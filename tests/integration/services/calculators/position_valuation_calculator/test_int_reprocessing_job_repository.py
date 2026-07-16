@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from portfolio_common.database_models import ReprocessingJob
@@ -8,6 +9,60 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 pytestmark = pytest.mark.asyncio
+
+
+async def test_stale_security_replay_coalesces_with_newer_pending_job(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    stale_job = ReprocessingJob(
+        job_type="RESET_WATERMARKS",
+        payload={"security_id": "S-STALE", "earliest_impacted_date": "2025-01-05"},
+        status="PROCESSING",
+        attempt_count=2,
+        correlation_id="corr-stale-earliest",
+        updated_at=datetime.now(timezone.utc) - timedelta(minutes=30),
+    )
+    pending_job = ReprocessingJob(
+        job_type="RESET_WATERMARKS",
+        payload={"security_id": "S-STALE", "earliest_impacted_date": "2025-01-07"},
+        status="PENDING",
+        attempt_count=0,
+        correlation_id="corr-pending-later",
+    )
+    async_db_session.add_all([stale_job, pending_job])
+    await async_db_session.commit()
+
+    recovered_count = await ReprocessingJobRepository(async_db_session).find_and_reset_stale_jobs(
+        timeout_minutes=15, max_attempts=3
+    )
+    await async_db_session.commit()
+    async_db_session.expire_all()
+
+    jobs = (
+        (
+            await async_db_session.execute(
+                select(ReprocessingJob)
+                .where(ReprocessingJob.job_type == "RESET_WATERMARKS")
+                .order_by(ReprocessingJob.id.asc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert recovered_count == 1
+    assert len(jobs) == 2
+    assert jobs[0].status == "COMPLETE"
+    assert jobs[0].failure_reason == (
+        "Coalesced into pending security replay during stale recovery"
+    )
+    assert jobs[1].status == "PENDING"
+    assert jobs[1].attempt_count == 2
+    assert jobs[1].payload == {
+        "security_id": "S-STALE",
+        "earliest_impacted_date": "2025-01-05",
+    }
+    assert jobs[1].correlation_id == "corr-stale-earliest"
 
 
 async def test_find_and_claim_jobs_prioritizes_oldest_pending_reset_watermarks(

@@ -124,9 +124,167 @@ class ReprocessingJobRepository:
             )
         return deleted_count
 
+    async def stage_pending_fx_revaluation_job(
+        self,
+        *,
+        from_currency: str,
+        to_currency: str,
+        earliest_impacted_date: date,
+        content_hash: str,
+        generated_at: str,
+        correlation_id: str | None,
+        correlation_missing_reason: str | None,
+        alternate_lookup_key: str | None,
+        attempt_count: int = 0,
+    ) -> None:
+        """Coalesce one pending FX replay while preserving retry and lineage order."""
+
+        statement = text(
+            """
+            INSERT INTO reprocessing_jobs (
+                job_type,
+                payload,
+                status,
+                attempt_count,
+                correlation_id,
+                correlation_missing_reason,
+                alternate_lookup_key
+            )
+            VALUES (
+                'RESET_FX_WATERMARKS',
+                json_build_object(
+                    'from_currency', :from_currency,
+                    'to_currency', :to_currency,
+                    'earliest_impacted_date', CAST(:effective_date AS date)::text,
+                    'content_hash', :content_hash,
+                    'generated_at', :generated_at
+                )::json,
+                'PENDING',
+                :attempt_count,
+                :correlation_id,
+                :correlation_missing_reason,
+                :alternate_lookup_key
+            )
+            ON CONFLICT ((payload->>'from_currency'), (payload->>'to_currency'))
+            WHERE job_type = 'RESET_FX_WATERMARKS' AND status = 'PENDING'
+            DO UPDATE SET
+                payload = json_build_object(
+                    'from_currency', :from_currency,
+                    'to_currency', :to_currency,
+                    'earliest_impacted_date', LEAST(
+                        (reprocessing_jobs.payload->>'earliest_impacted_date')::date,
+                        CAST(:effective_date AS date)
+                    )::text,
+                    'content_hash', CASE
+                        WHEN ROW(
+                            CAST(:generated_at AS timestamptz),
+                            :content_hash
+                        ) > ROW(
+                            COALESCE(
+                                CAST(reprocessing_jobs.payload->>'generated_at' AS timestamptz),
+                                '-infinity'::timestamptz
+                            ),
+                            COALESCE(reprocessing_jobs.payload->>'content_hash', '')
+                        )
+                        THEN :content_hash
+                        ELSE reprocessing_jobs.payload->>'content_hash'
+                    END,
+                    'generated_at', CASE
+                        WHEN ROW(
+                            CAST(:generated_at AS timestamptz),
+                            :content_hash
+                        ) > ROW(
+                            COALESCE(
+                                CAST(reprocessing_jobs.payload->>'generated_at' AS timestamptz),
+                                '-infinity'::timestamptz
+                            ),
+                            COALESCE(reprocessing_jobs.payload->>'content_hash', '')
+                        )
+                        THEN :generated_at
+                        ELSE reprocessing_jobs.payload->>'generated_at'
+                    END
+                )::json,
+                attempt_count = GREATEST(
+                    reprocessing_jobs.attempt_count,
+                    EXCLUDED.attempt_count
+                ),
+                correlation_id = CASE
+                    WHEN ROW(
+                        CAST(:generated_at AS timestamptz),
+                        :content_hash
+                    ) > ROW(
+                        COALESCE(
+                            CAST(reprocessing_jobs.payload->>'generated_at' AS timestamptz),
+                            '-infinity'::timestamptz
+                        ),
+                        COALESCE(reprocessing_jobs.payload->>'content_hash', '')
+                    )
+                    THEN COALESCE(:correlation_id, reprocessing_jobs.correlation_id)
+                    ELSE reprocessing_jobs.correlation_id
+                END,
+                correlation_missing_reason = CASE
+                    WHEN ROW(
+                        CAST(:generated_at AS timestamptz),
+                        :content_hash
+                    ) <= ROW(
+                        COALESCE(
+                            CAST(reprocessing_jobs.payload->>'generated_at' AS timestamptz),
+                            '-infinity'::timestamptz
+                        ),
+                        COALESCE(reprocessing_jobs.payload->>'content_hash', '')
+                    ) THEN reprocessing_jobs.correlation_missing_reason
+                    WHEN :correlation_id IS NOT NULL THEN NULL
+                    ELSE reprocessing_jobs.correlation_missing_reason
+                END,
+                alternate_lookup_key = CASE
+                    WHEN ROW(
+                        CAST(:generated_at AS timestamptz),
+                        :content_hash
+                    ) <= ROW(
+                        COALESCE(
+                            CAST(reprocessing_jobs.payload->>'generated_at' AS timestamptz),
+                            '-infinity'::timestamptz
+                        ),
+                        COALESCE(reprocessing_jobs.payload->>'content_hash', '')
+                    ) THEN reprocessing_jobs.alternate_lookup_key
+                    WHEN :correlation_id IS NOT NULL THEN NULL
+                    ELSE reprocessing_jobs.alternate_lookup_key
+                END,
+                updated_at = now()
+            """
+        ).bindparams(
+            bindparam("from_currency", type_=String()),
+            bindparam("to_currency", type_=String()),
+            bindparam("effective_date", type_=Date()),
+            bindparam("content_hash", type_=String()),
+            bindparam("generated_at", type_=String()),
+            bindparam("correlation_id", type_=String()),
+            bindparam("correlation_missing_reason", type_=String()),
+            bindparam("alternate_lookup_key", type_=String()),
+        )
+        await self.db.execute(
+            statement,
+            {
+                "from_currency": from_currency,
+                "to_currency": to_currency,
+                "effective_date": earliest_impacted_date,
+                "content_hash": content_hash,
+                "generated_at": generated_at,
+                "attempt_count": attempt_count,
+                "correlation_id": correlation_id,
+                "correlation_missing_reason": correlation_missing_reason,
+                "alternate_lookup_key": alternate_lookup_key,
+            },
+        )
+
     @async_timed(repository="ReprocessingJobRepository", method="create_job")
     async def create_job(
-        self, job_type: str, payload: Dict[str, Any], correlation_id: str | None = None
+        self,
+        job_type: str,
+        payload: Dict[str, Any],
+        correlation_id: str | None = None,
+        *,
+        attempt_count: int = 0,
     ) -> ReprocessingJob:
         diagnostics = _reprocessing_job_correlation_diagnostics(
             job_type=job_type,
@@ -157,7 +315,7 @@ class ReprocessingJobRepository:
                         'earliest_impacted_date', :earliest_impacted_date
                     )::json,
                     'PENDING',
-                    0,
+                    :attempt_count,
                     :correlation_id,
                     :correlation_missing_reason,
                     :alternate_lookup_key
@@ -175,6 +333,10 @@ class ReprocessingJobRepository:
                             )::text
                         )
                     )::json,
+                    attempt_count = GREATEST(
+                        reprocessing_jobs.attempt_count,
+                        EXCLUDED.attempt_count
+                    ),
                     correlation_id = CASE
                         WHEN CAST(:earliest_impacted_date AS date)
                              < (reprocessing_jobs.payload->>'earliest_impacted_date')::date
@@ -222,6 +384,7 @@ class ReprocessingJobRepository:
                 {
                     "security_id": payload["security_id"],
                     "earliest_impacted_date": date.fromisoformat(payload["earliest_impacted_date"]),
+                    "attempt_count": attempt_count,
                     "correlation_id": correlation_id,
                     "correlation_missing_reason": diagnostics.correlation_missing_reason,
                     "alternate_lookup_key": diagnostics.alternate_lookup_key,
@@ -241,6 +404,7 @@ class ReprocessingJobRepository:
             job_type=job_type,
             payload=payload,
             status="PENDING",
+            attempt_count=attempt_count,
             correlation_id=correlation_id,
             correlation_missing_reason=diagnostics.correlation_missing_reason,
             alternate_lookup_key=diagnostics.alternate_lookup_key,
@@ -296,18 +460,98 @@ class ReprocessingJobRepository:
         if not stale_rows:
             return 0
 
+        handled_job_ids, recovered_count = await self._recover_retryable_stale_coalesced_jobs(
+            stale_rows,
+            stale_cutoff=stale_cutoff,
+            max_attempts=max_attempts,
+        )
+
         failed_job_ids = _over_limit_stale_job_ids(stale_rows, max_attempts)
-        reset_job_ids = _resettable_stale_job_ids(stale_rows, max_attempts)
+        reset_job_ids = [
+            job_id
+            for job_id in _resettable_stale_job_ids(stale_rows, max_attempts)
+            if job_id not in handled_job_ids
+        ]
 
         await self._mark_over_limit_stale_jobs_failed(
             failed_job_ids,
             stale_cutoff,
             max_attempts,
         )
-        return await self._reset_retryable_stale_jobs(reset_job_ids, stale_cutoff)
+        reset_count = await self._reset_retryable_stale_jobs(reset_job_ids, stale_cutoff)
+        return recovered_count + reset_count
 
     async def _find_stale_job_rows(self, stale_cutoff: datetime) -> list[Any]:
         return (await self.db.execute(_stale_reprocessing_jobs_stmt(stale_cutoff))).all()
+
+    async def _recover_retryable_stale_coalesced_jobs(
+        self,
+        stale_rows: list[Any],
+        *,
+        stale_cutoff: datetime,
+        max_attempts: int,
+    ) -> tuple[set[int], int]:
+        handled_job_ids: set[int] = set()
+        recovered_count = 0
+        for row in stale_rows:
+            if row.job_type not in EARLIEST_IMPACTED_DATE_JOB_TYPES:
+                continue
+            if row.attempt_count >= max_attempts:
+                continue
+            try:
+                payload = row.payload
+                if row.job_type == "RESET_FX_WATERMARKS":
+                    await self.stage_pending_fx_revaluation_job(
+                        from_currency=payload["from_currency"],
+                        to_currency=payload["to_currency"],
+                        earliest_impacted_date=date.fromisoformat(
+                            payload["earliest_impacted_date"]
+                        ),
+                        content_hash=payload["content_hash"],
+                        generated_at=payload["generated_at"],
+                        correlation_id=row.correlation_id,
+                        correlation_missing_reason=row.correlation_missing_reason,
+                        alternate_lookup_key=row.alternate_lookup_key,
+                        attempt_count=int(row.attempt_count),
+                    )
+                    completion_reason = "Coalesced into pending FX replay during stale recovery"
+                else:
+                    await self.create_job(
+                        row.job_type,
+                        payload,
+                        correlation_id=row.correlation_id,
+                        attempt_count=int(row.attempt_count),
+                    )
+                    completion_reason = (
+                        "Coalesced into pending security replay during stale recovery"
+                    )
+            except (KeyError, TypeError, ValueError):
+                logger.warning(
+                    "Skipped malformed stale replay during identity coalescing.",
+                    extra={"job_id": row.id, "job_type": row.job_type},
+                )
+                result = await self.db.execute(
+                    _stale_jobs_update_stmt([row.id], stale_cutoff).values(
+                        status="FAILED",
+                        failure_reason="Malformed effective-dated replay during stale recovery",
+                        updated_at=func.now(),
+                    )
+                )
+                if int(result.rowcount or 0) == 1:
+                    handled_job_ids.add(int(row.id))
+                continue
+
+            result = await self.db.execute(
+                _stale_jobs_update_stmt([row.id], stale_cutoff).values(
+                    status="COMPLETE",
+                    failure_reason=completion_reason,
+                    updated_at=func.now(),
+                )
+            )
+            if int(result.rowcount or 0) == 1:
+                handled_job_ids.add(int(row.id))
+                recovered_count += 1
+        return handled_job_ids, recovered_count
 
     async def _mark_over_limit_stale_jobs_failed(
         self,
@@ -381,9 +625,21 @@ def _resettable_stale_job_ids(stale_rows: list[Any], max_attempts: int) -> list[
 
 
 def _stale_reprocessing_jobs_stmt(stale_cutoff: datetime):
-    return select(ReprocessingJob.id, ReprocessingJob.attempt_count).where(
-        ReprocessingJob.status == "PROCESSING",
-        ReprocessingJob.updated_at < stale_cutoff,
+    return (
+        select(
+            ReprocessingJob.id,
+            ReprocessingJob.attempt_count,
+            ReprocessingJob.job_type,
+            ReprocessingJob.payload,
+            ReprocessingJob.correlation_id,
+            ReprocessingJob.correlation_missing_reason,
+            ReprocessingJob.alternate_lookup_key,
+        )
+        .where(
+            ReprocessingJob.status == "PROCESSING",
+            ReprocessingJob.updated_at < stale_cutoff,
+        )
+        .order_by(ReprocessingJob.id.asc())
     )
 
 

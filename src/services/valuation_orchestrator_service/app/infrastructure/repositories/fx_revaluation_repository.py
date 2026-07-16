@@ -14,7 +14,7 @@ from portfolio_common.database_models import (
 )
 from portfolio_common.durable_correlation import durable_correlation_diagnostics
 from portfolio_common.reprocessing_job_repository import ReprocessingJobRepository
-from sqlalchemy import Date, String, bindparam, func, select, text
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...domain.fx_revaluation import (
@@ -162,137 +162,15 @@ class SqlAlchemyFxRevaluationRepository:
             currency_pair=correction.pair.key,
             earliest_impacted_date=correction.effective_date,
         )
-        statement = text(
-            """
-            INSERT INTO reprocessing_jobs (
-                job_type,
-                payload,
-                status,
-                attempt_count,
-                correlation_id,
-                correlation_missing_reason,
-                alternate_lookup_key
-            )
-            VALUES (
-                'RESET_FX_WATERMARKS',
-                json_build_object(
-                    'from_currency', :from_currency,
-                    'to_currency', :to_currency,
-                    'earliest_impacted_date', CAST(:effective_date AS date)::text,
-                    'content_hash', :content_hash,
-                    'generated_at', :generated_at
-                )::json,
-                'PENDING',
-                0,
-                :correlation_id,
-                :correlation_missing_reason,
-                :alternate_lookup_key
-            )
-            ON CONFLICT ((payload->>'from_currency'), (payload->>'to_currency'))
-            WHERE job_type = 'RESET_FX_WATERMARKS' AND status = 'PENDING'
-            DO UPDATE SET
-                payload = json_build_object(
-                    'from_currency', :from_currency,
-                    'to_currency', :to_currency,
-                    'earliest_impacted_date', LEAST(
-                        (reprocessing_jobs.payload->>'earliest_impacted_date')::date,
-                        CAST(:effective_date AS date)
-                    )::text,
-                    'content_hash', CASE
-                        WHEN ROW(
-                            CAST(:generated_at AS timestamptz),
-                            :content_hash
-                        ) > ROW(
-                            COALESCE(
-                                CAST(reprocessing_jobs.payload->>'generated_at' AS timestamptz),
-                                '-infinity'::timestamptz
-                            ),
-                            COALESCE(reprocessing_jobs.payload->>'content_hash', '')
-                        )
-                        THEN :content_hash
-                        ELSE reprocessing_jobs.payload->>'content_hash'
-                    END,
-                    'generated_at', CASE
-                        WHEN ROW(
-                            CAST(:generated_at AS timestamptz),
-                            :content_hash
-                        ) > ROW(
-                            COALESCE(
-                                CAST(reprocessing_jobs.payload->>'generated_at' AS timestamptz),
-                                '-infinity'::timestamptz
-                            ),
-                            COALESCE(reprocessing_jobs.payload->>'content_hash', '')
-                        )
-                        THEN :generated_at
-                        ELSE reprocessing_jobs.payload->>'generated_at'
-                    END
-                )::json,
-                correlation_id = CASE
-                    WHEN ROW(
-                        CAST(:generated_at AS timestamptz),
-                        :content_hash
-                    ) > ROW(
-                        COALESCE(
-                            CAST(reprocessing_jobs.payload->>'generated_at' AS timestamptz),
-                            '-infinity'::timestamptz
-                        ),
-                        COALESCE(reprocessing_jobs.payload->>'content_hash', '')
-                    )
-                    THEN COALESCE(:correlation_id, reprocessing_jobs.correlation_id)
-                    ELSE reprocessing_jobs.correlation_id
-                END,
-                correlation_missing_reason = CASE
-                    WHEN ROW(
-                        CAST(:generated_at AS timestamptz),
-                        :content_hash
-                    ) <= ROW(
-                        COALESCE(
-                            CAST(reprocessing_jobs.payload->>'generated_at' AS timestamptz),
-                            '-infinity'::timestamptz
-                        ),
-                        COALESCE(reprocessing_jobs.payload->>'content_hash', '')
-                    ) THEN reprocessing_jobs.correlation_missing_reason
-                    WHEN :correlation_id IS NOT NULL THEN NULL
-                    ELSE reprocessing_jobs.correlation_missing_reason
-                END,
-                alternate_lookup_key = CASE
-                    WHEN ROW(
-                        CAST(:generated_at AS timestamptz),
-                        :content_hash
-                    ) <= ROW(
-                        COALESCE(
-                            CAST(reprocessing_jobs.payload->>'generated_at' AS timestamptz),
-                            '-infinity'::timestamptz
-                        ),
-                        COALESCE(reprocessing_jobs.payload->>'content_hash', '')
-                    ) THEN reprocessing_jobs.alternate_lookup_key
-                    WHEN :correlation_id IS NOT NULL THEN NULL
-                    ELSE reprocessing_jobs.alternate_lookup_key
-                END,
-                updated_at = now()
-            """
-        ).bindparams(
-            bindparam("from_currency", type_=String()),
-            bindparam("to_currency", type_=String()),
-            bindparam("effective_date", type_=Date()),
-            bindparam("content_hash", type_=String()),
-            bindparam("generated_at", type_=String()),
-            bindparam("correlation_id", type_=String()),
-            bindparam("correlation_missing_reason", type_=String()),
-            bindparam("alternate_lookup_key", type_=String()),
-        )
-        await self._db.execute(
-            statement,
-            {
-                "from_currency": correction.pair.from_currency,
-                "to_currency": correction.pair.to_currency,
-                "effective_date": correction.effective_date,
-                "content_hash": correction.content_hash,
-                "generated_at": correction.generated_at.isoformat(),
-                "correlation_id": diagnostics.correlation_id,
-                "correlation_missing_reason": diagnostics.correlation_missing_reason,
-                "alternate_lookup_key": diagnostics.alternate_lookup_key,
-            },
+        await ReprocessingJobRepository(self._db).stage_pending_fx_revaluation_job(
+            from_currency=correction.pair.from_currency,
+            to_currency=correction.pair.to_currency,
+            earliest_impacted_date=correction.effective_date,
+            content_hash=correction.content_hash,
+            generated_at=correction.generated_at.isoformat(),
+            correlation_id=diagnostics.correlation_id,
+            correlation_missing_reason=diagnostics.correlation_missing_reason,
+            alternate_lookup_key=diagnostics.alternate_lookup_key,
         )
 
     async def find_affected_position_keys(

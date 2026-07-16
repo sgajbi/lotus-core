@@ -68,10 +68,12 @@ async def test_stage_durable_replay_uses_pair_scoped_pending_upsert() -> None:
     assert "LEAST" in sql
     assert "CAST(:generated_at AS timestamptz)" in sql
     assert "COALESCE(reprocessing_jobs.payload->>'content_hash', '')" in sql
+    assert "GREATEST" in sql
     assert parameters["from_currency"] == "USD"
     assert parameters["to_currency"] == "SGD"
     assert parameters["effective_date"] == date(2026, 4, 10)
     assert parameters["content_hash"] == correction.content_hash
+    assert parameters["attempt_count"] == 0
     assert parameters["correlation_id"] == "corr-fx"
 
 
