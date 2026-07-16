@@ -76,6 +76,7 @@ async def test_event_stager_writes_governed_outbox_contract() -> None:
     call = repository.create_outbox_event.await_args.kwargs
     assert call["aggregate_type"] == "Cashflow"
     assert call["aggregate_id"] == "PB-001"
+    assert call["partition_key"].value == "PB-001"
     assert call["event_type"] == "CashflowCalculated"
     assert call["topic"] == "cashflows.calculated"
     assert call["payload"]["cashflow_id"] == 91

@@ -4,6 +4,7 @@ from datetime import date
 from unittest.mock import AsyncMock
 
 import pytest
+from portfolio_common.domain.eventing import portfolio_partition_key
 from portfolio_common.outbox_repository import OutboxRepository
 
 from src.services.portfolio_derived_state_service.app.domain.portfolio_timeseries.models import (
@@ -36,6 +37,7 @@ async def test_stager_preserves_existing_completion_and_reconciliation_contracts
     assert completion_call.kwargs == {
         "aggregate_type": "PortfolioAggregationStage",
         "aggregate_id": "PORT-1:2026-07-15:4",
+        "partition_key": portfolio_partition_key("PORT-1"),
         "event_type": "PortfolioAggregationDayCompleted",
         "topic": "portfolio_day.aggregation.completed",
         "payload": completion_call.kwargs["payload"],
@@ -46,6 +48,7 @@ async def test_stager_preserves_existing_completion_and_reconciliation_contracts
     assert reconciliation_call.kwargs == {
         "aggregate_type": "FinancialReconciliation",
         "aggregate_id": "PORT-1:2026-07-15:4",
+        "partition_key": portfolio_partition_key("PORT-1"),
         "event_type": "FinancialReconciliationRequested",
         "topic": "portfolio_day.reconciliation.requested",
         "payload": reconciliation_call.kwargs["payload"],
