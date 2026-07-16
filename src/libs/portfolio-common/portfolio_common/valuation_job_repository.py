@@ -40,13 +40,14 @@ class ValuationJobRepository:
         valuation_date: date,
         epoch: int,
         correlation_id: Optional[str] = None,
+        rearm_completed: bool = False,
     ) -> int:
         """
         Idempotently creates or updates a valuation job.
 
         Duplicate scheduler polls for the same logical run must not re-arm an already completed
-        valuation job. A genuinely new replay/backfill run is allowed to re-arm the job via a
-        different correlation id.
+        valuation job. Correlation is diagnostic lineage, not rearm authority. Source-correction
+        callers must request completed-job rearming explicitly after proving source freshness.
         """
         return await self.upsert_jobs(
             [
@@ -57,10 +58,16 @@ class ValuationJobRepository:
                     epoch=epoch,
                     correlation_id=correlation_id,
                 )
-            ]
+            ],
+            rearm_completed=rearm_completed,
         )
 
-    async def upsert_jobs(self, jobs: Iterable[ValuationJobUpsert]) -> int:
+    async def upsert_jobs(
+        self,
+        jobs: Iterable[ValuationJobUpsert],
+        *,
+        rearm_completed: bool = False,
+    ) -> int:
         normalized_jobs = self._normalize_jobs(jobs)
         if not normalized_jobs:
             return 0
@@ -72,7 +79,10 @@ class ValuationJobRepository:
             if not eligible_jobs:
                 return 0
 
-            staged_count = await self._execute_upsert_jobs(eligible_jobs)
+            staged_count = await self._execute_upsert_jobs(
+                eligible_jobs,
+                rearm_completed=rearm_completed,
+            )
             superseded_count = await self._skip_superseded_pending_jobs(
                 normalized_jobs=normalized_jobs,
                 latest_epochs_by_scope=latest_epochs_by_scope,
@@ -103,9 +113,17 @@ class ValuationJobRepository:
             job for job in normalized_jobs if not self._is_stale_job(job, latest_epochs_by_scope)
         ]
 
-    async def _execute_upsert_jobs(self, eligible_jobs: list[ValuationJobUpsert]) -> int:
+    async def _execute_upsert_jobs(
+        self,
+        eligible_jobs: list[ValuationJobUpsert],
+        *,
+        rearm_completed: bool,
+    ) -> int:
         result = await self.db.execute(
-            _valuation_job_upsert_stmt(eligible_jobs).returning(
+            _valuation_job_upsert_stmt(
+                eligible_jobs,
+                rearm_completed=rearm_completed,
+            ).returning(
                 PortfolioValuationJob.portfolio_id,
                 PortfolioValuationJob.security_id,
                 PortfolioValuationJob.valuation_date,
@@ -247,12 +265,19 @@ class ValuationJobRepository:
         return skipped_count
 
 
-def _valuation_job_upsert_stmt(eligible_jobs: list[ValuationJobUpsert]):
+def _valuation_job_upsert_stmt(
+    eligible_jobs: list[ValuationJobUpsert],
+    *,
+    rearm_completed: bool,
+):
     stmt = pg_insert(PortfolioValuationJob).values(_valuation_job_insert_values(eligible_jobs))
     return stmt.on_conflict_do_update(
         index_elements=["portfolio_id", "security_id", "valuation_date", "epoch"],
         set_=_valuation_job_update_values(stmt),
-        where=_valuation_job_conflict_update_predicate(stmt),
+        where=_valuation_job_conflict_update_predicate(
+            stmt,
+            rearm_completed=rearm_completed,
+        ),
     )
 
 
@@ -294,13 +319,16 @@ def _valuation_job_update_values(stmt) -> dict[str, object]:
     }
 
 
-def _valuation_job_conflict_update_predicate(stmt):
-    return not_(PortfolioValuationJob.status == "PROCESSING") & not_(
+def _valuation_job_conflict_update_predicate(stmt, *, rearm_completed: bool):
+    predicate = not_(PortfolioValuationJob.status == "PROCESSING") & not_(
         and_(
-            PortfolioValuationJob.status.in_(("PENDING", "COMPLETE")),
+            PortfolioValuationJob.status == "PENDING",
             PortfolioValuationJob.correlation_id.is_not_distinct_from(stmt.excluded.correlation_id),
         )
     )
+    if not rearm_completed:
+        predicate &= PortfolioValuationJob.status != "COMPLETE"
+    return predicate
 
 
 def _log_staged_job_upsert(

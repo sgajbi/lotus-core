@@ -57,6 +57,7 @@ class ProcessFxRateCorrection:
                 valuation_date=correction.effective_date,
                 epoch=key.epoch,
                 correlation_id=correlation_id,
+                rearm_completed=True,
             )
 
         return FxRevaluationPlan(

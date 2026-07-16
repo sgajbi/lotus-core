@@ -54,6 +54,7 @@ class PositionValuationJobWriter(Protocol):
         valuation_date: date,
         epoch: int,
         correlation_id: str,
+        rearm_completed: bool = False,
     ) -> object:
         """Stage one position valuation job."""
 

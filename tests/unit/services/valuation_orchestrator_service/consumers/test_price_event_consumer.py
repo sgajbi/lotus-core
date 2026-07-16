@@ -257,6 +257,7 @@ async def test_current_price_queues_immediate_jobs_for_open_positions(
         valuation_date=mock_event.price_date,
         epoch=0,
         correlation_id=f"PRICE_EVENT_{mock_event.security_id}_{mock_event.price_date.isoformat()}",
+        rearm_completed=True,
     )
     mock_job_repo.upsert_job.assert_any_await(
         portfolio_id="P2",
@@ -264,6 +265,7 @@ async def test_current_price_queues_immediate_jobs_for_open_positions(
         valuation_date=mock_event.price_date,
         epoch=1,
         correlation_id=f"PRICE_EVENT_{mock_event.security_id}_{mock_event.price_date.isoformat()}",
+        rearm_completed=True,
     )
 
 
@@ -294,6 +296,7 @@ async def test_backdated_price_queues_current_date_job_and_flags_reprocessing(
         valuation_date=mock_event.price_date,
         epoch=0,
         correlation_id=f"PRICE_EVENT_{mock_event.security_id}_{mock_event.price_date.isoformat()}",
+        rearm_completed=True,
     )
     mock_reprocessing_repo.upsert_state.assert_awaited_once_with(
         security_id=mock_event.security_id,
