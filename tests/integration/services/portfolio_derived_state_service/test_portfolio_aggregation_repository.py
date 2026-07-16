@@ -110,6 +110,12 @@ async def test_recover_expired_job_leases_requeues_retryable_claim(
     """Requeue only an expired processing lease below its retry ceiling."""
 
     repo = PortfolioAggregationRepository(async_db_session)
+    await async_db_session.execute(
+        update(PortfolioAggregationJob)
+        .where(PortfolioAggregationJob.portfolio_id == "P1_STALE")
+        .values(failure_reason=portfolio_aggregation_repository.AGGREGATION_REPROCESS_REQUESTED)
+    )
+    await async_db_session.commit()
 
     recovery = await repo.recover_expired_job_leases(
         now=datetime.now(UTC),
@@ -126,6 +132,7 @@ async def test_recover_expired_job_leases_requeues_retryable_claim(
         assert job1.lease_owner is None
         assert job1.lease_token is None
         assert job1.lease_expires_at is None
+        assert job1.failure_reason is None
 
         job2 = session.query(PortfolioAggregationJob).filter_by(portfolio_id="P2_RECENT").one()
         assert job2.status == "PROCESSING"
