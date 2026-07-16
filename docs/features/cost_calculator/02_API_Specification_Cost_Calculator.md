@@ -1,6 +1,8 @@
-# API Specification: Cost Calculator
+# Kafka Contract: Transaction Processing
 
-The `cost_calculator_service` is a headless service that does not have a traditional REST API for its core logic. Its primary interface is Apache Kafka. It also exposes standard HTTP endpoints for health and metrics monitoring.
+The `portfolio_transaction_processing_service` is the unified transaction-economics runtime for
+cost, cashflow, and position processing. Its primary interface is Apache Kafka. It also exposes
+standard HTTP endpoints for health and metrics monitoring.
 
 ## 1. Health & Metrics API
 
@@ -46,14 +48,20 @@ The service listens to two topics:
 #### Topic: `transactions.reprocessing.requested`
 
 * **Purpose:** Consumes requests to reprocess a transaction.
-* **Producer:** `ingestion_service` (via API) or `tools/reprocess_transactions.py` (via script).
-* **Key:** `transaction_id`
+* **Producer:** `ingestion_service` or `event_replay_service`.
+* **Key:** source-owned `portfolio_id`
 * **Payload:**
     ```json
     {
-      "transaction_id": "TXN_001"
+      "transaction_id": "TXN_001",
+      "portfolio_id": "PORT_001"
     }
     ```
+
+The public API remains transaction-id based. Before publishing, Core resolves each transaction
+against the canonical ledger and adds its portfolio identity. Consumers continue to accept the
+legacy transaction-id-only payload during the compatibility window, but enriched commands must
+carry a `portfolio_id` that matches the Kafka key.
 
 ### 2.2. Producers (via Outbox)
 
@@ -62,13 +70,13 @@ The service produces events to two different topics depending on the flow:
 #### Topic: `transactions.cost.processed`
 
 * **Purpose:** This event signals that a transaction has been successfully processed and enriched with cost basis and/or realized P&L information.
-* **Consumer:** `position-calculator-service`
+* **Consumer:** No active runtime consumer; retained as a compatibility fact.
 * **Key:** `portfolio_id`
 * **Payload (`TransactionEvent`):** The payload is the full, enriched `TransactionEvent`, now including calculated fields like `net_cost`, `realized_gain_loss`, `transaction_fx_rate`, etc.
 
 #### Topic: `transactions.persisted` (Reprocessing Flow)
 
 * **Purpose:** When triggered by the `transactions.reprocessing.requested` topic, the consumer re-publishes the original raw transaction event back to this topic to restart the calculation pipeline for that specific transaction.
-* **Consumer:** Itself (`cost-calculator-service`).
+* **Consumer:** The unified `portfolio_transaction_processing_service`.
 * **Key:** `portfolio_id`
 * **Payload (`TransactionEvent`):** The original, raw `TransactionEvent` as it exists in the database.

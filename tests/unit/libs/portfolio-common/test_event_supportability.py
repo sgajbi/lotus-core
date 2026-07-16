@@ -322,6 +322,10 @@ def test_transaction_reprocessing_commands_target_unified_runtime() -> None:
     assert direct_topics["TransactionReprocessingRequested"].consumer_services == (
         "portfolio_transaction_processing_service",
     )
+    assert (
+        direct_topics["TransactionReprocessingRequested"].payload_contract
+        == "transaction_reprocessing_command"
+    )
     assert direct_topics["TransactionReprocessingPersistedReplay"].consumer_services == (
         "portfolio_transaction_processing_service",
     )
