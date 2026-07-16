@@ -66,7 +66,7 @@ def test_plan_transaction_replay_builds_payloads_and_explicit_headers() -> None:
     message = plan.messages[0]
     assert message.transaction_id == "TXN1"
     assert message.topic == KAFKA_TRANSACTIONS_PERSISTED_TOPIC
-    assert message.key == "P-1"
+    assert message.key == "P-1|S1"
     assert message.payload["transaction_id"] == "TXN1"
     assert message.headers == [
         ("correlation_id", b"corr-001"),

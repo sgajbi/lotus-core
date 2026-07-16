@@ -1635,7 +1635,7 @@ async def test_ingest_single_transaction_endpoint(
     mock_kafka_producer.publish_message.assert_called_once()
     publish_kwargs = mock_kafka_producer.publish_message.call_args.kwargs
     assert publish_kwargs["topic"] == "transactions.raw.received"
-    assert publish_kwargs["key"] == "P1"
+    assert publish_kwargs["key"] == "P1|S1"
     assert publish_kwargs["value"]["transaction_id"] == "TX_SINGLE_ACK_001"
     assert dict(publish_kwargs["headers"])["idempotency_key"] == (b"single-transaction-idem-001")
 
@@ -1735,7 +1735,7 @@ async def test_ingest_transactions_endpoint(
     mock_kafka_producer.publish_message.assert_called_once()
     publish_kwargs = mock_kafka_producer.publish_message.call_args.kwargs
     assert publish_kwargs["topic"] == "transactions.raw.received"
-    assert publish_kwargs["key"] == "P1"
+    assert publish_kwargs["key"] == "P1|S1"
     assert publish_kwargs["value"]["transaction_id"] == "TX_BATCH_ACK_001"
     assert publish_kwargs["value"]["trade_currency"] == "USD"
     assert publish_kwargs["value"]["currency"] == "USD"
