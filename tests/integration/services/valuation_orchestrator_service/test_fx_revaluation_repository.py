@@ -470,6 +470,82 @@ async def test_malformed_fx_replay_is_claimed_and_failed_supportably(
     assert "invalid_fx_revaluation_job_payload" in failed_job.failure_reason
 
 
+@pytest.mark.parametrize(
+    "malformed_payload",
+    [
+        {
+            "from_currency": "USD",
+            "to_currency": "SGD",
+            "earliest_impacted_date": "not-a-date",
+            "content_hash": "sha256:malformed-date",
+            "generated_at": "2026-04-10T08:00:00+00:00",
+        },
+        {
+            "from_currency": "USD",
+            "to_currency": "SGD",
+            "earliest_impacted_date": "2026-04-10",
+            "content_hash": "sha256:malformed-timestamp",
+            "generated_at": "not-a-timestamp",
+        },
+    ],
+)
+async def test_valid_fx_replay_quarantines_malformed_pending_pair_before_upsert(
+    clean_db,
+    async_db_session: AsyncSession,
+    malformed_payload: dict[str, str],
+) -> None:
+    malformed_job = ReprocessingJob(
+        job_type="RESET_FX_WATERMARKS",
+        payload=malformed_payload,
+        status="PENDING",
+        correlation_id="corr-malformed-pending-pair",
+    )
+    async_db_session.add(malformed_job)
+    await async_db_session.commit()
+    malformed_job_id = malformed_job.id
+
+    repository = fx_revaluation_repository.SqlAlchemyFxRevaluationRepository(async_db_session)
+    await repository.stage_durable_replay(
+        correction=FxRateCorrection(
+            pair=DirectCurrencyPair("USD", "SGD"),
+            effective_date=date(2026, 4, 8),
+            content_hash="sha256:" + ("c" * 64),
+            generated_at=datetime(2026, 4, 10, 9, tzinfo=timezone.utc),
+        ),
+        correlation_id="corr-valid-replacement",
+    )
+    await async_db_session.commit()
+    async_db_session.expire_all()
+
+    jobs = (
+        (
+            await async_db_session.execute(
+                select(ReprocessingJob)
+                .where(ReprocessingJob.job_type == "RESET_FX_WATERMARKS")
+                .order_by(ReprocessingJob.id.asc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    assert len(jobs) == 2
+    assert jobs[0].id == malformed_job_id
+    assert jobs[0].status == "FAILED"
+    assert jobs[0].failure_reason == (
+        "invalid_fx_revaluation_job_payload: superseded during valid replay staging"
+    )
+    assert jobs[1].status == "PENDING"
+    assert jobs[1].payload == {
+        "from_currency": "USD",
+        "to_currency": "SGD",
+        "earliest_impacted_date": "2026-04-08",
+        "content_hash": "sha256:" + ("c" * 64),
+        "generated_at": "2026-04-10T09:00:00+00:00",
+    }
+    assert jobs[1].correlation_id == "corr-valid-replacement"
+
+
 async def test_claimed_fx_job_resets_exact_affected_watermark_and_completes(
     clean_db,
     async_db_session: AsyncSession,

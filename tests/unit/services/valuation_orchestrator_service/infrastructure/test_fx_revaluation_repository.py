@@ -61,8 +61,16 @@ async def test_stage_durable_replay_uses_pair_scoped_pending_upsert() -> None:
         correlation_id="corr-fx",
     )
 
-    statement, parameters = session.execute.await_args.args
+    quarantine_statement, quarantine_parameters = session.execute.await_args_list[0].args
+    statement, parameters = session.execute.await_args_list[1].args
+    quarantine_sql = str(quarantine_statement)
     sql = str(statement)
+    assert "pg_input_is_valid" in quarantine_sql
+    assert "status = 'FAILED'" in quarantine_sql
+    assert quarantine_parameters == {
+        "from_currency": "USD",
+        "to_currency": "SGD",
+    }
     assert "RESET_FX_WATERMARKS" in sql
     assert "ON CONFLICT ((payload->>'from_currency'), (payload->>'to_currency'))" in sql
     assert "LEAST" in sql
@@ -75,6 +83,7 @@ async def test_stage_durable_replay_uses_pair_scoped_pending_upsert() -> None:
     assert parameters["content_hash"] == correction.content_hash
     assert parameters["attempt_count"] == 0
     assert parameters["correlation_id"] == "corr-fx"
+    assert session.execute.await_count == 2
 
 
 async def test_affected_keys_include_open_and_later_positions_without_duplicates() -> None:

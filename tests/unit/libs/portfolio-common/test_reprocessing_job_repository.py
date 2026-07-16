@@ -362,10 +362,12 @@ async def test_find_and_reset_stale_jobs_coalesces_retryable_fx_pair(
             alternate_lookup_key=None,
         )
     ]
+    quarantine_result = MagicMock()
     coalesce_result = MagicMock()
     complete_result = MagicMock(rowcount=1)
     mock_db_session.execute.side_effect = [
         stale_result,
+        quarantine_result,
         coalesce_result,
         complete_result,
     ]
@@ -376,11 +378,13 @@ async def test_find_and_reset_stale_jobs_coalesces_retryable_fx_pair(
     )
 
     assert recovered_count == 1
-    assert mock_db_session.execute.await_count == 3
-    coalesce_statement, coalesce_parameters = mock_db_session.execute.await_args_list[1].args
+    assert mock_db_session.execute.await_count == 4
+    quarantine_statement = mock_db_session.execute.await_args_list[1].args[0]
+    assert "pg_input_is_valid" in str(quarantine_statement)
+    coalesce_statement, coalesce_parameters = mock_db_session.execute.await_args_list[2].args
     assert "GREATEST" in str(coalesce_statement)
     assert coalesce_parameters["attempt_count"] == 2
-    complete_statement = mock_db_session.execute.await_args_list[2].args[0]
+    complete_statement = mock_db_session.execute.await_args_list[3].args[0]
     compiled_complete = str(complete_statement.compile(compile_kwargs={"literal_binds": True}))
     assert "Coalesced into pending FX replay during stale recovery" in compiled_complete
 
