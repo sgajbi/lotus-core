@@ -47,14 +47,14 @@ class SqlAlchemyCashflowRepository:
                 self._session.add(cashflow_row)
                 await self._session.flush()
             await self._session.refresh(cashflow_row)
-            logger.info(
+            logger.debug(
                 "Successfully staged cashflow record for transaction_id '%s' in epoch %s",
                 cashflow_row.transaction_id,
                 cashflow_row.epoch,
             )
             return _to_stored_cashflow(cashflow_row)
         except IntegrityError:
-            logger.info(
+            logger.debug(
                 "Cashflow for transaction_id '%s' in epoch %s already exists. "
                 "Reusing persisted row.",
                 cashflow_row.transaction_id,

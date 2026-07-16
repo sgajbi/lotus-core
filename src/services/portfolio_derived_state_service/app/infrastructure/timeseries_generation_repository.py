@@ -95,10 +95,12 @@ class TimeseriesGenerationRepository(TimeseriesMarketDataReader):
     async def upsert_position_timeseries(self, timeseries_record: PositionTimeseriesRecord) -> None:
         try:
             await self.db.execute(build_position_timeseries_upsert_statement(timeseries_record))
-            logger.info(
-                "Staged upsert for position time series for %s on %s",
-                timeseries_record.security_id,
-                timeseries_record.date,
+            logger.debug(
+                "Staged position time-series upsert.",
+                extra={
+                    "security_id": timeseries_record.security_id,
+                    "valuation_date": timeseries_record.date.isoformat(),
+                },
             )
         except Exception as exc:
             logger.error("Failed to stage upsert for position time series: %s", exc, exc_info=True)
@@ -318,12 +320,14 @@ class TimeseriesGenerationRepository(TimeseriesMarketDataReader):
                 ),
             )
         )
-        logger.info(
-            "Staged %s portfolio aggregation job(s) for %s from %s to %s.",
-            len(normalized_dates),
-            portfolio_id,
-            normalized_dates[0],
-            normalized_dates[-1],
+        logger.debug(
+            "Staged portfolio aggregation jobs.",
+            extra={
+                "aggregation_job_count": len(normalized_dates),
+                "portfolio_id": portfolio_id,
+                "aggregation_date_from": normalized_dates[0].isoformat(),
+                "aggregation_date_to": normalized_dates[-1].isoformat(),
+            },
         )
 
 

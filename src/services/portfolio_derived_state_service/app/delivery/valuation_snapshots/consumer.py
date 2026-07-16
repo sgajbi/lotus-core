@@ -68,7 +68,7 @@ class PositionTimeseriesConsumer(BaseConsumer):
                 result = await self._use_case.execute(
                     map_position_snapshot_event(event, correlation_id=correlation_id)
                 )
-                logger.info(
+                logger.debug(
                     "Position-timeseries materialization completed.",
                     extra={
                         "snapshot_id": event.id,

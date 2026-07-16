@@ -121,7 +121,7 @@ def test_prometheus_persistence_observer_preserves_metrics_and_support_logs(
         stage=stage,
     )
 
-    with caplog.at_level(logging.INFO):
+    with caplog.at_level(logging.DEBUG):
         observer.observe(observation)
 
     selected_counter = buy_lifecycle if transaction_type == "BUY" else sell_lifecycle

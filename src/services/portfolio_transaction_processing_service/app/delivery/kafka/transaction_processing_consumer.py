@@ -91,7 +91,7 @@ class TransactionProcessingConsumer(BaseConsumer):
                     "Transaction processing database dependency unavailable"
                 ) from exc
 
-        logger.info(
+        logger.debug(
             "Transaction processing completed.",
             extra={
                 "event_id": event_id,

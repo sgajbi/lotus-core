@@ -176,7 +176,7 @@ def _log_persisted_transaction_state(
     observation: CostBasisPersistenceObservation,
 ) -> None:
     transaction = observation.transaction
-    logger.info(
+    logger.debug(
         event_name,
         extra={
             "transaction_id": transaction.transaction_id,
