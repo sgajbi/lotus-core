@@ -38,6 +38,11 @@ These features are non-functional as well as functional. They provide auditabili
 diagnostics, bounded metric labels, and governed drill-through paths for client-facing portfolio
 readiness conversations.
 
+Malformed durable replay dates remain visible in portfolio-scoped reprocessing evidence. Their
+`business_date` is `null`, while job identity, pair or security scope, status, failure reason, and
+correlation evidence remain available for support-led remediation; the API does not invent a date
+or fail the entire support query.
+
 ## Runtime role
 
 The main routes are grouped around two concepts:

@@ -13,7 +13,7 @@ from portfolio_common.database_models import (
     PositionState,
     ReprocessingJob,
 )
-from sqlalchemy import Date, and_, case, cast, func, or_, select
+from sqlalchemy import Date, and_, case, cast, func, literal_column, or_, select
 
 from .operations_position_scope_queries import (
     apply_current_position_history_scope,
@@ -29,6 +29,7 @@ class ReprocessingJobScope:
     portfolio_id: str
     security_id_expr: Any
     impacted_date_expr: Any
+    impacted_date_is_valid: Any
     from_currency_expr: Any
     to_currency_expr: Any
     portfolio_scope_exists: Any
@@ -80,6 +81,25 @@ def reprocessing_job_portfolio_scope_exists(
         select(1)
         .select_from(latest_history)
         .where(latest_history.c.rn == 1, latest_history.c.quantity > 0)
+        .exists()
+    )
+
+
+def reprocessing_job_portfolio_security_exists(
+    *,
+    portfolio_id: str,
+    reprocessing_security_id_expr,
+):
+    """Return historical portfolio ownership when a replay date is malformed."""
+    position_history_security_id = security_id_expr(PositionHistory.security_id)
+    return (
+        select(1)
+        .select_from(PositionHistory)
+        .where(
+            PositionHistory.portfolio_id == portfolio_id,
+            position_history_security_id == reprocessing_security_id_expr,
+        )
+        .correlate(ReprocessingJob)
         .exists()
     )
 
@@ -161,15 +181,55 @@ def fx_revaluation_job_portfolio_scope_exists(
     return or_(open_on_date, first_held_later)
 
 
+def fx_revaluation_job_pair_portfolio_scope_exists(
+    *,
+    portfolio_id: str,
+    from_currency_expr,
+    to_currency_expr,
+    normalized_security_id: str | None = None,
+):
+    """Return historical pair ownership when a replay date is malformed."""
+    history_security_id = security_id_expr(PositionHistory.security_id)
+    instrument_security_id = security_id_expr(Instrument.security_id)
+    portfolio_identity = func.trim(Portfolio.portfolio_id)
+    pair_scope = and_(
+        PositionHistory.portfolio_id == portfolio_id,
+        func.upper(func.trim(Instrument.currency)) == from_currency_expr,
+        func.upper(func.trim(Portfolio.base_currency)) == to_currency_expr,
+    )
+    if normalized_security_id:
+        pair_scope = and_(pair_scope, history_security_id == normalized_security_id)
+    return (
+        select(1)
+        .select_from(PositionHistory)
+        .join(Instrument, instrument_security_id == history_security_id)
+        .join(Portfolio, portfolio_identity == func.trim(PositionHistory.portfolio_id))
+        .where(pair_scope)
+        .correlate(ReprocessingJob)
+        .exists()
+    )
+
+
 def reprocessing_job_scope(portfolio_id: str) -> ReprocessingJobScope:
     """Build portfolio scope for security-price and direct-pair FX replay jobs."""
     reprocessing_security_id_expr = func.trim(ReprocessingJob.payload["security_id"].as_string())
     impacted_date_expr = ReprocessingJob.payload["earliest_impacted_date"].as_string()
-    impacted_date_cast = cast(impacted_date_expr, Date)
+    impacted_date_is_valid = func.pg_input_is_valid(
+        impacted_date_expr,
+        literal_column("'date'"),
+    )
+    impacted_date_cast = case(
+        (impacted_date_is_valid.is_(True), cast(impacted_date_expr, Date)),
+        else_=None,
+    )
     reset_portfolio_scope_exists = reprocessing_job_portfolio_scope_exists(
         portfolio_id=portfolio_id,
         reprocessing_security_id_expr=reprocessing_security_id_expr,
         impacted_date_expr=impacted_date_cast,
+    )
+    malformed_reset_portfolio_scope_exists = reprocessing_job_portfolio_security_exists(
+        portfolio_id=portfolio_id,
+        reprocessing_security_id_expr=reprocessing_security_id_expr,
     )
     from_currency_expr = func.upper(func.trim(ReprocessingJob.payload["from_currency"].as_string()))
     to_currency_expr = func.upper(func.trim(ReprocessingJob.payload["to_currency"].as_string()))
@@ -179,20 +239,38 @@ def reprocessing_job_scope(portfolio_id: str) -> ReprocessingJobScope:
         to_currency_expr=to_currency_expr,
         impacted_date_expr=impacted_date_cast,
     )
+    malformed_fx_portfolio_scope_exists = fx_revaluation_job_pair_portfolio_scope_exists(
+        portfolio_id=portfolio_id,
+        from_currency_expr=from_currency_expr,
+        to_currency_expr=to_currency_expr,
+    )
     return ReprocessingJobScope(
         portfolio_id=portfolio_id,
         security_id_expr=reprocessing_security_id_expr,
         impacted_date_expr=impacted_date_expr,
+        impacted_date_is_valid=impacted_date_is_valid,
         from_currency_expr=from_currency_expr,
         to_currency_expr=to_currency_expr,
         portfolio_scope_exists=or_(
             and_(
                 ReprocessingJob.job_type == "RESET_WATERMARKS",
-                reset_portfolio_scope_exists,
+                or_(
+                    reset_portfolio_scope_exists,
+                    and_(
+                        impacted_date_is_valid.is_not(True),
+                        malformed_reset_portfolio_scope_exists,
+                    ),
+                ),
             ),
             and_(
                 ReprocessingJob.job_type == "RESET_FX_WATERMARKS",
-                fx_portfolio_scope_exists,
+                or_(
+                    fx_portfolio_scope_exists,
+                    and_(
+                        impacted_date_is_valid.is_not(True),
+                        malformed_fx_portfolio_scope_exists,
+                    ),
+                ),
             ),
         ),
     )
@@ -218,11 +296,24 @@ def apply_reprocessing_job_security_scope(
     normalized_security_id: str | None,
 ):
     if normalized_security_id:
+        safe_impacted_date = case(
+            (
+                job_scope.impacted_date_is_valid.is_(True),
+                cast(job_scope.impacted_date_expr, Date),
+            ),
+            else_=None,
+        )
         fx_security_scope_exists = fx_revaluation_job_portfolio_scope_exists(
             portfolio_id=job_scope.portfolio_id,
             from_currency_expr=job_scope.from_currency_expr,
             to_currency_expr=job_scope.to_currency_expr,
-            impacted_date_expr=cast(job_scope.impacted_date_expr, Date),
+            impacted_date_expr=safe_impacted_date,
+            normalized_security_id=normalized_security_id,
+        )
+        malformed_fx_security_scope_exists = fx_revaluation_job_pair_portfolio_scope_exists(
+            portfolio_id=job_scope.portfolio_id,
+            from_currency_expr=job_scope.from_currency_expr,
+            to_currency_expr=job_scope.to_currency_expr,
             normalized_security_id=normalized_security_id,
         )
         stmt = stmt.where(
@@ -233,7 +324,13 @@ def apply_reprocessing_job_security_scope(
                 ),
                 and_(
                     ReprocessingJob.job_type == "RESET_FX_WATERMARKS",
-                    fx_security_scope_exists,
+                    or_(
+                        fx_security_scope_exists,
+                        and_(
+                            job_scope.impacted_date_is_valid.is_not(True),
+                            malformed_fx_security_scope_exists,
+                        ),
+                    ),
                 ),
             )
         )

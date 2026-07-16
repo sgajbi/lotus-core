@@ -5,6 +5,7 @@ from src.services.query_control_plane_service.app.application.operations.support
     get_support_job_operational_state,
     is_support_job_stale,
     normalize_support_job_status,
+    parse_support_job_business_date,
 )
 
 
@@ -47,3 +48,9 @@ def test_support_job_record_builder_classifies_processing_staleness() -> None:
     assert (
         get_support_job_operational_state("PROCESSING", fresh_updated_at, now=now) == "PROCESSING"
     )
+
+
+def test_support_job_business_date_parser_preserves_malformed_replay_visibility() -> None:
+    assert parse_support_job_business_date("2026-04-10") == date(2026, 4, 10)
+    assert parse_support_job_business_date("not-a-date") is None
+    assert parse_support_job_business_date(None) is None
