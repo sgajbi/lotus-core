@@ -137,7 +137,43 @@ class ReprocessingJobRepository:
         alternate_lookup_key: str | None,
         attempt_count: int = 0,
     ) -> None:
-        """Coalesce one pending FX replay while preserving retry and lineage order."""
+        """Quarantine malformed pair work, then coalesce one valid pending FX replay."""
+
+        quarantine_statement = text(
+            """
+            UPDATE reprocessing_jobs
+            SET status = 'FAILED',
+                failure_reason = (
+                    'invalid_fx_revaluation_job_payload: '
+                    'superseded during valid replay staging'
+                ),
+                updated_at = now()
+            WHERE job_type = 'RESET_FX_WATERMARKS'
+              AND status = 'PENDING'
+              AND payload->>'from_currency' = :from_currency
+              AND payload->>'to_currency' = :to_currency
+              AND (
+                  pg_input_is_valid(
+                      payload->>'earliest_impacted_date',
+                      'date'
+                  ) IS NOT TRUE
+                  OR pg_input_is_valid(
+                      payload->>'generated_at',
+                      'timestamp with time zone'
+                  ) IS NOT TRUE
+              )
+            """
+        ).bindparams(
+            bindparam("from_currency", type_=String()),
+            bindparam("to_currency", type_=String()),
+        )
+        await self.db.execute(
+            quarantine_statement,
+            {
+                "from_currency": from_currency,
+                "to_currency": to_currency,
+            },
+        )
 
         statement = text(
             """
