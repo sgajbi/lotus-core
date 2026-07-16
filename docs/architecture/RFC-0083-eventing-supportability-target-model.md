@@ -139,12 +139,12 @@ Current governed direct topics are:
 | --- | --- | --- | --- | --- |
 | `portfolios.raw.received` | `ingestion_service` | `persistence_service` | `PortfolioEvent` | Raw portfolio ingress fact |
 | `transactions.raw.received` | `ingestion_service` | `persistence_service` | `TransactionEvent` | Raw transaction ingress fact |
-| `instruments.received` | `ingestion_service`, `cost_calculator_service` | `persistence_service` | `InstrumentEvent` | Mixed direct and derived instrument fact |
+| `instruments.received` | `ingestion_service`, `portfolio_transaction_processing_service` | `persistence_service` | `InstrumentEvent` | Mixed direct and derived instrument fact |
 | `market_prices.raw.received` | `ingestion_service` | `persistence_service` | `MarketPriceEvent` | Raw market-price ingress fact |
 | `fx_rates.raw.received` | `ingestion_service` | `persistence_service` | `FxRateEvent` | Raw FX-rate ingress fact |
 | `business_dates.raw.received` | `ingestion_service` | `persistence_service` | `BusinessDateEvent` | Raw business-calendar ingress fact |
-| `transactions.reprocessing.requested` | `ingestion_service`, `event_replay_service` | `cost_calculator_service` | `transaction_id_command` | Transaction reprocessing request |
-| `transactions.persisted` | `event_replay_service` | `cost_calculator_service`, `cashflow_calculator_service` | `TransactionEvent` | Transaction replay back into persisted-stage processing |
+| `transactions.reprocessing.requested` | `ingestion_service`, `event_replay_service` | `portfolio_transaction_processing_service` | `transaction_reprocessing_command` | Portfolio-ordered transaction reprocessing request |
+| `transactions.persisted` | `event_replay_service` | `portfolio_transaction_processing_service` | `TransactionEvent` | Transaction replay back into unified transaction processing |
 | `valuation.job.requested` | `valuation_orchestrator_service` | `position_valuation_calculator` | `valuation_job_command` | Valuation job dispatch |
 
 ## Runtime Follow-Up

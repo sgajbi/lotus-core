@@ -9,6 +9,8 @@ from scripts.quality import event_contract_test_pack_guard as guard
 
 def _write_repo(tmp_path: Path) -> None:
     (tmp_path / "tests/unit").mkdir(parents=True)
+    runtime_contract_path = tmp_path / guard.RUNTIME_CONTRACT_PATH
+    runtime_contract_path.parent.mkdir(parents=True)
     for filename in (
         "producer.py",
         "consumer.py",
@@ -22,6 +24,23 @@ def _write_repo(tmp_path: Path) -> None:
     (tmp_path / "Makefile").write_text(
         "event-contract-test-pack-guard:\n"
         "\tpython scripts/quality/event_contract_test_pack_guard.py\n",
+        encoding="utf-8",
+    )
+    runtime_topics = {
+        definition.topic
+        for definition in (
+            *guard.EVENT_FAMILY_DEFINITIONS,
+            *guard.DIRECT_KAFKA_TOPIC_DEFINITIONS,
+        )
+    }
+    runtime_contract_path.write_text(
+        json.dumps(
+            {
+                "topics": [
+                    {"topic": topic, "current_key": "test"} for topic in sorted(runtime_topics)
+                ]
+            }
+        ),
         encoding="utf-8",
     )
 
@@ -101,6 +120,25 @@ def test_guard_rejects_direct_topic_contract_drift(tmp_path: Path) -> None:
         "field": "topic",
         "actual": "wrong.topic",
         "expected": guard.DIRECT_KAFKA_TOPIC_DEFINITIONS[0].topic,
+    } in findings
+
+
+def test_guard_rejects_partition_key_policy_drift(tmp_path: Path) -> None:
+    _write_repo(tmp_path)
+    pack = _minimal_pack()
+    direct_topics = pack["direct_kafka_topics"]
+    direct_topics[0] = {
+        **direct_topics[0],
+        "partition_key_policy": "stale_key",
+    }
+
+    findings = guard.validate_event_contract_test_pack(pack, repo_root=tmp_path)
+
+    assert {
+        "direct_topic": guard.DIRECT_KAFKA_TOPIC_DEFINITIONS[0].name,
+        "field": "partition_key_policy",
+        "actual": "stale_key",
+        "expected": "test",
     } in findings
 
 

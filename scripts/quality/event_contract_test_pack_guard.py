@@ -17,6 +17,7 @@ from portfolio_common.events import GOVERNED_EVENT_SCHEMA_VERSION
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PACK_PATH = Path("docs/standards/event-contract-test-pack.v1.json")
+RUNTIME_CONTRACT_PATH = Path("contracts/eventing/kafka-topic-runtime-contract.v1.json")
 SCHEMA_VERSION = "lotus-core.event-contract-test-pack.v1"
 REQUIRED_EVIDENCE_KEYS = {
     "producer_evidence",
@@ -122,7 +123,63 @@ def _validate_evidence_profiles(
     return findings
 
 
-def _validate_event_families(pack: dict[str, Any]) -> list[dict[str, Any]]:
+def _runtime_partition_key_policies(
+    repo_root: Path,
+) -> tuple[dict[str, str], list[dict[str, Any]]]:
+    contract_path = repo_root / RUNTIME_CONTRACT_PATH
+    if not contract_path.exists():
+        return {}, [{"missing_runtime_contract": RUNTIME_CONTRACT_PATH.as_posix()}]
+    contract = _load_json(contract_path)
+    topics = contract.get("topics")
+    if not isinstance(topics, list) or not topics:
+        return {}, [{"invalid_runtime_contract": "topics"}]
+
+    policies: dict[str, str] = {}
+    findings: list[dict[str, Any]] = []
+    for entry in topics:
+        if not isinstance(entry, dict):
+            findings.append({"invalid_runtime_topic": entry})
+            continue
+        topic = str(entry.get("topic", "")).strip()
+        current_key = str(entry.get("current_key", "")).strip()
+        if not topic or not current_key:
+            findings.append({"invalid_runtime_topic": entry})
+            continue
+        if topic in policies:
+            findings.append({"duplicate_runtime_topic": topic})
+            continue
+        policies[topic] = current_key
+    return policies, findings
+
+
+def _validate_partition_key_policy(
+    *,
+    entry: dict[str, Any],
+    entry_identity: dict[str, str],
+    topic: str,
+    runtime_partition_key_policies: dict[str, str],
+) -> list[dict[str, Any]]:
+    actual_policy = entry.get("partition_key_policy")
+    if not actual_policy:
+        return [{**entry_identity, "missing": "partition_key_policy"}]
+    expected_policy = runtime_partition_key_policies.get(topic)
+    if expected_policy is not None and actual_policy != expected_policy:
+        return [
+            {
+                **entry_identity,
+                "field": "partition_key_policy",
+                "actual": actual_policy,
+                "expected": expected_policy,
+            }
+        ]
+    return []
+
+
+def _validate_event_families(
+    pack: dict[str, Any],
+    *,
+    runtime_partition_key_policies: dict[str, str],
+) -> list[dict[str, Any]]:
     findings: list[dict[str, Any]] = []
     entries = pack.get("event_families")
     if not isinstance(entries, list) or not entries:
@@ -160,12 +217,22 @@ def _validate_event_families(pack: dict[str, Any]) -> list[dict[str, Any]]:
                 )
         if not entry.get("evidence_profile"):
             findings.append({"event_type": event_type, "missing": "evidence_profile"})
-        if not entry.get("partition_key_policy"):
-            findings.append({"event_type": event_type, "missing": "partition_key_policy"})
+        findings.extend(
+            _validate_partition_key_policy(
+                entry=entry,
+                entry_identity={"event_type": event_type},
+                topic=definition.topic,
+                runtime_partition_key_policies=runtime_partition_key_policies,
+            )
+        )
     return findings
 
 
-def _validate_direct_topics(pack: dict[str, Any]) -> list[dict[str, Any]]:
+def _validate_direct_topics(
+    pack: dict[str, Any],
+    *,
+    runtime_partition_key_policies: dict[str, str],
+) -> list[dict[str, Any]]:
     findings: list[dict[str, Any]] = []
     entries = pack.get("direct_kafka_topics")
     if not isinstance(entries, list) or not entries:
@@ -203,8 +270,14 @@ def _validate_direct_topics(pack: dict[str, Any]) -> list[dict[str, Any]]:
                 )
         if not entry.get("evidence_profile"):
             findings.append({"direct_topic": name, "missing": "evidence_profile"})
-        if not entry.get("partition_key_policy"):
-            findings.append({"direct_topic": name, "missing": "partition_key_policy"})
+        findings.extend(
+            _validate_partition_key_policy(
+                entry=entry,
+                entry_identity={"direct_topic": name},
+                topic=definition.topic,
+                runtime_partition_key_policies=runtime_partition_key_policies,
+            )
+        )
     return findings
 
 
@@ -227,6 +300,10 @@ def validate_event_contract_test_pack(
 
     repo_files = _repo_files(repo_root)
     make_targets = _make_targets(repo_root)
+    runtime_partition_key_policies, runtime_contract_findings = _runtime_partition_key_policies(
+        repo_root
+    )
+    findings.extend(runtime_contract_findings)
     findings.extend(
         _validate_evidence_profiles(
             pack,
@@ -235,8 +312,18 @@ def validate_event_contract_test_pack(
             make_targets=make_targets,
         )
     )
-    findings.extend(_validate_event_families(pack))
-    findings.extend(_validate_direct_topics(pack))
+    findings.extend(
+        _validate_event_families(
+            pack,
+            runtime_partition_key_policies=runtime_partition_key_policies,
+        )
+    )
+    findings.extend(
+        _validate_direct_topics(
+            pack,
+            runtime_partition_key_policies=runtime_partition_key_policies,
+        )
+    )
     return findings
 
 
