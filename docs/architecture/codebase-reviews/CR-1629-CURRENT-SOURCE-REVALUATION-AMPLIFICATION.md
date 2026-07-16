@@ -32,6 +32,10 @@ facts.
 5. Future observations and observations received before a business-date horizon retain durable
    replay and defer the visible-position scan.
 6. FX plans expose whether replay was actually staged rather than defaulting the evidence to true.
+7. Immediate price and FX selection compares the persisted source row's `updated_at` with the
+   same-day snapshot. Missing or older snapshots are queued; snapshots materialized after the
+   source fact suppress delayed duplicate notifications; a later source correction becomes
+   eligible again.
 
 ## Compatibility
 
@@ -41,13 +45,14 @@ Backdated and future correction contracts remain unchanged.
 
 ## Validation
 
-- `96` valuation-orchestrator unit tests passed.
+- `97` valuation-orchestrator unit tests passed.
+- `3` focused PostgreSQL price/FX freshness lifecycle tests passed.
 - Focused Ruff lint and format checks passed.
-- Focused MyPy passed.
+- Full repository `make typecheck` passed for `235` source files.
 - Architecture boundary, domain layer, application workflow policy, and infrastructure adapter
   guards passed.
 
-The implementation commit is `4b8a4c772`. The prior failed certifying artifact is
+The implementation commits are `4b8a4c772` and `fd7c71fa5`. The prior failed certifying artifact is
 `output/task-runs/20260716T095705Z-bank-day-load.json`. Fresh runtime evidence remains required
 before issue `#795` can move to fixed-local.
 
