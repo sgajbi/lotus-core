@@ -149,7 +149,7 @@ async def test_process_message_success(
         )
         mock_outbox_repo.create_outbox_event.assert_called_once()
         assert mock_outbox_repo.create_outbox_event.call_args.kwargs["partition_key"].value == (
-            "PORT_UT_01"
+            "PORT_UT_01|SEC_UT_01"
         )
         assert mock_outbox_repo.create_outbox_event.call_args.kwargs["correlation_id"] == (
             "test-corr-id"
