@@ -66,6 +66,7 @@ async def test_current_correction_queues_immediate_jobs_without_replay() -> None
         epoch=3,
         correlation_id="corr-fx-1",
         source_correction_id="sha256:" + ("1" * 64),
+        rearm_completed=True,
         requeue_if_processing=True,
     )
 

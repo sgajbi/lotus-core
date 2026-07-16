@@ -1367,6 +1367,7 @@ async def test_source_correction_defers_in_flight_claim_and_requeues_after_compl
         epoch=2,
         correlation_id="shared-transport-correlation",
         source_correction_id="sha256:" + ("c" * 64),
+        rearm_completed=True,
         requeue_if_processing=True,
     )
     await async_db_session.commit()
@@ -1406,6 +1407,65 @@ async def test_source_correction_defers_in_flight_claim_and_requeues_after_compl
     assert job.requeue_requested is False
     assert job.correlation_id == "shared-transport-correlation"
     assert job.source_correction_id == "sha256:" + ("c" * 64)
+
+
+async def test_completed_job_requires_explicit_source_correction_rearm(
+    async_db_session: AsyncSession,
+    clean_db,
+) -> None:
+    repo = ValuationJobRepository(async_db_session)
+    async_db_session.add(
+        PortfolioValuationJob(
+            portfolio_id="P-COMPLETE-1",
+            security_id="S-COMPLETE-1",
+            valuation_date=date(2025, 8, 12),
+            epoch=2,
+            status="COMPLETE",
+            correlation_id="corr-original",
+            attempt_count=2,
+        )
+    )
+    await async_db_session.commit()
+
+    default_staged_count = await repo.upsert_job(
+        portfolio_id="P-COMPLETE-1",
+        security_id="S-COMPLETE-1",
+        valuation_date=date(2025, 8, 12),
+        epoch=2,
+        correlation_id="corr-scheduler-backfill",
+    )
+    await async_db_session.commit()
+
+    job = (
+        (
+            await async_db_session.execute(
+                select(PortfolioValuationJob).where(
+                    PortfolioValuationJob.portfolio_id == "P-COMPLETE-1"
+                )
+            )
+        )
+        .scalars()
+        .one()
+    )
+    assert default_staged_count == 0
+    assert job.status == "COMPLETE"
+    assert job.correlation_id == "corr-original"
+
+    correction_staged_count = await repo.upsert_job(
+        portfolio_id="P-COMPLETE-1",
+        security_id="S-COMPLETE-1",
+        valuation_date=date(2025, 8, 12),
+        epoch=2,
+        correlation_id="corr-source-correction",
+        rearm_completed=True,
+    )
+    await async_db_session.commit()
+    await async_db_session.refresh(job)
+
+    assert correction_staged_count == 1
+    assert job.status == "PENDING"
+    assert job.correlation_id == "corr-source-correction"
+    assert job.attempt_count == 2
 
 
 async def test_upsert_job_marks_older_pending_epoch_skipped_when_newer_epoch_arrives(
