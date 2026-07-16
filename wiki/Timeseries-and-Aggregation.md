@@ -69,10 +69,19 @@ execution requires building the exact branch source and fails fast if existing i
 The market-price correction profiles do not certify FX corrections. Core publishes each accepted
 FX observation as source-owned persisted evidence and valuation orchestration coalesces bounded
 direct-pair/date replay work. Unsupported inverse or triangulated paths are not inferred. Query
-Control Plane exposes portfolio-scoped `RESET_FX_WATERMARKS` diagnostics. Issue #791 remains open
-until the managed FX profile, restart, concurrency, and exact derived-value evidence pass.
+Control Plane exposes portfolio-scoped `RESET_FX_WATERMARKS` diagnostics. Valuation backfill and
+watermark contiguity use only seeded `GLOBAL` business dates; calendar-day fallback is reserved for
+an entirely absent governed calendar. A newer authoritative snapshot refreshes position-series
+freshness and rearms portfolio aggregation even when local-currency values are unchanged, while an
+already materialized duplicate remains a no-op.
 No-exposure pairs use a bounded visibility retry and complete as observable no-ops instead of
 cycling indefinitely.
+
+Local certifying run `20260715T233241Z` passed the exact five-business-date FX correction: 12,500
+affected snapshot, valuation-job, and position-series refreshes; 500 portfolio-series refreshes;
+one source observation and one pair replay; exact market value and unrealized price/FX/total P&L;
+measured stop/restart recovery; closed queues; zero failures; and complete resource evidence. Issue
+#791 is locally fixed pending PR, CI, exact-main validation, and QA closure.
 
 Valuation dispatch is capped by `VALUATION_SCHEDULER_MAX_IN_FLIGHT_JOBS` across scheduler replicas,
 so Kafka backlog cannot grow into false stale-worker failures. App-local workloads use eight
