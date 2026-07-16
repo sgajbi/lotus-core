@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from ..domain.fx_revaluation import FxRateCorrection, FxRevaluationPlan
+from ..domain.source_revaluation import decide_source_revaluation_schedule
 from ..ports.fx_revaluation import FxRevaluationRepository, PositionValuationJobWriter
 
 
 class ProcessFxRateCorrection:
-    """Stage durable replay and immediate jobs for one accepted FX correction."""
+    """Schedule the minimum correct work for one accepted FX correction."""
 
     def __init__(
         self,
@@ -24,18 +25,25 @@ class ProcessFxRateCorrection:
         correction: FxRateCorrection,
         correlation_id: str,
     ) -> FxRevaluationPlan:
-        """Persist replay intent before scheduling currently visible position keys."""
-        await self._repository.stage_durable_replay(
-            correction=correction,
-            correlation_id=correlation_id,
+        """Schedule visible positions and preserve replay only when timing requires it."""
+        latest_business_date = await self._repository.latest_business_date()
+        schedule = decide_source_revaluation_schedule(
+            effective_date=correction.effective_date,
+            latest_business_date=latest_business_date,
         )
 
-        latest_business_date = await self._repository.latest_business_date()
-        if latest_business_date is None or correction.effective_date > latest_business_date:
+        if schedule.stage_durable_replay:
+            await self._repository.stage_durable_replay(
+                correction=correction,
+                correlation_id=correlation_id,
+            )
+
+        if not schedule.scan_visible_positions:
             return FxRevaluationPlan(
                 pair=correction.pair,
                 effective_date=correction.effective_date,
                 immediate_job_count=0,
+                durable_replay_staged=schedule.stage_durable_replay,
             )
 
         position_keys = await self._repository.find_open_position_keys(
@@ -55,4 +63,5 @@ class ProcessFxRateCorrection:
             pair=correction.pair,
             effective_date=correction.effective_date,
             immediate_job_count=len(position_keys),
+            durable_replay_staged=schedule.stage_durable_replay,
         )

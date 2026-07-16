@@ -42,24 +42,19 @@ def use_case() -> tuple[ProcessFxRateCorrection, AsyncMock, AsyncMock]:
 
 
 @pytest.mark.asyncio
-async def test_current_correction_stages_replay_before_immediate_jobs() -> None:
+async def test_current_correction_queues_immediate_jobs_without_replay() -> None:
     handler, repository, valuation_jobs = use_case()
     repository.latest_business_date.return_value = date(2026, 4, 10)
     repository.find_open_position_keys.return_value = [
         PositionValuationKey("P-SGD", "USD-BOND", 3),
     ]
-    parent = AsyncMock()
-    parent.attach_mock(repository.stage_durable_replay, "stage_replay")
-    parent.attach_mock(valuation_jobs.upsert_job, "upsert_job")
 
     result = await handler.execute(correction=correction(), correlation_id="corr-fx-1")
 
     assert result.immediate_job_count == 1
     assert result.pair.key == "USD->SGD"
-    assert parent.mock_calls[0] == call.stage_replay(
-        correction=correction(),
-        correlation_id="corr-fx-1",
-    )
+    assert result.durable_replay_staged is False
+    repository.stage_durable_replay.assert_not_awaited()
     valuation_jobs.upsert_job.assert_awaited_once_with(
         portfolio_id="P-SGD",
         security_id="USD-BOND",
@@ -77,11 +72,18 @@ async def test_backdated_correction_queues_visible_keys_and_preserves_replay() -
         PositionValuationKey("P1", "USD-EQUITY", 0),
         PositionValuationKey("P2", "USD-BOND", 2),
     ]
+    parent = AsyncMock()
+    parent.attach_mock(repository.stage_durable_replay, "stage_replay")
+    parent.attach_mock(valuation_jobs.upsert_job, "upsert_job")
 
     result = await handler.execute(correction=correction(), correlation_id="corr-backdated")
 
     assert result.durable_replay_staged is True
     assert result.immediate_job_count == 2
+    assert parent.mock_calls[0] == call.stage_replay(
+        correction=correction(),
+        correlation_id="corr-backdated",
+    )
     assert valuation_jobs.upsert_job.await_count == 2
 
 
@@ -102,15 +104,16 @@ async def test_out_of_horizon_correction_only_stages_durable_replay(
 
 
 @pytest.mark.asyncio
-async def test_no_visible_position_keeps_durable_readiness_race_evidence() -> None:
+async def test_current_correction_without_visible_positions_relies_on_position_readiness() -> None:
     handler, repository, valuation_jobs = use_case()
     repository.latest_business_date.return_value = date(2026, 4, 10)
     repository.find_open_position_keys.return_value = []
 
     result = await handler.execute(correction=correction(), correlation_id="corr-race")
 
-    assert result.durable_replay_staged is True
+    assert result.durable_replay_staged is False
     assert result.immediate_job_count == 0
+    repository.stage_durable_replay.assert_not_awaited()
     valuation_jobs.upsert_job.assert_not_awaited()
 
 

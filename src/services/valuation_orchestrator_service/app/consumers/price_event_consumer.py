@@ -19,6 +19,10 @@ from pydantic import ValidationError
 from sqlalchemy.exc import DBAPIError, OperationalError
 from tenacity import retry
 
+from ..domain.source_revaluation import (
+    SourceRevaluationSchedule,
+    decide_source_revaluation_schedule,
+)
 from ..repositories.instrument_reprocessing_state_repository import (
     InstrumentReprocessingStateRepository,
 )
@@ -91,19 +95,23 @@ class PriceEventConsumer(BaseConsumer):
 
                         latest_business_date = await valuation_repo.get_latest_business_date()
                         event_correlation_id = correlation_id
+                        schedule = decide_source_revaluation_schedule(
+                            effective_date=event.price_date,
+                            latest_business_date=latest_business_date,
+                        )
 
                         open_position_keys = await self._queue_immediate_valuation_jobs(
                             valuation_repo=valuation_repo,
                             job_repo=ValuationJobRepository(db),
                             event=event,
-                            latest_business_date=latest_business_date,
+                            schedule=schedule,
                             correlation_id=event_correlation_id,
                         )
 
                         await self._stage_reprocessing_if_needed(
                             reprocessing_repo=reprocessing_repo,
                             event=event,
-                            latest_business_date=latest_business_date,
+                            schedule=schedule,
                             open_position_keys=open_position_keys,
                             correlation_id=event_correlation_id,
                         )
@@ -131,10 +139,10 @@ class PriceEventConsumer(BaseConsumer):
         valuation_repo: ValuationRepository,
         job_repo: ValuationJobRepository,
         event: MarketPricePersistedEvent,
-        latest_business_date,
+        schedule: SourceRevaluationSchedule,
         correlation_id: str,
     ) -> list[tuple[str, str, int]]:
-        if latest_business_date is None or event.price_date > latest_business_date:
+        if not schedule.scan_visible_positions:
             return []
 
         open_position_keys = cast(
@@ -167,51 +175,28 @@ class PriceEventConsumer(BaseConsumer):
         *,
         reprocessing_repo: InstrumentReprocessingStateRepository,
         event: MarketPricePersistedEvent,
-        latest_business_date,
+        schedule: SourceRevaluationSchedule,
         open_position_keys: list[tuple[str, str, int]],
         correlation_id: str,
     ) -> None:
-        if latest_business_date is not None and event.price_date < latest_business_date:
-            logger.warning(
-                "Back-dated price event detected. Flagging instrument for reprocessing.",
-                extra={
-                    "security_id": event.security_id,
-                    "price_date": event.price_date,
-                },
-            )
-            await self._upsert_reprocessing_state(
-                reprocessing_repo=reprocessing_repo,
-                event=event,
-                correlation_id=correlation_id,
-            )
+        if not schedule.stage_durable_replay:
+            if not open_position_keys:
+                logger.info(
+                    "Current price has no visible positions; later position readiness "
+                    "will use the persisted price.",
+                    extra={
+                        "security_id": event.security_id,
+                        "price_date": event.price_date,
+                    },
+                )
             return
 
-        if latest_business_date is not None and event.price_date <= latest_business_date:
-            if open_position_keys:
-                return
-            logger.info(
-                "No open position keys were ready for in-horizon market price. "
-                "Staging durable reprocessing trigger to close the readiness race.",
-                extra={
-                    "security_id": event.security_id,
-                    "price_date": event.price_date,
-                    "latest_business_date": latest_business_date,
-                },
-            )
-            await self._upsert_reprocessing_state(
-                reprocessing_repo=reprocessing_repo,
-                event=event,
-                correlation_id=correlation_id,
-            )
-            return
-
-        logger.info(
-            "Price event is ahead of current business-date horizon. "
-            "Staging durable reprocessing trigger.",
+        logger.warning(
+            "Effective-dated price requires durable reprocessing.",
             extra={
                 "security_id": event.security_id,
                 "price_date": event.price_date,
-                "latest_business_date": latest_business_date,
+                "revaluation_timing": schedule.timing.value,
             },
         )
         await self._upsert_reprocessing_state(

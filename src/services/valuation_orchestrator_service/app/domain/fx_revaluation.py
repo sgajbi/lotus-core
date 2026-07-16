@@ -63,7 +63,7 @@ class FxRevaluationPlan:
     pair: DirectCurrencyPair
     effective_date: date
     immediate_job_count: int
-    durable_replay_staged: bool = True
+    durable_replay_staged: bool
 
 
 @dataclass(frozen=True, slots=True)
