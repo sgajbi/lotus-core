@@ -119,7 +119,7 @@ async def test_duplicate_replay_requests_preserve_single_derived_transaction_sta
     assert producer.flush_count == 2
     assert len(producer.messages) == 2
     assert all(message["topic"] == "transactions.persisted" for message in producer.messages)
-    assert all(message["key"] == portfolio_id for message in producer.messages)
+    assert all(message["key"] == f"{portfolio_id}|CASH" for message in producer.messages)
     assert all(
         message["headers"]
         == [
