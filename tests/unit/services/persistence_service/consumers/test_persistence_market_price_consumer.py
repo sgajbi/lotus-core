@@ -135,6 +135,7 @@ async def test_process_message_success(
         call_args = mock_outbox_repo.create_outbox_event.call_args.kwargs
         assert call_args["topic"] == KAFKA_MARKET_PRICES_PERSISTED_TOPIC
         assert call_args["aggregate_id"] == valid_market_price_event.security_id
+        assert call_args["partition_key"].value == valid_market_price_event.security_id
         assert call_args["payload"]["security_id"] == valid_market_price_event.security_id
         assert call_args["correlation_id"] == "test-corr-id"
 

@@ -10,6 +10,12 @@ from portfolio_common.config import (
     KAFKA_TRANSACTIONS_RAW_RECEIVED_TOPIC,
     KAFKA_TRANSACTIONS_REPROCESSING_REQUESTED_TOPIC,
 )
+from portfolio_common.domain.eventing import (
+    business_calendar_partition_key,
+    currency_pair_partition_key,
+    portfolio_partition_key,
+    security_partition_key,
+)
 from portfolio_common.event_publisher import (
     EventPublisher,
     EventPublishRequest,
@@ -149,7 +155,7 @@ class IngestionService:
             for business_date in business_dates
         ]
         for idx, business_date in enumerate(business_dates):
-            key = record_keys[idx]
+            key = business_calendar_partition_key(business_date.calendar_code).value
             payload = business_date_event_payload(business_date)
             try:
                 self._publish_event(
@@ -183,7 +189,7 @@ class IngestionService:
             try:
                 self._publish_event(
                     topic=KAFKA_PORTFOLIOS_RAW_RECEIVED_TOPIC,
-                    key=portfolio.portfolio_id,
+                    key=portfolio_partition_key(portfolio.portfolio_id).value,
                     value=portfolio_payload,
                     headers=headers,
                 )
@@ -207,9 +213,11 @@ class IngestionService:
         """Publishes a single transaction to the raw transactions topic."""
         headers = self._get_headers(idempotency_key)
         transaction_payload = transaction_event_payload(transaction)
-        partition_key = self._partition_key_or_raise(
-            key=transaction.portfolio_id, field_name="portfolio_id"
+        portfolio_id = self._partition_key_or_raise(
+            key=transaction.portfolio_id,
+            field_name="portfolio_id",
         )
+        partition_key = portfolio_partition_key(portfolio_id).value
         try:
             self._publish_event(
                 topic=KAFKA_TRANSACTIONS_RAW_RECEIVED_TOPIC,
@@ -232,9 +240,11 @@ class IngestionService:
         record_keys = [transaction.transaction_id for transaction in transactions]
         for idx, transaction in enumerate(transactions):
             transaction_payload = transaction_event_payload(transaction)
-            partition_key = self._partition_key_or_raise(
-                key=transaction.portfolio_id, field_name="portfolio_id"
+            portfolio_id = self._partition_key_or_raise(
+                key=transaction.portfolio_id,
+                field_name="portfolio_id",
             )
+            partition_key = portfolio_partition_key(portfolio_id).value
             try:
                 self._publish_event(
                     topic=KAFKA_TRANSACTIONS_RAW_RECEIVED_TOPIC,
@@ -267,7 +277,7 @@ class IngestionService:
             try:
                 self._publish_event(
                     topic=KAFKA_INSTRUMENTS_RECEIVED_TOPIC,
-                    key=instrument.security_id,
+                    key=security_partition_key(instrument.security_id).value,
                     value=instrument_payload,
                     headers=headers,
                 )
@@ -294,7 +304,7 @@ class IngestionService:
             try:
                 self._publish_event(
                     topic=KAFKA_MARKET_PRICES_RAW_RECEIVED_TOPIC,
-                    key=price.security_id,
+                    key=security_partition_key(price.security_id).value,
                     value=price_payload,
                     headers=headers,
                 )
@@ -322,7 +332,7 @@ class IngestionService:
             for rate in fx_rates
         ]
         for idx, rate in enumerate(fx_rates):
-            key = record_keys[idx]
+            key = currency_pair_partition_key(rate.from_currency, rate.to_currency).value
             rate_payload = fx_rate_event_payload(rate)
             try:
                 self._publish_event(

@@ -15,6 +15,7 @@ from portfolio_common.database_models import (
     MarketPrice,
     Portfolio,
 )
+from portfolio_common.domain.eventing import portfolio_security_partition_key
 from portfolio_common.events import (
     DailyPositionSnapshotPersistedEvent,
     PortfolioValuationRequiredEvent,
@@ -412,6 +413,10 @@ class ValuationJobProcessor:
         await outbox_repo.create_outbox_event(
             aggregate_type="DailyPositionSnapshot",
             aggregate_id=persisted_snapshot.portfolio_id,
+            partition_key=portfolio_security_partition_key(
+                persisted_snapshot.portfolio_id,
+                persisted_snapshot.security_id,
+            ),
             event_type="DailyPositionSnapshotPersisted",
             topic=KAFKA_VALUATION_SNAPSHOT_PERSISTED_TOPIC,
             payload=completion_event.model_dump(mode="json"),

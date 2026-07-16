@@ -136,6 +136,9 @@ async def test_process_message_success(
         mock_repo.check_instrument_exists.assert_awaited_once_with("SEC_UT_01")
         mock_repo.check_active_cash_account_exists.assert_not_awaited()
         mock_outbox_repo.create_outbox_event.assert_called_once()
+        assert mock_outbox_repo.create_outbox_event.call_args.kwargs["partition_key"].value == (
+            "PORT_UT_01"
+        )
         assert mock_outbox_repo.create_outbox_event.call_args.kwargs["correlation_id"] == (
             "test-corr-id"
         )

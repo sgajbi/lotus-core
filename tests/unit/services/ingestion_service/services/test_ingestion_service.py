@@ -8,6 +8,8 @@ from portfolio_common.event_publisher import KafkaEventPublisher
 from portfolio_common.kafka_utils import KafkaProducer
 from portfolio_common.logging_utils import correlation_id_var, traceparent_var
 
+from src.services.ingestion_service.app.DTOs.business_date_dto import BusinessDate
+from src.services.ingestion_service.app.DTOs.fx_rate_dto import FxRate
 from src.services.ingestion_service.app.DTOs.portfolio_bundle_dto import (
     PortfolioBundleIngestionRequest,
 )
@@ -145,6 +147,50 @@ async def test_publish_transactions_rejects_empty_partition_key(
         await ingestion_service.publish_transactions(transactions)
 
     mock_kafka_producer.publish_message.assert_not_called()
+
+
+async def test_business_date_partition_key_orders_one_calendar_across_dates(
+    ingestion_service: IngestionService,
+    mock_kafka_producer: MagicMock,
+) -> None:
+    await ingestion_service.publish_business_dates(
+        [
+            BusinessDate(business_date=date(2026, 4, 10), calendar_code="global"),
+            BusinessDate(business_date=date(2026, 4, 13), calendar_code="global"),
+        ]
+    )
+
+    assert [call.kwargs["key"] for call in mock_kafka_producer.publish_message.call_args_list] == [
+        "GLOBAL",
+        "GLOBAL",
+    ]
+
+
+async def test_fx_partition_key_orders_one_pair_across_dates_and_corrections(
+    ingestion_service: IngestionService,
+    mock_kafka_producer: MagicMock,
+) -> None:
+    await ingestion_service.publish_fx_rates(
+        [
+            FxRate(
+                from_currency="usd",
+                to_currency="sgd",
+                rate_date=date(2026, 4, 10),
+                rate=Decimal("1.35"),
+            ),
+            FxRate(
+                from_currency="usd",
+                to_currency="sgd",
+                rate_date=date(2026, 4, 9),
+                rate=Decimal("1.34"),
+            ),
+        ]
+    )
+
+    assert [call.kwargs["key"] for call in mock_kafka_producer.publish_message.call_args_list] == [
+        "USD|SGD",
+        "USD|SGD",
+    ]
 
 
 async def test_publish_transactions_reports_remaining_unpublished_keys_on_batch_failure(

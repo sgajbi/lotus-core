@@ -927,7 +927,7 @@ async def test_scheduler_dispatches_claimed_jobs(
 
     mock_kafka_producer.publish_message.assert_called_once_with(
         topic=KAFKA_VALUATION_JOB_REQUESTED_TOPIC,
-        key="P1",
+        key="P1|S1",
         value={
             "event_type": None,
             "schema_version": None,
@@ -966,7 +966,7 @@ async def test_job_dispatcher_dispatches_claimed_jobs_without_scheduler_loop(
 
     mock_kafka_producer.publish_message.assert_called_once_with(
         topic=KAFKA_VALUATION_JOB_REQUESTED_TOPIC,
-        key="P1",
+        key="P1|S1",
         value={
             "event_type": None,
             "schema_version": None,
@@ -1000,7 +1000,7 @@ async def test_scheduler_omits_empty_correlation_header(
 
     mock_kafka_producer.publish_message.assert_called_once_with(
         topic=KAFKA_VALUATION_JOB_REQUESTED_TOPIC,
-        key="P2",
+        key="P2|S2",
         value={
             "event_type": None,
             "schema_version": None,

@@ -6,6 +6,7 @@ from portfolio_common.config import (
     KAFKA_INSTRUMENTS_RECEIVED_TOPIC,
     KAFKA_TRANSACTIONS_COST_PROCESSED_TOPIC,
 )
+from portfolio_common.domain.eventing import portfolio_partition_key, security_partition_key
 from portfolio_common.events import event_business_payload
 from portfolio_common.monitoring import BUY_LIFECYCLE_STAGE_TOTAL, SELL_LIFECYCLE_STAGE_TOTAL
 from portfolio_common.outbox_repository import OutboxRepository
@@ -56,6 +57,7 @@ class TransactionalCostProcessingEffectStager:
             await self._outbox_repository.create_outbox_event(
                 aggregate_type="ProcessedTransaction",
                 aggregate_id=str(event.portfolio_id),
+                partition_key=portfolio_partition_key(event.portfolio_id),
                 event_type="ProcessedTransactionPersisted",
                 topic=KAFKA_TRANSACTIONS_COST_PROCESSED_TOPIC,
                 payload=event_business_payload(event, mode="json"),
@@ -76,6 +78,7 @@ class TransactionalCostProcessingEffectStager:
             await self._outbox_repository.create_outbox_event(
                 aggregate_type="Instrument",
                 aggregate_id=str(event.security_id),
+                partition_key=security_partition_key(event.security_id),
                 event_type="InstrumentUpserted",
                 topic=KAFKA_INSTRUMENTS_RECEIVED_TOPIC,
                 payload=event.model_dump(mode="json"),

@@ -115,6 +115,7 @@ async def test_process_message_success(
     )
     outbox_call = mock_outbox_repo.create_outbox_event.call_args.kwargs
     assert outbox_call["aggregate_id"] == "EUR-USD"
+    assert outbox_call["partition_key"].value == "EUR|USD"
     assert outbox_call["topic"] == KAFKA_FX_RATES_PERSISTED_TOPIC
     assert outbox_call["payload"]["generated_at"].endswith("Z")
     assert outbox_call["payload"]["content_hash"].startswith("sha256:")

@@ -6,6 +6,10 @@ from portfolio_common.config import (
     KAFKA_PORTFOLIO_SECURITY_DAY_VALUATION_READY_TOPIC,
     KAFKA_TRANSACTION_PROCESSING_READY_TOPIC,
 )
+from portfolio_common.domain.eventing import (
+    portfolio_partition_key,
+    portfolio_security_partition_key,
+)
 from portfolio_common.event_mapping import outbox_event_payload
 from portfolio_common.events import (
     PortfolioDayReadyForValuationEvent,
@@ -46,6 +50,7 @@ class TransactionalTransactionReadinessEventStager:
         await self._outbox_repository.create_outbox_event(
             aggregate_type="PipelineStage",
             aggregate_id=f"{stage.portfolio_id}:{stage.transaction_id}:{stage.epoch}",
+            partition_key=portfolio_partition_key(stage.portfolio_id),
             event_type="TransactionProcessingCompleted",
             topic=KAFKA_TRANSACTION_PROCESSING_READY_TOPIC,
             payload=outbox_event_payload(completed_event),
@@ -68,6 +73,10 @@ class TransactionalTransactionReadinessEventStager:
             aggregate_type="ValuationReadiness",
             aggregate_id=(
                 f"{stage.portfolio_id}:{stage.security_id}:{stage.business_date}:{stage.epoch}"
+            ),
+            partition_key=portfolio_security_partition_key(
+                stage.portfolio_id,
+                stage.security_id,
             ),
             event_type="PortfolioDayReadyForValuation",
             topic=KAFKA_PORTFOLIO_SECURITY_DAY_VALUATION_READY_TOPIC,
