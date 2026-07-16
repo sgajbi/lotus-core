@@ -8,5 +8,5 @@ required ordering scope, consumer group, state owner, duplicate policy, replay b
 partition count, and bounded in-flight capacity.
 
 The contract intentionally records current limitations. In particular, the event family does not
-yet carry a source-owned tenant identity, and transaction reprocessing requests remain globally
-serialized until their command contract carries portfolio identity.
+yet carry a source-owned tenant identity. Transaction reprocessing requests preserve their public
+transaction-id API while resolving authoritative portfolio identity before Kafka publication.
