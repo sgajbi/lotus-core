@@ -667,7 +667,8 @@ The route uses the correct single-record ingestion architecture:
 2. it enforces ingestion operating mode before publishing;
 3. it enforces write-rate protection with `record_count=1`;
 4. it propagates `X-Idempotency-Key` into Kafka publish headers for lineage;
-5. it publishes to `transactions.raw.received` using `portfolio_id` as the partition key;
+5. it publishes to `transactions.raw.received` using `portfolio_id|security_id` as the partition
+   key;
 6. it reports publish failures as HTTP `500` with `INGESTION_PUBLISH_FAILED` and the failed
    transaction id.
 
@@ -2957,8 +2958,8 @@ The route uses the correct batch ingestion architecture:
 4. it enforces write-rate protection using the submitted batch size;
 5. it creates or replays ingestion jobs with idempotency semantics;
 6. it propagates `X-Idempotency-Key` into Kafka publish headers for lineage;
-7. it publishes each record to `transactions.raw.received` using `portfolio_id` as the partition
-   key;
+7. it publishes each record to `transactions.raw.received` using `portfolio_id|security_id` as the
+   partition key;
 8. it records publish failures with failed transaction ids for operational diagnosis and retry;
 9. it marks accepted jobs queued only after publish succeeds, with explicit post-publish
    bookkeeping failure handling.

@@ -13,7 +13,9 @@ The ingestion process is designed to be simple, fast, and asynchronous. The `ing
 2.  **Correlation ID:** The FastAPI middleware checks for an `X-Correlation-ID` header. If one is not present, it generates a new one (e.g., `ING:uuid`). This ID is logged with every message related to this request.
 3.  **Validation:** The endpoint's Pydantic model (`TransactionIngestionRequest`) parses and validates the request body. If validation fails (e.g., missing fields, incorrect data types), the service immediately returns a `422 Unprocessable Entity` error.
 4.  **Publishing:** For each valid transaction in the payload, the `IngestionService` calls the shared `KafkaProducer`.
-5.  **Kafka Message:** A message is produced to the designated Kafka topic. Crucially, the message is **keyed by the `portfolio_id`**. This ensures that all messages for a given portfolio are sent to the same Kafka partition, which guarantees they will be processed sequentially by downstream consumers.
+5.  **Kafka Message:** A message is produced to the designated Kafka topic keyed by
+    `portfolio_id|security_id`. This preserves ordering for one position timeline while allowing
+    independent securities in the same portfolio to use separate Kafka partitions.
 6.  **Response:** Once all messages have been handed off to the producer's buffer, the service immediately returns a `202 Accepted` response to the client. It does not wait for the messages to be physically written to Kafka.
 
 ## 2. Endpoint-to-Topic Mapping
@@ -24,7 +26,7 @@ The service routes data from each API endpoint to a specific Kafka topic with a 
 | :--- | :--- | :--- | :--- |
 | `/ingest/portfolios` | `portfolios.raw.received` | `portfolioId` | Group all events for a portfolio. |
 | `/ingest/instruments` | `instruments.received` | `securityId` | Group all events for an instrument. |
-| `/ingest/transactions` | `transactions.raw.received` | `portfolio_id` | **Sequential processing** for a portfolio's activity. |
+| `/ingest/transactions` | `transactions.raw.received` | `portfolio_id|security_id` | Preserve one position timeline while allowing independent securities to process concurrently. |
 | `/ingest/market-prices` | `market_prices.raw.received` | `securityId` | Group all prices for an instrument. |
 | `/ingest/fx-rates` | `fx_rates.raw.received` | `from_currency|to_currency` (for example, `EUR|USD`) | Preserve effective-dated corrections for one currency pair. |
 | `/ingest/business-dates` | `business_dates.raw.received` | `calendar_code` | Preserve updates for one governed business calendar. |
