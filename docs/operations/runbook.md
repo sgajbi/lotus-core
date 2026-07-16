@@ -219,19 +219,25 @@ metric labels; use logs, DLQ evidence, replay audit, and support APIs for drill-
 
 ## Kafka Consumer Execution Profiles
 
-Consumers that inherit `BaseConsumer` load a shared execution profile. Defaults preserve historical
-serial behavior:
+Consumers that inherit `BaseConsumer` load a shared execution profile. Known Core consumer groups
+use source-owned, partition-aligned in-flight limits; unknown groups remain serial by default:
 
 ```powershell
 LOTUS_CORE_KAFKA_CONSUMER_EXECUTION_DEFAULTS_JSON='{"poll_timeout_seconds":1,"max_in_flight_messages":1,"ordering_key":"partition","per_key_concurrency":1,"shutdown_drain_timeout_seconds":30,"overload_behavior":"pause_poll"}'
 LOTUS_CORE_KAFKA_CONSUMER_EXECUTION_GROUP_OVERRIDES_JSON='{"consumer-group-id":{"poll_timeout_seconds":0.5,"max_in_flight_messages":2}}'
 ```
 
-Only raise `max_in_flight_messages` for workers that are safe to process concurrently across Kafka
-partitions. The shared loop still processes at most one message per partition at a time, pauses
+Environment overrides may reduce a governed group's capacity but must not exceed its source-owned
+partition capacity. The shared loop still processes at most one message per partition at a time, pauses
 polling when ordered same-partition work is queued, and commits offsets only after processing or DLQ
 publication completes. `per_key_concurrency` must remain `1` until a separate ordered commit manager
 is designed and tested.
+
+Topic counts, key scopes, producers, consumer groups, state owners, duplicate policies, and replay
+contracts are inventoried in
+`contracts/eventing/kafka-topic-runtime-contract.v1.json`. Follow
+`docs/operations/kafka-partition-migration-runbook.md` for any existing-topic mismatch. Do not use a
+global partition-count override.
 
 The combined transaction-processing target loads separate profiles for
 `portfolio_transaction_processing_group` and
@@ -405,7 +411,6 @@ Operational knobs:
 | `VALUATION_SCHEDULER_BACKFILL_UPSERT_CHUNK_SIZE` | `100` | Maximum generated valuation backfill jobs written in one scheduler upsert chunk across states. |
 | `VALUATION_SCHEDULER_MAX_IN_FLIGHT_JOBS` | Scheduler batch size (`100` by default; Compose uses `1000`) | Maximum durable valuation jobs allowed in `PROCESSING` across scheduler replicas. Claims use a PostgreSQL transaction-scoped lock so concurrent schedulers share the same cap. Size this below the number the active valuation workers can drain within `VALUATION_SCHEDULER_STALE_TIMEOUT_MINUTES`. |
 | `POSITION_VALUATION_WORKER_COUNT` | `1` (`8` in app-local Compose) | Number of serial Kafka valuation consumers in one position-valuation process. Do not configure more active workers than `valuation.job.requested` partitions. |
-| `KAFKA_NUM_PARTITIONS` | `1` (`8` in app-local Compose) | Partition count used only when the topic creator creates a missing topic. Existing topics are not repartitioned. Preserve portfolio-keyed ordering when increasing this value. |
 
 The guard is static contract evidence. Environment-level ingress, IAM, WAF, network policy, and
 penetration-test evidence remain separate higher-lane proof.

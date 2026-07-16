@@ -374,6 +374,18 @@ Current repository posture:
     enforces this ownership. For derived-state changes, run
     `make test-derived-state-poison-gate` to prove one poison record, support-plane visibility,
     bounded lag recovery, subsequent valid-message progress, and clean reconciliation.
+    Kafka topic topology and ordering are governed by
+    `contracts/eventing/kafka-topic-runtime-contract.v1.json`. Domain partition keys live in
+    `portfolio_common.domain.eventing`; dates and epochs must not enter position, portfolio,
+    security, currency-pair, or business-calendar ordering keys. Outbox aggregate identity and
+    transport partition identity are separate fields. Topic provisioning and service startup must
+    fail when broker partition metadata differs from the source contract. Known consumer groups
+    may process independent partitions concurrently but must remain serial within each partition
+    and may not exceed governed partition capacity. Follow
+    `docs/operations/kafka-partition-migration-runbook.md` for pause/drain/cutover/rollback. Current
+    transaction reprocessing commands remain one-partition until they carry source-owned portfolio
+    identity, and current tenant-blind event families must not be described as tenant-isolation
+    proof.
 39. Structured operational logging is governed by
     `portfolio_common.logging_utils.operation_log_extra(...)`, `log_operation_event(...)`, and
     `make structured-log-guard` through `make lint`. Guarded health, Kafka, outbox, ingestion,

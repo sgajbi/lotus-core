@@ -29,6 +29,7 @@ The outbox row records:
 
 - aggregate type
 - aggregate id
+- partition key
 - event type
 - topic
 - correlation id
@@ -50,6 +51,11 @@ payloads.
 
 The outbox dispatcher polls `outbox_events`, publishes pending rows to Kafka, and updates publish
 status based on delivery acknowledgement.
+
+`aggregate_id` identifies durable business evidence. `partition_key` independently identifies the
+ordered transport stream. Keeping them separate prevents database record identity, dates, epochs,
+or retry identifiers from accidentally changing Kafka ordering. The dispatcher always publishes
+with the stored partition key.
 
 This gives `lotus-core` a durable database-backed publish queue rather than relying on in-memory
 best effort after a write succeeds.
@@ -156,6 +162,10 @@ Use this page together with:
   until the event contract is versioned explicitly
 - do not bypass durable publish intent with ad hoc direct publish from state-mutating paths unless
   the contract is explicitly governed as direct Kafka publication
+- keep producer keys and partition counts aligned with
+  [the machine-readable Kafka runtime contract](../contracts/eventing/kafka-topic-runtime-contract.v1.json)
+- use the [Kafka Partition Migration Runbook](../docs/operations/kafka-partition-migration-runbook.md)
+  before changing existing topic metadata
 
 ## Related references
 
