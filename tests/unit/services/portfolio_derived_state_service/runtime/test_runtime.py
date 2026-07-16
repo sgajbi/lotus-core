@@ -138,6 +138,7 @@ async def test_runtime_ensures_owned_input_and_output_topics(
 
     assert ensured_topics == [
         runtime.KAFKA_VALUATION_SNAPSHOT_PERSISTED_TOPIC,
+        runtime.KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC,
         runtime.KAFKA_PORTFOLIO_DAY_AGGREGATION_COMPLETED_TOPIC,
         runtime.KAFKA_PORTFOLIO_DAY_RECONCILIATION_REQUESTED_TOPIC,
     ]

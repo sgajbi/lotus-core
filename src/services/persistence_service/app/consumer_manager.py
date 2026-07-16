@@ -129,7 +129,10 @@ class ConsumerManager:
         """
         The main execution function. Sets up signal handling and runs all concurrent tasks.
         """
-        required_topics = [consumer.topic for consumer in self.consumers]
+        required_topics = [
+            *(consumer.topic for consumer in self.consumers),
+            KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC,
+        ]
         ensure_topics_exist(required_topics)
 
         signal.signal(signal.SIGINT, self._signal_handler)

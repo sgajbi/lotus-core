@@ -90,10 +90,15 @@ async def run_kafka_worker_runtime(
     server_factory: Callable[[Any], Any],
 ) -> None:
     """Run Kafka consumers, one outbox dispatcher, and the worker health server."""
+    consumer_topics = [str(getattr(consumer, "topic")) for consumer in consumers]
+    consumer_dlq_topics: list[str] = []
+    for consumer in consumers:
+        dlq_topic = getattr(consumer, "dlq_topic", None)
+        if isinstance(dlq_topic, str) and dlq_topic.strip():
+            consumer_dlq_topics.append(dlq_topic)
     required_topics = list(
         dict.fromkeys(
-            [str(getattr(consumer, "topic")) for consumer in consumers]
-            + [str(topic) for topic in published_topics]
+            consumer_topics + consumer_dlq_topics + [str(topic) for topic in published_topics]
         )
     )
     ensure_topics(required_topics)
