@@ -5,7 +5,6 @@ import logging
 from portfolio_common.database_models import Cashflow, Portfolio, Transaction
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...domain.cashflow import CalculatedCashflow, StoredCashflow
@@ -41,39 +40,46 @@ class SqlAlchemyCashflowRepository:
         cashflow: CalculatedCashflow | Cashflow,
     ) -> StoredCashflow:
         """Stage a cashflow or return the existing transaction/epoch row."""
-        cashflow_row = _to_cashflow_row(cashflow)
+        values = _cashflow_values(cashflow)
         try:
-            async with self._session.begin_nested():
-                self._session.add(cashflow_row)
-                await self._session.flush()
-            await self._session.refresh(cashflow_row)
-            logger.debug(
-                "Successfully staged cashflow record for transaction_id '%s' in epoch %s",
-                cashflow_row.transaction_id,
-                cashflow_row.epoch,
-            )
-            return _to_stored_cashflow(cashflow_row)
-        except IntegrityError:
+            inserted_id = (
+                await self._session.execute(
+                    pg_insert(Cashflow)
+                    .values(**values)
+                    .on_conflict_do_nothing(constraint="_transaction_epoch_uc")
+                    .returning(Cashflow.id)
+                )
+            ).scalar_one_or_none()
+            if inserted_id is not None:
+                logger.debug(
+                    "Successfully staged cashflow record for transaction_id '%s' in epoch %s",
+                    cashflow.transaction_id,
+                    cashflow.epoch,
+                )
+                return _to_stored_cashflow(cashflow, cashflow_id=int(inserted_id))
+
             logger.debug(
                 "Cashflow for transaction_id '%s' in epoch %s already exists. "
                 "Reusing persisted row.",
-                cashflow_row.transaction_id,
-                cashflow_row.epoch,
+                cashflow.transaction_id,
+                cashflow.epoch,
             )
             result = await self._session.execute(
                 select(Cashflow).where(
-                    Cashflow.transaction_id == cashflow_row.transaction_id,
-                    Cashflow.epoch == cashflow_row.epoch,
+                    Cashflow.transaction_id == cashflow.transaction_id,
+                    Cashflow.epoch == cashflow.epoch,
                 )
             )
             existing_cashflow = result.scalars().first()
             if existing_cashflow is None:
-                raise
+                raise RuntimeError(
+                    "Cashflow insert conflicted without an existing transaction/epoch row"
+                )
             return _to_stored_cashflow(existing_cashflow)
         except Exception:
             logger.exception(
                 "Unexpected error while staging cashflow for transaction_id '%s'",
-                cashflow_row.transaction_id,
+                cashflow.transaction_id,
             )
             raise
 
@@ -98,10 +104,7 @@ class SqlAlchemyCashflowRepository:
                 ).returning(Cashflow.id)
             )
         ).scalar_one()
-        stored = (
-            await self._session.execute(select(Cashflow).where(Cashflow.id == cashflow_id))
-        ).scalar_one()
-        return _to_stored_cashflow(stored)
+        return _to_stored_cashflow(cashflow, cashflow_id=int(cashflow_id))
 
 
 def _cashflow_values(
@@ -125,32 +128,16 @@ def _cashflow_values(
     }
 
 
-def _to_cashflow_row(cashflow: CalculatedCashflow | Cashflow) -> Cashflow:
-    if isinstance(cashflow, Cashflow):
-        return cashflow
-    return Cashflow(
-        transaction_id=cashflow.transaction_id,
-        portfolio_id=cashflow.portfolio_id,
-        security_id=cashflow.security_id,
-        cashflow_date=cashflow.cashflow_date,
-        epoch=cashflow.epoch,
-        amount=cashflow.amount,
-        currency=cashflow.currency,
-        classification=cashflow.classification,
-        timing=cashflow.timing,
-        calculation_type=cashflow.calculation_type,
-        is_position_flow=cashflow.is_position_flow,
-        is_portfolio_flow=cashflow.is_portfolio_flow,
-        economic_event_id=cashflow.economic_event_id,
-        linked_transaction_group_id=cashflow.linked_transaction_group_id,
-    )
-
-
-def _to_stored_cashflow(cashflow: Cashflow) -> StoredCashflow:
-    if cashflow.id is None:
+def _to_stored_cashflow(
+    cashflow: CalculatedCashflow | Cashflow,
+    *,
+    cashflow_id: int | None = None,
+) -> StoredCashflow:
+    resolved_cashflow_id = cashflow_id or getattr(cashflow, "id", None)
+    if resolved_cashflow_id is None:
         raise RuntimeError("Persisted cashflow is missing its database identity")
     return StoredCashflow(
-        cashflow_id=int(cashflow.id),
+        cashflow_id=int(resolved_cashflow_id),
         transaction_id=str(cashflow.transaction_id),
         portfolio_id=str(cashflow.portfolio_id),
         security_id=(str(cashflow.security_id) if cashflow.security_id is not None else None),
