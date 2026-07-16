@@ -87,16 +87,14 @@ class OutboxRepository:
             created_at=datetime.now(timezone.utc),
         )
         self.db.add(event)
-        await self.db.flush()
-        logger.info(
-            "Outbox event created",
+        logger.debug(
+            "Outbox event staged",
             extra={
                 "aggregate_type": aggregate_type,
                 "aggregate_id": aggregate_id,
                 "partition_key": resolved_partition_key,
                 "event_type": event_type,
                 "topic": topic,
-                "outbox_id": event.id,
             },
         )
         return event
