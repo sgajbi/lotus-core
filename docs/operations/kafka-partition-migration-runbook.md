@@ -14,8 +14,11 @@ schemas and payloads are unchanged.
 - Kafka ordering is guaranteed only within one partition.
 - Dates and epochs are not partition-key components. Backdated events, corrections, reversals, and
   restatements must remain on the same business stream as the original state.
-- Transaction economics is currently portfolio ordered because corporate actions and linked legs
-  can mutate more than one security timeline.
+- Transaction ingestion, persistence, replay, and economics are portfolio-security ordered.
+  Backdated arrivals rebuild deterministic position timelines. Cross-security corporate-action and
+  linked-leg correctness is enforced by explicit dependency references, deterministic domain
+  ordering, reconciliation, and portfolio-security mutation locks rather than portfolio-wide
+  transport serialization.
 - Valuation and position timeseries work is portfolio-security ordered.
 - Market prices are security ordered, FX rates are directed-currency-pair ordered, and business
   dates are calendar ordered.

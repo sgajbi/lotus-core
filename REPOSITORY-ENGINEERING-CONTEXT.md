@@ -2716,6 +2716,14 @@ Most relevant current governance:
      and event behavior. Do not reintroduce one existence query per reference family on the
      bank-day hot path; prove the one-read shape in repository tests and the behavior against
      PostgreSQL.
+194. Transaction ingestion, raw persistence, and repair replay must use the same normalized
+     `portfolio_id|security_id` partition identity. This preserves same-position ordering across
+     normal, duplicate, backdated, reversal, correction, restatement, and corporate-action
+     processing while allowing independent securities in one portfolio to use the governed
+     partition capacity. Cross-security lifecycle correctness must remain explicit in dependency
+     references, deterministic domain ordering, reconciliation, and portfolio-security database
+     locks; do not restore portfolio-wide transport serialization as a substitute for those domain
+     controls.
 
 ## Context Maintenance Rule
 
