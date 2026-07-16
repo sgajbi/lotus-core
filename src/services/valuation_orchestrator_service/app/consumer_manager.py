@@ -7,8 +7,8 @@ from portfolio_common.config import (
     KAFKA_BOOTSTRAP_SERVERS,
     KAFKA_FX_RATES_PERSISTED_TOPIC,
     KAFKA_MARKET_PRICES_PERSISTED_TOPIC,
-    KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC,
     KAFKA_PORTFOLIO_SECURITY_DAY_VALUATION_READY_TOPIC,
+    KAFKA_VALUATION_SERVICE_DLQ_TOPIC,
 )
 from portfolio_common.health_server import health_probe_bind_host
 from portfolio_common.kafka_admin import ensure_topics_exist
@@ -43,7 +43,7 @@ class ConsumerManager:
 
         group_id = "valuation_orchestrator_group"
         service_prefix = "VAL-ORCH"
-        dlq_topic = KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC
+        dlq_topic = KAFKA_VALUATION_SERVICE_DLQ_TOPIC
 
         self.consumers.append(
             ValuationReadinessConsumer(
@@ -86,7 +86,10 @@ class ConsumerManager:
         self._shutdown_event.set()
 
     async def run(self):
-        required_topics = [consumer.topic for consumer in self.consumers]
+        required_topics = [
+            *(consumer.topic for consumer in self.consumers),
+            KAFKA_VALUATION_SERVICE_DLQ_TOPIC,
+        ]
         ensure_topics_exist(required_topics)
 
         signal.signal(signal.SIGINT, self._signal_handler)

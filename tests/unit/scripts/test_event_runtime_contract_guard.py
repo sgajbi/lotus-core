@@ -55,7 +55,9 @@ def test_discover_consumer_dlq_wirings_finds_current_base_consumer_topics() -> N
     consumer_names = {wiring.consumer_name for wiring in wirings}
 
     assert "dlq.persistence_service" in topics
+    assert "dlq.valuation_service" in topics
     assert "PortfolioConsumer" in consumer_names
+    assert "ValuationConsumer" in consumer_names
     assert "TransactionProcessingConsumer" in consumer_names
     assert "BookedTransactionReplayRequestConsumer" in consumer_names
 
