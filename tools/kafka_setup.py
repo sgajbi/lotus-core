@@ -8,7 +8,7 @@ from confluent_kafka import KafkaException
 from confluent_kafka.admin import AdminClient, NewTopic
 from portfolio_common.config import (
     KAFKA_BOOTSTRAP_SERVERS,
-    KAFKA_TOPIC_RUNTIME_NAMES,
+    KAFKA_TOPIC_PARTITION_COUNTS,
 )
 from portfolio_common.logging_utils import setup_logging
 
@@ -20,7 +20,6 @@ logger = logging.getLogger(__name__)
 
 # For production, replication_factor should be >= 3. For local dev, 1 is sufficient.
 REPLICATION_FACTOR = int(os.getenv("KAFKA_REPLICATION_FACTOR", 1))
-NUM_PARTITIONS = int(os.getenv("KAFKA_NUM_PARTITIONS", 1))
 # For production, min.insync.replicas should be 2 when replication factor is 3.
 MIN_INSYNC_REPLICAS = int(os.getenv("KAFKA_MIN_INSYNC_REPLICAS", 1))
 
@@ -33,22 +32,31 @@ TOPIC_CONFIG = {
     "retention.ms": "604800000",
 }
 
-TOPICS_TO_CREATE = list(KAFKA_TOPIC_RUNTIME_NAMES)
+TOPICS_TO_CREATE = list(KAFKA_TOPIC_PARTITION_COUNTS)
 
 
-def create_topics(admin_client: AdminClient):
-    """Creates topics in Kafka."""
+class KafkaTopicProvisioningError(RuntimeError):
+    """Raised when broker topic metadata conflicts with the governed Core contract."""
+
+
+def create_topics(admin_client: AdminClient) -> None:
+    """Create missing topics and reject existing partition-count drift."""
 
     existing_topics = admin_client.list_topics().topics
+    partition_mismatches = _partition_mismatches(existing_topics)
+    if partition_mismatches:
+        raise KafkaTopicProvisioningError(
+            f"Kafka topic partition contract mismatch: {partition_mismatches}"
+        )
 
     new_topic_list = [
         NewTopic(
             topic,
-            num_partitions=max(1, NUM_PARTITIONS),
+            num_partitions=partition_count,
             replication_factor=REPLICATION_FACTOR,
             config=TOPIC_CONFIG,
         )
-        for topic in TOPICS_TO_CREATE
+        for topic, partition_count in KAFKA_TOPIC_PARTITION_COUNTS.items()
         if topic not in existing_topics
     ]
 
@@ -71,6 +79,18 @@ def create_topics(admin_client: AdminClient):
                 logger.error(f"Failed to create topic '{topic}': {e}")
         except Exception as e:
             logger.error(f"An unexpected error occurred for topic '{topic}': {e}")
+
+
+def _partition_mismatches(existing_topics: dict[str, object]) -> dict[str, dict[str, int]]:
+    return {
+        topic: {
+            "expected": expected_count,
+            "actual": len(getattr(existing_topics[topic], "partitions", {})),
+        }
+        for topic, expected_count in KAFKA_TOPIC_PARTITION_COUNTS.items()
+        if topic in existing_topics
+        and len(getattr(existing_topics[topic], "partitions", {})) != expected_count
+    }
 
 
 def main():

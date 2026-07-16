@@ -6,7 +6,7 @@ from confluent_kafka import KafkaException
 from confluent_kafka.admin import AdminClient
 from tenacity import retry
 
-from .config import KAFKA_BOOTSTRAP_SERVERS
+from .config import KAFKA_BOOTSTRAP_SERVERS, KAFKA_TOPIC_PARTITION_COUNTS
 from .downstream_access import DownstreamAccessPolicy, load_downstream_access_policy
 from .retry_policy import KAFKA_ADMIN_STARTUP_RETRY, tenacity_retry_kwargs
 
@@ -16,6 +16,10 @@ KAFKA_ADMIN_ACCESS_POLICY = load_downstream_access_policy()
 
 class KafkaTopicVerificationError(RuntimeError):
     """Raised when required Kafka topics cannot be verified safely."""
+
+
+class KafkaTopicPartitionMismatchError(KafkaTopicVerificationError):
+    """Raised when existing broker metadata conflicts with the partition contract."""
 
 
 @retry(
@@ -50,6 +54,8 @@ def ensure_topics_exist(required_topics: List[str]):
         )
         logger.info("All required Kafka topics found.")
 
+    except KafkaTopicVerificationError:
+        raise
     except KafkaException as e:
         logger.warning(f"Kafka error while verifying topics: {e}. Retrying...")
         raise  # Re-raise to allow tenacity to handle the retry
@@ -70,10 +76,15 @@ def _verify_required_topics(
     *,
     policy: DownstreamAccessPolicy | None = None,
 ) -> None:
-    existing_topics = _existing_topic_names(admin_client, policy=policy)
-    missing_topics = _missing_required_topics(required_topics, existing_topics)
+    topic_metadata = _existing_topic_metadata(admin_client, policy=policy)
+    missing_topics = _missing_required_topics(required_topics, topic_metadata)
     if missing_topics:
         raise KafkaException(f"Required topics are not yet available: {missing_topics}")
+    partition_mismatches = _partition_mismatches(required_topics, topic_metadata)
+    if partition_mismatches:
+        raise KafkaTopicPartitionMismatchError(
+            f"Kafka topic partition contract mismatch: {partition_mismatches}"
+        )
 
 
 def _existing_topic_names(
@@ -81,10 +92,33 @@ def _existing_topic_names(
     *,
     policy: DownstreamAccessPolicy | None = None,
 ):
+    return _existing_topic_metadata(admin_client, policy=policy).keys()
+
+
+def _existing_topic_metadata(
+    admin_client: AdminClient,
+    *,
+    policy: DownstreamAccessPolicy | None = None,
+):
     resolved_policy = policy or KAFKA_ADMIN_ACCESS_POLICY
     cluster_metadata = admin_client.list_topics(timeout=resolved_policy.request_timeout_seconds)
-    return cluster_metadata.topics.keys()
+    return cluster_metadata.topics
 
 
 def _missing_required_topics(required_topics: List[str], existing_topics) -> list[str]:
     return [topic for topic in required_topics if topic not in existing_topics]
+
+
+def _partition_mismatches(
+    required_topics: List[str],
+    topic_metadata,
+) -> dict[str, dict[str, int]]:
+    return {
+        topic: {
+            "expected": KAFKA_TOPIC_PARTITION_COUNTS[topic],
+            "actual": len(topic_metadata[topic].partitions),
+        }
+        for topic in required_topics
+        if topic in KAFKA_TOPIC_PARTITION_COUNTS
+        and len(topic_metadata[topic].partitions) != KAFKA_TOPIC_PARTITION_COUNTS[topic]
+    }

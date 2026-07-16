@@ -395,3 +395,19 @@ def test_topic_registry_limits_runtime_names_to_active_topics():
     assert {"active", "inactive"} <= statuses
     assert config_module.KAFKA_TRANSACTIONS_PERSISTED_TOPIC in runtime_names
     assert inactive_names.isdisjoint(runtime_names)
+
+
+def test_active_topic_registry_has_explicit_source_owned_partition_counts():
+    import portfolio_common.config as config_module
+
+    active_topics = {
+        topic.runtime_name: topic
+        for topic in config_module.KAFKA_TOPIC_DEFINITIONS
+        if topic.lifecycle_status == "active"
+    }
+
+    assert set(config_module.KAFKA_TOPIC_PARTITION_COUNTS) == set(active_topics)
+    assert all(count > 0 for count in config_module.KAFKA_TOPIC_PARTITION_COUNTS.values())
+    assert config_module.KAFKA_TOPIC_PARTITION_COUNTS["business_dates.raw.received"] == 1
+    assert config_module.KAFKA_TOPIC_PARTITION_COUNTS["transactions.persisted"] == 8
+    assert len(set(config_module.KAFKA_TOPIC_PARTITION_COUNTS.values())) > 1
