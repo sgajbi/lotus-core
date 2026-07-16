@@ -73,6 +73,50 @@ async def test_find_and_claim_fx_jobs_prioritizes_earliest_impacted_date(
     assert "(payload->>'earliest_impacted_date') ASC" in str(query)
 
 
+async def test_find_and_claim_fx_jobs_defers_invalid_date_rejection(
+    repository: ReprocessingJobRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    mock_result = MagicMock()
+    mock_result.mappings.return_value.all.return_value = [
+        {
+            "id": 20,
+            "job_type": "RESET_FX_WATERMARKS",
+            "payload": {
+                "from_currency": "USD",
+                "to_currency": "SGD",
+                "earliest_impacted_date": "not-a-date",
+            },
+            "status": "PROCESSING",
+            "attempt_count": 1,
+            "last_attempted_at": None,
+            "failure_reason": None,
+            "created_at": None,
+            "updated_at": None,
+        },
+        {
+            "id": 10,
+            "job_type": "RESET_FX_WATERMARKS",
+            "payload": {
+                "from_currency": "USD",
+                "to_currency": "SGD",
+                "earliest_impacted_date": "2026-04-10",
+            },
+            "status": "PROCESSING",
+            "attempt_count": 1,
+            "last_attempted_at": None,
+            "failure_reason": None,
+            "created_at": None,
+            "updated_at": None,
+        },
+    ]
+    mock_db_session.execute.return_value = mock_result
+
+    claimed = await repository.find_and_claim_jobs("RESET_FX_WATERMARKS", batch_size=2)
+
+    assert [job.id for job in claimed] == [10, 20]
+
+
 async def test_normalize_pending_reset_watermarks_duplicates_uses_set_based_cleanup(
     repository: ReprocessingJobRepository,
     mock_db_session: AsyncMock,
