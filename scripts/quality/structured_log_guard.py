@@ -18,11 +18,40 @@ DEFAULT_SCAN_PATHS = (
     Path("src/libs/portfolio-common/portfolio_common/health.py"),
     Path("src/libs/portfolio-common/portfolio_common/kafka_consumer.py"),
     Path("src/libs/portfolio-common/portfolio_common/kafka_utils.py"),
+    Path("src/libs/portfolio-common/portfolio_common/outbox_repository.py"),
     Path("src/libs/portfolio-common/portfolio_common/outbox_dispatcher.py"),
     Path("src/services/ingestion_service/app/routers/reprocessing.py"),
+    Path("src/services/persistence_service/app/repositories/transaction_db_repo.py"),
+    Path(
+        "src/services/portfolio_transaction_processing_service/app/delivery/kafka/"
+        "transaction_processing_consumer.py"
+    ),
+    Path("src/services/portfolio_transaction_processing_service/app/infrastructure"),
+    Path("src/services/calculators/position_valuation_calculator/app/consumers"),
+    Path("src/services/portfolio_derived_state_service/app/delivery"),
+    Path("src/services/portfolio_derived_state_service/app/infrastructure"),
     Path("src/services/query_service/app/repositories"),
     Path("src/services/query_service/app/services"),
     Path("src/services/valuation_orchestrator_service/app/core"),
+)
+
+HIGH_VOLUME_DEBUG_ONLY_MESSAGES = frozenset(
+    {
+        "Calculated cashflow for transaction %s: amount=%s classification=%s",
+        "Cost-basis processing lock acquired.",
+        "Outbox event staged",
+        "Position-timeseries materialization completed.",
+        "Processing valuation job.",
+        "Re-armed valuation and timeseries generation after position history write.",
+        "Staged portfolio aggregation jobs.",
+        "Staged position history records for the recalculation epoch.",
+        "Staged position history records.",
+        "Staged portfolio time-series upsert.",
+        "Staged position time-series upsert.",
+        "Successfully staged cashflow record for transaction_id '%s' in epoch %s",
+        "Transaction processing completed.",
+        "Transaction upsert staged.",
+    }
 )
 
 
@@ -70,6 +99,15 @@ def evaluate_structured_log_guard(paths: tuple[Path, ...] = DEFAULT_SCAN_PATHS) 
         for node in ast.walk(tree):
             if not isinstance(node, ast.Call) or not _is_logger_call(node):
                 continue
+            logger_method = node.func.attr
+            message = (
+                node.args[0].value if node.args and isinstance(node.args[0], ast.Constant) else None
+            )
+            if logger_method == "info" and message in HIGH_VOLUME_DEBUG_ONLY_MESSAGES:
+                errors.append(
+                    f"{file_path}:{node.lineno}: high-volume routine event must use "
+                    "logger.debug or bounded metrics, not logger.info"
+                )
             if node.args and isinstance(node.args[0], ast.JoinedStr):
                 errors.append(
                     f"{file_path}:{node.lineno}: logger message must not be an f-string; "

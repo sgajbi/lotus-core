@@ -17,7 +17,7 @@ class PrometheusCashflowCalculationObserver:
             classification=cashflow.classification,
             timing=cashflow.timing,
         ).inc()
-        logger.info(
+        logger.debug(
             "Calculated cashflow for transaction %s: amount=%s classification=%s",
             cashflow.transaction_id,
             cashflow.amount,

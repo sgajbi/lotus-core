@@ -67,3 +67,40 @@ def test_structured_log_guard_accepts_constant_message_with_safe_extra(tmp_path:
     )
 
     assert evaluate_structured_log_guard((source,)) == []
+
+
+def test_structured_log_guard_rejects_high_volume_routine_info_event(tmp_path: Path) -> None:
+    source = tmp_path / "hot_path.py"
+    source.write_text(
+        "\n".join(
+            [
+                "import logging",
+                "logger = logging.getLogger(__name__)",
+                "def process():",
+                "    logger.info('Transaction processing completed.')",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    errors = evaluate_structured_log_guard((source,))
+
+    assert len(errors) == 1
+    assert "high-volume routine event must use logger.debug" in errors[0]
+
+
+def test_structured_log_guard_accepts_high_volume_routine_debug_event(tmp_path: Path) -> None:
+    source = tmp_path / "hot_path.py"
+    source.write_text(
+        "\n".join(
+            [
+                "import logging",
+                "logger = logging.getLogger(__name__)",
+                "def process():",
+                "    logger.debug('Transaction processing completed.')",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    assert evaluate_structured_log_guard((source,)) == []
