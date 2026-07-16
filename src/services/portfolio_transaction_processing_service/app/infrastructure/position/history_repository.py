@@ -226,12 +226,11 @@ class SqlAlchemyPositionHistoryRepository:
 
     @async_timed(repository="PositionRepository", method="save_positions")
     async def save_records(self, records: tuple[PositionHistoryRecord, ...]) -> None:
-        """Map domain history records to ORM rows and flush them without committing."""
+        """Stage domain history records for the caller-owned transaction commit."""
         if not records:
             return
         rows = [_to_position_history_row(record) for record in records]
         self._session.add_all(rows)
-        await self._session.flush()
         logger.debug(
             "Staged position history records.",
             extra={"position_record_count": len(rows)},

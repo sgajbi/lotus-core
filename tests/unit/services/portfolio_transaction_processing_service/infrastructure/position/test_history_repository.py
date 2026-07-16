@@ -88,7 +88,7 @@ async def test_last_record_before_maps_nullable_local_basis_to_zero() -> None:
 
 
 @pytest.mark.asyncio
-async def test_save_records_maps_domain_records_to_orm_and_flushes() -> None:
+async def test_save_records_maps_domain_records_without_eager_flush() -> None:
     session = AsyncMock(spec=AsyncSession)
     repository = SqlAlchemyPositionHistoryRepository(session)
     record = PositionHistoryRecord(
@@ -110,7 +110,7 @@ async def test_save_records_maps_domain_records_to_orm_and_flushes() -> None:
     assert rows[0].portfolio_id == "PB-001"
     assert rows[0].transaction_id == "TX-001"
     assert rows[0].cost_basis_local == Decimal("95")
-    session.flush.assert_awaited_once_with()
+    session.flush.assert_not_awaited()
 
 
 def test_repository_excludes_production_unused_legacy_reads() -> None:
