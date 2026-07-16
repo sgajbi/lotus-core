@@ -183,6 +183,7 @@ def test_dispatcher_elapsed_retry_budget_moves_failure_to_terminal() -> None:
         id=101,
         aggregate_type="OutboxElapsedBudget",
         aggregate_id="agg-elapsed",
+        partition_key="PORT_001|SEC_A",
         event_type="TestEvent",
         payload={},
         topic="elapsed.topic",

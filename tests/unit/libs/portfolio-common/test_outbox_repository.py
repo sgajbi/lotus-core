@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from portfolio_common.database_models import OutboxEvent
+from portfolio_common.domain.eventing import portfolio_security_partition_key
 from portfolio_common.events import CashflowCalculatedEvent
 from portfolio_common.logging_utils import traceparent_var
 from portfolio_common.outbox_repository import EVENT_SCHEMA_VERSION, OutboxRepository
@@ -55,6 +56,7 @@ async def test_create_outbox_event_success(
     added_object = mock_db_session.add.call_args[0][0]
     assert isinstance(added_object, OutboxEvent)
     assert added_object.aggregate_id == event_details["aggregate_id"]
+    assert added_object.partition_key == event_details["aggregate_id"]
     assert added_object.topic == event_details["topic"]
     assert added_object.payload == {
         "data": "value",
@@ -65,6 +67,36 @@ async def test_create_outbox_event_success(
     }
     assert added_object.status == "PENDING"
     assert event_details["payload"] == {"data": "value"}
+
+
+async def test_create_outbox_event_separates_aggregate_and_partition_identity(
+    repository: OutboxRepository,
+) -> None:
+    event = await repository.create_outbox_event(
+        aggregate_type="DailyPositionSnapshot",
+        aggregate_id="snapshot-101",
+        partition_key=portfolio_security_partition_key("PORT_001", "SEC_A"),
+        event_type="DailyPositionSnapshotPersisted",
+        payload={"snapshot_id": 101},
+        topic="valuation.snapshot.persisted",
+    )
+
+    assert event.aggregate_id == "snapshot-101"
+    assert event.partition_key == "PORT_001|SEC_A"
+
+
+async def test_create_outbox_event_rejects_blank_partition_key(
+    repository: OutboxRepository,
+) -> None:
+    with pytest.raises(ValueError, match="partition_key is required"):
+        await repository.create_outbox_event(
+            aggregate_type="DailyPositionSnapshot",
+            aggregate_id="snapshot-101",
+            partition_key="   ",
+            event_type="DailyPositionSnapshotPersisted",
+            payload={"snapshot_id": 101},
+            topic="valuation.snapshot.persisted",
+        )
 
 
 async def test_create_outbox_event_raises_type_error_for_bad_payload(repository: OutboxRepository):

@@ -43,6 +43,7 @@ class _ClaimedOutboxEvent:
     id: int
     aggregate_type: str
     aggregate_id: str
+    partition_key: str
     event_type: str
     payload: object
     topic: str
@@ -256,6 +257,7 @@ class OutboxDispatcher:
                             id=event.id,
                             aggregate_type=event.aggregate_type,
                             aggregate_id=event.aggregate_id,
+                            partition_key=event.partition_key,
                             event_type=event.event_type,
                             payload=event.payload,
                             topic=event.topic,
@@ -279,7 +281,7 @@ class OutboxDispatcher:
             try:
                 self._producer.publish_message(
                     topic=event.topic,
-                    key=event.aggregate_id,
+                    key=event.partition_key,
                     value=_event_payload(event),
                     headers=_event_headers(event),
                     outbox_id=str(event.id),
