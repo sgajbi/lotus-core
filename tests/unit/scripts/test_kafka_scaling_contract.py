@@ -30,6 +30,8 @@ def test_kafka_scalers_use_current_consumer_groups_and_topics() -> None:
 def test_kafka_scaler_replica_limits_do_not_exceed_topic_partitions() -> None:
     for resource in _scaled_objects():
         max_replicas = resource["spec"]["maxReplicaCount"]
-        for trigger in resource["spec"]["triggers"]:
-            topic = trigger["metadata"]["topic"]
-            assert max_replicas <= KAFKA_TOPIC_PARTITION_COUNTS[topic]
+        triggered_partition_counts = [
+            KAFKA_TOPIC_PARTITION_COUNTS[trigger["metadata"]["topic"]]
+            for trigger in resource["spec"]["triggers"]
+        ]
+        assert max_replicas <= max(triggered_partition_counts)

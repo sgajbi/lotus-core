@@ -21,7 +21,7 @@ GOVERNED_GROUP_MAX_IN_FLIGHT = {
     "persistence_group_fx_rates": 4,
     "persistence_group_business_dates": 1,
     "portfolio_transaction_processing_group": 8,
-    "portfolio_transaction_replay_request_group": 8,
+    "portfolio_transaction_replay_request_group": 1,
     "valuation_orchestrator_group_readiness": 8,
     "valuation_orchestrator_group_price_events": 8,
     "valuation_orchestrator_group_fx_events": 4,

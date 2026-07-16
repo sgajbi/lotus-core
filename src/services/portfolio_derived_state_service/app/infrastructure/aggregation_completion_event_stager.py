@@ -6,6 +6,7 @@ from portfolio_common.config import (
     KAFKA_PORTFOLIO_DAY_AGGREGATION_COMPLETED_TOPIC,
     KAFKA_PORTFOLIO_DAY_RECONCILIATION_REQUESTED_TOPIC,
 )
+from portfolio_common.domain.eventing import portfolio_partition_key
 from portfolio_common.event_mapping import outbox_event_payload
 from portfolio_common.events import (
     FinancialReconciliationRequestedEvent,
@@ -41,6 +42,7 @@ class TransactionalAggregationCompletionEventStager:
             aggregate_id=(
                 f"{completion.portfolio_id}:{completion.aggregation_date}:{completion.epoch}"
             ),
+            partition_key=portfolio_partition_key(completion.portfolio_id),
             event_type="PortfolioAggregationDayCompleted",
             topic=KAFKA_PORTFOLIO_DAY_AGGREGATION_COMPLETED_TOPIC,
             payload=outbox_event_payload(completed_event),
@@ -58,6 +60,7 @@ class TransactionalAggregationCompletionEventStager:
             aggregate_id=(
                 f"{completion.portfolio_id}:{completion.aggregation_date}:{completion.epoch}"
             ),
+            partition_key=portfolio_partition_key(completion.portfolio_id),
             event_type="FinancialReconciliationRequested",
             topic=KAFKA_PORTFOLIO_DAY_RECONCILIATION_REQUESTED_TOPIC,
             payload=outbox_event_payload(reconciliation_event),

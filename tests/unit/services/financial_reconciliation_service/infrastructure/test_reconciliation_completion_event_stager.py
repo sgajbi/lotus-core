@@ -44,6 +44,7 @@ async def test_stages_existing_completion_contract_without_payload_drift() -> No
     call = outbox_repository.create_outbox_event.await_args
     assert call.kwargs["aggregate_type"] == "FinancialReconciliation"
     assert call.kwargs["aggregate_id"] == "PORT-CTRL-1:2026-03-08:3"
+    assert call.kwargs["partition_key"].value == "PORT-CTRL-1"
     assert call.kwargs["event_type"] == "FinancialReconciliationCompleted"
     assert call.kwargs["topic"] == "portfolio_day.reconciliation.completed"
     payload = FinancialReconciliationCompletedEvent.model_validate(call.kwargs["payload"])
@@ -65,6 +66,7 @@ async def test_stages_existing_controls_contract_with_recorded_status() -> None:
     call = outbox_repository.create_outbox_event.await_args
     assert call.kwargs["aggregate_type"] == "PipelineStage"
     assert call.kwargs["aggregate_id"] == "PORT-CTRL-1:2026-03-08:3"
+    assert call.kwargs["partition_key"].value == "PORT-CTRL-1"
     assert call.kwargs["event_type"] == "PortfolioDayControlsEvaluated"
     assert call.kwargs["topic"] == "portfolio_day.controls.evaluated"
     payload = PortfolioDayControlsEvaluatedEvent.model_validate(call.kwargs["payload"])

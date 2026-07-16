@@ -1,6 +1,7 @@
 """Stage calculated cashflow events in the caller-owned outbox transaction."""
 
 from portfolio_common.config import KAFKA_CASHFLOWS_CALCULATED_TOPIC
+from portfolio_common.domain.eventing import portfolio_partition_key
 from portfolio_common.events import CashflowCalculatedEvent
 from portfolio_common.outbox_repository import OutboxRepository
 
@@ -25,6 +26,7 @@ class TransactionalCashflowEventStager:
         await self._outbox_repository.create_outbox_event(
             aggregate_type="Cashflow",
             aggregate_id=cashflow.portfolio_id,
+            partition_key=portfolio_partition_key(cashflow.portfolio_id),
             event_type="CashflowCalculated",
             topic=KAFKA_CASHFLOWS_CALCULATED_TOPIC,
             payload=event.model_dump(mode="json"),
