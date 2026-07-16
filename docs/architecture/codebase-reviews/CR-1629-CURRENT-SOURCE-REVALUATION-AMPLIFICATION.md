@@ -80,9 +80,13 @@ Backdated and future correction contracts remain unchanged.
   package were green; changed critical files measured `95.15%` line and `88.77%` branch coverage,
   with migration `c114b2c3d4f3` at `100%` line coverage and the valuation job repository at
   `93.52%` line / `92.31%` branch coverage.
+- Rebuilt diagnostic smoke `20260716T130810Z` passed with `10` transactions, snapshots, completed
+  valuation jobs, and snapshot events; valuation attempt count min/max were both `2`, repeated-job
+  count was `0`, queues and outbox closed, blocked sessions were `0`, and peak derived-state CPU
+  was `4.66%`.
 
-The implementation source commits are `4b8a4c772`, `fd7c71fa5`, and `e5083a4ff`; the signed
-in-flight correction fix-forward is `a0ae66c88`. The prior failed certifying artifact is
+The implementation source commits are `4b8a4c772`, `fd7c71fa5`, `e5083a4ff`, and `4709b0b53`;
+the signed in-flight correction fix-forward is `a0ae66c88`. The prior failed certifying artifact is
 `output/task-runs/20260716T095705Z-bank-day-load.json`. An initial local lifecycle attempt reused a
 prebuilt migration image at Alembic head `c113b2c3d4f2` and failed because the `c114b2c3d4f3`
 column was absent; it is invalid harness evidence, not a behavior verdict. The branch-local
