@@ -8,6 +8,10 @@ from .adapter_mode import (
     ensure_portfolio_bundle_adapter_enabled,
     ensure_upload_adapter_enabled,
 )
+from .application import ResolveTransactionReprocessingTargets
+from .infrastructure.transaction_reprocessing_target_reader import (
+    SqlAlchemyTransactionReprocessingTargetReader,
+)
 from .repositories.business_calendar_repository import BusinessCalendarRepository
 from .services.business_date_ingestion_commands import BusinessDateIngestionCommandHandler
 from .services.business_date_ingestion_policy import BusinessDateIngestionPolicy
@@ -74,13 +78,23 @@ def get_business_date_ingestion_command_handler(
     )
 
 
+def get_transaction_reprocessing_target_resolver(
+    db: AsyncSession = Depends(get_async_db_session),
+) -> ResolveTransactionReprocessingTargets:
+    return ResolveTransactionReprocessingTargets(SqlAlchemyTransactionReprocessingTargetReader(db))
+
+
 def get_ingestion_publish_command_handler(
     ingestion_service: IngestionService = Depends(get_ingestion_service),
     ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
+    reprocessing_target_resolver: ResolveTransactionReprocessingTargets = Depends(
+        get_transaction_reprocessing_target_resolver
+    ),
 ) -> IngestionPublishCommandHandler:
     return IngestionPublishCommandHandler(
         ingestion_service=ingestion_service,
         ingestion_job_service=ingestion_job_service,
+        resolve_transaction_reprocessing_targets=reprocessing_target_resolver,
     )
 
 

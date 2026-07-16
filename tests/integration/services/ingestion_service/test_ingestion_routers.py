@@ -19,12 +19,20 @@ from portfolio_common.kafka_utils import KafkaProducer, get_kafka_producer
 
 from src.services.event_replay_service.app.main import app as event_replay_app
 from src.services.ingestion_service.app import ops_controls
+from src.services.ingestion_service.app.application import (
+    TransactionReprocessingTargetNotFound,
+)
 from src.services.ingestion_service.app.dependencies import (
     get_business_date_ingestion_policy,
     get_ingestion_service,
+    get_transaction_reprocessing_target_resolver,
 )
+from src.services.ingestion_service.app.domain import TransactionReprocessingTarget
 from src.services.ingestion_service.app.DTOs.ingestion_job_dto import IngestionJobResponse
 from src.services.ingestion_service.app.main import app
+from src.services.ingestion_service.app.ports.transaction_reprocessing import (
+    TransactionReprocessingTargetReadError,
+)
 from src.services.ingestion_service.app.services import (
     business_date_ingestion_commands,
     ingestion_publish_commands,
@@ -1102,6 +1110,35 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
         async def get_latest_business_date(self, calendar_code: str):
             return self.latest_business_dates.get(calendar_code)
 
+    class FakeTransactionReprocessingTargetResolver:
+        def __init__(self) -> None:
+            self.portfolio_by_transaction: dict[str, str] = {}
+            self.missing_transaction_ids: set[str] = set()
+            self.unavailable = False
+
+        async def execute(
+            self,
+            transaction_ids: list[str],
+        ) -> tuple[TransactionReprocessingTarget, ...]:
+            if self.unavailable:
+                raise TransactionReprocessingTargetReadError(
+                    "Transaction reprocessing source lookup is unavailable."
+                )
+            missing_ids = [
+                transaction_id
+                for transaction_id in transaction_ids
+                if transaction_id in self.missing_transaction_ids
+            ]
+            if missing_ids:
+                raise TransactionReprocessingTargetNotFound(missing_ids)
+            return tuple(
+                TransactionReprocessingTarget(
+                    transaction_id=transaction_id,
+                    portfolio_id=self.portfolio_by_transaction.get(transaction_id, "P1"),
+                )
+                for transaction_id in transaction_ids
+            )
+
     fake_job_service = FakeIngestionJobService()
     fake_reference_data_service = FakeReferenceDataIngestionService()
     fake_business_calendar_repository = FakeBusinessCalendarRepository()
@@ -1109,6 +1146,7 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
         fake_business_calendar_repository,
         enforce_monotonic_advance=True,
     )
+    fake_reprocessing_target_resolver = FakeTransactionReprocessingTargetResolver()
     target_apps = (app, event_replay_app)
 
     for target_app in target_apps:
@@ -1128,6 +1166,9 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
     )
     app.dependency_overrides[fx_rates_router.get_ingestion_job_service] = lambda: fake_job_service
     app.dependency_overrides[get_business_date_ingestion_policy] = lambda: fake_business_date_policy
+    app.dependency_overrides[get_transaction_reprocessing_target_resolver] = lambda: (
+        fake_reprocessing_target_resolver
+    )
     app.dependency_overrides[portfolio_bundle_router.get_ingestion_job_service] = lambda: (
         fake_job_service
     )
@@ -1148,6 +1189,7 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
         "fake_job_service": fake_job_service,
         "fake_reference_data_service": fake_reference_data_service,
         "fake_business_calendar_repository": fake_business_calendar_repository,
+        "fake_reprocessing_target_resolver": fake_reprocessing_target_resolver,
     }
 
     for target_app in target_apps:
@@ -1160,6 +1202,7 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
     app.dependency_overrides.pop(market_prices_router.get_ingestion_job_service, None)
     app.dependency_overrides.pop(fx_rates_router.get_ingestion_job_service, None)
     app.dependency_overrides.pop(get_business_date_ingestion_policy, None)
+    app.dependency_overrides.pop(get_transaction_reprocessing_target_resolver, None)
     app.dependency_overrides.pop(portfolio_bundle_router.get_ingestion_job_service, None)
     app.dependency_overrides.pop(reprocessing_router.get_ingestion_job_service, None)
     app.dependency_overrides.pop(reference_data_router.get_ingestion_job_service, None)
@@ -6002,7 +6045,7 @@ async def test_ingest_fx_rates_endpoint(
     mock_kafka_producer.publish_message.assert_called_once()
     publish_kwargs = mock_kafka_producer.publish_message.call_args.kwargs
     assert publish_kwargs["topic"] == "fx_rates.raw.received"
-    assert publish_kwargs["key"] == "USD-SGD-2025-01-01"
+    assert publish_kwargs["key"] == "USD|SGD"
     assert publish_kwargs["value"]["from_currency"] == "USD"
     assert publish_kwargs["value"]["to_currency"] == "SGD"
     assert dict(publish_kwargs["headers"])["idempotency_key"] == b"fx-rate-batch-idem-001"
@@ -6662,7 +6705,7 @@ UPLOAD_ENTITY_CASES = [
             ["USD", "SGD", "2026-01-02", "1.35"],
             "from_currency",
             "fx_rates.raw.received",
-            "USD-SGD-2026-01-02",
+            "USD|SGD",
         ),
         (
             "business_dates",
@@ -6670,7 +6713,7 @@ UPLOAD_ENTITY_CASES = [
             ["2026-01-02", "GLOBAL", "NYSE", "UPLOAD", "BATCH1"],
             "business_date",
             "business_dates.raw.received",
-            "GLOBAL|2026-01-02",
+            "GLOBAL",
         ),
     ]
 ]
@@ -7291,7 +7334,51 @@ async def test_reprocess_transactions_deduplicates_transaction_ids_at_ingress(
     assert published_ids == ["TXN1", "TXN2"]
     publish_kwargs = mock_kafka_producer.publish_message.call_args_list[0].kwargs
     assert publish_kwargs["topic"] == "transactions.reprocessing.requested"
-    assert publish_kwargs["key"] == "TXN1"
+    assert publish_kwargs["key"] == "P1"
+    assert publish_kwargs["value"]["portfolio_id"] == "P1"
+
+
+async def test_reprocess_transactions_returns_404_for_missing_source_identity(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    mock_kafka_producer: MagicMock,
+):
+    ingestion_test_harness["fake_reprocessing_target_resolver"].missing_transaction_ids.add(
+        "TXN-MISSING"
+    )
+
+    response = await async_test_client.post(
+        "/reprocess/transactions",
+        json={"transaction_ids": ["TXN-MISSING"]},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == {
+        "code": "INGESTION_REPROCESSING_SOURCE_NOT_FOUND",
+        "message": "One or more transactions are not available for reprocessing.",
+        "missing_transaction_ids": ["TXN-MISSING"],
+    }
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
+async def test_reprocess_transactions_returns_503_when_source_lookup_is_unavailable(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    mock_kafka_producer: MagicMock,
+):
+    ingestion_test_harness["fake_reprocessing_target_resolver"].unavailable = True
+
+    response = await async_test_client.post(
+        "/reprocess/transactions",
+        json={"transaction_ids": ["TXN-1"]},
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == {
+        "code": "INGESTION_REPROCESSING_SOURCE_UNAVAILABLE",
+        "message": "Transaction reprocessing source lookup is unavailable.",
+    }
+    mock_kafka_producer.publish_message.assert_not_called()
 
 
 async def test_reprocess_transactions_replays_duplicate_idempotency_key(
@@ -7565,7 +7652,7 @@ async def test_ingest_business_dates_endpoint(
     mock_kafka_producer.publish_message.assert_called_once()
     publish_kwargs = mock_kafka_producer.publish_message.call_args.kwargs
     assert publish_kwargs["topic"] == "business_dates.raw.received"
-    assert publish_kwargs["key"] == "GLOBAL|2025-01-02"
+    assert publish_kwargs["key"] == "GLOBAL"
     assert publish_kwargs["value"]["business_date"].isoformat() == "2025-01-02"
     assert dict(publish_kwargs["headers"])["idempotency_key"] == (b"business-date-batch-idem-001")
 

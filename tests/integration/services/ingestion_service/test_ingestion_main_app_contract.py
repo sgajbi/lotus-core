@@ -262,10 +262,18 @@ async def test_openapi_describes_reprocessing_parameters_and_shared_schema(async
     rate_limited = reprocess["responses"]["429"]["content"]["application/json"]["example"]
     assert rate_limited["detail"]["code"] == "INGESTION_RATE_LIMIT_EXCEEDED"
 
+    not_found = reprocess["responses"]["404"]["content"]["application/json"]["example"]
+    assert not_found["detail"]["code"] == "INGESTION_REPROCESSING_SOURCE_NOT_FOUND"
+    assert not_found["detail"]["missing_transaction_ids"] == ["TRN_404"]
+
     _publish_failed_example(reprocess)
 
     mode_blocked = _mode_blocked_example(reprocess)
     assert mode_blocked["detail"]["code"] == "INGESTION_MODE_BLOCKS_WRITES"
+    source_unavailable = reprocess["responses"]["503"]["content"]["application/json"]["examples"][
+        "source_unavailable"
+    ]["value"]
+    assert source_unavailable["detail"]["code"] == ("INGESTION_REPROCESSING_SOURCE_UNAVAILABLE")
 
     reprocessing_request = components["ReprocessingRequest"]
     batch_ack = components["BatchIngestionAcceptedResponse"]
@@ -1027,7 +1035,9 @@ async def test_openapi_describes_write_plane_acknowledgement_schema(async_test_c
     batch_ack = components["BatchIngestionAcceptedResponse"]
 
     assert reprocessing_request["properties"]["transaction_ids"]["description"] == (
-        "Canonical transaction identifiers to reprocess in the current replay request."
+        "Canonical transaction identifiers to reprocess. Core resolves each identifier "
+        "against the authoritative transaction ledger before publishing a portfolio-ordered "
+        "repair command."
     )
     assert batch_ack["properties"]["job_id"]["description"] == (
         "Asynchronous ingestion job identifier used for client polling, "

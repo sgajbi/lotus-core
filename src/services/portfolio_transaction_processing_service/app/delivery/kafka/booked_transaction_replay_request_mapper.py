@@ -13,6 +13,7 @@ class BookedTransactionReplayRequestPayloadError(ValueError):
 @dataclass(frozen=True, slots=True, kw_only=True)
 class BookedTransactionReplayRequest:
     transaction_id: str | None
+    portfolio_id: str | None
     correlation_id: str | None
 
 
@@ -38,6 +39,10 @@ def parse_booked_transaction_replay_request(
             payload.get("transaction_id"),
             field_name="transaction_id",
         ),
+        portfolio_id=_normalized_optional_text(
+            payload.get("portfolio_id"),
+            field_name="portfolio_id",
+        ),
         correlation_id=_normalized_optional_text(
             payload.get("correlation_id"),
             field_name="correlation_id",
@@ -56,6 +61,21 @@ def map_booked_transaction_replay_request(
         transaction_id=request.transaction_id,
         correlation_id=correlation_id,
     )
+
+
+def validate_booked_transaction_replay_partition_key(
+    request: BookedTransactionReplayRequest,
+    *,
+    partition_key: str | None,
+) -> None:
+    """Reject additive portfolio metadata that conflicts with Kafka ordering."""
+
+    if request.portfolio_id is None:
+        return
+    if partition_key != request.portfolio_id:
+        raise BookedTransactionReplayRequestPayloadError(
+            "Booked transaction replay request portfolio_id must match the Kafka key"
+        )
 
 
 def _normalized_optional_text(value: object, *, field_name: str) -> str | None:

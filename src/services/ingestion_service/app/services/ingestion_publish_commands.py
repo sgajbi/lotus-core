@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Awaitable, Callable, Sequence, cast
 
+from ..application import (
+    ResolveTransactionReprocessingTargets,
+    TransactionReprocessingTargetNotFound,
+)
 from ..ops_controls import enforce_ingestion_write_rate_limit
+from ..ports.transaction_reprocessing import TransactionReprocessingTargetReadError
 from ..request_metadata import create_ingestion_job_id, get_request_lineage
 from .ingestion_job_service import IngestionJobService
 from .ingestion_service import IngestionPublishError, IngestionService
@@ -13,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 HTTP_TOO_MANY_REQUESTS = 429
 HTTP_CONFLICT = 409
+HTTP_NOT_FOUND = 404
 HTTP_SERVICE_UNAVAILABLE = 503
 
 BatchPublisher = Callable[[Sequence[Any], str | None], Awaitable[None]]
@@ -86,6 +92,7 @@ class IngestionCommandResult:
 class IngestionPublishCommandHandler:
     ingestion_service: IngestionService
     ingestion_job_service: IngestionJobService
+    resolve_transaction_reprocessing_targets: ResolveTransactionReprocessingTargets
 
     async def ingest_portfolios(
         self, command: BatchPublishIngestionCommand
@@ -118,6 +125,7 @@ class IngestionPublishCommandHandler:
         await self._assert_ingestion_writable()
         await self._assert_reprocessing_publish_allowed(len(command.records))
         self._enforce_rate_limit(command.endpoint, len(command.records))
+        resolved_targets = await self._resolve_reprocessing_targets(command.records)
         job_result = await self._create_job(command)
         if not job_result.created:
             return IngestionCommandResult(
@@ -130,7 +138,7 @@ class IngestionPublishCommandHandler:
             )
 
         await self._publish_batch_or_mark_failed(
-            command,
+            replace(command, records=resolved_targets),
             job_result.job.job_id,
             self.publish_reprocessing_requests,
         )
@@ -285,6 +293,31 @@ class IngestionPublishCommandHandler:
             raise IngestionPublishCommandError(
                 HTTP_CONFLICT,
                 {"code": "INGESTION_REPLAY_BLOCKED", "message": str(exc)},
+            ) from exc
+
+    async def _resolve_reprocessing_targets(
+        self,
+        transaction_ids: Sequence[Any],
+    ) -> Sequence[Any]:
+        try:
+            return await self.resolve_transaction_reprocessing_targets.execute(
+                [str(transaction_id) for transaction_id in transaction_ids]
+            )
+        except TransactionReprocessingTargetNotFound as exc:
+            raise IngestionPublishCommandError(
+                HTTP_NOT_FOUND,
+                {
+                    "code": exc.reason_code,
+                    **cast(dict[str, Any], exc.detail),
+                },
+            ) from exc
+        except TransactionReprocessingTargetReadError as exc:
+            raise IngestionPublishCommandError(
+                HTTP_SERVICE_UNAVAILABLE,
+                {
+                    "code": "INGESTION_REPROCESSING_SOURCE_UNAVAILABLE",
+                    "message": str(exc),
+                },
             ) from exc
 
     @staticmethod

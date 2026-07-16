@@ -78,10 +78,23 @@ def ingestion_unavailable_response(
     *,
     mode_blocked_example: dict[str, object],
     publish_failed_example: dict[str, object],
+    additional_examples: dict[str, dict[str, object]] | None = None,
     description: str = (
         "Ingestion is unavailable because operating mode blocks writes or Kafka publish failed."
     ),
 ) -> dict[str, object]:
+    examples = {
+        "mode_blocked": {
+            "summary": "Ingestion operating mode blocked writes.",
+            "value": mode_blocked_example,
+        },
+        "publish_failed": {
+            "summary": "Kafka publish dependency failed.",
+            "value": publish_failed_example,
+        },
+    }
+    if additional_examples:
+        examples.update(additional_examples)
     return {
         "description": description,
         "headers": {
@@ -90,20 +103,7 @@ def ingestion_unavailable_response(
                 "schema": {"type": "integer", "minimum": 1},
             }
         },
-        "content": {
-            "application/json": {
-                "examples": {
-                    "mode_blocked": {
-                        "summary": "Ingestion operating mode blocked writes.",
-                        "value": mode_blocked_example,
-                    },
-                    "publish_failed": {
-                        "summary": "Kafka publish dependency failed.",
-                        "value": publish_failed_example,
-                    },
-                }
-            }
-        },
+        "content": {"application/json": {"examples": examples}},
     }
 
 
