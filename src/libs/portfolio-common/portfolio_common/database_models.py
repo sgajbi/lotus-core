@@ -1964,12 +1964,19 @@ class ProcessedEvent(Base):
     )
 
 
+def _default_outbox_partition_key(context) -> str:
+    """Preserve aggregate-key dispatch for legacy direct ORM construction."""
+
+    return str(context.get_current_parameters()["aggregate_id"])
+
+
 class OutboxEvent(Base):
     __tablename__ = "outbox_events"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     aggregate_type = Column(String, nullable=False, index=True)
     aggregate_id = Column(String, nullable=False, index=True)
+    partition_key = Column(String, nullable=False, default=_default_outbox_partition_key)
     event_type = Column(String, nullable=False)
     payload = Column(JSON, nullable=False)
     topic = Column(String, nullable=False)

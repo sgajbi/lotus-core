@@ -60,7 +60,7 @@ async def test_create_outbox_event_fails_with_missing_aggregate_id(db_engine, cl
     async with AsyncSessionLocal() as session:
         repo = OutboxRepository(session)
 
-        match_str = "aggregate_id \\(portfolio_id\\) is required for outbox events"
+        match_str = "aggregate_id is required for outbox events"
 
         with pytest.raises(ValueError, match=match_str):
             await repo.create_outbox_event(
@@ -93,9 +93,11 @@ def test_dispatcher_processes_and_updates_pending_events(
     session = TestSessionFactory()
 
     aggregate_id = f"agg-id-{uuid.uuid4()}"
+    partition_key = "PORT-ORDERING-01|SEC-ORDERING-01"
     new_event = OutboxEvent(
         aggregate_type="TestAggregate",
         aggregate_id=aggregate_id,
+        partition_key=partition_key,
         status="PENDING",
         event_type="TestEvent",
         payload=json.dumps({"msg": "hi"}),
@@ -114,6 +116,7 @@ def test_dispatcher_processes_and_updates_pending_events(
 
     # ASSERT
     smart_mock_kafka_producer.publish_message.assert_called_once()
+    assert smart_mock_kafka_producer.publish_message.call_args.kwargs["key"] == partition_key
 
     # Verify the database state in a new session to ensure the change was committed
     session = TestSessionFactory()

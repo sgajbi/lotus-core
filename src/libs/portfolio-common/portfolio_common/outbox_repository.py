@@ -5,6 +5,7 @@ from typing import Any, Dict, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from portfolio_common.database_models import OutboxEvent
+from portfolio_common.domain.eventing import EventPartitionKey
 from portfolio_common.durable_correlation import durable_correlation_diagnostics
 from portfolio_common.events import GOVERNED_EVENT_SCHEMA_VERSION
 from portfolio_common.logging_utils import (
@@ -36,16 +37,20 @@ class OutboxRepository:
         event_type: str,
         payload: Dict[str, Any],
         topic: str,
+        partition_key: str | EventPartitionKey | None = None,
         correlation_id: Optional[str] = None,
         traceparent: Optional[str] = None,
     ) -> OutboxEvent:
         """
         Create a new outbox event in PENDING status.
-        - aggregate_id MUST be present (typically portfolio_id for partition affinity).
+        - aggregate_id MUST be present as the durable business aggregate identity.
+        - partition_key controls transport ordering and defaults to aggregate_id for compatibility.
         - payload MUST be a dict; it will be stored directly in the JSON column.
         """
         if not aggregate_id:
-            raise ValueError("aggregate_id (portfolio_id) is required for outbox events")
+            raise ValueError("aggregate_id is required for outbox events")
+
+        resolved_partition_key = _resolve_partition_key(partition_key, aggregate_id=aggregate_id)
 
         if not isinstance(payload, dict):
             raise TypeError("payload must be a dict (will be serialized by SQLAlchemy JSON type)")
@@ -66,6 +71,7 @@ class OutboxRepository:
         event = OutboxEvent(
             aggregate_type=aggregate_type,
             aggregate_id=str(aggregate_id),
+            partition_key=resolved_partition_key,
             status="PENDING",
             event_type=event_type,
             payload=build_outbox_payload(
@@ -87,12 +93,26 @@ class OutboxRepository:
             extra={
                 "aggregate_type": aggregate_type,
                 "aggregate_id": aggregate_id,
+                "partition_key": resolved_partition_key,
                 "event_type": event_type,
                 "topic": topic,
                 "outbox_id": event.id,
             },
         )
         return event
+
+
+def _resolve_partition_key(
+    partition_key: str | EventPartitionKey | None,
+    *,
+    aggregate_id: str,
+) -> str:
+    if isinstance(partition_key, EventPartitionKey):
+        return partition_key.value
+    resolved = str(partition_key if partition_key is not None else aggregate_id).strip()
+    if not resolved:
+        raise ValueError("partition_key is required for outbox events")
+    return resolved
 
 
 def build_outbox_payload(
