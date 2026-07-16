@@ -296,6 +296,84 @@ async def test_find_and_reset_stale_jobs_rechecks_processing_state_before_reset(
     assert "reprocessing_jobs.updated_at < :updated_at_1" in stmt_text
 
 
+async def test_find_and_reset_stale_jobs_coalesces_retryable_fx_pair(
+    repository: ReprocessingJobRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    stale_result = MagicMock()
+    stale_result.all.return_value = [
+        MagicMock(
+            id=10,
+            attempt_count=2,
+            job_type="RESET_FX_WATERMARKS",
+            payload={
+                "from_currency": "USD",
+                "to_currency": "SGD",
+                "earliest_impacted_date": "2026-04-08",
+                "content_hash": "sha256:" + ("a" * 64),
+                "generated_at": "2026-04-10T08:00:00+00:00",
+            },
+            correlation_id="corr-stale",
+            correlation_missing_reason=None,
+            alternate_lookup_key=None,
+        )
+    ]
+    coalesce_result = MagicMock()
+    complete_result = MagicMock(rowcount=1)
+    mock_db_session.execute.side_effect = [
+        stale_result,
+        coalesce_result,
+        complete_result,
+    ]
+
+    recovered_count = await repository.find_and_reset_stale_jobs(
+        timeout_minutes=30,
+        max_attempts=3,
+    )
+
+    assert recovered_count == 1
+    assert mock_db_session.execute.await_count == 3
+    coalesce_statement, coalesce_parameters = mock_db_session.execute.await_args_list[1].args
+    assert "GREATEST" in str(coalesce_statement)
+    assert coalesce_parameters["attempt_count"] == 2
+    complete_statement = mock_db_session.execute.await_args_list[2].args[0]
+    compiled_complete = str(complete_statement.compile(compile_kwargs={"literal_binds": True}))
+    assert "Coalesced into pending FX replay during stale recovery" in compiled_complete
+
+
+async def test_find_and_reset_stale_jobs_fails_malformed_effective_dated_replay(
+    repository: ReprocessingJobRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    stale_result = MagicMock()
+    stale_result.all.return_value = [
+        MagicMock(
+            id=10,
+            attempt_count=1,
+            job_type="RESET_FX_WATERMARKS",
+            payload={
+                "from_currency": "USD",
+                "to_currency": "SGD",
+                "earliest_impacted_date": "2026-04-08",
+            },
+        )
+    ]
+    failed_result = MagicMock(rowcount=1)
+    mock_db_session.execute.side_effect = [stale_result, failed_result]
+
+    recovered_count = await repository.find_and_reset_stale_jobs(
+        timeout_minutes=30,
+        max_attempts=3,
+    )
+
+    assert recovered_count == 0
+    assert mock_db_session.execute.await_count == 2
+    failed_statement = mock_db_session.execute.await_args_list[1].args[0]
+    compiled_failed = str(failed_statement.compile(compile_kwargs={"literal_binds": True}))
+    assert "status='FAILED'" in compiled_failed
+    assert "Malformed effective-dated replay during stale recovery" in compiled_failed
+
+
 async def test_create_job_coalesces_pending_reset_watermarks_job(
     repository: ReprocessingJobRepository,
     mock_db_session: AsyncMock,

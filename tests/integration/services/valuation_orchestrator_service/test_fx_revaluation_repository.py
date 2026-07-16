@@ -1,7 +1,7 @@
 """PostgreSQL integration tests for direct-pair FX correction revaluation."""
 
 import asyncio
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
@@ -358,6 +358,73 @@ async def test_concurrent_pair_replays_keep_earliest_date_and_newest_lineage(
         "generated_at": "2026-04-10T10:00:00+00:00",
     }
     assert jobs[0].correlation_id == "corr-newest-lineage"
+
+
+async def test_stale_fx_replay_coalesces_with_newer_pending_pair_job(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    stale_job = ReprocessingJob(
+        job_type="RESET_FX_WATERMARKS",
+        payload={
+            "from_currency": "USD",
+            "to_currency": "SGD",
+            "earliest_impacted_date": "2026-04-08",
+            "content_hash": "sha256:" + ("a" * 64),
+            "generated_at": "2026-04-10T08:00:00+00:00",
+        },
+        status="PROCESSING",
+        attempt_count=2,
+        correlation_id="corr-stale-earliest",
+        updated_at=datetime.now(timezone.utc) - timedelta(minutes=30),
+    )
+    pending_job = ReprocessingJob(
+        job_type="RESET_FX_WATERMARKS",
+        payload={
+            "from_currency": "USD",
+            "to_currency": "SGD",
+            "earliest_impacted_date": "2026-04-10",
+            "content_hash": "sha256:" + ("b" * 64),
+            "generated_at": "2026-04-10T09:00:00+00:00",
+        },
+        status="PENDING",
+        attempt_count=0,
+        correlation_id="corr-pending-latest",
+    )
+    async_db_session.add_all([stale_job, pending_job])
+    await async_db_session.commit()
+
+    recovered_count = await ReprocessingJobRepository(async_db_session).find_and_reset_stale_jobs(
+        timeout_minutes=15, max_attempts=3
+    )
+    await async_db_session.commit()
+    async_db_session.expire_all()
+
+    jobs = (
+        (
+            await async_db_session.execute(
+                select(ReprocessingJob)
+                .where(ReprocessingJob.job_type == "RESET_FX_WATERMARKS")
+                .order_by(ReprocessingJob.id.asc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert recovered_count == 1
+    assert len(jobs) == 2
+    assert jobs[0].status == "COMPLETE"
+    assert jobs[0].failure_reason == "Coalesced into pending FX replay during stale recovery"
+    assert jobs[1].status == "PENDING"
+    assert jobs[1].attempt_count == 2
+    assert jobs[1].payload == {
+        "from_currency": "USD",
+        "to_currency": "SGD",
+        "earliest_impacted_date": "2026-04-08",
+        "content_hash": "sha256:" + ("b" * 64),
+        "generated_at": "2026-04-10T09:00:00+00:00",
+    }
+    assert jobs[1].correlation_id == "corr-pending-latest"
 
 
 async def test_claimed_fx_job_resets_exact_affected_watermark_and_completes(
