@@ -76,7 +76,24 @@ def test_portfolio_derived_state_deployment_uses_external_runtime_configuration(
         "name": "lotus-core-runtime",
         "key": "kafka-bootstrap-servers",
     }
-    assert environment["PORTFOLIO_AGGREGATION_WORKER_COUNT"]["valueFrom"]
+    optional_tuning_keys = {
+        "PORTFOLIO_AGGREGATION_WORKER_COUNT": "portfolio-aggregation-worker-count",
+        "AGGREGATION_JOB_LEASE_DURATION_SECONDS": "aggregation-job-lease-duration-seconds",
+        "AGGREGATION_SCHEDULER_POLL_INTERVAL_SECONDS": (
+            "aggregation-scheduler-poll-interval-seconds"
+        ),
+        "AGGREGATION_SCHEDULER_BATCH_SIZE": "aggregation-scheduler-batch-size",
+    }
+    assert {
+        name: environment[name]["valueFrom"]["configMapKeyRef"] for name in optional_tuning_keys
+    } == {
+        name: {
+            "name": "lotus-core-runtime",
+            "key": key,
+            "optional": True,
+        }
+        for name, key in optional_tuning_keys.items()
+    }
 
 
 def test_keda_scales_one_derived_state_runtime_from_preserved_position_group() -> None:
