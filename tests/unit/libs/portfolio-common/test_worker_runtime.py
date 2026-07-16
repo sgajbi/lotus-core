@@ -14,6 +14,7 @@ async def test_run_kafka_worker_runtime_composes_consumers_dispatcher_and_health
 ) -> None:
     consumer = MagicMock(
         topic="transactions.persisted",
+        dlq_topic="dlq.persistence_service",
         group_id="portfolio_transaction_processing_group",
     )
     consumer.run = AsyncMock()
@@ -55,7 +56,11 @@ async def test_run_kafka_worker_runtime_composes_consumers_dispatcher_and_health
     )
 
     ensure_topics.assert_called_once_with(
-        ["transactions.persisted", "transaction_processing.ready"]
+        [
+            "transactions.persisted",
+            "dlq.persistence_service",
+            "transaction_processing.ready",
+        ]
     )
     assert signal_module.signal.call_count == 2
     server_config_factory.assert_called_once_with(

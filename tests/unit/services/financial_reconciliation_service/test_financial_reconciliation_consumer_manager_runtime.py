@@ -2,6 +2,7 @@ import asyncio
 
 import pytest
 from portfolio_common.config import (
+    KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC,
     KAFKA_PORTFOLIO_DAY_CONTROLS_EVALUATED_TOPIC,
     KAFKA_PORTFOLIO_DAY_RECONCILIATION_COMPLETED_TOPIC,
 )
@@ -80,6 +81,7 @@ async def test_consumer_manager_graceful_shutdown(_patch_runtime, monkeypatch):
 
     assert all(c.shutdown_called for c in manager.consumers)
     assert manager.dispatcher.stop_called is True
+    assert KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC in _patch_runtime
     assert KAFKA_PORTFOLIO_DAY_RECONCILIATION_COMPLETED_TOPIC in _patch_runtime
     assert KAFKA_PORTFOLIO_DAY_CONTROLS_EVALUATED_TOPIC in _patch_runtime
 

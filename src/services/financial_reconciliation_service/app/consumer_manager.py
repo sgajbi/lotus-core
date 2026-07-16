@@ -46,6 +46,7 @@ class ConsumerManager:
 
     async def run(self):
         required_topics = [consumer.topic for consumer in self.consumers]
+        required_topics.append(KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC)
         required_topics.append(KAFKA_PORTFOLIO_DAY_RECONCILIATION_COMPLETED_TOPIC)
         required_topics.append(KAFKA_PORTFOLIO_DAY_CONTROLS_EVALUATED_TOPIC)
         ensure_topics_exist(required_topics)

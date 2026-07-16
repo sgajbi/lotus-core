@@ -103,6 +103,7 @@ class PortfolioDerivedStateRuntime:
         ensure_topics_exist(
             [
                 KAFKA_VALUATION_SNAPSHOT_PERSISTED_TOPIC,
+                KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC,
                 KAFKA_PORTFOLIO_DAY_AGGREGATION_COMPLETED_TOPIC,
                 KAFKA_PORTFOLIO_DAY_RECONCILIATION_REQUESTED_TOPIC,
             ]
