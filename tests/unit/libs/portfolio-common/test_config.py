@@ -314,6 +314,46 @@ def test_kafka_consumer_execution_profile_defaults_preserve_serial_behavior(monk
     assert profile.per_key_concurrency == 1
 
 
+@pytest.mark.parametrize(
+    ("group_id", "expected_max_in_flight"),
+    [
+        ("persistence_group_transactions", 8),
+        ("portfolio_transaction_processing_group", 8),
+        ("valuation_orchestrator_group_fx_events", 4),
+        ("position_valuation_worker_group", 1),
+        ("timeseries_generator_group_positions", 8),
+        ("portfolio_day.reconciliation.requested_group", 4),
+    ],
+)
+def test_governed_consumer_groups_use_partition_aligned_capacity(
+    monkeypatch,
+    group_id: str,
+    expected_max_in_flight: int,
+):
+    monkeypatch.delenv("LOTUS_CORE_KAFKA_CONSUMER_EXECUTION_DEFAULTS_JSON", raising=False)
+    monkeypatch.delenv("LOTUS_CORE_KAFKA_CONSUMER_EXECUTION_GROUP_OVERRIDES_JSON", raising=False)
+
+    profile = load_kafka_consumer_execution_profile(group_id)
+
+    assert profile.max_in_flight_messages == expected_max_in_flight
+    assert profile.ordering_key == "partition"
+    assert profile.per_key_concurrency == 1
+
+
+def test_governed_consumer_group_rejects_capacity_above_partition_count(monkeypatch):
+    monkeypatch.delenv("LOTUS_CORE_KAFKA_CONSUMER_EXECUTION_DEFAULTS_JSON", raising=False)
+    monkeypatch.setenv(
+        "LOTUS_CORE_KAFKA_CONSUMER_EXECUTION_GROUP_OVERRIDES_JSON",
+        '{"persistence_group_fx_rates": {"max_in_flight_messages": 5}}',
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="must not exceed governed partition capacity 4",
+    ):
+        load_kafka_consumer_execution_profile("persistence_group_fx_rates")
+
+
 def test_kafka_consumer_execution_profile_merges_group_override(monkeypatch):
     monkeypatch.setenv(
         "LOTUS_CORE_KAFKA_CONSUMER_EXECUTION_DEFAULTS_JSON",

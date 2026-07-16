@@ -7,7 +7,7 @@ spec:
   scaleTargetRef:
     name: portfolio-transaction-processing
   minReplicaCount: 2
-  maxReplicaCount: 12
+  maxReplicaCount: 8
   pollingInterval: 15
   cooldownPeriod: 120
   triggers:
@@ -35,15 +35,15 @@ spec:
   scaleTargetRef:
     name: position-valuation-calculator
   minReplicaCount: 2
-  maxReplicaCount: 10
+  maxReplicaCount: 8
   pollingInterval: 15
   cooldownPeriod: 120
   triggers:
     - type: kafka
       metadata:
         bootstrapServers: kafka:9092
-        consumerGroup: position_valuation_group_jobs
-        topic: valuation_required
+        consumerGroup: position_valuation_worker_group
+        topic: valuation.job.requested
         lagThreshold: "150"
         offsetResetPolicy: latest
 ---
@@ -56,7 +56,7 @@ spec:
   scaleTargetRef:
     name: portfolio-derived-state
   minReplicaCount: 1
-  maxReplicaCount: 6
+  maxReplicaCount: 8
   pollingInterval: 20
   cooldownPeriod: 240
   triggers:
