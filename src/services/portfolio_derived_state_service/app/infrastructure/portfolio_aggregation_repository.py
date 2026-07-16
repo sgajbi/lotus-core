@@ -432,7 +432,7 @@ def _owned_claim_update(*, job_id: int, lease_token: str):
 
 def _cleared_lease_values() -> dict[str, None]:
     return {
-        "lease_owner": None,
-        "lease_token": None,
-        "lease_expires_at": None,
+        PortfolioAggregationJob.lease_owner.key: None,
+        PortfolioAggregationJob.lease_token.key: None,
+        PortfolioAggregationJob.lease_expires_at.key: None,
     }
