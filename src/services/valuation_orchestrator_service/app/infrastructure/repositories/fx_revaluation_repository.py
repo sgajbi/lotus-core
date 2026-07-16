@@ -6,6 +6,8 @@ from datetime import date
 from typing import cast
 
 from portfolio_common.database_models import (
+    DailyPositionSnapshot,
+    FxRate,
     Instrument,
     Portfolio,
     PositionHistory,
@@ -14,7 +16,7 @@ from portfolio_common.database_models import (
 )
 from portfolio_common.durable_correlation import durable_correlation_diagnostics
 from portfolio_common.reprocessing_job_repository import ReprocessingJobRepository
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...domain.fx_revaluation import (
@@ -81,72 +83,50 @@ class SqlAlchemyFxRevaluationRepository:
         effective_date: date,
     ) -> list[PositionValuationKey]:
         """Return current epochs open on date and valued through the exact direct pair."""
-        latest_history = (
-            select(
-                PositionHistory.portfolio_id.label("portfolio_id"),
-                PositionHistory.security_id.label("security_id"),
-                PositionHistory.epoch.label("epoch"),
-                PositionHistory.quantity.label("quantity"),
-                func.row_number()
-                .over(
-                    partition_by=(
-                        PositionHistory.portfolio_id,
-                        PositionHistory.security_id,
-                        PositionHistory.epoch,
-                    ),
-                    order_by=(
-                        PositionHistory.position_date.desc(),
-                        PositionHistory.id.desc(),
-                    ),
-                )
-                .label("row_number"),
-            )
-            .join(
-                PositionState,
-                (PositionState.portfolio_id == PositionHistory.portfolio_id)
-                & (PositionState.security_id == PositionHistory.security_id)
-                & (PositionState.epoch == PositionHistory.epoch),
-            )
-            .join(
-                Instrument,
-                func.trim(Instrument.security_id) == func.trim(PositionHistory.security_id),
-            )
-            .join(
-                Portfolio,
-                func.trim(Portfolio.portfolio_id) == func.trim(PositionHistory.portfolio_id),
-            )
-            .where(
-                PositionHistory.position_date <= effective_date,
-                func.upper(func.trim(Instrument.currency)) == pair.from_currency,
-                func.upper(func.trim(Portfolio.base_currency)) == pair.to_currency,
-            )
-            .subquery()
+        latest_history = _latest_open_position_scope(
+            pair=pair,
+            effective_date=effective_date,
+        )
+        statement = _open_position_keys_statement(latest_history)
+        rows = (await self._db.execute(statement)).all()
+        return [_position_valuation_key(row) for row in rows]
+
+    async def find_position_keys_requiring_revaluation(
+        self,
+        *,
+        pair: DirectCurrencyPair,
+        effective_date: date,
+    ) -> list[PositionValuationKey]:
+        """Return direct-pair keys whose snapshot is absent or older than the source rate."""
+
+        latest_history = _latest_open_position_scope(
+            pair=pair,
+            effective_date=effective_date,
         )
         statement = (
-            select(
-                latest_history.c.portfolio_id,
-                latest_history.c.security_id,
-                latest_history.c.epoch,
+            _open_position_keys_statement(latest_history)
+            .join(
+                FxRate,
+                (FxRate.from_currency == pair.from_currency)
+                & (FxRate.to_currency == pair.to_currency)
+                & (FxRate.rate_date == effective_date),
+            )
+            .outerjoin(
+                DailyPositionSnapshot,
+                (DailyPositionSnapshot.portfolio_id == latest_history.c.portfolio_id)
+                & (DailyPositionSnapshot.security_id == latest_history.c.security_id)
+                & (DailyPositionSnapshot.date == effective_date)
+                & (DailyPositionSnapshot.epoch == latest_history.c.epoch),
             )
             .where(
-                latest_history.c.row_number == 1,
-                latest_history.c.quantity > 0,
-            )
-            .order_by(
-                latest_history.c.portfolio_id.asc(),
-                latest_history.c.security_id.asc(),
-                latest_history.c.epoch.asc(),
+                or_(
+                    DailyPositionSnapshot.id.is_(None),
+                    DailyPositionSnapshot.updated_at < FxRate.updated_at,
+                )
             )
         )
         rows = (await self._db.execute(statement)).all()
-        return [
-            PositionValuationKey(
-                portfolio_id=row.portfolio_id,
-                security_id=row.security_id,
-                epoch=row.epoch,
-            )
-            for row in rows
-        ]
+        return [_position_valuation_key(row) for row in rows]
 
     async def stage_durable_replay(
         self,
@@ -217,3 +197,80 @@ class SqlAlchemyFxRevaluationRepository:
             key = PositionValuationKey(row.portfolio_id, row.security_id, row.epoch)
             affected[(key.portfolio_id, key.security_id, key.epoch)] = key
         return [affected[key] for key in sorted(affected)]
+
+
+def _latest_open_position_scope(*, pair: DirectCurrencyPair, effective_date: date):
+    """Build the current-epoch direct-pair position scope for one effective date."""
+
+    return (
+        select(
+            PositionHistory.portfolio_id.label("portfolio_id"),
+            PositionHistory.security_id.label("security_id"),
+            PositionHistory.epoch.label("epoch"),
+            PositionHistory.quantity.label("quantity"),
+            func.row_number()
+            .over(
+                partition_by=(
+                    PositionHistory.portfolio_id,
+                    PositionHistory.security_id,
+                    PositionHistory.epoch,
+                ),
+                order_by=(
+                    PositionHistory.position_date.desc(),
+                    PositionHistory.id.desc(),
+                ),
+            )
+            .label("row_number"),
+        )
+        .join(
+            PositionState,
+            (PositionState.portfolio_id == PositionHistory.portfolio_id)
+            & (PositionState.security_id == PositionHistory.security_id)
+            & (PositionState.epoch == PositionHistory.epoch),
+        )
+        .join(
+            Instrument,
+            func.trim(Instrument.security_id) == func.trim(PositionHistory.security_id),
+        )
+        .join(
+            Portfolio,
+            func.trim(Portfolio.portfolio_id) == func.trim(PositionHistory.portfolio_id),
+        )
+        .where(
+            PositionHistory.position_date <= effective_date,
+            func.upper(func.trim(Instrument.currency)) == pair.from_currency,
+            func.upper(func.trim(Portfolio.base_currency)) == pair.to_currency,
+        )
+        .subquery()
+    )
+
+
+def _open_position_keys_statement(latest_history):
+    """Select positive current-epoch keys from one ranked position scope."""
+
+    return (
+        select(
+            latest_history.c.portfolio_id,
+            latest_history.c.security_id,
+            latest_history.c.epoch,
+        )
+        .where(
+            latest_history.c.row_number == 1,
+            latest_history.c.quantity > 0,
+        )
+        .order_by(
+            latest_history.c.portfolio_id.asc(),
+            latest_history.c.security_id.asc(),
+            latest_history.c.epoch.asc(),
+        )
+    )
+
+
+def _position_valuation_key(row) -> PositionValuationKey:
+    """Map one infrastructure query row to the application-facing value object."""
+
+    return PositionValuationKey(
+        portfolio_id=row.portfolio_id,
+        security_id=row.security_id,
+        epoch=row.epoch,
+    )
