@@ -3,14 +3,23 @@ import os
 
 import pytest
 from confluent_kafka.admin import AdminClient
+from portfolio_common.config import KAFKA_TOPIC_PARTITION_COUNTS
 
-from tools.kafka_setup import TOPICS_TO_CREATE
-
-# Import the main function and topic list from the script we are testing
 from tools.kafka_setup import main as create_all_topics
 
 # Mark all tests in this file as async since some Kafka operations can be slow
 pytestmark = pytest.mark.asyncio
+
+
+def _assert_governed_partition_counts(topic_metadata) -> None:
+    """Assert the broker matches every source-owned topic partition contract."""
+
+    actual_partition_counts = {
+        topic: len(topic_metadata[topic].partitions)
+        for topic in KAFKA_TOPIC_PARTITION_COUNTS
+        if topic in topic_metadata
+    }
+    assert actual_partition_counts == KAFKA_TOPIC_PARTITION_COUNTS
 
 
 @pytest.fixture(scope="module")
@@ -32,10 +41,13 @@ async def test_kafka_setup_ensures_topics_exist_and_is_idempotent(kafka_admin_cl
     # So, we first verify that the startup process worked as expected.
     topics_after_startup = kafka_admin_client.list_topics(timeout=5).topics
 
-    missing_at_start = [topic for topic in TOPICS_TO_CREATE if topic not in topics_after_startup]
+    missing_at_start = [
+        topic for topic in KAFKA_TOPIC_PARTITION_COUNTS if topic not in topics_after_startup
+    ]
     assert not missing_at_start, (
         f"Topics that should have been created at startup are missing: {missing_at_start}"
     )
+    _assert_governed_partition_counts(topics_after_startup)
 
     # ACT
     # Run the topic creation logic again to test for idempotency.
@@ -46,8 +58,11 @@ async def test_kafka_setup_ensures_topics_exist_and_is_idempotent(kafka_admin_cl
     # Fetch the topics again and verify the list is unchanged.
     topics_after_second_run = kafka_admin_client.list_topics(timeout=5).topics
 
-    missing_at_end = [topic for topic in TOPICS_TO_CREATE if topic not in topics_after_second_run]
+    missing_at_end = [
+        topic for topic in KAFKA_TOPIC_PARTITION_COUNTS if topic not in topics_after_second_run
+    ]
     assert not missing_at_end, f"Topics disappeared after the second run: {missing_at_end}"
+    _assert_governed_partition_counts(topics_after_second_run)
 
     # Check that no topics were unexpectedly removed.
     assert topics_after_second_run.keys() >= topics_after_startup.keys()
