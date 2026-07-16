@@ -468,6 +468,10 @@ def test_database_tie_out_measures_both_materialization_stages_with_upsert_times
             "per_security_quantity_max": Decimal("1"),
             "pending_valuation_jobs": 0,
             "processing_valuation_jobs": 0,
+            "completed_valuation_jobs": 1,
+            "valuation_job_attempt_count_min": 2,
+            "valuation_job_attempt_count_max": 2,
+            "valuation_jobs_with_repeated_processing": 0,
             "pending_aggregation_jobs": 0,
             "processing_aggregation_jobs": 0,
             "latest_snapshot_materialized_at_utc": None,
@@ -506,6 +510,7 @@ def test_database_tie_out_measures_both_materialization_stages_with_upsert_times
     assert "position_materialization_completion AS" in query
     assert "max(updated_at) AS positions_materialized_at" in query
     assert "pfts.updated_at - pmc.positions_materialized_at" in query
+    assert "attempt_count > 2" in query
     assert query.count("percentile_cont(0.99)") == 2
     assert captured["params"] == {
         "portfolio_pattern": "LOAD_RUN1_PF_%",
@@ -516,3 +521,120 @@ def test_database_tie_out_measures_both_materialization_stages_with_upsert_times
     assert tie_out.valuation_to_position_timeseries_latency_p99_seconds == 0.99
     assert tie_out.position_to_portfolio_timeseries_latency_sample_count == 1
     assert tie_out.position_to_portfolio_timeseries_latency_p99_seconds == 0.49
+    assert tie_out.completed_valuation_jobs == 1
+    assert tie_out.valuation_job_attempt_count_min == 2
+    assert tie_out.valuation_job_attempt_count_max == 2
+    assert tie_out.valuation_jobs_with_repeated_processing == 0
+
+
+def test_evaluate_report_rejects_baseline_valuation_reprocessing() -> None:
+    report = ScenarioReport(
+        scenario_name="bank-day-average-load",
+        run_id="RUN1",
+        terminal_status="complete",
+        started_at="2026-04-18T00:00:00Z",
+        ended_at="2026-04-18T00:01:00Z",
+        duration_seconds=60.0,
+        config={
+            "portfolio_count": 0,
+            "transactions_per_portfolio": 0,
+            "transaction_count": 0,
+            "derived_state_resource_evidence_required": False,
+            "market_price_correction_multiplier": None,
+            "fx_rate_correction_multiplier": None,
+            "restart_valuation_orchestrator_during_fx_correction": False,
+        },
+        ingest_phases=[],
+        drain_seconds=0.0,
+        peak_backlog_jobs=0,
+        peak_backlog_age_seconds=0.0,
+        peak_replay_pressure_ratio=0.0,
+        peak_dlq_events_in_window=0,
+        health_samples=[],
+        database_tie_out=DatabaseTieOut(
+            portfolios_count=0,
+            instruments_count=0,
+            transactions_count=0,
+            portfolios_with_snapshots=0,
+            snapshots_count=0,
+            portfolios_with_position_timeseries=0,
+            complete_portfolios=0,
+            incomplete_portfolios=0,
+            portfolios_waiting_for_snapshots=0,
+            snapshot_portfolios_without_position_timeseries=0,
+            position_timeseries_count=0,
+            portfolios_with_portfolio_timeseries=0,
+            portfolios_waiting_for_position_timeseries=0,
+            position_timeseries_portfolios_without_portfolio_timeseries=0,
+            portfolios_waiting_for_portfolio_timeseries=0,
+            portfolio_timeseries_count=0,
+            summed_snapshot_quantity="0.0000000000",
+            expected_total_quantity="0.0000000000",
+            summed_snapshot_market_value="0.0000000000",
+            expected_total_market_value="0.0000000000",
+            per_security_quantity_min="0.0000000000",
+            per_security_quantity_max="0.0000000000",
+            pending_valuation_jobs=0,
+            processing_valuation_jobs=0,
+            open_valuation_jobs=0,
+            pending_aggregation_jobs=0,
+            processing_aggregation_jobs=0,
+            open_aggregation_jobs=0,
+            latest_snapshot_materialized_at_utc=None,
+            latest_position_timeseries_materialized_at_utc=None,
+            latest_portfolio_timeseries_materialized_at_utc=None,
+            latest_valuation_job_updated_at_utc=None,
+            latest_aggregation_job_updated_at_utc=None,
+            completed_valuation_jobs_without_position_timeseries=0,
+            oldest_completed_valuation_without_position_timeseries_at_utc=None,
+            valuation_to_position_timeseries_latency_sample_count=0,
+            valuation_to_position_timeseries_latency_p50_seconds=None,
+            valuation_to_position_timeseries_latency_p95_seconds=None,
+            valuation_to_position_timeseries_latency_p99_seconds=None,
+            valuation_to_position_timeseries_latency_max_seconds=None,
+            position_to_portfolio_timeseries_latency_sample_count=0,
+            position_to_portfolio_timeseries_latency_p50_seconds=None,
+            position_to_portfolio_timeseries_latency_p95_seconds=None,
+            position_to_portfolio_timeseries_latency_p99_seconds=None,
+            position_to_portfolio_timeseries_latency_max_seconds=None,
+            completed_valuation_jobs=0,
+            valuation_job_attempt_count_min=2,
+            valuation_job_attempt_count_max=4,
+            valuation_jobs_with_repeated_processing=1,
+        ),
+        sample_portfolios=[],
+        api_probes=[],
+        log_evidence=[],
+        checks_passed=False,
+        failures=[],
+        derived_state_resource_evidence=DerivedStateResourceEvidence(
+            sample_count=1,
+            sampling_error_count=0,
+            sampling_error_types=(),
+            peak_database_total_connections=1,
+            peak_database_active_connections=0,
+            peak_database_idle_in_transaction_connections=0,
+            peak_database_lock_waiters=0,
+            peak_database_blocked_sessions=0,
+            peak_database_connection_utilization_percent=1.0,
+            peak_runtime_cpu_percent=1.0,
+            peak_runtime_memory_usage_bytes=1,
+            peak_runtime_memory_utilization_percent=1.0,
+            peak_outbox_pending_events=0,
+            peak_outbox_oldest_pending_age_seconds=0.0,
+            peak_outbox_retry_eligible_pending_events=0,
+            peak_outbox_retry_waiting_pending_events=0,
+            peak_outbox_failed_events=0,
+            final_outbox_pending_events=0,
+            final_outbox_processed_events=1,
+            final_outbox_failed_events=0,
+            final_outbox_pending_events_by_topic=(),
+            final_outbox_created_events_by_topic=(("valuation.snapshot.persisted", 1),),
+        ),
+    )
+
+    failures = _evaluate_report(report)
+
+    assert "valuation_job_attempt_count_max 4 != expected 2" in failures
+    assert "valuation_jobs_with_repeated_processing 1 != expected 0" in failures
+    assert "valuation_snapshot_event_count 1 != expected 0" in failures
