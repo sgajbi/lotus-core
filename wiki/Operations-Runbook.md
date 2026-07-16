@@ -28,6 +28,12 @@ docker compose logs --tail=200 kafka-topic-creator
 make test-docker-smoke
 ```
 
+Kafka topic counts and ordering scopes are source-owned. The topic creator and service startup fail
+when existing metadata conflicts with the governed contract. Use the
+[Kafka Partition Migration Runbook](../docs/operations/kafka-partition-migration-runbook.md) for
+pause, drain, expansion, replacement-topic, and rollback procedures; do not bypass the mismatch
+check or use a global partition-count override.
+
 ## Transaction-processing runtime
 
 App-local Compose runs one `portfolio_transaction_processing_service` on host port `8090`; it owns
