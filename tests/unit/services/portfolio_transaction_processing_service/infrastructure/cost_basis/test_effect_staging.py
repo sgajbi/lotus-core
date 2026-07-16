@@ -5,6 +5,10 @@ from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from portfolio_common.domain.eventing import (
+    portfolio_partition_key,
+    security_partition_key,
+)
 from portfolio_common.events import event_business_payload
 from portfolio_common.outbox_repository import OutboxRepository
 
@@ -83,6 +87,7 @@ async def test_stage_processed_transaction_preserves_payload_and_epoch(epoch: in
     outbox.create_outbox_event.assert_awaited_once_with(
         aggregate_type="ProcessedTransaction",
         aggregate_id="PORT-OUTBOX-01",
+        partition_key=portfolio_partition_key("PORT-OUTBOX-01"),
         event_type="ProcessedTransactionPersisted",
         topic="transactions.cost.processed",
         payload=event_business_payload(expected_event, mode="json"),
@@ -144,6 +149,7 @@ async def test_stage_fx_contract_instrument_preserves_integration_contract() -> 
     outbox.create_outbox_event.assert_awaited_once_with(
         aggregate_type="Instrument",
         aggregate_id="FX-CONTRACT-01",
+        partition_key=security_partition_key("FX-CONTRACT-01"),
         event_type="InstrumentUpserted",
         topic="instruments.received",
         payload=expected_event.model_dump(mode="json"),

@@ -47,6 +47,7 @@ async def test_stages_transaction_and_valuation_readiness_events() -> None:
     assert outbox_repository.create_outbox_event.await_count == 2
     completed_call, valuation_call = outbox_repository.create_outbox_event.await_args_list
     assert completed_call.kwargs["aggregate_id"] == "PB-001:TX-READY-001:4"
+    assert completed_call.kwargs["partition_key"].value == "PB-001"
     assert completed_call.kwargs["event_type"] == "TransactionProcessingCompleted"
     assert completed_call.kwargs["topic"] == KAFKA_TRANSACTION_PROCESSING_READY_TOPIC
     assert completed_call.kwargs["payload"]["readiness_reason"] == (
@@ -55,6 +56,7 @@ async def test_stages_transaction_and_valuation_readiness_events() -> None:
     assert completed_call.kwargs["payload"]["traceparent"] == TRACEPARENT
     assert completed_call.kwargs["traceparent"] == TRACEPARENT
     assert valuation_call.kwargs["aggregate_id"] == "PB-001:SEC-001:2026-04-10:4"
+    assert valuation_call.kwargs["partition_key"].value == "PB-001|SEC-001"
     assert valuation_call.kwargs["event_type"] == "PortfolioDayReadyForValuation"
     assert valuation_call.kwargs["topic"] == KAFKA_PORTFOLIO_SECURITY_DAY_VALUATION_READY_TOPIC
     assert valuation_call.kwargs["payload"]["traceparent"] == TRACEPARENT

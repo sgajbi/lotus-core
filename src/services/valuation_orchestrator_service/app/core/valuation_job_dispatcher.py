@@ -3,6 +3,7 @@ import time
 from typing import Any, List
 
 from portfolio_common.database_models import PortfolioValuationJob
+from portfolio_common.domain.eventing import portfolio_security_partition_key
 from portfolio_common.events import PortfolioValuationRequiredEvent
 from portfolio_common.logging_utils import operation_log_extra
 from portfolio_common.monitoring import observe_valuation_scheduler_jobs_dispatched
@@ -59,7 +60,7 @@ class ValuationJobDispatcher:
 
     def _publish_valuation_job(self, job: PortfolioValuationJob) -> None:
         self._valuation_job_publisher.publish_job_requested(
-            key=job.portfolio_id,
+            key=portfolio_security_partition_key(job.portfolio_id, job.security_id).value,
             value=self._valuation_required_event(job),
             headers=self._valuation_job_headers(job),
         )

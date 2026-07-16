@@ -173,6 +173,9 @@ async def test_valuation_processor_executes_success_path_without_kafka_consumer(
     )
     mock_valuation_repo.update_job_status.assert_awaited_once()
     mock_outbox_repo.create_outbox_event.assert_awaited_once()
+    assert mock_outbox_repo.create_outbox_event.call_args.kwargs["partition_key"].value == (
+        f"{mock_event.portfolio_id}|{mock_event.security_id}"
+    )
     assert mock_outbox_repo.create_outbox_event.call_args.kwargs["correlation_id"] == (
         "processor-corr-id"
     )
