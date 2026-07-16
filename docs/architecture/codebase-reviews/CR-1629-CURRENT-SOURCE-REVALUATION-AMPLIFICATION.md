@@ -20,6 +20,13 @@ work. This was unnecessary because transaction processing already emits one valu
 fact for every later position mutation, and valuation reads the committed current price and FX
 facts.
 
+The next exact-source run proved a second amplification path after source replay was removed.
+Scheduler backfill used a different correlation id from transaction readiness, and the valuation
+job upsert treated that lineage difference as permission to reopen an already `COMPLETE` job. At
+diagnostic interruption, Core had accepted `16,671` transactions but emitted `14,025` valuation
+snapshot events for only `9,804` snapshots; `4,204` valuation jobs had been processed twice.
+Correlation identity describes operational lineage and cannot authorize replay or state mutation.
+
 ## Implemented Direction
 
 1. `source_revaluation.py` owns one framework-neutral temporal scheduling policy for price and FX
@@ -44,6 +51,9 @@ facts.
    to `PENDING` and reports that it did not complete, preventing publication of the stale snapshot.
    Same-source and ordinary readiness duplicates remain non-disruptive. Stale-claim and dispatch
    recovery consume the same fence without dropping a correction at the retry limit.
+9. Completed valuation jobs remain idempotent across different scheduler, readiness, and recovery
+   correlation ids. Only price and FX correction handlers can request explicit completed-job
+   rearming, after source-versus-snapshot freshness proves that newer authoritative input exists.
 
 ## Compatibility
 
@@ -56,7 +66,7 @@ Backdated and future correction contracts remain unchanged.
 
 ## Validation
 
-- `97` valuation-orchestrator unit tests passed.
+- `104` valuation-orchestrator and valuation-job repository unit tests passed.
 - `3` focused PostgreSQL price/FX freshness lifecycle tests passed.
 - Review fix-forward proof passed `72` focused unit checks and `2` isolated PostgreSQL queue
   lifecycle scenarios: same-source delivery remains a no-op, while a different correction
@@ -71,13 +81,14 @@ Backdated and future correction contracts remain unchanged.
   with migration `c114b2c3d4f3` at `100%` line coverage and the valuation job repository at
   `93.52%` line / `92.31%` branch coverage.
 
-The implementation commits are `4b8a4c772` and `fd7c71fa5`; the in-flight correction fix-forward
-commit is recorded after signing. The prior failed certifying artifact is
+The implementation source commits are `4b8a4c772`, `fd7c71fa5`, and `e5083a4ff`; the signed
+in-flight correction fix-forward is `a0ae66c88`. The prior failed certifying artifact is
 `output/task-runs/20260716T095705Z-bank-day-load.json`. An initial local lifecycle attempt reused a
 prebuilt migration image at Alembic head `c113b2c3d4f2` and failed because the `c114b2c3d4f3`
 column was absent; it is invalid harness evidence, not a behavior verdict. The branch-local
-migration image and governed `unit-db` rerun passed. Fresh runtime evidence remains required before
-issue `#795` can move to fixed-local.
+migration image and governed `unit-db` rerun passed. The intentionally interrupted second diagnostic
+is `output/task-runs/20260716T123231Z-bank-day-load.json`. Fresh runtime evidence remains required
+before issue `#795` can move to fixed-local.
 
 ## Documentation Decision
 

@@ -73,6 +73,10 @@ same-day snapshots were materialized after that source row; a later correction u
 freshness and reopens valuation. Backdated and future source facts still require durable replay. A
 daily run that creates materially more valuation-snapshot events than source position keys must be
 investigated as work amplification rather than accepted by extending the drain deadline.
+Likewise, a normal valuation job should have one claim and one completion transition in its
+attempt count. Jobs with repeated normal-lifecycle transitions indicate duplicate scheduling or
+rearm amplification. Different correlation ids are lineage evidence only and must not reopen
+completed work; only a freshness-proven source correction can request explicit rearm.
 
 `price-restatement` applies the same price correction across five business dates.
 `fx-restatement` materializes the same 100 x 100 shape across five business dates, corrects the
