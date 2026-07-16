@@ -105,46 +105,45 @@ def test_transaction_event_to_record_values_excludes_traceparent_envelope() -> N
 
 
 @pytest.mark.asyncio
-async def test_check_instrument_exists_queries_instrument_master() -> None:
+async def test_transaction_reference_availability_uses_one_query_without_cash_account() -> None:
     db = AsyncMock(spec=AsyncSession)
     result = MagicMock()
-    result.scalar.return_value = True
+    result.one.return_value = (True, True, None)
     db.execute.return_value = result
     repo = TransactionDBRepository(db)
 
-    assert await repo.check_instrument_exists(" SEC-1 ") is True
+    availability = await repo.resolve_transaction_reference_availability(
+        portfolio_id="P1",
+        security_id=" SEC-1 ",
+        cash_account_id=None,
+        cash_security_id=None,
+        as_of_date=date(2026, 3, 27),
+    )
 
     stmt = db.execute.await_args.args[0]
     compiled_query = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "portfolios.portfolio_id = 'P1'" in compiled_query
     assert "trim(instruments.security_id) = 'SEC-1'" in compiled_query
+    assert availability.portfolio_exists is True
+    assert availability.instrument_exists is True
+    assert availability.cash_account_exists is None
+    db.execute.assert_awaited_once()
 
 
 @pytest.mark.asyncio
-async def test_check_instrument_exists_skips_blank_security_id() -> None:
-    db = AsyncMock(spec=AsyncSession)
-    repo = TransactionDBRepository(db)
-
-    assert await repo.check_instrument_exists("   ") is False
-
-    db.execute.assert_not_awaited()
-
-
-@pytest.mark.asyncio
-async def test_check_active_cash_account_exists_queries_active_effective_master() -> None:
+async def test_transaction_reference_availability_includes_active_cash_account() -> None:
     db = AsyncMock(spec=AsyncSession)
     result = MagicMock()
-    result.scalar.return_value = True
+    result.one.return_value = (True, True, True)
     db.execute.return_value = result
     repo = TransactionDBRepository(db)
 
-    assert (
-        await repo.check_active_cash_account_exists(
-            portfolio_id="P1",
-            cash_account_id=" CASH-ACC-1 ",
-            cash_security_id=" CASH_USD ",
-            as_of_date=date(2026, 3, 27),
-        )
-        is True
+    availability = await repo.resolve_transaction_reference_availability(
+        portfolio_id="P1",
+        security_id="SEC-1",
+        cash_account_id=" CASH-ACC-1 ",
+        cash_security_id=" CASH_USD ",
+        as_of_date=date(2026, 3, 27),
     )
 
     stmt = db.execute.await_args.args[0]
@@ -155,21 +154,5 @@ async def test_check_active_cash_account_exists_queries_active_effective_master(
     assert "cash_account_masters.opened_on <= '2026-03-27'" in compiled_query
     assert "cash_account_masters.closed_on >= '2026-03-27'" in compiled_query
     assert "trim(cash_account_masters.security_id) = 'CASH_USD'" in compiled_query
-
-
-@pytest.mark.asyncio
-async def test_check_active_cash_account_exists_skips_blank_cash_account_id() -> None:
-    db = AsyncMock(spec=AsyncSession)
-    repo = TransactionDBRepository(db)
-
-    assert (
-        await repo.check_active_cash_account_exists(
-            portfolio_id="P1",
-            cash_account_id="   ",
-            cash_security_id="CASH_USD",
-            as_of_date=date(2026, 3, 27),
-        )
-        is False
-    )
-
-    db.execute.assert_not_awaited()
+    assert availability.cash_account_exists is True
+    db.execute.assert_awaited_once()

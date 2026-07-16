@@ -14,6 +14,7 @@ from src.services.persistence_service.app.consumers.transaction_consumer import 
 )
 from src.services.persistence_service.app.repositories.transaction_db_repo import (
     TransactionDBRepository,
+    TransactionReferenceAvailability,
 )
 
 # Mark all tests in this file as asyncio
@@ -106,6 +107,7 @@ def mock_dependencies():
 
 async def test_process_message_success(
     transaction_consumer: TransactionPersistenceConsumer,
+    valid_transaction_event: TransactionEvent,
     mock_kafka_message: MagicMock,
     mock_dependencies: dict,
 ):
@@ -120,8 +122,13 @@ async def test_process_message_success(
     mock_outbox_repo = mock_dependencies["outbox_repo"]
     mock_idempotency_repo = mock_dependencies["idempotency_repo"]
 
-    mock_repo.check_portfolio_exists.return_value = True
-    mock_repo.check_instrument_exists.return_value = True
+    mock_repo.resolve_transaction_reference_availability.return_value = (
+        TransactionReferenceAvailability(
+            portfolio_exists=True,
+            instrument_exists=True,
+            cash_account_exists=None,
+        )
+    )
     mock_idempotency_repo.claim_event_processing.return_value = True
 
     # Use patch.object for robust mocking
@@ -133,8 +140,13 @@ async def test_process_message_success(
 
         # ASSERT
         mock_repo.create_or_update_transaction.assert_called_once()
-        mock_repo.check_instrument_exists.assert_awaited_once_with("SEC_UT_01")
-        mock_repo.check_active_cash_account_exists.assert_not_awaited()
+        mock_repo.resolve_transaction_reference_availability.assert_awaited_once_with(
+            portfolio_id="PORT_UT_01",
+            security_id="SEC_UT_01",
+            cash_account_id=None,
+            cash_security_id=None,
+            as_of_date=valid_transaction_event.transaction_date.date(),
+        )
         mock_outbox_repo.create_outbox_event.assert_called_once()
         assert mock_outbox_repo.create_outbox_event.call_args.kwargs["partition_key"].value == (
             "PORT_UT_01"
@@ -160,8 +172,13 @@ async def test_process_message_uses_header_correlation_on_direct_path(
     mock_outbox_repo = mock_dependencies["outbox_repo"]
     mock_idempotency_repo = mock_dependencies["idempotency_repo"]
 
-    mock_repo.check_portfolio_exists.return_value = True
-    mock_repo.check_instrument_exists.return_value = True
+    mock_repo.resolve_transaction_reference_availability.return_value = (
+        TransactionReferenceAvailability(
+            portfolio_exists=True,
+            instrument_exists=True,
+            cash_account_exists=None,
+        )
+    )
     mock_idempotency_repo.claim_event_processing.return_value = True
 
     token = correlation_id_var.set("<not-set>")
@@ -196,8 +213,18 @@ async def test_handle_persistence_retries_and_succeeds(
     mock_repo = mock_dependencies["repo"]
 
     # Simulate portfolio not found on first call, but found on the second
-    mock_repo.check_portfolio_exists.side_effect = [False, True]
-    mock_repo.check_instrument_exists.return_value = True
+    mock_repo.resolve_transaction_reference_availability.side_effect = [
+        TransactionReferenceAvailability(
+            portfolio_exists=False,
+            instrument_exists=True,
+            cash_account_exists=None,
+        ),
+        TransactionReferenceAvailability(
+            portfolio_exists=True,
+            instrument_exists=True,
+            cash_account_exists=None,
+        ),
+    ]
 
     # ACT
     # This call will invoke the retry logic internally and should complete without error
@@ -205,11 +232,9 @@ async def test_handle_persistence_retries_and_succeeds(
 
     # ASSERT
     # Verify the check was called twice (initial attempt + 1 retry)
-    assert mock_repo.check_portfolio_exists.call_count == 2
+    assert mock_repo.resolve_transaction_reference_availability.await_count == 2
 
     # Verify the transaction was created only on the successful attempt
-    mock_repo.check_instrument_exists.assert_awaited_once_with("SEC_UT_01")
-    mock_repo.check_active_cash_account_exists.assert_not_awaited()
     mock_repo.create_or_update_transaction.assert_awaited_once_with(valid_transaction_event)
 
 
@@ -221,12 +246,16 @@ async def test_handle_persistence_allows_provisional_raw_landing_for_missing_ins
 ):
     caplog.set_level(logging.WARNING, logger=TRANSACTION_CONSUMER_LOGGER)
     mock_repo = mock_dependencies["repo"]
-    mock_repo.check_portfolio_exists.return_value = True
-    mock_repo.check_instrument_exists.return_value = False
+    mock_repo.resolve_transaction_reference_availability.return_value = (
+        TransactionReferenceAvailability(
+            portfolio_exists=True,
+            instrument_exists=False,
+            cash_account_exists=None,
+        )
+    )
 
     await transaction_consumer.handle_persistence(AsyncMock(), valid_transaction_event)
 
-    mock_repo.check_instrument_exists.assert_awaited_once_with("SEC_UT_01")
     mock_repo.create_or_update_transaction.assert_awaited_once_with(valid_transaction_event)
     assert "Transaction raw landing has unresolved instrument reference." in caplog.text
     warning = next(
@@ -253,14 +282,19 @@ async def test_handle_persistence_allows_provisional_raw_landing_for_missing_cas
             "settlement_cash_instrument_id": " CASH_USD ",
         }
     )
-    mock_repo.check_portfolio_exists.return_value = True
-    mock_repo.check_instrument_exists.return_value = True
-    mock_repo.check_active_cash_account_exists.return_value = False
+    mock_repo.resolve_transaction_reference_availability.return_value = (
+        TransactionReferenceAvailability(
+            portfolio_exists=True,
+            instrument_exists=True,
+            cash_account_exists=False,
+        )
+    )
 
     await transaction_consumer.handle_persistence(AsyncMock(), event)
 
-    mock_repo.check_active_cash_account_exists.assert_awaited_once_with(
+    mock_repo.resolve_transaction_reference_availability.assert_awaited_once_with(
         portfolio_id="PORT_UT_01",
+        security_id="SEC_UT_01",
         cash_account_id=" CASH-ACC-404 ",
         cash_security_id=" CASH_USD ",
         as_of_date=event.transaction_date.date(),
