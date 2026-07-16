@@ -25,6 +25,7 @@ class KafkaTopicDefinition:
     lifecycle_status: str
     semantic_type: str
     scope: str
+    partition_count: int | None = None
 
 
 def _env_int(name: str, default: int, *, minimum: int | None = None) -> int:
@@ -165,6 +166,7 @@ KAFKA_TOPIC_DEFINITIONS = (
         lifecycle_status="active",
         semantic_type="fact",
         scope="portfolio",
+        partition_count=4,
     ),
     KafkaTopicDefinition(
         canonical_name="transactions.raw.received",
@@ -172,6 +174,7 @@ KAFKA_TOPIC_DEFINITIONS = (
         lifecycle_status="active",
         semantic_type="fact",
         scope="transaction",
+        partition_count=8,
     ),
     KafkaTopicDefinition(
         canonical_name="instruments.received",
@@ -179,6 +182,7 @@ KAFKA_TOPIC_DEFINITIONS = (
         lifecycle_status="active",
         semantic_type="fact",
         scope="instrument",
+        partition_count=8,
     ),
     KafkaTopicDefinition(
         canonical_name="market_prices.raw.received",
@@ -186,6 +190,7 @@ KAFKA_TOPIC_DEFINITIONS = (
         lifecycle_status="active",
         semantic_type="fact",
         scope="market_price",
+        partition_count=8,
     ),
     KafkaTopicDefinition(
         canonical_name="fx_rates.raw.received",
@@ -193,6 +198,7 @@ KAFKA_TOPIC_DEFINITIONS = (
         lifecycle_status="active",
         semantic_type="fact",
         scope="fx_rate",
+        partition_count=4,
     ),
     KafkaTopicDefinition(
         canonical_name="business_dates.raw.received",
@@ -200,6 +206,7 @@ KAFKA_TOPIC_DEFINITIONS = (
         lifecycle_status="active",
         semantic_type="fact",
         scope="business_date",
+        partition_count=1,
     ),
     KafkaTopicDefinition(
         canonical_name="transactions.persisted",
@@ -207,6 +214,7 @@ KAFKA_TOPIC_DEFINITIONS = (
         lifecycle_status="active",
         semantic_type="fact",
         scope="transaction",
+        partition_count=8,
     ),
     KafkaTopicDefinition(
         canonical_name="market_prices.persisted",
@@ -214,6 +222,7 @@ KAFKA_TOPIC_DEFINITIONS = (
         lifecycle_status="active",
         semantic_type="fact",
         scope="market_price",
+        partition_count=8,
     ),
     KafkaTopicDefinition(
         canonical_name="fx_rates.persisted",
@@ -221,6 +230,7 @@ KAFKA_TOPIC_DEFINITIONS = (
         lifecycle_status="active",
         semantic_type="fact",
         scope="fx_rate",
+        partition_count=4,
     ),
     KafkaTopicDefinition(
         canonical_name="transactions.cost.processed",
@@ -228,6 +238,7 @@ KAFKA_TOPIC_DEFINITIONS = (
         lifecycle_status="active",
         semantic_type="fact",
         scope="transaction",
+        partition_count=8,
     ),
     KafkaTopicDefinition(
         canonical_name="transaction_processing.ready",
@@ -235,6 +246,7 @@ KAFKA_TOPIC_DEFINITIONS = (
         lifecycle_status="active",
         semantic_type="readiness",
         scope="transaction",
+        partition_count=8,
     ),
     KafkaTopicDefinition(
         canonical_name="cashflows.calculated",
@@ -242,6 +254,7 @@ KAFKA_TOPIC_DEFINITIONS = (
         lifecycle_status="active",
         semantic_type="fact",
         scope="transaction",
+        partition_count=8,
     ),
     KafkaTopicDefinition(
         canonical_name="valuation.snapshot.persisted",
@@ -249,6 +262,7 @@ KAFKA_TOPIC_DEFINITIONS = (
         lifecycle_status="active",
         semantic_type="fact",
         scope="portfolio_security_day",
+        partition_count=8,
     ),
     KafkaTopicDefinition(
         canonical_name="valuation.job.requested",
@@ -256,6 +270,7 @@ KAFKA_TOPIC_DEFINITIONS = (
         lifecycle_status="active",
         semantic_type="command",
         scope="portfolio_security_day",
+        partition_count=8,
     ),
     KafkaTopicDefinition(
         canonical_name="portfolio_security_day.valuation.ready",
@@ -263,6 +278,7 @@ KAFKA_TOPIC_DEFINITIONS = (
         lifecycle_status="active",
         semantic_type="readiness",
         scope="portfolio_security_day",
+        partition_count=8,
     ),
     KafkaTopicDefinition(
         canonical_name="portfolio_security_day.valuation.completed",
@@ -270,6 +286,7 @@ KAFKA_TOPIC_DEFINITIONS = (
         lifecycle_status="active",
         semantic_type="fact",
         scope="portfolio_security_day",
+        partition_count=8,
     ),
     KafkaTopicDefinition(
         canonical_name="portfolio_security_day.position_timeseries.completed",
@@ -277,6 +294,7 @@ KAFKA_TOPIC_DEFINITIONS = (
         lifecycle_status="active",
         semantic_type="fact",
         scope="portfolio_security_day",
+        partition_count=8,
     ),
     KafkaTopicDefinition(
         canonical_name="portfolio_day.aggregation.completed",
@@ -284,6 +302,7 @@ KAFKA_TOPIC_DEFINITIONS = (
         lifecycle_status="active",
         semantic_type="fact",
         scope="portfolio_day",
+        partition_count=8,
     ),
     KafkaTopicDefinition(
         canonical_name="portfolio_day.reconciliation.requested",
@@ -291,6 +310,7 @@ KAFKA_TOPIC_DEFINITIONS = (
         lifecycle_status="active",
         semantic_type="command",
         scope="portfolio_day",
+        partition_count=4,
     ),
     KafkaTopicDefinition(
         canonical_name="portfolio_day.reconciliation.completed",
@@ -298,6 +318,7 @@ KAFKA_TOPIC_DEFINITIONS = (
         lifecycle_status="active",
         semantic_type="fact",
         scope="portfolio_day",
+        partition_count=4,
     ),
     KafkaTopicDefinition(
         canonical_name="portfolio_day.controls.evaluated",
@@ -305,6 +326,7 @@ KAFKA_TOPIC_DEFINITIONS = (
         lifecycle_status="active",
         semantic_type="fact",
         scope="portfolio_day",
+        partition_count=4,
     ),
     KafkaTopicDefinition(
         canonical_name="transactions.reprocessing.requested",
@@ -312,6 +334,7 @@ KAFKA_TOPIC_DEFINITIONS = (
         lifecycle_status="active",
         semantic_type="command",
         scope="transaction",
+        partition_count=8,
     ),
     KafkaTopicDefinition(
         canonical_name="dlq.persistence_service",
@@ -319,6 +342,7 @@ KAFKA_TOPIC_DEFINITIONS = (
         lifecycle_status="active",
         semantic_type="dlq",
         scope="service",
+        partition_count=8,
     ),
     KafkaTopicDefinition(
         canonical_name="dlq.valuation_service",
@@ -326,6 +350,7 @@ KAFKA_TOPIC_DEFINITIONS = (
         lifecycle_status="active",
         semantic_type="dlq",
         scope="service",
+        partition_count=8,
     ),
     KafkaTopicDefinition(
         canonical_name="positions.valued",
@@ -357,6 +382,12 @@ KAFKA_TOPIC_RUNTIME_NAMES = tuple(
         if topic.lifecycle_status == "active"
     )
 )
+
+KAFKA_TOPIC_PARTITION_COUNTS = {
+    topic.runtime_name: topic.partition_count
+    for topic in KAFKA_TOPIC_DEFINITIONS
+    if topic.lifecycle_status == "active" and topic.partition_count is not None
+}
 
 # Business-date calendar and guardrail policy
 DEFAULT_BUSINESS_CALENDAR_CODE = os.getenv("DEFAULT_BUSINESS_CALENDAR_CODE", "GLOBAL")

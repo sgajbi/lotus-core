@@ -1,9 +1,11 @@
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
 from confluent_kafka import KafkaException
 from portfolio_common.downstream_access import DownstreamAccessPolicy
 from portfolio_common.kafka_admin import (
+    KafkaTopicPartitionMismatchError,
     KafkaTopicVerificationError,
     _existing_topic_names,
     ensure_topics_exist,
@@ -13,9 +15,9 @@ from portfolio_common.kafka_admin import (
 @patch("portfolio_common.kafka_admin.AdminClient")
 def test_ensure_topics_exist_passes_when_all_topics_exist(mock_admin_client_cls):
     mock_admin_client = MagicMock()
-    mock_admin_client.list_topics.return_value.topics.keys.return_value = {
-        "topic-a",
-        "topic-b",
+    mock_admin_client.list_topics.return_value.topics = {
+        "topic-a": SimpleNamespace(partitions={0: object()}),
+        "topic-b": SimpleNamespace(partitions={0: object()}),
     }
     mock_admin_client_cls.return_value = mock_admin_client
 
@@ -27,7 +29,9 @@ def test_ensure_topics_exist_passes_when_all_topics_exist(mock_admin_client_cls)
 @patch("portfolio_common.kafka_admin.AdminClient")
 def test_ensure_topics_exist_raises_kafka_exception_for_missing_topics(mock_admin_client_cls):
     mock_admin_client = MagicMock()
-    mock_admin_client.list_topics.return_value.topics.keys.return_value = {"topic-a"}
+    mock_admin_client.list_topics.return_value.topics = {
+        "topic-a": SimpleNamespace(partitions={0: object()})
+    }
     mock_admin_client_cls.return_value = mock_admin_client
 
     with pytest.raises(KafkaException):
@@ -49,7 +53,9 @@ def test_ensure_topics_exist_raises_typed_error_for_unexpected_failures(mock_adm
 
 def test_existing_topic_names_uses_supplied_downstream_timeout():
     admin_client = MagicMock()
-    admin_client.list_topics.return_value.topics.keys.return_value = {"topic-a"}
+    admin_client.list_topics.return_value.topics = {
+        "topic-a": SimpleNamespace(partitions={0: object()})
+    }
     policy = DownstreamAccessPolicy(
         connect_timeout_seconds=0.1,
         request_timeout_seconds=1.25,
@@ -64,3 +70,18 @@ def test_existing_topic_names_uses_supplied_downstream_timeout():
 
     assert set(_existing_topic_names(admin_client, policy=policy)) == {"topic-a"}
     admin_client.list_topics.assert_called_once_with(timeout=1.25)
+
+
+@patch("portfolio_common.kafka_admin.AdminClient")
+def test_ensure_topics_exist_rejects_partition_contract_drift(mock_admin_client_cls):
+    mock_admin_client = MagicMock()
+    mock_admin_client.list_topics.return_value.topics = {
+        "transactions.persisted": SimpleNamespace(partitions={0: object()}),
+    }
+    mock_admin_client_cls.return_value = mock_admin_client
+
+    with pytest.raises(
+        KafkaTopicPartitionMismatchError,
+        match="'expected': 8, 'actual': 1",
+    ):
+        ensure_topics_exist.__wrapped__(["transactions.persisted"])
