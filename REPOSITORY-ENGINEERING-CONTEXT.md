@@ -383,9 +383,9 @@ Current repository posture:
     may process independent partitions concurrently but must remain serial within each partition
     and may not exceed governed partition capacity. Follow
     `docs/operations/kafka-partition-migration-runbook.md` for pause/drain/cutover/rollback. Current
-    transaction reprocessing commands remain one-partition until they carry source-owned portfolio
-    identity, and current tenant-blind event families must not be described as tenant-isolation
-    proof.
+    transaction reprocessing commands preserve the transaction-id API but resolve source-owned
+    portfolio identity before publication; legacy commands without additive `portfolio_id` remain
+    consumable. Current tenant-blind event families must not be described as tenant-isolation proof.
 39. Structured operational logging is governed by
     `portfolio_common.logging_utils.operation_log_extra(...)`, `log_operation_event(...)`, and
     `make structured-log-guard` through `make lint`. Guarded health, Kafka, outbox, ingestion,

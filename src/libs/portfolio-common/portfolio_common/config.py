@@ -334,7 +334,7 @@ KAFKA_TOPIC_DEFINITIONS = (
         lifecycle_status="active",
         semantic_type="command",
         scope="transaction",
-        partition_count=1,
+        partition_count=8,
     ),
     KafkaTopicDefinition(
         canonical_name="dlq.persistence_service",

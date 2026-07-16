@@ -258,15 +258,15 @@
     },
     {
       "topic": "transactions.reprocessing.requested",
-      "partitions": 1,
+      "partitions": 8,
       "producer_services": ["ingestion_service", "event_replay_service"],
-      "current_key": "transaction_id",
-      "ordering_scope": "global_serial_until_portfolio_identity_is_source_owned",
+      "current_key": "portfolio_id",
+      "ordering_scope": "portfolio",
       "consumer_groups": ["portfolio_transaction_replay_request_group"],
-      "consumer_max_in_flight": 1,
+      "consumer_max_in_flight": 8,
       "state_owner": "portfolio_transaction_processing_service.repair_workflow",
       "duplicate_policy": "request_claim_then_transaction_semantic_fence",
-      "replay_contract": "single_partition_prevents_cross_transaction_portfolio_races"
+      "replay_contract": "source_lookup_enriches_portfolio_identity_before_publish"
     },
     {
       "topic": "dlq.persistence_service",

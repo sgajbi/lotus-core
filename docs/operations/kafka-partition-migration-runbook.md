@@ -19,8 +19,9 @@ schemas and payloads are unchanged.
 - Valuation and position timeseries work is portfolio-security ordered.
 - Market prices are security ordered, FX rates are directed-currency-pair ordered, and business
   dates are calendar ordered.
-- Transaction reprocessing requests remain one-partition and one-in-flight because the current
-  command carries `transaction_id` but not source-owned `portfolio_id`.
+- Transaction reprocessing requests resolve `portfolio_id` from the authoritative transaction
+  ledger before publication and are portfolio ordered. Unknown transactions are rejected before
+  Kafka publication.
 - Current event contracts do not carry source-owned tenant identity. Do not add a synthetic tenant
   component or describe the current keys as tenant-isolation proof.
 
