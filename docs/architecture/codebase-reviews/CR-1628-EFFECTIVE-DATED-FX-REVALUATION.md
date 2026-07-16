@@ -35,6 +35,15 @@ The same run exposed a sixth bottleneck: app-local Kafka created one partition a
 runtime constructed one serial consumer. Correctly bounded dispatch would therefore avoid false
 failures but still take several hours to drain the five-day workload.
 
+The first full drain exposed a seventh correctness defect: valuation backfill and watermark
+contiguity iterated calendar days even though the workload seeded five governed business dates.
+That created weekend snapshots and made the source-row oracle correctly reject the inflated scope.
+
+The corrected-rate phase exposed an eighth correctness defect: position time series stores
+instrument-local values, which can remain numerically unchanged when only portfolio-base FX
+changes. Material-change suppression therefore skipped the freshness write and never rearmed
+portfolio aggregation for the newer authoritative snapshot.
+
 ## Implemented Direction
 
 1. Persistence emits a versioned, deterministic, source-owned FX persisted event through the
@@ -62,19 +71,33 @@ failures but still take several hours to drain the five-day workload.
 10. Position valuation supports an explicit in-process worker count. App-local Compose creates
     eight topic partitions and runs eight serial consumers, preserving per-portfolio broker order
     while allowing different portfolios to value concurrently.
+11. Backfill planning resolves the seeded `GLOBAL` business dates once per scheduler batch and
+    filters them per position. Watermark contiguity uses the same governed dates, including the
+    previous governed date before a gap. Calendar-day fallback remains only for recovery when the
+    governed calendar is entirely empty.
+12. Position materialization compares authoritative snapshot freshness with the existing
+    time-series materialization timestamp. A newer snapshot refreshes the row and rearms portfolio
+    aggregation even when local-currency values are unchanged; duplicate delivery after freshness
+    catches up remains a no-op.
 
 ## Compatibility
 
 External API routes and existing event consumers are unchanged. The persisted FX event is an
 additive internal versioned contract. Query Control Plane adds truthful support records for the new
-job family. Database changes are additive indexes supporting bounded pair work. Inverse and
-triangulated conversion are intentionally unsupported by this trigger and are never inferred.
+job family. Database changes are additive indexes supporting bounded pair work; the business-date
+and source-freshness fixes require no schema change. Inverse and triangulated conversion are
+intentionally unsupported by this trigger and are never inferred.
 
 ## Validation Status
 
 Unit, contract, strict typing, architecture, OpenAPI, migration, PostgreSQL lifecycle, and QCP
-support tests pass in focused slices. Managed Kafka/runtime, restart, concurrent-session, and
-five-business-date exact-value evidence are required before #791 can move to `status/fixed-local`.
+support tests pass. Managed certifying run `20260715T233241Z` completed successfully over exactly
+five governed business dates: 12,500/12,500 affected snapshots, valuation jobs, and position rows;
+500/500 portfolio rows; one persisted observation; one completed pair replay; exact corrected
+market value and unrealized price/FX/total P&L; a measured `6.167s` orchestrator outage with healthy
+restore; 292 complete resource samples; zero failures; and closed valuation, aggregation, and
+outbox queues. This is local closure evidence for #791 pending PR, CI, exact-main validation, QA,
+and issue closure.
 
 ## Documentation Decision
 

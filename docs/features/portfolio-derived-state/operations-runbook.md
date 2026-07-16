@@ -30,6 +30,13 @@ The health of this service is critical for the availability of all performance a
   direct pair; repeated observations must not create an unbounded queue. A pair with no affected
   positions retries visibility only to the configured attempt limit and then completes as an
   observable successful no-op.
+* **Business-date scope:** Valuation backfill and watermark contiguity use only seeded `GLOBAL`
+  business dates. Calendar-day fallback is a recovery behavior used only when that governed
+  calendar is entirely empty; weekend or holiday valuation rows are not normal output.
+* **Source freshness:** A newer authoritative valuation snapshot refreshes the corresponding
+  position-timeseries row and rearms portfolio aggregation even when instrument-local values are
+  unchanged by a portfolio-base FX correction. Replaying an already materialized snapshot is a
+  no-op.
 
 ## 2. Structured Logging & Tracing
 
@@ -59,11 +66,13 @@ zero lock waiters, and zero blocked sessions. Its portfolio-stage maximum was `1
 `900s` aggregation lease. This does not certify daily, price/FX burst, backdated, release, or
 rollback behavior, and it does not yet close the fixed-lease versus heartbeat decision.
 
-Daily, market-price burst/restatement, FX restatement, release, and rollback certification remains
-required before #714 closure. Runtime consolidation does not permit position and portfolio workload
-metrics to lose their separate attribution. FX correction is not covered by the market-price
-profiles. Core now owns a versioned persisted FX event and bounded direct-pair replay; #791 remains
-open until managed runtime, restart, concurrency, and exact corrected-value evidence pass.
+Daily, market-price burst/restatement, release, and rollback certification remains required before
+#714 closure. Runtime consolidation does not permit position and portfolio workload metrics to lose
+their separate attribution. FX correction is not covered by the market-price profiles. Core now
+owns a versioned persisted FX event and bounded direct-pair replay. Certifying run
+`20260715T233241Z` passed the five-business-date FX profile with exact corrected rows and values,
+restart recovery, closed queues, clean reconciliation, and complete resource evidence; #791 is
+locally fixed pending PR, CI, exact-main validation, and QA closure.
 
 Run `make profile-derived-state-daily`, `make profile-derived-state-fan-in`,
 `make profile-derived-state-price-burst`, `make profile-derived-state-price-restatement`, and

@@ -2670,6 +2670,15 @@ Most relevant current governance:
      Certification artifacts must not persist credentialed database URLs or raw process
      configuration. Emit only a safe database target (backend, host, port, database), and run the
      synthetic-fixture leakage guard against generated evidence before retaining or sharing it.
+190. Valuation scheduling and watermark contiguity must use the seeded
+     `DEFAULT_BUSINESS_CALENDAR_CODE` date set, not calendar-day iteration. Resolve eligible dates
+     once per scheduler batch and filter them per position; do not introduce a query per position.
+     Calendar-day fallback is permitted only when the governed calendar is entirely empty. A newer
+     authoritative valuation snapshot must refresh position-timeseries freshness and rearm
+     portfolio aggregation even when instrument-local values are unchanged by portfolio-base FX.
+     Compare source and materialization timestamps so duplicate delivery remains a no-op after the
+     derived row catches up. Prove this with weekend/holiday, empty-calendar, PostgreSQL lifecycle,
+     and exact FX-restatement tests.
 
 ## Context Maintenance Rule
 
