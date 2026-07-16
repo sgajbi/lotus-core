@@ -53,19 +53,23 @@ class TransactionPersistenceConsumer(GenericPersistenceConsumer):
         Returns the event for outbox creation.
         """
         repo = TransactionDBRepository(db_session)
-
-        portfolio_exists = await repo.check_portfolio_exists(event.portfolio_id)
-        if not portfolio_exists:
+        reference_availability = await repo.resolve_transaction_reference_availability(
+            portfolio_id=event.portfolio_id,
+            security_id=event.security_id,
+            cash_account_id=event.settlement_cash_account_id,
+            cash_security_id=event.settlement_cash_instrument_id,
+            as_of_date=(event.settlement_date or event.transaction_date).date(),
+        )
+        if not reference_availability.portfolio_exists:
             raise PortfolioNotFoundError(
                 "Portfolio "
                 f"{event.portfolio_id} not found for transaction "
                 f"{event.transaction_id}. Retrying..."
             )
 
-        instrument_exists = await repo.check_instrument_exists(event.security_id)
         instrument_decision = decide_transaction_instrument_reference(
             security_id=event.security_id,
-            instrument_exists=instrument_exists,
+            instrument_exists=reference_availability.instrument_exists,
         )
         if instrument_decision.reason_code is not None:
             log_operation_event(
@@ -80,17 +84,9 @@ class TransactionPersistenceConsumer(GenericPersistenceConsumer):
                 downstream_lifecycle_blocked=instrument_decision.downstream_lifecycle_blocked,
             )
 
-        cash_account_exists = None
-        if (event.settlement_cash_account_id or "").strip():
-            cash_account_exists = await repo.check_active_cash_account_exists(
-                portfolio_id=event.portfolio_id,
-                cash_account_id=event.settlement_cash_account_id or "",
-                cash_security_id=event.settlement_cash_instrument_id,
-                as_of_date=(event.settlement_date or event.transaction_date).date(),
-            )
         cash_account_decision = decide_transaction_cash_account_reference(
             settlement_cash_account_id=event.settlement_cash_account_id,
-            cash_account_exists=cash_account_exists,
+            cash_account_exists=reference_availability.cash_account_exists,
         )
         if cash_account_decision.reason_code is not None:
             log_operation_event(
