@@ -2699,7 +2699,10 @@ Most relevant current governance:
      Transaction processing is the authoritative creator of later position valuation readiness, so
      current price and FX facts must not reset position epochs merely because reference data arrived
      first. Preserve durable replay for backdated/future observations and prove the distinction with
-     domain policy tests plus workload event-amplification evidence.
+     domain policy tests plus workload event-amplification evidence. Immediate source-trigger
+     repositories must compare the persisted source row's update time with the same-day valuation
+     snapshot: queue missing/older snapshots, suppress notifications already reflected by a newer
+     snapshot, and re-open work when a later correction updates the source row.
 
 ## Context Maintenance Rule
 
