@@ -13,6 +13,23 @@ OVERLOAD_PAUSE_POLL = "pause_poll"
 SUPPORTED_ORDERING_KEYS = {ORDERING_PARTITION}
 SUPPORTED_OVERLOAD_BEHAVIORS = {OVERLOAD_PAUSE_POLL}
 
+GOVERNED_GROUP_MAX_IN_FLIGHT = {
+    "persistence_group_portfolios": 4,
+    "persistence_group_transactions": 8,
+    "persistence_group_instruments": 8,
+    "persistence_group_market_prices": 8,
+    "persistence_group_fx_rates": 4,
+    "persistence_group_business_dates": 1,
+    "portfolio_transaction_processing_group": 8,
+    "portfolio_transaction_replay_request_group": 8,
+    "valuation_orchestrator_group_readiness": 8,
+    "valuation_orchestrator_group_price_events": 8,
+    "valuation_orchestrator_group_fx_events": 4,
+    "position_valuation_worker_group": 1,
+    "timeseries_generator_group_positions": 8,
+    "portfolio_day.reconciliation.requested_group": 4,
+}
+
 
 @dataclass(frozen=True)
 class KafkaConsumerExecutionProfile:
@@ -92,24 +109,47 @@ class KafkaConsumerExecutionProfile:
 
 
 def load_kafka_consumer_execution_profile(group_id: str) -> KafkaConsumerExecutionProfile:
-    profile = _load_default_execution_profile()
+    profile = _governed_group_execution_profile(group_id)
+    default_override = _load_default_execution_override()
+    if default_override:
+        try:
+            profile = profile.merge(default_override)
+        except ValueError as exc:
+            return _invalid_profile(DEFAULTS_ENV, default_override, reason=str(exc))
     group_override = _load_group_execution_override(group_id)
     if not group_override:
-        return profile
+        return _validate_governed_group_capacity(group_id, profile)
     try:
-        return profile.merge(group_override)
+        resolved_profile = profile.merge(group_override)
     except ValueError as exc:
         return _invalid_profile(GROUP_OVERRIDES_ENV, group_override, reason=str(exc))
+    return _validate_governed_group_capacity(group_id, resolved_profile)
 
 
-def _load_default_execution_profile() -> KafkaConsumerExecutionProfile:
+def _governed_group_execution_profile(group_id: str) -> KafkaConsumerExecutionProfile:
+    return KafkaConsumerExecutionProfile(
+        max_in_flight_messages=GOVERNED_GROUP_MAX_IN_FLIGHT.get(group_id, 1)
+    )
+
+
+def _validate_governed_group_capacity(
+    group_id: str,
+    profile: KafkaConsumerExecutionProfile,
+) -> KafkaConsumerExecutionProfile:
+    governed_capacity = GOVERNED_GROUP_MAX_IN_FLIGHT.get(group_id)
+    if governed_capacity is not None and profile.max_in_flight_messages > governed_capacity:
+        raise ValueError(
+            f"max_in_flight_messages for group '{group_id}' must not exceed "
+            f"governed partition capacity {governed_capacity}"
+        )
+    return profile
+
+
+def _load_default_execution_override() -> dict[str, object]:
     raw = env_json_map(DEFAULTS_ENV, service_name=CONFIG_SERVICE_NAME)
     if not raw:
-        return KafkaConsumerExecutionProfile()
-    try:
-        return KafkaConsumerExecutionProfile.from_mapping(raw)
-    except ValueError as exc:
-        return _invalid_profile(DEFAULTS_ENV, raw, reason=str(exc))
+        return {}
+    return raw
 
 
 def _load_group_execution_override(group_id: str) -> dict[str, object]:
