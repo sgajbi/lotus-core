@@ -122,7 +122,7 @@ async def test_reprocess_transactions_by_ids_success(
     call_args = mock_kafka_producer.publish_message.call_args.kwargs
 
     assert call_args["topic"] == KAFKA_TRANSACTIONS_PERSISTED_TOPIC
-    assert call_args["key"] == "P1"
+    assert call_args["key"] == "P1|S1"
     assert call_args["value"]["transaction_id"] == "TXN1"
 
     mock_kafka_producer.flush.assert_called_once()

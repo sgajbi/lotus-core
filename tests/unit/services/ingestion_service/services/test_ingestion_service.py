@@ -96,7 +96,7 @@ async def test_publish_transactions(
     mock_kafka_producer.publish_message.assert_called_once()
     call_args = mock_kafka_producer.publish_message.call_args.kwargs
     assert call_args["topic"] == "transactions.raw.received"
-    assert call_args["key"] == "P1"
+    assert call_args["key"] == "P1|S1"
     assert call_args["value"]["transaction_id"] == "T1"
 
 
@@ -122,7 +122,7 @@ async def test_publish_transactions_normalizes_partition_key(
     await ingestion_service.publish_transactions(transactions)
 
     call_args = mock_kafka_producer.publish_message.call_args.kwargs
-    assert call_args["key"] == "P1"
+    assert call_args["key"] == "P1|S1"
 
 
 async def test_publish_transactions_rejects_empty_partition_key(
@@ -145,6 +145,31 @@ async def test_publish_transactions_rejects_empty_partition_key(
     ]
 
     with pytest.raises(ValueError, match="portfolio_id"):
+        await ingestion_service.publish_transactions(transactions)
+
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
+async def test_publish_transactions_rejects_empty_security_partition_component(
+    ingestion_service: IngestionService, mock_kafka_producer: MagicMock
+):
+    transactions = [
+        Transaction.model_construct(
+            transaction_id="T4",
+            portfolio_id="P1",
+            instrument_id="I1",
+            security_id="   ",
+            transaction_date=datetime.now(),
+            transaction_type="BUY",
+            quantity=Decimal("1"),
+            price=Decimal("1"),
+            gross_transaction_amount=Decimal("1"),
+            trade_currency="USD",
+            currency="USD",
+        )
+    ]
+
+    with pytest.raises(ValueError, match="security_id"):
         await ingestion_service.publish_transactions(transactions)
 
     mock_kafka_producer.publish_message.assert_not_called()

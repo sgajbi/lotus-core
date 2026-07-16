@@ -30,7 +30,7 @@ def test_position_key_is_stable_across_dates_epochs_and_event_types() -> None:
     assert {normal.value, backdated.value, correction.value} == {"PORT_001|SEC_BOND_001"}
 
 
-def test_transaction_lifecycle_semantics_do_not_fragment_portfolio_ordering() -> None:
+def test_transaction_lifecycle_semantics_preserve_position_ordering() -> None:
     lifecycle_events = [
         {"event_type": "BUY", "security_id": "SEC_A", "epoch": 1},
         {"event_type": "DUPLICATE_BUY", "security_id": "SEC_A", "epoch": 1},
@@ -38,17 +38,15 @@ def test_transaction_lifecycle_semantics_do_not_fragment_portfolio_ordering() ->
         {"event_type": "REVERSAL", "security_id": "SEC_A", "epoch": 3},
         {"event_type": "CORRECTION", "security_id": "SEC_A", "epoch": 4},
         {"event_type": "RESTATEMENT", "security_id": "SEC_A", "epoch": 5},
-        {"event_type": "CORPORATE_ACTION_PARENT", "security_id": "SEC_PARENT", "epoch": 6},
-        {"event_type": "CORPORATE_ACTION_CHILD", "security_id": "SEC_CHILD", "epoch": 6},
+        {"event_type": "CORPORATE_ACTION", "security_id": "SEC_A", "epoch": 6},
     ]
 
-    partition_keys = {portfolio_partition_key("PORT_001").value for _event in lifecycle_events}
-
-    assert {event["security_id"] for event in lifecycle_events} >= {
-        "SEC_PARENT",
-        "SEC_CHILD",
+    partition_keys = {
+        portfolio_security_partition_key("PORT_001", event["security_id"]).value
+        for event in lifecycle_events
     }
-    assert partition_keys == {"PORT_001"}
+
+    assert partition_keys == {"PORT_001|SEC_A"}
 
 
 def test_independent_positions_receive_independent_partition_identities() -> None:
