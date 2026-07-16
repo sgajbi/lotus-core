@@ -170,7 +170,7 @@ async def test_current_price_without_ready_open_positions_relies_on_position_rea
 
     mock_idempotency_repo.claim_event_processing.return_value = True
     mock_valuation_repo.get_latest_business_date.return_value = mock_event.price_date
-    mock_valuation_repo.find_open_position_keys_for_security_on_date.return_value = []
+    mock_valuation_repo.find_position_keys_requiring_price_revaluation.return_value = []
 
     await consumer.process_message(mock_kafka_message)
 
@@ -243,7 +243,7 @@ async def test_current_price_queues_immediate_jobs_for_open_positions(
 
     mock_idempotency_repo.claim_event_processing.return_value = True
     mock_valuation_repo.get_latest_business_date.return_value = mock_event.price_date
-    mock_valuation_repo.find_open_position_keys_for_security_on_date.return_value = [
+    mock_valuation_repo.find_position_keys_requiring_price_revaluation.return_value = [
         ("P1", mock_event.security_id, 0),
         ("P2", mock_event.security_id, 1),
     ]
@@ -282,7 +282,7 @@ async def test_backdated_price_queues_current_date_job_and_flags_reprocessing(
     mock_valuation_repo.get_latest_business_date.return_value = mock_event.price_date + timedelta(
         days=2
     )
-    mock_valuation_repo.find_open_position_keys_for_security_on_date.return_value = [
+    mock_valuation_repo.find_position_keys_requiring_price_revaluation.return_value = [
         ("P1", mock_event.security_id, 0)
     ]
 
@@ -314,7 +314,7 @@ async def test_price_event_uses_header_correlation_for_direct_processing(
 
     mock_idempotency_repo.claim_event_processing.return_value = True
     mock_valuation_repo.get_latest_business_date.return_value = mock_event.price_date
-    mock_valuation_repo.find_open_position_keys_for_security_on_date.return_value = [
+    mock_valuation_repo.find_position_keys_requiring_price_revaluation.return_value = [
         ("P1", mock_event.security_id, 0)
     ]
     mock_kafka_message.headers.return_value = [("correlation_id", b"test-corr-id")]

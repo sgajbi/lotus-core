@@ -45,7 +45,7 @@ def use_case() -> tuple[ProcessFxRateCorrection, AsyncMock, AsyncMock]:
 async def test_current_correction_queues_immediate_jobs_without_replay() -> None:
     handler, repository, valuation_jobs = use_case()
     repository.latest_business_date.return_value = date(2026, 4, 10)
-    repository.find_open_position_keys.return_value = [
+    repository.find_position_keys_requiring_revaluation.return_value = [
         PositionValuationKey("P-SGD", "USD-BOND", 3),
     ]
 
@@ -68,7 +68,7 @@ async def test_current_correction_queues_immediate_jobs_without_replay() -> None
 async def test_backdated_correction_queues_visible_keys_and_preserves_replay() -> None:
     handler, repository, valuation_jobs = use_case()
     repository.latest_business_date.return_value = date(2026, 4, 15)
-    repository.find_open_position_keys.return_value = [
+    repository.find_position_keys_requiring_revaluation.return_value = [
         PositionValuationKey("P1", "USD-EQUITY", 0),
         PositionValuationKey("P2", "USD-BOND", 2),
     ]
@@ -99,7 +99,7 @@ async def test_out_of_horizon_correction_only_stages_durable_replay(
 
     assert result.immediate_job_count == 0
     repository.stage_durable_replay.assert_awaited_once()
-    repository.find_open_position_keys.assert_not_awaited()
+    repository.find_position_keys_requiring_revaluation.assert_not_awaited()
     valuation_jobs.upsert_job.assert_not_awaited()
 
 
@@ -107,7 +107,7 @@ async def test_out_of_horizon_correction_only_stages_durable_replay(
 async def test_current_correction_without_visible_positions_relies_on_position_readiness() -> None:
     handler, repository, valuation_jobs = use_case()
     repository.latest_business_date.return_value = date(2026, 4, 10)
-    repository.find_open_position_keys.return_value = []
+    repository.find_position_keys_requiring_revaluation.return_value = []
 
     result = await handler.execute(correction=correction(), correlation_id="corr-race")
 

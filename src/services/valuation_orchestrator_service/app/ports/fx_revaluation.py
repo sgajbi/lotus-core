@@ -18,13 +18,13 @@ class FxRevaluationRepository(Protocol):
     async def latest_business_date(self) -> date | None:
         """Return the latest governed valuation horizon."""
 
-    async def find_open_position_keys(
+    async def find_position_keys_requiring_revaluation(
         self,
         *,
         pair: DirectCurrencyPair,
         effective_date: date,
     ) -> Sequence[PositionValuationKey]:
-        """Return open position epochs using exactly the corrected direct pair."""
+        """Return open epochs whose snapshot predates the persisted direct-pair source."""
 
     async def find_affected_position_keys(
         self,

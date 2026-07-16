@@ -592,9 +592,10 @@ async def test_find_portfolios_holding_security_on_date(
     assert portfolio_ids[0] == "P1"
 
 
-async def test_find_open_position_keys_for_security_on_date_uses_current_epoch_only(
+async def test_price_revaluation_selects_current_epoch_until_snapshot_is_source_fresh(
     clean_db, async_db_session: AsyncSession
 ):
+    source_updated_at = datetime(2025, 8, 2, 8, 0, tzinfo=timezone.utc)
     async_db_session.add(
         Portfolio(
             portfolio_id="P-CURRENT-1",
@@ -643,6 +644,14 @@ async def test_find_open_position_keys_for_security_on_date_uses_current_epoch_o
                 watermark_date=date(2025, 8, 2),
                 status="CURRENT",
             ),
+            MarketPrice(
+                security_id="S-CURRENT-1",
+                price_date=date(2025, 8, 2),
+                price=Decimal("1"),
+                currency="USD",
+                created_at=source_updated_at,
+                updated_at=source_updated_at,
+            ),
         ]
     )
     await async_db_session.commit()
@@ -671,9 +680,32 @@ async def test_find_open_position_keys_for_security_on_date_uses_current_epoch_o
     await async_db_session.commit()
 
     repo = ValuationRepository(async_db_session)
-    keys = await repo.find_open_position_keys_for_security_on_date("S-CURRENT-1", date(2025, 8, 2))
+    keys = await repo.find_position_keys_requiring_price_revaluation(
+        "S-CURRENT-1",
+        date(2025, 8, 2),
+    )
 
     assert keys == [("P-CURRENT-1", "S-CURRENT-1", 1)]
+
+    async_db_session.add(
+        DailyPositionSnapshot(
+            portfolio_id="P-CURRENT-1",
+            security_id="S-CURRENT-1",
+            date=date(2025, 8, 2),
+            epoch=1,
+            quantity=Decimal("12"),
+            cost_basis=Decimal("12"),
+            updated_at=source_updated_at + timedelta(seconds=1),
+        )
+    )
+    await async_db_session.commit()
+
+    keys = await repo.find_position_keys_requiring_price_revaluation(
+        "S-CURRENT-1",
+        date(2025, 8, 2),
+    )
+
+    assert keys == []
 
 
 async def test_find_and_reset_stale_jobs(

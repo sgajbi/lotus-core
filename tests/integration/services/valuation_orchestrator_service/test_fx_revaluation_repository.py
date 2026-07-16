@@ -6,6 +6,8 @@ from decimal import Decimal
 
 import pytest
 from portfolio_common.database_models import (
+    DailyPositionSnapshot,
+    FxRate,
     Instrument,
     Portfolio,
     PositionHistory,
@@ -191,6 +193,82 @@ async def test_direct_pair_query_returns_open_matching_position_epoch(
     repository = fx_revaluation_repository.SqlAlchemyFxRevaluationRepository(async_db_session)
 
     keys = await repository.find_open_position_keys(
+        pair=DirectCurrencyPair("USD", "SGD"),
+        effective_date=date(2026, 4, 10),
+    )
+
+    assert [(key.portfolio_id, key.security_id, key.epoch) for key in keys] == [
+        ("P-SGD", "USD-BOND", 0)
+    ]
+
+
+async def test_immediate_fx_revaluation_uses_source_snapshot_freshness(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    source_updated_at = datetime(2026, 4, 10, 8, tzinfo=timezone.utc)
+    rate = FxRate(
+        from_currency="USD",
+        to_currency="SGD",
+        rate_date=date(2026, 4, 10),
+        rate=Decimal("1.35"),
+        created_at=source_updated_at,
+        updated_at=source_updated_at,
+    )
+    async_db_session.add_all(
+        [
+            _portfolio("P-SGD", "SGD"),
+            _instrument("USD-BOND", "USD"),
+            _transaction("TX-MATCH", "P-SGD", "USD-BOND"),
+            rate,
+        ]
+    )
+    await async_db_session.flush()
+    await _seed_position(
+        async_db_session,
+        portfolio_id="P-SGD",
+        security_id="USD-BOND",
+        transaction_id="TX-MATCH",
+        quantity=Decimal("10"),
+    )
+    await async_db_session.commit()
+    repository = fx_revaluation_repository.SqlAlchemyFxRevaluationRepository(async_db_session)
+
+    keys = await repository.find_position_keys_requiring_revaluation(
+        pair=DirectCurrencyPair("USD", "SGD"),
+        effective_date=date(2026, 4, 10),
+    )
+
+    assert [(key.portfolio_id, key.security_id, key.epoch) for key in keys] == [
+        ("P-SGD", "USD-BOND", 0)
+    ]
+
+    async_db_session.add(
+        DailyPositionSnapshot(
+            portfolio_id="P-SGD",
+            security_id="USD-BOND",
+            date=date(2026, 4, 10),
+            epoch=0,
+            quantity=Decimal("10"),
+            cost_basis=Decimal("1000"),
+            updated_at=source_updated_at + timedelta(seconds=1),
+        )
+    )
+    await async_db_session.commit()
+
+    assert (
+        await repository.find_position_keys_requiring_revaluation(
+            pair=DirectCurrencyPair("USD", "SGD"),
+            effective_date=date(2026, 4, 10),
+        )
+        == []
+    )
+
+    rate.updated_at = source_updated_at + timedelta(seconds=2)
+    rate.rate = Decimal("1.36")
+    await async_db_session.commit()
+
+    keys = await repository.find_position_keys_requiring_revaluation(
         pair=DirectCurrencyPair("USD", "SGD"),
         effective_date=date(2026, 4, 10),
     )

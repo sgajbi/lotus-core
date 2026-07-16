@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
-from sqlalchemy import and_, func, select, tuple_, update
+from sqlalchemy import and_, func, or_, select, tuple_, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
@@ -63,11 +63,14 @@ class ValuationRepositoryBase:
         )
 
     @async_timed(
-        repository="ValuationRepository", method="find_open_position_keys_for_security_on_date"
+        repository="ValuationRepository",
+        method="find_position_keys_requiring_price_revaluation",
     )
-    async def find_open_position_keys_for_security_on_date(
+    async def find_position_keys_requiring_price_revaluation(
         self, security_id: str, a_date: date
     ) -> List[Tuple[str, str, int]]:
+        """Return open current epochs whose same-day snapshot predates the persisted price."""
+
         latest_history_subquery = (
             select(
                 PositionHistory.portfolio_id.label("portfolio_id"),
@@ -100,9 +103,25 @@ class ValuationRepositoryBase:
                 & (PositionState.security_id == latest_history_subquery.c.security_id)
                 & (PositionState.epoch == latest_history_subquery.c.epoch),
             )
+            .join(
+                MarketPrice,
+                (MarketPrice.security_id == latest_history_subquery.c.security_id)
+                & (MarketPrice.price_date == a_date),
+            )
+            .outerjoin(
+                DailyPositionSnapshot,
+                (DailyPositionSnapshot.portfolio_id == latest_history_subquery.c.portfolio_id)
+                & (DailyPositionSnapshot.security_id == latest_history_subquery.c.security_id)
+                & (DailyPositionSnapshot.date == a_date)
+                & (DailyPositionSnapshot.epoch == latest_history_subquery.c.epoch),
+            )
             .where(
                 latest_history_subquery.c.rn == 1,
                 latest_history_subquery.c.quantity > 0,
+                or_(
+                    DailyPositionSnapshot.id.is_(None),
+                    DailyPositionSnapshot.updated_at < MarketPrice.updated_at,
+                ),
             )
         )
 

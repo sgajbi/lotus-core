@@ -147,7 +147,7 @@ class PriceEventConsumer(BaseConsumer):
 
         open_position_keys = cast(
             list[tuple[str, str, int]],
-            await valuation_repo.find_open_position_keys_for_security_on_date(
+            await valuation_repo.find_position_keys_requiring_price_revaluation(
                 event.security_id, event.price_date
             ),
         )

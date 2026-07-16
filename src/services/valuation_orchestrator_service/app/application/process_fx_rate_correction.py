@@ -46,7 +46,7 @@ class ProcessFxRateCorrection:
                 durable_replay_staged=schedule.stage_durable_replay,
             )
 
-        position_keys = await self._repository.find_open_position_keys(
+        position_keys = await self._repository.find_position_keys_requiring_revaluation(
             pair=correction.pair,
             effective_date=correction.effective_date,
         )

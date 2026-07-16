@@ -92,7 +92,7 @@ async def test_current_persisted_observation_does_not_stage_redundant_replay(
 ) -> None:
     dependencies["idempotency"].claim_event_processing.return_value = True
     dependencies["repository"].latest_business_date.return_value = event.rate_date
-    dependencies["repository"].find_open_position_keys.return_value = []
+    dependencies["repository"].find_position_keys_requiring_revaluation.return_value = []
 
     await consumer.process_message(message)
 
@@ -103,7 +103,7 @@ async def test_current_persisted_observation_does_not_stage_redundant_replay(
         "corr-fx",
     )
     dependencies["repository"].stage_durable_replay.assert_not_awaited()
-    dependencies["repository"].find_open_position_keys.assert_awaited_once()
+    dependencies["repository"].find_position_keys_requiring_revaluation.assert_awaited_once()
 
 
 async def test_exact_observation_replay_is_noop(
@@ -116,7 +116,7 @@ async def test_exact_observation_replay_is_noop(
     await consumer.process_message(message)
 
     dependencies["repository"].stage_durable_replay.assert_not_awaited()
-    dependencies["repository"].find_open_position_keys.assert_not_awaited()
+    dependencies["repository"].find_position_keys_requiring_revaluation.assert_not_awaited()
     dependencies["jobs"].upsert_job.assert_not_awaited()
 
 

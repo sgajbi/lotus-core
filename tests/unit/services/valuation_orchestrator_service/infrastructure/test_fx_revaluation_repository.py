@@ -46,6 +46,25 @@ async def test_find_open_position_keys_uses_set_based_direct_pair_query() -> Non
     assert "row_number() OVER" in sql
 
 
+async def test_revaluation_query_requires_snapshot_older_than_direct_pair_source() -> None:
+    session = AsyncMock(spec=AsyncSession)
+    result = MagicMock()
+    result.all.return_value = []
+    session.execute.return_value = result
+    repository = fx_revaluation_repository.SqlAlchemyFxRevaluationRepository(session)
+
+    await repository.find_position_keys_requiring_revaluation(
+        pair=DirectCurrencyPair("USD", "SGD"),
+        effective_date=date(2026, 4, 10),
+    )
+
+    statement = session.execute.await_args.args[0]
+    sql = str(statement)
+    assert "fx_rates" in sql
+    assert "daily_position_snapshots" in sql
+    assert "daily_position_snapshots.updated_at < fx_rates.updated_at" in sql
+
+
 async def test_stage_durable_replay_uses_pair_scoped_pending_upsert() -> None:
     session = AsyncMock(spec=AsyncSession)
     repository = fx_revaluation_repository.SqlAlchemyFxRevaluationRepository(session)
