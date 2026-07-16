@@ -3,8 +3,8 @@ from datetime import date, datetime
 from decimal import Decimal
 
 import pytest
+from portfolio_common.database_models import CashAccountMaster, Portfolio
 from portfolio_common.database_models import Instrument as DBInstrument
-from portfolio_common.database_models import Portfolio
 from portfolio_common.database_models import Portfolio as DBPortfolio
 from portfolio_common.database_models import Transaction as DBTransaction
 from portfolio_common.events import InstrumentEvent, PortfolioEvent, TransactionEvent
@@ -23,6 +23,70 @@ from src.services.persistence_service.app.repositories.transaction_db_repo impor
 
 # Mark all tests in this file as async
 pytestmark = pytest.mark.asyncio
+
+
+async def test_transaction_reference_availability_resolves_governed_state(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    async_db_session.add(
+        Portfolio(
+            portfolio_id="PORT_REFERENCE_01",
+            base_currency="USD",
+            open_date=date(2024, 1, 1),
+            risk_exposure="High",
+            investment_time_horizon="Long",
+            portfolio_type="Discretionary",
+            booking_center_code="SG",
+            client_id="CIF_REFERENCE_01",
+            status="ACTIVE",
+        )
+    )
+    await async_db_session.commit()
+    async_db_session.add_all(
+        [
+            DBInstrument(
+                security_id="SEC_REFERENCE_01",
+                name="Reference instrument",
+                isin="SG000REF0001",
+                currency="USD",
+                product_type="Equity",
+            ),
+            CashAccountMaster(
+                cash_account_id="CASH_REFERENCE_01",
+                portfolio_id="PORT_REFERENCE_01",
+                security_id="CASH_USD",
+                display_name="USD settlement cash",
+                account_currency="USD",
+                lifecycle_status="ACTIVE",
+                opened_on=date(2024, 1, 1),
+            ),
+        ]
+    )
+    await async_db_session.commit()
+
+    repository = TransactionDBRepository(async_db_session)
+    availability = await repository.resolve_transaction_reference_availability(
+        portfolio_id="PORT_REFERENCE_01",
+        security_id=" SEC_REFERENCE_01 ",
+        cash_account_id=" CASH_REFERENCE_01 ",
+        cash_security_id=" CASH_USD ",
+        as_of_date=date(2026, 7, 16),
+    )
+    missing_availability = await repository.resolve_transaction_reference_availability(
+        portfolio_id="PORT_REFERENCE_404",
+        security_id="SEC_REFERENCE_404",
+        cash_account_id=None,
+        cash_security_id=None,
+        as_of_date=date(2026, 7, 16),
+    )
+
+    assert availability.portfolio_exists is True
+    assert availability.instrument_exists is True
+    assert availability.cash_account_exists is True
+    assert missing_availability.portfolio_exists is False
+    assert missing_availability.instrument_exists is False
+    assert missing_availability.cash_account_exists is None
 
 
 async def _transactions_table_has_column(async_db_session: AsyncSession, column_name: str) -> bool:
