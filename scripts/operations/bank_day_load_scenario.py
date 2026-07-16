@@ -167,6 +167,10 @@ class DatabaseTieOut:
     position_to_portfolio_timeseries_latency_p95_seconds: float | None
     position_to_portfolio_timeseries_latency_p99_seconds: float | None
     position_to_portfolio_timeseries_latency_max_seconds: float | None
+    completed_valuation_jobs: int = 0
+    valuation_job_attempt_count_min: int | None = None
+    valuation_job_attempt_count_max: int | None = None
+    valuation_jobs_with_repeated_processing: int = 0
 
 
 @dataclass(frozen=True)
@@ -892,6 +896,29 @@ def _build_database_tie_out(
                 WHERE portfolio_id LIKE :portfolio_pattern
             ) AS processing_valuation_jobs,
             (
+                SELECT count(*) FILTER (WHERE status = 'COMPLETE')
+                FROM portfolio_valuation_jobs
+                WHERE portfolio_id LIKE :portfolio_pattern
+            ) AS completed_valuation_jobs,
+            (
+                SELECT min(attempt_count) FILTER (WHERE status = 'COMPLETE')
+                FROM portfolio_valuation_jobs
+                WHERE portfolio_id LIKE :portfolio_pattern
+            ) AS valuation_job_attempt_count_min,
+            (
+                SELECT max(attempt_count) FILTER (WHERE status = 'COMPLETE')
+                FROM portfolio_valuation_jobs
+                WHERE portfolio_id LIKE :portfolio_pattern
+            ) AS valuation_job_attempt_count_max,
+            (
+                SELECT count(*) FILTER (
+                    WHERE status = 'COMPLETE'
+                      AND attempt_count > 2
+                )
+                FROM portfolio_valuation_jobs
+                WHERE portfolio_id LIKE :portfolio_pattern
+            ) AS valuation_jobs_with_repeated_processing,
+            (
                 SELECT count(*) FILTER (WHERE status = 'PENDING')
                 FROM portfolio_aggregation_jobs
                 WHERE portfolio_id LIKE :portfolio_pattern
@@ -1161,6 +1188,20 @@ def _build_database_tie_out(
             float(aggregate_row["position_to_portfolio_timeseries_latency_max_seconds"])
             if aggregate_row["position_to_portfolio_timeseries_latency_max_seconds"] is not None
             else None
+        ),
+        completed_valuation_jobs=int(aggregate_row["completed_valuation_jobs"] or 0),
+        valuation_job_attempt_count_min=(
+            int(aggregate_row["valuation_job_attempt_count_min"])
+            if aggregate_row["valuation_job_attempt_count_min"] is not None
+            else None
+        ),
+        valuation_job_attempt_count_max=(
+            int(aggregate_row["valuation_job_attempt_count_max"])
+            if aggregate_row["valuation_job_attempt_count_max"] is not None
+            else None
+        ),
+        valuation_jobs_with_repeated_processing=int(
+            aggregate_row["valuation_jobs_with_repeated_processing"] or 0
         ),
     )
 
@@ -1453,6 +1494,33 @@ def _evaluate_report(report: ScenarioReport) -> list[str]:
         )
     if tie_out.open_valuation_jobs != 0:
         failures.append(f"open_valuation_jobs {tie_out.open_valuation_jobs} != 0")
+    source_correction_requested = (
+        report.config.get("market_price_correction_multiplier") is not None
+        or report.config.get("fx_rate_correction_multiplier") is not None
+    )
+    if not source_correction_requested:
+        expected_completed_valuation_jobs = int(report.config["transaction_count"])
+        if tie_out.completed_valuation_jobs != expected_completed_valuation_jobs:
+            failures.append(
+                "completed_valuation_jobs "
+                f"{tie_out.completed_valuation_jobs} != expected "
+                f"{expected_completed_valuation_jobs}"
+            )
+        if tie_out.valuation_job_attempt_count_min != 2:
+            failures.append(
+                "valuation_job_attempt_count_min "
+                f"{tie_out.valuation_job_attempt_count_min} != expected 2"
+            )
+        if tie_out.valuation_job_attempt_count_max != 2:
+            failures.append(
+                "valuation_job_attempt_count_max "
+                f"{tie_out.valuation_job_attempt_count_max} != expected 2"
+            )
+        if tie_out.valuation_jobs_with_repeated_processing != 0:
+            failures.append(
+                "valuation_jobs_with_repeated_processing "
+                f"{tie_out.valuation_jobs_with_repeated_processing} != expected 0"
+            )
     if tie_out.open_aggregation_jobs != 0:
         failures.append(f"open_aggregation_jobs {tie_out.open_aggregation_jobs} != 0")
     expected_position_samples = int(report.config["transaction_count"])
@@ -1519,6 +1587,18 @@ def _evaluate_report(report: ScenarioReport) -> list[str]:
                 "final outbox failed events "
                 f"{outbox_evidence.final_outbox_failed_events} != expected 0"
             )
+        if not source_correction_requested:
+            created_events_by_topic = dict(outbox_evidence.final_outbox_created_events_by_topic)
+            valuation_snapshot_event_count = int(
+                created_events_by_topic.get("valuation.snapshot.persisted", 0)
+            )
+            expected_valuation_snapshot_event_count = int(report.config["transaction_count"])
+            if valuation_snapshot_event_count != expected_valuation_snapshot_event_count:
+                failures.append(
+                    "valuation_snapshot_event_count "
+                    f"{valuation_snapshot_event_count} != expected "
+                    f"{expected_valuation_snapshot_event_count}"
+                )
     if (
         report.config.get("market_price_correction_multiplier") is not None
         and report.correction_evidence is None
