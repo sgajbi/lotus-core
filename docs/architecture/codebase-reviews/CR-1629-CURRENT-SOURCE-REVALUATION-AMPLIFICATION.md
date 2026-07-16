@@ -54,6 +54,10 @@ Correlation identity describes operational lineage and cannot authorize replay o
 9. Completed valuation jobs remain idempotent across different scheduler, readiness, and recovery
    correlation ids. Only price and FX correction handlers can request explicit completed-job
    rearming, after source-versus-snapshot freshness proves that newer authoritative input exists.
+10. Raw transaction persistence resolves portfolio, instrument, and optional effective cash-account
+   availability in one repository query before upsert. This removes one database round trip from
+   every normal transaction while preserving portfolio retry, provisional instrument/cash
+   reference policy, idempotency, outbox, and event contracts.
 
 ## Compatibility
 
@@ -84,14 +88,22 @@ Backdated and future correction contracts remain unchanged.
   valuation jobs, and snapshot events; valuation attempt count min/max were both `2`, repeated-job
   count was `0`, queues and outbox closed, blocked sessions were `0`, and peak derived-state CPU
   was `4.66%`.
+- Exact run `20260716T131058Z` proved amplification removal but missed the two-hour drain deadline:
+  `98,759` transactions were durable; `95,693` completed valuation jobs all had attempt count `2`;
+  repeated-job count was `0`; failed outbox and DLQ counts were `0`. The remaining tail was
+  transaction persistence/processing and position-timeseries throughput, not duplicate valuation.
+- Post-throughput-fix rebuilt smoke `20260716T152953Z` passed the same exact `10/10` job/event and
+  attempt-count assertions, with zero blocked sessions and closed queues.
 
-The implementation source commits are `4b8a4c772`, `fd7c71fa5`, `e5083a4ff`, and `4709b0b53`;
+The implementation source commits are `4b8a4c772`, `fd7c71fa5`, `e5083a4ff`, `4709b0b53`, and
+`7ba71a04e`;
 the signed in-flight correction fix-forward is `a0ae66c88`. The prior failed certifying artifact is
 `output/task-runs/20260716T095705Z-bank-day-load.json`. An initial local lifecycle attempt reused a
 prebuilt migration image at Alembic head `c113b2c3d4f2` and failed because the `c114b2c3d4f3`
 column was absent; it is invalid harness evidence, not a behavior verdict. The branch-local
-migration image and governed `unit-db` rerun passed. The intentionally interrupted second diagnostic
-is `output/task-runs/20260716T123231Z-bank-day-load.json`. Fresh runtime evidence remains required
+migration image and governed `unit-db` rerun passed. Other diagnostic artifacts are
+`output/task-runs/20260716T123231Z-bank-day-load.json` and
+`output/task-runs/20260716T131058Z-bank-day-load.json`. Fresh runtime evidence remains required
 before issue `#795` can move to fixed-local.
 
 ## Documentation Decision
