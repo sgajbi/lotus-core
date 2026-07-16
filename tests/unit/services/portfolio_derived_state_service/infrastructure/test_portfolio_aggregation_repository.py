@@ -533,6 +533,7 @@ async def test_recover_expired_job_leases_requeues_retryable_claim_and_clears_le
     assert "lease_owner=NULL" in reset_sql
     assert "lease_token=NULL" in reset_sql
     assert "lease_expires_at=NULL" in reset_sql
+    assert "failure_reason=NULL" in reset_sql
 
 
 async def test_recover_expired_job_leases_fails_retry_exhausted_claim(

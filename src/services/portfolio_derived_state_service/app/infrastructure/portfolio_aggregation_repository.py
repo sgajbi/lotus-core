@@ -277,6 +277,7 @@ class PortfolioAggregationRepository(TimeseriesMarketDataReader):
         result = await self.db.execute(
             _expired_job_leases_update(job_ids, now).values(
                 status="PENDING",
+                failure_reason=None,
                 updated_at=func.now(),
                 **_cleared_lease_values(),
             )
