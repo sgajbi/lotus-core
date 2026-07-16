@@ -34,7 +34,7 @@ async def test_create_outbox_event_success(
     """
     GIVEN valid event details
     WHEN create_outbox_event is called
-    THEN it should add a correctly formed OutboxEvent to the session and flush.
+    THEN it should stage a correctly formed OutboxEvent without an eager database flush.
     """
     # Arrange
     event_details = {
@@ -51,7 +51,7 @@ async def test_create_outbox_event_success(
 
     # Assert
     mock_db_session.add.assert_called_once()
-    mock_db_session.flush.assert_awaited_once()
+    mock_db_session.flush.assert_not_awaited()
 
     added_object = mock_db_session.add.call_args[0][0]
     assert isinstance(added_object, OutboxEvent)
