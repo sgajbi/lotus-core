@@ -2703,6 +2703,13 @@ Most relevant current governance:
      repositories must compare the persisted source row's update time with the same-day valuation
      snapshot: queue missing/older snapshots, suppress notifications already reflected by a newer
      snapshot, and re-open work when a later correction updates the source row.
+192. Correlation ids are diagnostic lineage, not authorization to replay completed work. Valuation
+     scheduler, readiness, recovery, and duplicate-delivery paths must leave an existing
+     `COMPLETE` same-scope job unchanged even when their correlation differs. A source correction
+     may explicitly rearm completed valuation only after source-owned freshness proves that the
+     authoritative price or FX observation is newer than the materialized snapshot. Preserve this
+     distinction in PostgreSQL conflict-lifecycle tests and workload evidence; do not infer replay
+     intent from correlation inequality.
 
 ## Context Maintenance Rule
 
