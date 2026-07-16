@@ -16,6 +16,16 @@ def normalize_support_job_status(status: str | None) -> str | None:
     return status.strip().upper()
 
 
+def parse_support_job_business_date(value: str | None) -> date | None:
+    """Return a valid replay date or None for a malformed source payload."""
+    if value is None:
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        return None
+
+
 def is_support_job_stale(
     status: str | None,
     updated_at: datetime | None,
@@ -61,7 +71,7 @@ def build_support_job_record(
     *,
     job_id: int,
     job_type: str,
-    business_date: date,
+    business_date: date | None,
     status: str,
     security_id: str | None,
     epoch: int | None,

@@ -30,6 +30,9 @@ The health of this service is critical for the availability of all performance a
   direct pair; repeated observations must not create an unbounded queue. A pair with no affected
   positions retries visibility only to the configured attempt limit and then completes as an
   observable successful no-op.
+  A malformed durable replay date is returned as `business_date: null` with the job's status,
+  failure reason, pair/security scope, and correlation evidence preserved. Treat it as poisoned
+  work requiring source correction; do not substitute a guessed date or query the queue directly.
 * **Business-date scope:** Valuation backfill and watermark contiguity use only seeded `GLOBAL`
   business dates. Calendar-day fallback is a recovery behavior used only when that governed
   calendar is entirely empty; weekend or holiday valuation rows are not normal output.

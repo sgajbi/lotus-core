@@ -1704,9 +1704,12 @@ class SupportJobRecord(BaseModel):
         ),
         examples=["VALUATION", "RESET_WATERMARKS", "RESET_FX_WATERMARKS"],
     )
-    business_date: date = Field(
+    business_date: Optional[date] = Field(
         ...,
-        description="Business date for the job (valuation_date or aggregation_date).",
+        description=(
+            "Business date for the job (valuation_date or aggregation_date); null only when a "
+            "durable replay row contains a malformed source date and remains visible for support."
+        ),
         examples=["2025-12-30"],
     )
     status: str = Field(

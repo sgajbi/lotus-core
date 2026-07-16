@@ -78,6 +78,7 @@ from .support_jobs import (
     is_support_job_stale,
     is_terminal_failure_status,
     normalize_support_job_status,
+    parse_support_job_business_date,
 )
 from .support_overview import (
     SupportOverviewSnapshot,
@@ -300,7 +301,7 @@ class OperationsService:
         *,
         job_id: int,
         job_type: str,
-        business_date: date,
+        business_date: date | None,
         status: str,
         security_id: str | None,
         epoch: int | None,
@@ -1487,10 +1488,11 @@ class OperationsService:
                 as_of=generated_at_utc,
             ),
         )
+        job_business_dates = [parse_support_job_business_date(job.business_date) for job in jobs]
         return ReprocessingJobListResponse(
             **self._evidence_product_runtime_metadata(
                 generated_at_utc=generated_at_utc,
-                as_of_dates=[date.fromisoformat(job.business_date) for job in jobs],
+                as_of_dates=job_business_dates,
                 evidence_timestamps=[job.updated_at or job.created_at for job in jobs],
             ),
             portfolio_id=portfolio_id,
@@ -1503,7 +1505,7 @@ class OperationsService:
                 self._build_support_job_record(
                     job_id=job.id,
                     job_type=job.job_type,
-                    business_date=date.fromisoformat(job.business_date),
+                    business_date=job_business_dates[index],
                     status=job.status,
                     security_id=job.security_id,
                     epoch=None,
@@ -1517,7 +1519,7 @@ class OperationsService:
                     reference_now=generated_at_utc,
                     stale_threshold_minutes=stale_threshold_minutes,
                 )
-                for job in jobs
+                for index, job in enumerate(jobs)
             ],
         )
 

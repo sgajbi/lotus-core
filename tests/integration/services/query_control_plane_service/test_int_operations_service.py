@@ -852,6 +852,33 @@ async def test_reprocessing_jobs_return_coherent_snapshot_under_job_churn(
                 created_at=datetime(2025, 8, 30, 12, 30, tzinfo=timezone.utc),
                 updated_at=datetime(2025, 8, 30, 12, 30, tzinfo=timezone.utc),
             ),
+            ReprocessingJob(
+                job_type="RESET_WATERMARKS",
+                payload={
+                    "security_id": "SEC-JOB-OLD",
+                    "earliest_impacted_date": "not-a-date",
+                },
+                status="FAILED",
+                correlation_id="corr-malformed-security-job",
+                failure_reason="invalid replay date",
+                created_at=datetime(2025, 8, 30, 9, 45, tzinfo=timezone.utc),
+                updated_at=datetime(2025, 8, 30, 9, 46, tzinfo=timezone.utc),
+            ),
+            ReprocessingJob(
+                job_type="RESET_FX_WATERMARKS",
+                payload={
+                    "from_currency": "EUR",
+                    "to_currency": "USD",
+                    "earliest_impacted_date": "not-a-date",
+                    "content_hash": "sha256:" + ("b" * 64),
+                    "generated_at": "2025-08-30T09:40:00+00:00",
+                },
+                status="FAILED",
+                correlation_id="corr-malformed-fx-job",
+                failure_reason="invalid FX replay date",
+                created_at=datetime(2025, 8, 30, 9, 40, tzinfo=timezone.utc),
+                updated_at=datetime(2025, 8, 30, 9, 41, tzinfo=timezone.utc),
+            ),
         ]
     )
     await async_db_session.commit()
@@ -862,19 +889,50 @@ async def test_reprocessing_jobs_return_coherent_snapshot_under_job_churn(
         response = await service.get_reprocessing_jobs("P7", skip=0, limit=20)
 
     assert response.generated_at_utc == FIXED_GENERATED_AT
-    assert response.total == 2
-    assert len(response.items) == 2
-    assert response.items[0].job_type == "RESET_WATERMARKS"
-    assert response.items[0].security_id == "SEC-JOB-OLD"
-    assert response.items[0].business_date == date(2025, 8, 18)
-    assert response.items[0].correlation_id == "corr-job-old"
-    assert response.items[0].operational_state == "STALE_PROCESSING"
-    fx_job = next(item for item in response.items if item.job_type == "RESET_FX_WATERMARKS")
+    assert response.total == 4
+    assert len(response.items) == 4
+    security_job = next(item for item in response.items if item.correlation_id == "corr-job-old")
+    assert security_job.job_type == "RESET_WATERMARKS"
+    assert security_job.security_id == "SEC-JOB-OLD"
+    assert security_job.business_date == date(2025, 8, 18)
+    assert security_job.operational_state == "STALE_PROCESSING"
+    fx_job = next(item for item in response.items if item.correlation_id == "corr-fx-job-old")
     assert fx_job.security_id is None
     assert fx_job.from_currency == "EUR"
     assert fx_job.to_currency == "USD"
     assert fx_job.business_date == date(2025, 8, 18)
     assert fx_job.correlation_id == "corr-fx-job-old"
+    malformed_security_job = next(
+        item for item in response.items if item.correlation_id == "corr-malformed-security-job"
+    )
+    assert malformed_security_job.business_date is None
+    assert malformed_security_job.security_id == "SEC-JOB-OLD"
+    assert malformed_security_job.operational_state == "FAILED"
+    assert malformed_security_job.failure_reason == "invalid replay date"
+    malformed_fx_job = next(
+        item for item in response.items if item.correlation_id == "corr-malformed-fx-job"
+    )
+    assert malformed_fx_job.business_date is None
+    assert malformed_fx_job.from_currency == "EUR"
+    assert malformed_fx_job.to_currency == "USD"
+    assert malformed_fx_job.operational_state == "FAILED"
+    assert malformed_fx_job.failure_reason == "invalid FX replay date"
+
+    with patch.object(operations_service_module, "datetime", _FixedDateTime):
+        security_filtered = await service.get_reprocessing_jobs(
+            "P7",
+            skip=0,
+            limit=20,
+            security_id="SEC-JOB-OLD",
+        )
+
+    assert security_filtered.total == 4
+    assert {item.correlation_id for item in security_filtered.items} == {
+        "corr-job-old",
+        "corr-fx-job-old",
+        "corr-malformed-security-job",
+        "corr-malformed-fx-job",
+    }
 
 
 async def test_lineage_keys_return_coherent_snapshot_under_key_churn(
