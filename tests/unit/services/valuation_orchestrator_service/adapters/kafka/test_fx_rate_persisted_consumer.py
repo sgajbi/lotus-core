@@ -84,7 +84,7 @@ def dependencies():
         }
 
 
-async def test_persisted_observation_stages_durable_and_immediate_work(
+async def test_current_persisted_observation_does_not_stage_redundant_replay(
     consumer: fx_rate_persisted_consumer.FxRatePersistedConsumer,
     message: MagicMock,
     event: FxRatePersistedEvent,
@@ -102,11 +102,8 @@ async def test_persisted_observation_stages_durable_and_immediate_work(
         "fx-rate-revaluation-trigger",
         "corr-fx",
     )
-    staged = dependencies["repository"].stage_durable_replay.await_args.kwargs
-    assert staged["correction"].pair.key == "USD->SGD"
-    assert staged["correction"].effective_date == event.rate_date
-    assert staged["correction"].content_hash == event.content_hash
-    assert staged["correlation_id"] == "corr-fx"
+    dependencies["repository"].stage_durable_replay.assert_not_awaited()
+    dependencies["repository"].find_open_position_keys.assert_awaited_once()
 
 
 async def test_exact_observation_replay_is_noop(
