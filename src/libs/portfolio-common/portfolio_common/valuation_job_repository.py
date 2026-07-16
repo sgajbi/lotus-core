@@ -42,17 +42,18 @@ class ValuationJobRepository:
         epoch: int,
         correlation_id: Optional[str] = None,
         source_correction_id: Optional[str] = None,
+        rearm_completed: bool = False,
         requeue_if_processing: bool = False,
     ) -> int:
         """
         Idempotently creates or updates a valuation job.
 
         Duplicate scheduler polls for the same logical run must not re-arm an already completed
-        valuation job. A genuinely new replay/backfill run is allowed to re-arm the job via a
-        different correlation id. Source-correction callers can explicitly preserve a different
-        source observation that arrives during PROCESSING; ordinary readiness callers remain
-        non-disruptive. Transport correlation remains diagnostic and is never used as source
-        correction identity.
+        valuation job. Correlation is diagnostic lineage, not rearm authority. Source-correction
+        callers must request completed-job rearming explicitly after proving source freshness.
+        They can also preserve a different source observation that arrives during PROCESSING;
+        ordinary readiness callers remain non-disruptive. Transport correlation remains
+        diagnostic and is never used as source-correction identity.
         """
         return await self._upsert_jobs(
             [
@@ -65,16 +66,28 @@ class ValuationJobRepository:
                     source_correction_id=source_correction_id,
                 )
             ],
+            rearm_completed=rearm_completed,
             requeue_if_processing=requeue_if_processing,
         )
 
-    async def upsert_jobs(self, jobs: Iterable[ValuationJobUpsert]) -> int:
-        return await self._upsert_jobs(jobs, requeue_if_processing=False)
+    async def upsert_jobs(
+        self,
+        jobs: Iterable[ValuationJobUpsert],
+        *,
+        rearm_completed: bool = False,
+        requeue_if_processing: bool = False,
+    ) -> int:
+        return await self._upsert_jobs(
+            jobs,
+            rearm_completed=rearm_completed,
+            requeue_if_processing=requeue_if_processing,
+        )
 
     async def _upsert_jobs(
         self,
         jobs: Iterable[ValuationJobUpsert],
         *,
+        rearm_completed: bool,
         requeue_if_processing: bool,
     ) -> int:
         normalized_jobs = self._normalize_jobs(jobs)
@@ -96,6 +109,7 @@ class ValuationJobRepository:
 
             staged_count = await self._execute_upsert_jobs(
                 eligible_jobs,
+                rearm_completed=rearm_completed,
                 requeue_if_processing=requeue_if_processing,
             )
             superseded_count = await self._skip_superseded_pending_jobs(
@@ -132,11 +146,13 @@ class ValuationJobRepository:
         self,
         eligible_jobs: list[ValuationJobUpsert],
         *,
+        rearm_completed: bool,
         requeue_if_processing: bool,
     ) -> int:
         result = await self.db.execute(
             _valuation_job_upsert_stmt(
                 eligible_jobs,
+                rearm_completed=rearm_completed,
                 requeue_if_processing=requeue_if_processing,
             ).returning(
                 PortfolioValuationJob.portfolio_id,
@@ -284,6 +300,7 @@ class ValuationJobRepository:
 def _valuation_job_upsert_stmt(
     eligible_jobs: list[ValuationJobUpsert],
     *,
+    rearm_completed: bool = False,
     requeue_if_processing: bool = False,
 ):
     stmt = pg_insert(PortfolioValuationJob).values(_valuation_job_insert_values(eligible_jobs))
@@ -295,6 +312,7 @@ def _valuation_job_upsert_stmt(
         ),
         where=_valuation_job_conflict_update_predicate(
             stmt,
+            rearm_completed=rearm_completed,
             requeue_if_processing=requeue_if_processing,
         ),
     )
@@ -364,11 +382,9 @@ def _valuation_job_update_values(
 def _valuation_job_conflict_update_predicate(
     stmt,
     *,
+    rearm_completed: bool,
     requeue_if_processing: bool,
 ):
-    protected_statuses = ("PENDING", "COMPLETE")
-    if requeue_if_processing:
-        protected_statuses = (*protected_statuses, "PROCESSING")
     identity_matches = PortfolioValuationJob.correlation_id.is_not_distinct_from(
         stmt.excluded.correlation_id
     )
@@ -376,13 +392,22 @@ def _valuation_job_conflict_update_predicate(
         identity_matches = PortfolioValuationJob.source_correction_id.is_not_distinct_from(
             stmt.excluded.source_correction_id
         )
-    same_lineage = and_(
-        PortfolioValuationJob.status.in_(protected_statuses),
-        identity_matches,
-    )
-    if requeue_if_processing:
-        return not_(same_lineage)
-    return not_(PortfolioValuationJob.status == "PROCESSING") & not_(same_lineage)
+        same_source = and_(
+            PortfolioValuationJob.status.in_(("PENDING", "PROCESSING", "COMPLETE")),
+            identity_matches,
+        )
+        predicate = not_(same_source)
+    else:
+        same_pending_lineage = and_(
+            PortfolioValuationJob.status == "PENDING",
+            identity_matches,
+        )
+        predicate = not_(PortfolioValuationJob.status == "PROCESSING") & not_(
+            same_pending_lineage
+        )
+    if not rearm_completed:
+        predicate &= PortfolioValuationJob.status != "COMPLETE"
+    return predicate
 
 
 def _log_staged_job_upsert(

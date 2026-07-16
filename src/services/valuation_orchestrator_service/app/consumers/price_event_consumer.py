@@ -168,6 +168,7 @@ class PriceEventConsumer(BaseConsumer):
                 epoch=epoch,
                 correlation_id=correlation_id,
                 source_correction_id=source_correction_id,
+                rearm_completed=True,
                 requeue_if_processing=True,
             )
         if open_position_keys:

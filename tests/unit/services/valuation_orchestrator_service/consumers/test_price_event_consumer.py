@@ -260,6 +260,7 @@ async def test_current_price_queues_immediate_jobs_for_open_positions(
         epoch=0,
         correlation_id=f"PRICE_EVENT_{mock_event.security_id}_{mock_event.price_date.isoformat()}",
         source_correction_id=_price_source_correction_id(mock_event),
+        rearm_completed=True,
         requeue_if_processing=True,
     )
     mock_job_repo.upsert_job.assert_any_await(
@@ -269,6 +270,7 @@ async def test_current_price_queues_immediate_jobs_for_open_positions(
         epoch=1,
         correlation_id=f"PRICE_EVENT_{mock_event.security_id}_{mock_event.price_date.isoformat()}",
         source_correction_id=_price_source_correction_id(mock_event),
+        rearm_completed=True,
         requeue_if_processing=True,
     )
 
@@ -301,6 +303,7 @@ async def test_backdated_price_queues_current_date_job_and_flags_reprocessing(
         epoch=0,
         correlation_id=f"PRICE_EVENT_{mock_event.security_id}_{mock_event.price_date.isoformat()}",
         source_correction_id=_price_source_correction_id(mock_event),
+        rearm_completed=True,
         requeue_if_processing=True,
     )
     mock_reprocessing_repo.upsert_state.assert_awaited_once_with(
