@@ -85,6 +85,26 @@ def main() -> int:
         return 1
     if (
         run_suite(
+            "unit-db",
+            with_coverage=True,
+            coverage_sources=coverage_sources,
+            coverage_file=".coverage.unit_db",
+        )
+        != 0
+    ):
+        return 1
+    if (
+        run_suite(
+            "critical-db-coverage",
+            with_coverage=True,
+            coverage_sources=coverage_sources,
+            coverage_file=".coverage.critical_db",
+        )
+        != 0
+    ):
+        return 1
+    if (
+        run_suite(
             "integration-lite",
             with_coverage=True,
             coverage_sources=coverage_sources,
