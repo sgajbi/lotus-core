@@ -2719,6 +2719,13 @@ Most relevant current governance:
      a different trace. Ordinary readiness duplicates must not set this fence. Claim, stale-reset,
      and dispatch-recovery paths must clear a consumed fence without discarding a newer correction,
      including at the normal retry limit.
+192. Correlation ids are diagnostic lineage, not authorization to replay completed work. Valuation
+     scheduler, readiness, recovery, and duplicate-delivery paths must leave an existing
+     `COMPLETE` same-scope job unchanged even when their correlation differs. A source correction
+     may explicitly rearm completed valuation only after source-owned freshness proves that the
+     authoritative price or FX observation is newer than the materialized snapshot. Preserve this
+     distinction in PostgreSQL conflict-lifecycle tests and workload evidence; do not infer replay
+     intent from correlation inequality.
 
 ## Context Maintenance Rule
 
