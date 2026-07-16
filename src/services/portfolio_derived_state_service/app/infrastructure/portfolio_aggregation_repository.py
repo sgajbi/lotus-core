@@ -57,10 +57,12 @@ class PortfolioAggregationRepository(TimeseriesMarketDataReader):
     async def upsert_portfolio_timeseries(self, record: PortfolioTimeseriesRecord) -> None:
         try:
             await self.db.execute(build_portfolio_timeseries_upsert_statement(record))
-            logger.info(
-                "Staged upsert for portfolio time series for %s on %s",
-                record.portfolio_id,
-                record.date,
+            logger.debug(
+                "Staged portfolio time-series upsert.",
+                extra={
+                    "portfolio_id": record.portfolio_id,
+                    "aggregation_date": record.date.isoformat(),
+                },
             )
         except Exception as exc:
             logger.error("Failed to stage portfolio time series upsert: %s", exc, exc_info=True)

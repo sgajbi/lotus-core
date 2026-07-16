@@ -232,7 +232,7 @@ class SqlAlchemyPositionHistoryRepository:
         rows = [_to_position_history_row(record) for record in records]
         self._session.add_all(rows)
         await self._session.flush()
-        logger.info(
+        logger.debug(
             "Staged position history records.",
             extra={"position_record_count": len(rows)},
         )
