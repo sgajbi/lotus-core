@@ -4,7 +4,7 @@ import os
 import sys
 import time
 
-from confluent_kafka import KafkaException
+from confluent_kafka import KafkaError, KafkaException
 from confluent_kafka.admin import AdminClient, NewTopic
 from portfolio_common.config import (
     KAFKA_BOOTSTRAP_SERVERS,
@@ -66,19 +66,24 @@ def create_topics(admin_client: AdminClient) -> None:
 
     logger.info(f"Attempting to create {len(new_topic_list)} new topics...")
     futures = admin_client.create_topics(new_topic_list)
+    creation_failures: dict[str, str] = {}
 
     for topic, future in futures.items():
         try:
             future.result()  # The result itself is None on success
             logger.info(f"Topic '{topic}' created successfully.")
         except KafkaException as e:
-            # Check if the error is "TOPIC_ALREADY_EXISTS"
-            if e.args[0].code() == KafkaException.TOPIC_ALREADY_EXISTS:
+            if e.args[0].code() == KafkaError.TOPIC_ALREADY_EXISTS:
                 logger.warning(f"Topic '{topic}' already exists.")
             else:
                 logger.error(f"Failed to create topic '{topic}': {e}")
+                creation_failures[topic] = str(e)
         except Exception as e:
             logger.error(f"An unexpected error occurred for topic '{topic}': {e}")
+            creation_failures[topic] = str(e)
+
+    if creation_failures:
+        raise KafkaTopicProvisioningError(f"Kafka topic creation failed: {creation_failures}")
 
 
 def _partition_mismatches(existing_topics: dict[str, object]) -> dict[str, dict[str, int]]:
