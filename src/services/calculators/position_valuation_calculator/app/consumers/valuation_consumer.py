@@ -85,8 +85,12 @@ class ValuationConsumer(BaseConsumer):
 
     @staticmethod
     def _log_valuation_job_start(event: PortfolioValuationRequiredEvent) -> None:
-        logger.info(
-            "Processing valuation job for "
-            f"{event.security_id} in {event.portfolio_id} "
-            f"on {event.valuation_date} for epoch {event.epoch}"
+        logger.debug(
+            "Processing valuation job.",
+            extra={
+                "security_id": event.security_id,
+                "portfolio_id": event.portfolio_id,
+                "valuation_date": event.valuation_date.isoformat(),
+                "epoch": event.epoch,
+            },
         )

@@ -67,7 +67,7 @@ class SqlAlchemyCostBasisProcessingStateRepository:
             raise
         wait_seconds = max(0.0, self._clock() - started_at)
         observe_cost_basis_processing_lock_wait(outcome="acquired", seconds=wait_seconds)
-        logger.info(
+        logger.debug(
             "Cost-basis processing lock acquired.",
             extra={
                 "portfolio_id": normalize_lookup_identifier(portfolio_id),

@@ -152,10 +152,11 @@ def test_observer_emits_structured_rebuild_and_generation_logs(logger) -> None:
     )
 
     logger.warning.assert_called_once()
-    assert logger.info.call_count == 2
+    logger.info.assert_called_once()
+    logger.debug.assert_called_once()
     assert logger.warning.call_args.kwargs["extra"]["backdated_handling"] == "inline_rebuild"
-    assert logger.info.call_args_list[0].kwargs["extra"]["position_record_count"] == 3
-    assert logger.info.call_args_list[1].kwargs["extra"]["new_watermark_date"] == "2026-04-09"
+    assert logger.info.call_args.kwargs["extra"]["position_record_count"] == 3
+    assert logger.debug.call_args.kwargs["extra"]["new_watermark_date"] == "2026-04-09"
 
 
 @patch(

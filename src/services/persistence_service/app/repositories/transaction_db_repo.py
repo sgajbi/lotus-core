@@ -105,15 +105,19 @@ class TransactionDBRepository:
             )
 
             await self.db.execute(final_stmt)
-            logger.info(f"Successfully staged UPSERT for transaction '{event.transaction_id}'.")
+            logger.debug(
+                "Transaction upsert staged.",
+                extra={"transaction_id": event.transaction_id},
+            )
 
             # Note: Since UPSERT doesn't easily return the model, we can assume success.
             # The calling consumer logic doesn't depend on the returned object.
             return DBTransaction(**event_dict)
 
-        except Exception as e:
+        except Exception:
             logger.error(
-                f"Failed to stage UPSERT for transaction '{event.transaction_id}': {e}",
+                "Failed to stage transaction upsert.",
+                extra={"transaction_id": event.transaction_id},
                 exc_info=True,
             )
             raise

@@ -138,7 +138,7 @@ class PrometheusPositionHistoryObserver:
         """Record position-history rows staged in the caller-owned transaction."""
         self._record(
             "records_staged",
-            lambda: logger.info(
+            lambda: logger.debug(
                 "Staged position history records for the recalculation epoch.",
                 extra=operation_log_extra(
                     event_name="position_history_staged",
@@ -163,7 +163,7 @@ class PrometheusPositionHistoryObserver:
         """Record that valuation and timeseries generation were marked dirty."""
         self._record(
             "generation_rearmed",
-            lambda: logger.info(
+            lambda: logger.debug(
                 "Re-armed valuation and timeseries generation after position history write.",
                 extra=operation_log_extra(
                     event_name="position_generation_rearmed",
