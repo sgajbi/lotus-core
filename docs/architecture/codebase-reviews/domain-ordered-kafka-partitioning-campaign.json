@@ -48,11 +48,11 @@
       "tranche_id": "tranche-2-throughput-and-certification",
       "branch": "feat/domain-ordered-kafka-partitioning",
       "base_sha": "b9c55792361557bda56ba498492e962225557dd4",
-      "head_sha": "d34da93054c56897c317dbdeb7a1c7a595a432c7",
+      "head_sha": "37ffa2fadd37662c34d6f2ae66e7455d1bbd8cb7",
       "post_merge_main_sha": "pending",
       "required_predecessor_main_sha": "b9c55792361557bda56ba498492e962225557dd4",
       "capability_boundary": "Transactional hot-path throughput, twelve-way capacity, valuation-job lock ordering, and exact workload certification",
-      "commit_count": 38,
+      "commit_count": 40,
       "issue_closure_decision": "close_after_final_validated_main",
       "local_evidence": [
         "Focused #799 unit, domain, lint, format, and type checks pass at signed campaign commits through 349ee126c66415c9bf683baa43b51656e6c8905d",
@@ -67,6 +67,9 @@
         "Signed 6640ec911a31d722410b678de54f415433f469f2 makes the load gate fail fast when drained COMPLETE valuation jobs lack their atomic same-scope snapshots; 19 focused tests plus MyPy, Ruff, format, and diff checks passed",
         "Exact clean fan-in 20260717T174251Z passed at signed evidence head d34da93054c56897c317dbdeb7a1c7a595a432c7 with 105.622-second drain, exact 1000 transaction and derived-row reconciliation, attempts 2/2, zero repeated processing, closed jobs and outbox, and no recurrence of the terminal ownership anomaly",
         "Pure FIFO recalculation in 20260717T174251Z totalled only 0.160816 seconds at depth one while the wider cost stage totalled 194.163301 seconds; database, persistence, or coordination evidence is required before another cost-path change",
+        "Signed 37ffa2fadd37662c34d6f2ae66e7455d1bbd8cb7 retains eleven existing low-cardinality repository/method database timing series in the governed artifact and fails closed on missing, incomplete, or zero-observation evidence; 32 focused tests plus scoped MyPy, Ruff, format, and diff checks passed",
+        "Exact clean fan-in 20260717T180631Z reproduced the terminal ownership contradiction: 1000 durable transactions and COMPLETE valuation jobs with attempts 2/2, zero repeats, and final outbox 0/0 produced zero snapshots or timeseries rows; the guard failed in 314.102 seconds instead of consuming the full drain timeout",
+        "Database timing in 20260717T180631Z totalled 139.978303 seconds across eleven repository operations while pure FIFO recalculation totalled 0.152853 seconds; this narrows future work to targeted persistence, coordination, and valuation ownership-transition proof without attributing the defect to a specific lock or UPSERT",
         "The next investigation requires database, persistence, or coordination timing evidence and a runtime explanation for the valuation ownership anomaly before any further hot-path change or daily rerun; ordered append, full rebuild, method-specific lot state, backdated and correction semantics, and single-writer coordination remain mandatory",
         "Exact daily, recovery, poison, duplicate, price-restatement, and FX-restatement completion evidence remains required before PR readiness"
       ],
@@ -79,7 +82,8 @@
         "Remote Feature Lane 29595818757 passed at signed stage-evidence and managed-endpoint head 20333978aa0f52d62032334bc9b474edd3c9f4ab",
         "Remote Feature Lane 29597316430 passed at signed internal-cost-evidence head 37abbf19b293e9e720fa704d04fcd737fc4d239d",
         "Remote Feature Lane 29599992446 passed at signed fail-fast diagnostic head 6640ec911a31d722410b678de54f415433f469f2",
-        "Remote Feature Lane 29600977253 passed at signed exact fan-in evidence head d34da93054c56897c317dbdeb7a1c7a595a432c7"
+        "Remote Feature Lane 29600977253 passed at signed exact fan-in evidence head d34da93054c56897c317dbdeb7a1c7a595a432c7",
+        "Remote Feature Lane 29602493876 passed at signed database-attribution head 37ffa2fadd37662c34d6f2ae66e7455d1bbd8cb7"
       ]
     }
   ],
