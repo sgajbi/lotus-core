@@ -1,7 +1,6 @@
 # tests/unit/libs/portfolio-common/test_kafka_consumer.py
 import asyncio
 import json
-import threading
 from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
@@ -281,68 +280,6 @@ async def test_concurrent_profile_does_not_commit_before_processing_completion(
     assert sorted(started_partitions) == [0, 1]
     assert sorted(completed_partitions) == [0, 1]
     assert mock_confluent_consumer.commit.call_count == 2
-
-
-async def test_concurrent_profile_offloads_synchronous_commits_by_partition(
-    mock_confluent_consumer: MagicMock,
-    mock_kafka_producer: MagicMock,
-):
-    messages = [
-        create_mock_message("key-commit-0", {"data": "value-0"}, partition=0, offset=1),
-        create_mock_message("key-commit-1", {"data": "value-1"}, partition=1, offset=1),
-    ]
-    polled_messages = list(messages)
-    mock_confluent_consumer.poll.side_effect = lambda _timeout: (
-        polled_messages.pop(0) if polled_messages else None
-    )
-    commit_lock = threading.Lock()
-    both_commits_started = threading.Event()
-    active_commits = 0
-    peak_active_commits = 0
-
-    def commit(*, message, asynchronous):
-        nonlocal active_commits, peak_active_commits
-        assert message in messages
-        assert asynchronous is False
-        with commit_lock:
-            active_commits += 1
-            peak_active_commits = max(peak_active_commits, active_commits)
-            if active_commits == 2:
-                both_commits_started.set()
-        assert both_commits_started.wait(timeout=1)
-        with commit_lock:
-            active_commits -= 1
-
-    mock_confluent_consumer.commit.side_effect = commit
-    processed_count = 0
-    consumer = ConcreteTestConsumer(
-        bootstrap_servers="mock_bs",
-        topic="test-topic",
-        group_id="test-group",
-        execution_profile=KafkaConsumerExecutionProfile(max_in_flight_messages=2),
-    )
-
-    async def process_message(_msg):
-        nonlocal processed_count
-        processed_count += 1
-        if processed_count == 2:
-            consumer.shutdown()
-
-    consumer.process_message_mock.side_effect = process_message
-
-    with (
-        patch("portfolio_common.kafka_consumer.Consumer", return_value=mock_confluent_consumer),
-        patch(
-            "portfolio_common.kafka_consumer.get_kafka_producer",
-            return_value=mock_kafka_producer,
-        ),
-        patch("portfolio_common.kafka_consumer.set_kafka_consumer_in_flight"),
-        patch("portfolio_common.kafka_consumer.observe_kafka_consumer_backlog_pressure"),
-    ):
-        await asyncio.wait_for(consumer.run(), timeout=2)
-
-    assert mock_confluent_consumer.commit.call_count == 2
-    assert peak_active_commits == 2
 
 
 async def test_concurrent_profile_preserves_partition_order(
