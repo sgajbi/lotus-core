@@ -193,6 +193,24 @@ evidence while preserving ordered append, full-rebuild fallback, method-specific
 backdated/correction semantics, and single-writer coordination. Artifact SHA-256 is
 `668AC265FA7D12058A1A917CFF1B8B1ED50B5AA9E492B2AE7255867A461A6E17`.
 
+The next exact-source fan-in diagnostic at signed head `37abbf19b` separated calculator work from
+the wider cost stage without adding production instrumentation. All `1,000` cost executions were
+FIFO full rebuilds with recalculation depth exactly one. Pure recalculation duration totalled only
+`0.18031266846810468s`, about `0.000180313s` per transaction, and no opening lots were restored.
+The earlier `199.828910s` cost-stage total is therefore dominated by database, persistence, or
+coordination work rather than cost arithmetic. No calculator change is justified by this evidence.
+
+That diagnostic is not a capacity result. It reached a terminally inconsistent valuation state:
+all `1,000` transactions, position-history rows, and position-state rows were durable; all `1,000`
+valuation jobs were `COMPLETE` with attempt count `2`; the Kafka group had zero lag; and the worker
+had recorded `1,000` processed-event fences. Nevertheless it emitted `1,000` lost-ownership
+warnings and produced zero snapshots, snapshot outbox rows, or timeseries rows. Rollback-only
+repository and full valuation-sequence probes returned successful ownership in isolation, so the
+runtime contract was not changed on inference. Signed `6640ec911` instead makes the load gate fail
+immediately when all expected transactions and outbox work are drained but a `COMPLETE` valuation
+job lacks its atomic same-scope snapshot. This preserves the anomaly for diagnosis and prevents an
+irrecoverable terminal state from consuming the full drain timeout.
+
 ## Compatibility
 
 HTTP APIs, OpenAPI schemas, Kafka topics, event payload schemas, transaction calculations,
@@ -260,11 +278,15 @@ because historical and new keys can map to different partitions after producer r
   Lane `29595818757` passed at signed head `20333978a`.
 - Internal cost-evidence parsing and fail-closed report behavior passed `44` focused
   runner/parser/orchestration tests plus scoped MyPy, Ruff/format, and diff checks before commit.
+- Terminal valuation/snapshot inconsistency detection passed `19` focused bank-day tests plus
+  scoped MyPy, Ruff/format, and diff checks at signed commit `6640ec911`. Remote Feature Lane
+  `29597316430` passed at the exact cost-evidence head `37abbf19b`; Remote Feature Lane
+  `29599992446` then passed at the exact fail-fast head `6640ec911`.
 
 Implementation commits include `23fc6faf3`, `d51adb739`, `ad1ad179d`, `57f8c60e2`,
 `4f05be9a5`, `c230d660a`, `f42f6eaa3`, `d56e14dbf`, `2d49fc8f1`, `70ae16f0f`,
-`a3c9eeaac`, `b7e7e1be2`, `35fb5d84f`, and `20333978a`. Human contract/context alignment starts in
-`9d6dbbbf9`.
+`a3c9eeaac`, `b7e7e1be2`, `35fb5d84f`, `20333978a`, `37abbf19b`, and `6640ec911`.
+Human contract/context alignment starts in `9d6dbbbf9`.
 
 ## Documentation Decision
 
@@ -277,3 +299,6 @@ recorded workload evidence fields. The position-state and initial-opening-lot st
 also require no additional OpenAPI, migration, event-contract, operator-runbook, or wiki source
 change. Operation-evidence collection changes the bank-day runbook and authored wiki source because
 operators gain a new required certifying diagnostic; publish and verify wiki parity after merge.
+The terminal valuation/snapshot invariant also changes operator-facing failure diagnosis, so the
+bank-day runbook and authored wiki record the fail-fast condition in this slice. It does not require
+an OpenAPI, migration, event-contract, or calculation-methodology change.

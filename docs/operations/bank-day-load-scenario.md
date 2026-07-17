@@ -216,6 +216,14 @@ persistence, or coordination changes are proposed. Complete certifying runs requ
 recalculation-duration, and recalculation-depth samples. An empty restored-lot set is valid for a
 workload containing only initial opening lots.
 
+The drain loop also fails fast on an atomicity contradiction instead of waiting for its full
+timeout. Once every expected transaction is durable, no valuation job remains pending or
+processing, and the durable outbox is empty, each `COMPLETE` valuation job must have a matching
+snapshot for the same portfolio, security, valuation date, and epoch. A completed job without that
+snapshot is terminal diagnostic evidence: no queued work remains that can repair it. Retain the
+reported count, worker lost-ownership logs, job attempt counts, processed-event fences, and Kafka
+lag; do not classify the run as capacity evidence or raise the timeout.
+
 ## Live Institutional Run Notes
 
 The active institutional run `20260418T065154Z` on `2026-04-18` established three important
