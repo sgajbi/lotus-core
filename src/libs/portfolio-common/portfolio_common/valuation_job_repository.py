@@ -396,9 +396,7 @@ def _valuation_job_conflict_update_predicate(
             PortfolioValuationJob.status == "PENDING",
             identity_matches,
         )
-        predicate = not_(PortfolioValuationJob.status == "PROCESSING") & not_(
-            same_pending_lineage
-        )
+        predicate = not_(PortfolioValuationJob.status == "PROCESSING") & not_(same_pending_lineage)
     if not rearm_completed:
         predicate &= PortfolioValuationJob.status != "COMPLETE"
     return predicate
