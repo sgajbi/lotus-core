@@ -35,11 +35,15 @@ class BusinessDateRepository:
             final_stmt = stmt.on_conflict_do_nothing(index_elements=["calendar_code", "date"])
 
             await self.db.execute(final_stmt)
-            logger.info(f"Successfully staged UPSERT for business date '{event.business_date}'.")
+            logger.debug(
+                "Staged business date upsert.",
+                extra={"business_date": event.business_date.isoformat()},
+            )
 
-        except Exception as e:
+        except Exception:
             logger.error(
-                f"Failed to stage UPSERT for business date '{event.business_date}': {e}",
+                "Failed to stage business date upsert.",
+                extra={"business_date": event.business_date.isoformat()},
                 exc_info=True,
             )
             raise

@@ -40,11 +40,16 @@ class PortfolioRepository:
             )
 
             await self.db.execute(final_stmt)
-            logger.info(f"Successfully staged UPSERT for portfolio '{event.portfolio_id}'.")
+            logger.debug(
+                "Staged portfolio upsert.",
+                extra={"portfolio_id": event.portfolio_id},
+            )
 
             return DBPortfolio(**portfolio_data)
-        except Exception as e:
+        except Exception:
             logger.error(
-                f"Failed to stage UPSERT for portfolio '{event.portfolio_id}': {e}", exc_info=True
+                "Failed to stage portfolio upsert.",
+                extra={"portfolio_id": event.portfolio_id},
+                exc_info=True,
             )
             raise

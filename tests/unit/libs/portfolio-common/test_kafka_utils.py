@@ -207,8 +207,8 @@ def test_delivery_report_handles_success(MockProducer):
     # ACT & ASSERT
     with patch("portfolio_common.kafka_utils.logger") as mock_logger:
         callback(err, mock_msg)
-        mock_logger.info.assert_called_with("Kafka message delivered.", extra=ANY)
-        extra = mock_logger.info.call_args.kwargs["extra"]
+        mock_logger.debug.assert_called_with("Kafka message delivered.", extra=ANY)
+        extra = mock_logger.debug.call_args.kwargs["extra"]
         assert extra["event_name"] == "kafka.producer.delivery_succeeded"
         assert extra["reason_code"] == "delivery_acknowledged"
         assert extra["topic"] == "t"
