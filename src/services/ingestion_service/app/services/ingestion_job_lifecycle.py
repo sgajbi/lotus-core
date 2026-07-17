@@ -160,49 +160,6 @@ async def create_or_get_job_result(
     raise RuntimeError(msg)
 
 
-async def find_idempotent_job_response(
-    *,
-    endpoint: str,
-    idempotency_key: str | None,
-    request_payload: dict[str, Any] | None,
-    session_factory,
-) -> IngestionJobResponse | None:
-    """Find an established replay without reserving a key for an unvalidated command."""
-    if not idempotency_key:
-        return None
-
-    async for db in session_factory():
-        existing = await db.scalar(
-            select(DBIngestionJob)
-            .where(
-                and_(
-                    DBIngestionJob.endpoint == endpoint,
-                    DBIngestionJob.idempotency_key == idempotency_key,
-                )
-            )
-            .order_by(desc(DBIngestionJob.submitted_at))
-            .limit(1)
-        )
-        if existing is None:
-            return None
-        if _idempotency_payload_conflicts(
-            existing_payload=existing.request_payload,
-            existing_payload_fingerprint=getattr(
-                existing,
-                "request_payload_fingerprint",
-                None,
-            ),
-            requested_payload=request_payload,
-        ):
-            raise IngestionIdempotencyConflictError(
-                endpoint=endpoint,
-                idempotency_key=idempotency_key,
-            )
-        return to_job_response(existing)
-
-    return None
-
-
 async def _acquire_idempotency_key_lock(db, *, endpoint: str, idempotency_key: str) -> None:
     await db.execute(
         text("SELECT pg_advisory_xact_lock(hashtextextended(:lock_key, 0))"),

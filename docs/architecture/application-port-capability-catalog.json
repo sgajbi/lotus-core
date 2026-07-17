@@ -55,6 +55,32 @@
       "runtime_boundary": "design-modularity-only"
     },
     {
+      "capability_id": "ingestion.idempotency-replay-reader",
+      "capability_family": "audit-idempotency-store",
+      "owner_service": "ingestion_service",
+      "port_module": "src/services/ingestion_service/app/ports/ingestion_idempotency_replay.py",
+      "port_symbols": [
+        "IngestionIdempotencyReplayReader"
+      ],
+      "adapter_modules": [
+        "src/services/ingestion_service/app/infrastructure/ingestion_idempotency_replay_reader.py"
+      ],
+      "consumer_modules": [
+        "src/services/ingestion_service/app/services/ingestion_publish_commands.py"
+      ],
+      "guard_scripts": [
+        "scripts/quality/application_port_catalog_guard.py",
+        "scripts/quality/application_dependency_inversion_guard.py",
+        "scripts/quality/infrastructure_adapter_layer_guard.py"
+      ],
+      "standards": [
+        "docs/standards/application-port-layer-standard.md",
+        "docs/standards/infrastructure-adapter-layer-standard.md"
+      ],
+      "status": "implemented-representative",
+      "runtime_boundary": "design-modularity-only"
+    },
+    {
       "capability_id": "events.event-publisher",
       "capability_family": "event-publisher",
       "owner_service": "portfolio_common",
