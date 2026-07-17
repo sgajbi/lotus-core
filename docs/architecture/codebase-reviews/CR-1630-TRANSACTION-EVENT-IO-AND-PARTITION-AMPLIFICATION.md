@@ -221,6 +221,24 @@ was again negligible: `0.160816s` total and `0.000160816s` mean at depth one, co
 persistence, or coordination evidence, not calculator arithmetic. Artifact SHA-256 is
 `5188E393806662464F97247072CB837B7E7EB97A3A455CD30F19D99813C3D524`.
 
+The next exact clean fan-in `20260717T180631Z` at signed implementation head `37ffa2fad`
+reproduced the terminal contradiction for the complete workload. All `1,000` transactions and
+valuation jobs were durable, attempts remained `2/2`, repeated processing remained zero, and the
+final pending/failed outbox was `0/0`; nevertheless snapshots and both timeseries stages remained
+zero. The fail-fast guard ended the run in `314.102s` with
+`completed_valuation_jobs_without_snapshots=1000`. This is reproducible runtime ownership evidence,
+not a capacity result and not proof of an UPSERT or lock root cause. JSON SHA-256 is
+`CEFF56A9AAA90D1D4F5852FDD707C7A356C17A0D59633FC736E9262B94005525`.
+
+The additive database evidence retained eleven complete repository/method series totalling
+`139.978303s`. The largest were `PositionStateRepository.get_or_create_state` (`2,000` calls,
+`36.802742s`), cost-basis lock acquisition (`1,000`, `18.139104s`), position materialization
+progress (`1,000`, `15.217857s`), and position history read/delete operations (`1,000` each,
+`12.149594s` to `12.558317s`). FIFO recalculation still totalled only `0.152853s` at depth one.
+Because these repository timings span cost, cashflow, position, and readiness work, their sum is
+not a cost-stage percentage. It narrows the next work to targeted persistence/coordination and
+valuation ownership-transition proof without justifying another broad micro-optimization.
+
 ## Compatibility
 
 HTTP APIs, OpenAPI schemas, Kafka topics, event payload schemas, transaction calculations,
@@ -235,6 +253,11 @@ and runner configuration. It reuses existing bounded metrics and changes no serv
 runtime behavior, API, event, calculation, or persistent schema. Stage/outcome labels contain no
 portfolio, security, account, or transaction identifiers. The internal cost evidence has the same
 compatibility posture and uses only bounded mode and cost-basis-method labels.
+
+Database operation evidence is likewise additive and reuses the existing low-cardinality
+repository/method histogram. It records no query text, SQL values, or business identifiers and
+changes no production instrumentation, transaction boundary, lock, API, event, schema, or
+calculation contract.
 
 The intentional transport behavior change is the transaction partition key:
 `portfolio_id` becomes `portfolio_id|security_id` for raw ingestion, persisted transaction facts,
@@ -295,11 +318,17 @@ because historical and new keys can map to different partitions after producer r
 - Exact clean fan-in `20260717T174251Z` passed at `d34da9305` with the measured result above;
   Remote Feature Lane `29600977253` passed at that exact source head. Scoped teardown removed every
   run-owned resource while retaining the separately owned canonical UI stack.
+- Database-operation parsing, incomplete-series exclusion, fail-closed collection, report
+  propagation, and config proof passed `32` focused tests plus scoped MyPy, Ruff, format, and diff
+  checks at signed commit `37ffa2fad`. Remote Feature Lane `29602493876` passed at that exact head.
+- Exact clean fan-in `20260717T180631Z` failed fast with the measured ownership contradiction and
+  retained eleven bounded database series. Managed teardown removed all run-owned containers,
+  networks, and volumes while preserving the 15-container canonical UI stack.
 
 Implementation commits include `23fc6faf3`, `d51adb739`, `ad1ad179d`, `57f8c60e2`,
 `4f05be9a5`, `c230d660a`, `f42f6eaa3`, `d56e14dbf`, `2d49fc8f1`, `70ae16f0f`,
-`a3c9eeaac`, `b7e7e1be2`, `35fb5d84f`, `20333978a`, `37abbf19b`, and `6640ec911`.
-Evidence alignment continues through `d34da9305`; human contract/context alignment starts in
+`a3c9eeaac`, `b7e7e1be2`, `35fb5d84f`, `20333978a`, `37abbf19b`, `6640ec911`, and `37ffa2fad`.
+Evidence alignment continues through `37ffa2fad`; human contract/context alignment starts in
 `9d6dbbbf9`.
 
 ## Documentation Decision
@@ -315,4 +344,7 @@ change. Operation-evidence collection changes the bank-day runbook and authored 
 operators gain a new required certifying diagnostic; publish and verify wiki parity after merge.
 The terminal valuation/snapshot invariant also changes operator-facing failure diagnosis, so the
 bank-day runbook and authored wiki record the fail-fast condition in this slice. It does not require
-an OpenAPI, migration, event-contract, or calculation-methodology change.
+an OpenAPI, migration, event-contract, or calculation-methodology change. Database-operation
+attribution extends the same generated artifact and runbook contract; it adds no new production
+metric and requires no OpenAPI, migration, event-contract, calculation-methodology, or additional
+wiki-source change.

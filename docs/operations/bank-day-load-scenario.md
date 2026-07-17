@@ -216,6 +216,14 @@ persistence, or coordination changes are proposed. Complete certifying runs requ
 recalculation-duration, and recalculation-depth samples. An empty restored-lot set is valid for a
 workload containing only initial opening lots.
 
+The artifact also retains the runtime's existing `db_operation_latency_seconds` histogram as one
+deterministically sorted entry per bounded `repository` and `method`. Each entry contains an
+observation count, cumulative duration, and mean duration. Query text, SQL parameters, portfolio,
+security, account, and transaction identifiers are not collected. A certifying run fails when no
+complete positive-observation repository/method series exists. Use these totals to select a
+targeted persistence or coordination investigation; they span multiple transaction stages and must
+not be treated as a cost-only percentage, latency percentile, or SLO.
+
 The drain loop also fails fast on an atomicity contradiction instead of waiting for its full
 timeout. Once every expected transaction is durable, no valuation job remains pending or
 processing, and the durable outbox is empty, each `COMPLETE` valuation job must have a matching
@@ -223,6 +231,13 @@ snapshot for the same portfolio, security, valuation date, and epoch. A complete
 snapshot is terminal diagnostic evidence: no queued work remains that can repair it. Retain the
 reported count, worker lost-ownership logs, job attempt counts, processed-event fences, and Kafka
 lag; do not classify the run as capacity evidence or raise the timeout.
+
+Exact clean fan-in `20260717T180631Z` demonstrated why this check is fail-closed: all 1,000
+transactions and valuation jobs were terminal with attempts `2/2`, no repeats, and an empty
+pending/failed outbox, but no matching snapshot or timeseries rows existed. The guard stopped the
+run in `314.102s`. A prior exact run had converged, so preserve both results and diagnose the worker
+ownership transition; do not infer a capacity limit or change lock ordering from the terminal
+counts alone.
 
 ## Live Institutional Run Notes
 
