@@ -317,8 +317,8 @@ def test_kafka_consumer_execution_profile_defaults_preserve_serial_behavior(monk
 @pytest.mark.parametrize(
     ("group_id", "expected_max_in_flight"),
     [
-        ("persistence_group_transactions", 8),
-        ("portfolio_transaction_processing_group", 8),
+        ("persistence_group_transactions", 12),
+        ("portfolio_transaction_processing_group", 12),
         ("portfolio_transaction_replay_request_group", 8),
         ("valuation_orchestrator_group_fx_events", 4),
         ("position_valuation_worker_group", 1),
@@ -450,6 +450,7 @@ def test_active_topic_registry_has_explicit_source_owned_partition_counts():
     assert set(config_module.KAFKA_TOPIC_PARTITION_COUNTS) == set(active_topics)
     assert all(count > 0 for count in config_module.KAFKA_TOPIC_PARTITION_COUNTS.values())
     assert config_module.KAFKA_TOPIC_PARTITION_COUNTS["business_dates.raw.received"] == 1
-    assert config_module.KAFKA_TOPIC_PARTITION_COUNTS["transactions.persisted"] == 8
+    assert config_module.KAFKA_TOPIC_PARTITION_COUNTS["transactions.raw.received"] == 12
+    assert config_module.KAFKA_TOPIC_PARTITION_COUNTS["transactions.persisted"] == 12
     assert config_module.KAFKA_TOPIC_PARTITION_COUNTS["transactions.reprocessing.requested"] == 8
     assert len(set(config_module.KAFKA_TOPIC_PARTITION_COUNTS.values())) > 1

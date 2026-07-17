@@ -82,6 +82,6 @@ def test_ensure_topics_exist_rejects_partition_contract_drift(mock_admin_client_
 
     with pytest.raises(
         KafkaTopicPartitionMismatchError,
-        match="'expected': 8, 'actual': 1",
+        match="'expected': 12, 'actual': 1",
     ):
         ensure_topics_exist.__wrapped__(["transactions.persisted"])
