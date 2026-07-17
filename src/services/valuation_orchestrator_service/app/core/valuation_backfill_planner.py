@@ -250,9 +250,17 @@ class ValuationBackfillPlanner:
         latest_business_date,
         valuation_dates: list[date],
     ) -> None:
+        lock_ordered_states = sorted(
+            states_to_backfill,
+            key=lambda state: (
+                state.portfolio_id,
+                state.security_id,
+                state.epoch,
+            ),
+        )
         for chunk_index, job_requests in enumerate(
             self._iter_backfill_job_chunks(
-                states_to_backfill,
+                lock_ordered_states,
                 first_open_dates,
                 latest_business_date,
                 valuation_dates,

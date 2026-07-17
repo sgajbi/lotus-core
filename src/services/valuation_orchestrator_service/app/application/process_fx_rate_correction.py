@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from portfolio_common.valuation_job_contracts import ValuationJobUpsert
+
 from ..domain.fx_revaluation import FxRateCorrection, FxRevaluationPlan
 from ..domain.source_revaluation import decide_source_revaluation_schedule
 from ..ports.fx_revaluation import FxRevaluationRepository, PositionValuationJobWriter
@@ -51,14 +53,19 @@ class ProcessFxRateCorrection:
             pair=correction.pair,
             effective_date=correction.effective_date,
         )
-        for key in position_keys:
-            await self._valuation_jobs.upsert_job(
-                portfolio_id=key.portfolio_id,
-                security_id=key.security_id,
-                valuation_date=correction.effective_date,
-                epoch=key.epoch,
-                correlation_id=correlation_id,
-                source_correction_id=source_correction_id,
+        if position_keys:
+            await self._valuation_jobs.upsert_jobs(
+                [
+                    ValuationJobUpsert(
+                        portfolio_id=key.portfolio_id,
+                        security_id=key.security_id,
+                        valuation_date=correction.effective_date,
+                        epoch=key.epoch,
+                        correlation_id=correlation_id,
+                        source_correction_id=source_correction_id,
+                    )
+                    for key in position_keys
+                ],
                 rearm_completed=True,
                 requeue_if_processing=True,
             )
