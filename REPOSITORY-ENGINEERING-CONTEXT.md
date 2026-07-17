@@ -2776,7 +2776,9 @@ Most relevant current governance:
      teardown and retain bounded operation counts, duration observation counts, cumulative duration,
      and mean duration by stage/outcome. Never add business identifiers to these metrics or artifacts.
      Treat missing samples as a certifying failure and treat cumulative/mean values as bottleneck
-     attribution rather than latency percentiles or SLOs.
+     attribution rather than latency percentiles or SLOs. Also retain existing bounded cost execution
+     mode/method counts, recalculation duration/depth, and restored-open-lot statistics so calculator
+     work can be separated from the wider cost stage before changing persistence or coordination.
 
 ## Context Maintenance Rule
 

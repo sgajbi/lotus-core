@@ -209,6 +209,13 @@ the scrape is unavailable or contains no bounded samples; an interrupted run sti
 failure beside all other partial evidence. Cumulative and mean durations are attribution evidence,
 not latency percentiles or service-level objectives.
 
+The same runtime scrape retains existing cost-processing execution counts by bounded mode/method,
+plus recalculation duration, recalculation depth, and restored-open-lot histogram count/sum/mean.
+This separates pure calculation and replay depth from the wider cost stage before database,
+persistence, or coordination changes are proposed. Complete certifying runs require execution,
+recalculation-duration, and recalculation-depth samples. An empty restored-lot set is valid for a
+workload containing only initial opening lots.
+
 ## Live Institutional Run Notes
 
 The active institutional run `20260418T065154Z` on `2026-04-18` established three important

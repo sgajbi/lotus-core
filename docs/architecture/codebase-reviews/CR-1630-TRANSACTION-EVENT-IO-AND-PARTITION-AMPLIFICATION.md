@@ -66,6 +66,9 @@ rearmed and completed `525` times for one final portfolio-day row.
     teardown and retain bounded count, duration count, cumulative duration, and mean duration by
     transaction-processing stage/outcome. Complete certifying runs fail closed when this evidence
     is absent.
+15. The same scrape retains existing cost execution mode/method counts, recalculation duration and
+    depth, and restored-open-lot observations. This adds internal cost attribution without adding a
+    production metric or changing calculation behavior.
 
 ## Measured Result
 
@@ -202,7 +205,8 @@ does not elevate local workload evidence to CI or production certification.
 Transaction-processing operation evidence is also additive to the generated JSON/Markdown artifact
 and runner configuration. It reuses existing bounded metrics and changes no service instrumentation,
 runtime behavior, API, event, calculation, or persistent schema. Stage/outcome labels contain no
-portfolio, security, account, or transaction identifiers.
+portfolio, security, account, or transaction identifiers. The internal cost evidence has the same
+compatibility posture and uses only bounded mode and cost-basis-method labels.
 
 The intentional transport behavior change is the transaction partition key:
 `portfolio_id` becomes `portfolio_id|security_id` for raw ingestion, persisted transaction facts,
@@ -254,6 +258,8 @@ because historical and new keys can map to different partitions after producer r
   the complete architecture and wiki/documentation guards, synthetic-fixture leakage, and
   repository output-shape validation. Exact fan-in `20260717T162223Z` passed, and Remote Feature
   Lane `29595818757` passed at signed head `20333978a`.
+- Internal cost-evidence parsing and fail-closed report behavior passed `44` focused
+  runner/parser/orchestration tests plus scoped MyPy, Ruff/format, and diff checks before commit.
 
 Implementation commits include `23fc6faf3`, `d51adb739`, `ad1ad179d`, `57f8c60e2`,
 `4f05be9a5`, `c230d660a`, `f42f6eaa3`, `d56e14dbf`, `2d49fc8f1`, `70ae16f0f`,
