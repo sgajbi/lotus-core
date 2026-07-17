@@ -2779,6 +2779,13 @@ Most relevant current governance:
      attribution rather than latency percentiles or SLOs. Also retain existing bounded cost execution
      mode/method counts, recalculation duration/depth, and restored-open-lot statistics so calculator
      work can be separated from the wider cost stage before changing persistence or coordination.
+202. A `COMPLETE` valuation job and its portfolio/security/date/epoch snapshot are one atomic unit
+     of work. When a governed workload has all expected transactions durable, no pending or
+     processing valuation work, and an empty outbox, a completed job without its matching snapshot
+     is irrecoverable terminal evidence rather than normal lag. Fail fast with the exact count,
+     preserve worker ownership logs, attempt counts, processed-event fences, and Kafka lag, and do
+     not raise the timeout or claim capacity. Diagnose the ownership path before changing valuation
+     semantics; an isolated successful repository probe is not sufficient runtime proof.
 
 ## Context Maintenance Rule
 
