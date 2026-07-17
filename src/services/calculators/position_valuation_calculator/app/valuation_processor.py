@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Protocol, cast
+from typing import TYPE_CHECKING, Any, Protocol
 
 from portfolio_common.config import KAFKA_VALUATION_SNAPSHOT_PERSISTED_TOPIC
 from portfolio_common.database_models import (
@@ -21,6 +21,7 @@ from portfolio_common.events import (
     PortfolioValuationRequiredEvent,
 )
 from portfolio_common.monitoring import VALUATION_JOBS_FAILED_TOTAL, VALUATION_JOBS_SKIPPED_TOTAL
+from portfolio_common.valuation_job_contracts import ValuationJobTransitionOutcome
 
 from .logic.valuation_logic import ValuationComponents, ValuationLogic
 
@@ -145,13 +146,18 @@ class ValuationJobProcessor:
         async for db in self._session_provider():
             async with db.begin():
                 dependencies = self._dependency_factory.from_session(db)
-                await dependencies.repo.update_job_status(
+                outcome = await dependencies.repo.update_job_status(
                     event.portfolio_id,
                     event.security_id,
                     event.valuation_date,
                     event.epoch,
                     status=VALUATION_FAILED,
                     failure_reason=str(exc),
+                )
+                self._terminal_transition_applied(
+                    outcome,
+                    event,
+                    side_effect_name="valuation failure transition",
                 )
 
     async def _build_snapshot_for_event(
@@ -226,18 +232,19 @@ class ValuationJobProcessor:
             reason="missing_ref_data",
         ).inc()
         logger.error("%s Job will be marked FAILED.", error_msg)
-        if not await repo.update_job_status(
+        outcome = await repo.update_job_status(
             event.portfolio_id,
             event.security_id,
             event.valuation_date,
             event.epoch,
             VALUATION_FAILED,
             failure_reason=error_msg,
-        ):
-            self._log_lost_job_ownership(
-                "Skipping valuation failure completion after losing job ownership.",
-                event,
-            )
+        )
+        self._terminal_transition_applied(
+            outcome,
+            event,
+            side_effect_name="valuation failure completion",
+        )
 
     @staticmethod
     def _missing_reference_data_message(
@@ -381,23 +388,19 @@ class ValuationJobProcessor:
             if snapshot_result.snapshot.valuation_status in FAILED_JOB_STATUSES
             else VALUATION_JOB_COMPLETE
         )
-        job_completed = cast(
-            bool,
-            await repo.update_job_status(
-                event.portfolio_id,
-                event.security_id,
-                event.valuation_date,
-                event.epoch,
-                terminal_status,
-                failure_reason=snapshot_result.job_failure_reason,
-            ),
+        outcome = await repo.update_job_status(
+            event.portfolio_id,
+            event.security_id,
+            event.valuation_date,
+            event.epoch,
+            terminal_status,
+            failure_reason=snapshot_result.job_failure_reason,
         )
-        if not job_completed:
-            self._log_lost_job_ownership(
-                "Skipping valuation completion side effects after losing job ownership.",
-                event,
-            )
-        return job_completed
+        return self._terminal_transition_applied(
+            outcome,
+            event,
+            side_effect_name="valuation completion side effects",
+        )
 
     @staticmethod
     async def _persist_and_publish_snapshot(
@@ -444,30 +447,47 @@ class ValuationJobProcessor:
         )
         async with db.begin():
             dependencies = self._dependency_factory.from_session(db)
-            if not await dependencies.repo.update_job_status(
+            outcome = await dependencies.repo.update_job_status(
                 event.portfolio_id,
                 event.security_id,
                 event.valuation_date,
                 event.epoch,
                 status=VALUATION_JOB_SKIPPED_NO_POSITION,
                 failure_reason=str(error),
+            )
+            if not self._terminal_transition_applied(
+                outcome,
+                event,
+                side_effect_name="valuation no-position completion",
             ):
-                self._log_lost_job_ownership(
-                    "Skipping valuation no-position completion after losing job ownership.",
-                    event,
-                )
                 return
             await dependencies.idempotency_repo.mark_event_processed(
                 event_id, event.portfolio_id, SERVICE_NAME, correlation_id
             )
 
     @staticmethod
-    def _log_lost_job_ownership(message: str, event: PortfolioValuationRequiredEvent) -> None:
+    def _terminal_transition_applied(
+        outcome: ValuationJobTransitionOutcome,
+        event: PortfolioValuationRequiredEvent,
+        *,
+        side_effect_name: str,
+    ) -> bool:
+        if outcome is ValuationJobTransitionOutcome.TERMINAL_APPLIED:
+            return True
+        reason = (
+            "newer source work requested requeue"
+            if outcome is ValuationJobTransitionOutcome.REQUEUED
+            else "job ownership was lost"
+        )
         logger.warning(
-            message,
+            "Skipping %s because %s.",
+            side_effect_name,
+            reason,
             extra={
                 "portfolio_id": event.portfolio_id,
                 "security_id": event.security_id,
                 "valuation_date": str(event.valuation_date),
+                "transition_outcome": outcome.value,
             },
         )
+        return False

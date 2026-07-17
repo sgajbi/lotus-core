@@ -23,6 +23,7 @@ from .database_models import (
 from .domain.currency import normalize_currency_code
 from .identifiers import normalize_lookup_identifier
 from .utils import async_timed
+from .valuation_job_contracts import ValuationJobTransitionOutcome
 from .valuation_snapshot_contiguity import (
     build_contiguous_snapshot_dates_stmt,
     contiguous_snapshot_dates_by_key,
@@ -382,7 +383,7 @@ class ValuationRepositoryBase:
         epoch: int,
         status: str,
         failure_reason: Optional[str] = None,
-    ) -> bool:
+    ) -> ValuationJobTransitionOutcome:
         terminal_status = case(
             (PortfolioValuationJob.requeue_requested.is_(True), "PENDING"),
             else_=status,
@@ -418,7 +419,16 @@ class ValuationRepositoryBase:
         )
         result = await self.db.execute(stmt)
         applied_status = result.scalar_one_or_none()
-        return applied_status == status
+        if applied_status is None:
+            return ValuationJobTransitionOutcome.NOT_OWNED
+        if applied_status == status:
+            return ValuationJobTransitionOutcome.TERMINAL_APPLIED
+        if applied_status == "PENDING":
+            return ValuationJobTransitionOutcome.REQUEUED
+        raise RuntimeError(
+            "Valuation job transition returned an unsupported applied status: "
+            f"requested={status!r}, applied={applied_status!r}"
+        )
 
     @async_timed(repository="ValuationRepository", method="recover_dispatch_failed_jobs")
     async def recover_dispatch_failed_jobs(

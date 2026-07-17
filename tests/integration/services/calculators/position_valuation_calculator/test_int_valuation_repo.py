@@ -17,6 +17,7 @@ from portfolio_common.database_models import (
     PositionState,
     Transaction,
 )
+from portfolio_common.valuation_job_contracts import ValuationJobTransitionOutcome
 from portfolio_common.valuation_job_repository import ValuationJobRepository, ValuationJobUpsert
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -1479,7 +1480,7 @@ async def test_source_correction_defers_in_flight_claim_and_requeues_after_compl
     assert job.correlation_id == "shared-transport-correlation"
     assert job.source_correction_id == "sha256:" + ("c" * 64)
 
-    completed = await job_state.update_job_status(
+    outcome = await job_state.update_job_status(
         portfolio_id=job.portfolio_id,
         security_id=job.security_id,
         valuation_date=job.valuation_date,
@@ -1489,11 +1490,50 @@ async def test_source_correction_defers_in_flight_claim_and_requeues_after_compl
     await async_db_session.commit()
     await async_db_session.refresh(job)
 
-    assert completed is False
+    assert outcome is ValuationJobTransitionOutcome.REQUEUED
     assert job.status == "PENDING"
     assert job.requeue_requested is False
     assert job.correlation_id == "shared-transport-correlation"
     assert job.source_correction_id == "sha256:" + ("c" * 64)
+
+
+async def test_job_status_transition_distinguishes_terminal_owner_from_stale_delivery(
+    async_db_session: AsyncSession,
+    clean_db,
+) -> None:
+    repo = ValuationRepository(async_db_session)
+    job = PortfolioValuationJob(
+        portfolio_id="P-TRANSITION-OUTCOME",
+        security_id="S-TRANSITION-OUTCOME",
+        valuation_date=date(2025, 8, 12),
+        epoch=2,
+        status="PROCESSING",
+        attempt_count=1,
+    )
+    async_db_session.add(job)
+    await async_db_session.commit()
+
+    applied = await repo.update_job_status(
+        portfolio_id=job.portfolio_id,
+        security_id=job.security_id,
+        valuation_date=job.valuation_date,
+        epoch=job.epoch,
+        status="COMPLETE",
+    )
+    stale_delivery = await repo.update_job_status(
+        portfolio_id=job.portfolio_id,
+        security_id=job.security_id,
+        valuation_date=job.valuation_date,
+        epoch=job.epoch,
+        status="COMPLETE",
+    )
+    await async_db_session.commit()
+    await async_db_session.refresh(job)
+
+    assert applied is ValuationJobTransitionOutcome.TERMINAL_APPLIED
+    assert stale_delivery is ValuationJobTransitionOutcome.NOT_OWNED
+    assert job.status == "COMPLETE"
+    assert job.attempt_count == 2
 
 
 async def test_completed_job_requires_explicit_source_correction_rearm(
