@@ -32,7 +32,7 @@ def test_create_topics_rejects_existing_partition_count_mismatch() -> None:
 
     with pytest.raises(
         KafkaTopicProvisioningError,
-        match="'expected': 14, 'actual': 1",
+        match="'expected': 12, 'actual': 1",
     ):
         create_topics(admin_client)
 
