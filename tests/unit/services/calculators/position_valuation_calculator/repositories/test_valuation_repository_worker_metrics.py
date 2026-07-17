@@ -2,6 +2,7 @@ from datetime import date, datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from portfolio_common.valuation_job_contracts import ValuationJobTransitionOutcome
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.calculators.position_valuation_calculator.app.repositories.valuation_repository import (  # noqa: E501
@@ -460,7 +461,7 @@ async def test_update_job_status_trims_portfolio_and_security_ids(
     result.scalar_one_or_none.return_value = "COMPLETED"
     mock_db_session.execute.return_value = result
 
-    updated = await repo.update_job_status(
+    outcome = await repo.update_job_status(
         portfolio_id=" PORT_001 ",
         security_id=" SEC_A ",
         valuation_date=date(2026, 3, 27),
@@ -468,7 +469,7 @@ async def test_update_job_status_trims_portfolio_and_security_ids(
         status="COMPLETED",
     )
 
-    assert updated is True
+    assert outcome is ValuationJobTransitionOutcome.TERMINAL_APPLIED
     stmt = mock_db_session.execute.await_args.args[0]
     compiled_query = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "trim(portfolio_valuation_jobs.portfolio_id) = 'PORT_001'" in compiled_query
@@ -478,6 +479,52 @@ async def test_update_job_status_trims_portfolio_and_security_ids(
     assert "portfolio_valuation_jobs.status = 'PROCESSING'" in compiled_query
     assert "portfolio_valuation_jobs.requeue_requested IS true" in compiled_query
     assert "RETURNING portfolio_valuation_jobs.status" in compiled_query
+
+
+@pytest.mark.parametrize(
+    ("applied_status", "expected_outcome"),
+    [
+        ("PENDING", ValuationJobTransitionOutcome.REQUEUED),
+        (None, ValuationJobTransitionOutcome.NOT_OWNED),
+    ],
+)
+async def test_update_job_status_classifies_non_terminal_outcomes(
+    mock_db_session: AsyncMock,
+    applied_status: str | None,
+    expected_outcome: ValuationJobTransitionOutcome,
+) -> None:
+    repo = ValuationRepository(mock_db_session)
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = applied_status
+    mock_db_session.execute.return_value = result
+
+    outcome = await repo.update_job_status(
+        portfolio_id="PORT_001",
+        security_id="SEC_A",
+        valuation_date=date(2026, 3, 27),
+        epoch=42,
+        status="COMPLETE",
+    )
+
+    assert outcome is expected_outcome
+
+
+async def test_update_job_status_rejects_unsupported_applied_status(
+    mock_db_session: AsyncMock,
+) -> None:
+    repo = ValuationRepository(mock_db_session)
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = "SKIPPED_SUPERSEDED"
+    mock_db_session.execute.return_value = result
+
+    with pytest.raises(RuntimeError, match="unsupported applied status"):
+        await repo.update_job_status(
+            portfolio_id="PORT_001",
+            security_id="SEC_A",
+            valuation_date=date(2026, 3, 27),
+            epoch=42,
+            status="COMPLETE",
+        )
 
 
 async def test_get_latest_price_for_position_trims_security_id_before_query(
