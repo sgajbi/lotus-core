@@ -58,6 +58,13 @@ Each workload artifact also records the emitting checkout's `source_revision` an
 without persisting filenames or Git command output; it does not elevate local workload evidence to
 CI, deployment, or production certification.
 
+The bank-day artifact scrapes the combined transaction runtime before teardown and retains bounded
+operation count, duration observation count, cumulative duration, and mean duration by
+`stage`/`outcome`. Use this to distinguish cost, position, cashflow, readiness, idempotency, commit,
+replay, and whole-transaction contribution before proposing another hot-path change. No portfolio,
+security, account, or transaction identifier is retained. Missing stage evidence fails a certifying
+run; cumulative and mean durations are diagnostic attribution, not latency SLOs.
+
 Use `make profile-derived-state-daily` for the 100,000-transaction bank-day shape and
 `make profile-derived-state-fan-in` for one portfolio with 1,000 positions. Use
 `make profile-derived-state-price-burst` to materialize 10,000 shared-instrument positions and then

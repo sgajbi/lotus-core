@@ -62,6 +62,10 @@ rearmed and completed `525` times for one final portfolio-day row.
 13. Retained workload artifacts record the emitting Git revision and a non-sensitive clean, dirty,
     or unavailable tree state. Local evidence remains subordinate to trusted CI and deployment
     receipts even when its source revision is present.
+14. Governed bank-day artifacts scrape the existing combined-runtime Prometheus metrics before
+    teardown and retain bounded count, duration count, cumulative duration, and mean duration by
+    transaction-processing stage/outcome. Complete certifying runs fail closed when this evidence
+    is absent.
 
 ## Measured Result
 
@@ -176,6 +180,11 @@ The workload JSON config changes additively with `source_revision` and `source_t
 field contains file names, command output, credentials, or runtime configuration. Their presence
 does not elevate local workload evidence to CI or production certification.
 
+Transaction-processing operation evidence is also additive to the generated JSON/Markdown artifact
+and runner configuration. It reuses existing bounded metrics and changes no service instrumentation,
+runtime behavior, API, event, calculation, or persistent schema. Stage/outcome labels contain no
+portfolio, security, account, or transaction identifiers.
+
 The intentional transport behavior change is the transaction partition key:
 `portfolio_id` becomes `portfolio_id|security_id` for raw ingestion, persisted transaction facts,
 and repair replay. Existing deployed topics require the governed pause/drain/cutover procedure
@@ -221,6 +230,9 @@ because historical and new keys can map to different partitions after producer r
   tests, `2` targeted PostgreSQL statement/lifecycle tests, and the full `75`-test PostgreSQL
   transaction-processing contract. MyPy across `235` files, Ruff/format/diff, the architecture
   guard, and Remote Feature Lane `29593836128` passed at signed commit `b7e7e1be2`.
+- Transaction-operation evidence collection passed `25` focused runner/parser tests, full MyPy
+  across `235` source files, Ruff/format/diff, the complete architecture and wiki/documentation
+  guards, synthetic-fixture leakage, and repository output-shape validation before commit.
 
 Implementation commits include `23fc6faf3`, `d51adb739`, `ad1ad179d`, `57f8c60e2`,
 `4f05be9a5`, `c230d660a`, `f42f6eaa3`, `d56e14dbf`, `2d49fc8f1`, `70ae16f0f`,
@@ -235,4 +247,5 @@ wiki parity after merge. No public OpenAPI change is required. The cashflow, pos
 residual logging, and cost-reference slices change no public or operator workflow beyond the
 recorded workload evidence fields. The position-state and initial-opening-lot statement reductions
 also require no additional OpenAPI, migration, event-contract, operator-runbook, or wiki source
-change.
+change. Operation-evidence collection changes the bank-day runbook and authored wiki source because
+operators gain a new required certifying diagnostic; publish and verify wiki parity after merge.

@@ -49,6 +49,10 @@ from scripts.operations.performance.market_price_correction import (
 from scripts.operations.performance.market_price_correction import (
     SyntheticInstrumentSpec as InstrumentSpec,
 )
+from scripts.operations.transaction_processing_load_support import (
+    TransactionProcessingOperationEvidence,
+    transaction_processing_operation_evidence,
+)
 from tests.test_support.runtime.compose_fault_recovery import (
     ComposeFaultRecoveryBoundary,
     ComposeFaultRecoveryEvidence,
@@ -59,6 +63,7 @@ DEFAULT_QUERY_BASE_URL = "http://localhost:8201"
 DEFAULT_QUERY_CONTROL_BASE_URL = "http://localhost:8202"
 DEFAULT_EVENT_REPLAY_BASE_URL = "http://localhost:8209"
 DEFAULT_RECONCILIATION_BASE_URL = "http://localhost:8210"
+DEFAULT_TRANSACTION_PROCESSING_BASE_URL = "http://localhost:8090"
 DEFAULT_OUTPUT_DIR = "output/task-runs"
 DEFAULT_OPS_TOKEN = os.getenv("LOTUS_CORE_INGEST_OPS_TOKEN", "lotus-core-ops-local")
 DEFAULT_HOST_DATABASE_URL = os.getenv(
@@ -211,6 +216,9 @@ class ScenarioReport:
     log_evidence: list[LogEvidence]
     checks_passed: bool
     failures: list[str]
+    transaction_processing_operation_evidence: (
+        list[TransactionProcessingOperationEvidence] | None
+    ) = None
     derived_state_resource_evidence: DerivedStateResourceEvidence | None = None
     correction_evidence: DerivedStateCorrectionEvidence | None = None
     fx_correction_evidence: FxDerivedStateCorrectionEvidence | None = None
@@ -1394,6 +1402,11 @@ def _collect_log_evidence(
 
 def _evaluate_report(report: ScenarioReport) -> list[str]:
     failures: list[str] = []
+    if (
+        report.config.get("transaction_processing_operation_evidence_required")
+        and not report.transaction_processing_operation_evidence
+    ):
+        failures.append("transaction-processing operation evidence has no samples")
     if report.terminal_status != "complete":
         failures.append(f"scenario terminal_status is {report.terminal_status}")
     tie_out = report.database_tie_out
@@ -1657,6 +1670,15 @@ def _write_report(*, report: ScenarioReport, output_dir: Path) -> tuple[Path, Pa
             f"- Peak replay pressure ratio: {report.peak_replay_pressure_ratio}",
             f"- Peak DLQ events in window: {report.peak_dlq_events_in_window}",
             "",
+            "## Transaction Processing Operation Evidence",
+            "",
+            "```json",
+            json.dumps(
+                [asdict(item) for item in (report.transaction_processing_operation_evidence or [])],
+                indent=2,
+            ),
+            "```",
+            "",
             "## Derived-State Correction Evidence",
             "",
             "```json",
@@ -1875,6 +1897,21 @@ def _safe_collect_log_evidence(
         return [], [f"failed to collect log evidence for partial report: {exc}"]
 
 
+def _safe_collect_transaction_processing_operation_evidence(
+    *,
+    transaction_processing_base_url: str,
+) -> tuple[list[TransactionProcessingOperationEvidence], list[str]]:
+    try:
+        evidence = transaction_processing_operation_evidence(
+            transaction_processing_base_url=transaction_processing_base_url,
+        )
+    except Exception as exc:
+        return [], [f"failed to collect transaction-processing operation evidence: {exc}"]
+    if not evidence:
+        return [], ["transaction-processing operation metrics returned no bounded samples"]
+    return evidence, []
+
+
 def _source_provenance() -> dict[str, str | None]:
     """Return source identity without retaining command output or file names."""
 
@@ -1944,6 +1981,12 @@ def _build_config(args: argparse.Namespace, *, resolved_trade_date: str) -> dict
         "query_control_base_url": args.query_control_base_url,
         "event_replay_base_url": args.event_replay_base_url,
         "reconciliation_base_url": args.reconciliation_base_url,
+        "transaction_processing_base_url": getattr(
+            args,
+            "transaction_processing_base_url",
+            DEFAULT_TRANSACTION_PROCESSING_BASE_URL,
+        ),
+        "transaction_processing_operation_evidence_required": True,
         "derived_state_service": args.derived_state_service,
         "resource_poll_interval_seconds": args.resource_poll_interval_seconds,
         "derived_state_resource_evidence_required": True,
@@ -1991,6 +2034,9 @@ def _finalize_report(
     api_probes: list[ApiProbeResult],
     log_evidence: list[LogEvidence],
     initial_failures: list[str],
+    transaction_processing_operation_evidence: (
+        list[TransactionProcessingOperationEvidence] | None
+    ) = None,
     derived_state_resource_evidence: DerivedStateResourceEvidence | None = None,
     correction_evidence: DerivedStateCorrectionEvidence | None = None,
     fx_correction_evidence: FxDerivedStateCorrectionEvidence | None = None,
@@ -2026,6 +2072,7 @@ def _finalize_report(
         log_evidence=log_evidence,
         checks_passed=False,
         failures=[],
+        transaction_processing_operation_evidence=transaction_processing_operation_evidence,
         derived_state_resource_evidence=derived_state_resource_evidence,
         correction_evidence=correction_evidence,
         fx_correction_evidence=fx_correction_evidence,
@@ -2053,6 +2100,9 @@ def _finalize_report(
         log_evidence=report_base.log_evidence,
         checks_passed=len(failures) == 0,
         failures=failures,
+        transaction_processing_operation_evidence=(
+            report_base.transaction_processing_operation_evidence
+        ),
         derived_state_resource_evidence=report_base.derived_state_resource_evidence,
         correction_evidence=report_base.correction_evidence,
         fx_correction_evidence=report_base.fx_correction_evidence,
@@ -2092,6 +2142,10 @@ def main() -> int:
     parser.add_argument("--query-control-base-url", default=DEFAULT_QUERY_CONTROL_BASE_URL)
     parser.add_argument("--event-replay-base-url", default=DEFAULT_EVENT_REPLAY_BASE_URL)
     parser.add_argument("--reconciliation-base-url", default=DEFAULT_RECONCILIATION_BASE_URL)
+    parser.add_argument(
+        "--transaction-processing-base-url",
+        default=DEFAULT_TRANSACTION_PROCESSING_BASE_URL,
+    )
     parser.add_argument("--host-database-url", default=DEFAULT_HOST_DATABASE_URL)
     parser.add_argument("--ops-token", default=DEFAULT_OPS_TOKEN)
     parser.add_argument("--readiness-timeout-seconds", type=int, default=180)
@@ -2501,6 +2555,11 @@ def main() -> int:
         compose_file=args.compose_file,
         compose_project_name=args.compose_project_name,
     )
+    operation_evidence, operation_evidence_failures = (
+        _safe_collect_transaction_processing_operation_evidence(
+            transaction_processing_base_url=args.transaction_processing_base_url,
+        )
+    )
     report = _finalize_report(
         args=args,
         run_id=run_id,
@@ -2515,7 +2574,14 @@ def main() -> int:
         sample_portfolios=sample_portfolios,
         api_probes=api_probes,
         log_evidence=log_evidence,
-        initial_failures=partial_failures + sample_failures + tie_out_failures + log_failures,
+        initial_failures=(
+            partial_failures
+            + sample_failures
+            + tie_out_failures
+            + log_failures
+            + operation_evidence_failures
+        ),
+        transaction_processing_operation_evidence=operation_evidence,
         derived_state_resource_evidence=resource_monitor.evidence(),
         correction_evidence=correction_evidence,
         fx_correction_evidence=fx_correction_evidence,

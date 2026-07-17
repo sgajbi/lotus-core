@@ -32,6 +32,7 @@ python scripts\operations\bank_day_load_scenario.py `
   --sample-size 5 `
   --seed-materialization-timeout-seconds 600 `
   --resource-poll-interval-seconds 5 `
+  --transaction-processing-base-url http://localhost:8090 `
   --drain-timeout-seconds 7200
 ```
 
@@ -198,6 +199,15 @@ position count or the second-stage sample count differs from the generated portf
 The scenario also fails when it cannot complete at least one time-aligned database-and-container
 resource sample. Sampling diagnostics retain bounded exception types only; they do not persist
 command output or connection details.
+
+Before the managed stack is torn down, the scenario also scrapes the combined transaction-runtime
+metrics endpoint once and records one bounded entry per `stage` and `outcome`. Each entry contains
+the operation counter, duration observation count, cumulative duration, and mean duration. This
+allows cost, position, cashflow, readiness, idempotency, commit, replay, and whole-transaction work
+to be compared without retaining portfolio or transaction identifiers. A certifying run fails when
+the scrape is unavailable or contains no bounded samples; an interrupted run still writes the
+failure beside all other partial evidence. Cumulative and mean durations are attribution evidence,
+not latency percentiles or service-level objectives.
 
 ## Live Institutional Run Notes
 
