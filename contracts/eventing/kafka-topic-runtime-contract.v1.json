@@ -18,12 +18,12 @@
     },
     {
       "topic": "transactions.raw.received",
-      "partitions": 12,
+      "partitions": 14,
       "producer_services": ["ingestion_service"],
       "current_key": "portfolio_id|security_id",
       "ordering_scope": "portfolio_security",
       "consumer_groups": ["persistence_group_transactions"],
-      "consumer_max_in_flight": 12,
+      "consumer_max_in_flight": 14,
       "state_owner": "persistence_service.transactions",
       "duplicate_policy": "idempotency_claim_then_semantic_upsert",
       "replay_contract": "replay_preserves_position_key_across_normal_backdated_reversal_correction_and_corporate_action_events"
@@ -78,12 +78,12 @@
     },
     {
       "topic": "transactions.persisted",
-      "partitions": 12,
+      "partitions": 14,
       "producer_services": ["persistence_service", "event_replay_service"],
       "current_key": "portfolio_id|security_id",
       "ordering_scope": "portfolio_security",
       "consumer_groups": ["portfolio_transaction_processing_group"],
-      "consumer_max_in_flight": 12,
+      "consumer_max_in_flight": 14,
       "state_owner": "portfolio_transaction_processing_service.transaction_economics",
       "duplicate_policy": "semantic_claim_plus_database_mutation_fence",
       "replay_contract": "repair_replay_preserves_position_order_and_original_event_payload"

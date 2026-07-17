@@ -11,21 +11,26 @@ schemas and payloads are unchanged.
 
 ## Current Transaction Cutover
 
-The governed contract increases only these transaction paths from `8` to `12` partitions:
+The governed contract increases only these transaction paths from `8` to `14` partitions:
 
 - `transactions.raw.received` with `persistence_group_transactions`;
 - `transactions.persisted` with `portfolio_transaction_processing_group`.
 
-Both consumer groups have `max_in_flight_messages=12` and retain
+Both consumer groups have `max_in_flight_messages=14` and retain
 `per_key_concurrency=1`. All producers use `portfolio_id|security_id`, so same-position events stay
 ordered while independent positions can use the additional capacity. Do not increase only the
 topic or only the consumer profile.
 
 The exact-source fan-in artifact `20260717T003225Z` reduced drain from `110.249s` to `95.247s`
 (`13.61%`) with exact reconciliation, attempts `2/2`, zero repeats/failures, peak active database
-connections `11`, and peak lock waiters/blocked sessions `2/2`. Twelve is deliberately below the
+connections `11`, and peak lock waiters/blocked sessions `2/2` after the first measured step from
+eight to twelve. Exact daily `20260717T201508Z` then made all `100,000` source transactions durable
+but completed only `87,671` transaction operations and `87,550` snapshots before the fixed drain
+deadline, with attempts `2/2`, zero repeats/errors, peak active database connections `16`, and peak
+lock waiters/blocked sessions `8/8`. Fourteen is the smallest evidence-backed next step: it adds
+`16.7%` nominal capacity against the measured `14.2%` completion gap and remains below the
 service's default maximum pool capacity of fifteen connections. A further increase requires fresh
-pool, lock, lag, CPU, and exact-daily evidence.
+pool, lock, lag, CPU, exact fan-in, and exact-daily evidence.
 
 ## Ordering Invariants
 

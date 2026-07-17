@@ -2734,12 +2734,16 @@ Most relevant current governance:
      locks; do not restore portfolio-wide transport serialization as a substitute for those domain
      controls.
 195. `transactions.raw.received` / `persistence_group_transactions` and
-     `transactions.persisted` / `portfolio_transaction_processing_group` use twelve aligned
+     `transactions.persisted` / `portfolio_transaction_processing_group` use fourteen aligned
      partitions and in-flight tasks with `per_key_concurrency=1`. This is a measured
-     transaction-only capacity decision: exact fan-in reduced drain `13.61%`, peak active database
-     connections remained `11`, and lock/blocked peaks remained `2/2`. Do not change only one side
-     of the topic/group contract, apply twelve as a global topic default, or increase beyond twelve
-     without exact reconciliation plus pool, lock, lag, CPU, recovery, and daily-volume evidence.
+     transaction-only capacity decision delivered in bounded steps. Twelve-way exact fan-in
+     reduced drain `13.61%`; exact daily `20260717T201508Z` then completed only `87,671` transaction
+     operations and `87,550` snapshots before the fixed deadline, with peak active database
+     connections `16` and lock/blocked peaks `8/8`. Fourteen is the smallest candidate above that
+     measured `14.2%` completion gap and remains below the service's default maximum pool capacity
+     of fifteen. Do not change only one side of the topic/group contract, apply fourteen as a
+     global topic default, or increase beyond fourteen without exact reconciliation plus pool,
+     lock, lag, CPU, recovery, and daily-volume evidence.
 196. Cost-basis processing and AVCO rebuild must resolve portfolio policy and optional instrument
      facts through one typed application-port bundle and one repository statement. Preserve the
      distinct missing-portfolio retry and missing-instrument preparation/rebuild behavior. Do not
