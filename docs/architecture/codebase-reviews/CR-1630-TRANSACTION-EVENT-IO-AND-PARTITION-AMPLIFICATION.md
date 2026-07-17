@@ -51,6 +51,9 @@ rearmed and completed `525` times for one final portfolio-day row.
 9. Residual per-record success logs in reference persistence, Kafka delivery callbacks, outbox
    batches, position locking/deletion, and non-cash FX handling use `DEBUG`. The guard scans every
    persistence repository and rejects the governed messages at `INFO`.
+10. Position materialization progress is one typed application-port value loaded by one SQL
+    statement. Separate history-date and completed-snapshot-date methods and round trips were
+    removed.
 
 ## Measured Result
 
@@ -90,6 +93,10 @@ Subsequent bounded evidence kept measurement claims conservative:
   blocked sessions, and closed outbox queues. Its `110.256s` drain was unchanged from the
   immediately preceding run, so only the proven log-volume and operational-signal improvement is
   claimed.
+- coalesced progress-read fan-in `20260717T001431Z` completed with exact reconciliation, attempts
+  `2/2`, zero repeats, and closed queues. Drain was `110.249s` versus `110.256s` immediately prior,
+  so the claimed improvement is the direct two-to-one port/query reduction and simpler ownership
+  contract, not end-to-end throughput.
 
 The post-cashflow exact daily run `20260716T210418Z` reached `96,511` completed jobs/snapshots at
 the fixed deadline, up from `95,871` before that persistence change, but still did not satisfy the
@@ -124,9 +131,12 @@ because historical and new keys can map to different partitions after producer r
 - Residual logging validation passed `76` focused tests, the structured-log and complete
   architecture guards, full MyPy across `235` files, Ruff/format, and exact fan-in
   `20260717T000106Z`.
+- Coalesced progress-read validation passed `19` unit tests, `5` PostgreSQL
+  repository/lifecycle/concurrency scenarios, full MyPy and architecture guards, Ruff/format, and
+  exact fan-in `20260717T001431Z`.
 
 Implementation commits include `23fc6faf3`, `d51adb739`, `ad1ad179d`, `57f8c60e2`,
-`4f05be9a5`, and `c230d660a`. Human contract/context alignment is in `9d6dbbbf9`.
+`4f05be9a5`, `c230d660a`, and `f42f6eaa3`. Human contract/context alignment is in `9d6dbbbf9`.
 
 ## Documentation Decision
 
