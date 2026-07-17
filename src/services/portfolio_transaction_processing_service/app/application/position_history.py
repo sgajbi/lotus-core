@@ -27,6 +27,15 @@ class PositionHistoryProcessingResult:
 
     position_record_count: int = 0
     rebuilt_transactions: tuple[BookedTransaction, ...] = ()
+    locked_state_epoch: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class _StagedPositionHistory:
+    """Carry staged records and an epoch protected by this unit of work's row lock."""
+
+    records: tuple[PositionHistoryRecord, ...]
+    locked_state_epoch: int | None
 
 
 class PositionHistoryProcessor:
@@ -102,11 +111,14 @@ class PositionHistoryProcessor:
                 latest_history_date=latest_history_date,
             )
 
-        records = await self._recalculate_current_history(
+        staged = await self._recalculate_current_history(
             transaction=transaction,
             current_state=current_state,
         )
-        return PositionHistoryProcessingResult(position_record_count=len(records))
+        return PositionHistoryProcessingResult(
+            position_record_count=len(staged.records),
+            locked_state_epoch=staged.locked_state_epoch,
+        )
 
     async def _rebuild_backdated_history(
         self,
@@ -167,7 +179,7 @@ class PositionHistoryProcessor:
             position_date=earliest_transaction_date,
             epoch=new_state.epoch,
         )
-        records = await self._stage_history(
+        staged = await self._stage_history(
             anchor=None,
             transactions=epoch_transactions,
             state=new_state,
@@ -175,17 +187,18 @@ class PositionHistoryProcessor:
         )
         transactions_by_id = {item.transaction_id: item for item in epoch_transactions}
         rebuilt_transactions = tuple(
-            transactions_by_id[record.transaction_id] for record in records
+            transactions_by_id[record.transaction_id] for record in staged.records
         )
         self._observer.history_rebuilt(
             transaction=transaction,
             epoch=new_state.epoch,
-            record_count=len(records),
+            record_count=len(staged.records),
             earliest_transaction_date=earliest_transaction_date,
         )
         return PositionHistoryProcessingResult(
-            position_record_count=len(records),
+            position_record_count=len(staged.records),
             rebuilt_transactions=rebuilt_transactions,
+            locked_state_epoch=staged.locked_state_epoch,
         )
 
     async def _recalculate_current_history(
@@ -193,7 +206,7 @@ class PositionHistoryProcessor:
         *,
         transaction: BookedTransaction,
         current_state: PositionRecalculationState,
-    ) -> tuple[PositionHistoryRecord, ...]:
+    ) -> _StagedPositionHistory:
         transaction_date = transaction.transaction_date.date()
         message_epoch = transaction.epoch if transaction.epoch is not None else current_state.epoch
         await self._repository.acquire_replay_lock(
@@ -232,12 +245,13 @@ class PositionHistoryProcessor:
         transactions: tuple[BookedTransaction, ...],
         state: PositionRecalculationState,
         transaction_date: date,
-    ) -> tuple[PositionHistoryRecord, ...]:
+    ) -> _StagedPositionHistory:
         records = build_position_history(
             anchor=anchor,
             transactions=transactions,
             epoch=state.epoch,
         )
+        locked_state_epoch = None
         if records:
             await self._repository.save_records(records)
             watermark_date = transaction_date - timedelta(days=1)
@@ -246,6 +260,7 @@ class PositionHistoryProcessor:
                 security_id=state.security_id,
                 watermark_date=watermark_date,
             ):
+                locked_state_epoch = state.epoch
                 self._observer.generation_rearmed(
                     portfolio_id=state.portfolio_id,
                     security_id=state.security_id,
@@ -254,4 +269,7 @@ class PositionHistoryProcessor:
                     watermark_date=watermark_date,
                 )
         self._observer.records_staged(epoch=state.epoch, record_count=len(records))
-        return records
+        return _StagedPositionHistory(
+            records=records,
+            locked_state_epoch=locked_state_epoch,
+        )

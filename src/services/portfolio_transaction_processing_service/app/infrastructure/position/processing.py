@@ -33,4 +33,5 @@ class PositionHistoryProcessingAdapter:
             position_record_count=result.position_record_count,
             replay_queued=False,
             cashflow_rebuild_transactions=result.rebuilt_transactions,
+            locked_state_epoch=result.locked_state_epoch,
         )

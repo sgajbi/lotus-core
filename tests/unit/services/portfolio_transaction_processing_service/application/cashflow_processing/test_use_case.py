@@ -126,6 +126,7 @@ async def test_use_case_calculates_persists_and_stages_cashflow() -> None:
         transaction,
         correlation_id="corr-001",
         traceparent="trace-001",
+        locked_position_epoch=None,
     )
     assert state.claim_semantic_event.await_args.kwargs["semantic_event_id"] == (
         "cashflow:PB-001:TX-001:3"
@@ -139,6 +140,27 @@ async def test_use_case_calculates_persists_and_stages_cashflow() -> None:
         stored,
         transaction,
         correlation_id="corr-001",
+    )
+
+
+async def test_use_case_forwards_write_locked_position_epoch_to_state_fence() -> None:
+    use_case, _rules, state, persistence, _events, _observer = _use_case()
+    transaction = _transaction()
+    persistence.create.return_value = _stored_cashflow(transaction)
+
+    await use_case.process(
+        transaction,
+        event_id="transactions.persisted-0-42",
+        correlation_id="corr-001",
+        traceparent="trace-001",
+        locked_position_epoch=3,
+    )
+
+    state.accepts_epoch.assert_awaited_once_with(
+        transaction,
+        correlation_id="corr-001",
+        traceparent="trace-001",
+        locked_position_epoch=3,
     )
 
 

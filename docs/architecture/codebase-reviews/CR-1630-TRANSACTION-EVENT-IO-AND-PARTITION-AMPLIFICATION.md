@@ -69,6 +69,11 @@ rearmed and completed `525` times for one final portfolio-day row.
 15. The same scrape retains existing cost execution mode/method counts, recalculation duration and
     depth, and restored-open-lot observations. This adds internal cost attribution without adding a
     production metric or changing calculation behavior.
+16. Position materialization exposes its current epoch to the following cashflow stage only after
+    generation rearm successfully updates and write-locks the position-state row inside the shared
+    unit of work. Cashflow applies the existing epoch rule from that lock-scoped value instead of
+    loading the same position state again. No-record, stale, coalesced, and unsuccessful-rearm
+    paths retain the database-backed epoch fence.
 
 ## Measured Result
 
@@ -279,6 +284,11 @@ repository/method histogram. It records no query text, SQL values, or business i
 changes no production instrumentation, transaction boundary, lock, API, event, schema, or
 calculation contract.
 
+The lock-scoped epoch handoff is internal application-port metadata. It does not extend the row
+lock or unit-of-work lifetime, and it preserves the existing stale/current/future epoch comparison.
+Cashflow falls back to the database fence unless position processing proves the state-row update
+lock is held. No external API, event, persistence, calculation, or error contract changes.
+
 The intentional transport behavior change is the transaction partition key:
 `portfolio_id` becomes `portfolio_id|security_id` for raw ingestion, persisted transaction facts,
 and repair replay. Existing deployed topics require the governed pause/drain/cutover procedure
@@ -378,3 +388,6 @@ metric and requires no OpenAPI, migration, event-contract, calculation-methodolo
 wiki-source change. The terminal-transition outcome classification changes only an internal Python
 repository/processor contract and diagnostic log fields. It requires no OpenAPI, migration,
 event-contract, calculation-methodology, operator-runbook, or additional wiki-source change.
+The lock-scoped position epoch handoff is also an internal unit-of-work optimization and requires
+no OpenAPI, migration, event-contract, calculation-methodology, operator-runbook, or additional
+wiki-source change.

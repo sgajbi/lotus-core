@@ -3,7 +3,7 @@
 import logging
 
 from portfolio_common.idempotency_repository import IdempotencyRepository
-from portfolio_common.reprocessing import EpochFencer
+from portfolio_common.reprocessing import EpochFencer, event_epoch_is_current
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...domain import BookedTransaction
@@ -34,7 +34,11 @@ class SqlAlchemyCashflowProcessingState:
         *,
         correlation_id: str | None,
         traceparent: str | None,
+        locked_position_epoch: int | None = None,
     ) -> bool:
+        if locked_position_epoch is not None:
+            return bool(event_epoch_is_current(transaction.epoch, locked_position_epoch))
+
         event = to_transaction_event(
             transaction,
             correlation_id=correlation_id,
