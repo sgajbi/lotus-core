@@ -31,6 +31,7 @@ from services.calculators.position_valuation_calculator.app.repositories.valuati
 from services.calculators.position_valuation_calculator.app.valuation_processor import (
     ValuationJobProcessor,
     ValuationProcessorDependencies,
+    ValuationReferenceData,
 )
 from tests.unit.test_support.async_session_iter import make_single_session_getter
 
@@ -199,6 +200,40 @@ async def test_valuation_processor_duplicate_claim_skips_valuation_reads(
     mock_valuation_repo.get_last_position_history_before_date.assert_not_awaited()
     mock_valuation_repo.update_job_status.assert_not_awaited()
     mock_outbox_repo.create_outbox_event.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    ("reference_data", "expected_message"),
+    [
+        (
+            ValuationReferenceData(
+                instrument=None,
+                portfolio=Portfolio(portfolio_id="PORT_VAL_01"),
+                price=None,
+            ),
+            "Instrument 'SEC_VAL_01' not found.",
+        ),
+        (
+            ValuationReferenceData(
+                instrument=Instrument(security_id="SEC_VAL_01"),
+                portfolio=None,
+                price=None,
+            ),
+            "Portfolio 'PORT_VAL_01' not found.",
+        ),
+    ],
+)
+async def test_missing_reference_data_message_names_the_unresolved_domain_record(
+    mock_event: PortfolioValuationRequiredEvent,
+    reference_data: ValuationReferenceData,
+    expected_message: str,
+) -> None:
+    message = ValuationJobProcessor._missing_reference_data_message(
+        mock_event,
+        reference_data,
+    )
+
+    assert expected_message in message
 
 
 async def test_valuation_processor_marks_snapshot_unvalued_when_price_is_missing(
