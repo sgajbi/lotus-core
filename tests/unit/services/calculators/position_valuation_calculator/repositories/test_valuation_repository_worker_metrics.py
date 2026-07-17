@@ -479,6 +479,7 @@ async def test_update_job_status_trims_portfolio_and_security_ids(
     assert "portfolio_valuation_jobs.status = 'PROCESSING'" in compiled_query
     assert "portfolio_valuation_jobs.requeue_requested IS true" in compiled_query
     assert "RETURNING portfolio_valuation_jobs.status" in compiled_query
+    assert stmt.get_execution_options()["synchronize_session"] is False
 
 
 @pytest.mark.parametrize(

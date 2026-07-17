@@ -416,6 +416,7 @@ class ValuationRepositoryBase:
             )
             .values(**values_to_update)
             .returning(PortfolioValuationJob.status)
+            .execution_options(synchronize_session=False)
         )
         result = await self.db.execute(stmt)
         applied_status = result.scalar_one_or_none()
