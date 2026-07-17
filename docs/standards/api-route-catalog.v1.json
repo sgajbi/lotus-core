@@ -4016,6 +4016,11 @@
       ],
       "error_models": [
         {
+          "status_code": "404",
+          "schema": "none",
+          "description": "One or more requested transaction identifiers are absent from the authoritative Core transaction ledger."
+        },
+        {
           "status_code": "409",
           "schema": "none",
           "description": "Reprocessing publication is blocked by policy controls or the idempotency key was reused with a different canonical request payload."
@@ -4033,7 +4038,7 @@
         {
           "status_code": "503",
           "schema": "none",
-          "description": "Ingestion is unavailable because operating mode blocks writes or Kafka publish failed."
+          "description": "Reprocessing is unavailable because operating mode blocks writes, the authoritative transaction source cannot be read, or Kafka publication failed."
         }
       ],
       "pagination": [],
