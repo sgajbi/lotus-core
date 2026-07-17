@@ -211,6 +211,16 @@ immediately when all expected transactions and outbox work are drained but a `CO
 job lacks its atomic same-scope snapshot. This preserves the anomaly for diagnosis and prevents an
 irrecoverable terminal state from consuming the full drain timeout.
 
+The exact clean rerun `20260717T174251Z` at signed evidence head `d34da9305` completed normally,
+so the terminal contradiction did not reproduce and the fail-fast predicate did not reject normal
+convergence. The run reconciled exactly `1,000` transactions, valuation jobs, snapshots, and
+position-timeseries rows to one portfolio row in `105.622s` drain, with attempts `2/2`, zero
+repeated processing, zero open jobs, and final outbox pending/failed `0/0`. Pure FIFO recalculation
+was again negligible: `0.160816s` total and `0.000160816s` mean at depth one, compared with
+`194.163301s` for the wider cost stage. The next target must therefore be bounded database,
+persistence, or coordination evidence, not calculator arithmetic. Artifact SHA-256 is
+`5188E393806662464F97247072CB837B7E7EB97A3A455CD30F19D99813C3D524`.
+
 ## Compatibility
 
 HTTP APIs, OpenAPI schemas, Kafka topics, event payload schemas, transaction calculations,
@@ -282,11 +292,15 @@ because historical and new keys can map to different partitions after producer r
   scoped MyPy, Ruff/format, and diff checks at signed commit `6640ec911`. Remote Feature Lane
   `29597316430` passed at the exact cost-evidence head `37abbf19b`; Remote Feature Lane
   `29599992446` then passed at the exact fail-fast head `6640ec911`.
+- Exact clean fan-in `20260717T174251Z` passed at `d34da9305` with the measured result above;
+  Remote Feature Lane `29600977253` passed at that exact source head. Scoped teardown removed every
+  run-owned resource while retaining the separately owned canonical UI stack.
 
 Implementation commits include `23fc6faf3`, `d51adb739`, `ad1ad179d`, `57f8c60e2`,
 `4f05be9a5`, `c230d660a`, `f42f6eaa3`, `d56e14dbf`, `2d49fc8f1`, `70ae16f0f`,
 `a3c9eeaac`, `b7e7e1be2`, `35fb5d84f`, `20333978a`, `37abbf19b`, and `6640ec911`.
-Human contract/context alignment starts in `9d6dbbbf9`.
+Evidence alignment continues through `d34da9305`; human contract/context alignment starts in
+`9d6dbbbf9`.
 
 ## Documentation Decision
 
