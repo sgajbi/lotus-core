@@ -284,6 +284,16 @@ aggregation completions do not prove end-to-end throughput improvement or justif
 run. JSON SHA-256 is
 `E0D89A92A58E3C15C26ADD3234313AD32E45E8E9444B215318D88D9A57824999`.
 
+A bounded follow-up tested whether moving the existing synchronous, post-processing Kafka offset
+commit off the asyncio event loop improved cross-partition throughput without changing commit
+semantics. Exact clean fan-in `20260717T234511Z` at signed experiment head `704358fe0`
+reconciled all `1,000` rows, retained attempts `2/2`, zero repeats/errors/DLQ/outbox residue, and
+one aggregation completion, but drained in `100.783s` versus `100.608s` at parent `a8d6ee302`.
+That `0.17%` regression is effectively neutral and does not justify the executor path. Signed
+`e79496822` reverted the experiment forward. Do not repeat synchronous-commit executor offload
+without a workload that directly proves commit latency is the limiting factor. JSON SHA-256 is
+`D73EADB166CCC9591E8AA1E15CB1B20E75E43AEF794604EFF3E24AAF76673B34`.
+
 ## Compatibility
 
 HTTP APIs, OpenAPI schemas, Kafka topics, event payload schemas, transaction calculations,
@@ -388,11 +398,20 @@ because historical and new keys can map to different partitions after producer r
 - Exact clean fan-in `20260717T231632Z` passed at `a8d6ee302` with the direct one-state-read-per-
   transaction result above. Scoped teardown removed every run-owned resource and preserved the
   separately owned 15-container canonical UI stack.
+- Synchronous Kafka commit executor-offload validation passed the full unit lane (`4,886` passed,
+  `11` deselected), `68` focused Kafka-consumer tests including same-partition ordering and
+  cross-partition commit concurrency, full MyPy across `235` source files, the duplicate-delivery
+  concurrency guard, Ruff/format, complete architecture, and documentation/wiki guards at signed
+  experiment head `704358fe0`.
+- Exact clean fan-in `20260717T234511Z` passed at `704358fe0` but was neutral at `100.783s` drain
+  versus `100.608s` at its parent. Signed `e79496822` reverted the unproven executor complexity
+  forward; scoped teardown preserved the cleanup fence and all 15 canonical UI containers.
 
 Implementation commits include `23fc6faf3`, `d51adb739`, `ad1ad179d`, `57f8c60e2`,
 `4f05be9a5`, `c230d660a`, `f42f6eaa3`, `d56e14dbf`, `2d49fc8f1`, `70ae16f0f`,
 `a3c9eeaac`, `b7e7e1be2`, `35fb5d84f`, `20333978a`, `37abbf19b`, `6640ec911`, `37ffa2fad`, and
-`45295cf24`, and `a8d6ee302`. Evidence alignment continues through `a8d6ee302`; human
+`45295cf24`, `a8d6ee302`, `704358fe0`, and `e79496822`. Evidence alignment continues through
+`e79496822`; human
 contract/context alignment starts in `9d6dbbbf9`.
 
 ## Documentation Decision
@@ -417,3 +436,6 @@ event-contract, calculation-methodology, operator-runbook, or additional wiki-so
 The lock-scoped position epoch handoff is also an internal unit-of-work optimization and requires
 no OpenAPI, migration, event-contract, calculation-methodology, operator-runbook, or additional
 wiki-source change.
+The rejected synchronous-commit executor experiment changed no durable contract and was reverted
+forward. Recording its no-repeat evidence requires no OpenAPI, migration, event-contract,
+calculation-methodology, operator-runbook, or wiki-source change.
