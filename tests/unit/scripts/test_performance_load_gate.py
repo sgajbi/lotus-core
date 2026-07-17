@@ -51,6 +51,20 @@ class _MetricsResponse:
         "# TYPE cost_processing_open_lots_restored histogram\n"
         'cost_processing_open_lots_restored_count{cost_basis_method="FIFO"} 20\n'
         'cost_processing_open_lots_restored_sum{cost_basis_method="FIFO"} 30\n'
+        "# HELP db_operation_latency_seconds Database operation duration.\n"
+        "# TYPE db_operation_latency_seconds histogram\n"
+        'db_operation_latency_seconds_bucket{le="+Inf",method="save",'
+        'repository="PositionRepository"} 120\n'
+        'db_operation_latency_seconds_count{method="save",'
+        'repository="PositionRepository"} 120\n'
+        'db_operation_latency_seconds_sum{method="save",'
+        'repository="PositionRepository"} 24\n'
+        'db_operation_latency_seconds_count{method="load",'
+        'repository="CostRepository"} 60\n'
+        'db_operation_latency_seconds_sum{method="load",'
+        'repository="CostRepository"} 18\n'
+        'db_operation_latency_seconds_count{method="incomplete",'
+        'repository="IgnoredRepository"} 1\n'
     )
 
     def raise_for_status(self) -> None:
@@ -127,6 +141,30 @@ def test_cost_processing_runtime_evidence_retains_existing_bounded_metrics(
     assert evidence.recalculation_depth.average == 1.0
     assert evidence.restored_open_lots[0].cost_basis_method == "FIFO"
     assert evidence.restored_open_lots[0].average == 1.5
+
+
+def test_database_operation_evidence_retains_sorted_bounded_repository_timings(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        transaction_processing_load_support.requests,
+        "get",
+        lambda _url, *, timeout: _MetricsResponse(),
+    )
+
+    evidence = transaction_processing_load_support.database_operation_evidence(
+        transaction_processing_base_url="http://localhost:8090"
+    )
+
+    assert [(item.repository, item.method) for item in evidence] == [
+        ("CostRepository", "load"),
+        ("PositionRepository", "save"),
+    ]
+    assert evidence[0].observation_count == 60
+    assert evidence[0].total_duration_seconds == 18.0
+    assert evidence[0].average_duration_seconds == 0.3
+    assert evidence[1].observation_count == 120
+    assert evidence[1].average_duration_seconds == 0.2
 
 
 def test_repair_replay_completion_uses_processed_transaction_outcome(monkeypatch) -> None:
