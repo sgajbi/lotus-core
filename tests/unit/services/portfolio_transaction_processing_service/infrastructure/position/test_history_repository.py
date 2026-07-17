@@ -13,6 +13,9 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure.po
     SqlAlchemyPositionHistoryRepository,
     _position_history_replay_lock_key,
 )
+from src.services.portfolio_transaction_processing_service.app.ports import (
+    PositionMaterializationProgress,
+)
 
 
 @pytest.mark.asyncio
@@ -123,21 +126,28 @@ def test_repository_excludes_production_unused_legacy_reads() -> None:
 
 
 @pytest.mark.asyncio
-async def test_latest_completed_snapshot_date_normalizes_position_key() -> None:
+async def test_load_materialization_progress_normalizes_position_key_in_one_query() -> None:
     session = AsyncMock(spec=AsyncSession)
     result = MagicMock()
-    result.scalar_one_or_none.return_value = date(2026, 5, 28)
+    result.one.return_value = (date(2026, 5, 27), date(2026, 5, 28))
     session.execute.return_value = result
     repository = SqlAlchemyPositionHistoryRepository(session)
 
-    latest_date = await repository.latest_completed_snapshot_date(
+    progress = await repository.load_materialization_progress(
         portfolio_id=" PORT_COST_01 ", security_id=" SEC01 ", epoch=42
     )
 
-    assert latest_date == date(2026, 5, 28)
+    assert progress == PositionMaterializationProgress(
+        latest_history_date=date(2026, 5, 27),
+        latest_completed_snapshot_date=date(2026, 5, 28),
+    )
+    session.execute.assert_awaited_once()
     compiled_query = str(
         session.execute.call_args.args[0].compile(compile_kwargs={"literal_binds": True})
     )
+    assert "trim(position_history.portfolio_id) = 'PORT_COST_01'" in compiled_query
+    assert "trim(position_history.security_id) = 'SEC01'" in compiled_query
+    assert "position_history.epoch = 42" in compiled_query
     assert "trim(daily_position_snapshots.portfolio_id) = 'PORT_COST_01'" in compiled_query
     assert "trim(daily_position_snapshots.security_id) = 'SEC01'" in compiled_query
     assert "daily_position_snapshots.epoch = 42" in compiled_query

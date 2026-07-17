@@ -61,16 +61,13 @@ class PositionHistoryProcessor:
                 current_epoch=current_state.epoch,
             )
             return PositionHistoryProcessingResult()
-        latest_history_date = await self._repository.latest_history_date(
+        progress = await self._repository.load_materialization_progress(
             portfolio_id=transaction.portfolio_id,
             security_id=transaction.security_id,
             epoch=current_state.epoch,
         )
-        latest_completed_snapshot_date = await self._repository.latest_completed_snapshot_date(
-            portfolio_id=transaction.portfolio_id,
-            security_id=transaction.security_id,
-            epoch=current_state.epoch,
-        )
+        latest_history_date = progress.latest_history_date
+        latest_completed_snapshot_date = progress.latest_completed_snapshot_date
         transaction_date = transaction.transaction_date.date()
         decision = plan_backdated_recalculation(
             event_epoch=transaction.epoch,
