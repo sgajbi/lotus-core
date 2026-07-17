@@ -174,7 +174,7 @@ KAFKA_TOPIC_DEFINITIONS = (
         lifecycle_status="active",
         semantic_type="fact",
         scope="transaction",
-        partition_count=8,
+        partition_count=12,
     ),
     KafkaTopicDefinition(
         canonical_name="instruments.received",
@@ -214,7 +214,7 @@ KAFKA_TOPIC_DEFINITIONS = (
         lifecycle_status="active",
         semantic_type="fact",
         scope="transaction",
-        partition_count=8,
+        partition_count=12,
     ),
     KafkaTopicDefinition(
         canonical_name="market_prices.persisted",
