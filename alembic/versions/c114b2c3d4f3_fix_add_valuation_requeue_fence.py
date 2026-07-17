@@ -18,7 +18,7 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    """Add a durable single-row fence for superseded valuation claims."""
+    """Add a durable single-row fence and source-correction identity."""
 
     op.add_column(
         "portfolio_valuation_jobs",
@@ -29,9 +29,14 @@ def upgrade() -> None:
             server_default=sa.false(),
         ),
     )
+    op.add_column(
+        "portfolio_valuation_jobs",
+        sa.Column("source_correction_id", sa.String(), nullable=True),
+    )
 
 
 def downgrade() -> None:
     """Remove the in-flight valuation supersession fence."""
 
+    op.drop_column("portfolio_valuation_jobs", "source_correction_id")
     op.drop_column("portfolio_valuation_jobs", "requeue_requested")

@@ -3,7 +3,11 @@ from datetime import date
 from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
-from portfolio_common.valuation_job_repository import ValuationJobRepository, ValuationJobUpsert
+from portfolio_common.valuation_job_repository import (
+    ValuationJobRepository,
+    ValuationJobUpsert,
+    _valuation_job_upsert_stmt,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -198,6 +202,43 @@ async def test_upsert_job_does_not_rearm_processing_job_with_same_correlation(
     assert "portfolio_valuation_jobs.status != 'PROCESSING'" in compiled_where
     assert "portfolio_valuation_jobs.status IN ('PENDING', 'COMPLETE')" in compiled_where
     assert "IS NOT DISTINCT FROM" in compiled_where
+
+
+async def test_source_requeue_requires_transport_neutral_correction_identity(
+    repository: ValuationJobRepository,
+) -> None:
+    with pytest.raises(ValueError, match="source_correction_id is required"):
+        await repository.upsert_job(
+            portfolio_id="P1",
+            security_id="S1",
+            valuation_date=date(2025, 8, 10),
+            epoch=2,
+            correlation_id="shared-transport-correlation",
+            requeue_if_processing=True,
+        )
+
+
+async def test_source_requeue_compares_correction_identity_not_transport_correlation() -> None:
+    statement = _valuation_job_upsert_stmt(
+        [
+            ValuationJobUpsert(
+                portfolio_id="P1",
+                security_id="S1",
+                valuation_date=date(2025, 8, 10),
+                epoch=2,
+                correlation_id="shared-transport-correlation",
+                source_correction_id="sha256:" + ("a" * 64),
+            )
+        ],
+        requeue_if_processing=True,
+    )
+
+    compiled = str(statement.compile(compile_kwargs={"literal_binds": True}))
+    conflict_predicate = compiled.rsplit(" WHERE ", maxsplit=1)[-1]
+    assert "source_correction_id IS NOT DISTINCT FROM excluded.source_correction_id" in (
+        conflict_predicate
+    )
+    assert "correlation_id IS NOT DISTINCT FROM excluded.correlation_id" not in conflict_predicate
 
 
 async def test_upsert_jobs_deduplicates_duplicate_requests(repository: ValuationJobRepository):

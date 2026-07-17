@@ -37,32 +37,39 @@ facts.
    source fact suppress delayed duplicate notifications; a later source correction becomes
    eligible again.
 8. Price and FX correction writers opt into a single-row in-flight supersession fence. When a
-   different correction lineage meets a `PROCESSING` natural-key valuation job, the row retains
-   its active status and records one durable requeue request. The active owner atomically returns
-   the row to `PENDING` and reports that it did not complete, preventing publication of the stale
-   snapshot. Same-lineage and ordinary readiness duplicates remain non-disruptive. Stale-claim and
-   dispatch recovery consume the same fence without dropping a correction at the retry limit.
+   different source correction meets a `PROCESSING` natural-key valuation job, the row retains its
+   active status and records one durable requeue request. FX uses the persisted observation ID;
+   price uses a deterministic hash of canonical persisted business content. Transport correlation
+   remains diagnostic and is not correction identity. The active owner atomically returns the row
+   to `PENDING` and reports that it did not complete, preventing publication of the stale snapshot.
+   Same-source and ordinary readiness duplicates remain non-disruptive. Stale-claim and dispatch
+   recovery consume the same fence without dropping a correction at the retry limit.
 
 ## Compatibility
 
 Public APIs, persisted source-event schemas, Kafka topics, and position valuation formulas are
-unchanged. Migration `c114b2c3d4f3` adds one non-null, false-defaulted internal queue-fence column.
-The intentional internal behavior change removes redundant current-date replay while preserving a
-newer correction that races with active valuation work. Backdated and future correction contracts
-remain unchanged.
+unchanged. Migration `c114b2c3d4f3` adds two internal job columns: one non-null, false-defaulted
+queue fence and one nullable source-correction identity. This keeps accepted source revisions
+distinct from transport tracing. The intentional internal behavior change removes redundant
+current-date replay while preserving a newer correction that races with active valuation work.
+Backdated and future correction contracts remain unchanged.
 
 ## Validation
 
 - `97` valuation-orchestrator unit tests passed.
 - `3` focused PostgreSQL price/FX freshness lifecycle tests passed.
-- Review fix-forward proof added `48` focused unit checks and `2` isolated PostgreSQL queue
-  lifecycle scenarios: same-lineage source delivery remains a no-op, while a different correction
+- Review fix-forward proof passed `72` focused unit checks and `2` isolated PostgreSQL queue
+  lifecycle scenarios: same-source delivery remains a no-op, while a different correction
   stays fenced during `PROCESSING`, causes the stale owner to return false, and becomes `PENDING`
-  under the newer correlation.
+  under the newer source correction identity even when transport correlation is shared.
 - Focused Ruff lint and format checks passed.
 - Full repository `make typecheck` passed for `235` source files.
 - Architecture boundary, domain layer, application workflow policy, and infrastructure adapter
   guards passed.
+- Full `make coverage-gate` passed: `4,840` unit tests and the `51`-test valuation PostgreSQL
+  package were green; changed critical files measured `95.15%` line and `88.77%` branch coverage,
+  with migration `c114b2c3d4f3` at `100%` line coverage and the valuation job repository at
+  `93.52%` line / `92.31%` branch coverage.
 
 The implementation commits are `4b8a4c772` and `fd7c71fa5`; the in-flight correction fix-forward
 commit is recorded after signing. The prior failed certifying artifact is

@@ -5,7 +5,7 @@ from __future__ import annotations
 import runpy
 from pathlib import Path
 
-from sqlalchemy import Boolean, Column
+from sqlalchemy import Boolean, Column, String
 
 from alembic import op
 
@@ -38,7 +38,7 @@ def test_valuation_requeue_fence_is_non_nullable_defaulted_and_reversible(
 
     assert migration["revision"] == "c114b2c3d4f3"
     assert migration["down_revision"] == "c113b2c3d4f2"
-    assert len(operations) == 2
+    assert len(operations) == 4
 
     _, table, column = operations[0]
     assert table == "portfolio_valuation_jobs"
@@ -47,7 +47,18 @@ def test_valuation_requeue_fence_is_non_nullable_defaulted_and_reversible(
     assert isinstance(column.type, Boolean)
     assert column.nullable is False
     assert str(column.server_default.arg).lower() == "false"
-    assert operations[1] == (
+    _, source_table, source_column = operations[1]
+    assert source_table == "portfolio_valuation_jobs"
+    assert isinstance(source_column, Column)
+    assert source_column.name == "source_correction_id"
+    assert isinstance(source_column.type, String)
+    assert source_column.nullable is True
+    assert operations[2] == (
+        "drop_column",
+        "portfolio_valuation_jobs",
+        "source_correction_id",
+    )
+    assert operations[3] == (
         "drop_column",
         "portfolio_valuation_jobs",
         "requeue_requested",

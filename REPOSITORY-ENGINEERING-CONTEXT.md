@@ -2706,9 +2706,12 @@ Most relevant current governance:
      source correction that arrives while the natural-key valuation job is `PROCESSING` must use
      the explicit source-correction requeue fence. Keep the active row `PROCESSING` until its owner
      reaches a terminal transition, then atomically return the row to `PENDING` under the newer
-     correlation and make the stale owner skip snapshot/outbox side effects. Ordinary readiness
-     duplicates must not set this fence. Claim, stale-reset, and dispatch-recovery paths must clear
-     a consumed fence without discarding a newer correction, including at the normal retry limit.
+     source observation/content identity and make the stale owner skip snapshot/outbox side
+     effects. Never compare transport `correlation_id` as correction identity: distinct accepted
+     source observations may share correlation, and one source observation may be redelivered under
+     a different trace. Ordinary readiness duplicates must not set this fence. Claim, stale-reset,
+     and dispatch-recovery paths must clear a consumed fence without discarding a newer correction,
+     including at the normal retry limit.
 
 ## Context Maintenance Rule
 

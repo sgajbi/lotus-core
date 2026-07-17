@@ -13,6 +13,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.services.valuation_orchestrator_service.app.adapters.kafka import (
     fx_rate_persisted_consumer,
 )
+from src.services.valuation_orchestrator_service.app.domain.fx_revaluation import (
+    PositionValuationKey,
+)
 from src.services.valuation_orchestrator_service.app.infrastructure.repositories import (
     fx_revaluation_repository,
 )
@@ -49,12 +52,13 @@ def message(event: FxRatePersistedEvent) -> MagicMock:
 
 @pytest.fixture
 def consumer() -> fx_rate_persisted_consumer.FxRatePersistedConsumer:
-    return fx_rate_persisted_consumer.FxRatePersistedConsumer(
-        bootstrap_servers="mock_server",
-        topic="fx_rates.persisted",
-        group_id="test_fx_revaluation",
-        dlq_topic="dlq.persistence_service",
-    )
+    with patch("portfolio_common.kafka_consumer.get_kafka_producer", return_value=MagicMock()):
+        return fx_rate_persisted_consumer.FxRatePersistedConsumer(
+            bootstrap_servers="mock_server",
+            topic="fx_rates.persisted",
+            group_id="test_fx_revaluation",
+            dlq_topic="dlq.persistence_service",
+        )
 
 
 @pytest.fixture
@@ -118,6 +122,31 @@ async def test_exact_observation_replay_is_noop(
     dependencies["repository"].stage_durable_replay.assert_not_awaited()
     dependencies["repository"].find_position_keys_requiring_revaluation.assert_not_awaited()
     dependencies["jobs"].upsert_job.assert_not_awaited()
+
+
+async def test_shared_correlation_still_carries_fx_observation_identity_to_job_fence(
+    consumer: fx_rate_persisted_consumer.FxRatePersistedConsumer,
+    message: MagicMock,
+    event: FxRatePersistedEvent,
+    dependencies: dict,
+) -> None:
+    dependencies["idempotency"].claim_event_processing.return_value = True
+    dependencies["repository"].latest_business_date.return_value = event.rate_date
+    dependencies["repository"].find_position_keys_requiring_revaluation.return_value = [
+        PositionValuationKey("P1", "USD-BOND", 2)
+    ]
+
+    await consumer.process_message(message)
+
+    dependencies["jobs"].upsert_job.assert_awaited_once_with(
+        portfolio_id="P1",
+        security_id="USD-BOND",
+        valuation_date=event.rate_date,
+        epoch=2,
+        correlation_id="corr-fx",
+        source_correction_id=event.observation_id,
+        requeue_if_processing=True,
+    )
 
 
 async def test_invalid_event_contract_raises_to_shared_recovery_boundary(

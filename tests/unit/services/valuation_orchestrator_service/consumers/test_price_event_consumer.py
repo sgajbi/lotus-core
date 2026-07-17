@@ -1,4 +1,5 @@
 from datetime import date, timedelta
+from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -10,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.valuation_orchestrator_service.app.consumers.price_event_consumer import (
     PriceEventConsumer,
+    _price_source_correction_id,
 )
 from src.services.valuation_orchestrator_service.app.repositories import (
     instrument_reprocessing_state_repository as instrument_reprocessing_state_repo,
@@ -257,6 +259,7 @@ async def test_current_price_queues_immediate_jobs_for_open_positions(
         valuation_date=mock_event.price_date,
         epoch=0,
         correlation_id=f"PRICE_EVENT_{mock_event.security_id}_{mock_event.price_date.isoformat()}",
+        source_correction_id=_price_source_correction_id(mock_event),
         requeue_if_processing=True,
     )
     mock_job_repo.upsert_job.assert_any_await(
@@ -265,6 +268,7 @@ async def test_current_price_queues_immediate_jobs_for_open_positions(
         valuation_date=mock_event.price_date,
         epoch=1,
         correlation_id=f"PRICE_EVENT_{mock_event.security_id}_{mock_event.price_date.isoformat()}",
+        source_correction_id=_price_source_correction_id(mock_event),
         requeue_if_processing=True,
     )
 
@@ -296,6 +300,7 @@ async def test_backdated_price_queues_current_date_job_and_flags_reprocessing(
         valuation_date=mock_event.price_date,
         epoch=0,
         correlation_id=f"PRICE_EVENT_{mock_event.security_id}_{mock_event.price_date.isoformat()}",
+        source_correction_id=_price_source_correction_id(mock_event),
         requeue_if_processing=True,
     )
     mock_reprocessing_repo.upsert_state.assert_awaited_once_with(
@@ -325,4 +330,24 @@ async def test_price_event_uses_header_correlation_for_direct_processing(
     await consumer.process_message(mock_kafka_message)
 
     assert mock_job_repo.upsert_job.await_args.kwargs["correlation_id"] == "test-corr-id"
+    assert mock_job_repo.upsert_job.await_args.kwargs[
+        "source_correction_id"
+    ] == _price_source_correction_id(mock_event)
     assert mock_idempotency_repo.claim_event_processing.await_args.args[3] == "test-corr-id"
+
+
+async def test_price_source_correction_identity_ignores_transport_and_tracks_content(
+    mock_event: MarketPricePersistedEvent,
+) -> None:
+    shared_content = mock_event.model_copy(update={"correlation_id": "corr-a"})
+    different_transport = mock_event.model_copy(update={"correlation_id": "corr-b"})
+    corrected_price = mock_event.model_copy(
+        update={"price": Decimal("151.0"), "correlation_id": "corr-a"}
+    )
+
+    assert _price_source_correction_id(shared_content) == _price_source_correction_id(
+        different_transport
+    )
+    assert _price_source_correction_id(shared_content) != _price_source_correction_id(
+        corrected_price
+    )

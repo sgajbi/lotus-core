@@ -1288,7 +1288,7 @@ async def test_upsert_jobs_bulk_skips_stale_rows_and_stages_eligible_rows(
     ]
 
 
-async def test_upsert_job_does_not_rearm_processing_job_with_same_correlation(
+async def test_upsert_job_does_not_rearm_processing_job_with_same_source_correction(
     async_db_session: AsyncSession, clean_db
 ):
     repo = ValuationJobRepository(async_db_session)
@@ -1301,6 +1301,7 @@ async def test_upsert_job_does_not_rearm_processing_job_with_same_correlation(
             epoch=2,
             status="PROCESSING",
             correlation_id="corr-active",
+            source_correction_id="sha256:" + ("a" * 64),
             attempt_count=1,
         )
     )
@@ -1311,7 +1312,8 @@ async def test_upsert_job_does_not_rearm_processing_job_with_same_correlation(
         security_id="S-PROCESSING-1",
         valuation_date=date(2025, 8, 12),
         epoch=2,
-        correlation_id="corr-active",
+        correlation_id="corr-redelivery",
+        source_correction_id="sha256:" + ("a" * 64),
         requeue_if_processing=True,
     )
     await async_db_session.commit()
@@ -1335,6 +1337,7 @@ async def test_upsert_job_does_not_rearm_processing_job_with_same_correlation(
     assert job.status == "PROCESSING"
     assert job.requeue_requested is False
     assert job.correlation_id == "corr-active"
+    assert job.source_correction_id == "sha256:" + ("a" * 64)
     assert job.attempt_count == 1
 
 
@@ -1350,7 +1353,8 @@ async def test_source_correction_defers_in_flight_claim_and_requeues_after_compl
             valuation_date=date(2025, 8, 12),
             epoch=2,
             status="PROCESSING",
-            correlation_id="corr-source-before",
+            correlation_id="shared-transport-correlation",
+            source_correction_id="sha256:" + ("b" * 64),
             attempt_count=1,
         )
     )
@@ -1361,7 +1365,8 @@ async def test_source_correction_defers_in_flight_claim_and_requeues_after_compl
         security_id="S-PROCESSING-CORRECTION",
         valuation_date=date(2025, 8, 12),
         epoch=2,
-        correlation_id="corr-source-correction",
+        correlation_id="shared-transport-correlation",
+        source_correction_id="sha256:" + ("c" * 64),
         requeue_if_processing=True,
     )
     await async_db_session.commit()
@@ -1383,7 +1388,8 @@ async def test_source_correction_defers_in_flight_claim_and_requeues_after_compl
     assert staged_count == 1
     assert job.status == "PROCESSING"
     assert job.requeue_requested is True
-    assert job.correlation_id == "corr-source-correction"
+    assert job.correlation_id == "shared-transport-correlation"
+    assert job.source_correction_id == "sha256:" + ("c" * 64)
 
     completed = await job_state.update_job_status(
         portfolio_id=job.portfolio_id,
@@ -1398,7 +1404,8 @@ async def test_source_correction_defers_in_flight_claim_and_requeues_after_compl
     assert completed is False
     assert job.status == "PENDING"
     assert job.requeue_requested is False
-    assert job.correlation_id == "corr-source-correction"
+    assert job.correlation_id == "shared-transport-correlation"
+    assert job.source_correction_id == "sha256:" + ("c" * 64)
 
 
 async def test_upsert_job_marks_older_pending_epoch_skipped_when_newer_epoch_arrives(

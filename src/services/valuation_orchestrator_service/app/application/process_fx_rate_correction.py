@@ -24,6 +24,7 @@ class ProcessFxRateCorrection:
         *,
         correction: FxRateCorrection,
         correlation_id: str,
+        source_correction_id: str,
     ) -> FxRevaluationPlan:
         """Schedule visible positions and preserve replay only when timing requires it."""
         latest_business_date = await self._repository.latest_business_date()
@@ -57,6 +58,7 @@ class ProcessFxRateCorrection:
                 valuation_date=correction.effective_date,
                 epoch=key.epoch,
                 correlation_id=correlation_id,
+                source_correction_id=source_correction_id,
                 requeue_if_processing=True,
             )
 
