@@ -35,6 +35,7 @@ def _handler() -> IngestionPublishCommandHandler:
         assert_ingestion_writable=AsyncMock(),
         assert_reprocessing_publish_allowed=AsyncMock(),
         create_or_get_job=AsyncMock(return_value=_job_result()),
+        find_idempotent_job=AsyncMock(return_value=None),
         mark_failed=AsyncMock(),
         mark_queued=AsyncMock(return_value=True),
         record_failure_observation=AsyncMock(),
@@ -272,6 +273,33 @@ async def test_reprocessing_command_preserves_policy_sequence(
         "resolve:T1,T2",
         "publish:2:idem-reprocess",
     ]
+
+
+@pytest.mark.asyncio
+async def test_reprocessing_replay_does_not_require_source_resolution() -> None:
+    handler = _handler()
+    handler.ingestion_service.publish_reprocessing_requests = AsyncMock()
+    handler.ingestion_job_service.find_idempotent_job.return_value = SimpleNamespace(
+        job_id="job-replay",
+        accepted_count=2,
+    )
+
+    result = await handler.ingest_reprocessing_requests(
+        BatchPublishIngestionCommand(
+            endpoint="/reprocess/transactions",
+            entity_type="reprocessing_request",
+            records=["T1", "T2"],
+            idempotency_key="idem-reprocess",
+            request_payload={"transaction_ids": ["T1", "T2"]},
+            accepted_message="Reprocessing accepted.",
+        )
+    )
+
+    assert result.replayed is True
+    assert result.job_id == "job-replay"
+    handler.resolve_transaction_reprocessing_targets.execute.assert_not_awaited()
+    handler.ingestion_job_service.create_or_get_job.assert_not_awaited()
+    handler.ingestion_service.publish_reprocessing_requests.assert_not_awaited()
 
 
 @pytest.mark.asyncio

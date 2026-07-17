@@ -8,6 +8,7 @@ from src.services.ingestion_service.app.main import ingestion_idempotency_confli
 from src.services.ingestion_service.app.services.ingestion_job_lifecycle import (
     IngestionIdempotencyConflictError,
     create_or_get_job_result,
+    find_idempotent_job_response,
 )
 from src.services.ingestion_service.app.services.ingestion_payload_evidence import (
     ingestion_payload_fingerprint,
@@ -223,6 +224,29 @@ async def test_create_or_get_job_replays_same_idempotency_key_and_same_payload()
             {"lock_key": "/ingest/transactions|idem_1"},
         )
     ]
+    assert session.added_rows == []
+
+
+@pytest.mark.asyncio
+async def test_find_idempotent_job_replays_without_reserving_the_key():
+    payload = {"transactions": [{"transaction_id": "T1", "amount": "10"}]}
+    session = _FakeExistingSession(
+        _existing_job(
+            request_payload=source_safe_request_payload(payload),
+            request_payload_fingerprint=ingestion_payload_fingerprint(payload),
+        )
+    )
+
+    result = await find_idempotent_job_response(
+        endpoint="/ingest/transactions",
+        idempotency_key="idem_1",
+        request_payload={"transactions": [{"amount": "10", "transaction_id": "T1"}]},
+        session_factory=lambda: _SingleSessionAsyncIterable(session),
+    )
+
+    assert result is not None
+    assert result.job_id == "job_existing"
+    assert session.lock_calls == []
     assert session.added_rows == []
 
 

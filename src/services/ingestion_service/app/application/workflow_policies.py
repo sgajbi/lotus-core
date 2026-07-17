@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Mapping
 
+from ..DTOs.ingestion_job_dto import IngestionJobResponse
 from ..ports.ingestion_workflow_stores import (
     IngestionJobStore,
     ReplayAuditRecord,
@@ -46,6 +47,19 @@ class IdempotencyWorkflow:
             request_id=command.correlation.request_id,
             trace_id=command.correlation.trace_id,
             request_payload=command.request_payload,
+        )
+
+    async def find_existing(
+        self,
+        *,
+        endpoint: str,
+        idempotency_key: str | None,
+        request_payload: dict[str, Any] | None,
+    ) -> IngestionJobResponse | None:
+        return await self._store.find_idempotent_job(
+            endpoint=endpoint,
+            idempotency_key=idempotency_key,
+            request_payload=request_payload,
         )
 
 

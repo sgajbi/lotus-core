@@ -3,10 +3,12 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from ..DTOs.ingestion_job_dto import IngestionJobResponse
 from ..ports.ingestion_workflow_stores import ReplayAuditRecord
 from ..services.ingestion_job_lifecycle import (
     IngestionJobCreateResult,
     create_or_get_job_result,
+    find_idempotent_job_response,
 )
 from ..services.ingestion_replay_audits import (
     find_successful_replay_audit_by_fingerprint_response,
@@ -42,6 +44,20 @@ class SqlAlchemyIngestionJobStore:
             correlation_id=correlation_id,
             request_id=request_id,
             trace_id=trace_id,
+            request_payload=request_payload,
+            session_factory=self._session_factory,
+        )
+
+    async def find_idempotent_job(
+        self,
+        *,
+        endpoint: str,
+        idempotency_key: str | None,
+        request_payload: dict[str, Any] | None,
+    ) -> IngestionJobResponse | None:
+        return await find_idempotent_job_response(
+            endpoint=endpoint,
+            idempotency_key=idempotency_key,
             request_payload=request_payload,
             session_factory=self._session_factory,
         )
