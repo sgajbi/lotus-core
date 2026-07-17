@@ -31,11 +31,16 @@ class InstrumentRepository:
             )
 
             await self.db.execute(final_stmt)
-            logger.info(f"Successfully staged UPSERT for instrument '{event.security_id}'.")
+            logger.debug(
+                "Staged instrument upsert.",
+                extra={"security_id": event.security_id},
+            )
 
             return DBInstrument(**instrument_data)
-        except Exception as e:
+        except Exception:
             logger.error(
-                f"Failed to stage UPSERT for instrument '{event.security_id}': {e}", exc_info=True
+                "Failed to stage instrument upsert.",
+                extra={"security_id": event.security_id},
+                exc_info=True,
             )
             raise

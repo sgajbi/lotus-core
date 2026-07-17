@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from scripts.quality.structured_log_guard import evaluate_structured_log_guard
 
 
@@ -69,7 +71,25 @@ def test_structured_log_guard_accepts_constant_message_with_safe_extra(tmp_path:
     assert evaluate_structured_log_guard((source,)) == []
 
 
-def test_structured_log_guard_rejects_high_volume_routine_info_event(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    "message",
+    [
+        "Deleted stale position history records.",
+        "Kafka message delivered.",
+        "Outbox dispatcher flush completed.",
+        "Outbox dispatcher marked events as processed.",
+        "Position history replay lock acquired.",
+        "Staged FX rate upsert.",
+        "Staged instrument upsert.",
+        "Staged market price upsert.",
+        "Skipping cashflow creation for non-cash FX contract lifecycle event.",
+        "Transaction processing completed.",
+    ],
+)
+def test_structured_log_guard_rejects_high_volume_routine_info_event(
+    tmp_path: Path,
+    message: str,
+) -> None:
     source = tmp_path / "hot_path.py"
     source.write_text(
         "\n".join(
@@ -77,7 +97,7 @@ def test_structured_log_guard_rejects_high_volume_routine_info_event(tmp_path: P
                 "import logging",
                 "logger = logging.getLogger(__name__)",
                 "def process():",
-                "    logger.info('Transaction processing completed.')",
+                f"    logger.info({message!r})",
             ]
         ),
         encoding="utf-8",
