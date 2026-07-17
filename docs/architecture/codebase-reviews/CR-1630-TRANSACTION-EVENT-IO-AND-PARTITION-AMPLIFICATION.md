@@ -264,6 +264,26 @@ removed every run-owned resource and preserved the separately owned 15-container
 stack. This closes the bounded ownership-observability investigation but does not replace the
 still-required daily, recovery, poison, duplicate, correction, restatement, and pre-merge proof.
 
+Exact clean daily `20260717T201508Z` at signed `4525d56cb` made all `100,000` source
+transactions durable but reached `87,671` completed transaction operations and `87,550` snapshots
+before the fixed two-hour drain deadline. Attempts remained `2/2`, repeats and governed service
+errors remained zero, and failed outbox remained zero. The bounded twelve-to-fourteen transaction
+capacity experiment that followed did not close this gap: two exact fan-ins reconciled but drained
+in `100.732s` and `105.721s`, with portfolio-day aggregation completion facts increasing to `2`
+and then `9`. Signed `ca730d5da` reverted the experiment forward. The governed transaction
+capacity ceiling remains twelve.
+
+The next retained slice used the position-state row lock already acquired by successful generation
+rearm to pass the current epoch to cashflow inside the same unit of work. Exact clean fan-in
+`20260717T231632Z` at signed `a8d6ee302` reconciled all `1,000` rows with attempts `2/2`, zero
+repeats/errors/open jobs/outbox failures, `3/3` peak lock waiters/blocked sessions, and `100.608s`
+drain. `PositionStateRepository.get_or_create_state` fell from the prior two-call pattern to exactly
+`1,000` observations for `1,000` completed transactions (`17.876655s` accumulated). The direct
+two-to-one lookup reduction justifies retaining the simpler ownership shape, but the drain and two
+aggregation completions do not prove end-to-end throughput improvement or justify another daily
+run. JSON SHA-256 is
+`E0D89A92A58E3C15C26ADD3234313AD32E45E8E9444B215318D88D9A57824999`.
+
 ## Compatibility
 
 HTTP APIs, OpenAPI schemas, Kafka topics, event payload schemas, transaction calculations,
@@ -362,12 +382,18 @@ because historical and new keys can map to different partitions after producer r
   exact reconciliation, attempts `2/2`, zero repeats, closed jobs/outbox, no governed error lines,
   and zero `REQUEUED` or `NOT_OWNED` suppression warnings. The repeat restored the intended single
   aggregation completion and `95.645s` drain. Both scoped teardowns preserved canonical UI.
+- Lock-scoped epoch reuse passed `873` transaction-processing/common unit tests, `2` real-
+  PostgreSQL atomic reprocessing tests, full MyPy across `235` source files, Ruff/format, complete
+  architecture, and documentation/wiki guards at signed commit `a8d6ee302`.
+- Exact clean fan-in `20260717T231632Z` passed at `a8d6ee302` with the direct one-state-read-per-
+  transaction result above. Scoped teardown removed every run-owned resource and preserved the
+  separately owned 15-container canonical UI stack.
 
 Implementation commits include `23fc6faf3`, `d51adb739`, `ad1ad179d`, `57f8c60e2`,
 `4f05be9a5`, `c230d660a`, `f42f6eaa3`, `d56e14dbf`, `2d49fc8f1`, `70ae16f0f`,
 `a3c9eeaac`, `b7e7e1be2`, `35fb5d84f`, `20333978a`, `37abbf19b`, `6640ec911`, `37ffa2fad`, and
-`45295cf24`. Evidence alignment continues through `45295cf24`; human contract/context alignment
-starts in `9d6dbbbf9`.
+`45295cf24`, and `a8d6ee302`. Evidence alignment continues through `a8d6ee302`; human
+contract/context alignment starts in `9d6dbbbf9`.
 
 ## Documentation Decision
 

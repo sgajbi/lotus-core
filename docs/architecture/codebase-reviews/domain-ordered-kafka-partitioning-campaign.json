@@ -48,11 +48,11 @@
       "tranche_id": "tranche-2-throughput-and-certification",
       "branch": "feat/domain-ordered-kafka-partitioning",
       "base_sha": "b9c55792361557bda56ba498492e962225557dd4",
-      "head_sha": "45295cf2417f978911c182572c56062c3dfa46ad",
+      "head_sha": "a8d6ee3028c9f539712ea188eea762b62ad0975b",
       "post_merge_main_sha": "pending",
       "required_predecessor_main_sha": "b9c55792361557bda56ba498492e962225557dd4",
       "capability_boundary": "Transactional hot-path throughput, twelve-way capacity, valuation-job lock ordering, and exact workload certification",
-      "commit_count": 42,
+      "commit_count": 47,
       "issue_closure_decision": "close_after_final_validated_main",
       "local_evidence": [
         "Focused #799 unit, domain, lint, format, and type checks pass at signed campaign commits through 349ee126c66415c9bf683baa43b51656e6c8905d",
@@ -74,6 +74,10 @@
         "The ownership slice passed 4878 full-lane unit tests, 41 affected valuation unit tests, 5 isolated real-PostgreSQL ownership and lifecycle tests, focused MyPy, Ruff and format checks, and the complete architecture guard",
         "Exact clean fan-in 20260717T193156Z passed at 45295cf2417f978911c182572c56062c3dfa46ad with exact 1000 reconciliation, 105.710-second drain, attempts 2/2, zero repeats, closed outbox, zero transition-suppression warnings, and seven aggregation completion facts",
         "Same-SHA repeat 20260717T194013Z passed with exact 1000 reconciliation, 95.645-second drain, attempts 2/2, zero repeats, closed outbox, zero transition-suppression warnings, zero lock waiters or blocked sessions, and exactly one aggregation completion fact",
+        "Exact clean daily 20260717T201508Z at 4525d56cbe5c9dd31f6f0b94ba2f00cc4bc67bbc made all 100000 source transactions durable and reached 87671 completed transaction operations plus 87550 snapshots before the fixed deadline; attempts remained 2/2, repeats 0, governed errors 0, and failed outbox 0, so this is a valid remaining transaction-capacity failure",
+        "The bounded fourteen-way transaction experiment passed exact reconciliation but regressed repeat fan-in to 105.721-second drain and nine aggregation completion facts with 3 lock waiters and blocked sessions; signed ca730d5da02de1b8964e7893e6795b78c54ab823 reverted it forward and the governed ceiling remains twelve",
+        "Signed a8d6ee3028c9f539712ea188eea762b62ad0975b reuses a position epoch for cashflow only while the shared unit of work holds the state-row update lock; 873 focused unit and 2 real-PostgreSQL tests plus full MyPy, architecture, Ruff, and documentation guards passed",
+        "Exact clean fan-in 20260717T231632Z at a8d6ee3028c9f539712ea188eea762b62ad0975b reconciled exactly with 100.608-second drain, attempts 2/2, zero repeats or governed errors, closed outbox, and reduced PositionStateRepository.get_or_create_state to exactly 1000 observations for 1000 completed transactions; this directly proves the two-to-one lookup reduction but does not claim end-to-end throughput improvement",
         "The bounded ownership-observability investigation is complete; exact daily, recovery, poison, duplicate, price-restatement, and FX-restatement evidence remains required before PR readiness, and ordered append, full rebuild, method-specific lot state, backdated and correction semantics, and single-writer coordination remain mandatory"
       ],
       "remote_evidence": [
