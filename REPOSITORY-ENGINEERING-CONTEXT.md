@@ -2750,6 +2750,21 @@ Most relevant current governance:
      can be resolved. Never retain changed file names, Git command output, credentials, or raw
      process configuration in the artifact. Source provenance improves reproducibility but does not
      promote local evidence to trusted CI, deployment, or production certification.
+198. Position-state acquisition must use the conflict-aware insert result as the authoritative
+     newly-created state and perform a fallback read only when another transaction already owns the
+     natural key. Preserve one state row per portfolio/security/account boundary, caller-owned
+     transaction semantics, and the conflict fallback. Guard the absent-key path with a real
+     PostgreSQL statement-shape test; do not restore an unconditional post-insert reread.
+199. Cost persistence may skip the complete opening-lot snapshot reread only when the complete cost
+     timeline contains exactly one initial opening transaction. Continue to write the AVCO pool
+     checkpoint, and retain complete-snapshot reconstruction for existing, backdated, correction,
+     reversal, restatement, and other rebuilt timelines. Keep this scope explicit in the application
+     port rather than inferring it inside the repository adapter.
+200. A direct statement-count reduction is sufficient to retain a simpler hot-path ownership shape,
+     but not to claim end-to-end throughput. Require an exact clean fan-in comparison before spending
+     another two-hour daily run; if fan-in is neutral or slower, record the result and pause further
+     query-level micro-optimization until timing or equivalent stage evidence identifies a material
+     bottleneck.
 
 ## Context Maintenance Rule
 

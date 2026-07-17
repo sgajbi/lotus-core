@@ -126,6 +126,20 @@ Downstream stages kept pace with the facts they received. This is valid capacity
 not infrastructure or outbox failure evidence. The failure artifact's `drain_seconds = 0` despite a
 two-hour drain remains diagnostic debt under #730.
 
+The later exact-head daily run `20260717T125841Z` is a second valid capacity failure, not an
+external-kill diagnostic. It made all `100,000` source transactions durable and reached `82,014`
+valuation snapshots, `81,959` position-timeseries rows, and `876` portfolio-timeseries rows before
+the fixed drain deadline. `124` portfolios remained incomplete, with `21` valuation jobs and `15`
+aggregation jobs open. Attempts remained `2/2`, repeats remained `0`, final outbox pending/failed
+was `58/0`, and all eight governed service logs contained zero errors. Topic counts again tie the
+remaining tail to transaction processing: `transactions.persisted` reached `100,000`, while cost,
+cashflow, and valuation-ready topics each reached `82,014`; downstream snapshot persistence then
+reached `81,973`. Peak database total/active connections were `55/19`, idle-in-transaction reached
+`29`, and lock waiters/blocked sessions reached `8/8`. The run shared the host with the separately
+owned 15-container canonical UI stack, so its `1,630`-snapshot / `1.95%` shortfall against
+`20260717T092348Z` is not attributed to a code regression. The artifact hash is
+`357B0B929F4170ADBF7EE91B9F4E9F733C7B3A16C2D04EEE36F1CC12316EF030`.
+
 The cost-reference bundle passed exact same-host diagnostic A/B evidence under shared Docker load:
 parent `349ee126c` drained in `125.478s`, while signed implementation `2d49fc8f1` drained in
 `120.492s`, a `4.986s` / `3.97%` relative improvement with exact reconciliation. The result supports
@@ -133,6 +147,25 @@ retaining the direct two-to-one query reduction, but both runs remained material
 governed `95.247s` baseline. A concurrent actor changed only runner provenance/docs/tests/wiki
 during the parent run, so the A/B result is attribution evidence rather than standalone
 certification. It does not justify another 100,000-transaction daily run.
+
+Two further statement-shape improvements are retained for their direct database-I/O and ownership
+benefits, but their exact fan-in evidence is deliberately not presented as throughput improvement:
+
+- signed commit `a3c9eeaac` changed position-state creation to `INSERT ... DO NOTHING RETURNING`,
+  returning a newly created state directly while retaining the authoritative `SELECT` fallback for
+  a concurrent conflict. The absent-key path fell from two statements to one. Exact fan-in
+  `20260717T152820Z` completed and reconciled with `110.369s` drain, `4.65%` slower than the
+  `105.470s` parent baseline;
+- signed commit `b7e7e1be2` added an explicit initial-opening-lot persistence scope. A position with
+  exactly one opening transaction skips the redundant complete-snapshot reread while still writing
+  its AVCO pool checkpoint; existing and backdated timelines retain complete reconstruction. The
+  ordinary first-BUY PostgreSQL statement shape fell from ten statements to nine. Exact fan-in
+  `20260717T155339Z` completed and reconciled with `110.334s` drain, effectively neutral versus
+  `110.369s` and `4.61%` slower than the `105.470s` parent baseline.
+
+Neither result justifies another two-hour daily run. Further query-level micro-optimization on this
+path is paused until full unit-of-work timing or equivalent evidence identifies a material
+transaction-processing bottleneck.
 
 ## Compatibility
 
@@ -181,10 +214,17 @@ because historical and new keys can map to different partitions after producer r
   `20260717T121025Z` completed equivalently with `125.478s` drain.
 - Source-provenance runner tests passed `14` cases with touched Ruff/format and diff checks at signed
   commit `70ae16f0f`; exact-head Remote Feature Lane `29579810885` passed.
+- Position-state creation passed `11` database-unit tests, `29` focused position tests, and the
+  `75`-test PostgreSQL transaction-processing contract; Remote Feature Lane `29591744921` passed at
+  signed commit `a3c9eeaac`.
+- Initial-opening-lot persistence passed `22` focused application tests, `72` cost-processing unit
+  tests, `2` targeted PostgreSQL statement/lifecycle tests, and the full `75`-test PostgreSQL
+  transaction-processing contract. MyPy across `235` files, Ruff/format/diff, the architecture
+  guard, and Remote Feature Lane `29593836128` passed at signed commit `b7e7e1be2`.
 
 Implementation commits include `23fc6faf3`, `d51adb739`, `ad1ad179d`, `57f8c60e2`,
-`4f05be9a5`, `c230d660a`, `f42f6eaa3`, `d56e14dbf`, `2d49fc8f1`, and `70ae16f0f`. Human
-contract/context alignment starts in `9d6dbbbf9`.
+`4f05be9a5`, `c230d660a`, `f42f6eaa3`, `d56e14dbf`, `2d49fc8f1`, `70ae16f0f`,
+`a3c9eeaac`, and `b7e7e1be2`. Human contract/context alignment starts in `9d6dbbbf9`.
 
 ## Documentation Decision
 
@@ -193,4 +233,6 @@ partition migration runbook changed because transport ordering truth changed. Th
 provenance contract also changes operations guidance and authored `wiki/` source; publish and verify
 wiki parity after merge. No public OpenAPI change is required. The cashflow, position unit-of-work,
 residual logging, and cost-reference slices change no public or operator workflow beyond the
-recorded workload evidence fields.
+recorded workload evidence fields. The position-state and initial-opening-lot statement reductions
+also require no additional OpenAPI, migration, event-contract, operator-runbook, or wiki source
+change.
