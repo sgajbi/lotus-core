@@ -48,11 +48,11 @@
       "tranche_id": "tranche-2-throughput-and-certification",
       "branch": "feat/domain-ordered-kafka-partitioning",
       "base_sha": "b9c55792361557bda56ba498492e962225557dd4",
-      "head_sha": "a8d6ee3028c9f539712ea188eea762b62ad0975b",
+      "head_sha": "e794968221a6a6ad5489388488883efc5eb067b5",
       "post_merge_main_sha": "pending",
       "required_predecessor_main_sha": "b9c55792361557bda56ba498492e962225557dd4",
       "capability_boundary": "Transactional hot-path throughput, twelve-way capacity, valuation-job lock ordering, and exact workload certification",
-      "commit_count": 47,
+      "commit_count": 50,
       "issue_closure_decision": "close_after_final_validated_main",
       "local_evidence": [
         "Focused #799 unit, domain, lint, format, and type checks pass at signed campaign commits through 349ee126c66415c9bf683baa43b51656e6c8905d",
@@ -78,6 +78,9 @@
         "The bounded fourteen-way transaction experiment passed exact reconciliation but regressed repeat fan-in to 105.721-second drain and nine aggregation completion facts with 3 lock waiters and blocked sessions; signed ca730d5da02de1b8964e7893e6795b78c54ab823 reverted it forward and the governed ceiling remains twelve",
         "Signed a8d6ee3028c9f539712ea188eea762b62ad0975b reuses a position epoch for cashflow only while the shared unit of work holds the state-row update lock; 873 focused unit and 2 real-PostgreSQL tests plus full MyPy, architecture, Ruff, and documentation guards passed",
         "Exact clean fan-in 20260717T231632Z at a8d6ee3028c9f539712ea188eea762b62ad0975b reconciled exactly with 100.608-second drain, attempts 2/2, zero repeats or governed errors, closed outbox, and reduced PositionStateRepository.get_or_create_state to exactly 1000 observations for 1000 completed transactions; this directly proves the two-to-one lookup reduction but does not claim end-to-end throughput improvement",
+        "The bounded synchronous Kafka commit executor-offload experiment at signed 704358fe09996e44bdede33b6c46d051e7b4ac67 passed 4886 full-lane unit tests, 68 focused Kafka-consumer tests, full MyPy, the duplicate-delivery concurrency guard, architecture, Ruff, and documentation gates while preserving synchronous post-processing commit and same-partition ordering semantics",
+        "Exact clean fan-in 20260717T234511Z at 704358fe09996e44bdede33b6c46d051e7b4ac67 reconciled exactly with 100.783-second drain, attempts 2/2, zero repeats, errors, DLQ, or outbox residue, and one aggregation completion; this was a 0.17 percent regression versus its 100.608-second parent and did not justify added executor complexity",
+        "Signed e794968221a6a6ad5489388488883efc5eb067b5 reverted synchronous Kafka commit executor offload forward; do not repeat it without a workload that directly proves commit latency is the limiting factor",
         "The bounded ownership-observability investigation is complete; exact daily, recovery, poison, duplicate, price-restatement, and FX-restatement evidence remains required before PR readiness, and ordered append, full rebuild, method-specific lot state, backdated and correction semantics, and single-writer coordination remain mandatory"
       ],
       "remote_evidence": [
