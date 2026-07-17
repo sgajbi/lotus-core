@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import date
 from enum import StrEnum
 from typing import Protocol
@@ -24,16 +25,20 @@ class PositionReplayMode(StrEnum):
     INLINE_REBUILD = "inline_rebuild"
 
 
+@dataclass(frozen=True, slots=True)
+class PositionMaterializationProgress:
+    """Carry epoch-scoped history and completed-snapshot progress."""
+
+    latest_history_date: date | None
+    latest_completed_snapshot_date: date | None
+
+
 class PositionHistoryRepository(Protocol):
     """Load and persist canonical transaction-backed position history."""
 
-    async def latest_completed_snapshot_date(
+    async def load_materialization_progress(
         self, *, portfolio_id: str, security_id: str, epoch: int
-    ) -> date | None: ...
-
-    async def latest_history_date(
-        self, *, portfolio_id: str, security_id: str, epoch: int
-    ) -> date | None: ...
+    ) -> PositionMaterializationProgress: ...
 
     async def contains_transaction(
         self,
