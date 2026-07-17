@@ -15,12 +15,12 @@ SUPPORTED_OVERLOAD_BEHAVIORS = {OVERLOAD_PAUSE_POLL}
 
 GOVERNED_GROUP_MAX_IN_FLIGHT = {
     "persistence_group_portfolios": 4,
-    "persistence_group_transactions": 14,
+    "persistence_group_transactions": 12,
     "persistence_group_instruments": 8,
     "persistence_group_market_prices": 8,
     "persistence_group_fx_rates": 4,
     "persistence_group_business_dates": 1,
-    "portfolio_transaction_processing_group": 14,
+    "portfolio_transaction_processing_group": 12,
     "portfolio_transaction_replay_request_group": 8,
     "valuation_orchestrator_group_readiness": 8,
     "valuation_orchestrator_group_price_events": 8,
