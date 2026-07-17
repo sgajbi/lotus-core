@@ -2,6 +2,8 @@ from argparse import Namespace
 from decimal import Decimal
 from subprocess import CalledProcessError, CompletedProcess
 
+import pytest
+
 from scripts.operations import bank_day_load_scenario
 from scripts.operations.bank_day_load_scenario import (
     LOG_SERVICE_NAMES,
@@ -223,6 +225,7 @@ def test_cycle_completion_waits_until_durable_outbox_is_empty(monkeypatch) -> No
         "failed_aggregation_jobs": 0,
         "failed_outbox_events": 0,
         "snapshots_count": 4,
+        "completed_valuation_jobs_without_snapshots": 0,
         "position_timeseries_count": 4,
         "portfolio_timeseries_count": 2,
         "pending_valuation_jobs": 0,
@@ -255,6 +258,48 @@ def test_cycle_completion_waits_until_durable_outbox_is_empty(monkeypatch) -> No
     assert elapsed >= 0
     assert rows == []
     assert "pending_outbox_events" in captured["query"]
+
+
+def test_cycle_completion_fails_fast_for_completed_valuation_without_snapshot(
+    monkeypatch,
+) -> None:
+    terminal_inconsistency: dict[str, object] = {
+        "portfolios_count": 1,
+        "transactions_count": 2,
+        "failed_valuation_jobs": 0,
+        "failed_aggregation_jobs": 0,
+        "failed_outbox_events": 0,
+        "snapshots_count": 0,
+        "completed_valuation_jobs_without_snapshots": 2,
+        "position_timeseries_count": 0,
+        "portfolio_timeseries_count": 0,
+        "pending_valuation_jobs": 0,
+        "processing_valuation_jobs": 0,
+        "pending_aggregation_jobs": 0,
+        "processing_aggregation_jobs": 0,
+        "pending_outbox_events": 0,
+    }
+    monkeypatch.setattr(
+        bank_day_load_scenario,
+        "_db_row",
+        lambda _engine, _query, _params: terminal_inconsistency,
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match=(
+            "terminal valuation jobs without atomic snapshot side effects: "
+            "completed_valuation_jobs_without_snapshots=2"
+        ),
+    ):
+        _wait_for_cycle_completion(
+            engine=object(),
+            run_id="RUN1",
+            trade_date="2026-07-17",
+            portfolio_count=1,
+            transaction_count=2,
+            timeout_seconds=60,
+        )
 
 
 def test_expected_portfolio_market_value_converts_non_usd_prices() -> None:

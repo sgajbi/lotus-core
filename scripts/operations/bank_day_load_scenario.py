@@ -649,6 +649,21 @@ def _wait_for_cycle_completion(
         WHERE portfolio_id LIKE :portfolio_pattern
           AND date = :trade_date
     ),
+    completed_valuations_without_snapshots AS (
+        SELECT count(*) AS completed_valuation_jobs_without_snapshots
+        FROM portfolio_valuation_jobs job
+        WHERE job.portfolio_id LIKE :portfolio_pattern
+          AND job.valuation_date = :trade_date
+          AND job.status = 'COMPLETE'
+          AND NOT EXISTS (
+              SELECT 1
+              FROM daily_position_snapshots snapshot
+              WHERE snapshot.portfolio_id = job.portfolio_id
+                AND snapshot.security_id = job.security_id
+                AND snapshot.date = job.valuation_date
+                AND snapshot.epoch = job.epoch
+          )
+    ),
     position_timeseries_counts AS (
         SELECT count(*) AS position_timeseries_count
         FROM position_timeseries
@@ -687,6 +702,7 @@ def _wait_for_cycle_completion(
          failed_val,
          failed_agg,
          snapshot_counts,
+         completed_valuations_without_snapshots,
          position_timeseries_counts,
          timeseries_counts,
          valuation_job_counts,
@@ -710,6 +726,18 @@ def _wait_for_cycle_completion(
                 f"failed_valuation_jobs={row['failed_valuation_jobs']} "
                 f"failed_aggregation_jobs={row['failed_aggregation_jobs']} "
                 f"failed_outbox_events={row['failed_outbox_events']}"
+            )
+        completed_without_snapshot = int(row["completed_valuation_jobs_without_snapshots"] or 0)
+        if (
+            int(row["transactions_count"]) == transaction_count
+            and int(row["pending_valuation_jobs"] or 0) == 0
+            and int(row["processing_valuation_jobs"] or 0) == 0
+            and int(row["pending_outbox_events"] or 0) == 0
+            and completed_without_snapshot > 0
+        ):
+            raise RuntimeError(
+                "Pipeline reached terminal valuation jobs without atomic snapshot side effects: "
+                f"completed_valuation_jobs_without_snapshots={completed_without_snapshot}"
             )
         if (
             int(row["portfolios_count"]) == portfolio_count
