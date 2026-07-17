@@ -15,6 +15,7 @@ from portfolio_common.database_models import (
     Transaction,
 )
 from portfolio_common.events import PortfolioValuationRequiredEvent
+from portfolio_common.valuation_job_contracts import ValuationJobTransitionOutcome
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -283,7 +284,7 @@ async def test_valuation_message_skips_side_effects_after_losing_job_ownership(
         epoch: int,
         status: str,
         failure_reason: str | None = None,
-    ) -> bool:
+    ) -> ValuationJobTransitionOutcome:
         async with session_factory() as session:
             await session.execute(
                 update(PortfolioValuationJob)

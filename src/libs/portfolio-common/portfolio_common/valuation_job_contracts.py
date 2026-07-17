@@ -2,7 +2,16 @@
 
 from dataclasses import dataclass
 from datetime import date
+from enum import StrEnum
 from typing import Optional
+
+
+class ValuationJobTransitionOutcome(StrEnum):
+    """Classify the result of a processing-owned valuation-job transition."""
+
+    TERMINAL_APPLIED = "TERMINAL_APPLIED"
+    REQUEUED = "REQUEUED"
+    NOT_OWNED = "NOT_OWNED"
 
 
 @dataclass(frozen=True, slots=True)

@@ -19,6 +19,7 @@ from portfolio_common.events import (
 from portfolio_common.idempotency_repository import IdempotencyRepository
 from portfolio_common.logging_utils import correlation_id_var
 from portfolio_common.outbox_repository import OutboxRepository
+from portfolio_common.valuation_job_contracts import ValuationJobTransitionOutcome
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -82,6 +83,9 @@ def mock_dependencies():
     mock_idempotency_repo = AsyncMock(spec=IdempotencyRepository)
     mock_outbox_repo = AsyncMock(spec=OutboxRepository)
     mock_valuation_repo = AsyncMock(spec=ValuationRepository)
+    mock_valuation_repo.update_job_status.return_value = (
+        ValuationJobTransitionOutcome.TERMINAL_APPLIED
+    )
 
     mock_db_session = AsyncMock(spec=AsyncSession)
 
@@ -627,11 +631,23 @@ async def test_process_message_marks_job_failed_when_fx_rate_missing(
     assert mock_idempotency_repo.claim_event_processing.await_count == 1
 
 
-async def test_valuation_consumer_skips_success_side_effects_when_job_ownership_is_lost(
+@pytest.mark.parametrize(
+    ("transition_outcome", "expected_reason"),
+    [
+        (ValuationJobTransitionOutcome.NOT_OWNED, "job ownership was lost"),
+        (
+            ValuationJobTransitionOutcome.REQUEUED,
+            "newer source work requested requeue",
+        ),
+    ],
+)
+async def test_valuation_consumer_skips_success_side_effects_without_terminal_ownership(
     consumer: ValuationConsumer,
     mock_kafka_message: MagicMock,
     mock_event: PortfolioValuationRequiredEvent,
     mock_dependencies: dict,
+    transition_outcome: ValuationJobTransitionOutcome,
+    expected_reason: str,
 ):
     mock_idempotency_repo = mock_dependencies["idempotency_repo"]
     mock_outbox_repo = mock_dependencies["outbox_repo"]
@@ -657,11 +673,17 @@ async def test_valuation_consumer_skips_success_side_effects_when_job_ownership_
         price_date=mock_event.valuation_date,
     )
     mock_valuation_repo.get_fx_rate.return_value = FxRate(rate=Decimal("1.1"))
-    mock_valuation_repo.update_job_status.return_value = False
+    mock_valuation_repo.update_job_status.return_value = transition_outcome
 
-    await consumer.process_message(mock_kafka_message)
+    with patch(
+        "services.calculators.position_valuation_calculator.app.valuation_processor.logger.warning"
+    ) as warning:
+        await consumer.process_message(mock_kafka_message)
 
     mock_valuation_repo.update_job_status.assert_awaited_once()
     mock_valuation_repo.upsert_daily_snapshot.assert_not_called()
     mock_outbox_repo.create_outbox_event.assert_not_called()
     mock_idempotency_repo.mark_event_processed.assert_not_called()
+    warning.assert_called_once()
+    assert warning.call_args.args[2] == expected_reason
+    assert warning.call_args.kwargs["extra"]["transition_outcome"] == transition_outcome.value
