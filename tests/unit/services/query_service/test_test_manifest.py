@@ -38,6 +38,12 @@ def test_unit_db_suite_tracks_db_dependent_tests() -> None:
     )
 
 
+def test_critical_db_coverage_includes_changed_outbox_delivery_hot_path() -> None:
+    assert "tests/integration/libs/portfolio-common/test_outbox_dispatcher.py" in get_suite(
+        "critical-db-coverage"
+    )
+
+
 def test_integration_all_suite_tracks_full_integration_tree() -> None:
     assert get_suite("integration-all") == ["tests/integration"]
 
