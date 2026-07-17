@@ -64,13 +64,17 @@ class CostBasisProcessingAdapter:
         *,
         correlation_id: str,
     ) -> CostProcessingResult:
-        portfolio = await self._reference_data.get_cost_basis_portfolio(transaction.portfolio_id)
-        if not portfolio:
+        reference_data = await self._reference_data.get_cost_basis_reference_data(
+            portfolio_id=transaction.portfolio_id,
+            security_id=transaction.security_id,
+        )
+        if reference_data is None:
             raise PortfolioNotFoundError(
                 f"Portfolio {transaction.portfolio_id} not found. Retrying..."
             )
 
-        instrument = await self._reference_data.get_cost_basis_instrument(transaction.security_id)
+        portfolio = reference_data.portfolio
+        instrument = reference_data.instrument
         prepared = prepare_cost_transaction(
             transaction,
             cost_basis_method=portfolio.cost_basis_method,

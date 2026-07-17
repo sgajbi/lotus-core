@@ -18,6 +18,7 @@ from .processing_state import CostBasisProcessingStatePort
 from .reference_data import (
     CostBasisInstrumentReference,
     CostBasisPortfolioReference,
+    CostBasisReferenceData,
     CostBasisReferenceDataPort,
 )
 from .state_records import (
@@ -44,6 +45,7 @@ __all__ = [
     "CostBasisPersistenceStatus",
     "CostBasisInstrumentReference",
     "CostBasisPortfolioReference",
+    "CostBasisReferenceData",
     "CostBasisProcessingStatePort",
     "CostBasisReferenceDataPort",
     "CostBasisTransactionStatePort",

@@ -35,6 +35,7 @@ from src.services.portfolio_transaction_processing_service.app.ports import (
     CostBasisLotStatePort,
     CostBasisPortfolioReference,
     CostBasisProcessingStatePort,
+    CostBasisReferenceData,
     CostBasisReferenceDataPort,
     CostBasisTransactionStatePort,
     CostProcessingEffectStagingPort,
@@ -60,15 +61,17 @@ async def test_cost_adapter_maps_domain_and_returns_every_processed_leg() -> Non
     processed_transaction = replace(transaction, transaction_id="TX-001-COSTED")
     repository = AsyncMock(spec=CostBasisTransactionStatePort)
     reference_data = AsyncMock(spec=CostBasisReferenceDataPort)
-    reference_data.get_cost_basis_portfolio.return_value = CostBasisPortfolioReference(
-        base_currency="SGD",
-        portfolio_id="PB-001",
-        cost_basis_method=CostBasisMethod.FIFO,
-    )
-    reference_data.get_cost_basis_instrument.return_value = CostBasisInstrumentReference(
-        security_id="SEC-001",
-        product_type="EQUITY",
-        asset_class="EQUITY",
+    reference_data.get_cost_basis_reference_data.return_value = CostBasisReferenceData(
+        portfolio=CostBasisPortfolioReference(
+            base_currency="SGD",
+            portfolio_id="PB-001",
+            cost_basis_method=CostBasisMethod.FIFO,
+        ),
+        instrument=CostBasisInstrumentReference(
+            security_id="SEC-001",
+            product_type="EQUITY",
+            asset_class="EQUITY",
+        ),
     )
     effect_stager = AsyncMock(spec=CostProcessingEffectStagingPort)
     fx_rates = AsyncMock(spec=CostBasisFxRatePort)
@@ -141,7 +144,7 @@ async def test_cost_adapter_maps_missing_reference_data_to_retryable_application
     lot_states = AsyncMock(spec=CostBasisLotStatePort)
     income_offsets = AsyncMock(spec=AccruedIncomeOffsetStatePort)
     reconciliation_repository = AsyncMock(spec=CorporateActionReconciliationRepository)
-    reference_data.get_cost_basis_portfolio.return_value = None
+    reference_data.get_cost_basis_reference_data.return_value = None
     adapter = CostBasisProcessingAdapter(
         processor=AsyncMock(spec=PreparedCostProcessingUseCase),
         repository=repository,
@@ -180,15 +183,17 @@ async def test_cost_adapter_maps_settlement_rejection_to_non_retryable_error() -
     )
     repository = AsyncMock(spec=CostBasisTransactionStatePort)
     reference_data = AsyncMock(spec=CostBasisReferenceDataPort)
-    reference_data.get_cost_basis_portfolio.return_value = CostBasisPortfolioReference(
-        base_currency="SGD",
-        portfolio_id="PB-001",
-        cost_basis_method=CostBasisMethod.FIFO,
-    )
-    reference_data.get_cost_basis_instrument.return_value = CostBasisInstrumentReference(
-        security_id="SEC-001",
-        product_type="EQUITY",
-        asset_class="EQUITY",
+    reference_data.get_cost_basis_reference_data.return_value = CostBasisReferenceData(
+        portfolio=CostBasisPortfolioReference(
+            base_currency="SGD",
+            portfolio_id="PB-001",
+            cost_basis_method=CostBasisMethod.FIFO,
+        ),
+        instrument=CostBasisInstrumentReference(
+            security_id="SEC-001",
+            product_type="EQUITY",
+            asset_class="EQUITY",
+        ),
     )
     processor = AsyncMock(spec=PreparedCostProcessingUseCase)
     fx_rates = AsyncMock(spec=CostBasisFxRatePort)

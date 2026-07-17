@@ -17,6 +17,7 @@ from src.services.portfolio_transaction_processing_service.app.ports import (
     CostBasisFxRatePort,
     CostBasisInstrumentReference,
     CostBasisPortfolioReference,
+    CostBasisReferenceData,
     CostBasisReferenceDataPort,
     CostBasisTransactionStatePort,
 )
@@ -51,15 +52,17 @@ def _booked_transaction(
 
 def _reference_data(cost_basis_method: CostBasisMethod) -> AsyncMock:
     reference_data = AsyncMock(spec=CostBasisReferenceDataPort)
-    reference_data.get_cost_basis_portfolio.return_value = CostBasisPortfolioReference(
-        portfolio_id="P1",
-        base_currency="USD",
-        cost_basis_method=cost_basis_method,
-    )
-    reference_data.get_cost_basis_instrument.return_value = CostBasisInstrumentReference(
-        security_id="S1",
-        product_type="EQUITY",
-        asset_class="EQUITY",
+    reference_data.get_cost_basis_reference_data.return_value = CostBasisReferenceData(
+        portfolio=CostBasisPortfolioReference(
+            portfolio_id="P1",
+            base_currency="USD",
+            cost_basis_method=cost_basis_method,
+        ),
+        instrument=CostBasisInstrumentReference(
+            security_id="S1",
+            product_type="EQUITY",
+            asset_class="EQUITY",
+        ),
     )
     return reference_data
 
@@ -155,7 +158,11 @@ async def test_rebuild_plan_fails_closed_on_invalid_history() -> None:
 async def test_rebuild_plan_rejects_missing_instrument_before_history_read() -> None:
     transactions = AsyncMock(spec=CostBasisTransactionStatePort)
     reference_data = _reference_data(CostBasisMethod.AVCO)
-    reference_data.get_cost_basis_instrument.return_value = None
+    resolved = reference_data.get_cost_basis_reference_data.return_value
+    reference_data.get_cost_basis_reference_data.return_value = CostBasisReferenceData(
+        portfolio=resolved.portfolio,
+        instrument=None,
+    )
 
     with pytest.raises(ValueError, match="Instrument S1 was not found"):
         await AverageCostPoolRebuildPlanner().build(

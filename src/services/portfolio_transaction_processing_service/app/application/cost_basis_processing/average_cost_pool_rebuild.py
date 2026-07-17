@@ -38,14 +38,18 @@ class AverageCostPoolRebuildPlanner:
     ) -> AverageCostPoolRebuildPlan:
         """Build the expected AVCO source state without persisting it."""
 
-        portfolio = await reference_data.get_cost_basis_portfolio(portfolio_id)
-        if portfolio is None:
+        resolved_reference_data = await reference_data.get_cost_basis_reference_data(
+            portfolio_id=portfolio_id,
+            security_id=security_id,
+        )
+        if resolved_reference_data is None:
             raise ValueError(f"Portfolio {portfolio_id} was not found")
+        portfolio = resolved_reference_data.portfolio
         cost_basis_method = normalize_cost_basis_method(portfolio.cost_basis_method)
         if cost_basis_method is not CostBasisMethod.AVCO:
             raise ValueError("Average cost pool rebuild requires an AVCO portfolio")
 
-        instrument = await reference_data.get_cost_basis_instrument(security_id)
+        instrument = resolved_reference_data.instrument
         if instrument is None:
             raise ValueError(f"Instrument {security_id} was not found")
         history = await transactions.get_transaction_history(
