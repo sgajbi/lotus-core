@@ -117,6 +117,7 @@ def test_bank_day_command_uses_managed_endpoints_and_exact_profile_shape(tmp_pat
         e2e_query_control_plane_url="http://localhost:55004",
         e2e_event_replay_url="http://localhost:55005",
         e2e_financial_reconciliation_url="http://localhost:55006",
+        e2e_transaction_processing_url="http://localhost:55007",
     )
     command = build_bank_day_command(
         python_executable="python",
@@ -146,6 +147,9 @@ def test_bank_day_command_uses_managed_endpoints_and_exact_profile_shape(tmp_pat
     assert command[command.index("--trade-date") + 1] == "2026-07-15"
     assert command[command.index("--business-date-count") + 1] == "1"
     assert command[command.index("--seed-materialization-timeout-seconds") + 1] == "600"
+    assert command[command.index("--transaction-processing-base-url") + 1] == (
+        "http://localhost:55007"
+    )
     assert "--derived-state-service" in command
     assert "--market-price-correction-multiplier" not in command
 
@@ -167,6 +171,7 @@ def test_price_burst_command_requests_a_measured_market_price_correction(tmp_pat
         e2e_query_control_plane_url="http://localhost:55004",
         e2e_event_replay_url="http://localhost:55005",
         e2e_financial_reconciliation_url="http://localhost:55006",
+        e2e_transaction_processing_url="http://localhost:55007",
     )
 
     command = build_bank_day_command(
@@ -195,6 +200,7 @@ def test_price_restatement_command_requests_a_five_day_correction_window(
         e2e_query_control_plane_url="http://localhost:55004",
         e2e_event_replay_url="http://localhost:55005",
         e2e_financial_reconciliation_url="http://localhost:55006",
+        e2e_transaction_processing_url="http://localhost:55007",
     )
 
     command = build_bank_day_command(
@@ -224,6 +230,7 @@ def test_fx_restatement_command_requests_a_five_day_direct_pair_correction(
         e2e_query_control_plane_url="http://localhost:55004",
         e2e_event_replay_url="http://localhost:55005",
         e2e_financial_reconciliation_url="http://localhost:55006",
+        e2e_transaction_processing_url="http://localhost:55007",
     )
 
     command = build_bank_day_command(
@@ -286,6 +293,7 @@ def test_prepare_managed_run_uses_complete_derived_state_service_set(
         query_control_base_url=None,
         event_replay_base_url=None,
         reconciliation_base_url=None,
+        transaction_processing_base_url=None,
         host_database_url=None,
     )
 
