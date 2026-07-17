@@ -30,6 +30,7 @@ from scripts.operations.transaction_processing_load_support import (
     CostProcessingExecutionEvidence,
     CostProcessingHistogramEvidence,
     CostProcessingRuntimeEvidence,
+    DatabaseOperationEvidence,
     TransactionProcessingOperationEvidence,
 )
 
@@ -143,6 +144,49 @@ def test_cost_runtime_evidence_collection_rejects_missing_recalculation_metrics(
 
     assert evidence is None
     assert failures == ["cost-processing runtime metrics returned incomplete bounded samples"]
+
+
+def test_database_operation_evidence_collection_preserves_bounded_samples(
+    monkeypatch,
+) -> None:
+    expected = [
+        DatabaseOperationEvidence(
+            repository="CostRepository",
+            method="load",
+            observation_count=100,
+            total_duration_seconds=25.0,
+            average_duration_seconds=0.25,
+        )
+    ]
+    monkeypatch.setattr(
+        bank_day_load_scenario,
+        "database_operation_evidence",
+        lambda **_kwargs: expected,
+    )
+
+    evidence, failures = bank_day_load_scenario._safe_collect_database_operation_evidence(
+        transaction_processing_base_url="http://localhost:8090"
+    )
+
+    assert evidence == expected
+    assert failures == []
+
+
+def test_database_operation_evidence_collection_fails_closed_on_empty_scrape(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        bank_day_load_scenario,
+        "database_operation_evidence",
+        lambda **_kwargs: [],
+    )
+
+    evidence, failures = bank_day_load_scenario._safe_collect_database_operation_evidence(
+        transaction_processing_base_url="http://localhost:8090"
+    )
+
+    assert evidence == []
+    assert failures == ["database operation metrics returned no bounded repository/method samples"]
 
 
 def test_build_instrument_specs_cycles_currencies_and_prices() -> None:
@@ -339,6 +383,7 @@ def test_evaluate_report_flags_tie_out_sample_api_and_log_failures() -> None:
             "transaction_count": 6,
             "transaction_processing_operation_evidence_required": True,
             "cost_processing_runtime_evidence_required": True,
+            "database_operation_evidence_required": True,
             "derived_state_resource_evidence_required": True,
             "market_price_correction_multiplier": "1.05",
             "fx_rate_correction_multiplier": "1.05",
@@ -668,6 +713,7 @@ def test_finalize_report_marks_aborted_runs_as_failed_and_preserves_partial_evid
     assert report.config["transaction_processing_base_url"] == "http://localhost:8090"
     assert report.config["transaction_processing_operation_evidence_required"] is True
     assert report.config["cost_processing_runtime_evidence_required"] is True
+    assert report.config["database_operation_evidence_required"] is True
     assert "load_user" not in str(report.config)
     assert "load_password" not in str(report.config)
     assert "sslmode" not in str(report.config)
