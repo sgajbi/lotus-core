@@ -15,6 +15,7 @@ from portfolio_common.idempotency_repository import IdempotencyRepository
 from portfolio_common.kafka_consumer import BaseConsumer
 from portfolio_common.retry_policy import CONSUMER_DB_SHORT_RETRY, tenacity_retry_kwargs
 from portfolio_common.source_data_product_metadata import stable_content_hash
+from portfolio_common.valuation_job_contracts import ValuationJobUpsert
 from portfolio_common.valuation_job_repository import ValuationJobRepository
 from pydantic import ValidationError
 from sqlalchemy.exc import DBAPIError, OperationalError
@@ -160,14 +161,19 @@ class PriceEventConsumer(BaseConsumer):
                 event.security_id, event.price_date
             ),
         )
-        for portfolio_id, security_id, epoch in open_position_keys:
-            await job_repo.upsert_job(
-                portfolio_id=portfolio_id,
-                security_id=security_id,
-                valuation_date=event.price_date,
-                epoch=epoch,
-                correlation_id=correlation_id,
-                source_correction_id=source_correction_id,
+        if open_position_keys:
+            await job_repo.upsert_jobs(
+                [
+                    ValuationJobUpsert(
+                        portfolio_id=portfolio_id,
+                        security_id=security_id,
+                        valuation_date=event.price_date,
+                        epoch=epoch,
+                        correlation_id=correlation_id,
+                        source_correction_id=source_correction_id,
+                    )
+                    for portfolio_id, security_id, epoch in open_position_keys
+                ],
                 rearm_completed=True,
                 requeue_if_processing=True,
             )

@@ -6,6 +6,7 @@ import pytest
 from portfolio_common.event_mapping import EventContractValidationError
 from portfolio_common.events import GOVERNED_EVENT_SCHEMA_VERSION, MarketPricePersistedEvent
 from portfolio_common.idempotency_repository import IdempotencyRepository
+from portfolio_common.valuation_job_contracts import ValuationJobUpsert
 from portfolio_common.valuation_job_repository import ValuationJobRepository
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -176,7 +177,7 @@ async def test_current_price_without_ready_open_positions_relies_on_position_rea
 
     await consumer.process_message(mock_kafka_message)
 
-    mock_job_repo.upsert_job.assert_not_called()
+    mock_job_repo.upsert_jobs.assert_not_called()
     mock_reprocessing_repo.upsert_state.assert_not_awaited()
     mock_idempotency_repo.claim_event_processing.assert_awaited_once()
 
@@ -199,7 +200,7 @@ async def test_future_dated_price_stages_deferred_reprocessing(
 
     await consumer.process_message(mock_kafka_message)
 
-    mock_job_repo.upsert_job.assert_not_called()
+    mock_job_repo.upsert_jobs.assert_not_called()
     mock_reprocessing_repo.upsert_state.assert_awaited_once_with(
         security_id=mock_event.security_id,
         price_date=mock_event.price_date,
@@ -224,7 +225,7 @@ async def test_price_without_business_date_stages_deferred_reprocessing(
 
     await consumer.process_message(mock_kafka_message)
 
-    mock_job_repo.upsert_job.assert_not_called()
+    mock_job_repo.upsert_jobs.assert_not_called()
     mock_reprocessing_repo.upsert_state.assert_awaited_once_with(
         security_id=mock_event.security_id,
         price_date=mock_event.price_date,
@@ -252,24 +253,26 @@ async def test_current_price_queues_immediate_jobs_for_open_positions(
 
     await consumer.process_message(mock_kafka_message)
 
-    assert mock_job_repo.upsert_job.await_count == 2
-    mock_job_repo.upsert_job.assert_any_await(
-        portfolio_id="P1",
-        security_id=mock_event.security_id,
-        valuation_date=mock_event.price_date,
-        epoch=0,
-        correlation_id=f"PRICE_EVENT_{mock_event.security_id}_{mock_event.price_date.isoformat()}",
-        source_correction_id=_price_source_correction_id(mock_event),
-        rearm_completed=True,
-        requeue_if_processing=True,
-    )
-    mock_job_repo.upsert_job.assert_any_await(
-        portfolio_id="P2",
-        security_id=mock_event.security_id,
-        valuation_date=mock_event.price_date,
-        epoch=1,
-        correlation_id=f"PRICE_EVENT_{mock_event.security_id}_{mock_event.price_date.isoformat()}",
-        source_correction_id=_price_source_correction_id(mock_event),
+    correlation_id = f"PRICE_EVENT_{mock_event.security_id}_{mock_event.price_date.isoformat()}"
+    mock_job_repo.upsert_jobs.assert_awaited_once_with(
+        [
+            ValuationJobUpsert(
+                "P1",
+                mock_event.security_id,
+                mock_event.price_date,
+                0,
+                correlation_id,
+                _price_source_correction_id(mock_event),
+            ),
+            ValuationJobUpsert(
+                "P2",
+                mock_event.security_id,
+                mock_event.price_date,
+                1,
+                correlation_id,
+                _price_source_correction_id(mock_event),
+            ),
+        ],
         rearm_completed=True,
         requeue_if_processing=True,
     )
@@ -296,13 +299,17 @@ async def test_backdated_price_queues_current_date_job_and_flags_reprocessing(
 
     await consumer.process_message(mock_kafka_message)
 
-    mock_job_repo.upsert_job.assert_awaited_once_with(
-        portfolio_id="P1",
-        security_id=mock_event.security_id,
-        valuation_date=mock_event.price_date,
-        epoch=0,
-        correlation_id=f"PRICE_EVENT_{mock_event.security_id}_{mock_event.price_date.isoformat()}",
-        source_correction_id=_price_source_correction_id(mock_event),
+    mock_job_repo.upsert_jobs.assert_awaited_once_with(
+        [
+            ValuationJobUpsert(
+                "P1",
+                mock_event.security_id,
+                mock_event.price_date,
+                0,
+                f"PRICE_EVENT_{mock_event.security_id}_{mock_event.price_date.isoformat()}",
+                _price_source_correction_id(mock_event),
+            )
+        ],
         rearm_completed=True,
         requeue_if_processing=True,
     )
@@ -332,10 +339,9 @@ async def test_price_event_uses_header_correlation_for_direct_processing(
 
     await consumer.process_message(mock_kafka_message)
 
-    assert mock_job_repo.upsert_job.await_args.kwargs["correlation_id"] == "test-corr-id"
-    assert mock_job_repo.upsert_job.await_args.kwargs[
-        "source_correction_id"
-    ] == _price_source_correction_id(mock_event)
+    queued_job = mock_job_repo.upsert_jobs.await_args.args[0][0]
+    assert queued_job.correlation_id == "test-corr-id"
+    assert queued_job.source_correction_id == _price_source_correction_id(mock_event)
     assert mock_idempotency_repo.claim_event_processing.await_args.args[3] == "test-corr-id"
 
 
