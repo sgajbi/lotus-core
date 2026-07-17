@@ -2,7 +2,7 @@
   "schema_version": "lotus-core.architecture-documentation-catalog.v1",
   "repository": "lotus-core",
   "owner": "lotus-core",
-  "catalog_review_date": "2026-07-10",
+  "catalog_review_date": "2026-07-17",
   "guard": "make architecture-docs-catalog-guard",
   "issue": "https://github.com/sgajbi/lotus-core/issues/620",
   "truth_roles": [
@@ -441,6 +441,14 @@
       "owner": "lotus-core",
       "truth_role": "review-evidence",
       "freshness_policy": "Use CODEBASE-REVIEW-LEDGER.md for current status and validation evidence before treating a CR record as implementation truth."
+    },
+    {
+      "glob": "codebase-reviews/*-campaign.json",
+      "type": "stacked-refactor-campaign-manifest",
+      "status": "review-evidence",
+      "owner": "lotus-core",
+      "truth_role": "review-evidence",
+      "freshness_policy": "Update after every tranche merge and use exact-main validation plus final aggregate closure before treating campaign issues as complete."
     },
     {
       "glob": "adr_*.md",
