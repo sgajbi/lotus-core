@@ -34,6 +34,23 @@ class _MetricsResponse:
         'outcome="succeeded",stage="cost"} 30\n'
         'lotus_core_transaction_processing_operations_total{outcome="succeeded",'
         'stage="cost"} 120\n'
+        "# HELP cost_processing_execution_total Cost execution mode.\n"
+        "# TYPE cost_processing_execution_total counter\n"
+        'cost_processing_execution_total{mode="full_rebuild",cost_basis_method="FIFO"} 120\n'
+        "# HELP recalculation_duration_seconds Recalculation duration.\n"
+        "# TYPE recalculation_duration_seconds histogram\n"
+        'recalculation_duration_seconds_bucket{le="+Inf"} 120\n'
+        "recalculation_duration_seconds_count 120\n"
+        "recalculation_duration_seconds_sum 6\n"
+        "# HELP recalculation_depth Recalculation depth.\n"
+        "# TYPE recalculation_depth histogram\n"
+        'recalculation_depth_bucket{le="+Inf"} 120\n'
+        "recalculation_depth_count 120\n"
+        "recalculation_depth_sum 120\n"
+        "# HELP cost_processing_open_lots_restored Restored lots.\n"
+        "# TYPE cost_processing_open_lots_restored histogram\n"
+        'cost_processing_open_lots_restored_count{cost_basis_method="FIFO"} 20\n'
+        'cost_processing_open_lots_restored_sum{cost_basis_method="FIFO"} 30\n'
     )
 
     def raise_for_status(self) -> None:
@@ -84,6 +101,32 @@ def test_transaction_processing_operation_evidence_retains_bounded_stage_timing(
     assert duplicate.operation_count == 60
     assert duplicate.duration_observation_count == 0
     assert duplicate.average_duration_seconds is None
+
+
+def test_cost_processing_runtime_evidence_retains_existing_bounded_metrics(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        transaction_processing_load_support.requests,
+        "get",
+        lambda _url, *, timeout: _MetricsResponse(),
+    )
+
+    evidence = transaction_processing_load_support.cost_processing_runtime_evidence(
+        transaction_processing_base_url="http://localhost:8090"
+    )
+
+    assert evidence.executions[0].mode == "full_rebuild"
+    assert evidence.executions[0].cost_basis_method == "FIFO"
+    assert evidence.executions[0].operation_count == 120
+    assert evidence.recalculation_duration_seconds is not None
+    assert evidence.recalculation_duration_seconds.observation_count == 120
+    assert evidence.recalculation_duration_seconds.total == 6.0
+    assert evidence.recalculation_duration_seconds.average == 0.05
+    assert evidence.recalculation_depth is not None
+    assert evidence.recalculation_depth.average == 1.0
+    assert evidence.restored_open_lots[0].cost_basis_method == "FIFO"
+    assert evidence.restored_open_lots[0].average == 1.5
 
 
 def test_repair_replay_completion_uses_processed_transaction_outcome(monkeypatch) -> None:

@@ -15,6 +15,10 @@ _TRANSACTION_PROCESSING_OPERATION_METRIC = "lotus_core_transaction_processing_op
 _TRANSACTION_PROCESSING_DURATION_METRIC = (
     "lotus_core_transaction_processing_operation_duration_seconds"
 )
+_COST_PROCESSING_EXECUTION_METRIC = "cost_processing_execution_total"
+_COST_RECALCULATION_DURATION_METRIC = "recalculation_duration_seconds"
+_COST_RECALCULATION_DEPTH_METRIC = "recalculation_depth"
+_COST_RESTORED_OPEN_LOTS_METRIC = "cost_processing_open_lots_restored"
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,6 +40,30 @@ class TransactionProcessingOperationEvidence:
     duration_observation_count: int
     total_duration_seconds: float
     average_duration_seconds: float | None
+
+
+@dataclass(frozen=True, slots=True)
+class CostProcessingExecutionEvidence:
+    mode: str
+    cost_basis_method: str
+    operation_count: int
+
+
+@dataclass(frozen=True, slots=True)
+class CostProcessingHistogramEvidence:
+    metric_name: str
+    cost_basis_method: str | None
+    observation_count: int
+    total: float
+    average: float | None
+
+
+@dataclass(frozen=True, slots=True)
+class CostProcessingRuntimeEvidence:
+    executions: list[CostProcessingExecutionEvidence]
+    recalculation_duration_seconds: CostProcessingHistogramEvidence | None
+    recalculation_depth: CostProcessingHistogramEvidence | None
+    restored_open_lots: list[CostProcessingHistogramEvidence]
 
 
 def build_transaction_batch(
@@ -371,6 +399,89 @@ def transaction_processing_operation_evidence(
             )
         )
     return evidence
+
+
+def cost_processing_runtime_evidence(
+    *,
+    transaction_processing_base_url: str,
+) -> CostProcessingRuntimeEvidence:
+    """Collect existing bounded cost execution and recalculation evidence."""
+
+    response = requests.get(
+        f"{transaction_processing_base_url}/metrics",
+        timeout=10,
+    )
+    response.raise_for_status()
+    executions: list[CostProcessingExecutionEvidence] = []
+    histogram_values: dict[tuple[str, str | None], dict[str, float]] = {}
+    histogram_metrics = {
+        _COST_RECALCULATION_DURATION_METRIC,
+        _COST_RECALCULATION_DEPTH_METRIC,
+        _COST_RESTORED_OPEN_LOTS_METRIC,
+    }
+    for family in text_string_to_metric_families(response.text):
+        for sample in family.samples:
+            if sample.name == _COST_PROCESSING_EXECUTION_METRIC:
+                mode = sample.labels.get("mode")
+                method = sample.labels.get("cost_basis_method")
+                if mode is not None and method is not None:
+                    executions.append(
+                        CostProcessingExecutionEvidence(
+                            mode=mode,
+                            cost_basis_method=method,
+                            operation_count=int(sample.value),
+                        )
+                    )
+                continue
+            for metric_name in histogram_metrics:
+                suffix = next(
+                    (
+                        candidate
+                        for candidate in ("count", "sum")
+                        if sample.name == f"{metric_name}_{candidate}"
+                    ),
+                    None,
+                )
+                if suffix is not None:
+                    key = (metric_name, sample.labels.get("cost_basis_method"))
+                    histogram_values.setdefault(key, {})[suffix] = float(sample.value)
+                    break
+
+    histograms = [
+        _build_cost_histogram_evidence(metric_name, method, values)
+        for (metric_name, method), values in sorted(
+            histogram_values.items(),
+            key=lambda item: (item[0][0], item[0][1] or ""),
+        )
+    ]
+    by_metric = {item.metric_name: item for item in histograms if item.cost_basis_method is None}
+    return CostProcessingRuntimeEvidence(
+        executions=sorted(
+            executions,
+            key=lambda item: (item.mode, item.cost_basis_method),
+        ),
+        recalculation_duration_seconds=by_metric.get(_COST_RECALCULATION_DURATION_METRIC),
+        recalculation_depth=by_metric.get(_COST_RECALCULATION_DEPTH_METRIC),
+        restored_open_lots=[
+            item for item in histograms if item.metric_name == _COST_RESTORED_OPEN_LOTS_METRIC
+        ],
+    )
+
+
+def _build_cost_histogram_evidence(
+    metric_name: str,
+    cost_basis_method: str | None,
+    values: dict[str, float],
+) -> CostProcessingHistogramEvidence:
+    count = int(values.get("count", 0.0))
+    total = values.get("sum", 0.0)
+    return CostProcessingHistogramEvidence(
+        metric_name=metric_name,
+        cost_basis_method=cost_basis_method,
+        observation_count=count,
+        total=round(total, 6),
+        average=round(total / count, 9) if count > 0 else None,
+    )
 
 
 def wait_for_transaction_processing_operation_count(

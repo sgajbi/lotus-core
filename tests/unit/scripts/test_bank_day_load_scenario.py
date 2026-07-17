@@ -25,6 +25,9 @@ from scripts.operations.performance.derived_state_resource_monitor import (
     DerivedStateResourceEvidence,
 )
 from scripts.operations.transaction_processing_load_support import (
+    CostProcessingExecutionEvidence,
+    CostProcessingHistogramEvidence,
+    CostProcessingRuntimeEvidence,
     TransactionProcessingOperationEvidence,
 )
 
@@ -76,6 +79,68 @@ def test_operation_evidence_collection_fails_closed_on_empty_scrape(monkeypatch)
 
     assert evidence == []
     assert failures == ["transaction-processing operation metrics returned no bounded samples"]
+
+
+def test_cost_runtime_evidence_collection_preserves_existing_metrics(monkeypatch) -> None:
+    histogram = CostProcessingHistogramEvidence(
+        metric_name="recalculation_duration_seconds",
+        cost_basis_method=None,
+        observation_count=100,
+        total=5.0,
+        average=0.05,
+    )
+    expected = CostProcessingRuntimeEvidence(
+        executions=[
+            CostProcessingExecutionEvidence(
+                mode="full_rebuild",
+                cost_basis_method="FIFO",
+                operation_count=100,
+            )
+        ],
+        recalculation_duration_seconds=histogram,
+        recalculation_depth=CostProcessingHistogramEvidence(
+            metric_name="recalculation_depth",
+            cost_basis_method=None,
+            observation_count=100,
+            total=100.0,
+            average=1.0,
+        ),
+        restored_open_lots=[],
+    )
+    monkeypatch.setattr(
+        bank_day_load_scenario,
+        "cost_processing_runtime_evidence",
+        lambda **_kwargs: expected,
+    )
+
+    evidence, failures = bank_day_load_scenario._safe_collect_cost_processing_runtime_evidence(
+        transaction_processing_base_url="http://localhost:8090"
+    )
+
+    assert evidence == expected
+    assert failures == []
+
+
+def test_cost_runtime_evidence_collection_rejects_missing_recalculation_metrics(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        bank_day_load_scenario,
+        "cost_processing_runtime_evidence",
+        lambda **_kwargs: CostProcessingRuntimeEvidence(
+            executions=[],
+            recalculation_duration_seconds=None,
+            recalculation_depth=None,
+            restored_open_lots=[],
+        ),
+    )
+
+    evidence, failures = bank_day_load_scenario._safe_collect_cost_processing_runtime_evidence(
+        transaction_processing_base_url="http://localhost:8090"
+    )
+
+    assert evidence is None
+    assert failures == ["cost-processing runtime metrics returned incomplete bounded samples"]
 
 
 def test_build_instrument_specs_cycles_currencies_and_prices() -> None:
@@ -228,6 +293,7 @@ def test_evaluate_report_flags_tie_out_sample_api_and_log_failures() -> None:
             "transactions_per_portfolio": 3,
             "transaction_count": 6,
             "transaction_processing_operation_evidence_required": True,
+            "cost_processing_runtime_evidence_required": True,
             "derived_state_resource_evidence_required": True,
             "market_price_correction_multiplier": "1.05",
             "fx_rate_correction_multiplier": "1.05",
@@ -356,6 +422,7 @@ def test_evaluate_report_flags_tie_out_sample_api_and_log_failures() -> None:
     assert any("API probe failed /broken status=500" in failure for failure in failures)
     assert any("svc logged 2 error/traceback lines" in failure for failure in failures)
     assert "transaction-processing operation evidence has no samples" in failures
+    assert "cost-processing runtime evidence is incomplete" in failures
     assert any("derived-state resource evidence has no samples" in failure for failure in failures)
     assert any(
         "market price correction has no completed drain evidence" in failure for failure in failures
@@ -555,6 +622,7 @@ def test_finalize_report_marks_aborted_runs_as_failed_and_preserves_partial_evid
     assert report.config["source_tree_state"] == "clean"
     assert report.config["transaction_processing_base_url"] == "http://localhost:8090"
     assert report.config["transaction_processing_operation_evidence_required"] is True
+    assert report.config["cost_processing_runtime_evidence_required"] is True
     assert "load_user" not in str(report.config)
     assert "load_password" not in str(report.config)
     assert "sslmode" not in str(report.config)

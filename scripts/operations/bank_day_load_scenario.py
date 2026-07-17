@@ -50,7 +50,9 @@ from scripts.operations.performance.market_price_correction import (
     SyntheticInstrumentSpec as InstrumentSpec,
 )
 from scripts.operations.transaction_processing_load_support import (
+    CostProcessingRuntimeEvidence,
     TransactionProcessingOperationEvidence,
+    cost_processing_runtime_evidence,
     transaction_processing_operation_evidence,
 )
 from tests.test_support.runtime.compose_fault_recovery import (
@@ -219,6 +221,7 @@ class ScenarioReport:
     transaction_processing_operation_evidence: (
         list[TransactionProcessingOperationEvidence] | None
     ) = None
+    cost_processing_runtime_evidence: CostProcessingRuntimeEvidence | None = None
     derived_state_resource_evidence: DerivedStateResourceEvidence | None = None
     correction_evidence: DerivedStateCorrectionEvidence | None = None
     fx_correction_evidence: FxDerivedStateCorrectionEvidence | None = None
@@ -1407,6 +1410,13 @@ def _evaluate_report(report: ScenarioReport) -> list[str]:
         and not report.transaction_processing_operation_evidence
     ):
         failures.append("transaction-processing operation evidence has no samples")
+    if report.config.get("cost_processing_runtime_evidence_required") and (
+        report.cost_processing_runtime_evidence is None
+        or not report.cost_processing_runtime_evidence.executions
+        or report.cost_processing_runtime_evidence.recalculation_duration_seconds is None
+        or report.cost_processing_runtime_evidence.recalculation_depth is None
+    ):
+        failures.append("cost-processing runtime evidence is incomplete")
     if report.terminal_status != "complete":
         failures.append(f"scenario terminal_status is {report.terminal_status}")
     tie_out = report.database_tie_out
@@ -1679,6 +1689,17 @@ def _write_report(*, report: ScenarioReport, output_dir: Path) -> tuple[Path, Pa
             ),
             "```",
             "",
+            "## Cost Processing Runtime Evidence",
+            "",
+            "```json",
+            json.dumps(
+                asdict(report.cost_processing_runtime_evidence)
+                if report.cost_processing_runtime_evidence is not None
+                else None,
+                indent=2,
+            ),
+            "```",
+            "",
             "## Derived-State Correction Evidence",
             "",
             "```json",
@@ -1912,6 +1933,25 @@ def _safe_collect_transaction_processing_operation_evidence(
     return evidence, []
 
 
+def _safe_collect_cost_processing_runtime_evidence(
+    *,
+    transaction_processing_base_url: str,
+) -> tuple[CostProcessingRuntimeEvidence | None, list[str]]:
+    try:
+        evidence = cost_processing_runtime_evidence(
+            transaction_processing_base_url=transaction_processing_base_url,
+        )
+    except Exception as exc:
+        return None, [f"failed to collect cost-processing runtime evidence: {exc}"]
+    if (
+        not evidence.executions
+        or evidence.recalculation_duration_seconds is None
+        or evidence.recalculation_depth is None
+    ):
+        return None, ["cost-processing runtime metrics returned incomplete bounded samples"]
+    return evidence, []
+
+
 def _source_provenance() -> dict[str, str | None]:
     """Return source identity without retaining command output or file names."""
 
@@ -1987,6 +2027,7 @@ def _build_config(args: argparse.Namespace, *, resolved_trade_date: str) -> dict
             DEFAULT_TRANSACTION_PROCESSING_BASE_URL,
         ),
         "transaction_processing_operation_evidence_required": True,
+        "cost_processing_runtime_evidence_required": True,
         "derived_state_service": args.derived_state_service,
         "resource_poll_interval_seconds": args.resource_poll_interval_seconds,
         "derived_state_resource_evidence_required": True,
@@ -2037,6 +2078,7 @@ def _finalize_report(
     transaction_processing_operation_evidence: (
         list[TransactionProcessingOperationEvidence] | None
     ) = None,
+    cost_processing_runtime_evidence: CostProcessingRuntimeEvidence | None = None,
     derived_state_resource_evidence: DerivedStateResourceEvidence | None = None,
     correction_evidence: DerivedStateCorrectionEvidence | None = None,
     fx_correction_evidence: FxDerivedStateCorrectionEvidence | None = None,
@@ -2073,6 +2115,7 @@ def _finalize_report(
         checks_passed=False,
         failures=[],
         transaction_processing_operation_evidence=transaction_processing_operation_evidence,
+        cost_processing_runtime_evidence=cost_processing_runtime_evidence,
         derived_state_resource_evidence=derived_state_resource_evidence,
         correction_evidence=correction_evidence,
         fx_correction_evidence=fx_correction_evidence,
@@ -2103,6 +2146,7 @@ def _finalize_report(
         transaction_processing_operation_evidence=(
             report_base.transaction_processing_operation_evidence
         ),
+        cost_processing_runtime_evidence=report_base.cost_processing_runtime_evidence,
         derived_state_resource_evidence=report_base.derived_state_resource_evidence,
         correction_evidence=report_base.correction_evidence,
         fx_correction_evidence=report_base.fx_correction_evidence,
@@ -2560,6 +2604,9 @@ def main() -> int:
             transaction_processing_base_url=args.transaction_processing_base_url,
         )
     )
+    cost_evidence, cost_evidence_failures = _safe_collect_cost_processing_runtime_evidence(
+        transaction_processing_base_url=args.transaction_processing_base_url,
+    )
     report = _finalize_report(
         args=args,
         run_id=run_id,
@@ -2580,8 +2627,10 @@ def main() -> int:
             + tie_out_failures
             + log_failures
             + operation_evidence_failures
+            + cost_evidence_failures
         ),
         transaction_processing_operation_evidence=operation_evidence,
+        cost_processing_runtime_evidence=cost_evidence,
         derived_state_resource_evidence=resource_monitor.evidence(),
         correction_evidence=correction_evidence,
         fx_correction_evidence=fx_correction_evidence,
