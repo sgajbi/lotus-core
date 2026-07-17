@@ -19,6 +19,7 @@ _COST_PROCESSING_EXECUTION_METRIC = "cost_processing_execution_total"
 _COST_RECALCULATION_DURATION_METRIC = "recalculation_duration_seconds"
 _COST_RECALCULATION_DEPTH_METRIC = "recalculation_depth"
 _COST_RESTORED_OPEN_LOTS_METRIC = "cost_processing_open_lots_restored"
+_DATABASE_OPERATION_LATENCY_METRIC = "db_operation_latency_seconds"
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,6 +65,17 @@ class CostProcessingRuntimeEvidence:
     recalculation_duration_seconds: CostProcessingHistogramEvidence | None
     recalculation_depth: CostProcessingHistogramEvidence | None
     restored_open_lots: list[CostProcessingHistogramEvidence]
+
+
+@dataclass(frozen=True, slots=True)
+class DatabaseOperationEvidence:
+    """Retain bounded repository timing without query or business identifiers."""
+
+    repository: str
+    method: str
+    observation_count: int
+    total_duration_seconds: float
+    average_duration_seconds: float | None
 
 
 def build_transaction_batch(
@@ -466,6 +478,56 @@ def cost_processing_runtime_evidence(
             item for item in histograms if item.metric_name == _COST_RESTORED_OPEN_LOTS_METRIC
         ],
     )
+
+
+def database_operation_evidence(
+    *,
+    transaction_processing_base_url: str,
+) -> list[DatabaseOperationEvidence]:
+    """Collect existing low-cardinality repository/method duration evidence."""
+
+    response = requests.get(
+        f"{transaction_processing_base_url}/metrics",
+        timeout=10,
+    )
+    response.raise_for_status()
+    values: dict[tuple[str, str], dict[str, float]] = {}
+    for family in text_string_to_metric_families(response.text):
+        for sample in family.samples:
+            suffix = next(
+                (
+                    candidate
+                    for candidate in ("count", "sum")
+                    if sample.name == f"{_DATABASE_OPERATION_LATENCY_METRIC}_{candidate}"
+                ),
+                None,
+            )
+            if suffix is None:
+                continue
+            repository = sample.labels.get("repository")
+            method = sample.labels.get("method")
+            if repository is None or method is None:
+                continue
+            values.setdefault((repository, method), {})[suffix] = float(sample.value)
+
+    evidence: list[DatabaseOperationEvidence] = []
+    for (repository, method), sample_values in sorted(values.items()):
+        if not {"count", "sum"}.issubset(sample_values):
+            continue
+        count = int(sample_values.get("count", 0.0))
+        if count <= 0:
+            continue
+        total = sample_values.get("sum", 0.0)
+        evidence.append(
+            DatabaseOperationEvidence(
+                repository=repository,
+                method=method,
+                observation_count=count,
+                total_duration_seconds=round(total, 6),
+                average_duration_seconds=round(total / count, 9),
+            )
+        )
+    return evidence
 
 
 def _build_cost_histogram_evidence(
