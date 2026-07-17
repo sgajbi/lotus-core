@@ -10,6 +10,12 @@ from .position_state_repository import PositionStateRepository
 logger = logging.getLogger(__name__)
 
 
+def event_epoch_is_current(message_epoch: int | None, current_epoch: int) -> bool:
+    """Return whether an event belongs to the current or a future position epoch."""
+    resolved_epoch = current_epoch if message_epoch is None else message_epoch
+    return resolved_epoch >= current_epoch
+
+
 class FencedEvent(Protocol):
     """A protocol defining the required attributes for an event to be checked by the fencer."""
 
@@ -46,7 +52,7 @@ class EpochFencer:
 
         message_epoch = event.epoch if event.epoch is not None else current_state.epoch
 
-        if message_epoch < current_state.epoch:
+        if not event_epoch_is_current(event.epoch, current_state.epoch):
             EPOCH_MISMATCH_DROPPED_TOTAL.labels(
                 service_name=self.service_name,
                 topic=getattr(event, "topic", "<unknown>") or "<unknown>",

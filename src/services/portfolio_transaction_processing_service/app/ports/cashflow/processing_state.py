@@ -14,6 +14,7 @@ class CashflowProcessingStatePort(Protocol):
         *,
         correlation_id: str | None,
         traceparent: str | None,
+        locked_position_epoch: int | None = None,
     ) -> bool: ...
 
     async def claim_semantic_event(

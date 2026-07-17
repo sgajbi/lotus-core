@@ -112,6 +112,7 @@ async def test_processor_discards_stale_epoch_from_single_loaded_position_state(
 
     assert result.position_record_count == 0
     assert result.rebuilt_transactions == ()
+    assert result.locked_state_epoch is None
     state_store.get_or_create.assert_awaited_once_with(portfolio_id="PB-001", security_id="SEC-001")
     repository.load_materialization_progress.assert_not_awaited()
     observer.stale_epoch_discarded.assert_called_once_with(
@@ -130,6 +131,7 @@ async def test_processor_materializes_current_history_and_rearms_downstream_gene
 
     assert result.position_record_count == 1
     assert result.rebuilt_transactions == ()
+    assert result.locked_state_epoch == 3
     repository.acquire_replay_lock.assert_awaited_once_with(
         portfolio_id="PB-001", security_id="SEC-001", epoch=3
     )
@@ -190,9 +192,24 @@ async def test_processor_does_not_rearm_generation_when_no_history_is_materializ
     result = await processor.process(_transaction())
 
     assert result.position_record_count == 0
+    assert result.locked_state_epoch is None
     repository.save_records.assert_not_awaited()
     state_store.rearm_generation.assert_not_awaited()
     observer.records_staged.assert_called_once_with(epoch=3, record_count=0)
+    observer.generation_rearmed.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_processor_does_not_expose_epoch_without_state_row_update_lock() -> None:
+    repository, state_store, observer, processor = _ports()
+    transaction = _transaction()
+    repository.list_transactions_from.return_value = (transaction,)
+    state_store.rearm_generation.return_value = False
+
+    result = await processor.process(transaction)
+
+    assert result.position_record_count == 1
+    assert result.locked_state_epoch is None
     observer.generation_rearmed.assert_not_called()
 
 
@@ -248,6 +265,7 @@ async def test_processor_rebuilds_backdated_history_in_advanced_epoch() -> None:
     )
     assert result.position_record_count == 2
     assert result.rebuilt_transactions == expected_rebuilt
+    assert result.locked_state_epoch == 4
     state_store.advance_epoch.assert_awaited_once_with(
         portfolio_id="PB-001",
         security_id="SEC-001",

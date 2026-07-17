@@ -59,6 +59,7 @@ class ProcessTransactionCashflowUseCase:
         correlation_id: str | None,
         traceparent: str | None,
         repair_existing: bool = False,
+        locked_position_epoch: int | None = None,
         calculation_context: CashflowCalculationContext = (
             CashflowCalculationContext.CURRENT_BOOKING
         ),
@@ -69,6 +70,7 @@ class ProcessTransactionCashflowUseCase:
             transaction,
             correlation_id=correlation_id,
             traceparent=traceparent,
+            locked_position_epoch=locked_position_epoch,
         ):
             raise TransactionProcessingRejected(
                 reason_code="cashflow_epoch_rejected",

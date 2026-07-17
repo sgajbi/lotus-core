@@ -186,16 +186,23 @@ class ProcessTransactionUseCase:
                     traceparent=metadata.traceparent,
                 )
             position_results = []
+            locked_position_epochs: dict[tuple[str, str], int] = {}
             for processed_transaction in cost_result.processed_transactions:
                 with self._observer.observe(TransactionProcessingOperation.POSITION):
-                    position_results.append(
-                        await unit_of_work.position.process(
-                            processed_transaction,
-                            correlation_id=metadata.correlation_id,
-                            traceparent=metadata.traceparent,
-                            rebuild_existing=correction_claimed,
-                        )
+                    position_result = await unit_of_work.position.process(
+                        processed_transaction,
+                        correlation_id=metadata.correlation_id,
+                        traceparent=metadata.traceparent,
+                        rebuild_existing=correction_claimed,
                     )
+                    position_results.append(position_result)
+                    if position_result.locked_state_epoch is not None:
+                        locked_position_epochs[
+                            (
+                                processed_transaction.portfolio_id,
+                                processed_transaction.security_id,
+                            )
+                        ] = position_result.locked_state_epoch
             rebuilt_transactions = _rebuilt_position_transactions(position_results)
             financial_effect_transactions = _financial_effect_transactions(
                 cost_result.processed_transactions,
@@ -220,6 +227,12 @@ class ProcessTransactionUseCase:
                             traceparent=metadata.traceparent,
                             repair_existing=(
                                 metadata.processing_intent is TransactionProcessingIntent.REPAIR
+                            ),
+                            locked_position_epoch=locked_position_epochs.get(
+                                (
+                                    cashflow_transaction.portfolio_id,
+                                    cashflow_transaction.security_id,
+                                )
                             ),
                             calculation_context=(
                                 CashflowCalculationContext.HISTORICAL_REBUILD
