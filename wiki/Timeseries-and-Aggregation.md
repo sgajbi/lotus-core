@@ -53,6 +53,11 @@ idle-in-transaction connections, lock waiters, blocked sessions, and CPU/memory 
 one complete database-and-runtime sample. Sampling failures retain only bounded error types in the
 artifact, not command output or connection details.
 
+Each workload artifact also records the emitting checkout's `source_revision` and a non-sensitive
+`source_tree_state` (`clean`, `dirty`, or `unavailable`). This makes retained evidence reproducible
+without persisting filenames or Git command output; it does not elevate local workload evidence to
+CI, deployment, or production certification.
+
 Use `make profile-derived-state-daily` for the 100,000-transaction bank-day shape and
 `make profile-derived-state-fan-in` for one portfolio with 1,000 positions. Use
 `make profile-derived-state-price-burst` to materialize 10,000 shared-instrument positions and then
