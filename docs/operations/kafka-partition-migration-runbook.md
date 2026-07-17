@@ -9,6 +9,24 @@ Core services fail startup when an existing governed topic has a different parti
 is intentional: starting against an unreviewed topology can break domain ordering even when event
 schemas and payloads are unchanged.
 
+## Current Transaction Cutover
+
+The governed contract increases only these transaction paths from `8` to `12` partitions:
+
+- `transactions.raw.received` with `persistence_group_transactions`;
+- `transactions.persisted` with `portfolio_transaction_processing_group`.
+
+Both consumer groups have `max_in_flight_messages=12` and retain
+`per_key_concurrency=1`. All producers use `portfolio_id|security_id`, so same-position events stay
+ordered while independent positions can use the additional capacity. Do not increase only the
+topic or only the consumer profile.
+
+The exact-source fan-in artifact `20260717T003225Z` reduced drain from `110.249s` to `95.247s`
+(`13.61%`) with exact reconciliation, attempts `2/2`, zero repeats/failures, peak active database
+connections `11`, and peak lock waiters/blocked sessions `2/2`. Twelve is deliberately below the
+service's default maximum pool capacity of fifteen connections. A further increase requires fresh
+pool, lock, lag, CPU, and exact-daily evidence.
+
 ## Ordering Invariants
 
 - Kafka ordering is guaranteed only within one partition.

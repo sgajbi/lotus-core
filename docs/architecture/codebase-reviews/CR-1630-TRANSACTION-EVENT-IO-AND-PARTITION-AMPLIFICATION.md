@@ -54,6 +54,8 @@ rearmed and completed `525` times for one final portfolio-day row.
 10. Position materialization progress is one typed application-port value loaded by one SQL
     statement. Separate history-date and completed-snapshot-date methods and round trips were
     removed.
+11. The two transaction topics and their live consumer groups use twelve partitions/in-flight
+    tasks. Same-position concurrency remains one; unrelated topic capacities are unchanged.
 
 ## Measured Result
 
@@ -97,6 +99,10 @@ Subsequent bounded evidence kept measurement claims conservative:
   `2/2`, zero repeats, and closed queues. Drain was `110.249s` versus `110.256s` immediately prior,
   so the claimed improvement is the direct two-to-one port/query reduction and simpler ownership
   contract, not end-to-end throughput.
+- transaction-only 12-way fan-in `20260717T003225Z` completed in `297.619s` with `95.247s`
+  drain, a `13.61%` drain reduction from the 8-way `110.249s` run. It retained exact
+  transaction/job/snapshot/timeseries reconciliation, attempts `2/2`, zero repeats and outbox
+  failures, peak active database connections `11`, and peak lock waiters/blocked sessions `2/2`.
 
 The post-cashflow exact daily run `20260716T210418Z` reached `96,511` completed jobs/snapshots at
 the fixed deadline, up from `95,871` before that persistence change, but still did not satisfy the
@@ -134,9 +140,13 @@ because historical and new keys can map to different partitions after producer r
 - Coalesced progress-read validation passed `19` unit tests, `5` PostgreSQL
   repository/lifecycle/concurrency scenarios, full MyPy and architecture guards, Ruff/format, and
   exact fan-in `20260717T001431Z`.
+- Twelve-way transaction capacity passed `167` focused provisioning, consumer, supportability, and
+  runtime-contract tests; event runtime/contract-pack guards, full MyPy, Ruff/format, complete
+  architecture guards, and exact fan-in `20260717T003225Z` passed.
 
 Implementation commits include `23fc6faf3`, `d51adb739`, `ad1ad179d`, `57f8c60e2`,
-`4f05be9a5`, `c230d660a`, and `f42f6eaa3`. Human contract/context alignment is in `9d6dbbbf9`.
+`4f05be9a5`, `c230d660a`, `f42f6eaa3`, and `d56e14dbf`. Human contract/context alignment starts
+in `9d6dbbbf9`.
 
 ## Documentation Decision
 

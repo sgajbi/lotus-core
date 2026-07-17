@@ -2740,6 +2740,13 @@ Most relevant current governance:
      references, deterministic domain ordering, reconciliation, and portfolio-security database
      locks; do not restore portfolio-wide transport serialization as a substitute for those domain
      controls.
+195. `transactions.raw.received` / `persistence_group_transactions` and
+     `transactions.persisted` / `portfolio_transaction_processing_group` use twelve aligned
+     partitions and in-flight tasks with `per_key_concurrency=1`. This is a measured
+     transaction-only capacity decision: exact fan-in reduced drain `13.61%`, peak active database
+     connections remained `11`, and lock/blocked peaks remained `2/2`. Do not change only one side
+     of the topic/group contract, apply twelve as a global topic default, or increase beyond twelve
+     without exact reconciliation plus pool, lock, lag, CPU, recovery, and daily-volume evidence.
 
 ## Context Maintenance Rule
 
