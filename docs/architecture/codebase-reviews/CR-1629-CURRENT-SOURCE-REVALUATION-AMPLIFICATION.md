@@ -36,27 +36,43 @@ facts.
    same-day snapshot. Missing or older snapshots are queued; snapshots materialized after the
    source fact suppress delayed duplicate notifications; a later source correction becomes
    eligible again.
+8. Price and FX correction writers opt into a single-row in-flight supersession fence. When a
+   different correction lineage meets a `PROCESSING` natural-key valuation job, the row retains
+   its active status and records one durable requeue request. The active owner atomically returns
+   the row to `PENDING` and reports that it did not complete, preventing publication of the stale
+   snapshot. Same-lineage and ordinary readiness duplicates remain non-disruptive. Stale-claim and
+   dispatch recovery consume the same fence without dropping a correction at the retry limit.
 
 ## Compatibility
 
 Public APIs, persisted source-event schemas, Kafka topics, and position valuation formulas are
-unchanged. The intentional internal behavior change removes redundant current-date replay only.
-Backdated and future correction contracts remain unchanged.
+unchanged. Migration `c114b2c3d4f3` adds one non-null, false-defaulted internal queue-fence column.
+The intentional internal behavior change removes redundant current-date replay while preserving a
+newer correction that races with active valuation work. Backdated and future correction contracts
+remain unchanged.
 
 ## Validation
 
 - `97` valuation-orchestrator unit tests passed.
 - `3` focused PostgreSQL price/FX freshness lifecycle tests passed.
+- Review fix-forward proof added `48` focused unit checks and `2` isolated PostgreSQL queue
+  lifecycle scenarios: same-lineage source delivery remains a no-op, while a different correction
+  stays fenced during `PROCESSING`, causes the stale owner to return false, and becomes `PENDING`
+  under the newer correlation.
 - Focused Ruff lint and format checks passed.
 - Full repository `make typecheck` passed for `235` source files.
 - Architecture boundary, domain layer, application workflow policy, and infrastructure adapter
   guards passed.
 
-The implementation commits are `4b8a4c772` and `fd7c71fa5`. The prior failed certifying artifact is
-`output/task-runs/20260716T095705Z-bank-day-load.json`. Fresh runtime evidence remains required
-before issue `#795` can move to fixed-local.
+The implementation commits are `4b8a4c772` and `fd7c71fa5`; the in-flight correction fix-forward
+commit is recorded after signing. The prior failed certifying artifact is
+`output/task-runs/20260716T095705Z-bank-day-load.json`. An initial local lifecycle attempt reused a
+prebuilt migration image at Alembic head `c113b2c3d4f2` and failed because the `c114b2c3d4f3`
+column was absent; it is invalid harness evidence, not a behavior verdict. The branch-local
+migration image and governed `unit-db` rerun passed. Fresh runtime evidence remains required before
+issue `#795` can move to fixed-local.
 
 ## Documentation Decision
 
-Repository context and the bank-day runbook change because the temporal replay invariant changed.
-No public OpenAPI or authored wiki contract changes.
+Repository context changes because the temporal replay invariant now includes active-claim
+supersession. No public OpenAPI, authored wiki, or operator-command contract changes.

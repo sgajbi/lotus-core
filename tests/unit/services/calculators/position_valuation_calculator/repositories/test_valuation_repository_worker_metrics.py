@@ -103,6 +103,35 @@ async def test_find_and_reset_stale_jobs_marks_over_limit_rows_failed(
     reset_metric.assert_not_called()
 
 
+async def test_stale_recovery_preserves_superseding_source_correction_after_attempt_limit(
+    mock_db_session: AsyncMock,
+) -> None:
+    repo = ValuationRepository(mock_db_session)
+    select_result = MagicMock()
+    select_result.all.return_value = [
+        MagicMock(
+            id=202,
+            attempt_count=3,
+            has_newer_epoch=False,
+            requeue_requested=True,
+        )
+    ]
+    reset_result = MagicMock()
+    reset_result.fetchall.return_value = [(202,)]
+    mock_db_session.execute.side_effect = [select_result, reset_result]
+
+    with patch(
+        "src.services.calculators.position_valuation_calculator.app.repositories.valuation_repository.observe_valuation_worker_stale_resets"
+    ) as reset_metric:
+        reset_count = await repo.find_and_reset_stale_jobs(timeout_minutes=15, max_attempts=3)
+
+    assert reset_count == 1
+    reset_metric.assert_called_once_with(1)
+    reset_stmt = mock_db_session.execute.await_args_list[1].args[0]
+    reset_sql = str(reset_stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "SET status='PENDING', requeue_requested=false" in reset_sql
+
+
 async def test_find_and_reset_stale_jobs_skips_superseded_rows_without_emitting_reset_metric(
     mock_db_session: AsyncMock,
 ) -> None:
@@ -173,11 +202,14 @@ async def test_recover_dispatch_failed_jobs_requeues_retryable_and_fails_exhaust
     assert "failure_reason='Scheduler dispatch publish failed" in failed_sql
     assert "portfolio_valuation_jobs.status = 'PROCESSING'" in failed_sql
     assert "portfolio_valuation_jobs.attempt_count >= 3" in failed_sql
+    assert "portfolio_valuation_jobs.requeue_requested IS false" in failed_sql
 
     assert "UPDATE portfolio_valuation_jobs" in pending_sql
     assert "SET status='PENDING'" in pending_sql
     assert "portfolio_valuation_jobs.status = 'PROCESSING'" in pending_sql
     assert "portfolio_valuation_jobs.attempt_count < 3" in pending_sql
+    assert "portfolio_valuation_jobs.requeue_requested IS true" in pending_sql
+    assert "requeue_requested=false" in pending_sql
 
 
 async def test_get_job_queue_stats_returns_pending_failed_and_oldest_pending(
@@ -425,7 +457,7 @@ async def test_update_job_status_trims_portfolio_and_security_ids(
     repo = ValuationRepository(mock_db_session)
 
     result = MagicMock()
-    result.rowcount = 1
+    result.scalar_one_or_none.return_value = "COMPLETED"
     mock_db_session.execute.return_value = result
 
     updated = await repo.update_job_status(
@@ -444,6 +476,8 @@ async def test_update_job_status_trims_portfolio_and_security_ids(
     assert "portfolio_valuation_jobs.valuation_date = '2026-03-27'" in compiled_query
     assert "portfolio_valuation_jobs.epoch = 42" in compiled_query
     assert "portfolio_valuation_jobs.status = 'PROCESSING'" in compiled_query
+    assert "portfolio_valuation_jobs.requeue_requested IS true" in compiled_query
+    assert "RETURNING portfolio_valuation_jobs.status" in compiled_query
 
 
 async def test_get_latest_price_for_position_trims_security_id_before_query(

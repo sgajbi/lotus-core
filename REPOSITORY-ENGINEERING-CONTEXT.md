@@ -2702,7 +2702,13 @@ Most relevant current governance:
      domain policy tests plus workload event-amplification evidence. Immediate source-trigger
      repositories must compare the persisted source row's update time with the same-day valuation
      snapshot: queue missing/older snapshots, suppress notifications already reflected by a newer
-     snapshot, and re-open work when a later correction updates the source row.
+     snapshot, and re-open work when a later correction updates the source row. A current-date
+     source correction that arrives while the natural-key valuation job is `PROCESSING` must use
+     the explicit source-correction requeue fence. Keep the active row `PROCESSING` until its owner
+     reaches a terminal transition, then atomically return the row to `PENDING` under the newer
+     correlation and make the stale owner skip snapshot/outbox side effects. Ordinary readiness
+     duplicates must not set this fence. Claim, stale-reset, and dispatch-recovery paths must clear
+     a consumed fence without discarding a newer correction, including at the normal retry limit.
 
 ## Context Maintenance Rule
 

@@ -158,6 +158,7 @@ class PriceEventConsumer(BaseConsumer):
                 valuation_date=event.price_date,
                 epoch=epoch,
                 correlation_id=correlation_id,
+                requeue_if_processing=True,
             )
         if open_position_keys:
             logger.info(

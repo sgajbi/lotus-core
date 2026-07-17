@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
-from sqlalchemy import and_, func, or_, select, tuple_, update
+from sqlalchemy import and_, case, func, or_, select, tuple_, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
@@ -383,13 +383,24 @@ class ValuationRepositoryBase:
         status: str,
         failure_reason: Optional[str] = None,
     ) -> bool:
+        terminal_status = case(
+            (PortfolioValuationJob.requeue_requested.is_(True), "PENDING"),
+            else_=status,
+        )
         values_to_update = {
-            "status": status,
+            "status": terminal_status,
+            "requeue_requested": False,
             "updated_at": func.now(),
             "attempt_count": PortfolioValuationJob.attempt_count + 1,
+            "failure_reason": case(
+                (PortfolioValuationJob.requeue_requested.is_(True), None),
+                else_=(
+                    failure_reason
+                    if failure_reason is not None
+                    else PortfolioValuationJob.failure_reason
+                ),
+            ),
         }
-        if failure_reason:
-            values_to_update["failure_reason"] = failure_reason
 
         normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
         normalized_security_id = normalize_lookup_identifier(security_id)
@@ -403,9 +414,11 @@ class ValuationRepositoryBase:
                 PortfolioValuationJob.status == "PROCESSING",
             )
             .values(**values_to_update)
+            .returning(PortfolioValuationJob.status)
         )
         result = await self.db.execute(stmt)
-        return result.rowcount == 1
+        applied_status = result.scalar_one_or_none()
+        return applied_status == status
 
     @async_timed(repository="ValuationRepository", method="recover_dispatch_failed_jobs")
     async def recover_dispatch_failed_jobs(
@@ -492,6 +505,7 @@ class ValuationRepositoryBase:
             .where(PortfolioValuationJob.id.in_(eligible_ids))
             .values(
                 status="PROCESSING",
+                requeue_requested=False,
                 updated_at=func.now(),
                 attempt_count=PortfolioValuationJob.attempt_count + 1,
             )
@@ -813,15 +827,25 @@ def _retryable_stale_rows(stale_rows: list[Any], superseded_job_ids: list[int]) 
 
 
 def _over_limit_stale_job_ids(stale_rows: list[Any], max_attempts: int) -> list[int]:
-    return [row.id for row in stale_rows if row.attempt_count >= max_attempts]
+    return [
+        row.id
+        for row in stale_rows
+        if row.attempt_count >= max_attempts and not _requeue_requested(row)
+    ]
 
 
 def _resettable_stale_job_ids(stale_rows: list[Any], max_attempts: int) -> list[int]:
-    return [row.id for row in stale_rows if row.attempt_count < max_attempts]
+    return [
+        row.id for row in stale_rows if row.attempt_count < max_attempts or _requeue_requested(row)
+    ]
 
 
 def _has_newer_epoch(stale_row: Any) -> bool:
     return bool(getattr(stale_row, "has_newer_epoch", False))
+
+
+def _requeue_requested(stale_row: Any) -> bool:
+    return getattr(stale_row, "requeue_requested", False) is True
 
 
 def _stale_valuation_jobs_stmt(stale_threshold: datetime, repository: ValuationRepositoryBase):
@@ -829,6 +853,7 @@ def _stale_valuation_jobs_stmt(stale_threshold: datetime, repository: ValuationR
     return select(
         PortfolioValuationJob.id,
         PortfolioValuationJob.attempt_count,
+        PortfolioValuationJob.requeue_requested,
         repository._newer_epoch_exists(PortfolioValuationJob, newer_epoch).label("has_newer_epoch"),
     ).where(
         PortfolioValuationJob.status == "PROCESSING",
@@ -844,6 +869,7 @@ def _superseded_stale_jobs_update_stmt(
         _stale_jobs_update_stmt(superseded_job_ids, stale_threshold)
         .values(
             status="SKIPPED_SUPERSEDED",
+            requeue_requested=False,
             failure_reason="Superseded by newer valuation epoch.",
             updated_at=func.now(),
         )
@@ -859,6 +885,7 @@ def _failed_stale_jobs_update_stmt(
         _stale_jobs_update_stmt(failed_job_ids, stale_threshold)
         .values(
             status="FAILED",
+            requeue_requested=False,
             failure_reason="Stale processing timeout exceeded max attempts",
             updated_at=func.now(),
         )
@@ -874,6 +901,7 @@ def _reset_stale_jobs_update_stmt(
         _stale_jobs_update_stmt(reset_job_ids, stale_threshold)
         .values(
             status="PENDING",
+            requeue_requested=False,
             updated_at=func.now(),
         )
         .returning(PortfolioValuationJob.id)
@@ -896,8 +924,16 @@ def _dispatch_failed_valuation_jobs_update_stmt(
 ):
     return (
         _dispatch_recovery_valuation_jobs_update_stmt(job_ids)
-        .where(PortfolioValuationJob.attempt_count >= max_attempts)
-        .values(status="FAILED", failure_reason=failure_reason, updated_at=func.now())
+        .where(
+            PortfolioValuationJob.attempt_count >= max_attempts,
+            PortfolioValuationJob.requeue_requested.is_(False),
+        )
+        .values(
+            status="FAILED",
+            requeue_requested=False,
+            failure_reason=failure_reason,
+            updated_at=func.now(),
+        )
         .execution_options(synchronize_session=False)
     )
 
@@ -910,8 +946,18 @@ def _dispatch_retryable_valuation_jobs_update_stmt(
 ):
     return (
         _dispatch_recovery_valuation_jobs_update_stmt(job_ids)
-        .where(PortfolioValuationJob.attempt_count < max_attempts)
-        .values(status="PENDING", failure_reason=failure_reason, updated_at=func.now())
+        .where(
+            or_(
+                PortfolioValuationJob.attempt_count < max_attempts,
+                PortfolioValuationJob.requeue_requested.is_(True),
+            )
+        )
+        .values(
+            status="PENDING",
+            requeue_requested=False,
+            failure_reason=failure_reason,
+            updated_at=func.now(),
+        )
         .execution_options(synchronize_session=False)
     )
 

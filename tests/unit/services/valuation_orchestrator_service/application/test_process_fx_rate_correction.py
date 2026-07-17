@@ -61,6 +61,7 @@ async def test_current_correction_queues_immediate_jobs_without_replay() -> None
         valuation_date=date(2026, 4, 10),
         epoch=3,
         correlation_id="corr-fx-1",
+        requeue_if_processing=True,
     )
 
 
