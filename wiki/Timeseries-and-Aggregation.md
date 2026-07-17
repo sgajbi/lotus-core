@@ -70,6 +70,13 @@ recalculation duration, recalculation depth, and restored-open-lot count/sum/mea
 separate calculator work and replay depth from reference, lock, persistence, and effect-staging work
 before changing the cost path. Initial-opening workloads may legitimately restore no lots.
 
+The bank-day drain fails immediately when all expected transactions and outbox work are durable,
+valuation queues are closed, and a `COMPLETE` valuation job has no matching portfolio/security/date/
+epoch snapshot. Job completion and snapshot persistence are one transaction, so this state is an
+atomicity contradiction rather than ordinary lag. Preserve it as diagnostic evidence and inspect
+lost-ownership logs, attempts, processed-event fences, and Kafka lag; do not extend the drain
+timeout or present the run as capacity proof.
+
 Use `make profile-derived-state-daily` for the 100,000-transaction bank-day shape and
 `make profile-derived-state-fan-in` for one portfolio with 1,000 positions. Use
 `make profile-derived-state-price-burst` to materialize 10,000 shared-instrument positions and then
