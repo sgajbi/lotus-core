@@ -239,6 +239,26 @@ Because these repository timings span cost, cashflow, position, and readiness wo
 not a cost-stage percentage. It narrows the next work to targeted persistence/coordination and
 valuation ownership-transition proof without justifying another broad micro-optimization.
 
+The bounded ownership slice at signed head `45295cf24` replaced the ambiguous internal boolean
+transition result with `TERMINAL_APPLIED`, `REQUEUED`, and `NOT_OWNED`. The valuation processor
+continues to permit snapshot, outbox, and idempotency completion side effects only after
+`TERMINAL_APPLIED`; it now records whether suppression was caused by newer source work or lost
+ownership. The repository contract fails closed if PostgreSQL returns any unsupported applied
+status. This is an internal application/repository diagnostic contract, not a public event or API
+change.
+
+Two consecutive exact clean certifying fan-in runs at that SHA completed without a requeue or
+lost-ownership suppression. `20260717T193156Z` reconciled all `1,000` rows with `105.710s` drain,
+attempts `2/2`, zero repeats, closed outbox, and seven aggregation completion facts.
+`20260717T194013Z` repeated exact reconciliation with `95.645s` drain, attempts `2/2`, zero repeats,
+closed outbox, zero lock waiters/blocked sessions, and exactly one aggregation completion fact.
+Their JSON SHA-256 values are respectively
+`47C1959D3E9113526BDA69AAA6D0F5C983861B9E8E725BCBABB8C5716AC5846A` and
+`63179D93C8DEBABE00F1CE73049DA65153EB6A604F3749681D31DC8F0DA6FCF9`. Both managed teardowns
+removed every run-owned resource and preserved the separately owned 15-container canonical UI
+stack. This closes the bounded ownership-observability investigation but does not replace the
+still-required daily, recovery, poison, duplicate, correction, restatement, and pre-merge proof.
+
 ## Compatibility
 
 HTTP APIs, OpenAPI schemas, Kafka topics, event payload schemas, transaction calculations,
@@ -324,12 +344,20 @@ because historical and new keys can map to different partitions after producer r
 - Exact clean fan-in `20260717T180631Z` failed fast with the measured ownership contradiction and
   retained eleven bounded database series. Managed teardown removed all run-owned containers,
   networks, and volumes while preserving the 15-container canonical UI stack.
+- Terminal-transition classification passed the full unit lane (`4,878` passed, `11` deselected),
+  `41` affected valuation unit tests, `5` isolated real-PostgreSQL ownership/lifecycle tests,
+  focused MyPy, Ruff/format/diff checks, and the complete architecture guard at signed commit
+  `45295cf24`.
+- Exact clean fan-in runs `20260717T193156Z` and `20260717T194013Z` both passed at `45295cf24` with
+  exact reconciliation, attempts `2/2`, zero repeats, closed jobs/outbox, no governed error lines,
+  and zero `REQUEUED` or `NOT_OWNED` suppression warnings. The repeat restored the intended single
+  aggregation completion and `95.645s` drain. Both scoped teardowns preserved canonical UI.
 
 Implementation commits include `23fc6faf3`, `d51adb739`, `ad1ad179d`, `57f8c60e2`,
 `4f05be9a5`, `c230d660a`, `f42f6eaa3`, `d56e14dbf`, `2d49fc8f1`, `70ae16f0f`,
-`a3c9eeaac`, `b7e7e1be2`, `35fb5d84f`, `20333978a`, `37abbf19b`, `6640ec911`, and `37ffa2fad`.
-Evidence alignment continues through `37ffa2fad`; human contract/context alignment starts in
-`9d6dbbbf9`.
+`a3c9eeaac`, `b7e7e1be2`, `35fb5d84f`, `20333978a`, `37abbf19b`, `6640ec911`, `37ffa2fad`, and
+`45295cf24`. Evidence alignment continues through `45295cf24`; human contract/context alignment
+starts in `9d6dbbbf9`.
 
 ## Documentation Decision
 
@@ -347,4 +375,6 @@ bank-day runbook and authored wiki record the fail-fast condition in this slice.
 an OpenAPI, migration, event-contract, or calculation-methodology change. Database-operation
 attribution extends the same generated artifact and runbook contract; it adds no new production
 metric and requires no OpenAPI, migration, event-contract, calculation-methodology, or additional
-wiki-source change.
+wiki-source change. The terminal-transition outcome classification changes only an internal Python
+repository/processor contract and diagnostic log fields. It requires no OpenAPI, migration,
+event-contract, calculation-methodology, operator-runbook, or additional wiki-source change.
