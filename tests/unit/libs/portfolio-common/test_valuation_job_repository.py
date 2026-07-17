@@ -3,9 +3,16 @@ from datetime import date
 from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
+from portfolio_common.valuation_job_contracts import (
+    ValuationJobUpsert as ContractValuationJobUpsert,
+)
 from portfolio_common.valuation_job_repository import ValuationJobRepository, ValuationJobUpsert
 
 pytestmark = pytest.mark.asyncio
+
+
+async def test_repository_preserves_valuation_job_upsert_import_compatibility() -> None:
+    assert ValuationJobUpsert is ContractValuationJobUpsert
 
 
 @pytest.fixture
@@ -266,4 +273,25 @@ async def test_upsert_jobs_deduplicates_duplicate_requests(repository: Valuation
             epoch=1,
             correlation_id="corr-2",
         )
+    ]
+
+
+async def test_upsert_jobs_normalizes_reversed_inputs_to_unique_key_lock_order(
+    repository: ValuationJobRepository,
+):
+    jobs = [
+        ValuationJobUpsert("P2", "S1", date(2025, 8, 9), 1, "corr-3"),
+        ValuationJobUpsert("P1", "S2", date(2025, 8, 10), 1, "corr-2"),
+        ValuationJobUpsert("P1", "S1", date(2025, 8, 11), 2, "corr-1"),
+    ]
+
+    normalized_jobs = repository._normalize_jobs(jobs)
+
+    assert [
+        (job.portfolio_id, job.security_id, job.valuation_date, job.epoch)
+        for job in normalized_jobs
+    ] == [
+        ("P1", "S1", date(2025, 8, 11), 2),
+        ("P1", "S2", date(2025, 8, 10), 1),
+        ("P2", "S1", date(2025, 8, 9), 1),
     ]

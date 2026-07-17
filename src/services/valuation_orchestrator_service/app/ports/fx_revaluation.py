@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from datetime import date
-from typing import Protocol, Sequence
+from typing import Iterable, Protocol, Sequence
+
+from portfolio_common.valuation_job_contracts import ValuationJobUpsert
 
 from ..domain.fx_revaluation import (
     DirectCurrencyPair,
@@ -46,17 +48,13 @@ class FxRevaluationRepository(Protocol):
 class PositionValuationJobWriter(Protocol):
     """Persist idempotent position valuation jobs."""
 
-    async def upsert_job(
+    async def upsert_jobs(
         self,
+        jobs: Iterable[ValuationJobUpsert],
         *,
-        portfolio_id: str,
-        security_id: str,
-        valuation_date: date,
-        epoch: int,
-        correlation_id: str,
         rearm_completed: bool = False,
-    ) -> object:
-        """Stage one position valuation job."""
+    ) -> int:
+        """Stage position valuation jobs in the repository's deterministic lock order."""
 
 
 class PositionWatermarkWriter(Protocol):

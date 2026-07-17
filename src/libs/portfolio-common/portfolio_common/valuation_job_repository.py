@@ -1,6 +1,5 @@
 # src/libs/portfolio-common/portfolio_common/valuation_job_repository.py
 import logging
-from dataclasses import dataclass
 from datetime import date
 from typing import Iterable, Optional
 
@@ -11,17 +10,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from .database_models import PortfolioValuationJob
 from .durable_correlation import durable_correlation_diagnostics
 from .logging_utils import normalize_lineage_value
+from .valuation_job_contracts import ValuationJobUpsert
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass(frozen=True, slots=True)
-class ValuationJobUpsert:
-    portfolio_id: str
-    security_id: str
-    valuation_date: date
-    epoch: int
-    correlation_id: Optional[str] = None
 
 
 class ValuationJobRepository:
@@ -150,7 +141,10 @@ class ValuationJobRepository:
                     normalized_job.epoch,
                 )
             ] = normalized_job
-        return list(normalized_by_scope.values())
+        # PostgreSQL acquires row and unique-index locks in VALUES order. Every caller must use
+        # the same order so overlapping scheduler, price, FX, and readiness transactions cannot
+        # form an inverted lock cycle while upserting the same valuation-job scopes.
+        return [normalized_by_scope[scope] for scope in sorted(normalized_by_scope)]
 
     def _is_stale_job(
         self,
@@ -188,7 +182,8 @@ class ValuationJobRepository:
                 PortfolioValuationJob.valuation_date == valuation_date,
             )
         )
-        return result.scalar_one_or_none()
+        latest_epoch = result.scalar_one_or_none()
+        return int(latest_epoch) if latest_epoch is not None else None
 
     async def get_latest_epochs_for_scopes(
         self, jobs: Iterable[ValuationJobUpsert]

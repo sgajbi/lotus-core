@@ -1288,6 +1288,93 @@ async def test_upsert_jobs_bulk_skips_stale_rows_and_stages_eligible_rows(
     ]
 
 
+async def test_concurrent_reversed_valuation_job_batches_use_one_lock_order(
+    session_factory: async_sessionmaker,
+    clean_db,
+):
+    job_keys = [
+        (f"P-LOCK-{index // 10:02d}", f"S-LOCK-{index % 10:02d}", date(2025, 8, 14), 1)
+        for index in range(100)
+    ]
+    start_barrier = asyncio.Barrier(2)
+
+    async def stage_batch(keys, correlation_id: str) -> int:
+        async with session_factory() as session:
+            async with session.begin():
+                await start_barrier.wait()
+                return await ValuationJobRepository(session).upsert_jobs(
+                    [ValuationJobUpsert(*key, correlation_id) for key in keys]
+                )
+
+    staged_counts = await asyncio.wait_for(
+        asyncio.gather(
+            stage_batch(job_keys, "corr-lock-forward"),
+            stage_batch(reversed(job_keys), "corr-lock-reverse"),
+        ),
+        timeout=15,
+    )
+
+    async with session_factory() as session:
+        persisted_jobs = list(
+            (
+                await session.execute(
+                    select(PortfolioValuationJob).where(
+                        PortfolioValuationJob.portfolio_id.like("P-LOCK-%")
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+    assert staged_counts == [100, 100]
+    assert len(persisted_jobs) == 100
+    assert {job.status for job in persisted_jobs} == {"PENDING"}
+    assert {job.epoch for job in persisted_jobs} == {1}
+
+
+async def test_single_job_scheduling_overlaps_ordered_batch_without_deadlock(
+    session_factory: async_sessionmaker,
+    clean_db,
+):
+    batch_jobs = [
+        ValuationJobUpsert(
+            "P-SINGLE-BATCH",
+            f"S-{index:03d}",
+            date(2025, 8, 15),
+            2,
+            "corr-batch",
+        )
+        for index in reversed(range(100))
+    ]
+    start_barrier = asyncio.Barrier(2)
+
+    async def stage_batch() -> int:
+        async with session_factory() as session:
+            async with session.begin():
+                await start_barrier.wait()
+                return await ValuationJobRepository(session).upsert_jobs(batch_jobs)
+
+    async def stage_single() -> int:
+        async with session_factory() as session:
+            async with session.begin():
+                await start_barrier.wait()
+                return await ValuationJobRepository(session).upsert_job(
+                    portfolio_id="P-SINGLE-BATCH",
+                    security_id="S-050",
+                    valuation_date=date(2025, 8, 15),
+                    epoch=2,
+                    correlation_id="corr-single",
+                )
+
+    staged_counts = await asyncio.wait_for(
+        asyncio.gather(stage_batch(), stage_single()),
+        timeout=15,
+    )
+
+    assert staged_counts == [100, 1]
+
+
 async def test_upsert_job_does_not_rearm_processing_job_with_same_correlation(
     async_db_session: AsyncSession, clean_db
 ):
