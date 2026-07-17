@@ -2772,6 +2772,11 @@ Most relevant current governance:
      another two-hour daily run; if fan-in is neutral or slower, record the result and pause further
      query-level micro-optimization until timing or equivalent stage evidence identifies a material
      bottleneck.
+201. Governed bank-day evidence must scrape the combined transaction-processing runtime before
+     teardown and retain bounded operation counts, duration observation counts, cumulative duration,
+     and mean duration by stage/outcome. Never add business identifiers to these metrics or artifacts.
+     Treat missing samples as a certifying failure and treat cumulative/mean values as bottleneck
+     attribution rather than latency percentiles or SLOs.
 
 ## Context Maintenance Rule
 

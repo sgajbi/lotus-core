@@ -14,11 +14,27 @@ from scripts.operations.performance_load_gate import (
 
 
 class _MetricsResponse:
-    text = """# HELP lotus_core_transaction_processing_operations_total Completed operations.
-# TYPE lotus_core_transaction_processing_operations_total counter
-lotus_core_transaction_processing_operations_total{outcome="processed",stage="transaction"} 120
-lotus_core_transaction_processing_operations_total{outcome="duplicate",stage="transaction"} 60
-"""
+    text = (
+        "# HELP lotus_core_transaction_processing_operations_total Completed operations.\n"
+        "# TYPE lotus_core_transaction_processing_operations_total counter\n"
+        'lotus_core_transaction_processing_operations_total{outcome="processed",'
+        'stage="transaction"} 120\n'
+        'lotus_core_transaction_processing_operations_total{outcome="duplicate",'
+        'stage="transaction"} 60\n'
+        "# HELP lotus_core_transaction_processing_operation_duration_seconds "
+        "Operation duration.\n"
+        "# TYPE lotus_core_transaction_processing_operation_duration_seconds histogram\n"
+        "lotus_core_transaction_processing_operation_duration_seconds_bucket{"
+        'le="0.1",outcome="succeeded",stage="cost"} 80\n'
+        "lotus_core_transaction_processing_operation_duration_seconds_bucket{"
+        'le="+Inf",outcome="succeeded",stage="cost"} 120\n'
+        "lotus_core_transaction_processing_operation_duration_seconds_count{"
+        'outcome="succeeded",stage="cost"} 120\n'
+        "lotus_core_transaction_processing_operation_duration_seconds_sum{"
+        'outcome="succeeded",stage="cost"} 30\n'
+        'lotus_core_transaction_processing_operations_total{outcome="succeeded",'
+        'stage="cost"} 120\n'
+    )
 
     def raise_for_status(self) -> None:
         return None
@@ -43,6 +59,31 @@ def test_transaction_processing_operation_count_reads_bounded_duplicate_metric(
 
     assert count == 60
     assert requested == [("http://localhost:8090/metrics", 10)]
+
+
+def test_transaction_processing_operation_evidence_retains_bounded_stage_timing(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        transaction_processing_load_support.requests,
+        "get",
+        lambda _url, *, timeout: _MetricsResponse(),
+    )
+
+    evidence = transaction_processing_load_support.transaction_processing_operation_evidence(
+        transaction_processing_base_url="http://localhost:8090"
+    )
+
+    cost = next(item for item in evidence if item.stage == "cost")
+    assert cost.outcome == "succeeded"
+    assert cost.operation_count == 120
+    assert cost.duration_observation_count == 120
+    assert cost.total_duration_seconds == 30.0
+    assert cost.average_duration_seconds == 0.25
+    duplicate = next(item for item in evidence if item.outcome == "duplicate")
+    assert duplicate.operation_count == 60
+    assert duplicate.duration_observation_count == 0
+    assert duplicate.average_duration_seconds is None
 
 
 def test_repair_replay_completion_uses_processed_transaction_outcome(monkeypatch) -> None:
