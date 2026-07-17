@@ -74,12 +74,6 @@ rearmed and completed `525` times for one final portfolio-day row.
     unit of work. Cashflow applies the existing epoch rule from that lock-scoped value instead of
     loading the same position state again. No-record, stale, coalesced, and unsuccessful-rearm
     paths retain the database-backed epoch fence.
-17. Shared Kafka consumers retain post-processing synchronous broker acknowledgement but offload
-    the blocking `commit(..., asynchronous=False)` call from the asyncio event-loop thread. This
-    allows independent partitions to wait for acknowledgements concurrently while preserving one
-    active task and ordered commit per partition. Successful processing and durable-DLQ paths use
-    the same execution rule; commit failures remain observable and unacknowledged work remains
-    eligible for at-least-once redelivery.
 
 ## Measured Result
 
@@ -315,10 +309,6 @@ lock or unit-of-work lifetime, and it preserves the existing stale/current/futur
 Cashflow falls back to the database fence unless position processing proves the state-row update
 lock is held. No external API, event, persistence, calculation, or error contract changes.
 
-Synchronous commit executor offload changes only where the existing blocking client call waits. It
-does not change the commit mode, offset value, post-processing order, DLQ prerequisite, shutdown
-drain, topic/group/key identity, or delivery guarantee. Same-partition tasks remain serialized.
-
 The intentional transport behavior change is the transaction partition key:
 `portfolio_id` becomes `portfolio_id|security_id` for raw ingestion, persisted transaction facts,
 and repair replay. Existing deployed topics require the governed pause/drain/cutover procedure
@@ -427,6 +417,3 @@ event-contract, calculation-methodology, operator-runbook, or additional wiki-so
 The lock-scoped position epoch handoff is also an internal unit-of-work optimization and requires
 no OpenAPI, migration, event-contract, calculation-methodology, operator-runbook, or additional
 wiki-source change.
-Synchronous offset-commit offload is likewise an internal shared-consumer execution change. It
-requires focused ordering, failure, DLQ, and shutdown proof but no OpenAPI, migration, event,
-calculation, operator-runbook, or additional wiki-source change.

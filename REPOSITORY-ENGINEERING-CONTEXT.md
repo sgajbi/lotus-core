@@ -2813,14 +2813,6 @@ Most relevant current governance:
      coalesced, or unsuccessful-rearm paths must retain the database-backed `EpochFencer` lookup.
      Do not reuse pre-lock materialization progress or cache an epoch across unit-of-work
      boundaries; both would weaken correction and concurrent-reprocessing fences.
-204. `BaseConsumer` preserves post-processing synchronous offset acknowledgement
-     (`asynchronous=False`) but must execute the blocking Confluent commit outside the asyncio
-     event-loop thread. The regular Confluent Python `Consumer` is thread-safe, while a synchronous
-     commit waits for the broker response; executor offload lets independent partition tasks await
-     their own acknowledgements without serializing unrelated application work. Same-partition
-     processing and commit order, shutdown drain, commit-failure diagnostics, retry/DLQ ownership,
-     and at-least-once redelivery remain mandatory. Do not switch to asynchronous commits without a
-     separately governed callback, failure, shutdown, and offset-ordering contract.
 
 ## Context Maintenance Rule
 
