@@ -53,8 +53,12 @@ class IngestionReplayPublisher(Protocol):
     ) -> None: ...
 
     async def publish_reprocessing_requests(
-        self, transaction_ids: Any, idempotency_key: str | None = None
+        self, targets: Any, idempotency_key: str | None = None
     ) -> None: ...
+
+
+class TransactionReprocessingTargetResolver(Protocol):
+    async def execute(self, transaction_ids: Any) -> Any: ...
 
 
 @dataclass(frozen=True)
@@ -118,17 +122,13 @@ _REPLAY_PAYLOAD_PUBLISHERS = {
         publish_method="publish_portfolio_bundle",
         payload_field=None,
     ),
-    "/reprocess/transactions": _ReplayPayloadPublisher(
-        request_model=ReprocessingRequest,
-        publish_method="publish_reprocessing_requests",
-        payload_field="transaction_ids",
-    ),
 }
 
 
 @dataclass(frozen=True)
 class IngestionServiceReplayPayloadDispatcher:
     ingestion_service: IngestionReplayPublisher
+    reprocessing_target_resolver: TransactionReprocessingTargetResolver
 
     async def replay_payload(
         self,
@@ -137,6 +137,15 @@ class IngestionServiceReplayPayloadDispatcher:
         payload: dict[str, Any],
         idempotency_key: str | None,
     ) -> None:
+        if endpoint == "/reprocess/transactions":
+            request = ReprocessingRequest.model_validate(payload)
+            targets = await self.reprocessing_target_resolver.execute(request.transaction_ids)
+            await self.ingestion_service.publish_reprocessing_requests(
+                targets,
+                idempotency_key=idempotency_key,
+            )
+            return
+
         try:
             publisher = _REPLAY_PAYLOAD_PUBLISHERS[endpoint]
         except KeyError as exc:

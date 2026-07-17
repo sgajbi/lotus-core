@@ -7400,6 +7400,21 @@ async def test_reprocess_transactions_returns_404_for_missing_source_identity(
     mock_kafka_producer.publish_message.assert_not_called()
 
 
+async def test_reprocess_transactions_rejects_blank_source_identity(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    mock_kafka_producer: MagicMock,
+):
+    response = await async_test_client.post(
+        "/reprocess/transactions",
+        json={"transaction_ids": ["  "]},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"][0]["loc"] == ["body", "transaction_ids", 0]
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
 async def test_reprocess_transactions_returns_503_when_source_lookup_is_unavailable(
     async_test_client: httpx.AsyncClient,
     ingestion_test_harness,
