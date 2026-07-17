@@ -48,11 +48,11 @@
       "tranche_id": "tranche-2-throughput-and-certification",
       "branch": "feat/domain-ordered-kafka-partitioning",
       "base_sha": "b9c55792361557bda56ba498492e962225557dd4",
-      "head_sha": "b7e7e1be230fb80337dbe19e75e5e84bcef5159a",
+      "head_sha": "20333978aa0f52d62032334bc9b474edd3c9f4ab",
       "post_merge_main_sha": "pending",
       "required_predecessor_main_sha": "b9c55792361557bda56ba498492e962225557dd4",
       "capability_boundary": "Transactional hot-path throughput, twelve-way capacity, valuation-job lock ordering, and exact workload certification",
-      "commit_count": 30,
+      "commit_count": 33,
       "issue_closure_decision": "close_after_final_validated_main",
       "local_evidence": [
         "Focused #799 unit, domain, lint, format, and type checks pass at signed campaign commits through 349ee126c66415c9bf683baa43b51656e6c8905d",
@@ -61,13 +61,17 @@
         "Cost-reference coalescing at signed 2d49fc8f144b6845a862d067cc689ce2bbad5119 passed 105 focused unit, 74 contract, and 2 real PostgreSQL tests and improved same-host diagnostic fan-in 3.97 percent versus parent",
         "Position-state creation at signed a3c9eeaace53e65d0e5892ba2a20c28a162d02aa reduced the absent-key path from two statements to one, but exact fan-in 20260717T152820Z drained in 110.369 seconds and did not improve the 105.470-second parent baseline",
         "Initial-opening-lot persistence at signed b7e7e1be230fb80337dbe19e75e5e84bcef5159a reduced ordinary first-BUY PostgreSQL statement count from ten to nine, but exact fan-in 20260717T155339Z was neutral at 110.334 seconds; another daily run and further query-level micro-optimization are not justified without stronger material-bottleneck evidence",
+        "Stage-attributed certifying fan-in 20260717T162223Z passed at exact signed head 20333978aa0f52d62032334bc9b474edd3c9f4ab with 110.416-second drain and exact reconciliation; cost contributed 37.18 percent of whole-transaction duration, idempotency 17.69 percent, position 17.37 percent, cashflow 11.72 percent, readiness 9.21 percent, and commit 6.64 percent",
+        "The next investigation requires bounded internal cost timing or query evidence before any further hot-path change or daily rerun; ordered append, full rebuild, method-specific lot state, backdated and correction semantics, and single-writer coordination remain mandatory",
         "Exact daily, recovery, poison, duplicate, price-restatement, and FX-restatement completion evidence remains required before PR readiness"
       ],
       "remote_evidence": [
         "Remote Feature Lane 29578198110 passed at signed cost-reference commit 2d49fc8f144b6845a862d067cc689ce2bbad5119",
         "Remote Feature Lane 29579810885 passed at signed source-provenance head 70ae16f0f51185d914c7b4dd0cb4db59b07a912d",
         "Remote Feature Lane 29591744921 passed at signed position-state fast-path commit a3c9eeaace53e65d0e5892ba2a20c28a162d02aa",
-        "Remote Feature Lane 29593836128 passed at signed initial-opening-lot head b7e7e1be230fb80337dbe19e75e5e84bcef5159a"
+        "Remote Feature Lane 29593836128 passed at signed initial-opening-lot head b7e7e1be230fb80337dbe19e75e5e84bcef5159a",
+        "Remote Feature Lane 29594879442 passed at signed durable-evidence commit 24294a3ff8875d8011f6251fddb032b6c8867a69",
+        "Remote Feature Lane 29595818757 passed at signed stage-evidence and managed-endpoint head 20333978aa0f52d62032334bc9b474edd3c9f4ab"
       ]
     }
   ],
