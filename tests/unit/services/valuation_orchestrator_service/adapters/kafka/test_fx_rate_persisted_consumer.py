@@ -7,6 +7,7 @@ import pytest
 from portfolio_common.event_mapping import EventContractValidationError
 from portfolio_common.events import GOVERNED_EVENT_SCHEMA_VERSION, FxRatePersistedEvent
 from portfolio_common.idempotency_repository import IdempotencyRepository
+from portfolio_common.valuation_job_contracts import ValuationJobUpsert
 from portfolio_common.valuation_job_repository import ValuationJobRepository
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -121,7 +122,7 @@ async def test_exact_observation_replay_is_noop(
 
     dependencies["repository"].stage_durable_replay.assert_not_awaited()
     dependencies["repository"].find_position_keys_requiring_revaluation.assert_not_awaited()
-    dependencies["jobs"].upsert_job.assert_not_awaited()
+    dependencies["jobs"].upsert_jobs.assert_not_awaited()
 
 
 async def test_shared_correlation_still_carries_fx_observation_identity_to_job_fence(
@@ -138,13 +139,18 @@ async def test_shared_correlation_still_carries_fx_observation_identity_to_job_f
 
     await consumer.process_message(message)
 
-    dependencies["jobs"].upsert_job.assert_awaited_once_with(
-        portfolio_id="P1",
-        security_id="USD-BOND",
-        valuation_date=event.rate_date,
-        epoch=2,
-        correlation_id="corr-fx",
-        source_correction_id=event.observation_id,
+    dependencies["jobs"].upsert_jobs.assert_awaited_once_with(
+        [
+            ValuationJobUpsert(
+                portfolio_id="P1",
+                security_id="USD-BOND",
+                valuation_date=event.rate_date,
+                epoch=2,
+                correlation_id="corr-fx",
+                source_correction_id=event.observation_id,
+            )
+        ],
+        rearm_completed=True,
         requeue_if_processing=True,
     )
 
