@@ -48,11 +48,11 @@
       "tranche_id": "tranche-2-throughput-and-certification",
       "branch": "feat/domain-ordered-kafka-partitioning",
       "base_sha": "b9c55792361557bda56ba498492e962225557dd4",
-      "head_sha": "37ffa2fadd37662c34d6f2ae66e7455d1bbd8cb7",
+      "head_sha": "45295cf2417f978911c182572c56062c3dfa46ad",
       "post_merge_main_sha": "pending",
       "required_predecessor_main_sha": "b9c55792361557bda56ba498492e962225557dd4",
       "capability_boundary": "Transactional hot-path throughput, twelve-way capacity, valuation-job lock ordering, and exact workload certification",
-      "commit_count": 40,
+      "commit_count": 42,
       "issue_closure_decision": "close_after_final_validated_main",
       "local_evidence": [
         "Focused #799 unit, domain, lint, format, and type checks pass at signed campaign commits through 349ee126c66415c9bf683baa43b51656e6c8905d",
@@ -70,8 +70,11 @@
         "Signed 37ffa2fadd37662c34d6f2ae66e7455d1bbd8cb7 retains eleven existing low-cardinality repository/method database timing series in the governed artifact and fails closed on missing, incomplete, or zero-observation evidence; 32 focused tests plus scoped MyPy, Ruff, format, and diff checks passed",
         "Exact clean fan-in 20260717T180631Z reproduced the terminal ownership contradiction: 1000 durable transactions and COMPLETE valuation jobs with attempts 2/2, zero repeats, and final outbox 0/0 produced zero snapshots or timeseries rows; the guard failed in 314.102 seconds instead of consuming the full drain timeout",
         "Database timing in 20260717T180631Z totalled 139.978303 seconds across eleven repository operations while pure FIFO recalculation totalled 0.152853 seconds; this narrows future work to targeted persistence, coordination, and valuation ownership-transition proof without attributing the defect to a specific lock or UPSERT",
-        "The next investigation requires database, persistence, or coordination timing evidence and a runtime explanation for the valuation ownership anomaly before any further hot-path change or daily rerun; ordered append, full rebuild, method-specific lot state, backdated and correction semantics, and single-writer coordination remain mandatory",
-        "Exact daily, recovery, poison, duplicate, price-restatement, and FX-restatement completion evidence remains required before PR readiness"
+        "Signed 45295cf2417f978911c182572c56062c3dfa46ad replaces the ambiguous internal valuation transition boolean with TERMINAL_APPLIED, REQUEUED, and NOT_OWNED; completion side effects remain gated on terminal ownership and unsupported applied statuses fail closed",
+        "The ownership slice passed 4878 full-lane unit tests, 41 affected valuation unit tests, 5 isolated real-PostgreSQL ownership and lifecycle tests, focused MyPy, Ruff and format checks, and the complete architecture guard",
+        "Exact clean fan-in 20260717T193156Z passed at 45295cf2417f978911c182572c56062c3dfa46ad with exact 1000 reconciliation, 105.710-second drain, attempts 2/2, zero repeats, closed outbox, zero transition-suppression warnings, and seven aggregation completion facts",
+        "Same-SHA repeat 20260717T194013Z passed with exact 1000 reconciliation, 95.645-second drain, attempts 2/2, zero repeats, closed outbox, zero transition-suppression warnings, zero lock waiters or blocked sessions, and exactly one aggregation completion fact",
+        "The bounded ownership-observability investigation is complete; exact daily, recovery, poison, duplicate, price-restatement, and FX-restatement evidence remains required before PR readiness, and ordered append, full rebuild, method-specific lot state, backdated and correction semantics, and single-writer coordination remain mandatory"
       ],
       "remote_evidence": [
         "Remote Feature Lane 29578198110 passed at signed cost-reference commit 2d49fc8f144b6845a862d067cc689ce2bbad5119",
