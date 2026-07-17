@@ -44,6 +44,13 @@ rearmed and completed `525` times for one final portfolio-day row.
 6. Cross-security corporate-action and linked-leg correctness remains explicit through dependency
    references, deterministic domain ordering/rebuild, reconciliation, and portfolio-security
    database locks rather than portfolio-wide Kafka serialization.
+7. Normal cashflow persistence uses one PostgreSQL conflict-aware insert instead of a savepoint,
+   flush, and refresh sequence; duplicate delivery still returns the authoritative stored row.
+8. Position-history writes and outbox rows rely on the caller-owned unit-of-work commit instead of
+   eager flushes that no caller observes.
+9. Residual per-record success logs in reference persistence, Kafka delivery callbacks, outbox
+   batches, position locking/deletion, and non-cash FX handling use `DEBUG`. The guard scans every
+   persistence repository and rejects the governed messages at `INFO`.
 
 ## Measured Result
 
@@ -68,6 +75,27 @@ No aggregation debounce was added. The repeated aggregation was downstream evide
 upstream arrival and disappeared after the domain-correct partition fix. Adding a timer after that
 result would increase freshness latency without a remaining measured defect.
 
+Subsequent bounded evidence kept measurement claims conservative:
+
+- cashflow persistence fan-in `20260716T205744Z` completed exactly with `105.245s` drain;
+- deferred position-history flush fan-in `20260716T231755Z` completed exactly with `105.234s`
+  drain, effectively unchanged, so the benefit is unit-of-work simplification rather than a claimed
+  throughput gain;
+- two attempts to skip first-position delete/anchor reads were rejected and fully reverted. Moving
+  the lock earlier increased drain to `115.253s`; a concurrency-safe post-lock `MAX` recheck
+  increased it to `110.252s`. The latter aggregate query cost more than the empty delete plus
+  indexed anchor read it replaced;
+- residual hot-path log suppression fan-in `20260717T000106Z` completed with exact `1,000`
+  transaction/job/snapshot/position rows, one portfolio row, attempts `2/2`, zero repeats, zero
+  blocked sessions, and closed outbox queues. Its `110.256s` drain was unchanged from the
+  immediately preceding run, so only the proven log-volume and operational-signal improvement is
+  claimed.
+
+The post-cashflow exact daily run `20260716T210418Z` reached `96,511` completed jobs/snapshots at
+the fixed deadline, up from `95,871` before that persistence change, but still did not satisfy the
+100,000 exact-source acceptance criterion. Another exact daily run is not justified until bounded
+evidence identifies a material remaining transaction-economics improvement.
+
 ## Compatibility
 
 HTTP APIs, OpenAPI schemas, Kafka topics, event payload schemas, transaction calculations,
@@ -91,12 +119,18 @@ because historical and new keys can map to different partitions after producer r
 - Rebuilt diagnostic smoke `20260716T175518Z` completed with exact `10/10` transaction-to-timeseries
   evidence, attempt count `2/2`, zero repeats, and closed queues.
 - Rebuilt certifying fan-in `20260716T183314Z` passed with the measured result above.
+- Cashflow and position-history PostgreSQL lifecycle, duplicate, repair, backdated, and concurrency
+  tests passed before their commits.
+- Residual logging validation passed `76` focused tests, the structured-log and complete
+  architecture guards, full MyPy across `235` files, Ruff/format, and exact fan-in
+  `20260717T000106Z`.
 
-Implementation commits are `23fc6faf3`, `d51adb739`, and `ad1ad179d`. Human contract/context
-alignment is in `9d6dbbbf9`.
+Implementation commits include `23fc6faf3`, `d51adb739`, `ad1ad179d`, `57f8c60e2`,
+`4f05be9a5`, and `c230d660a`. Human contract/context alignment is in `9d6dbbbf9`.
 
 ## Documentation Decision
 
 Repository context, event contracts, ingestion guidance, the endpoint certification audit, and the
 partition migration runbook changed because transport ordering truth changed. No authored wiki or
-public OpenAPI change is required.
+public OpenAPI change is required. The cashflow, position unit-of-work, and residual logging slices
+change no operator workflow or public contract, so they require no additional wiki update.
