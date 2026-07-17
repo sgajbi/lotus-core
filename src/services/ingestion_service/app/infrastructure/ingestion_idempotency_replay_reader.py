@@ -8,8 +8,7 @@ from portfolio_common.database_models import IngestionJob as DBIngestionJob
 from sqlalchemy import and_, desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..DTOs.ingestion_job_dto import IngestionJobResponse
-from ..services.ingestion_job_lifecycle import to_job_response
+from ..ports.ingestion_idempotency_replay import IngestionIdempotencyReplay
 from ..services.ingestion_payload_evidence import (
     ingestion_payload_fingerprint,
     source_safe_payload_fingerprint,
@@ -28,7 +27,7 @@ class SqlAlchemyIngestionIdempotencyReplayReader:
         endpoint: str,
         idempotency_key: str | None,
         request_payload: dict[str, Any] | None,
-    ) -> IngestionJobResponse | None:
+    ) -> IngestionIdempotencyReplay | None:
         if not idempotency_key:
             return None
 
@@ -45,7 +44,10 @@ class SqlAlchemyIngestionIdempotencyReplayReader:
         )
         if existing is None or not _payload_matches(existing, request_payload):
             return None
-        return to_job_response(existing)
+        return IngestionIdempotencyReplay(
+            job_id=str(existing.job_id),
+            accepted_count=int(existing.accepted_count),
+        )
 
 
 def _payload_matches(existing: Any, requested_payload: dict[str, Any] | None) -> bool:

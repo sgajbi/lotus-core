@@ -88,7 +88,7 @@ async def test_matching_current_fingerprint_returns_established_job() -> None:
 
     assert result is not None
     assert result.job_id == "job-existing"
-    assert result.status == "queued"
+    assert result.accepted_count == 2
 
 
 async def test_different_current_fingerprint_does_not_replay() -> None:

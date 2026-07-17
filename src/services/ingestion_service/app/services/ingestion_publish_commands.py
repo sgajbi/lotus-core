@@ -10,7 +10,10 @@ from ..application import (
 )
 from ..DTOs.ingestion_job_dto import IngestionJobResponse
 from ..ops_controls import enforce_ingestion_write_rate_limit
-from ..ports.ingestion_idempotency_replay import IngestionIdempotencyReplayReader
+from ..ports.ingestion_idempotency_replay import (
+    IngestionIdempotencyReplay,
+    IngestionIdempotencyReplayReader,
+)
 from ..ports.transaction_reprocessing import TransactionReprocessingTargetReadError
 from ..request_metadata import create_ingestion_job_id, get_request_lineage
 from .ingestion_job_service import IngestionJobService
@@ -161,7 +164,7 @@ class IngestionPublishCommandHandler:
     @staticmethod
     def _reprocessing_replay_result(
         command: BatchPublishIngestionCommand,
-        job: IngestionJobResponse,
+        job: IngestionIdempotencyReplay | IngestionJobResponse,
     ) -> IngestionCommandResult:
         return IngestionCommandResult(
             message="Duplicate reprocessing request accepted via idempotency replay.",

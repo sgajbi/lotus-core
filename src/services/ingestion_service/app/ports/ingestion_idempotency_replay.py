@@ -2,9 +2,16 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any, Protocol
 
-from ..DTOs.ingestion_job_dto import IngestionJobResponse
+
+@dataclass(frozen=True, slots=True)
+class IngestionIdempotencyReplay:
+    """Minimal established-job evidence required to acknowledge a replay."""
+
+    job_id: str
+    accepted_count: int
 
 
 class IngestionIdempotencyReplayReader(Protocol):
@@ -16,4 +23,4 @@ class IngestionIdempotencyReplayReader(Protocol):
         endpoint: str,
         idempotency_key: str | None,
         request_payload: dict[str, Any] | None,
-    ) -> IngestionJobResponse | None: ...
+    ) -> IngestionIdempotencyReplay | None: ...
