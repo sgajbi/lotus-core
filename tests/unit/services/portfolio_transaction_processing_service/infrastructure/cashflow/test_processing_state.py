@@ -1,5 +1,6 @@
 """Test SQL-backed epoch and semantic cashflow state."""
 
+from dataclasses import replace
 from datetime import datetime, timezone
 from decimal import Decimal
 from unittest.mock import AsyncMock
@@ -70,6 +71,37 @@ async def test_processing_state_checks_epoch_with_cashflow_service_identity(
     event = captured["event"]
     assert getattr(event, "correlation_id") == "corr-001"
     assert getattr(event, "traceparent") == "trace-001"
+
+
+@pytest.mark.parametrize(
+    ("message_epoch", "locked_position_epoch", "expected"),
+    [(None, 3, True), (3, 3, True), (4, 3, True), (2, 3, False)],
+)
+async def test_processing_state_reuses_write_locked_position_epoch_without_database_lookup(
+    monkeypatch: pytest.MonkeyPatch,
+    message_epoch: int | None,
+    locked_position_epoch: int,
+    expected: bool,
+) -> None:
+    class UnexpectedEpochFencer:
+        def __init__(self, *_args: object, **_kwargs: object) -> None:
+            raise AssertionError("database epoch fence must not be rebuilt while row lock is held")
+
+    monkeypatch.setattr(state_module, "EpochFencer", UnexpectedEpochFencer)
+    state = SqlAlchemyCashflowProcessingState(
+        AsyncMock(spec=AsyncSession),
+        AsyncMock(spec=IdempotencyRepository),
+        source_topic="transactions.persisted",
+    )
+
+    accepted = await state.accepts_epoch(
+        replace(_transaction(), epoch=message_epoch),
+        correlation_id="corr-001",
+        traceparent="trace-001",
+        locked_position_epoch=locked_position_epoch,
+    )
+
+    assert accepted is expected
 
 
 async def test_processing_state_claims_semantic_cashflow_identity() -> None:

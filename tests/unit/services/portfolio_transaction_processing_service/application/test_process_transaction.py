@@ -136,10 +136,12 @@ class _Cashflow:
         self.calls = calls
         self.error = error
         self.calculation_contexts: list[CashflowCalculationContext | None] = []
+        self.locked_position_epochs: list[int | None] = []
 
     async def process(self, transaction: BookedTransaction, **kwargs) -> CashflowProcessingResult:
         self.calls.append(f"cashflow:{transaction.transaction_id}:{transaction.epoch or 0}")
         self.calculation_contexts.append(kwargs.get("calculation_context"))
+        self.locked_position_epochs.append(kwargs.get("locked_position_epoch"))
         if self.error is not None:
             raise self.error
         return CashflowProcessingResult(cashflow_record_count=1)
@@ -152,10 +154,12 @@ class _Position:
         *,
         error_on: str | None = None,
         cashflow_rebuild_transactions_by_id: dict[str, tuple[BookedTransaction, ...]] | None = None,
+        locked_state_epoch: int | None = None,
     ) -> None:
         self.calls = calls
         self.error_on = error_on
         self.cashflow_rebuild_transactions_by_id = cashflow_rebuild_transactions_by_id or {}
+        self.locked_state_epoch = locked_state_epoch
         self.rebuild_existing_calls: list[bool] = []
 
     async def process(self, transaction: BookedTransaction, **kwargs) -> PositionProcessingResult:
@@ -170,6 +174,7 @@ class _Position:
                 transaction.transaction_id,
                 (),
             ),
+            locked_state_epoch=self.locked_state_epoch,
         )
 
 
@@ -199,6 +204,7 @@ class _UnitOfWork:
         cashflow_error: Exception | None = None,
         position_error_on: str | None = None,
         cashflow_rebuild_transactions_by_id: dict[str, tuple[BookedTransaction, ...]] | None = None,
+        position_locked_state_epoch: int | None = None,
     ) -> None:
         self.calls = calls
         self.idempotency = _Idempotency(calls, outcome=idempotency_outcome)
@@ -212,6 +218,7 @@ class _UnitOfWork:
             calls,
             error_on=position_error_on,
             cashflow_rebuild_transactions_by_id=cashflow_rebuild_transactions_by_id,
+            locked_state_epoch=position_locked_state_epoch,
         )
         self.readiness = _Readiness(calls)
         self.committed = False
@@ -343,6 +350,19 @@ async def test_use_case_stages_cashflows_from_inline_position_rebuild_epoch() ->
         CashflowCalculationContext.HISTORICAL_REBUILD,
         CashflowCalculationContext.HISTORICAL_REBUILD,
     ]
+
+
+@pytest.mark.asyncio
+async def test_use_case_reuses_write_locked_position_epoch_for_cashflow_fence() -> None:
+    calls: list[str] = []
+    unit_of_work = _UnitOfWork(calls=calls, position_locked_state_epoch=3)
+
+    await ProcessTransactionUseCase(
+        lambda: unit_of_work,
+        observer=_RecordingObserver(),
+    ).execute(_command())
+
+    assert unit_of_work.cashflow.locked_position_epochs == [3]
 
 
 @pytest.mark.asyncio

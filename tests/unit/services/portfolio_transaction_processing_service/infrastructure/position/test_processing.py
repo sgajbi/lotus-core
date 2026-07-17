@@ -37,6 +37,7 @@ async def test_position_adapter_returns_position_and_replay_outcome() -> None:
     processor.process.return_value = PositionHistoryProcessingResult(
         position_record_count=2,
         rebuilt_transactions=(rebuilt_transaction,),
+        locked_state_epoch=4,
     )
     adapter = PositionHistoryProcessingAdapter(processor=processor)
 
@@ -50,4 +51,5 @@ async def test_position_adapter_returns_position_and_replay_outcome() -> None:
     assert result.position_record_count == 2
     assert result.replay_queued is False
     assert result.cashflow_rebuild_transactions == (rebuilt_transaction,)
+    assert result.locked_state_epoch == 4
     processor.process.assert_awaited_once_with(transaction, rebuild_existing=True)

@@ -2806,6 +2806,13 @@ Most relevant current governance:
      exactly one aggregation completion. Treat this as bounded ownership-observability and repeat
      evidence, not as a substitute for daily, recovery, poison, duplicate, correction, or
      restatement certification.
+203. Inside the unified transaction-processing unit of work, cashflow may reuse a position epoch
+     only when position materialization successfully rearmed generation through the position-state
+     `UPDATE`. That update holds the state-row write lock until the caller-owned commit, so the
+     returned epoch is safe for the same transaction and position key. No-record, stale,
+     coalesced, or unsuccessful-rearm paths must retain the database-backed `EpochFencer` lookup.
+     Do not reuse pre-lock materialization progress or cache an epoch across unit-of-work
+     boundaries; both would weaken correction and concurrent-reprocessing fences.
 
 ## Context Maintenance Rule
 

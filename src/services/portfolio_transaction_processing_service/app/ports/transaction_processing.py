@@ -26,6 +26,7 @@ class PositionProcessingResult:
     position_record_count: int = 0
     replay_queued: bool = False
     cashflow_rebuild_transactions: tuple[BookedTransaction, ...] = ()
+    locked_state_epoch: int | None = None
 
 
 class TransactionIdempotencyOutcome(StrEnum):
@@ -74,6 +75,7 @@ class CashflowProcessingPort(Protocol):
         correlation_id: str | None,
         traceparent: str | None,
         repair_existing: bool = False,
+        locked_position_epoch: int | None = None,
         calculation_context: CashflowCalculationContext = (
             CashflowCalculationContext.CURRENT_BOOKING
         ),
