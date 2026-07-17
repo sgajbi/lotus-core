@@ -32,7 +32,7 @@
       "branch": "feat/domain-ordered-kafka-partitioning-contracts",
       "base_sha": "c44d863bb849eddb7c751dab4a02d1be18a3d75f",
       "head_sha": "e4a6b39e4d852508892f908388485c7f8975a878",
-      "post_merge_main_sha": "pending",
+      "post_merge_main_sha": "b9c55792361557bda56ba498492e962225557dd4",
       "capability_boundary": "Domain partition keys, source-owned Kafka capacity, ordered replay, partition migration, and source-freshness scheduling",
       "commit_count": 21,
       "tranche_decision": "Tranche 2 retains throughput tuning, valuation-job lock ordering, exact runtime certification, and aggregate documentation closure.",
@@ -41,25 +41,28 @@
         "84 focused partition, Kafka runtime-contract, replay, ingestion-targeting, and source-scheduling tests pass at the tranche code head"
       ],
       "remote_evidence": [
-        "Remote Feature Lane required at the pushed tranche branch head before PR readiness"
+        "PR #800 merged by the approved rebase/non-squash method; exact main b9c55792361557bda56ba498492e962225557dd4 passed local architecture, migration, documentation, and wiki parity validation"
       ]
     },
     {
       "tranche_id": "tranche-2-throughput-and-certification",
       "branch": "feat/domain-ordered-kafka-partitioning",
-      "base_sha": "pending",
-      "head_sha": "302b3536a0b3de7d82ae11618ced892f71e8fcfe",
+      "base_sha": "b9c55792361557bda56ba498492e962225557dd4",
+      "head_sha": "70ae16f0f51185d914c7b4dd0cb4db59b07a912d",
       "post_merge_main_sha": "pending",
-      "required_predecessor_main_sha": "pending",
+      "required_predecessor_main_sha": "b9c55792361557bda56ba498492e962225557dd4",
       "capability_boundary": "Transactional hot-path throughput, twelve-way capacity, valuation-job lock ordering, and exact workload certification",
-      "commit_count": 23,
+      "commit_count": 26,
       "issue_closure_decision": "close_after_final_validated_main",
       "local_evidence": [
-        "Focused #799 unit, domain, lint, format, and type checks pass at 302b3536a0b3de7d82ae11618ced892f71e8fcfe",
-        "Exact daily, recovery, poison, duplicate, price-restatement, and FX-restatement evidence remains required before PR readiness"
+        "Focused #799 unit, domain, lint, format, and type checks pass at signed campaign commits through 349ee126c66415c9bf683baa43b51656e6c8905d",
+        "Exact daily 20260717T092348Z made all 100,000 source transactions durable but only 83,644 valuation snapshots before the fixed drain deadline; this is a valid transaction-processing capacity failure",
+        "Cost-reference coalescing at signed 2d49fc8f144b6845a862d067cc689ce2bbad5119 passed 105 focused unit, 74 contract, and 2 real PostgreSQL tests and improved same-host diagnostic fan-in 3.97 percent versus parent",
+        "Exact daily, recovery, poison, duplicate, price-restatement, and FX-restatement completion evidence remains required before PR readiness"
       ],
       "remote_evidence": [
-        "Remote Feature Lane 29551105641 is running at 302b3536a0b3de7d82ae11618ced892f71e8fcfe"
+        "Remote Feature Lane 29578198110 passed at signed cost-reference commit 2d49fc8f144b6845a862d067cc689ce2bbad5119",
+        "Remote Feature Lane 29579810885 passed at signed source-provenance head 70ae16f0f51185d914c7b4dd0cb4db59b07a912d"
       ]
     }
   ],

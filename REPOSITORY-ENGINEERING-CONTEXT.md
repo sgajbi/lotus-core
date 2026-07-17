@@ -2740,6 +2740,16 @@ Most relevant current governance:
      connections remained `11`, and lock/blocked peaks remained `2/2`. Do not change only one side
      of the topic/group contract, apply twelve as a global topic default, or increase beyond twelve
      without exact reconciliation plus pool, lock, lag, CPU, recovery, and daily-volume evidence.
+196. Cost-basis processing and AVCO rebuild must resolve portfolio policy and optional instrument
+     facts through one typed application-port bundle and one repository statement. Preserve the
+     distinct missing-portfolio retry and missing-instrument preparation/rebuild behavior. Do not
+     restore one database round trip per reference owner on the transaction-processing hot path;
+     prove the one-statement shape against real PostgreSQL as well as port-level behavior.
+197. Bank-day workload artifacts must record the emitting checkout's exact Git revision and a
+     non-sensitive `source_tree_state` of `clean`, `dirty`, or `unavailable` when repository metadata
+     can be resolved. Never retain changed file names, Git command output, credentials, or raw
+     process configuration in the artifact. Source provenance improves reproducibility but does not
+     promote local evidence to trusted CI, deployment, or production certification.
 
 ## Context Maintenance Rule
 
