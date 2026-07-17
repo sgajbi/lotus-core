@@ -883,7 +883,7 @@ class BaseConsumer(ABC):
 
             await self._dispatch_message_for_processing(msg, loop)
             self._clear_retryable_failure_attempts(msg)
-            processed_successfully = self._commit_after_successful_processing(msg)
+            processed_successfully = await self._commit_after_successful_processing(msg)
 
         except RetryableConsumerError as e:
             retry_exhausted = await self._handle_retryable_processing_error(msg, e)
@@ -1024,7 +1024,7 @@ class BaseConsumer(ABC):
         if dlq_succeeded:
             self._clear_retryable_failure_attempts(msg)
             self._clear_dlq_failure_attempts(msg)
-            self._commit_after_dlq_publication(msg)
+            await self._commit_after_dlq_publication(msg)
             return
         self._handle_dlq_publication_failed(msg, error)
 
@@ -1066,7 +1066,7 @@ class BaseConsumer(ABC):
         if dlq_succeeded:
             self._clear_dlq_failure_attempts(msg)
             self._clear_retryable_failure_attempts(msg)
-            self._commit_after_dlq_publication(msg)
+            await self._commit_after_dlq_publication(msg)
         else:
             self._handle_dlq_publication_failed(msg, error)
 
@@ -1117,9 +1117,20 @@ class BaseConsumer(ABC):
             reason=reason,
         )
 
-    def _commit_after_dlq_publication(self, msg: Message) -> None:
+    async def _commit_message_synchronously(self, msg: Message) -> None:
+        """Wait for broker acknowledgement without blocking the asyncio event loop."""
+        consumer = self._consumer
+        if consumer is None:
+            raise RuntimeError("Kafka consumer must be initialized before committing offsets.")
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(
+            None,
+            functools.partial(consumer.commit, message=msg, asynchronous=False),
+        )
+
+    async def _commit_after_dlq_publication(self, msg: Message) -> None:
         try:
-            self._consumer.commit(message=msg, asynchronous=False)
+            await self._commit_message_synchronously(msg)
             self._observe_committed_message_lag(msg)
         except Exception as commit_error:
             self._record_consumer_event("commit_failed", "dlq_publication")
@@ -1133,9 +1144,9 @@ class BaseConsumer(ABC):
                 error_type=type(commit_error).__name__,
             )
 
-    def _commit_after_successful_processing(self, msg: Message) -> bool:
+    async def _commit_after_successful_processing(self, msg: Message) -> bool:
         try:
-            self._consumer.commit(message=msg, asynchronous=False)
+            await self._commit_message_synchronously(msg)
             self._observe_committed_message_lag(msg)
             return True
         except Exception as commit_error:
