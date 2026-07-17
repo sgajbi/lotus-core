@@ -18,6 +18,9 @@ from sqlalchemy.orm import Session
 from src.services.portfolio_transaction_processing_service.app.infrastructure.position.history_repository import (  # noqa: E501
     SqlAlchemyPositionHistoryRepository,
 )
+from src.services.portfolio_transaction_processing_service.app.ports import (
+    PositionMaterializationProgress,
+)
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration_db, pytest.mark.db_direct]
 
@@ -147,7 +150,7 @@ def position_history_repository_data(db_engine) -> None:
         session.commit()
 
 
-async def test_latest_completed_snapshot_date_is_epoch_scoped(
+async def test_materialization_progress_is_epoch_scoped(
     clean_db,
     position_history_repository_data: None,
     async_db_session: AsyncSession,
@@ -155,37 +158,21 @@ async def test_latest_completed_snapshot_date_is_epoch_scoped(
     del clean_db, position_history_repository_data
     repository = SqlAlchemyPositionHistoryRepository(async_db_session)
 
-    assert await repository.latest_completed_snapshot_date(
+    assert await repository.load_materialization_progress(
         portfolio_id=f" {PORTFOLIO_ID} ", security_id=f" {SECURITY_ID} ", epoch=0
-    ) == date(2025, 8, 5)
-    assert await repository.latest_completed_snapshot_date(
-        portfolio_id=PORTFOLIO_ID, security_id=SECURITY_ID, epoch=1
-    ) == date(2025, 8, 10)
-    assert (
-        await repository.latest_completed_snapshot_date(
-            portfolio_id=PORTFOLIO_ID, security_id=SECURITY_ID, epoch=2
-        )
-        is None
+    ) == PositionMaterializationProgress(
+        latest_history_date=date(2025, 8, 6),
+        latest_completed_snapshot_date=date(2025, 8, 5),
     )
-
-
-async def test_latest_history_date_is_epoch_scoped(
-    clean_db,
-    position_history_repository_data: None,
-    async_db_session: AsyncSession,
-) -> None:
-    del clean_db, position_history_repository_data
-    repository = SqlAlchemyPositionHistoryRepository(async_db_session)
-
-    assert await repository.latest_history_date(
-        portfolio_id=f" {PORTFOLIO_ID} ", security_id=f" {SECURITY_ID} ", epoch=0
-    ) == date(2025, 8, 6)
-    assert await repository.latest_history_date(
+    assert await repository.load_materialization_progress(
         portfolio_id=PORTFOLIO_ID, security_id=SECURITY_ID, epoch=1
-    ) == date(2025, 8, 9)
-    assert (
-        await repository.latest_history_date(
-            portfolio_id=PORTFOLIO_ID, security_id=SECURITY_ID, epoch=2
-        )
-        is None
+    ) == PositionMaterializationProgress(
+        latest_history_date=date(2025, 8, 9),
+        latest_completed_snapshot_date=date(2025, 8, 10),
+    )
+    assert await repository.load_materialization_progress(
+        portfolio_id=PORTFOLIO_ID, security_id=SECURITY_ID, epoch=2
+    ) == PositionMaterializationProgress(
+        latest_history_date=None,
+        latest_completed_snapshot_date=None,
     )

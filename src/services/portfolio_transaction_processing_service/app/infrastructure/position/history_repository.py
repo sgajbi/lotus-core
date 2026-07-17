@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...domain.position.history import PositionHistoryRecord
 from ...domain.transaction.booked import BookedTransaction
+from ...ports.position_history import PositionMaterializationProgress
 
 logger = logging.getLogger(__name__)
 
@@ -84,33 +85,41 @@ class SqlAlchemyPositionHistoryRepository:
             },
         )
 
-    @async_timed(repository="PositionRepository", method="get_latest_completed_snapshot_date")
-    async def latest_completed_snapshot_date(
+    @async_timed(repository="PositionRepository", method="load_materialization_progress")
+    async def load_materialization_progress(
         self, *, portfolio_id: str, security_id: str, epoch: int
-    ) -> date | None:
-        """Return the latest completed daily snapshot date for the position epoch."""
-        statement = select(func.max(DailyPositionSnapshot.date)).where(
-            func.trim(DailyPositionSnapshot.portfolio_id)
-            == normalize_lookup_identifier(portfolio_id),
-            func.trim(DailyPositionSnapshot.security_id)
-            == normalize_lookup_identifier(security_id),
-            DailyPositionSnapshot.epoch == epoch,
+    ) -> PositionMaterializationProgress:
+        """Load both epoch progress boundaries in one database round trip."""
+        normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
+        normalized_security_id = normalize_lookup_identifier(security_id)
+        latest_history_date = (
+            select(func.max(PositionHistory.position_date))
+            .where(
+                func.trim(PositionHistory.portfolio_id) == normalized_portfolio_id,
+                func.trim(PositionHistory.security_id) == normalized_security_id,
+                PositionHistory.epoch == epoch,
+            )
+            .scalar_subquery()
+        )
+        latest_completed_snapshot_date = (
+            select(func.max(DailyPositionSnapshot.date))
+            .where(
+                func.trim(DailyPositionSnapshot.portfolio_id) == normalized_portfolio_id,
+                func.trim(DailyPositionSnapshot.security_id) == normalized_security_id,
+                DailyPositionSnapshot.epoch == epoch,
+            )
+            .scalar_subquery()
+        )
+        statement = select(
+            latest_history_date.label("latest_history_date"),
+            latest_completed_snapshot_date.label("latest_completed_snapshot_date"),
         )
         result = await self._session.execute(statement)
-        return cast(date | None, result.scalar_one_or_none())
-
-    @async_timed(repository="PositionRepository", method="get_latest_position_history_date")
-    async def latest_history_date(
-        self, *, portfolio_id: str, security_id: str, epoch: int
-    ) -> date | None:
-        """Return the latest materialized position-history date for the epoch."""
-        statement = select(func.max(PositionHistory.position_date)).where(
-            func.trim(PositionHistory.portfolio_id) == normalize_lookup_identifier(portfolio_id),
-            func.trim(PositionHistory.security_id) == normalize_lookup_identifier(security_id),
-            PositionHistory.epoch == epoch,
+        history_date, snapshot_date = result.one()
+        return PositionMaterializationProgress(
+            latest_history_date=cast(date | None, history_date),
+            latest_completed_snapshot_date=cast(date | None, snapshot_date),
         )
-        result = await self._session.execute(statement)
-        return cast(date | None, result.scalar_one_or_none())
 
     @async_timed(repository="PositionRepository", method="is_transaction_materialized")
     async def contains_transaction(
