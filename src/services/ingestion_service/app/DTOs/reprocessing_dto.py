@@ -1,11 +1,16 @@
 # src/services/ingestion_service/app/DTOs/reprocessing_dto.py
-from typing import List
+from typing import Annotated, List
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StringConstraints
+
+CanonicalTransactionId = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, min_length=1),
+]
 
 
 class ReprocessingRequest(BaseModel):
-    transaction_ids: List[str] = Field(
+    transaction_ids: List[CanonicalTransactionId] = Field(
         ...,
         min_length=1,
         description=(

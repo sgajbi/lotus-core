@@ -1,7 +1,9 @@
 from fastapi import Depends
 
+from src.services.ingestion_service.app.application import ResolveTransactionReprocessingTargets
 from src.services.ingestion_service.app.dependencies import (
     get_ingestion_service,
+    get_transaction_reprocessing_target_resolver,
 )
 from src.services.ingestion_service.app.services.ingestion_job_service import (
     IngestionJobService,
@@ -22,8 +24,14 @@ from .application.replay_payload_dispatcher import (
 
 def get_replay_payload_dispatcher(
     ingestion_service: IngestionService = Depends(get_ingestion_service),
+    reprocessing_target_resolver: ResolveTransactionReprocessingTargets = Depends(
+        get_transaction_reprocessing_target_resolver
+    ),
 ) -> ReplayPayloadDispatcher:
-    return IngestionServiceReplayPayloadDispatcher(ingestion_service)
+    return IngestionServiceReplayPayloadDispatcher(
+        ingestion_service,
+        reprocessing_target_resolver,
+    )
 
 
 def get_ingestion_retry_command_service(

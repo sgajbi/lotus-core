@@ -11,8 +11,19 @@ import pytest
 from src.services.event_replay_service.app.application.replay_payload_dispatcher import (
     IngestionServiceReplayPayloadDispatcher,
 )
+from src.services.ingestion_service.app.domain import TransactionReprocessingTarget
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
+
+
+def _dispatcher(
+    ingestion_service: MagicMock,
+    *,
+    resolved_targets: tuple[TransactionReprocessingTarget, ...] = (),
+) -> tuple[IngestionServiceReplayPayloadDispatcher, AsyncMock]:
+    resolver = AsyncMock()
+    resolver.execute.return_value = resolved_targets
+    return IngestionServiceReplayPayloadDispatcher(ingestion_service, resolver), resolver
 
 
 def _copy_package_tree(source: Path, destination: Path) -> None:
@@ -61,7 +72,7 @@ async def test_replay_payload_dispatcher_dispatches_list_field_payload_with_idem
     ingestion_service = MagicMock()
     ingestion_service.publish_business_dates = AsyncMock()
 
-    dispatcher = IngestionServiceReplayPayloadDispatcher(ingestion_service)
+    dispatcher, _ = _dispatcher(ingestion_service)
 
     await dispatcher.replay_payload(
         endpoint="/ingest/business-dates",
@@ -80,7 +91,7 @@ async def test_replay_payload_dispatcher_dispatches_whole_portfolio_bundle_reque
     ingestion_service = MagicMock()
     ingestion_service.publish_portfolio_bundle = AsyncMock()
 
-    dispatcher = IngestionServiceReplayPayloadDispatcher(ingestion_service)
+    dispatcher, _ = _dispatcher(ingestion_service)
 
     await dispatcher.replay_payload(
         endpoint="/ingest/portfolio-bundle",
@@ -96,7 +107,7 @@ async def test_replay_payload_dispatcher_dispatches_whole_portfolio_bundle_reque
 
 @pytest.mark.asyncio
 async def test_replay_payload_dispatcher_rejects_unsupported_endpoint() -> None:
-    dispatcher = IngestionServiceReplayPayloadDispatcher(MagicMock())
+    dispatcher, _ = _dispatcher(MagicMock())
 
     with pytest.raises(ValueError, match="Retry not supported"):
         await dispatcher.replay_payload(
@@ -104,3 +115,26 @@ async def test_replay_payload_dispatcher_rejects_unsupported_endpoint() -> None:
             payload={},
             idempotency_key=None,
         )
+
+
+@pytest.mark.asyncio
+async def test_replay_payload_dispatcher_resolves_reprocessing_ordering_targets() -> None:
+    ingestion_service = MagicMock()
+    ingestion_service.publish_reprocessing_requests = AsyncMock()
+    targets = (
+        TransactionReprocessingTarget(transaction_id="TXN-1", portfolio_id="PORT-1"),
+        TransactionReprocessingTarget(transaction_id="TXN-2", portfolio_id="PORT-2"),
+    )
+    dispatcher, resolver = _dispatcher(ingestion_service, resolved_targets=targets)
+
+    await dispatcher.replay_payload(
+        endpoint="/reprocess/transactions",
+        payload={"transaction_ids": [" TXN-1 ", "TXN-2"]},
+        idempotency_key="idem-reprocess",
+    )
+
+    resolver.execute.assert_awaited_once_with(["TXN-1", "TXN-2"])
+    ingestion_service.publish_reprocessing_requests.assert_awaited_once_with(
+        targets,
+        idempotency_key="idem-reprocess",
+    )
