@@ -4,6 +4,7 @@ from datetime import date
 import pytest
 from portfolio_common.database_models import PositionState
 from portfolio_common.position_state_repository import PositionStateRepository
+from sqlalchemy import event as sqlalchemy_event
 from sqlalchemy.ext.asyncio import AsyncSession
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration_db]
@@ -31,6 +32,39 @@ async def test_get_or_create_state_creates_new_record(clean_db, async_db_session
     assert state.epoch == 0
     assert state.watermark_date == date(1970, 1, 1)
     assert state.status == "CURRENT"
+
+
+async def test_get_or_create_state_returns_new_record_without_rereading(
+    clean_db, async_db_session: AsyncSession
+):
+    """A newly inserted position key must require exactly one database round trip."""
+
+    statements: list[str] = []
+
+    def capture_statement(
+        _connection, _cursor, statement, _parameters, _context, _executemany
+    ) -> None:
+        statements.append(" ".join(statement.split()))
+
+    sync_engine = async_db_session.bind.sync_engine
+    sqlalchemy_event.listen(sync_engine, "before_cursor_execute", capture_statement)
+    try:
+        state = await PositionStateRepository(async_db_session).get_or_create_state(
+            "STATE_RETURNING_P1",
+            "STATE_RETURNING_S1",
+        )
+    finally:
+        sqlalchemy_event.remove(sync_engine, "before_cursor_execute", capture_statement)
+
+    position_state_statements = [
+        statement for statement in statements if "position_state" in statement.lower()
+    ]
+    assert len(position_state_statements) == 1
+    assert position_state_statements[0].startswith("INSERT INTO position_state")
+    assert "ON CONFLICT (portfolio_id, security_id) DO NOTHING" in position_state_statements[0]
+    assert "RETURNING" in position_state_statements[0]
+    assert state.portfolio_id == "STATE_RETURNING_P1"
+    assert state.security_id == "STATE_RETURNING_S1"
 
 
 async def test_get_or_create_state_is_idempotent(clean_db, async_db_session: AsyncSession):
