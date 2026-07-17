@@ -50,9 +50,13 @@ class MarketPriceRepository:
 
         result = await self.db.execute(stmt)
         portfolio_ids = result.scalars().all()
-        logger.info(
-            f"Found {len(portfolio_ids)} portfolios with an open position in "
-            f"'{security_id}' on or before {price_date}."
+        logger.debug(
+            "Loaded portfolios with an open position for market-price propagation.",
+            extra={
+                "security_id": security_id,
+                "price_date": price_date.isoformat(),
+                "portfolio_count": len(portfolio_ids),
+            },
         )
         return portfolio_ids
 
@@ -76,16 +80,22 @@ class MarketPriceRepository:
             )
 
             await self.db.execute(final_stmt)
-            logger.info(
-                "Successfully staged UPSERT for market price for "
-                f"'{event.security_id}' on '{event.price_date}'."
+            logger.debug(
+                "Staged market price upsert.",
+                extra={
+                    "security_id": event.security_id,
+                    "price_date": event.price_date.isoformat(),
+                },
             )
 
             return DBMarketPrice(**market_price_data)
-        except Exception as e:
+        except Exception:
             logger.error(
-                "Failed to stage UPSERT for market price for "
-                f"'{event.security_id}' on '{event.price_date}': {e}",
+                "Failed to stage market price upsert.",
+                extra={
+                    "security_id": event.security_id,
+                    "price_date": event.price_date.isoformat(),
+                },
                 exc_info=True,
             )
             raise

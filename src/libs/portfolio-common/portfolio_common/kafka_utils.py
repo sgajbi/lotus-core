@@ -313,7 +313,7 @@ def _handle_delivery_success(
     outbox_id: Optional[str],
     on_delivery: Optional[Callable[[str, bool, Optional[str]], None]],
 ) -> None:
-    logger.info(
+    logger.debug(
         "Kafka message delivered.",
         extra=_delivery_log_extra(msg),
     )

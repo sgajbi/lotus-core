@@ -74,7 +74,7 @@ class SqlAlchemyPositionHistoryRepository:
             outcome="acquired",
             seconds=wait_seconds,
         )
-        logger.info(
+        logger.debug(
             "Position history replay lock acquired.",
             extra={
                 "portfolio_id": normalize_lookup_identifier(portfolio_id),
@@ -212,7 +212,7 @@ class SqlAlchemyPositionHistoryRepository:
         )
         result = await self._session.execute(statement)
         deleted_count = result.rowcount or 0
-        logger.info(
+        logger.debug(
             "Deleted stale position history records.",
             extra={
                 "portfolio_id": normalize_lookup_identifier(portfolio_id),

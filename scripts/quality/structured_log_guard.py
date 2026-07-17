@@ -21,7 +21,7 @@ DEFAULT_SCAN_PATHS = (
     Path("src/libs/portfolio-common/portfolio_common/outbox_repository.py"),
     Path("src/libs/portfolio-common/portfolio_common/outbox_dispatcher.py"),
     Path("src/services/ingestion_service/app/routers/reprocessing.py"),
-    Path("src/services/persistence_service/app/repositories/transaction_db_repo.py"),
+    Path("src/services/persistence_service/app/repositories"),
     Path(
         "src/services/portfolio_transaction_processing_service/app/delivery/kafka/"
         "transaction_processing_consumer.py"
@@ -39,16 +39,28 @@ HIGH_VOLUME_DEBUG_ONLY_MESSAGES = frozenset(
     {
         "Calculated cashflow for transaction %s: amount=%s classification=%s",
         "Cost-basis processing lock acquired.",
+        "Deleted stale position history records.",
+        "Kafka message delivered.",
+        "Loaded portfolios with an open position for market-price propagation.",
         "Outbox event staged",
+        "Outbox dispatcher flush completed.",
+        "Outbox dispatcher marked events as processed.",
+        "Position history replay lock acquired.",
         "Position-timeseries materialization completed.",
         "Processing valuation job.",
         "Re-armed valuation and timeseries generation after position history write.",
         "Staged portfolio aggregation jobs.",
+        "Staged business date upsert.",
+        "Staged FX rate upsert.",
+        "Staged instrument upsert.",
+        "Staged market price upsert.",
+        "Staged portfolio upsert.",
         "Staged position history records for the recalculation epoch.",
         "Staged position history records.",
         "Staged portfolio time-series upsert.",
         "Staged position time-series upsert.",
         "Successfully staged cashflow record for transaction_id '%s' in epoch %s",
+        "Skipping cashflow creation for non-cash FX contract lifecycle event.",
         "Transaction processing completed.",
         "Transaction upsert staged.",
     }
