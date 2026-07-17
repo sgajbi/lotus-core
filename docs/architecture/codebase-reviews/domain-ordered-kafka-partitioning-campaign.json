@@ -1,0 +1,70 @@
+{
+  "schema_version": "lotus.stacked-refactor-campaign.v1",
+  "campaign_id": "lotus-core-domain-ordered-kafka-partitioning-2026q3",
+  "repository": "lotus-core",
+  "base_branch": "main",
+  "issue_closure_policy": "final_validated_main_only",
+  "commit_budget": {
+    "warning_at": 40,
+    "split_required_at": 60,
+    "fail_above": 90
+  },
+  "campaign_issues": [
+    {
+      "repo": "sgajbi/lotus-core",
+      "number": 795,
+      "final_close_required": true
+    },
+    {
+      "repo": "sgajbi/lotus-core",
+      "number": 794,
+      "final_close_required": true
+    },
+    {
+      "repo": "sgajbi/lotus-core",
+      "number": 799,
+      "final_close_required": true
+    }
+  ],
+  "tranches": [
+    {
+      "tranche_id": "tranche-1-partition-and-replay-contracts",
+      "branch": "feat/domain-ordered-kafka-partitioning-contracts",
+      "base_sha": "c44d863bb849eddb7c751dab4a02d1be18a3d75f",
+      "head_sha": "e4a6b39e4d852508892f908388485c7f8975a878",
+      "post_merge_main_sha": "pending",
+      "capability_boundary": "Domain partition keys, source-owned Kafka capacity, ordered replay, partition migration, and source-freshness scheduling",
+      "commit_count": 21,
+      "tranche_decision": "Tranche 2 retains throughput tuning, valuation-job lock ordering, exact runtime certification, and aggregate documentation closure.",
+      "issue_closure_decision": "keep_campaign_issues_open",
+      "local_evidence": [
+        "84 focused partition, Kafka runtime-contract, replay, ingestion-targeting, and source-scheduling tests pass at the tranche code head"
+      ],
+      "remote_evidence": [
+        "Remote Feature Lane required at the pushed tranche branch head before PR readiness"
+      ]
+    },
+    {
+      "tranche_id": "tranche-2-throughput-and-certification",
+      "branch": "feat/domain-ordered-kafka-partitioning",
+      "base_sha": "pending",
+      "head_sha": "302b3536a0b3de7d82ae11618ced892f71e8fcfe",
+      "post_merge_main_sha": "pending",
+      "required_predecessor_main_sha": "pending",
+      "capability_boundary": "Transactional hot-path throughput, twelve-way capacity, valuation-job lock ordering, and exact workload certification",
+      "commit_count": 23,
+      "issue_closure_decision": "close_after_final_validated_main",
+      "local_evidence": [
+        "Focused #799 unit, domain, lint, format, and type checks pass at 302b3536a0b3de7d82ae11618ced892f71e8fcfe",
+        "Exact daily, recovery, poison, duplicate, price-restatement, and FX-restatement evidence remains required before PR readiness"
+      ],
+      "remote_evidence": [
+        "Remote Feature Lane 29551105641 is running at 302b3536a0b3de7d82ae11618ced892f71e8fcfe"
+      ]
+    }
+  ],
+  "final_aggregate_closure": {
+    "status": "open",
+    "campaign_issues_closed": false
+  }
+}
