@@ -56,6 +56,12 @@ rearmed and completed `525` times for one final portfolio-day row.
     removed.
 11. The two transaction topics and their live consumer groups use twelve partitions/in-flight
     tasks. Same-position concurrency remains one; unrelated topic capacities are unchanged.
+12. Cost-basis processing and AVCO rebuild load portfolio policy plus optional instrument facts
+    through one typed application-port bundle and one SQL statement. Missing portfolio and missing
+    instrument behavior remain distinct; no calculation or retry contract changed.
+13. Retained workload artifacts record the emitting Git revision and a non-sensitive clean, dirty,
+    or unavailable tree state. Local evidence remains subordinate to trusted CI and deployment
+    receipts even when its source revision is present.
 
 ## Measured Result
 
@@ -109,10 +115,33 @@ the fixed deadline, up from `95,871` before that persistence change, but still d
 100,000 exact-source acceptance criterion. Another exact daily run is not justified until bounded
 evidence identifies a material remaining transaction-economics improvement.
 
+The exact post-twelve-way daily run `20260717T092348Z` made all `100,000` source transactions
+durable but reached only `83,644` complete valuation snapshots, `83,398` position-timeseries rows,
+and `916` portfolio-timeseries rows before the fixed two-hour drain deadline. Valuation attempts
+remained `2/2`, repeated-processing count remained `0`, and failed outbox count remained `0`.
+Topic creation counts isolated the tail to transaction processing: `transactions.persisted`
+reached `100,000`, while `transaction_processing.ready`, `transactions.cost.processed`,
+`cashflows.calculated`, and `portfolio_security_day.valuation.ready` each reached `83,644`.
+Downstream stages kept pace with the facts they received. This is valid capacity-failure evidence,
+not infrastructure or outbox failure evidence. The failure artifact's `drain_seconds = 0` despite a
+two-hour drain remains diagnostic debt under #730.
+
+The cost-reference bundle passed exact same-host diagnostic A/B evidence under shared Docker load:
+parent `349ee126c` drained in `125.478s`, while signed implementation `2d49fc8f1` drained in
+`120.492s`, a `4.986s` / `3.97%` relative improvement with exact reconciliation. The result supports
+retaining the direct two-to-one query reduction, but both runs remained materially slower than the
+governed `95.247s` baseline. A concurrent actor changed only runner provenance/docs/tests/wiki
+during the parent run, so the A/B result is attribution evidence rather than standalone
+certification. It does not justify another 100,000-transaction daily run.
+
 ## Compatibility
 
 HTTP APIs, OpenAPI schemas, Kafka topics, event payload schemas, transaction calculations,
 idempotency identities, outbox atomicity, and database schemas are unchanged.
+
+The workload JSON config changes additively with `source_revision` and `source_tree_state`; neither
+field contains file names, command output, credentials, or runtime configuration. Their presence
+does not elevate local workload evidence to CI or production certification.
 
 The intentional transport behavior change is the transaction partition key:
 `portfolio_id` becomes `portfolio_id|security_id` for raw ingestion, persisted transaction facts,
@@ -143,14 +172,25 @@ because historical and new keys can map to different partitions after producer r
 - Twelve-way transaction capacity passed `167` focused provisioning, consumer, supportability, and
   runtime-contract tests; event runtime/contract-pack guards, full MyPy, Ruff/format, complete
   architecture guards, and exact fan-in `20260717T003225Z` passed.
+- Cost-reference coalescing passed `105` focused unit tests, `74` transaction-processing contract
+  tests, `2` real PostgreSQL integration tests including a one-statement guard, full MyPy across
+  `235` source files, Ruff/format, and complete architecture guards. Remote Feature Lane
+  `29578198110` passed at signed commit `2d49fc8f1`.
+- Exact fan-in `20260717T115854Z` completed with exact `1,000` reconciliation, attempts `2/2`, zero
+  repeats/open jobs/outbox failures, and `120.492s` drain. Parent diagnostic
+  `20260717T121025Z` completed equivalently with `125.478s` drain.
+- Source-provenance runner tests passed `14` cases with touched Ruff/format and diff checks at signed
+  commit `70ae16f0f`; exact-head Remote Feature Lane `29579810885` passed.
 
 Implementation commits include `23fc6faf3`, `d51adb739`, `ad1ad179d`, `57f8c60e2`,
-`4f05be9a5`, `c230d660a`, `f42f6eaa3`, and `d56e14dbf`. Human contract/context alignment starts
-in `9d6dbbbf9`.
+`4f05be9a5`, `c230d660a`, `f42f6eaa3`, `d56e14dbf`, `2d49fc8f1`, and `70ae16f0f`. Human
+contract/context alignment starts in `9d6dbbbf9`.
 
 ## Documentation Decision
 
 Repository context, event contracts, ingestion guidance, the endpoint certification audit, and the
-partition migration runbook changed because transport ordering truth changed. No authored wiki or
-public OpenAPI change is required. The cashflow, position unit-of-work, and residual logging slices
-change no operator workflow or public contract, so they require no additional wiki update.
+partition migration runbook changed because transport ordering truth changed. The workload
+provenance contract also changes operations guidance and authored `wiki/` source; publish and verify
+wiki parity after merge. No public OpenAPI change is required. The cashflow, position unit-of-work,
+residual logging, and cost-reference slices change no public or operator workflow beyond the
+recorded workload evidence fields.
