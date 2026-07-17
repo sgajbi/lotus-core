@@ -251,17 +251,17 @@ async def test_scheduler_batches_backfill_jobs_across_states_in_bounded_chunks(
     states_to_backfill = [
         PositionState(
             portfolio_id="P1",
-            security_id="S1",
-            watermark_date=date(2025, 8, 10),
-            epoch=1,
-            updated_at=datetime(2025, 8, 10, 9, 30, tzinfo=timezone.utc),
-        ),
-        PositionState(
-            portfolio_id="P1",
             security_id="S2",
             watermark_date=date(2025, 8, 11),
             epoch=1,
             updated_at=datetime(2025, 8, 11, 9, 30, tzinfo=timezone.utc),
+        ),
+        PositionState(
+            portfolio_id="P1",
+            security_id="S1",
+            watermark_date=date(2025, 8, 10),
+            epoch=1,
+            updated_at=datetime(2025, 8, 10, 9, 30, tzinfo=timezone.utc),
         ),
     ]
 

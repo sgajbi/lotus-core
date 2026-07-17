@@ -4,6 +4,7 @@ from datetime import date, datetime, timezone
 from unittest.mock import AsyncMock, call
 
 import pytest
+from portfolio_common.valuation_job_contracts import ValuationJobUpsert
 
 from src.services.valuation_orchestrator_service.app.application.process_fx_rate_correction import (
     ProcessFxRateCorrection,
@@ -59,13 +60,17 @@ async def test_current_correction_queues_immediate_jobs_without_replay() -> None
     assert result.pair.key == "USD->SGD"
     assert result.durable_replay_staged is False
     repository.stage_durable_replay.assert_not_awaited()
-    valuation_jobs.upsert_job.assert_awaited_once_with(
-        portfolio_id="P-SGD",
-        security_id="USD-BOND",
-        valuation_date=date(2026, 4, 10),
-        epoch=3,
-        correlation_id="corr-fx-1",
-        source_correction_id="sha256:" + ("1" * 64),
+    valuation_jobs.upsert_jobs.assert_awaited_once_with(
+        [
+            ValuationJobUpsert(
+                "P-SGD",
+                "USD-BOND",
+                date(2026, 4, 10),
+                3,
+                "corr-fx-1",
+                "sha256:" + ("1" * 64),
+            )
+        ],
         rearm_completed=True,
         requeue_if_processing=True,
     )
@@ -81,7 +86,7 @@ async def test_backdated_correction_queues_visible_keys_and_preserves_replay() -
     ]
     parent = AsyncMock()
     parent.attach_mock(repository.stage_durable_replay, "stage_replay")
-    parent.attach_mock(valuation_jobs.upsert_job, "upsert_job")
+    parent.attach_mock(valuation_jobs.upsert_jobs, "upsert_jobs")
 
     result = await handler.execute(
         correction=correction(),
@@ -95,7 +100,28 @@ async def test_backdated_correction_queues_visible_keys_and_preserves_replay() -
         correction=correction(),
         correlation_id="corr-backdated",
     )
-    assert valuation_jobs.upsert_job.await_count == 2
+    valuation_jobs.upsert_jobs.assert_awaited_once_with(
+        [
+            ValuationJobUpsert(
+                "P1",
+                "USD-EQUITY",
+                date(2026, 4, 10),
+                0,
+                "corr-backdated",
+                "sha256:" + ("2" * 64),
+            ),
+            ValuationJobUpsert(
+                "P2",
+                "USD-BOND",
+                date(2026, 4, 10),
+                2,
+                "corr-backdated",
+                "sha256:" + ("2" * 64),
+            ),
+        ],
+        rearm_completed=True,
+        requeue_if_processing=True,
+    )
 
 
 @pytest.mark.parametrize("latest_business_date", [None, date(2026, 4, 9)])
@@ -115,7 +141,7 @@ async def test_out_of_horizon_correction_only_stages_durable_replay(
     assert result.immediate_job_count == 0
     repository.stage_durable_replay.assert_awaited_once()
     repository.find_position_keys_requiring_revaluation.assert_not_awaited()
-    valuation_jobs.upsert_job.assert_not_awaited()
+    valuation_jobs.upsert_jobs.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -133,7 +159,7 @@ async def test_current_correction_without_visible_positions_relies_on_position_r
     assert result.durable_replay_staged is False
     assert result.immediate_job_count == 0
     repository.stage_durable_replay.assert_not_awaited()
-    valuation_jobs.upsert_job.assert_not_awaited()
+    valuation_jobs.upsert_jobs.assert_not_awaited()
 
 
 def test_direct_currency_pair_rejects_identity_conversion() -> None:
