@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Protocol
 
-from ..DTOs.ingestion_job_dto import IngestionReplayAuditResponse
+from ..DTOs.ingestion_job_dto import IngestionJobResponse, IngestionReplayAuditResponse
 from ..services.ingestion_job_lifecycle import IngestionJobCreateResult
 
 
@@ -45,6 +45,16 @@ class IngestionJobStore(Protocol):
         trace_id: str,
         request_payload: dict[str, Any] | None,
     ) -> IngestionJobCreateResult: ...
+
+    async def find_idempotent_job(
+        self,
+        *,
+        endpoint: str,
+        idempotency_key: str | None,
+        request_payload: dict[str, Any] | None,
+    ) -> IngestionJobResponse | None:
+        """Return a matching replay without reserving a new idempotency key."""
+        ...
 
 
 class ReplayAuditStore(Protocol):

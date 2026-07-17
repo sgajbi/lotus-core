@@ -88,6 +88,26 @@ class _FakeIngestionJobStore:
         self._seen[key] = (request_payload, job)
         return IngestionJobCreateResult(job=job, created=True)
 
+    async def find_idempotent_job(
+        self,
+        *,
+        endpoint: str,
+        idempotency_key: str | None,
+        request_payload: dict[str, Any] | None,
+    ) -> IngestionJobResponse | None:
+        if not idempotency_key:
+            return None
+        existing = self._seen.get((endpoint, idempotency_key))
+        if existing is None:
+            return None
+        existing_payload, existing_job = existing
+        if existing_payload != request_payload:
+            raise IngestionIdempotencyConflictError(
+                endpoint=endpoint,
+                idempotency_key=idempotency_key,
+            )
+        return existing_job
+
 
 class _FailingReplayAuditStore:
     def __init__(self) -> None:
@@ -165,6 +185,14 @@ async def test_create_or_get_job_uses_job_store_idempotency_conflict_semantics()
             trace_id="trace-003",
             request_payload={"transaction_id": "txn-002"},
         )
+
+    replay = await service.find_idempotent_job(
+        endpoint="/ingest/transactions",
+        idempotency_key="idem-001",
+        request_payload={"transaction_id": "txn-001"},
+    )
+    assert replay is not None
+    assert replay.job_id == "job-001"
 
 
 async def test_record_replay_audit_uses_store_and_preserves_typed_write_failure() -> None:

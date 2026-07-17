@@ -183,6 +183,19 @@ class IngestionJobService:
             )
         )
 
+    async def find_idempotent_job(
+        self,
+        *,
+        endpoint: str,
+        idempotency_key: str | None,
+        request_payload: dict[str, Any] | None,
+    ) -> IngestionJobResponse | None:
+        return await self._idempotency_workflow.find_existing(
+            endpoint=endpoint,
+            idempotency_key=idempotency_key,
+            request_payload=request_payload,
+        )
+
     async def mark_queued(self, job_id: str, *, expected_statuses=None) -> bool:
         return await mark_job_queued(
             job_id=job_id,

@@ -208,6 +208,32 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
                 self.job_payloads[job_id] = request_payload
             return SimpleNamespace(job=self.jobs[job_id], created=True)
 
+        async def find_idempotent_job(
+            self,
+            *,
+            endpoint: str,
+            idempotency_key: str | None,
+            request_payload: dict | None,
+        ) -> IngestionJobResponse | None:
+            if not idempotency_key:
+                return None
+            for existing in self.jobs.values():
+                if existing.endpoint != endpoint or existing.idempotency_key != idempotency_key:
+                    continue
+                existing_payload = self.job_payloads.get(existing.job_id)
+                if (
+                    request_payload is not None
+                    and existing_payload is not None
+                    and _command_payload_identity(existing_payload)
+                    != _command_payload_identity(request_payload)
+                ):
+                    raise IngestionIdempotencyConflictError(
+                        endpoint=endpoint,
+                        idempotency_key=idempotency_key,
+                    )
+                return existing
+            return None
+
         async def mark_queued(self, job_id: str) -> bool:
             if self.fail_next_mark_queued:
                 self.fail_next_mark_queued = False
@@ -7383,6 +7409,7 @@ async def test_reprocess_transactions_returns_503_when_source_lookup_is_unavaila
 
 async def test_reprocess_transactions_replays_duplicate_idempotency_key(
     async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
     mock_kafka_producer: MagicMock,
 ):
     mock_kafka_producer.publish_message.reset_mock()
@@ -7390,6 +7417,7 @@ async def test_reprocess_transactions_replays_duplicate_idempotency_key(
     headers = {"X-Idempotency-Key": "reprocessing-replay-001"}
 
     first = await async_test_client.post("/reprocess/transactions", json=payload, headers=headers)
+    ingestion_test_harness["fake_reprocessing_target_resolver"].unavailable = True
     second = await async_test_client.post("/reprocess/transactions", json=payload, headers=headers)
 
     assert first.status_code == 202

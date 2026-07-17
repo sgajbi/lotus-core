@@ -8,6 +8,7 @@ from ..application import (
     ResolveTransactionReprocessingTargets,
     TransactionReprocessingTargetNotFound,
 )
+from ..DTOs.ingestion_job_dto import IngestionJobResponse
 from ..ops_controls import enforce_ingestion_write_rate_limit
 from ..ports.transaction_reprocessing import TransactionReprocessingTargetReadError
 from ..request_metadata import create_ingestion_job_id, get_request_lineage
@@ -125,17 +126,18 @@ class IngestionPublishCommandHandler:
         await self._assert_ingestion_writable()
         await self._assert_reprocessing_publish_allowed(len(command.records))
         self._enforce_rate_limit(command.endpoint, len(command.records))
+        replay_job = await self.ingestion_job_service.find_idempotent_job(
+            endpoint=command.endpoint,
+            idempotency_key=command.idempotency_key,
+            request_payload=command.request_payload,
+        )
+        if replay_job is not None:
+            return self._reprocessing_replay_result(command, replay_job)
+
         resolved_targets = await self._resolve_reprocessing_targets(command.records)
         job_result = await self._create_job(command)
         if not job_result.created:
-            return IngestionCommandResult(
-                message="Duplicate reprocessing request accepted via idempotency replay.",
-                entity_type=command.entity_type,
-                job_id=job_result.job.job_id,
-                accepted_count=job_result.job.accepted_count,
-                idempotency_key=command.idempotency_key,
-                replayed=True,
-            )
+            return self._reprocessing_replay_result(command, job_result.job)
 
         await self._publish_batch_or_mark_failed(
             replace(command, records=resolved_targets),
@@ -152,6 +154,20 @@ class IngestionPublishCommandHandler:
             job_id=job_result.job.job_id,
             accepted_count=len(command.records),
             idempotency_key=command.idempotency_key,
+        )
+
+    @staticmethod
+    def _reprocessing_replay_result(
+        command: BatchPublishIngestionCommand,
+        job: IngestionJobResponse,
+    ) -> IngestionCommandResult:
+        return IngestionCommandResult(
+            message="Duplicate reprocessing request accepted via idempotency replay.",
+            entity_type=command.entity_type,
+            job_id=job.job_id,
+            accepted_count=job.accepted_count,
+            idempotency_key=command.idempotency_key,
+            replayed=True,
         )
 
     async def ingest_portfolio_bundle(
