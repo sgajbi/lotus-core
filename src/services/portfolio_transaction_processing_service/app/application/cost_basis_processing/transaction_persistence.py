@@ -71,13 +71,12 @@ async def _persist_cost_basis_transaction(
         stage=CostBasisPersistenceStage.TRANSACTION_COSTS,
         status=CostBasisPersistenceStatus.ATTEMPT,
     )
-    persisted = await transactions.apply_transaction_costs(transaction)
+    persisted = await transactions.apply_transaction_costs_and_replace_breakdown(transaction)
     if persisted is None:
         raise ValueError(
             "Canonical transaction row was not found during cost persistence: "
             f"{transaction.transaction_id}"
         )
-    await transactions.replace_transaction_cost_breakdown(transaction)
     _observe(
         observer,
         transaction=transaction,

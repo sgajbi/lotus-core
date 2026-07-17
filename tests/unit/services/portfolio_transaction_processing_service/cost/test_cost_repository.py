@@ -789,8 +789,9 @@ async def test_update_selected_open_lot_states_skips_empty_selection() -> None:
     db_session.execute.assert_not_awaited()
 
 
-async def test_apply_transaction_costs_persists_linkage_metadata() -> None:
+async def test_apply_transaction_costs_and_replace_breakdown_uses_update_returning() -> None:
     db_session = AsyncMock()
+    db_session.add_all = MagicMock()
     repository = SqlAlchemyCostBasisTransactionRepository(db_session)
 
     db_transaction = DBTransaction(
@@ -805,6 +806,17 @@ async def test_apply_transaction_costs_persists_linkage_metadata() -> None:
         gross_transaction_amount=Decimal("1000"),
         trade_currency="USD",
         currency="USD",
+        net_cost=Decimal("1002"),
+        gross_cost=Decimal("1000"),
+        realized_gain_loss=Decimal("0"),
+        net_cost_local=Decimal("1002"),
+        realized_gain_loss_local=Decimal("0"),
+        economic_event_id="EVT-BUY-PORT_COST_01-BUY01",
+        linked_transaction_group_id="LTG-BUY-PORT_COST_01-BUY01",
+        calculation_policy_id="BUY_DEFAULT_POLICY",
+        calculation_policy_version="1.0.0",
+        cash_entry_mode="AUTO_GENERATE",
+        settlement_cash_account_id="CASH-USD-01",
     )
     execute_result = MagicMock()
     execute_result.scalars.return_value.first.return_value = db_transaction
@@ -835,18 +847,22 @@ async def test_apply_transaction_costs_persists_linkage_metadata() -> None:
         settlement_cash_account_id="CASH-USD-01",
     )
 
-    updated_transaction = await repository.apply_transaction_costs(engine_transaction)
+    updated_transaction = await repository.apply_transaction_costs_and_replace_breakdown(
+        engine_transaction
+    )
 
     assert isinstance(updated_transaction, BookedTransaction)
     assert updated_transaction is not db_transaction
     assert updated_transaction.net_cost == Decimal("1002")
-    assert db_transaction.net_cost == Decimal("1002")
-    assert db_transaction.economic_event_id == "EVT-BUY-PORT_COST_01-BUY01"
-    assert db_transaction.linked_transaction_group_id == "LTG-BUY-PORT_COST_01-BUY01"
-    assert db_transaction.calculation_policy_id == "BUY_DEFAULT_POLICY"
-    assert db_transaction.calculation_policy_version == "1.0.0"
-    assert db_transaction.cash_entry_mode == "AUTO_GENERATE"
-    assert db_transaction.settlement_cash_account_id == "CASH-USD-01"
+    assert db_session.execute.await_count == 2
+    update_statement = str(db_session.execute.await_args_list[0].args[0])
+    delete_statement = str(db_session.execute.await_args_list[1].args[0])
+    assert update_statement.startswith("UPDATE transactions SET")
+    assert "economic_event_id=" in update_statement
+    assert "calculation_policy_version=" in update_statement
+    assert "RETURNING transactions.id" in update_statement
+    assert delete_statement.startswith("DELETE FROM transaction_costs")
+    db_session.add_all.assert_called_once_with([])
 
 
 async def test_upsert_booked_transaction_persists_only_canonical_table_fields() -> None:

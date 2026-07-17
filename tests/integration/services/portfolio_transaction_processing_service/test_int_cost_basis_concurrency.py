@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 from portfolio_common.database_models import CostBasisProcessingState, PositionLotState
+from sqlalchemy import event as sqlalchemy_event
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -279,3 +280,70 @@ async def test_cost_basis_processing_lock_does_not_serialize_other_security_keys
             ),
             timeout=1,
         )
+
+
+async def test_single_buy_cost_stage_avoids_duplicate_canonical_transaction_reads(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    portfolio_id = "PORT-COST-SHAPE-01"
+    security_id = "SEC-COST-SHAPE-01"
+    buy = booked_transaction_event(
+        transaction_id="BUY-COST-SHAPE-01",
+        portfolio_id=portfolio_id,
+        security_id=security_id,
+        transaction_date=datetime(2026, 7, 1, 10, 0, tzinfo=timezone.utc),
+        transaction_type="BUY",
+        quantity="100",
+        price="10",
+        gross_amount="1000",
+    )
+    async_db_session.add_all(
+        [
+            portfolio_record(portfolio_id, cost_basis_method="FIFO"),
+            instrument_record(
+                security_id,
+                name="Cost Shape Equity",
+                isin="SG0000000499",
+                currency="USD",
+            ),
+            canonical_transaction_record(buy),
+        ]
+    )
+    await async_db_session.commit()
+    statements: list[str] = []
+
+    def capture_statement(
+        _conn,
+        _cursor,
+        statement,
+        _parameters,
+        _context,
+        _executemany,
+    ) -> None:
+        statements.append(" ".join(statement.split()))
+
+    sync_engine = async_db_session.bind.sync_engine
+    sqlalchemy_event.listen(sync_engine, "before_cursor_execute", capture_statement)
+    try:
+        await _stage_cost_calculation(
+            session_factory=async_sessionmaker(async_db_session.bind, expire_on_commit=False),
+            event=buy,
+            repository_factory=SqlAlchemyCostBasisTransactionRepository,
+        )
+    finally:
+        sqlalchemy_event.remove(sync_engine, "before_cursor_execute", capture_statement)
+
+    assert len(statements) == 10
+    canonical_transaction_writes = [
+        statement for statement in statements if statement.startswith("UPDATE transactions SET")
+    ]
+    canonical_transaction_reads = [
+        statement
+        for statement in statements
+        if statement.startswith("SELECT transactions.id")
+        and "transactions.transaction_id =" in statement
+    ]
+    assert len(canonical_transaction_writes) == 1
+    assert "RETURNING transactions.id" in canonical_transaction_writes[0]
+    assert canonical_transaction_reads == []

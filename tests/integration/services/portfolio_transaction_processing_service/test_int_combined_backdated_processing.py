@@ -588,7 +588,9 @@ async def test_backdated_cost_suffix_failure_rolls_back_all_corrections(
             correlation_id="corr-combined-backdated-rollback-01",
         )
 
-    apply_transaction_costs = SqlAlchemyCostBasisTransactionRepository.apply_transaction_costs
+    apply_transaction_costs = (
+        SqlAlchemyCostBasisTransactionRepository.apply_transaction_costs_and_replace_breakdown
+    )
 
     async def fail_later_suffix_persistence(self, transaction):
         if transaction.transaction_id == later_sell.transaction_id:
@@ -597,7 +599,7 @@ async def test_backdated_cost_suffix_failure_rolls_back_all_corrections(
 
     monkeypatch.setattr(
         SqlAlchemyCostBasisTransactionRepository,
-        "apply_transaction_costs",
+        "apply_transaction_costs_and_replace_breakdown",
         fail_later_suffix_persistence,
     )
 

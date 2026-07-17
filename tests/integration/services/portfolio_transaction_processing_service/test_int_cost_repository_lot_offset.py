@@ -514,7 +514,7 @@ async def test_cost_repository_upserts_buy_lot_state_idempotently(
     assert lot.calculation_policy_version == "1.0.1"
 
 
-async def test_cost_repository_replaces_transaction_cost_breakdown_idempotently(
+async def test_cost_repository_applies_costs_and_replaces_breakdown_idempotently(
     clean_db, async_db_session: AsyncSession
 ) -> None:
     async_db_session.add(
@@ -576,9 +576,11 @@ async def test_cost_repository_replaces_transaction_cost_breakdown_idempotently(
         ),
     )
 
-    await repo.replace_transaction_cost_breakdown(txn)
+    updated_transaction = await repo.apply_transaction_costs_and_replace_breakdown(txn)
     await async_db_session.commit()
 
+    assert updated_transaction is not None
+    assert updated_transaction.transaction_id == "TXN_SLICE4_03"
     rows = (
         (
             await async_db_session.execute(

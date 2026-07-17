@@ -11,7 +11,7 @@ from portfolio_common.database_models import TransactionCost
 from portfolio_common.domain.currency import normalize_currency_code
 from portfolio_common.events import TransactionEvent
 from portfolio_common.identifiers import normalize_lookup_identifier
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -184,29 +184,46 @@ class SqlAlchemyCostBasisTransactionRepository:
             for row in result.scalars().all()
         ]
 
-    async def apply_transaction_costs(
+    async def apply_transaction_costs_and_replace_breakdown(
         self, transaction_result: CostBasisTransaction
     ) -> BookedTransaction | None:
-        """Apply calculated costs and return the updated canonical domain transaction."""
-        stmt = select(DBTransaction).filter_by(transaction_id=transaction_result.transaction_id)
-        result = await self.db.execute(stmt)
-        db_txn_to_update = result.scalars().first()
+        """Apply economics and replace fee components without rereading the canonical row."""
 
-        if db_txn_to_update:
-            db_txn_to_update.net_cost = transaction_result.net_cost
-            db_txn_to_update.gross_cost = transaction_result.gross_cost
-            db_txn_to_update.realized_gain_loss = transaction_result.realized_gain_loss
-            db_txn_to_update.transaction_fx_rate = transaction_result.transaction_fx_rate
-            db_txn_to_update.net_cost_local = transaction_result.net_cost_local
-            db_txn_to_update.realized_gain_loss_local = transaction_result.realized_gain_loss_local
-            for field_name in TRANSACTION_METADATA_FIELDS:
-                field_value = getattr(transaction_result, field_name, None)
-                if field_value is not None:
-                    setattr(db_txn_to_update, field_name, field_value)
-
-        if db_txn_to_update is None:
+        update_values = {
+            "net_cost": transaction_result.net_cost,
+            "gross_cost": transaction_result.gross_cost,
+            "realized_gain_loss": transaction_result.realized_gain_loss,
+            "transaction_fx_rate": transaction_result.transaction_fx_rate,
+            "net_cost_local": transaction_result.net_cost_local,
+            "realized_gain_loss_local": transaction_result.realized_gain_loss_local,
+            **{
+                field_name: field_value
+                for field_name in TRANSACTION_METADATA_FIELDS
+                if (field_value := getattr(transaction_result, field_name, None)) is not None
+            },
+        }
+        statement = (
+            update(DBTransaction)
+            .where(DBTransaction.transaction_id == transaction_result.transaction_id)
+            .values(**update_values)
+            .returning(DBTransaction)
+        )
+        db_transaction = (await self.db.execute(statement)).scalars().first()
+        if db_transaction is None:
             return None
-        return to_booked_transaction(TransactionEvent.model_validate(db_txn_to_update))
+
+        await self.db.execute(
+            TransactionCost.__table__.delete().where(
+                TransactionCost.transaction_id == transaction_result.transaction_id
+            )
+        )
+        self.db.add_all(
+            _transaction_cost_rows(
+                transaction_result=transaction_result,
+                db_txn=db_transaction,
+            )
+        )
+        return to_booked_transaction(TransactionEvent.model_validate(db_transaction))
 
     async def get_booked_transaction(
         self, transaction_id: str, *, portfolio_id: str | None = None
@@ -235,29 +252,4 @@ class SqlAlchemyCostBasisTransactionRepository:
         update_dict = {field: getattr(stmt.excluded, field) for field in update_fields}
         await self.db.execute(
             stmt.on_conflict_do_update(index_elements=["transaction_id"], set_=update_dict)
-        )
-
-    async def replace_transaction_cost_breakdown(
-        self, transaction_result: CostBasisTransaction
-    ) -> None:
-        """
-        Replaces the per-fee breakdown rows for a transaction.
-
-        The method is idempotent for reprocessing because existing rows are deleted
-        before re-insert using the latest computed fee components.
-        """
-        stmt = select(DBTransaction).filter_by(transaction_id=transaction_result.transaction_id)
-        result = await self.db.execute(stmt)
-        db_txn = result.scalars().first()
-        if not db_txn:
-            return
-
-        await self.db.execute(
-            TransactionCost.__table__.delete().where(
-                TransactionCost.transaction_id == transaction_result.transaction_id
-            )
-        )
-
-        self.db.add_all(
-            _transaction_cost_rows(transaction_result=transaction_result, db_txn=db_txn)
         )
