@@ -6728,7 +6728,7 @@ UPLOAD_ENTITY_CASES = [
             ],
             "transaction_id",
             "transactions.raw.received",
-            "P1",
+            "P1|SEC1",
         ),
         (
             "market_prices",
