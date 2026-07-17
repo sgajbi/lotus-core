@@ -43,6 +43,7 @@ def _handler() -> IngestionPublishCommandHandler:
     return IngestionPublishCommandHandler(
         ingestion_service=ingestion_service,
         ingestion_job_service=job_service,
+        idempotency_replay_reader=SimpleNamespace(find_matching_job=AsyncMock(return_value=None)),
         resolve_transaction_reprocessing_targets=SimpleNamespace(
             execute=AsyncMock(
                 side_effect=lambda transaction_ids: tuple(
@@ -279,7 +280,7 @@ async def test_reprocessing_command_preserves_policy_sequence(
 async def test_reprocessing_replay_does_not_require_source_resolution() -> None:
     handler = _handler()
     handler.ingestion_service.publish_reprocessing_requests = AsyncMock()
-    handler.ingestion_job_service.find_idempotent_job.return_value = SimpleNamespace(
+    handler.idempotency_replay_reader.find_matching_job.return_value = SimpleNamespace(
         job_id="job-replay",
         accepted_count=2,
     )

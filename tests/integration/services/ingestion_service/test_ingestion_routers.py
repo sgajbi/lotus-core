@@ -24,6 +24,7 @@ from src.services.ingestion_service.app.application import (
 )
 from src.services.ingestion_service.app.dependencies import (
     get_business_date_ingestion_policy,
+    get_ingestion_idempotency_replay_reader,
     get_ingestion_service,
     get_transaction_reprocessing_target_resolver,
 )
@@ -207,32 +208,6 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             if request_payload:
                 self.job_payloads[job_id] = request_payload
             return SimpleNamespace(job=self.jobs[job_id], created=True)
-
-        async def find_idempotent_job(
-            self,
-            *,
-            endpoint: str,
-            idempotency_key: str | None,
-            request_payload: dict | None,
-        ) -> IngestionJobResponse | None:
-            if not idempotency_key:
-                return None
-            for existing in self.jobs.values():
-                if existing.endpoint != endpoint or existing.idempotency_key != idempotency_key:
-                    continue
-                existing_payload = self.job_payloads.get(existing.job_id)
-                if (
-                    request_payload is not None
-                    and existing_payload is not None
-                    and _command_payload_identity(existing_payload)
-                    != _command_payload_identity(request_payload)
-                ):
-                    raise IngestionIdempotencyConflictError(
-                        endpoint=endpoint,
-                        idempotency_key=idempotency_key,
-                    )
-                return existing
-            return None
 
         async def mark_queued(self, job_id: str) -> bool:
             if self.fail_next_mark_queued:
@@ -1165,7 +1140,35 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
                 for transaction_id in transaction_ids
             )
 
+    class FakeIngestionIdempotencyReplayReader:
+        def __init__(self, job_service: FakeIngestionJobService) -> None:
+            self._job_service = job_service
+
+        async def find_matching_job(
+            self,
+            *,
+            endpoint: str,
+            idempotency_key: str | None,
+            request_payload: dict | None,
+        ) -> IngestionJobResponse | None:
+            if not idempotency_key:
+                return None
+            for existing in self._job_service.jobs.values():
+                if existing.endpoint != endpoint or existing.idempotency_key != idempotency_key:
+                    continue
+                existing_payload = self._job_service.job_payloads.get(existing.job_id)
+                if (
+                    request_payload is not None
+                    and existing_payload is not None
+                    and _command_payload_identity(existing_payload)
+                    != _command_payload_identity(request_payload)
+                ):
+                    return None
+                return existing
+            return None
+
     fake_job_service = FakeIngestionJobService()
+    fake_idempotency_replay_reader = FakeIngestionIdempotencyReplayReader(fake_job_service)
     fake_reference_data_service = FakeReferenceDataIngestionService()
     fake_business_calendar_repository = FakeBusinessCalendarRepository()
     fake_business_date_policy = BusinessDateIngestionPolicy(
@@ -1194,6 +1197,9 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
     app.dependency_overrides[get_business_date_ingestion_policy] = lambda: fake_business_date_policy
     app.dependency_overrides[get_transaction_reprocessing_target_resolver] = lambda: (
         fake_reprocessing_target_resolver
+    )
+    app.dependency_overrides[get_ingestion_idempotency_replay_reader] = lambda: (
+        fake_idempotency_replay_reader
     )
     app.dependency_overrides[portfolio_bundle_router.get_ingestion_job_service] = lambda: (
         fake_job_service
@@ -1229,6 +1235,7 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
     app.dependency_overrides.pop(fx_rates_router.get_ingestion_job_service, None)
     app.dependency_overrides.pop(get_business_date_ingestion_policy, None)
     app.dependency_overrides.pop(get_transaction_reprocessing_target_resolver, None)
+    app.dependency_overrides.pop(get_ingestion_idempotency_replay_reader, None)
     app.dependency_overrides.pop(portfolio_bundle_router.get_ingestion_job_service, None)
     app.dependency_overrides.pop(reprocessing_router.get_ingestion_job_service, None)
     app.dependency_overrides.pop(reference_data_router.get_ingestion_job_service, None)

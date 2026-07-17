@@ -31,6 +31,7 @@ modules while cataloged as transitional `clock-id-provider` capabilities.
 | --- | --- | --- | --- |
 | `ingestion.job-store` | audit/idempotency store | `ingestion_service/app/ports/ingestion_workflow_stores.py` | `IngestionJobService`; SQLAlchemy adapter in `ingestion_service/app/infrastructure/workflow_stores.py` |
 | `ingestion.replay-audit-store` | audit/idempotency store | `ingestion_service/app/ports/ingestion_workflow_stores.py` | `IngestionJobService`; SQLAlchemy adapter in `ingestion_service/app/infrastructure/workflow_stores.py` |
+| `ingestion.idempotency-replay-reader` | audit/idempotency store | `ingestion_service/app/ports/ingestion_idempotency_replay.py` | reprocessing command handler; SQLAlchemy adapter in `ingestion_service/app/infrastructure/ingestion_idempotency_replay_reader.py` |
 | `events.event-publisher` | event publisher | `portfolio_common/event_publisher.py` | ingestion publish workflow and valuation job publisher |
 | `aggregation.scheduler-runtime-ports` | scheduler runtime | `portfolio_derived_state_service/app/ports/aggregation_scheduler_ports.py` | `AggregationScheduler`; SQLAlchemy, Prometheus, and system-clock adapters in `portfolio_derived_state_service/app/infrastructure/aggregation_scheduler_adapters.py` |
 | `aggregation.timeseries-market-data-reader` | repository reader | `portfolio_derived_state_service/app/ports/timeseries_market_data.py` | `CalculatePortfolioTimeseries`; SQLAlchemy adapter in `portfolio_derived_state_service/app/infrastructure/portfolio_aggregation_repository.py` |

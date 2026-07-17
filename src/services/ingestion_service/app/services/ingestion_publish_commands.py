@@ -10,6 +10,7 @@ from ..application import (
 )
 from ..DTOs.ingestion_job_dto import IngestionJobResponse
 from ..ops_controls import enforce_ingestion_write_rate_limit
+from ..ports.ingestion_idempotency_replay import IngestionIdempotencyReplayReader
 from ..ports.transaction_reprocessing import TransactionReprocessingTargetReadError
 from ..request_metadata import create_ingestion_job_id, get_request_lineage
 from .ingestion_job_service import IngestionJobService
@@ -93,6 +94,7 @@ class IngestionCommandResult:
 class IngestionPublishCommandHandler:
     ingestion_service: IngestionService
     ingestion_job_service: IngestionJobService
+    idempotency_replay_reader: IngestionIdempotencyReplayReader
     resolve_transaction_reprocessing_targets: ResolveTransactionReprocessingTargets
 
     async def ingest_portfolios(
@@ -126,7 +128,7 @@ class IngestionPublishCommandHandler:
         await self._assert_ingestion_writable()
         await self._assert_reprocessing_publish_allowed(len(command.records))
         self._enforce_rate_limit(command.endpoint, len(command.records))
-        replay_job = await self.ingestion_job_service.find_idempotent_job(
+        replay_job = await self.idempotency_replay_reader.find_matching_job(
             endpoint=command.endpoint,
             idempotency_key=command.idempotency_key,
             request_payload=command.request_payload,
