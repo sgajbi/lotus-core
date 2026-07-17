@@ -2782,13 +2782,23 @@ Most relevant current governance:
      Current exact fan-in evidence attributes only about `0.16s` of `194s` wider cost-stage time to
      FIFO calculation across 1,000 opening transactions. Do not optimize calculator arithmetic from
      the aggregate cost-stage label; obtain database, persistence, or coordination evidence first.
+     The same certifying artifact must retain the existing low-cardinality
+     `db_operation_latency_seconds` count, sum, and mean by repository/method, deterministically
+     sorted and without query text or business identifiers. Treat missing, incomplete, or
+     zero-observation series as absent evidence. Current exact evidence attributes `139.978303s`
+     across eleven repository operations while FIFO arithmetic remains `0.152853s`; use the
+     repository series to choose targeted statement or coordination proof, not as permission to
+     collapse domain locks or transaction boundaries.
 202. A `COMPLETE` valuation job and its portfolio/security/date/epoch snapshot are one atomic unit
      of work. When a governed workload has all expected transactions durable, no pending or
      processing valuation work, and an empty outbox, a completed job without its matching snapshot
      is irrecoverable terminal evidence rather than normal lag. Fail fast with the exact count,
      preserve worker ownership logs, attempt counts, processed-event fences, and Kafka lag, and do
      not raise the timeout or claim capacity. Diagnose the ownership path before changing valuation
-     semantics; an isolated successful repository probe is not sufficient runtime proof.
+     semantics; an isolated successful repository probe is not sufficient runtime proof. Exact run
+     `20260717T180631Z` reproduced the contradiction for all 1,000 jobs at a clean signed SHA after
+     a prior exact run converged, so treat the defect as nondeterministic and reproducible until the
+     worker transition has targeted concurrency proof.
 
 ## Context Maintenance Rule
 
