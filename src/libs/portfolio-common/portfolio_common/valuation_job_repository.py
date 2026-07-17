@@ -22,6 +22,7 @@ class ValuationJobUpsert:
     valuation_date: date
     epoch: int
     correlation_id: Optional[str] = None
+    source_correction_id: Optional[str] = None
 
 
 class ValuationJobRepository:
@@ -40,6 +41,7 @@ class ValuationJobRepository:
         valuation_date: date,
         epoch: int,
         correlation_id: Optional[str] = None,
+        source_correction_id: Optional[str] = None,
         requeue_if_processing: bool = False,
     ) -> int:
         """
@@ -48,7 +50,9 @@ class ValuationJobRepository:
         Duplicate scheduler polls for the same logical run must not re-arm an already completed
         valuation job. A genuinely new replay/backfill run is allowed to re-arm the job via a
         different correlation id. Source-correction callers can explicitly preserve a different
-        lineage that arrives during PROCESSING; ordinary readiness callers remain non-disruptive.
+        source observation that arrives during PROCESSING; ordinary readiness callers remain
+        non-disruptive. Transport correlation remains diagnostic and is never used as source
+        correction identity.
         """
         return await self._upsert_jobs(
             [
@@ -58,6 +62,7 @@ class ValuationJobRepository:
                     valuation_date=valuation_date,
                     epoch=epoch,
                     correlation_id=correlation_id,
+                    source_correction_id=source_correction_id,
                 )
             ],
             requeue_if_processing=requeue_if_processing,
@@ -75,6 +80,12 @@ class ValuationJobRepository:
         normalized_jobs = self._normalize_jobs(jobs)
         if not normalized_jobs:
             return 0
+        if requeue_if_processing and any(
+            job.source_correction_id is None for job in normalized_jobs
+        ):
+            raise ValueError(
+                "source_correction_id is required when requeue_if_processing is enabled"
+            )
 
         try:
             latest_epochs_by_scope = await self.get_latest_epochs_for_scopes(normalized_jobs)
@@ -145,6 +156,7 @@ class ValuationJobRepository:
                 valuation_date=job.valuation_date,
                 epoch=job.epoch,
                 correlation_id=normalize_lineage_value(job.correlation_id),
+                source_correction_id=normalize_lineage_value(job.source_correction_id),
             )
             normalized_by_scope[
                 (
@@ -309,6 +321,7 @@ def _valuation_job_insert_values(
                 "epoch": job.epoch,
                 "status": "PENDING",
                 "requeue_requested": False,
+                "source_correction_id": job.source_correction_id,
                 "correlation_id": diagnostics.correlation_id,
                 "correlation_missing_reason": diagnostics.correlation_missing_reason,
                 "alternate_lookup_key": diagnostics.alternate_lookup_key,
@@ -325,6 +338,7 @@ def _valuation_job_update_values(
     values: dict[str, object] = {
         "status": "PENDING",
         "requeue_requested": False,
+        "source_correction_id": stmt.excluded.source_correction_id,
         "correlation_id": stmt.excluded.correlation_id,
         "correlation_missing_reason": stmt.excluded.correlation_missing_reason,
         "alternate_lookup_key": stmt.excluded.alternate_lookup_key,
@@ -355,9 +369,16 @@ def _valuation_job_conflict_update_predicate(
     protected_statuses = ("PENDING", "COMPLETE")
     if requeue_if_processing:
         protected_statuses = (*protected_statuses, "PROCESSING")
+    identity_matches = PortfolioValuationJob.correlation_id.is_not_distinct_from(
+        stmt.excluded.correlation_id
+    )
+    if requeue_if_processing:
+        identity_matches = PortfolioValuationJob.source_correction_id.is_not_distinct_from(
+            stmt.excluded.source_correction_id
+        )
     same_lineage = and_(
         PortfolioValuationJob.status.in_(protected_statuses),
-        PortfolioValuationJob.correlation_id.is_not_distinct_from(stmt.excluded.correlation_id),
+        identity_matches,
     )
     if requeue_if_processing:
         return not_(same_lineage)

@@ -49,7 +49,11 @@ async def test_current_correction_queues_immediate_jobs_without_replay() -> None
         PositionValuationKey("P-SGD", "USD-BOND", 3),
     ]
 
-    result = await handler.execute(correction=correction(), correlation_id="corr-fx-1")
+    result = await handler.execute(
+        correction=correction(),
+        correlation_id="corr-fx-1",
+        source_correction_id="sha256:" + ("1" * 64),
+    )
 
     assert result.immediate_job_count == 1
     assert result.pair.key == "USD->SGD"
@@ -61,6 +65,7 @@ async def test_current_correction_queues_immediate_jobs_without_replay() -> None
         valuation_date=date(2026, 4, 10),
         epoch=3,
         correlation_id="corr-fx-1",
+        source_correction_id="sha256:" + ("1" * 64),
         requeue_if_processing=True,
     )
 
@@ -77,7 +82,11 @@ async def test_backdated_correction_queues_visible_keys_and_preserves_replay() -
     parent.attach_mock(repository.stage_durable_replay, "stage_replay")
     parent.attach_mock(valuation_jobs.upsert_job, "upsert_job")
 
-    result = await handler.execute(correction=correction(), correlation_id="corr-backdated")
+    result = await handler.execute(
+        correction=correction(),
+        correlation_id="corr-backdated",
+        source_correction_id="sha256:" + ("2" * 64),
+    )
 
     assert result.durable_replay_staged is True
     assert result.immediate_job_count == 2
@@ -96,7 +105,11 @@ async def test_out_of_horizon_correction_only_stages_durable_replay(
     handler, repository, valuation_jobs = use_case()
     repository.latest_business_date.return_value = latest_business_date
 
-    result = await handler.execute(correction=correction(), correlation_id="corr-future")
+    result = await handler.execute(
+        correction=correction(),
+        correlation_id="corr-future",
+        source_correction_id="sha256:" + ("3" * 64),
+    )
 
     assert result.immediate_job_count == 0
     repository.stage_durable_replay.assert_awaited_once()
@@ -110,7 +123,11 @@ async def test_current_correction_without_visible_positions_relies_on_position_r
     repository.latest_business_date.return_value = date(2026, 4, 10)
     repository.find_position_keys_requiring_revaluation.return_value = []
 
-    result = await handler.execute(correction=correction(), correlation_id="corr-race")
+    result = await handler.execute(
+        correction=correction(),
+        correlation_id="corr-race",
+        source_correction_id="sha256:" + ("4" * 64),
+    )
 
     assert result.durable_replay_staged is False
     assert result.immediate_job_count == 0

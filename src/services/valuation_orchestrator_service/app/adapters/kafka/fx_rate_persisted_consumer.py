@@ -93,6 +93,7 @@ class FxRatePersistedConsumer(BaseConsumer):
                         plan = await handler.execute(
                             correction=_correction_from_event(event),
                             correlation_id=correlation_id,
+                            source_correction_id=event.observation_id,
                         )
                         logger.info(
                             "Persisted FX observation staged for valuation correction.",

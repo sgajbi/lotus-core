@@ -2165,6 +2165,7 @@ class PortfolioValuationJob(Base):
     epoch = Column(Integer, nullable=False, default=0, server_default="0")
     status = Column(String, nullable=False, default="PENDING", index=True)
     requeue_requested = Column(Boolean, nullable=False, default=False, server_default="false")
+    source_correction_id = Column(String, nullable=True)
     correlation_id = Column(String, nullable=True)
     correlation_missing_reason = Column(String, nullable=True)
     alternate_lookup_key = Column(String, nullable=True)
