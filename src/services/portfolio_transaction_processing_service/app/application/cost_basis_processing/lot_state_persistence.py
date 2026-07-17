@@ -20,6 +20,7 @@ class OpenLotPersistenceScope(str, Enum):
     """Select the durable open-lot state affected by one calculation."""
 
     COMPLETE_SNAPSHOT = "complete_snapshot"
+    INITIAL_OPENING_LOT = "initial_opening_lot"
     SELECTED_LOTS = "selected_lots"
     AVERAGE_COST_POOL = "average_cost_pool"
 
@@ -45,7 +46,10 @@ async def persist_open_lot_state(
     lot_behavior = transaction_lot_behavior(effective_transaction_type)
     mutates_lot_state = lot_behavior in LOT_STATE_MUTATING_BEHAVIORS
     incremental_opening = incremental and lot_behavior in LOT_OPENING_BEHAVIORS
-    should_update_lot_states = not incremental or (mutates_lot_state and not incremental_opening)
+    initial_opening_lot = persistence_scope is OpenLotPersistenceScope.INITIAL_OPENING_LOT
+    should_update_lot_states = not initial_opening_lot and (
+        not incremental or (mutates_lot_state and not incremental_opening)
+    )
     if should_update_lot_states:
         update_lot_states = (
             lot_states.update_selected_open_lot_states

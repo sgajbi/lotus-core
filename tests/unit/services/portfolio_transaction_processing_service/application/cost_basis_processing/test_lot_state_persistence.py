@@ -81,6 +81,42 @@ async def test_full_rebuild_replaces_complete_open_lot_snapshot() -> None:
     average_cost_pools.upsert_average_cost_pool_checkpoint.assert_not_awaited()
 
 
+@pytest.mark.parametrize("cost_basis_method", [CostBasisMethod.FIFO, CostBasisMethod.AVCO])
+async def test_initial_opening_lot_does_not_reread_complete_snapshot(
+    cost_basis_method: CostBasisMethod,
+) -> None:
+    average_cost_pools = AsyncMock(spec=CostBasisAverageCostPoolPort)
+    lot_states = AsyncMock(spec=CostBasisLotStatePort)
+    states = {
+        "BUY-1": OpenLotState(
+            quantity=Decimal("4"),
+            cost_local=Decimal("48"),
+            cost_base=Decimal("48"),
+        )
+    }
+
+    await persist_open_lot_state(
+        transaction=_transaction("BUY"),
+        effective_transaction_type="BUY",
+        open_lot_states=states,
+        average_cost_pools=average_cost_pools,
+        lot_states=lot_states,
+        incremental=False,
+        persistence_scope=OpenLotPersistenceScope.INITIAL_OPENING_LOT,
+        cost_basis_method=cost_basis_method,
+        average_cost_pool_transition=None,
+    )
+
+    lot_states.update_open_lot_states.assert_not_awaited()
+    lot_states.update_selected_open_lot_states.assert_not_awaited()
+    if cost_basis_method is CostBasisMethod.AVCO:
+        checkpoint = average_cost_pools.upsert_average_cost_pool_checkpoint.await_args.args[0]
+        assert checkpoint.quantity == Decimal("4")
+        assert checkpoint.representative_source_transaction_id == "BUY-1"
+    else:
+        average_cost_pools.upsert_average_cost_pool_checkpoint.assert_not_awaited()
+
+
 async def test_incremental_non_lot_transaction_preserves_existing_snapshot() -> None:
     average_cost_pools = AsyncMock(spec=CostBasisAverageCostPoolPort)
     lot_states = AsyncMock(spec=CostBasisLotStatePort)
