@@ -31,6 +31,9 @@ from src.services.ingestion_service.app.dependencies import (
 from src.services.ingestion_service.app.domain import TransactionReprocessingTarget
 from src.services.ingestion_service.app.DTOs.ingestion_job_dto import IngestionJobResponse
 from src.services.ingestion_service.app.main import app
+from src.services.ingestion_service.app.ports.ingestion_idempotency_replay import (
+    IngestionIdempotencyReplay,
+)
 from src.services.ingestion_service.app.ports.transaction_reprocessing import (
     TransactionReprocessingTargetReadError,
 )
@@ -319,7 +322,7 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
         async def get_latest_replayable_job_by_correlation_id(
             self,
             correlation_id: str,
-        ) -> IngestionJobResponse | None:
+        ) -> IngestionIdempotencyReplay | None:
             replayable_jobs = [
                 job
                 for job in self.jobs.values()
@@ -1164,7 +1167,10 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
                     != _command_payload_identity(request_payload)
                 ):
                     return None
-                return existing
+                return IngestionIdempotencyReplay(
+                    job_id=existing.job_id,
+                    accepted_count=existing.accepted_count,
+                )
             return None
 
     fake_job_service = FakeIngestionJobService()

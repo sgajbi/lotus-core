@@ -60,6 +60,7 @@
       "owner_service": "ingestion_service",
       "port_module": "src/services/ingestion_service/app/ports/ingestion_idempotency_replay.py",
       "port_symbols": [
+        "IngestionIdempotencyReplay",
         "IngestionIdempotencyReplayReader"
       ],
       "adapter_modules": [
