@@ -88,7 +88,10 @@ async def test_backdated_persistence_updates_affected_suffix_and_returns_incomin
     repository, lot_states, income_offsets, observer = _ports()
     incoming_booked = _booked_transaction(incoming)
     later_booked = _booked_transaction(later)
-    repository.apply_transaction_costs.side_effect = [incoming_booked, later_booked]
+    repository.apply_transaction_costs_and_replace_breakdown.side_effect = [
+        incoming_booked,
+        later_booked,
+    ]
 
     persisted = await persist_cost_basis_transactions(
         processed=[prior, incoming, later],
@@ -100,8 +103,7 @@ async def test_backdated_persistence_updates_affected_suffix_and_returns_incomin
     )
 
     assert [transaction.transaction_id for transaction in persisted] == [incoming.transaction_id]
-    assert repository.apply_transaction_costs.await_args_list == [call(incoming), call(later)]
-    assert repository.replace_transaction_cost_breakdown.await_args_list == [
+    assert repository.apply_transaction_costs_and_replace_breakdown.await_args_list == [
         call(incoming),
         call(later),
     ]
@@ -123,15 +125,16 @@ async def test_persistence_rejects_timeline_without_incoming_transaction_before_
             observer=observer,
         )
 
-    repository.apply_transaction_costs.assert_not_awaited()
-    repository.replace_transaction_cost_breakdown.assert_not_awaited()
+    repository.apply_transaction_costs_and_replace_breakdown.assert_not_awaited()
     observer.observe.assert_not_called()
 
 
 async def test_persistence_supports_application_use_without_telemetry_adapter() -> None:
     transaction = _calculated_transaction("SELL-1", transaction_type="SELL")
     repository, lot_states, income_offsets, _ = _ports()
-    repository.apply_transaction_costs.return_value = _booked_transaction(transaction)
+    repository.apply_transaction_costs_and_replace_breakdown.return_value = _booked_transaction(
+        transaction
+    )
 
     persisted = await persist_cost_basis_transactions(
         processed=[transaction],
@@ -147,7 +150,7 @@ async def test_persistence_supports_application_use_without_telemetry_adapter() 
 async def test_persistence_stops_before_child_writes_when_canonical_row_is_missing() -> None:
     transaction = _calculated_transaction("BUY-MISSING")
     repository, lot_states, income_offsets, observer = _ports()
-    repository.apply_transaction_costs.return_value = None
+    repository.apply_transaction_costs_and_replace_breakdown.return_value = None
 
     with pytest.raises(
         ValueError,
@@ -162,7 +165,6 @@ async def test_persistence_stops_before_child_writes_when_canonical_row_is_missi
             observer=observer,
         )
 
-    repository.replace_transaction_cost_breakdown.assert_not_awaited()
     lot_states.upsert_buy_lot_state.assert_not_awaited()
     income_offsets.upsert_accrued_income_offset.assert_not_awaited()
     observer.observe.assert_called_once_with(
@@ -194,7 +196,9 @@ async def test_persistence_applies_transaction_type_child_state_and_trade_fee(
         fee=fee,
     )
     repository, lot_states, income_offsets, observer = _ports()
-    repository.apply_transaction_costs.return_value = _booked_transaction(transaction)
+    repository.apply_transaction_costs_and_replace_breakdown.return_value = _booked_transaction(
+        transaction
+    )
 
     persisted = await persist_cost_basis_transactions(
         processed=[transaction],
