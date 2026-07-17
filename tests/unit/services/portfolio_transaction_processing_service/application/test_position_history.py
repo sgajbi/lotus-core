@@ -19,6 +19,7 @@ from src.services.portfolio_transaction_processing_service.app.domain import (
 from src.services.portfolio_transaction_processing_service.app.ports import (
     PositionHistoryObserver,
     PositionHistoryRepository,
+    PositionMaterializationProgress,
     PositionRecalculationReason,
     PositionRecalculationStateStore,
     PositionReplayMode,
@@ -86,8 +87,10 @@ def _ports() -> tuple[
     observer = Mock(spec=PositionHistoryObserver)
     state_store.get_or_create.return_value = _state()
     state_store.rearm_generation.return_value = True
-    repository.latest_history_date.return_value = None
-    repository.latest_completed_snapshot_date.return_value = None
+    repository.load_materialization_progress.return_value = PositionMaterializationProgress(
+        latest_history_date=None,
+        latest_completed_snapshot_date=None,
+    )
     repository.contains_transaction.return_value = False
     repository.last_record_before.return_value = None
     repository.list_transactions_from.return_value = ()
@@ -110,7 +113,7 @@ async def test_processor_discards_stale_epoch_from_single_loaded_position_state(
     assert result.position_record_count == 0
     assert result.rebuilt_transactions == ()
     state_store.get_or_create.assert_awaited_once_with(portfolio_id="PB-001", security_id="SEC-001")
-    repository.latest_history_date.assert_not_awaited()
+    repository.load_materialization_progress.assert_not_awaited()
     observer.stale_epoch_discarded.assert_called_once_with(
         transaction=transaction,
         current_epoch=3,
@@ -198,7 +201,10 @@ async def test_processor_coalesces_materialized_backdated_transaction() -> None:
     repository, state_store, observer, processor = _ports()
     transaction = _transaction(transaction_date=date(2026, 4, 10))
     state_store.get_or_create.return_value = _state(watermark_date=date(2026, 4, 20))
-    repository.latest_history_date.return_value = date(2026, 4, 19)
+    repository.load_materialization_progress.return_value = PositionMaterializationProgress(
+        latest_history_date=date(2026, 4, 19),
+        latest_completed_snapshot_date=None,
+    )
     repository.contains_transaction.return_value = True
 
     result = await processor.process(transaction)
@@ -223,8 +229,10 @@ async def test_processor_rebuilds_backdated_history_in_advanced_epoch() -> None:
     incoming = _transaction("TX-BACKDATED", transaction_date=date(2026, 4, 10))
     later = _transaction("TX-LATER", transaction_date=date(2026, 4, 12))
     state_store.get_or_create.return_value = _state(watermark_date=date(2026, 4, 20))
-    repository.latest_history_date.return_value = date(2026, 4, 19)
-    repository.latest_completed_snapshot_date.return_value = date(2026, 4, 21)
+    repository.load_materialization_progress.return_value = PositionMaterializationProgress(
+        latest_history_date=date(2026, 4, 19),
+        latest_completed_snapshot_date=date(2026, 4, 21),
+    )
     repository.list_all_transactions.return_value = (later,)
     state_store.advance_epoch.return_value = _state(
         epoch=4,
@@ -275,7 +283,10 @@ async def test_processor_coalesces_backdated_rebuild_when_epoch_compare_and_set_
     repository, state_store, observer, processor = _ports()
     transaction = _transaction(transaction_date=date(2026, 4, 10))
     state_store.get_or_create.return_value = _state(watermark_date=date(2026, 4, 20))
-    repository.latest_history_date.return_value = date(2026, 4, 19)
+    repository.load_materialization_progress.return_value = PositionMaterializationProgress(
+        latest_history_date=date(2026, 4, 19),
+        latest_completed_snapshot_date=None,
+    )
     state_store.advance_epoch.return_value = None
 
     result = await processor.process(transaction)
@@ -294,7 +305,10 @@ async def test_processor_correction_rebuild_bypasses_materialized_coalescing() -
     repository, state_store, _, processor = _ports()
     incoming = _transaction(transaction_date=date(2026, 4, 10))
     state_store.get_or_create.return_value = _state(watermark_date=date(2026, 4, 20))
-    repository.latest_history_date.return_value = date(2026, 4, 19)
+    repository.load_materialization_progress.return_value = PositionMaterializationProgress(
+        latest_history_date=date(2026, 4, 19),
+        latest_completed_snapshot_date=None,
+    )
     repository.contains_transaction.return_value = True
     repository.list_all_transactions.return_value = (incoming,)
     state_store.advance_epoch.return_value = _state(

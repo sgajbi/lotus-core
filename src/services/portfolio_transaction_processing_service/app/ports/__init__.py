@@ -43,6 +43,7 @@ from .income import AccruedIncomeOffsetStatePort
 from .position_history import (
     PositionHistoryObserver,
     PositionHistoryRepository,
+    PositionMaterializationProgress,
     PositionRecalculationReason,
     PositionRecalculationStateStore,
     PositionReplayMode,
@@ -115,6 +116,7 @@ __all__ = [
     "OpenLotCheckpointRecord",
     "PositionHistoryObserver",
     "PositionHistoryRepository",
+    "PositionMaterializationProgress",
     "PositionProcessingPort",
     "PositionProcessingResult",
     "PositionRecalculationReason",
