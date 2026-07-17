@@ -16,7 +16,7 @@ class CostBasisTransactionStatePort(Protocol):
         exclude_id: str | None = None,
     ) -> list[BookedTransaction]: ...
 
-    async def apply_transaction_costs(
+    async def apply_transaction_costs_and_replace_breakdown(
         self,
         transaction: CostBasisTransaction,
     ) -> BookedTransaction | None: ...
@@ -29,8 +29,3 @@ class CostBasisTransactionStatePort(Protocol):
     ) -> BookedTransaction | None: ...
 
     async def upsert_booked_transaction(self, transaction: BookedTransaction) -> None: ...
-
-    async def replace_transaction_cost_breakdown(
-        self,
-        transaction: CostBasisTransaction,
-    ) -> None: ...
