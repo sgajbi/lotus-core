@@ -12,6 +12,9 @@ from prometheus_client.parser import text_string_to_metric_families
 from sqlalchemy import Engine, text
 
 _TRANSACTION_PROCESSING_OPERATION_METRIC = "lotus_core_transaction_processing_operations_total"
+_TRANSACTION_PROCESSING_DURATION_METRIC = (
+    "lotus_core_transaction_processing_operation_duration_seconds"
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -21,6 +24,18 @@ class TransactionProcessingCounts:
     cashflow_count: int
     position_count: int
     processing_claim_count: int
+
+
+@dataclass(frozen=True, slots=True)
+class TransactionProcessingOperationEvidence:
+    """Retain bounded stage timing without business or transaction identifiers."""
+
+    stage: str
+    outcome: str
+    operation_count: int
+    duration_observation_count: int
+    total_duration_seconds: float
+    average_duration_seconds: float | None
 
 
 def build_transaction_batch(
@@ -309,6 +324,53 @@ def transaction_processing_operation_count(
             ):
                 return int(sample.value)
     return 0
+
+
+def transaction_processing_operation_evidence(
+    *,
+    transaction_processing_base_url: str,
+) -> list[TransactionProcessingOperationEvidence]:
+    """Collect aggregate operation counts and durations from one runtime scrape."""
+
+    response = requests.get(
+        f"{transaction_processing_base_url}/metrics",
+        timeout=10,
+    )
+    response.raise_for_status()
+    counts: dict[tuple[str, str], int] = {}
+    duration_counts: dict[tuple[str, str], int] = {}
+    duration_sums: dict[tuple[str, str], float] = {}
+    for family in text_string_to_metric_families(response.text):
+        for sample in family.samples:
+            stage = sample.labels.get("stage")
+            outcome = sample.labels.get("outcome")
+            if stage is None or outcome is None:
+                continue
+            key = (stage, outcome)
+            if sample.name == _TRANSACTION_PROCESSING_OPERATION_METRIC:
+                counts[key] = int(sample.value)
+            elif sample.name == f"{_TRANSACTION_PROCESSING_DURATION_METRIC}_count":
+                duration_counts[key] = int(sample.value)
+            elif sample.name == f"{_TRANSACTION_PROCESSING_DURATION_METRIC}_sum":
+                duration_sums[key] = float(sample.value)
+
+    evidence = []
+    for stage, outcome in sorted(counts.keys() | duration_counts.keys() | duration_sums.keys()):
+        observation_count = duration_counts.get((stage, outcome), 0)
+        total_duration = duration_sums.get((stage, outcome), 0.0)
+        evidence.append(
+            TransactionProcessingOperationEvidence(
+                stage=stage,
+                outcome=outcome,
+                operation_count=counts.get((stage, outcome), 0),
+                duration_observation_count=observation_count,
+                total_duration_seconds=round(total_duration, 6),
+                average_duration_seconds=(
+                    round(total_duration / observation_count, 9) if observation_count > 0 else None
+                ),
+            )
+        )
+    return evidence
 
 
 def wait_for_transaction_processing_operation_count(
