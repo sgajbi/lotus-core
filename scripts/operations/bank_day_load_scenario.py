@@ -1875,6 +1875,41 @@ def _safe_collect_log_evidence(
         return [], [f"failed to collect log evidence for partial report: {exc}"]
 
 
+def _source_provenance() -> dict[str, str | None]:
+    """Return source identity without retaining command output or file names."""
+
+    repository_root = Path(__file__).resolve().parents[2]
+    git_command = ["git", "-C", str(repository_root), "-c", "core.optionalLocks=false"]
+    try:
+        revision = subprocess.run(
+            [*git_command, "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        status = subprocess.run(
+            [*git_command, "status", "--porcelain=v1", "--untracked-files=all"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+    except (OSError, subprocess.CalledProcessError):
+        return {
+            "source_revision": None,
+            "source_tree_state": "unavailable",
+        }
+    if not revision:
+        return {
+            "source_revision": None,
+            "source_tree_state": "unavailable",
+        }
+
+    return {
+        "source_revision": revision,
+        "source_tree_state": "dirty" if status else "clean",
+    }
+
+
 def _build_config(args: argparse.Namespace, *, resolved_trade_date: str) -> dict[str, Any]:
     correction_multiplier = getattr(args, "market_price_correction_multiplier", None)
     fx_from_currency = getattr(args, "fx_rate_correction_from_currency", None)
@@ -1895,6 +1930,7 @@ def _build_config(args: argparse.Namespace, *, resolved_trade_date: str) -> dict
         "transaction_count": args.portfolio_count * args.transactions_per_portfolio,
         "transaction_batch_size": args.transaction_batch_size,
         "evidence_classification": args.evidence_classification,
+        **_source_provenance(),
         "seed_materialization_timeout_seconds": seed_materialization_timeout_seconds,
         "max_records_per_minute": args.max_records_per_minute,
         "max_requests_per_minute": args.max_requests_per_minute,

@@ -177,8 +177,12 @@ unrealized price/FX/total components, processed-observation count, pair-replay c
 relevant final queue/failure count. Missing evidence fails the report; a successful ingestion
 response is not correction proof.
 
-The report config records `evidence_classification` as `certifying` or `diagnostic`. Do not infer
-certification from a successful exit code or scenario name.
+The report config records `evidence_classification` as `certifying` or `diagnostic`, together with
+`source_revision` and `source_tree_state`. The revision is the exact Git commit when repository
+metadata is available; the tree state is `clean`, `dirty`, or `unavailable` and never retains file
+names or command output. Do not infer certification from a successful exit code, scenario name, or
+source-revision field: local evidence remains lower-class than trusted CI or receipt-bound runtime
+evidence.
 
 The report records the database backend, host, port, and database name under `database_target`.
 It never records the connection URL, username, password, or URL query parameters. Treat generated

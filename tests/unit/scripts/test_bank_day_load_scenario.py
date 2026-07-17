@@ -1,5 +1,6 @@
 from argparse import Namespace
 from decimal import Decimal
+from subprocess import CalledProcessError, CompletedProcess
 
 from scripts.operations import bank_day_load_scenario
 from scripts.operations.bank_day_load_scenario import (
@@ -319,7 +320,69 @@ def test_evaluate_report_flags_tie_out_sample_api_and_log_failures() -> None:
     )
 
 
-def test_finalize_report_marks_aborted_runs_as_failed_and_preserves_partial_evidence() -> None:
+def test_source_provenance_records_revision_and_dirty_tree_state(monkeypatch) -> None:
+    responses = iter(
+        (
+            CompletedProcess(args=[], returncode=0, stdout="abc123\n", stderr=""),
+            CompletedProcess(args=[], returncode=0, stdout=" M changed.py\n", stderr=""),
+        )
+    )
+
+    monkeypatch.setattr(
+        bank_day_load_scenario.subprocess,
+        "run",
+        lambda *args, **kwargs: next(responses),
+    )
+
+    assert bank_day_load_scenario._source_provenance() == {
+        "source_revision": "abc123",
+        "source_tree_state": "dirty",
+    }
+
+
+def test_source_provenance_records_revision_and_clean_tree_state(monkeypatch) -> None:
+    responses = iter(
+        (
+            CompletedProcess(args=[], returncode=0, stdout="abc123\n", stderr=""),
+            CompletedProcess(args=[], returncode=0, stdout="", stderr=""),
+        )
+    )
+
+    monkeypatch.setattr(
+        bank_day_load_scenario.subprocess,
+        "run",
+        lambda *args, **kwargs: next(responses),
+    )
+
+    assert bank_day_load_scenario._source_provenance() == {
+        "source_revision": "abc123",
+        "source_tree_state": "clean",
+    }
+
+
+def test_source_provenance_fails_closed_when_git_metadata_is_unavailable(monkeypatch) -> None:
+    def raise_git_error(*args, **kwargs):
+        raise CalledProcessError(returncode=128, cmd=args[0])
+
+    monkeypatch.setattr(bank_day_load_scenario.subprocess, "run", raise_git_error)
+
+    assert bank_day_load_scenario._source_provenance() == {
+        "source_revision": None,
+        "source_tree_state": "unavailable",
+    }
+
+
+def test_finalize_report_marks_aborted_runs_as_failed_and_preserves_partial_evidence(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        bank_day_load_scenario,
+        "_source_provenance",
+        lambda: {
+            "source_revision": "abc123",
+            "source_tree_state": "clean",
+        },
+    )
     report = _finalize_report(
         args=Namespace(
             scenario_name="bank-day-average-load",
@@ -439,6 +502,8 @@ def test_finalize_report_marks_aborted_runs_as_failed_and_preserves_partial_evid
         "port": 5432,
         "database": "test",
     }
+    assert report.config["source_revision"] == "abc123"
+    assert report.config["source_tree_state"] == "clean"
     assert "load_user" not in str(report.config)
     assert "load_password" not in str(report.config)
     assert "sslmode" not in str(report.config)
