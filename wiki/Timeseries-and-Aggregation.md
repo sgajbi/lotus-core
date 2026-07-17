@@ -65,6 +65,11 @@ replay, and whole-transaction contribution before proposing another hot-path cha
 security, account, or transaction identifier is retained. Missing stage evidence fails a certifying
 run; cumulative and mean durations are diagnostic attribution, not latency SLOs.
 
+Existing cost metrics are retained with the stage evidence: bounded execution mode/method counts,
+recalculation duration, recalculation depth, and restored-open-lot count/sum/mean. Use them to
+separate calculator work and replay depth from reference, lock, persistence, and effect-staging work
+before changing the cost path. Initial-opening workloads may legitimately restore no lots.
+
 Use `make profile-derived-state-daily` for the 100,000-transaction bank-day shape and
 `make profile-derived-state-fan-in` for one portfolio with 1,000 positions. Use
 `make profile-derived-state-price-burst` to materialize 10,000 shared-instrument positions and then
