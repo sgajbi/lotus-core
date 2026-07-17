@@ -451,6 +451,36 @@ async def test_ordered_avco_event_without_pool_checkpoint_uses_full_rebuild() ->
     lot_states.get_open_lot_checkpoint_records.assert_not_awaited()
 
 
+async def test_initial_opening_transaction_uses_exact_opening_lot_scope() -> None:
+    repo = AsyncMock(spec=CostBasisTransactionStatePort)
+    processing_state = _processing_state_port()
+    processing_state.get_cost_basis_processing_checkpoint.return_value = None
+    repo.get_transaction_history.return_value = []
+
+    calculation = await _calculate_cost_basis(
+        event=_event(
+            transaction_id="BUY-INITIAL",
+            transaction_date=datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc),
+            transaction_type="BUY",
+            quantity="10",
+        ),
+        event_transaction_type="BUY",
+        portfolio_base_currency="USD",
+        instrument=MagicMock(product_type="EQUITY", asset_class="EQUITY"),
+        repo=repo,
+        average_cost_pools=_average_cost_pool_port(),
+        lot_states=_lot_state_port(),
+        fx_rates=_fx_rate_port(),
+        processing_state=processing_state,
+        cost_basis_method=CostBasisMethod.FIFO,
+    )
+
+    assert calculation.incremental is False
+    assert calculation.errored == []
+    assert calculation.open_lot_persistence_scope is OpenLotPersistenceScope.INITIAL_OPENING_LOT
+    assert set(calculation.open_lot_states) == {"BUY-INITIAL"}
+
+
 async def test_backdated_transaction_uses_full_deterministic_history() -> None:
     observer = MagicMock(spec=CostBasisCalculationObserver)
     repo = AsyncMock(spec=CostBasisTransactionStatePort)

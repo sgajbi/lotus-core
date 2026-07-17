@@ -10,6 +10,7 @@ from portfolio_common.domain.cost_basis_method import CostBasisMethod
 from ...domain.cost_basis import (
     AVERAGE_COST_POOL_LOT_BEHAVIORS,
     INCREMENTAL_SAFE_LOT_BEHAVIORS,
+    LOT_OPENING_BEHAVIORS,
     STATE_DEPENDENT_LOT_BEHAVIORS,
     AverageCostPoolCheckpoint,
     AverageCostPoolTransition,
@@ -97,6 +98,7 @@ class CostBasisCalculationCoordinator:
 
         return await self._calculate_full_rebuild(
             transaction=transaction,
+            transaction_type=transaction_type,
             portfolio_base_currency=portfolio_base_currency,
             instrument=instrument,
             cost_basis_method=cost_basis_method,
@@ -125,6 +127,7 @@ class CostBasisCalculationCoordinator:
             if average_cost_pool_record is None:
                 return await self._calculate_full_rebuild(
                     transaction=transaction,
+                    transaction_type=transaction_type,
                     portfolio_base_currency=portfolio_base_currency,
                     instrument=instrument,
                     cost_basis_method=cost_basis_method,
@@ -191,6 +194,7 @@ class CostBasisCalculationCoordinator:
         self,
         *,
         transaction: BookedTransaction,
+        transaction_type: str,
         portfolio_base_currency: str,
         instrument: CostBasisInstrumentReference | None,
         cost_basis_method: CostBasisMethod,
@@ -207,13 +211,19 @@ class CostBasisCalculationCoordinator:
             existing_transactions_raw=[],
             new_transactions_raw=all_transactions_raw,
         )
+        persistence_scope = (
+            OpenLotPersistenceScope.INITIAL_OPENING_LOT
+            if len(all_transactions_raw) == 1
+            and transaction_lot_behavior(transaction_type) in LOT_OPENING_BEHAVIORS
+            else OpenLotPersistenceScope.COMPLETE_SNAPSHOT
+        )
         self._record_execution(CostBasisExecutionMode.FULL_REBUILD, cost_basis_method)
         return CostBasisCalculationResult(
             processed=processed,
             errored=errored,
             open_lot_states=open_lot_states,
             incremental=False,
-            open_lot_persistence_scope=OpenLotPersistenceScope.COMPLETE_SNAPSHOT,
+            open_lot_persistence_scope=persistence_scope,
             average_cost_pool_transition=None,
         )
 
