@@ -2798,7 +2798,14 @@ Most relevant current governance:
      semantics; an isolated successful repository probe is not sufficient runtime proof. Exact run
      `20260717T180631Z` reproduced the contradiction for all 1,000 jobs at a clean signed SHA after
      a prior exact run converged, so treat the defect as nondeterministic and reproducible until the
-     worker transition has targeted concurrency proof.
+     worker transition has targeted concurrency proof. Signed `45295cf24` now classifies the
+     internal transition as `TERMINAL_APPLIED`, `REQUEUED`, or `NOT_OWNED`, gates all completion
+     side effects on the first outcome, and fails closed on an unsupported applied status. Exact
+     clean fan-in runs `20260717T193156Z` and `20260717T194013Z` then reconciled all `1,000` rows
+     with zero requeue/lost-ownership suppression warnings; the repeat drained in `95.645s` with
+     exactly one aggregation completion. Treat this as bounded ownership-observability and repeat
+     evidence, not as a substitute for daily, recovery, poison, duplicate, correction, or
+     restatement certification.
 
 ## Context Maintenance Rule
 
