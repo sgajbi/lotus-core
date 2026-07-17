@@ -96,8 +96,11 @@ class PositionStateRepository:
                 status="CURRENT",
             )
             .on_conflict_do_nothing(index_elements=["portfolio_id", "security_id"])
+            .returning(PositionState)
         )
-        await self.db.execute(stmt)
+        inserted_state = (await self.db.execute(stmt)).scalars().one_or_none()
+        if inserted_state is not None:
+            return inserted_state
 
         select_stmt = select(PositionState).filter_by(
             portfolio_id=portfolio_id, security_id=security_id
