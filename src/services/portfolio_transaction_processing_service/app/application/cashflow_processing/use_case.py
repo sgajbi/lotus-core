@@ -90,7 +90,7 @@ class ProcessTransactionCashflowUseCase:
 
         transaction_type = _validated_cashflow_transaction_type(transaction)
         if not requires_cashflow_processing(transaction):
-            logger.info(
+            logger.debug(
                 "Skipping cashflow creation for non-cash FX contract lifecycle event.",
                 extra={
                     "transaction_id": transaction.transaction_id,

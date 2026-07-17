@@ -311,7 +311,7 @@ class OutboxDispatcher:
     ) -> None:
         try:
             undelivered_count = self._producer.flush(timeout=10)
-            logger.info(
+            logger.debug(
                 "Outbox dispatcher flush completed.",
                 extra=operation_log_extra(
                     event_name="outbox.dispatcher.flush_completed",
@@ -450,7 +450,7 @@ class OutboxDispatcher:
                         topic=event.topic,
                     ),
                 )
-        logger.info(
+        logger.debug(
             "Outbox dispatcher marked events as processed.",
             extra=operation_log_extra(
                 event_name="outbox.dispatcher.events_processed",

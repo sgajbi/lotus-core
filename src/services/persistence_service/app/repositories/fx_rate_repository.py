@@ -40,18 +40,24 @@ class FxRateRepository:
             )
 
             await self.db.execute(final_stmt)
-            logger.info(
-                "Successfully staged UPSERT for FX Rate for "
-                f"'{event.from_currency}-{event.to_currency}' "
-                f"on {event.rate_date}."
+            logger.debug(
+                "Staged FX rate upsert.",
+                extra={
+                    "from_currency": event.from_currency,
+                    "to_currency": event.to_currency,
+                    "rate_date": event.rate_date.isoformat(),
+                },
             )
 
             return DBFxRate(**fx_rate_data)
-        except Exception as e:
+        except Exception:
             logger.error(
-                "Failed to stage UPSERT for FX rate for "
-                f"'{event.from_currency}-{event.to_currency}' "
-                f"on '{event.rate_date}': {e}",
+                "Failed to stage FX rate upsert.",
+                extra={
+                    "from_currency": event.from_currency,
+                    "to_currency": event.to_currency,
+                    "rate_date": event.rate_date.isoformat(),
+                },
                 exc_info=True,
             )
             raise
