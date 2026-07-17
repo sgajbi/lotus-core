@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Iterable, Optional
 
-from sqlalchemy import and_, func, not_, select, tuple_, update
+from sqlalchemy import and_, case, func, not_, select, tuple_, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -40,15 +40,17 @@ class ValuationJobRepository:
         valuation_date: date,
         epoch: int,
         correlation_id: Optional[str] = None,
+        requeue_if_processing: bool = False,
     ) -> int:
         """
         Idempotently creates or updates a valuation job.
 
         Duplicate scheduler polls for the same logical run must not re-arm an already completed
         valuation job. A genuinely new replay/backfill run is allowed to re-arm the job via a
-        different correlation id.
+        different correlation id. Source-correction callers can explicitly preserve a different
+        lineage that arrives during PROCESSING; ordinary readiness callers remain non-disruptive.
         """
-        return await self.upsert_jobs(
+        return await self._upsert_jobs(
             [
                 ValuationJobUpsert(
                     portfolio_id=portfolio_id,
@@ -57,10 +59,19 @@ class ValuationJobRepository:
                     epoch=epoch,
                     correlation_id=correlation_id,
                 )
-            ]
+            ],
+            requeue_if_processing=requeue_if_processing,
         )
 
     async def upsert_jobs(self, jobs: Iterable[ValuationJobUpsert]) -> int:
+        return await self._upsert_jobs(jobs, requeue_if_processing=False)
+
+    async def _upsert_jobs(
+        self,
+        jobs: Iterable[ValuationJobUpsert],
+        *,
+        requeue_if_processing: bool,
+    ) -> int:
         normalized_jobs = self._normalize_jobs(jobs)
         if not normalized_jobs:
             return 0
@@ -72,7 +83,10 @@ class ValuationJobRepository:
             if not eligible_jobs:
                 return 0
 
-            staged_count = await self._execute_upsert_jobs(eligible_jobs)
+            staged_count = await self._execute_upsert_jobs(
+                eligible_jobs,
+                requeue_if_processing=requeue_if_processing,
+            )
             superseded_count = await self._skip_superseded_pending_jobs(
                 normalized_jobs=normalized_jobs,
                 latest_epochs_by_scope=latest_epochs_by_scope,
@@ -103,9 +117,17 @@ class ValuationJobRepository:
             job for job in normalized_jobs if not self._is_stale_job(job, latest_epochs_by_scope)
         ]
 
-    async def _execute_upsert_jobs(self, eligible_jobs: list[ValuationJobUpsert]) -> int:
+    async def _execute_upsert_jobs(
+        self,
+        eligible_jobs: list[ValuationJobUpsert],
+        *,
+        requeue_if_processing: bool,
+    ) -> int:
         result = await self.db.execute(
-            _valuation_job_upsert_stmt(eligible_jobs).returning(
+            _valuation_job_upsert_stmt(
+                eligible_jobs,
+                requeue_if_processing=requeue_if_processing,
+            ).returning(
                 PortfolioValuationJob.portfolio_id,
                 PortfolioValuationJob.security_id,
                 PortfolioValuationJob.valuation_date,
@@ -247,12 +269,22 @@ class ValuationJobRepository:
         return skipped_count
 
 
-def _valuation_job_upsert_stmt(eligible_jobs: list[ValuationJobUpsert]):
+def _valuation_job_upsert_stmt(
+    eligible_jobs: list[ValuationJobUpsert],
+    *,
+    requeue_if_processing: bool = False,
+):
     stmt = pg_insert(PortfolioValuationJob).values(_valuation_job_insert_values(eligible_jobs))
     return stmt.on_conflict_do_update(
         index_elements=["portfolio_id", "security_id", "valuation_date", "epoch"],
-        set_=_valuation_job_update_values(stmt),
-        where=_valuation_job_conflict_update_predicate(stmt),
+        set_=_valuation_job_update_values(
+            stmt,
+            requeue_if_processing=requeue_if_processing,
+        ),
+        where=_valuation_job_conflict_update_predicate(
+            stmt,
+            requeue_if_processing=requeue_if_processing,
+        ),
     )
 
 
@@ -276,6 +308,7 @@ def _valuation_job_insert_values(
                 "valuation_date": job.valuation_date,
                 "epoch": job.epoch,
                 "status": "PENDING",
+                "requeue_requested": False,
                 "correlation_id": diagnostics.correlation_id,
                 "correlation_missing_reason": diagnostics.correlation_missing_reason,
                 "alternate_lookup_key": diagnostics.alternate_lookup_key,
@@ -284,23 +317,51 @@ def _valuation_job_insert_values(
     return values
 
 
-def _valuation_job_update_values(stmt) -> dict[str, object]:
-    return {
+def _valuation_job_update_values(
+    stmt,
+    *,
+    requeue_if_processing: bool,
+) -> dict[str, object]:
+    values: dict[str, object] = {
         "status": "PENDING",
+        "requeue_requested": False,
         "correlation_id": stmt.excluded.correlation_id,
         "correlation_missing_reason": stmt.excluded.correlation_missing_reason,
         "alternate_lookup_key": stmt.excluded.alternate_lookup_key,
         "updated_at": func.now(),
     }
-
-
-def _valuation_job_conflict_update_predicate(stmt):
-    return not_(PortfolioValuationJob.status == "PROCESSING") & not_(
-        and_(
-            PortfolioValuationJob.status.in_(("PENDING", "COMPLETE")),
-            PortfolioValuationJob.correlation_id.is_not_distinct_from(stmt.excluded.correlation_id),
+    if requeue_if_processing:
+        values.update(
+            status=case(
+                (
+                    PortfolioValuationJob.status == "PROCESSING",
+                    PortfolioValuationJob.status,
+                ),
+                else_="PENDING",
+            ),
+            requeue_requested=case(
+                (PortfolioValuationJob.status == "PROCESSING", True),
+                else_=False,
+            ),
         )
+    return values
+
+
+def _valuation_job_conflict_update_predicate(
+    stmt,
+    *,
+    requeue_if_processing: bool,
+):
+    protected_statuses = ("PENDING", "COMPLETE")
+    if requeue_if_processing:
+        protected_statuses = (*protected_statuses, "PROCESSING")
+    same_lineage = and_(
+        PortfolioValuationJob.status.in_(protected_statuses),
+        PortfolioValuationJob.correlation_id.is_not_distinct_from(stmt.excluded.correlation_id),
     )
+    if requeue_if_processing:
+        return not_(same_lineage)
+    return not_(PortfolioValuationJob.status == "PROCESSING") & not_(same_lineage)
 
 
 def _log_staged_job_upsert(
