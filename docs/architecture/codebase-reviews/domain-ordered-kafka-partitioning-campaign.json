@@ -48,11 +48,11 @@
       "tranche_id": "tranche-2-throughput-and-certification",
       "branch": "feat/domain-ordered-kafka-partitioning",
       "base_sha": "b9c55792361557bda56ba498492e962225557dd4",
-      "head_sha": "6640ec911a31d722410b678de54f415433f469f2",
+      "head_sha": "d34da93054c56897c317dbdeb7a1c7a595a432c7",
       "post_merge_main_sha": "pending",
       "required_predecessor_main_sha": "b9c55792361557bda56ba498492e962225557dd4",
       "capability_boundary": "Transactional hot-path throughput, twelve-way capacity, valuation-job lock ordering, and exact workload certification",
-      "commit_count": 36,
+      "commit_count": 38,
       "issue_closure_decision": "close_after_final_validated_main",
       "local_evidence": [
         "Focused #799 unit, domain, lint, format, and type checks pass at signed campaign commits through 349ee126c66415c9bf683baa43b51656e6c8905d",
@@ -65,6 +65,8 @@
         "Internal cost diagnostic at signed head 37abbf19b293e9e720fa704d04fcd737fc4d239d proved 1000 FIFO full rebuilds had depth one and only 0.18031266846810468 seconds of pure recalculation time; the wider cost stage is database, persistence, or coordination work, so calculator optimization is not justified",
         "The same diagnostic reached 1000 COMPLETE valuation jobs with attempt count 2 and zero Kafka lag but produced zero snapshots or downstream rows while logging 1000 lost-ownership outcomes; it is terminal diagnostic evidence, not a capacity result",
         "Signed 6640ec911a31d722410b678de54f415433f469f2 makes the load gate fail fast when drained COMPLETE valuation jobs lack their atomic same-scope snapshots; 19 focused tests plus MyPy, Ruff, format, and diff checks passed",
+        "Exact clean fan-in 20260717T174251Z passed at signed evidence head d34da93054c56897c317dbdeb7a1c7a595a432c7 with 105.622-second drain, exact 1000 transaction and derived-row reconciliation, attempts 2/2, zero repeated processing, closed jobs and outbox, and no recurrence of the terminal ownership anomaly",
+        "Pure FIFO recalculation in 20260717T174251Z totalled only 0.160816 seconds at depth one while the wider cost stage totalled 194.163301 seconds; database, persistence, or coordination evidence is required before another cost-path change",
         "The next investigation requires database, persistence, or coordination timing evidence and a runtime explanation for the valuation ownership anomaly before any further hot-path change or daily rerun; ordered append, full rebuild, method-specific lot state, backdated and correction semantics, and single-writer coordination remain mandatory",
         "Exact daily, recovery, poison, duplicate, price-restatement, and FX-restatement completion evidence remains required before PR readiness"
       ],
@@ -76,7 +78,8 @@
         "Remote Feature Lane 29594879442 passed at signed durable-evidence commit 24294a3ff8875d8011f6251fddb032b6c8867a69",
         "Remote Feature Lane 29595818757 passed at signed stage-evidence and managed-endpoint head 20333978aa0f52d62032334bc9b474edd3c9f4ab",
         "Remote Feature Lane 29597316430 passed at signed internal-cost-evidence head 37abbf19b293e9e720fa704d04fcd737fc4d239d",
-        "Remote Feature Lane 29599992446 passed at signed fail-fast diagnostic head 6640ec911a31d722410b678de54f415433f469f2"
+        "Remote Feature Lane 29599992446 passed at signed fail-fast diagnostic head 6640ec911a31d722410b678de54f415433f469f2",
+        "Remote Feature Lane 29600977253 passed at signed exact fan-in evidence head d34da93054c56897c317dbdeb7a1c7a595a432c7"
       ]
     }
   ],

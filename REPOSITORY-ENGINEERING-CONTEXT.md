@@ -2779,6 +2779,9 @@ Most relevant current governance:
      attribution rather than latency percentiles or SLOs. Also retain existing bounded cost execution
      mode/method counts, recalculation duration/depth, and restored-open-lot statistics so calculator
      work can be separated from the wider cost stage before changing persistence or coordination.
+     Current exact fan-in evidence attributes only about `0.16s` of `194s` wider cost-stage time to
+     FIFO calculation across 1,000 opening transactions. Do not optimize calculator arithmetic from
+     the aggregate cost-stage label; obtain database, persistence, or coordination evidence first.
 202. A `COMPLETE` valuation job and its portfolio/security/date/epoch snapshot are one atomic unit
      of work. When a governed workload has all expected transactions durable, no pending or
      processing valuation work, and an empty outbox, a completed job without its matching snapshot
