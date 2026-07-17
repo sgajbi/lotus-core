@@ -171,6 +171,25 @@ Neither result justifies another two-hour daily run. Further query-level micro-o
 path is paused until full unit-of-work timing or equivalent evidence identifies a material
 transaction-processing bottleneck.
 
+The first stage-attributed certifying fan-in `20260717T162223Z` then completed at exact signed head
+`20333978a` with exact 1,000 transaction/snapshot/position rows, one portfolio row, `110.416s`
+drain, attempts `2/2`, repeats `0`, final outbox `0/0`, and zero failures. Across 1,000 successful
+operations, the existing bounded metrics attributed whole-transaction duration as follows:
+
+- cost `199.828910s` / `0.199828910s` mean (`37.18%`);
+- idempotency `95.100972s` / `0.095100972s` mean (`17.69%`);
+- position `93.364817s` / `0.093364817s` mean (`17.37%`);
+- cashflow `63.015394s` / `0.063015394s` mean (`11.72%`);
+- readiness `49.527981s` / `0.049527981s` mean (`9.21%`);
+- commit `35.701706s` / `0.035701706s` mean (`6.64%`).
+
+Whole-transaction duration was `537.486227s` / `0.537486227s` mean. Cost is therefore the largest
+remaining stage, but this aggregate evidence does not yet identify a safe internal cost change or
+justify another daily run. The next investigation must obtain bounded internal cost timing/query
+evidence while preserving ordered append, full-rebuild fallback, method-specific lot state,
+backdated/correction semantics, and single-writer coordination. Artifact SHA-256 is
+`668AC265FA7D12058A1A917CFF1B8B1ED50B5AA9E492B2AE7255867A461A6E17`.
+
 ## Compatibility
 
 HTTP APIs, OpenAPI schemas, Kafka topics, event payload schemas, transaction calculations,
@@ -230,13 +249,16 @@ because historical and new keys can map to different partitions after producer r
   tests, `2` targeted PostgreSQL statement/lifecycle tests, and the full `75`-test PostgreSQL
   transaction-processing contract. MyPy across `235` files, Ruff/format/diff, the architecture
   guard, and Remote Feature Lane `29593836128` passed at signed commit `b7e7e1be2`.
-- Transaction-operation evidence collection passed `25` focused runner/parser tests, full MyPy
-  across `235` source files, Ruff/format/diff, the complete architecture and wiki/documentation
-  guards, synthetic-fixture leakage, and repository output-shape validation before commit.
+- Transaction-operation evidence collection and managed dynamic-endpoint fix-forward passed `41`
+  focused runner/parser/orchestration tests, full MyPy across `235` source files, Ruff/format/diff,
+  the complete architecture and wiki/documentation guards, synthetic-fixture leakage, and
+  repository output-shape validation. Exact fan-in `20260717T162223Z` passed, and Remote Feature
+  Lane `29595818757` passed at signed head `20333978a`.
 
 Implementation commits include `23fc6faf3`, `d51adb739`, `ad1ad179d`, `57f8c60e2`,
 `4f05be9a5`, `c230d660a`, `f42f6eaa3`, `d56e14dbf`, `2d49fc8f1`, `70ae16f0f`,
-`a3c9eeaac`, and `b7e7e1be2`. Human contract/context alignment starts in `9d6dbbbf9`.
+`a3c9eeaac`, `b7e7e1be2`, `35fb5d84f`, and `20333978a`. Human contract/context alignment starts in
+`9d6dbbbf9`.
 
 ## Documentation Decision
 
