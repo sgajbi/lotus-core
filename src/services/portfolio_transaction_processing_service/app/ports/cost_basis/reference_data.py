@@ -26,13 +26,20 @@ class CostBasisInstrumentReference:
     asset_class: str | None
 
 
+@dataclass(frozen=True, slots=True)
+class CostBasisReferenceData:
+    """Portfolio policy and optional instrument facts loaded as one unit."""
+
+    portfolio: CostBasisPortfolioReference
+    instrument: CostBasisInstrumentReference | None
+
+
 class CostBasisReferenceDataPort(Protocol):
     """Load the minimal portfolio and instrument facts needed by cost processing."""
 
-    async def get_cost_basis_portfolio(
-        self, portfolio_id: str
-    ) -> CostBasisPortfolioReference | None: ...
-
-    async def get_cost_basis_instrument(
-        self, security_id: str
-    ) -> CostBasisInstrumentReference | None: ...
+    async def get_cost_basis_reference_data(
+        self,
+        *,
+        portfolio_id: str,
+        security_id: str,
+    ) -> CostBasisReferenceData | None: ...
