@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
+from typing import cast
 
 from portfolio_common.domain.calculation_lineage import canonical_content_hash
 from portfolio_common.domain.holdings_reconciliation import (
@@ -67,10 +68,13 @@ def core_snapshot_source_content_hash(rows: list[CoreSnapshotPositionSource]) ->
     """Hash the normalized source facts selected for baseline assembly."""
 
     payloads = [_core_snapshot_source_row_payload(row) for row in rows]
-    return canonical_content_hash(
-        {
-            "positions": sorted(payloads, key=canonical_content_hash),
-        }
+    return cast(
+        str,
+        canonical_content_hash(
+            {
+                "positions": sorted(payloads, key=canonical_content_hash),
+            }
+        ),
     )
 
 

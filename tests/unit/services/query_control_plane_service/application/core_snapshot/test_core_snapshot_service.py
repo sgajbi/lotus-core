@@ -4,7 +4,15 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
-from portfolio_common.reconciliation_quality import COMPLETE, PARTIAL
+from portfolio_common.domain.holdings_reconciliation import FinancialReconciliationControl
+from portfolio_common.reconciliation_quality import (
+    BLOCKED,
+    COMPLETE,
+    PARTIAL,
+    STALE,
+    UNKNOWN,
+    UNRECONCILED,
+)
 
 from src.services.query_control_plane_service.app.application.core_snapshot.baseline_metadata import (  # noqa: E501
     latest_snapshot_timestamp,
@@ -123,6 +131,20 @@ def _position_source(
     )
 
 
+def _reconciliation_control(
+    *,
+    epoch: int = 7,
+    status: str = "COMPLETED",
+    updated_at: datetime | None = datetime(2026, 2, 27, 10, 10, tzinfo=UTC),
+) -> FinancialReconciliationControl:
+    return FinancialReconciliationControl(
+        business_date=date(2026, 2, 27),
+        epoch=epoch,
+        status=status,
+        updated_at=updated_at,
+    )
+
+
 @pytest.fixture
 def mock_dependencies():
     position_repo = AsyncMock()
@@ -152,6 +174,7 @@ def mock_dependencies():
         )
     ]
     position_repo.get_latest_position_history_by_portfolio_as_of_date.return_value = []
+    position_repo.get_financial_reconciliation_controls.return_value = [_reconciliation_control()]
     simulation_repo.get_session.return_value = SimpleNamespace(
         session_id="SIM_1",
         portfolio_id="PORT_001",
@@ -180,6 +203,7 @@ def _service(mock_dependencies, *, clock=None) -> CoreSnapshotService:
         get_portfolio=portfolio_repo.get_by_id,
         get_position_snapshot=position_repo.get_latest_positions_by_portfolio_as_of_date,
         get_position_history=position_repo.get_latest_position_history_by_portfolio_as_of_date,
+        get_financial_reconciliation_controls=(position_repo.get_financial_reconciliation_controls),
         get_instruments=instrument_repo.get_by_security_ids,
         get_prices=price_repo.get_prices,
         get_fx_rates=fx_repo.get_fx_rates,
@@ -233,11 +257,13 @@ async def test_core_snapshot_baseline_success(mock_dependencies):
     assert response.product_version == "v1"
     assert response.tenant_id == "default"
     assert response.restatement_version == "current"
-    assert response.reconciliation_status == "UNKNOWN"
+    assert response.reconciliation_status == COMPLETE
     assert response.data_quality_status == COMPLETE
-    assert response.latest_evidence_timestamp == datetime(2026, 2, 27, 10, 5, tzinfo=UTC)
+    assert response.latest_evidence_timestamp == datetime(2026, 2, 27, 10, 10, tzinfo=UTC)
     assert response.source_batch_fingerprint == response.content_hash
-    assert response.snapshot_id is None
+    assert response.snapshot_id == (
+        f"portfolio_state_snapshot:{response.calculation_lineage.output_content_hash[:24]}"
+    )
     assert response.content_hash.startswith("sha256:")
     assert response.source_digest == response.content_hash
     assert response.source_refs == [
@@ -246,6 +272,18 @@ async def test_core_snapshot_baseline_success(mock_dependencies):
     assert response.source_lineage["source_owner"] == "lotus-core"
     assert response.source_lineage["source_product"] == "PortfolioStateSnapshot"
     assert response.source_lineage["request_fingerprint"] == response.request_fingerprint
+    assert response.source_lineage["input_content_hash"] == (
+        response.calculation_lineage.input_content_hash
+    )
+    assert response.source_lineage["calculation_content_hash"] == (
+        response.calculation_lineage.calculation_content_hash
+    )
+    assert response.source_lineage["output_content_hash"] == (
+        response.calculation_lineage.output_content_hash
+    )
+    assert response.calculation_lineage.algorithm_id == "PORTFOLIO_STATE_SNAPSHOT"
+    assert response.calculation_lineage.algorithm_version == 1
+    assert response.calculation_lineage.intermediate_precision == 28
     assert response.source_evidence_current is True
     assert response.policy_version == "snapshot.policy.inline.default"
     assert response.correlation_id is None
@@ -263,6 +301,116 @@ async def test_core_snapshot_uses_injected_clock_for_generated_metadata(mock_dep
     response = await service.get_core_snapshot("PORT_001", request)
 
     assert response.generated_at == generated_at
+
+
+@pytest.mark.parametrize(
+    ("control_status", "control_timestamp", "expected_status", "expected_freshness"),
+    [
+        (None, None, UNRECONCILED, "UNAVAILABLE"),
+        ("RUNNING", datetime(2026, 2, 27, 10, 10, tzinfo=UTC), PARTIAL, "UNAVAILABLE"),
+        ("FAILED", datetime(2026, 2, 27, 10, 10, tzinfo=UTC), BLOCKED, "UNAVAILABLE"),
+        ("COMPLETED", datetime(2026, 2, 27, 10, 4, tzinfo=UTC), STALE, "STALE"),
+    ],
+)
+async def test_core_snapshot_fails_closed_for_untrusted_reconciliation_controls(
+    mock_dependencies,
+    control_status,
+    control_timestamp,
+    expected_status,
+    expected_freshness,
+):
+    (position_repo, _, _, _, _, _) = mock_dependencies
+    position_repo.get_financial_reconciliation_controls.return_value = (
+        []
+        if control_status is None
+        else [_reconciliation_control(status=control_status, updated_at=control_timestamp)]
+    )
+    service = _service(mock_dependencies)
+
+    response = await service.get_core_snapshot(
+        "PORT_001",
+        CoreSnapshotRequest(
+            as_of_date="2026-02-27",
+            sections=[CoreSnapshotSection.POSITIONS_BASELINE],
+        ),
+    )
+
+    assert response.reconciliation_status == expected_status
+    assert response.source_evidence_current is False
+    assert response.freshness_status == expected_freshness
+
+
+async def test_core_snapshot_empty_source_window_is_deterministic_and_unreconciled(
+    mock_dependencies,
+):
+    (position_repo, _, _, _, _, _) = mock_dependencies
+    position_repo.get_latest_positions_by_portfolio_as_of_date.return_value = []
+    position_repo.get_latest_position_history_by_portfolio_as_of_date.return_value = []
+    position_repo.get_financial_reconciliation_controls.return_value = []
+    service = _service(mock_dependencies)
+    request = CoreSnapshotRequest(
+        as_of_date="2026-02-27",
+        sections=[CoreSnapshotSection.POSITIONS_BASELINE],
+    )
+
+    first = await service.get_core_snapshot("PORT_001", request)
+    second = await service.get_core_snapshot("PORT_001", request)
+
+    assert first.reconciliation_status == UNRECONCILED
+    assert first.data_quality_status == UNKNOWN
+    assert first.latest_evidence_timestamp is None
+    assert first.source_evidence_current is False
+    assert first.snapshot_id == second.snapshot_id
+    assert first.calculation_lineage == second.calculation_lineage
+
+
+async def test_core_snapshot_identity_changes_with_reconciliation_evidence(mock_dependencies):
+    (position_repo, _, _, _, _, _) = mock_dependencies
+    service = _service(mock_dependencies)
+    request = CoreSnapshotRequest(
+        as_of_date="2026-02-27",
+        sections=[CoreSnapshotSection.POSITIONS_BASELINE],
+    )
+
+    first = await service.get_core_snapshot("PORT_001", request)
+    second = await service.get_core_snapshot("PORT_001", request)
+    position_repo.get_financial_reconciliation_controls.return_value = [
+        _reconciliation_control(updated_at=datetime(2026, 2, 27, 10, 20, tzinfo=UTC))
+    ]
+    revised = await service.get_core_snapshot("PORT_001", request)
+
+    assert first.snapshot_id == second.snapshot_id
+    assert first.calculation_lineage == second.calculation_lineage
+    assert first.calculation_lineage.input_content_hash != (
+        revised.calculation_lineage.input_content_hash
+    )
+    assert first.snapshot_id != revised.snapshot_id
+
+
+async def test_core_snapshot_identity_is_tenant_bound(mock_dependencies):
+    service = _service(mock_dependencies)
+
+    tenant_a = await service.get_core_snapshot(
+        "PORT_001",
+        CoreSnapshotRequest(
+            as_of_date="2026-02-27",
+            tenant_id="tenant-a",
+            sections=[CoreSnapshotSection.POSITIONS_BASELINE],
+        ),
+    )
+    tenant_b = await service.get_core_snapshot(
+        "PORT_001",
+        CoreSnapshotRequest(
+            as_of_date="2026-02-27",
+            tenant_id="tenant-b",
+            sections=[CoreSnapshotSection.POSITIONS_BASELINE],
+        ),
+    )
+
+    assert tenant_a.calculation_lineage.input_content_hash != (
+        tenant_b.calculation_lineage.input_content_hash
+    )
+    assert tenant_a.snapshot_id != tenant_b.snapshot_id
 
 
 async def test_core_snapshot_canonicalizes_valuation_context_currencies(mock_dependencies):
@@ -324,6 +472,31 @@ async def test_core_snapshot_simulation_success(mock_dependencies):
     assert response.policy_version == "snapshot.policy.inline.default"
 
 
+async def test_core_snapshot_simulation_identity_is_session_version_bound(mock_dependencies):
+    (_, _, simulation_repo, _, _, _) = mock_dependencies
+    service = _service(mock_dependencies)
+    request = CoreSnapshotRequest(
+        as_of_date="2026-02-27",
+        snapshot_mode=CoreSnapshotMode.SIMULATION,
+        sections=[CoreSnapshotSection.POSITIONS_PROJECTED],
+        simulation={"session_id": "SIM_1"},
+    )
+
+    version_three = await service.get_core_snapshot("PORT_001", request)
+    simulation_repo.get_session.return_value = SimpleNamespace(
+        session_id="SIM_1",
+        portfolio_id="PORT_001",
+        version=4,
+    )
+    version_four = await service.get_core_snapshot("PORT_001", request)
+
+    assert version_three.request_fingerprint == version_four.request_fingerprint
+    assert version_three.calculation_lineage.input_content_hash != (
+        version_four.calculation_lineage.input_content_hash
+    )
+    assert version_three.snapshot_id != version_four.snapshot_id
+
+
 async def test_resolve_baseline_positions_normalizes_snapshot_security_ids(mock_dependencies):
     (position_repo, _, _, _, _, _) = mock_dependencies
     position_repo.get_latest_positions_by_portfolio_as_of_date.return_value = [
@@ -335,7 +508,7 @@ async def test_resolve_baseline_positions_normalizes_snapshot_security_ids(mock_
     ]
     service = _service(mock_dependencies)
 
-    rows, _source = await service._resolve_baseline_positions(
+    baseline = await service._resolve_baseline_positions(
         portfolio_id="PORT_001",
         as_of_date=date(2026, 2, 27),
         reporting_fx=Decimal("1"),
@@ -343,9 +516,9 @@ async def test_resolve_baseline_positions_normalizes_snapshot_security_ids(mock_
         include_zero=True,
     )
 
-    assert list(rows) == ["SEC_PADDED"]
-    assert rows["SEC_PADDED"]["security_id"] == "SEC_PADDED"
-    assert rows["SEC_PADDED"]["position_record"].security_id == "SEC_PADDED"
+    assert list(baseline.positions) == ["SEC_PADDED"]
+    assert baseline.positions["SEC_PADDED"]["security_id"] == "SEC_PADDED"
+    assert baseline.positions["SEC_PADDED"]["position_record"].security_id == "SEC_PADDED"
 
 
 async def test_resolve_baseline_positions_preserves_blank_optional_values(mock_dependencies):
@@ -359,7 +532,7 @@ async def test_resolve_baseline_positions_preserves_blank_optional_values(mock_d
     ]
     service = _service(mock_dependencies)
 
-    rows, _source = await service._resolve_baseline_positions(
+    baseline = await service._resolve_baseline_positions(
         portfolio_id="PORT_001",
         as_of_date=date(2026, 2, 27),
         reporting_fx=Decimal("1"),
@@ -367,7 +540,7 @@ async def test_resolve_baseline_positions_preserves_blank_optional_values(mock_d
         include_zero=True,
     )
 
-    record = rows["SEC_BLANK"]["position_record"]
+    record = baseline.positions["SEC_BLANK"]["position_record"]
     assert record.quantity == Decimal("3")
     assert record.market_value_base is None
     assert record.market_value_local is None
@@ -572,18 +745,18 @@ async def test_resolve_baseline_positions_uses_history_fallback(mock_dependencie
         )
     ]
     service = _service(mock_dependencies)
-    rows, source = await service._resolve_baseline_positions(
+    baseline = await service._resolve_baseline_positions(
         portfolio_id="PORT_001",
         as_of_date=date(2026, 2, 27),
         reporting_fx=Decimal("1"),
         include_cash=True,
         include_zero=True,
     )
-    assert rows["SEC_BOND_US"]["market_value_base"] == Decimal("45")
-    assert source.baseline_source == "position_history"
-    assert source.freshness_status == "HISTORICAL_FALLBACK"
-    assert source.snapshot_timestamp is None
-    assert source.fallback_reason == "NO_CURRENT_POSITION_STATE_ROWS"
+    assert baseline.positions["SEC_BOND_US"]["market_value_base"] == Decimal("45")
+    assert baseline.freshness.baseline_source == "position_history"
+    assert baseline.freshness.freshness_status == "HISTORICAL_FALLBACK"
+    assert baseline.freshness.snapshot_timestamp is None
+    assert baseline.freshness.fallback_reason == "NO_CURRENT_POSITION_STATE_ROWS"
 
 
 async def test_core_snapshot_history_fallback_classifies_data_quality_partial(mock_dependencies):
@@ -601,6 +774,9 @@ async def test_core_snapshot_history_fallback_classifies_data_quality_partial(mo
             SimpleNamespace(status="CURRENT"),
         )
     ]
+    position_repo.get_financial_reconciliation_controls.return_value = [
+        _reconciliation_control(epoch=0)
+    ]
     service = _service(mock_dependencies)
     request = CoreSnapshotRequest(
         as_of_date="2026-02-27",
@@ -612,7 +788,9 @@ async def test_core_snapshot_history_fallback_classifies_data_quality_partial(mo
 
     assert response.freshness.freshness_status == "HISTORICAL_FALLBACK"
     assert response.data_quality_status == PARTIAL
-    assert response.latest_evidence_timestamp is None
+    assert response.reconciliation_status == COMPLETE
+    assert response.latest_evidence_timestamp == datetime(2026, 2, 27, 10, 10, tzinfo=UTC)
+    assert response.source_evidence_current is True
 
 
 async def test_latest_snapshot_timestamp_uses_latest_row_or_state_timestamp():
@@ -650,7 +828,7 @@ async def test_resolve_baseline_positions_leaves_snapshot_epoch_null_for_mixed_e
     ]
     service = _service(mock_dependencies)
 
-    _rows, freshness = await service._resolve_baseline_positions(
+    baseline = await service._resolve_baseline_positions(
         portfolio_id="PORT_001",
         as_of_date=date(2026, 2, 27),
         reporting_fx=Decimal("1"),
@@ -658,8 +836,8 @@ async def test_resolve_baseline_positions_leaves_snapshot_epoch_null_for_mixed_e
         include_zero=True,
     )
 
-    assert freshness.baseline_source == "position_state"
-    assert freshness.snapshot_epoch is None
+    assert baseline.freshness.baseline_source == "position_state"
+    assert baseline.freshness.snapshot_epoch is None
 
 
 async def test_resolve_baseline_positions_applies_cash_and_zero_filters(mock_dependencies):
@@ -677,14 +855,14 @@ async def test_resolve_baseline_positions_applies_cash_and_zero_filters(mock_dep
         ),
     ]
     service = _service(mock_dependencies)
-    rows, _source = await service._resolve_baseline_positions(
+    baseline = await service._resolve_baseline_positions(
         portfolio_id="PORT_001",
         as_of_date=date(2026, 2, 27),
         reporting_fx=Decimal("1"),
         include_cash=False,
         include_zero=False,
     )
-    assert rows == {}
+    assert baseline.positions == {}
 
 
 async def test_static_helpers_cover_zero_total_and_delta_paths():

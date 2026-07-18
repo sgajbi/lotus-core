@@ -515,6 +515,49 @@ class CoreSnapshotSections(BaseModel):
     )
 
 
+class CoreSnapshotCalculationLineage(BaseModel):
+    """Deterministic input, calculation-policy, and output proof for the snapshot."""
+
+    algorithm_id: str = Field(
+        ...,
+        description="Stable portfolio-state snapshot calculation identity.",
+        examples=["PORTFOLIO_STATE_SNAPSHOT"],
+    )
+    algorithm_version: int = Field(
+        ...,
+        ge=1,
+        description="Exact snapshot calculation algorithm version.",
+        examples=[1],
+    )
+    intermediate_precision: int = Field(
+        ...,
+        ge=1,
+        description="Decimal precision applied to snapshot valuation and weight calculations.",
+        examples=[28],
+    )
+    input_content_hash: str = Field(
+        ...,
+        pattern="^[0-9a-f]{64}$",
+        description=(
+            "SHA-256 of normalized request, tenant, source-scope, reconciliation-control, "
+            "governance, valuation, and simulation inputs."
+        ),
+        examples=["a" * 64],
+    )
+    calculation_content_hash: str = Field(
+        ...,
+        pattern="^[0-9a-f]{64}$",
+        description="SHA-256 binding the algorithm, version, precision, and input hash.",
+        examples=["b" * 64],
+    )
+    output_content_hash: str = Field(
+        ...,
+        pattern="^[0-9a-f]{64}$",
+        description="SHA-256 binding returned sections and trust posture to the calculation hash.",
+        examples=["c" * 64],
+    )
+
+
 class CoreSnapshotResponse(SourceDataProductRuntimeMetadata):
     product_name: Literal["PortfolioStateSnapshot"] = product_name_field("PortfolioStateSnapshot")
     product_version: Literal["v1"] = product_version_field()
@@ -575,6 +618,13 @@ class CoreSnapshotResponse(SourceDataProductRuntimeMetadata):
         None,
         description="Simulation metadata present only when snapshot_mode=SIMULATION.",
         examples=[{"session_id": "SIM_0001", "version": 3, "baseline_as_of_date": "2026-02-27"}],
+    )
+    calculation_lineage: CoreSnapshotCalculationLineage = Field(
+        ...,
+        description=(
+            "Three-layer deterministic lineage for snapshot inputs, calculation policy, and "
+            "returned outputs."
+        ),
     )
     sections: CoreSnapshotSections = Field(
         ...,
