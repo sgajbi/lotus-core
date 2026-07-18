@@ -37,10 +37,11 @@ unit.
   passed.
 - Focused Ruff and strict MyPy passed; domain, monetary-float, architecture-documentation, wiki,
   RFC-ledger, supported-feature, incident-playbook, and diff guards passed.
-- The platform cross-app validator failed before comparison because it loads Core's package-relative
-  precision-policy module as a synthetic top-level file. The deduplicated automation defect and
-  required regression proof are tracked by `sgajbi/lotus-platform#578`. Issue #761 must remain in
-  progress until that governed cross-app evidence can run successfully.
+- The first platform cross-app run exposed a synthetic top-level import defect, tracked as
+  `sgajbi/lotus-platform#578`. Platform PR #579 fixed it with isolated real-package imports and
+  merged at exact main SHA `5b6a6dfc4060b59adebeb8d675f32733945f99b6` after all required checks passed.
+  Exact-main validation then compared all five repositories successfully at policy version `1.1.0`
+  with no consistency or policy failures.
 
 ## Documentation Decision
 
