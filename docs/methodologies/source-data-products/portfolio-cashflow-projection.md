@@ -25,9 +25,10 @@ business calendar. If no business date is available, it falls back to the curren
 | Input | Source | Required | Meaning |
 | --- | --- | --- | --- |
 | `portfolio_id` | Path parameter | Yes | Portfolio whose base currency and cashflow evidence are returned. |
-| `horizon_days` | Query parameter | No, default `10` | Calendar-day projection horizon from `as_of_date`; constrained by the API to `1..3650`. |
+| `horizon_days` | Query parameter | No, default `10` | Calendar-day projection horizon from `as_of_date`; constrained by the API and service to `1..366`. |
 | `as_of_date` | Query parameter | No | Business-date anchor for the projection baseline. |
 | `include_projected` | Query parameter | No, default `true` | Whether to include settlement-dated future external cash movements in addition to booked cashflow rows. |
+| `X-Tenant-Id` | Request header | No | Tenant or book-of-record scope bound to the deterministic trust receipt when supplied. |
 
 ## Upstream Data Sources
 
@@ -89,6 +90,12 @@ For every calendar date `d` in the returned range `[A, E]`:
 Booked cashflows and projected settlement movements on the same date are additive. Dates with no
 booked or projected movement return `net_cashflow = 0` and carry the prior cumulative value forward.
 
+All accumulation runs inside a local 50-digit Decimal context. Core publishes separate lowercase
+SHA-256 hashes for normalized inputs, the `PORTFOLIO_CASHFLOW_PROJECTION` algorithm/version/precision,
+and returned outputs. Inputs bind tenant, portfolio, dates, mode, currency, grouped booked/projected
+rows, source-row counts, source totals, and latest evidence timestamp. Correlation id is operational
+metadata and is intentionally excluded from these financial identities.
+
 ## Step-by-Step Computation
 
 1. Resolve the portfolio base currency from `portfolios`.
@@ -108,22 +115,26 @@ booked or projected movement return `net_cashflow = 0` and carry the prior cumul
    `points[].projected_cumulative_cashflow`.
 9. Return `booked_total_net_cashflow`, `projected_settlement_total_cashflow`, and
    `total_net_cashflow`.
-10. Return source-data runtime metadata with `product_name`, `product_version`,
-    `data_quality_status`, `latest_evidence_timestamp`, and `source_batch_fingerprint`.
+10. Compare SQL-owned booked/projected source totals with the independently accumulated component
+    totals; bind source-row count and returned point count in `source_window_trust`.
+11. Build normalized-input, calculation-policy, and returned-output lineage hashes plus deterministic
+    request and snapshot identities.
+12. Return tenant/correlation, reconciliation, supportability, freshness, content digest, source
+    references, policy version, and calculation lineage in the runtime receipt.
 
 ## Validation and Failure Behavior
 
 | Condition | Behavior |
 | --- | --- |
 | Portfolio id does not exist or has no base currency | Service raises `ValueError`; the API maps it to HTTP `404`. |
-| `horizon_days` outside `1..3650` | FastAPI validation rejects the request before service execution. |
-| No booked or projected cashflows in range | The service returns daily points with zero net cashflow and zero cumulative cashflow. |
-| No source evidence timestamp exists | `latest_evidence_timestamp` is returned as `null`; the product still returns deterministic points. |
+| `horizon_days` outside `1..366` | FastAPI rejects route calls; the service rejects direct calls before database access. |
+| No booked or projected cashflows in range | Return deterministic zero points with `COMPLETE`, `SUPPORTED`, `window_status=EMPTY`, and `EMPTY_SOURCE_WINDOW`; keep `latest_evidence_timestamp=null`. |
+| Populated source window has no evidence timestamp | Fail closed with `BLOCKED`, `UNAVAILABLE`, and `SOURCE_EVIDENCE_TIMESTAMP_MISSING`. |
+| Source component total does not equal calculated total | Return the values with `BLOCKED`, `UNAVAILABLE`, and `SOURCE_TOTAL_MISMATCH`; do not claim current evidence. |
 | Multiple cashflow epochs exist for a transaction | Only the latest cashflow row per transaction contributes to `B_d`. |
 | Same-day booked and projected movements exist | Amounts are added into a single `net_cashflow` point for that date. |
 
-`data_quality_status` is currently `COMPLETE` when the service can resolve the portfolio and build
-the projection. This status indicates a service-owned projection response, not a broader liquidity,
+`COMPLETE` means the bounded product counts and totals reconcile. It is not a broader liquidity,
 tax, execution, or performance certification.
 
 ## Configuration Options
@@ -131,7 +142,7 @@ tax, execution, or performance certification.
 | Option | Current value |
 | --- | --- |
 | Default horizon | `10` calendar days |
-| Maximum horizon | `3650` calendar days |
+| Maximum horizon | `366` calendar days |
 | Default projected mode | `include_projected=true` |
 | Default business calendar | `DEFAULT_BUSINESS_CALENDAR_CODE` |
 | Product identity | `PortfolioCashflowProjection:v1` |
@@ -150,7 +161,10 @@ tax, execution, or performance certification.
 | `projected_settlement_total_cashflow` | `ST`. |
 | `total_net_cashflow` | `T`. |
 | `notes` | Projected mode or booked-only mode explanation. |
-| `source_batch_fingerprint` | Deterministic fingerprint containing portfolio, start date, end date, and projected-mode flag. |
+| `source_window_trust` | Source/calculated row counts, output point count, component totals, window state, supportability, and reason codes. |
+| `request_fingerprint`, `snapshot_id`, `policy_version` | Deterministic request/output identities and `cashflow-projection-v1` policy. |
+| `calculation_lineage` | Normalized-input, algorithm/version/precision, and returned-output SHA-256 hashes. |
+| `source_batch_fingerprint`, `content_hash`, `source_digest` | Same deterministic content digest for downstream proof validation. |
 
 ## Worked Example
 
