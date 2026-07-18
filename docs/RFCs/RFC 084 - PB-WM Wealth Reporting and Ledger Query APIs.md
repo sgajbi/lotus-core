@@ -175,6 +175,13 @@ Asset allocation look-through:
   - support flag
   - decomposed position count
   - limitation reason when partial or unavailable
+- each bucket publishes direct or look-through contributor lineage, including the booked parent,
+  exact source snapshot, and exact component record/effective interval where applicable
+- `contributor_limit_per_bucket` bounds each bucket to `1..250` returned contributors (default `50`)
+  while `contributor_count`, `contributors_truncated`, and the signed omitted-value residual preserve
+  complete reconciliation to the bucket total
+- deterministic input, algorithm/version/28-digit precision, and output hashes bind the allocation
+  calculation; the existing weight precision and direct-only default remain unchanged
 
 Portfolio-summary semantics:
 

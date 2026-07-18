@@ -2913,6 +2913,18 @@ Most relevant current governance:
      depend on interpreter finalization for socket cleanup. Preserve held-port protection until
      Compose is ready to bind, and do not weaken collision resistance by releasing reservations at
      collection time.
+210. Asset-allocation contributor lineage is owned by Query Service source mapping and the shared
+     framework-independent allocation kernel. Every direct contribution binds portfolio, booked
+     security, and exact position snapshot; every decomposed contribution additionally binds the
+     component security to its booked parent and exact component record, effective interval,
+     weight, and available upstream source reference. Bucket totals include every contribution,
+     while response rows are bounded by `contributor_limit_per_bucket`; returned values plus the
+     signed omitted residual must reconcile exactly. Preserve deterministic descending-absolute-
+     value/source-identity ordering and the established 28-digit allocation-weight precision.
+     Publish normalized-input, algorithm/version/precision, and output hashes from the cross-domain
+     financial calculation-lineage primitive. Reporting workflow, DTOs, repository reads, and
+     OpenAPI stay in Query Service; do not move them into `portfolio_common` or ask downstream
+     consumers to reconstruct discarded look-through lineage from holdings.
 
 ## Context Maintenance Rule
 
