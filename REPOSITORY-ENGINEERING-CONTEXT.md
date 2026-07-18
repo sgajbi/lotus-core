@@ -846,6 +846,13 @@ Most relevant current governance:
     canonical front-office contract's RFC-0026 advisor-cockpit scenario, with fallback
     `advisor_sg_001`. This keeps Core portfolio master membership aligned with downstream
     advisor-cockpit validation instead of hard-coding a separate relationship-manager identifier.
+    Canonical parent reference ingestion remains asynchronous: before posting eligibility or other
+    dependent reference products, the seed must prove every unique instrument is query-visible
+    within a bounded wait and fail closed with the unresolved security ids. Local reseed fence
+    cleanup must use the governed physical topic identity (`instruments.received-*`), not a logical
+    or obsolete alias. The complete cleanup must remain one `ON_ERROR_STOP` PostgreSQL transaction
+    and include every direct portfolio foreign-key child, so schema drift rolls back before retry
+    instead of leaving `PB_SG_GLOBAL_BAL_001` partially deleted.
 40. `PerformanceComponentEconomics:v1` is active at
     `/integration/portfolios/{portfolio_id}/performance-component-economics` for
     `lotus-performance` contribution analytics sourcing. It returns source-authored transaction,
