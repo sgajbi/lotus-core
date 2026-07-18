@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
 from dataclasses import dataclass
 from datetime import date, datetime
 from enum import StrEnum
+
+from .calculation_lineage import canonical_content_hash
 
 
 class ValuationPolicyAssignmentError(ValueError):
@@ -90,24 +90,24 @@ class InstrumentValuationPolicyAssignment:
     def content_hash(self) -> str:
         """Return a deterministic hash for audit and cache invalidation evidence."""
 
-        payload = {
-            "assignment_reason": self.assignment_reason.strip(),
-            "assignment_status": self.assignment_status.value,
-            "assignment_version": self.assignment_version,
-            "legal_book_id": self.legal_book_id.strip(),
-            "observed_at": self.observed_at.isoformat(),
-            "policy_id": self.policy_id.strip(),
-            "policy_version": self.policy_version,
-            "security_id": self.security_id.strip(),
-            "source_record_id": self.source_record_id.strip(),
-            "source_revision": self.source_revision.strip(),
-            "source_system": self.source_system.strip(),
-            "tenant_id": self.tenant_id.strip(),
-            "valid_from": self.valid_from.isoformat(),
-            "valid_to": self.valid_to.isoformat() if self.valid_to else None,
-        }
-        canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
-        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+        return canonical_content_hash(
+            {
+                "assignment_reason": self.assignment_reason.strip(),
+                "assignment_status": self.assignment_status,
+                "assignment_version": self.assignment_version,
+                "legal_book_id": self.legal_book_id.strip(),
+                "observed_at": self.observed_at,
+                "policy_id": self.policy_id.strip(),
+                "policy_version": self.policy_version,
+                "security_id": self.security_id.strip(),
+                "source_record_id": self.source_record_id.strip(),
+                "source_revision": self.source_revision.strip(),
+                "source_system": self.source_system.strip(),
+                "tenant_id": self.tenant_id.strip(),
+                "valid_from": self.valid_from,
+                "valid_to": self.valid_to,
+            }
+        )
 
 
 @dataclass(frozen=True, slots=True)

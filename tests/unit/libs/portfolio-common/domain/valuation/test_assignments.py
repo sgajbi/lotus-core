@@ -1,7 +1,7 @@
 """Tests for exact-scope, effective-dated valuation-policy assignments."""
 
 from dataclasses import replace
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta, timezone
 
 import pytest
 from portfolio_common.domain.valuation import (
@@ -58,6 +58,21 @@ def test_resolution_is_exact_scope_effective_dated_and_cache_complete() -> None:
     assert resolved.cache_key.source_revision == "revision-17"
     assert len(resolved.cache_key.assignment_content_hash) == 64
     assert resolved.cache_key.assignment_content_hash == assignment.content_hash()
+
+
+def test_assignment_hash_normalizes_equivalent_observation_instants() -> None:
+    baseline = _assignment(observed_at=datetime(2026, 1, 1, 8, tzinfo=UTC))
+    singapore = _assignment(
+        observed_at=datetime(
+            2026,
+            1,
+            1,
+            16,
+            tzinfo=timezone(timedelta(hours=8)),
+        )
+    )
+
+    assert singapore.content_hash() == baseline.content_hash()
 
 
 @pytest.mark.parametrize(
