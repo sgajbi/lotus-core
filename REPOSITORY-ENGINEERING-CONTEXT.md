@@ -163,7 +163,9 @@ Current repository posture:
     ingestion, event replay and ops, operational query reads, query-control-plane support and
     lineage, integration policy and capabilities, core snapshot, simulation, and source-data
     contract governance. PR Merge Gate now runs it as a blocking app-validation gate with a
-    workflow-provided `lotus-platform` checkout for domain-product contract validation.
+    workflow-provided `lotus-platform` checkout for domain-product contract validation. The
+    runtime smoke must observe the exact transaction in the query ledger before issuing the
+    one-shot reprocessing command; do not retry the side-effecting POST or accept `404` as proof.
 27. Boundary mapping conformance now has a repo-native command,
     `make test-boundary-mapping-conformance`, backed by the test manifest and documented in
     `docs/architecture/mapping-anti-corruption-boundary.md`; `make architecture-guard` also runs
