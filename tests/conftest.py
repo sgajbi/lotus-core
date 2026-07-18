@@ -47,6 +47,18 @@ _test_runtime = prepare_test_runtime(
 _test_runtime.export_to(os.environ)
 
 
+def _release_test_runtime_port_reservation() -> None:
+    """Release process-owned test ports from every pytest lifecycle path."""
+
+    _test_runtime.port_reservation.release()
+
+
+def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:  # noqa: ARG001
+    """Release reservations even when no Docker-backed fixture was requested."""
+
+    _release_test_runtime_port_reservation()
+
+
 def _env_int(name: str, default: int) -> int:
     raw_value = os.getenv(name)
     if raw_value is None:
@@ -257,7 +269,7 @@ def docker_services(request):  # noqa: ARG001
         pytest.fail(str(exc))
 
     finally:
-        _test_runtime.port_reservation.release()
+        _release_test_runtime_port_reservation()
         compose_log_file = os.getenv("LOTUS_TESTS_COMPOSE_LOG_FILE")
         if compose_log_file:
             emit_test_output(f"\n--- Capturing Docker compose logs to {compose_log_file} ---")
