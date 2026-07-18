@@ -10,11 +10,20 @@
 - Product role: authoritative portfolio state snapshot for downstream performance, risk, advisory, reporting, management, opportunity-intelligence, gateway, and Workbench discovery flows
 - Source declaration: `contracts/domain-data-products/`
 - Trust telemetry: `contracts/trust-telemetry/`
+- Runtime trust receipt: exact position business-date/epoch reconciliation controls, deterministic
+  snapshot identity, and separate normalized-input, algorithm/version/precision, and returned-output
+  lineage hashes for both baseline and simulation modes
 
 The shared source-product catalog and runtime metadata contract are owned by
 `portfolio_common.source_data_products` and `portfolio_common.source_data_product_metadata`.
 Serving applications own their route DTOs and workflows; they must not duplicate hashing,
 lineage, freshness, or product-identity semantics in service-local helper modules.
+
+`PortfolioStateSnapshot:v1` fails closed when an exact financial-reconciliation control is missing,
+running, failed, unknown, or older than its selected position evidence. A response is current only
+when reconciliation is complete, data quality is complete or partial, and timestamp evidence exists.
+Its deterministic identity is tenant-, request-, source-, policy-, valuation-, restatement-, and
+simulation-version-bound; response generation time and correlation ids do not revise the snapshot.
 
 ## Market Reference Source Products
 

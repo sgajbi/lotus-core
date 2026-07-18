@@ -189,6 +189,9 @@ router inside the operational read plane.
 - generic simulation and Core snapshot assembly must remain QCP package-owned and must not import
   query-service repositories; snapshot source reads use `CoreSnapshotSourceReader`, and proposed
   changes use the QCP-owned `SimulationStore`
+- `PortfolioStateSnapshot:v1` must read exact business-date/epoch financial-reconciliation controls
+  in one set-based adapter query and expose deterministic input/calculation/output lineage plus a
+  source-bound snapshot id; never infer current trust from response construction alone
 - effective integration policy contracts and resolution must remain QCP package-owned; environment
   configuration and clock construction stay at dependency composition, while precedence,
   section filtering, provenance, and warnings remain deterministic application policy
