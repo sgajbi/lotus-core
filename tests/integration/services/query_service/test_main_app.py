@@ -458,7 +458,10 @@ async def test_openapi_describes_reporting_and_enhanced_discovery_contracts(asyn
     assert portfolio_ids["description"] == "Filter by an explicit portfolio identifier list."
 
     aum_request = components["AssetsUnderManagementQueryRequest"]
+    allocation_request = components["AssetAllocationQueryRequest"]
     allocation_response = components["AssetAllocationResponse"]
+    allocation_bucket = components["AllocationBucket"]
+    allocation_contributor = components["AllocationContributor"]
     cash_response = components["CashBalancesResponse"]
     cash_account_balance_record = components["CashAccountBalanceRecord"]
     portfolio_summary_response = components["PortfolioSummaryResponse"]
@@ -476,6 +479,21 @@ async def test_openapi_describes_reporting_and_enhanced_discovery_contracts(asyn
     ] == ["USD"]
     assert allocation_response["properties"]["look_through"]["description"].startswith(
         "Applied look-through mode"
+    )
+    assert allocation_request["properties"]["contributor_limit_per_bucket"]["default"] == 50
+    assert allocation_request["properties"]["contributor_limit_per_bucket"]["maximum"] == 250
+    assert allocation_bucket["properties"]["position_count"]["description"].startswith(
+        "Number of allocation rows"
+    )
+    assert (
+        "reconcile exactly"
+        in allocation_bucket["properties"]["omitted_market_value_reporting_currency"]["description"]
+    )
+    assert (
+        "component security" in allocation_contributor["properties"]["security_id"]["description"]
+    )
+    assert allocation_response["properties"]["calculation_lineage"]["description"].startswith(
+        "Deterministic normalized-input"
     )
     assert allocation_response["properties"]["resolved_as_of_date"]["examples"] == ["2026-03-27"]
     assert allocation_response["properties"]["reporting_currency"]["examples"] == ["USD"]

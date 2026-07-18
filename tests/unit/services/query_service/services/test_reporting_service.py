@@ -71,6 +71,7 @@ def _snapshot(
     security_id: str,
     *,
     market_value: str,
+    snapshot_id: int = 1,
     market_value_local: str | None = None,
     quantity: str = "1",
     valuation_status: str | None = "VALUED",
@@ -79,6 +80,7 @@ def _snapshot(
     updated_at: datetime | None = None,
 ):
     return SimpleNamespace(
+        id=snapshot_id,
         security_id=security_id,
         date=snapshot_date,
         market_value=Decimal(market_value),
@@ -220,6 +222,15 @@ async def test_get_asset_allocation_groups_requested_dimensions_with_fx_conversi
     )
     assert equity_bucket.market_value_reporting_currency == Decimal("150")
     assert bond_bucket.market_value_reporting_currency == Decimal("60")
+    assert equity_bucket.contributor_count == 1
+    assert equity_bucket.contributors[0].contributor_type == "direct_position"
+    assert equity_bucket.contributors[0].portfolio_id == "P1"
+    assert equity_bucket.contributors[0].security_id == "SEC1"
+    assert equity_bucket.contributors[0].booked_security_id == "SEC1"
+    assert equity_bucket.contributors[0].source_snapshot_id == 1
+    assert equity_bucket.omitted_market_value_reporting_currency == Decimal("0")
+    assert response.calculation_lineage.algorithm_id == "PORTFOLIO_ALLOCATION"
+    assert response.calculation_lineage.intermediate_precision == 28
 
 
 async def test_get_portfolio_summary_returns_historical_restated_totals() -> None:
@@ -501,12 +512,20 @@ async def test_get_asset_allocation_applies_region_and_partial_lookthrough() -> 
             component_security_id="ETF1",
             component_weight=Decimal("0.6"),
             component_instrument=_instrument("ETF1", asset_class="EQUITY", country_of_risk="US"),
+            component_record_id=101,
+            effective_from=date(2026, 1, 1),
+            source_system="fund-master",
+            source_record_id="FUND1-ETF1",
         ),
         InstrumentLookthroughComponentRow(
             parent_security_id="FUND1",
             component_security_id="ETF2",
             component_weight=Decimal("0.4"),
             component_instrument=_instrument("ETF2", asset_class="BOND", country_of_risk="DE"),
+            component_record_id=102,
+            effective_from=date(2026, 1, 1),
+            source_system="fund-master",
+            source_record_id="FUND1-ETF2",
         ),
     ]
 
@@ -536,6 +555,25 @@ async def test_get_asset_allocation_applies_region_and_partial_lookthrough() -> 
     )
     assert north_america_bucket.market_value_reporting_currency == Decimal("110.0")
     assert europe_bucket.market_value_reporting_currency == Decimal("40.0")
+    assert [
+        (item.contributor_type, item.booked_security_id, item.security_id)
+        for item in north_america_bucket.contributors
+    ] == [
+        ("look_through_component", "FUND1", "ETF1"),
+        ("direct_position", "SEC2", "SEC2"),
+    ]
+    component = north_america_bucket.contributors[0]
+    assert component.component_record_id == 101
+    assert component.component_weight == Decimal("0.6")
+    assert component.component_effective_from == date(2026, 1, 1)
+    assert component.component_source_system == "fund-master"
+    assert component.component_source_record_id == "FUND1-ETF1"
+    assert sum(
+        (item.market_value_reporting_currency for item in north_america_bucket.contributors),
+        Decimal("0"),
+    ) + north_america_bucket.omitted_market_value_reporting_currency == (
+        north_america_bucket.market_value_reporting_currency
+    )
 
 
 async def test_get_asset_allocation_reports_lookthrough_capability_in_direct_mode() -> None:
@@ -556,6 +594,8 @@ async def test_get_asset_allocation_reports_lookthrough_capability_in_direct_mod
             component_security_id="ETF1",
             component_weight=Decimal("1"),
             component_instrument=_instrument("ETF1", asset_class="EQUITY", country_of_risk="US"),
+            component_record_id=101,
+            effective_from=date(2026, 1, 1),
         )
     ]
 
@@ -589,7 +629,7 @@ async def test_get_asset_allocation_normalizes_lookthrough_parent_security_ids()
         ),
         ReportingSnapshotRow(
             portfolio=portfolio,
-            snapshot=_snapshot("FUND1", market_value="100"),
+            snapshot=_snapshot("FUND1", market_value="100", snapshot_id=2),
             instrument=_instrument("FUND1", asset_class="FUND", country_of_risk="LU"),
         ),
     ]
@@ -599,6 +639,8 @@ async def test_get_asset_allocation_normalizes_lookthrough_parent_security_ids()
             component_security_id="ETF1",
             component_weight=Decimal("1"),
             component_instrument=_instrument("ETF1", asset_class="EQUITY", country_of_risk="US"),
+            component_record_id=101,
+            effective_from=date(2026, 1, 1),
         )
     ]
 
@@ -625,6 +667,9 @@ async def test_get_asset_allocation_normalizes_lookthrough_parent_security_ids()
     assert buckets == [
         ("EQUITY", Decimal("200")),
     ]
+    assert asset_class_view.buckets[0].position_count == 2
+    assert asset_class_view.buckets[0].contributor_count == 2
+    assert [item.source_snapshot_id for item in asset_class_view.buckets[0].contributors] == [1, 2]
     repo.list_instrument_lookthrough_components.assert_awaited_once_with(
         parent_security_ids=["FUND1"],
         as_of_date=date(2026, 3, 27),
@@ -652,6 +697,8 @@ async def test_resolve_allocation_rows_reuses_reporting_values_for_lookthrough()
             component_security_id="ETF1",
             component_weight=Decimal("1"),
             component_instrument=_instrument("ETF1", asset_class="EQUITY", country_of_risk="US"),
+            component_record_id=101,
+            effective_from=date(2026, 1, 1),
         )
     ]
 
@@ -670,14 +717,22 @@ async def test_resolve_allocation_rows_reuses_reporting_values_for_lookthrough()
 
     assert service._convert_amount.await_count == len(rows)
     assert lookthrough.applied_mode == "prefer_look_through"
-    assert allocation_rows == [
-        (
-            repo.list_instrument_lookthrough_components.return_value[0].component_instrument,
-            SimpleNamespace(security_id="ETF1"),
-            Decimal("100"),
-        ),
-        (rows[1].instrument, rows[1].snapshot, Decimal("50")),
+    assert [row.market_value_reporting_currency for row in allocation_rows] == [
+        Decimal("100"),
+        Decimal("50"),
     ]
+    assert allocation_rows[0].instrument is (
+        repo.list_instrument_lookthrough_components.return_value[0].component_instrument
+    )
+    assert allocation_rows[0].snapshot.security_id == "ETF1"
+    assert allocation_rows[0].contributor is not None
+    assert allocation_rows[0].contributor.contributor_type == "look_through_component"
+    assert allocation_rows[0].contributor.booked_security_id == "FUND1"
+    assert allocation_rows[0].contributor.component_record_id == 101
+    assert allocation_rows[1].instrument is rows[1].instrument
+    assert allocation_rows[1].snapshot is rows[1].snapshot
+    assert allocation_rows[1].contributor is not None
+    assert allocation_rows[1].contributor.contributor_type == "direct_position"
 
 
 @pytest.mark.asyncio
@@ -735,7 +790,7 @@ async def test_resolve_allocation_rows_reads_conversions_and_components_sequenti
             reporting_currency="SGD",
         )
 
-    assert [row[1].security_id for row in allocation_rows] == [" FUND1 ", "SEC2"]
+    assert [row.snapshot.security_id for row in allocation_rows] == [" FUND1 ", "SEC2"]
     assert lookthrough.applied_mode == "direct_only"
     assert call_order == ["convert:100", "convert:50", "components"]
 

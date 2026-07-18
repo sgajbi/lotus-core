@@ -5,10 +5,12 @@ from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 
 from portfolio_common.domain.currency import normalize_currency_code
 from portfolio_common.portfolio_allocation import (
+    AllocationContributorInput,
+    AllocationContributorResult,
     AllocationInputRow,
     calculate_allocation_views,
 )
@@ -17,6 +19,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..domain.strict_decimal import decimal_or_none, decimal_or_zero
 from ..dtos.reporting_dto import (
     AllocationBucket,
+    AllocationCalculationLineage,
+    AllocationContributor,
     AllocationLookThroughInfo,
     AllocationView,
     AssetAllocationQueryRequest,
@@ -43,7 +47,6 @@ from .fx_conversion import CachedFxRateConverter
 ZERO = Decimal("0")
 UNVALUED_STATUS = "UNVALUED"
 ResolvedAllocationRow = tuple[Any, str | None, Decimal]
-AllocationOutputRow = tuple[object | None, object, Decimal]
 
 
 def _allocation_parent_security_ids(rows: list[Any]) -> tuple[list[str], list[str | None]]:
@@ -74,11 +77,57 @@ def _resolved_allocation_rows(
 
 def _direct_allocation_rows(
     resolved_rows: list[ResolvedAllocationRow],
-) -> list[AllocationOutputRow]:
+) -> list[AllocationInputRow]:
     return [
-        (row.instrument, row.snapshot, reporting_value)
-        for row, _parent_security_id, reporting_value in resolved_rows
+        AllocationInputRow(
+            instrument=row.instrument,
+            snapshot=row.snapshot,
+            market_value_reporting_currency=reporting_value,
+            contributor=_direct_allocation_contributor(row, parent_security_id),
+        )
+        for row, parent_security_id, reporting_value in resolved_rows
     ]
+
+
+def _required_snapshot_id(snapshot: Any) -> int:
+    snapshot_id = int(getattr(snapshot, "id", 0) or 0)
+    if snapshot_id < 1:
+        raise ValueError("Allocation contributor source snapshot identity is unavailable.")
+    return snapshot_id
+
+
+def _direct_allocation_contributor(
+    row: Any,
+    parent_security_id: str | None,
+) -> AllocationContributorInput:
+    if parent_security_id is None:
+        raise ValueError("Allocation contributor security identity is unavailable.")
+    return AllocationContributorInput(
+        contributor_type="direct_position",
+        portfolio_id=str(row.portfolio.portfolio_id).strip(),
+        security_id=parent_security_id,
+        booked_security_id=parent_security_id,
+        source_snapshot_id=_required_snapshot_id(row.snapshot),
+    )
+
+
+def _allocation_contributor_dto(result: AllocationContributorResult) -> AllocationContributor:
+    source = result.contributor
+    return AllocationContributor(
+        contributor_type=source.contributor_type,
+        portfolio_id=source.portfolio_id,
+        security_id=source.security_id,
+        booked_security_id=source.booked_security_id,
+        source_snapshot_id=source.source_snapshot_id,
+        component_record_id=source.component_record_id,
+        component_weight=source.component_weight,
+        component_effective_from=source.component_effective_from,
+        component_effective_to=source.component_effective_to,
+        component_source_system=source.component_source_system,
+        component_source_record_id=source.component_source_record_id,
+        market_value_reporting_currency=result.market_value_reporting_currency,
+        bucket_weight=result.bucket_weight,
+    )
 
 
 def _components_by_parent(
@@ -181,7 +230,7 @@ class _PortfolioSummaryRollup:
 
 
 def _is_unvalued_snapshot(row: Any) -> bool:
-    return normalize_control_code(row.snapshot.valuation_status) == UNVALUED_STATUS
+    return bool(normalize_control_code(row.snapshot.valuation_status) == UNVALUED_STATUS)
 
 
 def _portfolio_summary_rollup(
@@ -365,15 +414,17 @@ class ReportingService:
         )
 
         allocation_result = calculate_allocation_views(
-            rows=[
-                AllocationInputRow(
-                    instrument=instrument,
-                    snapshot=snapshot,
-                    market_value_reporting_currency=reporting_value,
-                )
-                for instrument, snapshot, reporting_value in allocation_rows
-            ],
+            rows=allocation_rows,
             dimensions=request.dimensions,
+            contributor_limit_per_bucket=request.contributor_limit_per_bucket,
+            calculation_context={
+                "applied_look_through_mode": look_through_info.applied_mode,
+                "as_of_date": resolved_as_of_date,
+                "reporting_currency": reporting_currency,
+                "requested_look_through_mode": request.look_through_mode,
+                "scope": request.scope.model_dump(mode="python"),
+                "scope_type": request.scope.scope_type,
+            },
         )
 
         views = [
@@ -386,6 +437,15 @@ class ReportingService:
                         market_value_reporting_currency=(bucket.market_value_reporting_currency),
                         weight=bucket.weight,
                         position_count=bucket.position_count,
+                        contributor_count=bucket.contributor_count,
+                        contributors=[
+                            _allocation_contributor_dto(contributor)
+                            for contributor in bucket.contributors
+                        ],
+                        contributors_truncated=bucket.contributors_truncated,
+                        omitted_market_value_reporting_currency=(
+                            bucket.omitted_market_value_reporting_currency
+                        ),
                     )
                     for bucket in view.buckets
                 ],
@@ -402,6 +462,9 @@ class ReportingService:
                 allocation_result.total_market_value_reporting_currency
             ),
             look_through=look_through_info,
+            calculation_lineage=AllocationCalculationLineage(
+                **allocation_result.calculation_lineage.lineage_payload()
+            ),
             views=views,
         )
 
@@ -505,7 +568,7 @@ class ReportingService:
         requested_mode: str,
         as_of_date: date,
         reporting_currency: str,
-    ) -> tuple[list[tuple[object | None, object, Decimal]], AllocationLookThroughInfo]:
+    ) -> tuple[list[AllocationInputRow], AllocationLookThroughInfo]:
         parent_security_ids, row_parent_security_ids = _allocation_parent_security_ids(rows)
         reporting_values = await self._snapshot_reporting_values(
             rows=rows,
@@ -556,19 +619,28 @@ class ReportingService:
         resolved_rows: list[ResolvedAllocationRow],
         components_by_parent: dict[str, list[InstrumentLookthroughComponentRow]],
         decomposable_parent_ids: set[str],
-    ) -> tuple[list[AllocationOutputRow], int, int]:
-        allocation_rows: list[AllocationOutputRow] = []
+    ) -> tuple[list[AllocationInputRow], int, int]:
+        allocation_rows: list[AllocationInputRow] = []
         decomposed_position_count = 0
         undecomposed_requested_count = 0
         for row, parent_security_id, reporting_value in resolved_rows:
             if parent_security_id not in decomposable_parent_ids:
-                allocation_rows.append((row.instrument, row.snapshot, reporting_value))
+                allocation_rows.append(
+                    AllocationInputRow(
+                        instrument=row.instrument,
+                        snapshot=row.snapshot,
+                        market_value_reporting_currency=reporting_value,
+                        contributor=_direct_allocation_contributor(row, parent_security_id),
+                    )
+                )
                 undecomposed_requested_count += self._undecomposed_row_count(row)
                 continue
             decomposed_position_count += 1
             allocation_rows.extend(
                 self._component_allocation_rows(
                     components_by_parent[parent_security_id],
+                    row,
+                    parent_security_id,
                     reporting_value,
                 )
             )
@@ -580,13 +652,28 @@ class ReportingService:
     @staticmethod
     def _component_allocation_rows(
         components: list[InstrumentLookthroughComponentRow],
+        row: Any,
+        parent_security_id: str,
         reporting_value: Decimal,
-    ) -> list[AllocationOutputRow]:
+    ) -> list[AllocationInputRow]:
         return [
-            (
-                component.component_instrument,
-                SimpleNamespace(security_id=component.component_security_id),
-                reporting_value * component_weight,
+            AllocationInputRow(
+                instrument=component.component_instrument,
+                snapshot=SimpleNamespace(security_id=component.component_security_id),
+                market_value_reporting_currency=reporting_value * component_weight,
+                contributor=AllocationContributorInput(
+                    contributor_type="look_through_component",
+                    portfolio_id=str(row.portfolio.portfolio_id).strip(),
+                    security_id=component.component_security_id,
+                    booked_security_id=parent_security_id,
+                    source_snapshot_id=_required_snapshot_id(row.snapshot),
+                    component_record_id=component.component_record_id,
+                    component_weight=component_weight,
+                    component_effective_from=component.effective_from,
+                    component_effective_to=component.effective_to,
+                    component_source_system=component.source_system,
+                    component_source_record_id=component.source_record_id,
+                ),
             )
             for component in components
             if (component_weight := ReportingService._component_weight(component)) is not None
@@ -613,7 +700,7 @@ class ReportingService:
 
     @staticmethod
     def _component_weight(component: InstrumentLookthroughComponentRow) -> Decimal | None:
-        return decimal_or_none(component.component_weight)
+        return cast(Decimal | None, decimal_or_none(component.component_weight))
 
     async def _resolve_scope_portfolios_and_date(
         self,
@@ -646,9 +733,9 @@ class ReportingService:
         requested_reporting_currency: str | None,
     ) -> str:
         if requested_reporting_currency:
-            return normalize_currency_code(requested_reporting_currency)
+            return str(normalize_currency_code(requested_reporting_currency))
         if scope.scope_type == "portfolio":
-            return normalize_currency_code(str(portfolios[0].base_currency))
+            return str(normalize_currency_code(str(portfolios[0].base_currency)))
         raise ValueError(
             "reporting_currency is required for portfolio-list and business-unit reporting queries."
         )
@@ -661,11 +748,14 @@ class ReportingService:
         to_currency: str,
         as_of_date: date,
     ) -> Decimal:
-        return await self._fx_converter.convert_amount(
-            amount=amount,
-            from_currency=from_currency,
-            to_currency=to_currency,
-            as_of_date=as_of_date,
+        return cast(
+            Decimal,
+            await self._fx_converter.convert_amount(
+                amount=amount,
+                from_currency=from_currency,
+                to_currency=to_currency,
+                as_of_date=as_of_date,
+            ),
         )
 
     async def _get_fx_rate(
@@ -674,4 +764,7 @@ class ReportingService:
         to_currency: str,
         as_of_date: date,
     ) -> Decimal:
-        return await self._fx_converter.get_fx_rate(from_currency, to_currency, as_of_date)
+        return cast(
+            Decimal,
+            await self._fx_converter.get_fx_rate(from_currency, to_currency, as_of_date),
+        )

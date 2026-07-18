@@ -78,7 +78,48 @@ async def test_query_asset_allocation(async_test_client):
             "decomposed_position_count": 0,
             "limitation_reason": None,
         },
-        "views": [],
+        "calculation_lineage": {
+            "algorithm_id": "PORTFOLIO_ALLOCATION",
+            "algorithm_version": 1,
+            "intermediate_precision": 28,
+            "input_content_hash": "a" * 64,
+            "calculation_content_hash": "b" * 64,
+            "output_content_hash": "c" * 64,
+        },
+        "views": [
+            {
+                "dimension": "asset_class",
+                "total_market_value_reporting_currency": Decimal("150"),
+                "buckets": [
+                    {
+                        "dimension_value": "EQUITY",
+                        "market_value_reporting_currency": Decimal("150"),
+                        "weight": Decimal("1"),
+                        "position_count": 1,
+                        "contributor_count": 1,
+                        "contributors": [
+                            {
+                                "contributor_type": "direct_position",
+                                "portfolio_id": "P1",
+                                "security_id": "SEC1",
+                                "booked_security_id": "SEC1",
+                                "source_snapshot_id": 101,
+                                "component_record_id": None,
+                                "component_weight": None,
+                                "component_effective_from": None,
+                                "component_effective_to": None,
+                                "component_source_system": None,
+                                "component_source_record_id": None,
+                                "market_value_reporting_currency": Decimal("150"),
+                                "bucket_weight": Decimal("1"),
+                            }
+                        ],
+                        "contributors_truncated": False,
+                        "omitted_market_value_reporting_currency": Decimal("0"),
+                    }
+                ],
+            }
+        ],
     }
 
     response = await client.post(
@@ -88,6 +129,10 @@ async def test_query_asset_allocation(async_test_client):
 
     assert response.status_code == 200
     assert response.json()["total_market_value_reporting_currency"] == "150"
+    contributor = response.json()["views"][0]["buckets"][0]["contributors"][0]
+    assert contributor["booked_security_id"] == "SEC1"
+    assert contributor["source_snapshot_id"] == 101
+    assert response.json()["calculation_lineage"]["input_content_hash"] == "a" * 64
 
 
 async def test_query_portfolio_summary(async_test_client):

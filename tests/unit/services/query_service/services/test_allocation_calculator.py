@@ -187,12 +187,15 @@ def test_calculate_allocation_views_uses_unclassified_for_missing_dimension_valu
                 instrument=_instrument("SEC1", sector=None),
                 snapshot=_snapshot("SEC1"),
                 market_value_reporting_currency=Decimal("100"),
+                contributor=_direct_contributor("SEC1", 1),
             )
         ],
         dimensions=["sector"],
+        contributor_limit_per_bucket=50,
     )
 
     assert _bucket_values(result, "sector") == {"UNCLASSIFIED": Decimal("100")}
+    assert result.views[0].buckets[0].contributors[0].contributor.security_id == "SEC1"
 
 
 def test_calculate_allocation_views_uses_snapshot_id_as_cash_currency_fallback() -> None:
@@ -202,12 +205,17 @@ def test_calculate_allocation_views_uses_snapshot_id_as_cash_currency_fallback()
                 instrument=None,
                 snapshot=_snapshot("CASH_USD"),
                 market_value_reporting_currency=Decimal("25"),
+                contributor=_direct_contributor("CASH_USD", 1),
             )
         ],
         dimensions=["currency"],
+        contributor_limit_per_bucket=50,
     )
 
     assert _bucket_values(result, "currency") == {"CASH_USD": Decimal("25")}
+    contributor = result.views[0].buckets[0].contributors[0].contributor
+    assert contributor.contributor_type == "direct_position"
+    assert contributor.security_id == "CASH_USD"
 
 
 def test_calculate_allocation_views_keeps_zero_total_weights_at_zero() -> None:
@@ -366,3 +374,71 @@ def test_allocation_weight_is_independent_of_ambient_decimal_precision() -> None
         result = calculate_allocation_views(rows=rows, dimensions=["asset_class"])
 
     assert result.views[0].buckets[0].weight == Decimal("0.6666666666666666666666666667")
+
+
+def test_empty_allocation_has_deterministic_lineage_and_no_buckets() -> None:
+    result = calculate_allocation_views(
+        rows=[],
+        dimensions=["asset_class", "currency"],
+        contributor_limit_per_bucket=50,
+    )
+
+    assert result.total_market_value_reporting_currency == Decimal("0")
+    assert [view.buckets for view in result.views] == [(), ()]
+    assert result.calculation_lineage.algorithm_id == "PORTFOLIO_ALLOCATION"
+
+
+def test_zero_value_bucket_exposes_unavailable_contributor_weight() -> None:
+    result = calculate_allocation_views(
+        rows=[
+            AllocationInputRow(
+                instrument=_instrument("SEC1", asset_class="EQUITY"),
+                snapshot=_snapshot("SEC1"),
+                market_value_reporting_currency=Decimal("10"),
+                contributor=_direct_contributor("SEC1", 1),
+            ),
+            AllocationInputRow(
+                instrument=_instrument("SEC2", asset_class="EQUITY"),
+                snapshot=_snapshot("SEC2"),
+                market_value_reporting_currency=Decimal("-10"),
+                contributor=_direct_contributor("SEC2", 2),
+            ),
+        ],
+        dimensions=["asset_class"],
+        contributor_limit_per_bucket=50,
+    )
+
+    assert [item.bucket_weight for item in result.views[0].buckets[0].contributors] == [None, None]
+
+
+def test_large_allocation_retains_only_bounded_top_contributors() -> None:
+    rows = [
+        AllocationInputRow(
+            instrument=_instrument(f"SEC_{index}", asset_class="EQUITY"),
+            snapshot=_snapshot(f"SEC_{index}"),
+            market_value_reporting_currency=Decimal(index),
+            contributor=_direct_contributor(f"SEC_{index}", index + 1),
+        )
+        for index in range(10_000)
+    ]
+
+    result = calculate_allocation_views(
+        rows=rows,
+        dimensions=["asset_class", "currency", "sector", "region"],
+        contributor_limit_per_bucket=50,
+        calculation_context={"portfolio_id": "PORT_1", "reporting_currency": "USD"},
+    )
+    bucket = result.views[0].buckets[0]
+
+    assert bucket.position_count == 10_000
+    assert bucket.contributor_count == 10_000
+    assert len(bucket.contributors) == 50
+    assert bucket.contributors_truncated is True
+    assert bucket.contributors[0].contributor.security_id == "SEC_9999"
+    assert (
+        sum(
+            (item.market_value_reporting_currency for item in bucket.contributors),
+            bucket.omitted_market_value_reporting_currency,
+        )
+        == bucket.market_value_reporting_currency
+    )
