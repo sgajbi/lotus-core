@@ -46,6 +46,7 @@
     "/ingest/model-portfolios",
     "/ingest/planned-withdrawal-schedules",
     "/ingest/portfolio-bundle",
+    "/ingest/portfolio-party-role-assignments",
     "/ingest/portfolios",
     "/ingest/reference/cash-accounts",
     "/ingest/reference/classification-taxonomy",
