@@ -2730,14 +2730,16 @@ Most relevant current governance:
      and event behavior. Do not reintroduce one existence query per reference family on the
      bank-day hot path; prove the one-read shape in repository tests and the behavior against
      PostgreSQL.
-194. Transaction ingestion, raw persistence, and repair replay must use the same normalized
-     `portfolio_id|security_id` partition identity. This preserves same-position ordering across
-     normal, duplicate, backdated, reversal, correction, restatement, and corporate-action
-     processing while allowing independent securities in one portfolio to use the governed
-     partition capacity. Cross-security lifecycle correctness must remain explicit in dependency
-     references, deterministic domain ordering, reconciliation, and portfolio-security database
-     locks; do not restore portfolio-wide transport serialization as a substitute for those domain
-     controls.
+194. Transaction ingestion, raw persistence, and repair replay must use one shared partition-key
+     policy. Unlinked transactions use `portfolio_id|security_id`. A non-blank
+     `linked_transaction_group_id` uses
+     `portfolio_id|transaction-group|linked_transaction_group_id`, scoped by portfolio, so a
+     canonical parent-before-dependent-leg producer sequence cannot split across Kafka partitions.
+     Dates and epochs remain outside both identities. This preserves same-position ordering and
+     linked cross-security ordering while allowing independent securities to use governed capacity.
+     Dependency references, deterministic domain ordering/rebuild, reconciliation, and
+     portfolio-security database locks remain mandatory; do not restore portfolio-wide transport
+     serialization or treat the group key as a substitute for those domain controls.
 195. `transactions.raw.received` / `persistence_group_transactions` and
      `transactions.persisted` / `portfolio_transaction_processing_group` use twelve aligned
      partitions and in-flight tasks with `per_key_concurrency=1`. This is a measured

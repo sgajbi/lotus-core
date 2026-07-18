@@ -37,13 +37,16 @@ rearmed and completed `525` times for one final portfolio-day row.
    stale-state, reconciliation, and lifecycle logs retain their operational levels.
 3. The structured-log guard scans the governed hot paths and rejects known high-volume routine
    messages at `INFO`.
-4. Transaction ingestion, raw persistence outbox, and repair replay all use the same normalized
-   `portfolio_id|security_id` key.
-5. Dates and epochs remain outside the key, preserving one position stream across normal,
-   duplicate, backdated, reversal, correction, restatement, and corporate-action processing.
-6. Cross-security corporate-action and linked-leg correctness remains explicit through dependency
-   references, deterministic domain ordering/rebuild, reconciliation, and portfolio-security
-   database locks rather than portfolio-wide Kafka serialization.
+4. Transaction ingestion, raw persistence outbox, and repair replay use one shared key policy.
+   Unlinked transactions use `portfolio_id|security_id`; a non-blank linked group uses
+   `portfolio_id|transaction-group|linked_transaction_group_id`.
+5. Dates and epochs remain outside the key. Unlinked flows preserve one position stream across
+   normal, duplicate, backdated, reversal, correction, and restatement processing. Linked
+   cross-security legs share the portfolio/group stream and retain their canonical producer order.
+6. Dependency references, deterministic domain ordering/rebuild, reconciliation, and
+   portfolio-security database locks remain mandatory for corporate-action correctness. The linked
+   group key prevents cross-partition reordering; it does not replace those controls or introduce
+   portfolio-wide Kafka serialization.
 7. Normal cashflow persistence uses one PostgreSQL conflict-aware insert instead of a savepoint,
    flush, and refresh sequence; duplicate delivery still returns the authoritative stored row.
 8. Position-history writes and outbox rows rely on the caller-owned unit-of-work commit instead of
@@ -351,9 +354,18 @@ Cashflow falls back to the database fence unless position processing proves the 
 lock is held. No external API, event, persistence, calculation, or error contract changes.
 
 The intentional transport behavior change is the transaction partition key:
-`portfolio_id` becomes `portfolio_id|security_id` for raw ingestion, persisted transaction facts,
-and repair replay. Existing deployed topics require the governed pause/drain/cutover procedure
-because historical and new keys can map to different partitions after producer rollout.
+`portfolio_id` becomes `portfolio_id|security_id` for unlinked raw ingestion, persisted transaction
+facts, and repair replay. Linked multi-leg transactions instead use
+`portfolio_id|transaction-group|linked_transaction_group_id` across all three paths, preventing a
+canonical parent-before-dependent-leg sequence from landing on different partitions. Existing
+deployed topics require the governed pause/drain/cutover procedure because historical and new keys
+can map to different partitions after producer rollout.
+
+The P1 review fix changes only Kafka record keys for transactions carrying a non-blank existing
+`linked_transaction_group_id`. HTTP APIs, OpenAPI, event payload schemas, database schemas, and
+migrations are unchanged. The event-contract pack, RFC-0082, repository context, operator runbook,
+review ledger, and campaign manifest record the new truth. No wiki source changes because the wiki
+does not publish this key policy; the operator-owned migration runbook is the durable runbook owner.
 
 ## Validation
 
@@ -362,6 +374,9 @@ because historical and new keys can map to different partitions after producer r
   derived state, and the durable guard.
 - `51` transaction partitioning/replay/ingestion/persistence tests passed, including real ingestion
   API paths.
+- The linked-group P1 fix passed `47` focused partitioning, ingestion, persistence, and repair-replay
+  tests; full repository-native MyPy passed all `235` source files; scoped Ruff lint and format
+  checks passed. Signed implementation commit: `dcb1aba71d47ab5d72732921a802135276a21143`.
 - Event runtime contract, event contract test pack, structured-log, domain, application workflow,
   infrastructure adapter, event publisher, repository port, wiki, and documentation guards passed.
 - Full `make typecheck` passed for `235` source files.
