@@ -402,6 +402,7 @@
             "tests/unit/libs/portfolio-common/domain/valuation/test_position_valuation.py",
             "tests/unit/libs/portfolio-common/domain/valuation/test_day_count.py",
             "tests/unit/libs/portfolio-common/domain/valuation/test_accrued_income.py",
+            "tests/unit/libs/portfolio-common/domain/valuation/test_calculation_lineage.py",
             "tests/unit/services/calculators/position_valuation_calculator/logic/test_valuation_logic.py"
           ]
         },

@@ -21,6 +21,11 @@ from .assignments import (
     revaluation_start_for_assignment_correction,
     validate_no_overlapping_active_assignments,
 )
+from .calculation_lineage import (
+    CalculationLineage,
+    build_calculation_lineage,
+    canonical_content_hash,
+)
 from .day_count import (
     BusinessDayCalendar,
     DayCountConvention,
@@ -59,6 +64,7 @@ __all__ = [
     "AccruedIncomeTreatment",
     "AccruedIncomeResult",
     "BusinessDayCalendar",
+    "CalculationLineage",
     "DayCountConvention",
     "DayCountConventionDefinition",
     "DayCountInputs",
@@ -84,6 +90,8 @@ __all__ = [
     "ValuationPolicyAssignmentStatus",
     "calculate_position_valuation",
     "calculate_segmented_accrued_income",
+    "build_calculation_lineage",
+    "canonical_content_hash",
     "calculate_year_fraction",
     "resolve_day_count_convention",
     "resolve_valuation_policy_assignment",
