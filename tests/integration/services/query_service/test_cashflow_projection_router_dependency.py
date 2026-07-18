@@ -24,6 +24,30 @@ def _source_metadata(as_of_date: date) -> dict[str, object]:
     )
 
 
+def _trust_fields(*, output_group_count: int = 0) -> dict[str, object]:
+    return {
+        "request_fingerprint": "cashflow_projection:" + "a" * 16,
+        "source_window_trust": {
+            "window_status": "EMPTY",
+            "supportability_status": "SUPPORTED",
+            "reason_codes": ["EMPTY_SOURCE_WINDOW"],
+            "source_row_count": 0,
+            "calculated_source_row_count": 0,
+            "output_group_count": output_group_count,
+            "source_component_totals": {"BOOKED": 0, "PROJECTED": 0},
+            "calculated_component_totals": {"BOOKED": 0, "PROJECTED": 0},
+        },
+        "calculation_lineage": {
+            "algorithm_id": "PORTFOLIO_CASHFLOW_PROJECTION",
+            "algorithm_version": 1,
+            "intermediate_precision": 50,
+            "input_content_hash": "a" * 64,
+            "calculation_content_hash": "b" * 64,
+            "output_content_hash": "c" * 64,
+        },
+    }
+
+
 @pytest_asyncio.fixture
 async def async_test_client():
     mock_service = AsyncMock()
@@ -50,6 +74,7 @@ async def test_cashflow_projection_success(async_test_client):
         "projected_settlement_total_cashflow": 0,
         "projection_days": 10,
         "notes": "Projected window includes settlement-dated future external cash movements.",
+        **_trust_fields(),
     }
 
     response = await client.get("/portfolios/P1/cashflow-projection")
@@ -60,6 +85,7 @@ async def test_cashflow_projection_success(async_test_client):
         horizon_days=10,
         as_of_date=None,
         include_projected=True,
+        tenant_id=None,
     )
 
 
@@ -79,10 +105,12 @@ async def test_cashflow_projection_forwards_params(async_test_client):
         "projected_settlement_total_cashflow": 0,
         "projection_days": 5,
         "notes": "Booked-only view capped at as_of_date.",
+        **_trust_fields(),
     }
 
     response = await client.get(
-        "/portfolios/P1/cashflow-projection?horizon_days=5&as_of_date=2026-03-01&include_projected=false"
+        "/portfolios/P1/cashflow-projection?horizon_days=5&as_of_date=2026-03-01&include_projected=false",
+        headers={"X-Tenant-Id": "tenant-a"},
     )
 
     assert response.status_code == 200
@@ -91,6 +119,7 @@ async def test_cashflow_projection_forwards_params(async_test_client):
         horizon_days=5,
         as_of_date=date(2026, 3, 1),
         include_projected=False,
+        tenant_id="tenant-a",
     )
 
 

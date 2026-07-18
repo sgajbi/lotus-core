@@ -1,7 +1,7 @@
 from datetime import date
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Path, Query, status
+from fastapi import APIRouter, Depends, Header, Path, Query, status
 from portfolio_common.source_data_products import source_data_product_openapi_extra
 
 from ..dependencies import get_cashflow_projection_service
@@ -77,6 +77,11 @@ async def get_cashflow_projection(
         ),
         examples=[True],
     ),
+    tenant_id: str | None = Header(
+        None,
+        alias="X-Tenant-Id",
+        description="Tenant or book-of-record scope carried into the runtime trust receipt.",
+    ),
     service: CashflowProjectionService = Depends(get_cashflow_projection_service),
 ):
     try:
@@ -85,6 +90,7 @@ async def get_cashflow_projection(
             horizon_days=horizon_days,
             as_of_date=as_of_date,
             include_projected=include_projected,
+            tenant_id=tenant_id,
         )
     except ValueError as exc:
         raise_value_error_as_resolution_http(exc)
