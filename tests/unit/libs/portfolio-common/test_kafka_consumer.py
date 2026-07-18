@@ -1,7 +1,7 @@
 # tests/unit/libs/portfolio-common/test_kafka_consumer.py
 import asyncio
 import json
-from unittest.mock import ANY, AsyncMock, MagicMock, patch
+from unittest.mock import ANY, AsyncMock, MagicMock, call, patch
 
 import pytest
 from portfolio_common.events import TransactionEvent
@@ -115,10 +115,10 @@ def _consumer_event_outcomes(metric_mock: MagicMock) -> list[tuple[str, str]]:
 
 
 def _assert_standard_metric_labels(metric_mock: MagicMock) -> None:
-    for call in metric_mock.call_args_list:
-        assert call.kwargs["service"] == "SVC"
-        assert call.kwargs["topic"] == "test-topic"
-        assert call.kwargs["group_id"] == "test-group"
+    for metric_call in metric_mock.call_args_list:
+        assert metric_call.kwargs["service"] == "SVC"
+        assert metric_call.kwargs["topic"] == "test-topic"
+        assert metric_call.kwargs["group_id"] == "test-group"
 
 
 async def test_run_loop_success_path(
@@ -742,6 +742,114 @@ async def test_run_loop_retryable_error_does_not_commit(
         ][0]
         == 1
     )
+
+
+async def test_run_loop_retries_transient_failure_in_process_then_commits(
+    test_consumer: ConcreteTestConsumer,
+    mock_confluent_consumer: MagicMock,
+):
+    mock_msg = create_mock_message("key-retry-success", {"data": "value-retry-success"})
+    mock_confluent_consumer.poll.return_value = mock_msg
+    test_consumer.execution_profile = KafkaConsumerExecutionProfile(
+        retryable_failure_backoff_seconds=0.001
+    )
+    processing_attempts = 0
+
+    async def fail_once_then_succeed(*args, **kwargs):
+        nonlocal processing_attempts
+        processing_attempts += 1
+        if processing_attempts == 1:
+            raise RetryableConsumerError("cost_dependency_unavailable")
+        test_consumer.shutdown()
+
+    test_consumer.process_message_mock.side_effect = fail_once_then_succeed
+
+    with patch("portfolio_common.kafka_consumer.logger.warning") as warning_log:
+        await test_consumer.run()
+
+    assert processing_attempts == 2
+    assert test_consumer.process_message_mock.await_args_list == [call(mock_msg), call(mock_msg)]
+    mock_confluent_consumer.commit.assert_called_once_with(
+        message=mock_msg,
+        asynchronous=False,
+    )
+    assert test_consumer._retryable_failure_attempts == {}
+    retry_log = next(
+        call
+        for call in warning_log.call_args_list
+        if call.kwargs["extra"]["event_name"] == "kafka.consumer.processing_retryable"
+    )
+    assert retry_log.kwargs["extra"]["retryable_error_reason"] == ("cost_dependency_unavailable")
+    assert retry_log.kwargs["extra"]["failure_attempts"] == 1
+    assert retry_log.kwargs["extra"]["retry_backoff_seconds"] == 0.001
+
+
+async def test_concurrent_profile_retries_before_next_partition_message(
+    mock_confluent_consumer: MagicMock,
+    mock_kafka_producer: MagicMock,
+):
+    first_msg = create_mock_message(
+        "key-retry-ordered-1",
+        {"data": "value-1"},
+        partition=0,
+        offset=1,
+    )
+    second_msg = create_mock_message(
+        "key-retry-ordered-2",
+        {"data": "value-2"},
+        partition=0,
+        offset=2,
+    )
+    polled_messages = [first_msg, second_msg]
+
+    def poll(_timeout):
+        return polled_messages.pop(0) if polled_messages else None
+
+    mock_confluent_consumer.poll.side_effect = poll
+    processing_attempts = []
+    first_message_attempts = 0
+
+    consumer = ConcreteTestConsumer(
+        bootstrap_servers="mock_bs",
+        topic="test-topic",
+        group_id="test-group",
+        execution_profile=KafkaConsumerExecutionProfile(
+            max_in_flight_messages=2,
+            poll_timeout_seconds=0.01,
+            retryable_failure_backoff_seconds=0.01,
+        ),
+    )
+
+    async def process_message(msg):
+        nonlocal first_message_attempts
+        processing_attempts.append(msg.offset())
+        if msg is first_msg:
+            first_message_attempts += 1
+            if first_message_attempts == 1:
+                raise RetryableConsumerError("dependency race")
+            return
+        consumer.shutdown()
+
+    consumer.process_message_mock.side_effect = process_message
+
+    with (
+        patch("portfolio_common.kafka_consumer.Consumer", return_value=mock_confluent_consumer),
+        patch(
+            "portfolio_common.kafka_consumer.get_kafka_producer",
+            return_value=mock_kafka_producer,
+        ),
+        patch("portfolio_common.kafka_consumer.set_kafka_consumer_in_flight"),
+        patch("portfolio_common.kafka_consumer.observe_kafka_consumer_backlog_pressure"),
+    ):
+        await asyncio.wait_for(consumer.run(), timeout=1)
+
+    assert processing_attempts == [1, 1, 2]
+    committed_messages = [
+        call.kwargs["message"] for call in mock_confluent_consumer.commit.call_args_list
+    ]
+    assert committed_messages == [first_msg, second_msg]
+    mock_confluent_consumer.pause.assert_called_once()
+    mock_confluent_consumer.resume.assert_called_once()
 
 
 async def test_run_loop_retryable_max_attempts_exhaustion_sends_to_dlq_and_commits(

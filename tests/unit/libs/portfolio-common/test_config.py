@@ -312,6 +312,7 @@ def test_kafka_consumer_execution_profile_defaults_preserve_serial_behavior(monk
     assert profile.max_in_flight_messages == 1
     assert profile.ordering_key == "partition"
     assert profile.per_key_concurrency == 1
+    assert profile.retryable_failure_backoff_seconds == 1.0
 
 
 @pytest.mark.parametrize(
@@ -358,7 +359,11 @@ def test_governed_consumer_group_rejects_capacity_above_partition_count(monkeypa
 def test_kafka_consumer_execution_profile_merges_group_override(monkeypatch):
     monkeypatch.setenv(
         "LOTUS_CORE_KAFKA_CONSUMER_EXECUTION_DEFAULTS_JSON",
-        '{"poll_timeout_seconds": 0.5, "shutdown_drain_timeout_seconds": 15}',
+        (
+            '{"poll_timeout_seconds": 0.5, '
+            '"retryable_failure_backoff_seconds": 0.25, '
+            '"shutdown_drain_timeout_seconds": 15}'
+        ),
     )
     monkeypatch.setenv(
         "LOTUS_CORE_KAFKA_CONSUMER_EXECUTION_GROUP_OVERRIDES_JSON",
@@ -369,6 +374,7 @@ def test_kafka_consumer_execution_profile_merges_group_override(monkeypatch):
 
     assert profile.poll_timeout_seconds == 0.5
     assert profile.max_in_flight_messages == 2
+    assert profile.retryable_failure_backoff_seconds == 0.25
     assert profile.shutdown_drain_timeout_seconds == 15
     assert profile.ordering_key == "partition"
 
