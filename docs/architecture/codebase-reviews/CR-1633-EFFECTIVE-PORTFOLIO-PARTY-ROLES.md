@@ -41,6 +41,11 @@ required source-owned identifier and enforces only portfolio ownership through a
   returned pending-review, quarantined, or rejected assignment is now `PARTIAL/INCOMPLETE` with an
   explicit `PARTY_ROLE_ASSIGNMENTS_NON_ACCEPTED` reason. Diagnostic rows remain visible without
   being misrepresented as usable relationship authority.
+- Fixed a second PR review identity gap: snapshot, content, source-batch, and source-digest identity
+  now bind the full returned assignment rows, request scope, aggregate quality/supportability,
+  latest evidence timestamp, and lineage. A same-version correction to an effective interval,
+  role/scope, party, or quality disposition therefore changes the receipt identity instead of
+  retaining the request-and-version fingerprint.
 
 ## Compatibility And Same-Pattern Review
 
@@ -103,3 +108,7 @@ governance already covers the reusable procedure without duplicating content.
 The PR review correction does not require an additional wiki edit: the existing wiki describes the
 source-owned quality disposition, while exact aggregate quality/supportability precedence belongs
 in the API contract, executable tests, and this review record.
+
+The receipt-identity correction likewise needs no additional wiki page. The existing Mesh Data
+Products page owns the audience-facing source-product description; exact hash inputs and correction
+behavior are implementation, executable-test, and review-ledger truth.
