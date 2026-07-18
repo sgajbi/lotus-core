@@ -12,6 +12,11 @@ from .assignments import (
     revaluation_start_for_assignment_correction,
     validate_no_overlapping_active_assignments,
 )
+from .policy_registry import (
+    UnknownValuationPolicyError,
+    resolve_position_valuation_policy,
+    supported_position_valuation_policies,
+)
 from .position_valuation import (
     AccruedIncomeTreatment,
     FxConversionPolicy,
@@ -39,6 +44,7 @@ __all__ = [
     "PrincipalBasis",
     "ResolvedValuationPolicyAssignment",
     "UnsupportedValuationError",
+    "UnknownValuationPolicyError",
     "ValuationInputBasis",
     "ValuationOutputMeasure",
     "ValuationPolicyAssignmentCacheKey",
@@ -46,6 +52,8 @@ __all__ = [
     "ValuationPolicyAssignmentStatus",
     "calculate_position_valuation",
     "resolve_valuation_policy_assignment",
+    "resolve_position_valuation_policy",
     "revaluation_start_for_assignment_correction",
+    "supported_position_valuation_policies",
     "validate_no_overlapping_active_assignments",
 ]
