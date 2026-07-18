@@ -446,7 +446,7 @@
       ],
       "freshness_policy": {
         "freshness_class": "daily",
-        "max_allowed_age_description": "Core-owned maturity posture summary over HoldingsAsOf instrument maturity facts for a bounded horizon."
+        "max_allowed_age_description": "Core-owned booked maturity posture over exact HoldingsAsOf portfolio-day/epoch scopes; current trust requires complete reconciliation at or after the latest selected source evidence."
       },
       "completeness_policy": {
         "default_status": "complete",

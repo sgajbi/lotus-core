@@ -22,7 +22,8 @@ performance methodology, tax advice, execution-quality assessment, or OMS acknow
 | `portfolio_id` | Path parameter | Yes | Portfolio whose maturity posture is queried. |
 | `as_of_date` | Query parameter | No | Booked HoldingsAsOf cap used as the summary start date. |
 | `horizon_days` | Query parameter | No, default `90`, max `3660` | Calendar-day horizon used to derive the inclusive maturity window end date. |
-| `include_projected` | Query parameter | No, default `false` | Controls whether projected holdings are included in the underlying HoldingsAsOf read. |
+| `include_projected` | Query parameter | No, fixed `false` | Projected holdings are excluded from this trust-certified receipt. Supplying `true` returns HTTP 422. |
+| `X-Tenant-Id` | Request header | No | Tenant identity bound into the receipt and deterministic input lineage when supplied. |
 
 ## Source Data
 
@@ -31,9 +32,17 @@ It inherits HoldingsAsOf effective-date resolution, current-epoch position selec
 history supplement behavior, market-price freshness posture, latest evidence timestamp, and
 runtime source-data metadata.
 
+For each selected snapshot or history row, Core preserves the exact source business date and
+current epoch before DTO mapping. One set-based indexed read resolves the durable
+`FINANCIAL_RECONCILIATION` aggregate control row for every unique portfolio-day/epoch scope. Core
+does not perform one reconciliation query per holding. A missing scope, an epoch mismatch, or an
+empty book without control evidence remains unreconciled; it is never promoted to complete from
+holdings quality alone.
+
 ## Methodology
 
-1. Resolve `HoldingsAsOf:v1` for the portfolio, optional `as_of_date`, and `include_projected`.
+1. Require `include_projected=false`, then resolve booked `HoldingsAsOf:v1` for the portfolio and
+   optional `as_of_date`.
 2. Set `window_start_date = HoldingsAsOf.as_of_date`.
 3. Set `window_end_date = window_start_date + horizon_days`.
 4. Classify returned holdings as maturity-bearing when `asset_class` or `product_type` contains
@@ -45,14 +54,27 @@ runtime source-data metadata.
 7. Count returned non-zero holdings whose source-owned `maturity_date` falls within the inclusive
    window as `maturing_holding_count`.
 8. Set `next_maturity_date` to the earliest in-window maturity date, or null when none exists.
-9. Inherit freshness from HoldingsAsOf data quality:
-   - `COMPLETE` and `PARTIAL` -> `freshness_status=CURRENT`,
-   - `STALE` -> `freshness_status=STALE`,
-   - `UNKNOWN` -> `freshness_status=UNKNOWN`.
-10. Derive supportability reason codes from HoldingsAsOf quality, missing maturity facts, and
-    unsupported product-feature indicators.
-11. Generate `request_fingerprint` from the requested scope and returned summary content. It is
-    product/request lineage, not an upstream `source_batch_fingerprint`.
+9. Classify each exact HoldingsAsOf source scope from its durable aggregate control:
+   - `COMPLETED` at or after the latest selected source evidence -> `COMPLETE`,
+   - `PENDING`, `RUNNING`, `PROCESSING`, or `QUEUED` -> `PARTIAL`,
+   - `FAILED`, `REQUIRES_REPLAY`, or `BLOCKED` -> `BLOCKED`,
+   - a completed control older than selected source evidence -> `STALE`,
+   - missing control -> `UNRECONCILED`, and an unrecognized or unscoped row -> `UNKNOWN`.
+   The response uses the most severe posture across all exact source scopes.
+10. Set `freshness_status=CURRENT` only when holdings quality is `COMPLETE` or `PARTIAL` and
+    reconciliation is `COMPLETE`; preserve `STALE` when either source or control evidence is stale.
+11. Derive supportability reason codes from HoldingsAsOf quality, reconciliation posture, missing
+    maturity facts, and unsupported product-feature indicators. Reconciliation other than
+    `COMPLETE` can never produce `supportability_status=SUPPORTED`.
+12. Build three deterministic SHA-256 lineage layers with algorithm id
+    `PORTFOLIO_CONTRACTUAL_MATURITY_SUMMARY`, version `1`:
+    - input: portfolio, normalized tenant, booked projection flag, horizon, exact HoldingsAsOf
+      product/as-of/snapshot/content/source-batch/policy/latest-evidence/reconciliation identity;
+    - calculation: algorithm id, version, integer/date intermediate precision, and input hash;
+    - output: window, counts, next maturity, and supportability output bound to the calculation hash.
+13. Derive `request_fingerprint` from the normalized input hash and publish the response content
+    hash as the source digest and source-batch fingerprint. Request correlation is propagated as
+    operational evidence but intentionally excluded from deterministic financial hashes.
 
 ## Supportability
 
@@ -61,6 +83,11 @@ runtime source-data metadata.
 | HoldingsAsOf quality is `UNKNOWN` | `supportability_status=UNAVAILABLE`, `supportability_reasons=["HOLDINGS_UNKNOWN"]`. |
 | HoldingsAsOf quality is `STALE` | `supportability_status=STALE`, `supportability_reasons` includes `HOLDINGS_STALE`. |
 | HoldingsAsOf quality is `PARTIAL` | `supportability_status=PARTIAL`, `supportability_reasons` includes `HOLDINGS_PARTIAL`. |
+| Exact reconciliation is missing | `reconciliation_status=UNRECONCILED`, `supportability_status=UNAVAILABLE`, reason `HOLDINGS_RECONCILIATION_MISSING`. |
+| Exact reconciliation is incomplete | `reconciliation_status=PARTIAL`, `supportability_status=PARTIAL`, reason `HOLDINGS_RECONCILIATION_PARTIAL`. |
+| Exact reconciliation is stale | `reconciliation_status=STALE`, `supportability_status=STALE`, reason `HOLDINGS_RECONCILIATION_STALE`. |
+| Exact reconciliation failed or requires replay | `reconciliation_status=BLOCKED`, `supportability_status=UNAVAILABLE`, reason `HOLDINGS_RECONCILIATION_BLOCKED`. |
+| Exact reconciliation is unknown or a source row cannot be scoped | `reconciliation_status=UNKNOWN`, `supportability_status=UNAVAILABLE`, reason `HOLDINGS_RECONCILIATION_UNKNOWN`. |
 | Maturity-bearing holding lacks `maturity_date` | `supportability_status=PARTIAL`, `supportability_reasons` includes `MISSING_INSTRUMENT_MATURITY_DATE`. |
 | Product classification suggests unsupported lifecycle features | `supportability_status=PARTIAL`, `supportability_reasons` includes `UNSUPPORTED_PRODUCT_MATURITY_FEATURE`. |
 | No in-window maturity exists and no supportability reason applies | `next_maturity_date=null`, `maturing_holding_count=0`, `supportability_status=SUPPORTED`. |
@@ -82,9 +109,13 @@ remain visible as partial supportability rather than being reconstructed in down
 | `maturity_bearing_holding_count` | Count of holdings classified as maturity-bearing. |
 | `missing_maturity_date_count` | Count of maturity-bearing holdings missing a maturity date. |
 | `unsupported_maturity_feature_count` | Count of holdings with classification terms outside the current contractual-date certification. |
-| `freshness_status` | Freshness posture inherited from HoldingsAsOf quality. |
+| `tenant_id`, `correlation_id` | Caller tenant when supplied and request correlation propagated by Core middleware. |
+| `snapshot_id`, `content_hash`, `source_digest`, `source_batch_fingerprint`, `policy_version` | Exact HoldingsAsOf source identity and deterministic maturity receipt identity. |
+| `reconciliation_status` | Aggregate exact-scope portfolio-day/epoch control posture. |
+| `freshness_status` | Combined HoldingsAsOf evidence and reconciliation freshness posture. |
 | `supportability_status`, `supportability_reasons` | Bounded posture and reason codes for downstream fail-closed handling. |
 | `request_fingerprint` | Deterministic product/request fingerprint for replay and lineage. |
+| `calculation_lineage` | Separate normalized-input, calculation-policy, and output SHA-256 hashes. |
 
 ## Worked Example
 
@@ -109,4 +140,10 @@ Output posture:
 | `next_maturity_date` | `2026-04-15` |
 | `maturing_holding_count` | `1` |
 | `maturity_bearing_holding_count` | `2` |
+| `reconciliation_status` | `COMPLETE` |
 | `supportability_status` | `SUPPORTED` |
+| `calculation_lineage.algorithm_id` | `PORTFOLIO_CONTRACTUAL_MATURITY_SUMMARY` |
+
+The worked example is supported only when every selected source business-date/epoch scope has a
+current `COMPLETED` financial-reconciliation control. The same holdings rows with missing control
+evidence return the same bounded maturity counts but an unavailable trust posture.

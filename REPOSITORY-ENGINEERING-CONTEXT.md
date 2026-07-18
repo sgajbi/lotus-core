@@ -978,7 +978,12 @@ Most relevant current governance:
     opportunity and review workflows. It is served by `query_service` at
     `/portfolios/{portfolio_id}/maturity-summary`, reuses the existing `HoldingsAsOf:v1` read path,
     publishes `next_maturity_date`, `maturing_holding_count`, freshness, supportability reasons,
-    and request-fingerprint lineage, and prevents downstream services such as `lotus-idea` from
+    and deterministic input/calculation/output lineage. The trust-certified receipt is booked-only,
+    carries caller tenant and correlation scope, binds deterministic HoldingsAsOf snapshot/content/
+    source-batch/policy identity, and derives reconciliation from one set-based read of every exact
+    selected portfolio-day/epoch control scope. Missing, incomplete, stale, failed, replay-required,
+    unknown, or source-newer-than-control evidence must not produce `SUPPORTED`. This prevents
+    downstream services such as `lotus-idea` from
     reconstructing maturity windows from raw holdings rows. The current implementation is
     contractual-instrument-maturity-date evidence only; callable, putable, amortizing,
     structured-note, lockup, expiry, liquidity, reinvestment, performance, risk, tax, execution,
