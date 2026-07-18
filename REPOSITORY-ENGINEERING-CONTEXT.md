@@ -367,7 +367,9 @@ Current repository posture:
     `dlq_failure_budget_exhausted` telemetry for the same topic/group/partition/offset/key. Do not
     claim durable local
     quarantine unless a separate service-owned quarantine store exists. Retryable consumer failures
-    default to uncommitted redelivery; operators can set
+    default to one attempt followed by consumer shutdown before any later same-partition offset can
+    be processed or committed. The source offset remains uncommitted for restart/rebalance
+    redelivery, and concurrent pending messages for that partition are discarded. Operators can set
     `KAFKA_CONSUMER_RETRYABLE_FAILURE_MAX_ATTEMPTS` and/or
     `KAFKA_CONSUMER_RETRYABLE_FAILURE_MAX_ELAPSED_SECONDS` to route repeatedly retryable messages
     to DLQ after a bounded in-process budget, committing only after DLQ success.

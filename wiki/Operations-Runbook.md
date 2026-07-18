@@ -227,6 +227,13 @@ retryable failures, terminal failures, DLQ outcomes, commit failures, poll error
 exits, and shutdown failures. Keep message keys, offsets, payload fields, raw exception text,
 portfolio/security IDs, request/correlation IDs, and trace IDs out of metric labels.
 
+Retryable processing is fail-stop by default. When both retry budgets are `0`, the first
+`RetryableConsumerError` stops the consumer before a later same-partition offset can be processed or
+committed, leaving the failed offset uncommitted for restart/rebalance redelivery. Positive attempt
+or elapsed budgets are the explicit opt-in to ordered in-process retry and eventual DLQ recovery.
+See [Kafka Consumer Retryable Failure Budgets](https://github.com/sgajbi/lotus-core/blob/main/docs/operations/runbook.md#kafka-consumer-retryable-failure-budgets)
+for settings, telemetry, and recovery semantics.
+
 Operational logs in guarded health, Kafka, outbox, ingestion, query, replay, and scheduler paths
 use constant messages with `event_name`, `operation`, `status`, and `reason_code` structured
 fields. Use `portfolio_common.logging_utils.operation_log_extra(...)` or
