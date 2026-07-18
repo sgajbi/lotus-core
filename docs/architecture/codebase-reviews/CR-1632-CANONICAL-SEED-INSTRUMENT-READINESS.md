@@ -33,6 +33,9 @@ Docker endpoint smoke: it posted a transaction and immediately requested replay,
 contract now resolves source identity from the durable transaction ledger. The one-shot replay POST
 therefore received 404 before the asynchronous transaction consumer committed the row. The smoke
 cleanup also retained the same non-atomic and incomplete portfolio-child deletion pattern.
+Review of that fix-forward found three additional direct portfolio children already handled by the
+canonical seed but omitted from smoke cleanup: `portfolio_mandate_bindings`,
+`client_restriction_profiles`, and `sustainability_preference_profiles`.
 
 ## Change
 
@@ -47,8 +50,8 @@ cleanup also retained the same non-atomic and incomplete portfolio-child deletio
 - Added an exact-identity, bounded transaction-ledger readiness wait before the smoke issues its
   one-shot replay POST. A page containing another transaction does not satisfy readiness, and a
   timeout reports the requested id plus the last HTTP and ledger evidence.
-- Applied the verified portfolio-child inventory, one transaction, and `ON_ERROR_STOP` behavior to
-  deterministic Docker smoke cleanup as well as canonical seed cleanup.
+- Applied the complete verified portfolio-child inventory, one transaction, and `ON_ERROR_STOP`
+  behavior to deterministic Docker smoke cleanup as well as canonical seed cleanup.
 
 ## Compatibility
 
@@ -76,8 +79,8 @@ rules. No wiki publication is required for this operator-tool implementation det
 - Docker smoke fix-forward tests: 10 passed; scoped Ruff, format, MyPy, and diff checks: passed
 - exact-head PR CI rerun, merge, and exact-main certification remain required before closure
 
-Signed implementation commits: `14726920a`, `1008a6150`, `c7b9feb52`, `cdd885b28`, and
-`10b985e86`.
+Signed implementation commits: `14726920a`, `1008a6150`, `c7b9feb52`, `cdd885b28`,
+`10b985e86`, and review fix-forward `b2e74f7d4`.
 
 GitHub evidence: issue #805 and
 `https://github.com/sgajbi/lotus-core/issues/805#issuecomment-5010205602`.
