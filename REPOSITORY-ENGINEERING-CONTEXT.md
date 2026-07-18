@@ -2833,6 +2833,16 @@ Most relevant current governance:
      rearm paths. Do not reuse a pre-update epoch merely because a later write touched the row, or
      cache an epoch across unit-of-work boundaries; both weaken correction and concurrent-
      reprocessing fences.
+204. Position valuation and financial reconciliation share only the framework-independent valuation
+     vocabulary, immutable values, deterministic calculation policy, and assignment-resolution
+     contract under `portfolio_common.domain.valuation`. This is a bounded cross-deployable domain
+     contract, not permission to put valuation workflow in `portfolio_common`. Ingestion DTOs,
+     assignment persistence, approval/migration workflow, impact preview, replay scheduling, caches,
+     Kafka/HTTP adapters, and orchestration stay with their owning services. Runtime wiring must
+     demonstrate both production consumers; otherwise move single-consumer policy into the owning
+     service domain. Explicit quote representation, principal basis, accrued treatment, scaling,
+     and FX direction must replace the legacy bond price-magnitude/cost-basis heuristic—never sit
+     beside it as a hidden fallback.
 
 ## Context Maintenance Rule
 
