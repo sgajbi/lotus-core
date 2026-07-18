@@ -103,6 +103,7 @@ class PositionRecalculationStateStore(Protocol):
         *,
         portfolio_id: str,
         security_id: str,
+        expected_epoch: int,
         watermark_date: date,
     ) -> bool: ...
 

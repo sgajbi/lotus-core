@@ -258,6 +258,37 @@ async def test_update_watermarks_if_older_can_touch_already_lagging_states(
     assert refreshed_current_state.updated_at is not None
 
 
+async def test_update_watermarks_if_older_rejects_a_stale_expected_epoch(
+    clean_db, async_db_session: AsyncSession
+):
+    """A conditional watermark touch must not claim a row whose epoch already advanced."""
+    repo = PositionStateRepository(async_db_session)
+    state = PositionState(
+        portfolio_id="P1",
+        security_id="S1",
+        watermark_date=date(2025, 8, 1),
+        epoch=4,
+        status="CURRENT",
+    )
+    async_db_session.add(state)
+    await async_db_session.commit()
+
+    updated_count = await repo.update_watermarks_if_older(
+        [("P1", "S1")],
+        date(2025, 6, 10),
+        touch_if_already_lagging=True,
+        expected_epoch=3,
+    )
+    await async_db_session.commit()
+    async_db_session.expire_all()
+
+    assert updated_count == 0
+    refreshed_state = await async_db_session.get(PositionState, ("P1", "S1"))
+    assert refreshed_state.watermark_date == date(2025, 8, 1)
+    assert refreshed_state.epoch == 4
+    assert refreshed_state.status == "CURRENT"
+
+
 async def test_bulk_update_states(clean_db, async_db_session: AsyncSession):
     """
     GIVEN a list of state updates

@@ -73,10 +73,12 @@ rearmed and completed `525` times for one final portfolio-day row.
     depth, and restored-open-lot observations. This adds internal cost attribution without adding a
     production metric or changing calculation behavior.
 16. Position materialization exposes its current epoch to the following cashflow stage only after
-    generation rearm successfully updates and write-locks the position-state row inside the shared
-    unit of work. Cashflow applies the existing epoch rule from that lock-scoped value instead of
-    loading the same position state again. No-record, stale, coalesced, and unsuccessful-rearm
-    paths retain the database-backed epoch fence.
+    generation rearm conditionally updates the position-state row for that exact expected epoch
+    and holds the resulting write lock inside the shared unit of work. Cashflow applies the existing
+    epoch rule from that proven lock-scoped value instead of loading the same position state again.
+    A concurrently advanced epoch makes the conditional update affect zero rows, so no epoch is
+    exposed and cashflow falls back to the database-backed fence. No-record, stale, coalesced, and
+    unsuccessful-rearm paths retain the same fallback.
 
 ## Measured Result
 
@@ -350,8 +352,9 @@ calculation contract.
 
 The lock-scoped epoch handoff is internal application-port metadata. It does not extend the row
 lock or unit-of-work lifetime, and it preserves the existing stale/current/future epoch comparison.
-Cashflow falls back to the database fence unless position processing proves the state-row update
-lock is held. No external API, event, persistence, calculation, or error contract changes.
+Cashflow falls back to the database fence unless a conditional position-state update proves both
+the expected epoch and the row lock are still owned by the current unit of work. No external API,
+event, persistence, calculation, or error contract changes.
 
 The intentional transport behavior change is the transaction partition key:
 `portfolio_id` becomes `portfolio_id|security_id` for unlinked raw ingestion, persisted transaction
@@ -441,6 +444,10 @@ does not publish this key policy; the operator-owned migration runbook is the du
 - Lock-scoped epoch reuse passed `873` transaction-processing/common unit tests, `2` real-
   PostgreSQL atomic reprocessing tests, full MyPy across `235` source files, Ruff/format, complete
   architecture, and documentation/wiki guards at signed commit `a8d6ee302`.
+- PR #804 review found that the lock-scoped epoch had been read before the watermark `UPDATE`; a
+  concurrent worker could advance the row before that update acquired its lock. The rearm now
+  applies an expected-epoch compare-and-set predicate. Focused position, cashflow, transaction, and
+  shared-repository tests cover stale-epoch rejection and the database-fence fallback contract.
 - Exact clean fan-in `20260717T231632Z` passed at `a8d6ee302` with the direct one-state-read-per-
   transaction result above. Scoped teardown removed every run-owned resource and preserved the
   separately owned 15-container canonical UI stack.
@@ -503,9 +510,9 @@ metric and requires no OpenAPI, migration, event-contract, calculation-methodolo
 wiki-source change. The terminal-transition outcome classification changes only an internal Python
 repository/processor contract and diagnostic log fields. It requires no OpenAPI, migration,
 event-contract, calculation-methodology, operator-runbook, or additional wiki-source change.
-The lock-scoped position epoch handoff is also an internal unit-of-work optimization and requires
-no OpenAPI, migration, event-contract, calculation-methodology, operator-runbook, or additional
-wiki-source change.
+The lock-scoped position epoch handoff and its expected-epoch compare-and-set hardening are internal
+unit-of-work behavior. They require no OpenAPI, migration, event-contract, calculation-methodology,
+operator-runbook, or additional wiki-source change.
 The rejected synchronous-commit executor experiment changed no durable contract and was reverted
 forward. Recording its no-repeat evidence requires no OpenAPI, migration, event-contract,
 calculation-methodology, operator-runbook, or wiki-source change.

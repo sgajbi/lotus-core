@@ -56,7 +56,7 @@ async def test_state_store_preserves_stale_epoch_compare_and_set_outcome() -> No
 
 
 @pytest.mark.asyncio
-async def test_state_store_rearms_generation_without_committing() -> None:
+async def test_state_store_rearms_generation_only_for_expected_epoch_without_committing() -> None:
     repository = AsyncMock(spec=PositionStateRepository)
     repository.update_watermarks_if_older.return_value = 1
     store = SqlAlchemyPositionRecalculationStateStore(repository)
@@ -64,6 +64,7 @@ async def test_state_store_rearms_generation_without_committing() -> None:
     updated = await store.rearm_generation(
         portfolio_id="PB-001",
         security_id="SEC-001",
+        expected_epoch=3,
         watermark_date=date(2026, 4, 9),
     )
 
@@ -72,4 +73,5 @@ async def test_state_store_rearms_generation_without_committing() -> None:
         keys=[("PB-001", "SEC-001")],
         new_watermark_date=date(2026, 4, 9),
         touch_if_already_lagging=True,
+        expected_epoch=3,
     )

@@ -146,6 +146,7 @@ class PositionStateRepository:
         new_watermark_date: date,
         *,
         touch_if_already_lagging: bool = False,
+        expected_epoch: int | None = None,
     ) -> int:
         """
         For a given list of (portfolio_id, security_id) keys, updates the
@@ -154,6 +155,9 @@ class PositionStateRepository:
         REPROCESSING and updated_at is advanced even if their watermark is already
         older. This preserves the earliest dirty date while giving the valuation
         scheduler a fresh correlation for corrected position-history writes.
+        When expected_epoch is supplied, only rows still on that epoch are
+        updated. A successful update then proves that this transaction holds
+        the position-state row lock for that exact epoch.
         Returns the number of rows that were updated.
         """
         if not keys:
@@ -185,6 +189,8 @@ class PositionStateRepository:
         )
         if not touch_if_already_lagging:
             stmt = stmt.where(PositionState.watermark_date > new_watermark_date)
+        if expected_epoch is not None:
+            stmt = stmt.where(PositionState.epoch == expected_epoch)
 
         result = await self.db.execute(stmt)
         updated_rows = result.fetchall()
