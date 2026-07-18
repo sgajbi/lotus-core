@@ -27,11 +27,15 @@ narrow framework-free contract therefore belongs in `portfolio_common.domain.val
   accrued-income treatment, FX conversion, and output measure.
 - Added one deterministic calculation result that keeps clean value, accrued income, total market
   value, notional exposure, and settlement variation distinct.
-- Added an immutable registry of 16 supported version-1 policy compositions. Resolution requires an
+- Added an immutable registry of 19 supported version-1 policy compositions. Resolution requires an
   exact policy identifier and version; there is no product-class, latest-version, or default-policy
   fallback. Percent-of-principal variants declare face, factor-adjusted, or supplied current
   principal and calculated or supplied accrual explicitly, while futures notional and settlement
   variation cannot resolve as market value.
+- Added explicit no-periodic-accrual clean-price compositions for face, factor-adjusted current
+  principal, and supplied current principal. These support zero-coupon/stripped discount positions
+  without applying a coupon formula; discount accretion, effective-interest, and tax amortization
+  remain outside the position market-value kernel.
 - Added immutable, tenant/legal-book/instrument-scoped valuation-policy assignments with exact-scope
   effective-date resolution, source-version fencing, overlap and gap rejection, deterministic
   content hashing, complete cache identity, and bounded replay-date derivation for corrections.
@@ -108,7 +112,8 @@ deleted rather than retained as a fallback when valuation and reconciliation are
 
 ## Validation
 
-- 91 valuation-domain tests passed, including unit/NAV, clean and dirty percent-of-principal,
+- 93 valuation-domain tests passed, including unit/NAV, clean, dirty, and explicit no-periodic-
+  accrual percent-of-principal,
   factor-adjusted principal, per-unit/per-contract/whole-position supplied values, futures notional,
   settlement variation, FX direction, exact tenant/book/instrument assignment resolution,
   source-version fencing, overlap/gap rejection, conflicting-version rejection, UTC-canonical cache
