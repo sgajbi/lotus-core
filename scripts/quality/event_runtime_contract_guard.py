@@ -28,11 +28,7 @@ GOVERNED_DLQ_PUBLICATION_BOUNDARIES = frozenset(
     {
         (
             "src/libs/portfolio-common/portfolio_common/kafka_consumer.py",
-            "_recover_exhausted_retryable_failure",
-        ),
-        (
-            "src/libs/portfolio-common/portfolio_common/kafka_consumer.py",
-            "_handle_terminal_processing_error",
+            "_recover_message_via_dlq",
         ),
     }
 )

@@ -65,9 +65,14 @@ def test_discover_consumer_dlq_wirings_finds_current_base_consumer_topics() -> N
 def test_current_consumers_delegate_terminal_dlq_publication_to_shared_boundary() -> None:
     publications = guard.discover_consumer_dlq_publications()
 
-    assert {(item.source, item.function_name) for item in publications} == set(
-        guard.GOVERNED_DLQ_PUBLICATION_BOUNDARIES
-    )
+    expected_boundary = {
+        (
+            "src/libs/portfolio-common/portfolio_common/kafka_consumer.py",
+            "_recover_message_via_dlq",
+        )
+    }
+    assert guard.GOVERNED_DLQ_PUBLICATION_BOUNDARIES == frozenset(expected_boundary)
+    assert {(item.source, item.function_name) for item in publications} == expected_boundary
 
 
 def test_event_runtime_guard_rejects_consumer_owned_dlq_publication(tmp_path: Path) -> None:
