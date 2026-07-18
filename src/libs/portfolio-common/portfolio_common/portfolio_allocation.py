@@ -65,13 +65,25 @@ class AllocationContributorInput:
         if self.contributor_type == "direct_position":
             if self.security_id != self.booked_security_id:
                 raise ValueError("direct contributor security must equal booked security")
-            if self.component_record_id is not None or self.component_weight is not None:
+            if any(
+                value is not None
+                for value in (
+                    self.component_record_id,
+                    self.component_weight,
+                    self.component_effective_from,
+                    self.component_effective_to,
+                    self.component_source_system,
+                    self.component_source_record_id,
+                )
+            ):
                 raise ValueError("direct contributor cannot carry component identity")
             return
         if self.component_record_id is None or self.component_record_id < 1:
             raise ValueError("look-through contributor requires a positive component_record_id")
         if self.component_weight is None or not self.component_weight.is_finite():
             raise ValueError("look-through contributor requires a finite component_weight")
+        if not ZERO <= self.component_weight <= Decimal("1"):
+            raise ValueError("look-through contributor component_weight must be between 0 and 1")
         if self.component_effective_from is None:
             raise ValueError("look-through contributor requires component_effective_from")
         if (
