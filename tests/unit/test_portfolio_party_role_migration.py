@@ -53,6 +53,8 @@ def test_portfolio_party_role_migration_is_constrained_indexed_and_reversible(
         "create_table",
         "create_index",
         "create_index",
+        "create_index",
+        "drop_index",
         "drop_index",
         "drop_index",
         "drop_table",

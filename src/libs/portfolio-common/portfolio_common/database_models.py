@@ -499,6 +499,7 @@ class PortfolioPartyRoleAssignment(Base):
             f"quality_status IN ({_enum_check_values(PortfolioPartyRoleQualityStatus)})",
             name="ck_party_role_quality_governed",
         ),
+        Index("ix_party_role_portfolio_history", "portfolio_id"),
         Index(
             "ix_party_role_portfolio_effective",
             "portfolio_id",

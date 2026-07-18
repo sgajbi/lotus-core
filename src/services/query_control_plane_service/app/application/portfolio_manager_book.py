@@ -93,8 +93,9 @@ def _membership_response(
         ),
         lineage={
             "source_system": "lotus-core",
-            "source_table": "portfolios",
-            "source_field": "advisor_id",
+            "source_table": _source_table(records),
+            "source_field": _source_field(records),
+            "compatibility_policy": "advisor_id_only_when_no_party_role_history",
             "contract_version": "rfc_041_pm_book_membership_v1",
         },
         **cast(
@@ -120,7 +121,9 @@ def _member(record: PortfolioManagerBookRecord) -> PortfolioManagerBookMember:
         open_date=record.open_date,
         close_date=record.close_date,
         base_currency=record.base_currency,
-        source_record_id=f"portfolio:{record.portfolio_id}",
+        source_record_id=(record.source_record_id or f"portfolio:{record.portfolio_id}"),
+        membership_source=record.membership_source,
+        role_type=record.role_type,
     )
 
 
@@ -128,7 +131,25 @@ def _latest_evidence_timestamp(records: list[PortfolioManagerBookRecord]) -> dat
     timestamps = [
         timestamp
         for record in records
-        for timestamp in (record.updated_at, record.created_at)
+        for timestamp in (record.observed_at, record.updated_at, record.created_at)
         if timestamp is not None
     ]
     return max(timestamps, default=None)
+
+
+def _source_table(records: list[PortfolioManagerBookRecord]) -> str:
+    sources = {record.membership_source for record in records}
+    if sources == {"party_role_assignment"}:
+        return "portfolio_party_role_assignments"
+    if sources == {"legacy_advisor_projection"} or not sources:
+        return "portfolios"
+    return "portfolio_party_role_assignments,portfolios"
+
+
+def _source_field(records: list[PortfolioManagerBookRecord]) -> str:
+    sources = {record.membership_source for record in records}
+    if sources == {"party_role_assignment"}:
+        return "role_type"
+    if sources == {"legacy_advisor_projection"} or not sources:
+        return "advisor_id"
+    return "role_type,advisor_id"

@@ -1,8 +1,10 @@
 """Behavior tests for QCP-owned portfolio-manager book membership."""
 
 from datetime import UTC, date, datetime
+from typing import Literal
 
 import pytest
+from portfolio_common.domain.portfolio_party_roles import PortfolioPartyRoleType
 
 from src.services.query_control_plane_service.app.application.portfolio_manager_book import (
     PortfolioManagerBookService,
@@ -30,7 +32,12 @@ class _Reader:
         return self.records
 
 
-def _record() -> PortfolioManagerBookRecord:
+def _record(
+    *,
+    membership_source: Literal[
+        "party_role_assignment", "legacy_advisor_projection"
+    ] = "legacy_advisor_projection",
+) -> PortfolioManagerBookRecord:
     return PortfolioManagerBookRecord(
         portfolio_id="PB_SG_GLOBAL_BAL_001",
         client_id="CIF_SG_GLOBAL_BAL_001",
@@ -42,6 +49,25 @@ def _record() -> PortfolioManagerBookRecord:
         base_currency="SGD",
         created_at=datetime(2026, 5, 3, 8, tzinfo=UTC),
         updated_at=datetime(2026, 5, 3, 9, tzinfo=UTC),
+        membership_source=membership_source,
+        role_type=(
+            PortfolioPartyRoleType.DISCRETIONARY_PORTFOLIO_MANAGER
+            if membership_source == "party_role_assignment"
+            else None
+        ),
+        source_system=(
+            "relationship_master" if membership_source == "party_role_assignment" else None
+        ),
+        source_record_id=(
+            "coverage-PB_SG_GLOBAL_BAL_001-PM-001"
+            if membership_source == "party_role_assignment"
+            else None
+        ),
+        observed_at=(
+            datetime(2026, 5, 3, 9, 30, tzinfo=UTC)
+            if membership_source == "party_role_assignment"
+            else None
+        ),
     )
 
 
@@ -91,3 +117,25 @@ async def test_empty_book_is_explicitly_incomplete_and_missing() -> None:
     assert response.supportability.filters_applied == ["portfolio_manager_id", "as_of_date"]
     assert response.data_quality_status == "MISSING"
     assert response.latest_evidence_timestamp is None
+
+
+@pytest.mark.asyncio
+async def test_authoritative_assignment_replaces_legacy_lineage_without_changing_v1_shape() -> None:
+    service = PortfolioManagerBookService(
+        reader=_Reader([_record(membership_source="party_role_assignment")]), clock=_Clock()
+    )
+
+    response = await service.resolve_membership(
+        portfolio_manager_id="PARTY_PM_SG_001",
+        request=PortfolioManagerBookMembershipRequest(as_of_date=date(2026, 5, 3)),
+    )
+
+    assert response.members[0].membership_source == "party_role_assignment"
+    assert response.members[0].role_type is PortfolioPartyRoleType.DISCRETIONARY_PORTFOLIO_MANAGER
+    assert response.members[0].source_record_id == "coverage-PB_SG_GLOBAL_BAL_001-PM-001"
+    assert response.lineage["source_table"] == "portfolio_party_role_assignments"
+    assert response.lineage["source_field"] == "role_type"
+    assert response.lineage["compatibility_policy"] == (
+        "advisor_id_only_when_no_party_role_history"
+    )
+    assert response.latest_evidence_timestamp == datetime(2026, 5, 3, 9, 30, tzinfo=UTC)

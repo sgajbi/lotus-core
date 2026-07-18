@@ -3,6 +3,7 @@
 from datetime import date
 from typing import Literal
 
+from portfolio_common.domain.portfolio_party_roles import PortfolioPartyRoleType
 from portfolio_common.source_data_product_metadata import (
     SourceDataProductRuntimeMetadata,
     product_name_field,
@@ -55,6 +56,14 @@ class PortfolioManagerBookMember(BaseModel):
     close_date: date | None = Field(None, description="Portfolio close date, if any.")
     base_currency: str = Field(..., description="Portfolio base currency.")
     source_record_id: str = Field(..., description="Stable source record identifier.")
+    membership_source: Literal["party_role_assignment", "legacy_advisor_projection"] = Field(
+        ...,
+        description="Authoritative role assignment or explicitly bounded legacy projection.",
+    )
+    role_type: PortfolioPartyRoleType | None = Field(
+        None,
+        description="Governed portfolio-management role, null for legacy compatibility rows.",
+    )
 
     model_config = ConfigDict()
 
@@ -86,7 +95,8 @@ class PortfolioManagerBookMembershipResponse(SourceDataProductRuntimeMetadata):
     portfolio_manager_id: str = Field(
         ...,
         description=(
-            "Portfolio-manager identifier backed by the portfolio master advisor_id field."
+            "Portfolio-manager party identifier resolved from effective role assignments, with "
+            "a bounded advisor_id projection for portfolios that have no role history."
         ),
     )
     as_of_date: date = Field(..., description="Business date used to resolve membership.")

@@ -451,8 +451,8 @@ SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = (
         paging_mode=INLINE_PAGED,
         export_mode=NOT_APPLICABLE,
         notes=(
-            "DPM source product for first-wave portfolio-manager book membership, backed by "
-            "core portfolio master advisor_id membership."
+            "DPM source product backed by effective portfolio-manager role assignments, with a "
+            "bounded advisor_id projection only for portfolios without role-assignment history."
         ),
     ),
     SourceDataProductDefinition(
