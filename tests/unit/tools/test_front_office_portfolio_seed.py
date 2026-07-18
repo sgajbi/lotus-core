@@ -783,6 +783,11 @@ def test_portfolio_seed_cleanup_sql_removes_portfolio_owned_state_before_reseed(
 
     assert "delete from transactions where portfolio_id = 'PB_SG_GLOBAL_BAL_001';" in sql
     assert "delete from position_timeseries where portfolio_id = 'PB_SG_GLOBAL_BAL_001';" in sql
+    assert "delete from average_cost_pool_state where portfolio_id = 'PB_SG_GLOBAL_BAL_001';" in sql
+    assert (
+        "delete from cost_basis_processing_state where portfolio_id = 'PB_SG_GLOBAL_BAL_001';"
+        in sql
+    )
     assert "delete from cash_account_masters where portfolio_id = 'PB_SG_GLOBAL_BAL_001';" in sql
     assert (
         "delete from client_restriction_profiles where portfolio_id = 'PB_SG_GLOBAL_BAL_001';"
@@ -792,6 +797,14 @@ def test_portfolio_seed_cleanup_sql_removes_portfolio_owned_state_before_reseed(
         "delete from sustainability_preference_profiles "
         "where portfolio_id = 'PB_SG_GLOBAL_BAL_001';" in sql
     )
+    for child_table in (
+        "client_income_needs_schedules",
+        "client_tax_profiles",
+        "client_tax_rule_sets",
+        "liquidity_reserve_requirements",
+        "planned_withdrawal_schedules",
+    ):
+        assert f"delete from {child_table} where portfolio_id = 'PB_SG_GLOBAL_BAL_001';" in sql
     assert (
         "delete from portfolio_mandate_bindings where portfolio_id = 'PB_SG_GLOBAL_BAL_001';" in sql
     )
