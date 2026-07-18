@@ -1501,11 +1501,14 @@ Most relevant current governance:
      extending the shared profile and tests.
 105. Cashflow rule caching is governed reference-data caching, not hidden calculation state. Cached
      cashflow rules must carry the source rule-set version fingerprint and latest effective
-     timestamp, verify the current source version before serving a fresh cache hit, reload on TTL
-     expiry, source-version change, missing-rule refresh, or explicit process-local invalidation,
-     and emit bounded `cashflow_rule_cache_events_total` outcomes. Multi-process invalidation is
-     source-owned through `cashflow_rules.updated_at`; do not add rule caches that lack source
-     version/effective metadata, stale-read behavior, invalidation ownership, and cache metrics.
+     timestamp. Fresh hits may be served without SQL only inside the bounded
+     `CASHFLOW_RULE_CACHE_SOURCE_VERSION_CHECK_INTERVAL_SECONDS` window; the first lookup after that
+     window must single-flight a source-version check before serving, and the full snapshot must
+     reload on TTL expiry, source-version change, missing-rule refresh, or explicit process-local
+     invalidation. Multi-process invalidation is source-owned through `cashflow_rules.updated_at` and
+     bounded by the source-version interval. Emit bounded `cashflow_rule_cache_events_total`
+     outcomes; do not add reference caches that query source metadata on every hit or lack source
+     version/effective metadata, explicit stale-read bounds, invalidation ownership, and metrics.
      The active cache is an instance-owned `CashflowRuleCache` under
      `app/infrastructure/cashflow/`; its immutable snapshot and lock belong to the composed runtime.
      SQL rule access belongs to the adjacent singular `rule_repository.py`, with tests mirrored
