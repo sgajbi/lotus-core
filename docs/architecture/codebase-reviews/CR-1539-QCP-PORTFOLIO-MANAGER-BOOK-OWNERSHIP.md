@@ -72,6 +72,11 @@ CR-1540 completed the `dpm_portfolio_population` move and removed the mixed DPM 
 transitional DTO definitions. Remaining #715 work is DPM readiness, transaction economics,
 benchmark/market reference, operations/support, advisory compatibility, and image proof.
 
+CR-1633 supersedes the original `advisor_id` source boundary for migrated portfolios: effective
+accepted portfolio-manager role assignments are now authoritative, while `advisor_id` remains a
+bounded compatibility projection only when a portfolio has no role-assignment history. The route
+and `v1` product identity remain stable.
+
 ## Documentation Decision
 
 Updated repository context, the current-state architecture map, historical records that named the

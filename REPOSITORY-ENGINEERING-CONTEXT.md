@@ -126,9 +126,13 @@ Current repository posture:
     `DpmPortfolioUniverseCandidate:v1`. They are declared in the active source-data catalog,
     route-family registry, source-security profiles, and domain-product declaration, backed by
     canonical front-office seed payloads where applicable, and live-proven for the RFC-0087 source
-    family through `make live-dpm-source-validate`. `PortfolioManagerBookMembership:v1` is the
-    first RFC41-WTBD-001 source-owner foundation and resolves portfolio master rows by
-    `advisor_id` without claiming a broader relationship-householding hierarchy.
+    family through `make live-dpm-source-validate`. `PortfolioPartyRoleAssignment:v1` owns
+    effective-dated relationship coverage, investment-advisory, portfolio-management, and
+    client-service capacity with source lineage and quality disposition. `party_id` remains a
+    source-owned identifier until #518 establishes the broader Party aggregate.
+    `PortfolioManagerBookMembership:v1` resolves governed portfolio-manager assignments and uses
+    `advisor_id` only as a compatibility projection for portfolios with no role-assignment history;
+    it does not claim a broader relationship-householding hierarchy.
     `CioModelChangeAffectedCohort:v1` is the RFC41-WTBD-002 source-owner foundation and resolves
     affected discretionary mandates from approved model definitions and effective mandate bindings
     without moving rebalance decisioning into core. `DpmPortfolioUniverseCandidate:v1` advances
@@ -759,7 +763,8 @@ Most relevant current governance:
     `DiscretionaryMandateBinding:v1`, `InstrumentEligibilityProfile:v1`,
     `PortfolioTaxLotWindow:v1`, `TransactionCostCurve:v1`,
     `MarketDataCoverageWindow:v1`, `DpmSourceReadiness:v1`, and
-    `PortfolioManagerBookMembership:v1`, `CioModelChangeAffectedCohort:v1`, and
+    `PortfolioManagerBookMembership:v1`, `PortfolioPartyRoleAssignment:v1`,
+    `CioModelChangeAffectedCohort:v1`, and
     `DpmPortfolioUniverseCandidate:v1`, with product-specific APIs, ingestion/persistence support
     where core owns source state, route-family metadata, source-data security, domain-product
     declarations, OpenAPI proof, live validator coverage where applicable, and canonical
