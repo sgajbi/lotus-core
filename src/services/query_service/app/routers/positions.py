@@ -203,9 +203,8 @@ async def get_portfolio_maturity_summary(
         ),
         examples=[False],
     ),
-    tenant_id: str | None = Header(
+    x_tenant_id: str | None = Header(
         None,
-        alias="X-Tenant-Id",
         description=(
             "Tenant scope bound into runtime receipt metadata when supplied by the caller."
         ),
@@ -219,7 +218,7 @@ async def get_portfolio_maturity_summary(
             as_of_date=as_of_date,
             horizon_days=horizon_days,
             include_projected=include_projected,
-            tenant_id=tenant_id,
+            tenant_id=x_tenant_id,
         )
     except LookupError as exc:
         raise lookup_error_to_http(exc) from exc

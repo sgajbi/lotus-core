@@ -54,7 +54,7 @@ async def test_get_cash_movement_summary_success() -> None:
         portfolio_id="P1",
         start_date=date(2026, 3, 1),
         end_date=date(2026, 3, 31),
-        tenant_id="tenant-a",
+        x_tenant_id="tenant-a",
         service=service,
     )
 
@@ -79,7 +79,7 @@ async def test_get_cash_movement_summary_maps_excessive_window_to_400() -> None:
             portfolio_id="P1",
             start_date=date(2026, 1, 1),
             end_date=date(2027, 1, 2),
-            tenant_id=None,
+            x_tenant_id=None,
             service=service,
         )
 
@@ -99,7 +99,7 @@ async def test_get_cash_movement_summary_maps_missing_portfolio_to_404() -> None
             portfolio_id="P404",
             start_date=date(2026, 3, 1),
             end_date=date(2026, 3, 31),
-            tenant_id=None,
+            x_tenant_id=None,
             service=service,
         )
 
