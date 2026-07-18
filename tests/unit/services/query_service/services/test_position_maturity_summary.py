@@ -221,17 +221,23 @@ def test_maturity_summary_flags_unsupported_maturity_features() -> None:
 
 
 @pytest.mark.parametrize(
-    ("reconciliation_status", "expected_supportability", "expected_reason"),
+    (
+        "reconciliation_status",
+        "expected_data_quality",
+        "expected_supportability",
+        "expected_reason",
+    ),
     [
-        (PARTIAL, "PARTIAL", "HOLDINGS_RECONCILIATION_PARTIAL"),
-        (STALE, "STALE", "HOLDINGS_RECONCILIATION_STALE"),
-        (UNKNOWN, "UNAVAILABLE", "HOLDINGS_RECONCILIATION_UNKNOWN"),
-        (UNRECONCILED, "UNAVAILABLE", "HOLDINGS_RECONCILIATION_MISSING"),
-        (BLOCKED, "UNAVAILABLE", "HOLDINGS_RECONCILIATION_BLOCKED"),
+        (PARTIAL, PARTIAL, "PARTIAL", "HOLDINGS_RECONCILIATION_PARTIAL"),
+        (STALE, STALE, "STALE", "HOLDINGS_RECONCILIATION_STALE"),
+        (UNKNOWN, UNKNOWN, "UNAVAILABLE", "HOLDINGS_RECONCILIATION_UNKNOWN"),
+        (UNRECONCILED, UNKNOWN, "UNAVAILABLE", "HOLDINGS_RECONCILIATION_MISSING"),
+        (BLOCKED, BLOCKED, "UNAVAILABLE", "HOLDINGS_RECONCILIATION_BLOCKED"),
     ],
 )
 def test_maturity_summary_fails_closed_for_degraded_reconciliation(
     reconciliation_status: str,
+    expected_data_quality: str,
     expected_supportability: str,
     expected_reason: str,
 ) -> None:
@@ -248,6 +254,7 @@ def test_maturity_summary_fails_closed_for_degraded_reconciliation(
     )
 
     assert summary.reconciliation_status == reconciliation_status
+    assert summary.data_quality_status == expected_data_quality
     assert summary.supportability_status == expected_supportability
     assert summary.supportability_reasons == [expected_reason]
     assert summary.source_evidence_current is False
