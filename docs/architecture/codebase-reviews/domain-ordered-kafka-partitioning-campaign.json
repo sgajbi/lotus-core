@@ -48,11 +48,11 @@
       "tranche_id": "tranche-2-throughput-and-certification",
       "branch": "feat/domain-ordered-kafka-partitioning",
       "base_sha": "b9c55792361557bda56ba498492e962225557dd4",
-      "head_sha": "d968af62c0b1bc7826f167d6316023f711c38661",
+      "head_sha": "45fe19d1e3eecdd72c6c1d7dd2cd60c1824301ab",
       "post_merge_main_sha": "pending",
       "required_predecessor_main_sha": "b9c55792361557bda56ba498492e962225557dd4",
       "capability_boundary": "Transactional hot-path throughput, twelve-way capacity, valuation-job lock ordering, and exact workload certification",
-      "commit_count": 52,
+      "commit_count": 54,
       "issue_closure_decision": "close_after_final_validated_main",
       "local_evidence": [
         "Focused #799 unit, domain, lint, format, and type checks pass at signed campaign commits through 349ee126c66415c9bf683baa43b51656e6c8905d",
@@ -85,7 +85,9 @@
         "Daily 20260718T002619Z improved snapshots by 1462 (1.67 percent) over valid daily 20260717T201508Z while attempts remained 2/2, repeats and governed errors remained zero, failed outbox remained zero, and scoped teardown removed every run-owned container, network, and volume without touching the separately owned canonical UI project",
         "The exact daily recorded 57 peak database connections, 21 active, 28 idle in transaction, 7 lock waiters and blocked sessions, and 89138 cashflow rule-set version queries versus only 25 full rule-snapshot loads; any fix must retain bounded source freshness, explicit invalidation, missing-rule refresh, and concurrency safety and must pass exact fan-in before another daily run",
         "Governed task eng-task-20260718-082223-lotus-core-derived-state-daily reconciled to FAILED with exit code 2; JSON SHA-256 CD19ACE2555FC85385697E1D2A574D75A7367E99CDEE6473F089D52CEF523DB6 and Markdown SHA-256 8A6FF684110135E34189C7FE24A963DCEA7DB626490E627556607CF2F2914DEB",
-        "CR-1631 bounds cashflow rule source-version validation to one concurrency-coalesced check per configurable five-second default interval while preserving the 300-second full-refresh TTL, explicit invalidation, missing-rule reload, invalidation-generation fencing, and immutable source lineage; 55 focused and 919 service/config tests, MyPy across 235 files, complete architecture, Ruff, format, documentation, and wiki guards pass, with exact fan-in still required before retention",
+        "Signed experiment 31ac198a43d0263940ee3c349caffd88ee521155 bounded cashflow rule source-version validation and reduced exact fan-in version queries from 999 to 19 while preserving exact reconciliation, attempts 2/2, zero repeats or governed errors, one aggregation completion, and final outbox 0/0",
+        "Exact clean fan-in 20260718T030244Z and repeat 20260718T031229Z drained in 110.821 and 110.768 seconds versus the retained 100.608-second parent, consistent 10.15 and 10.10 percent regressions despite the 98.10 percent query-count reduction",
+        "The source-version interval was reverted forward and immediate validation remains canonical; CR-1631 retains exact report hashes and prohibits repeating the interval without new end-to-end workload evidence",
         "The bounded ownership-observability investigation is complete; exact daily, recovery, poison, duplicate, price-restatement, and FX-restatement evidence remains required before PR readiness, and ordered append, full rebuild, method-specific lot state, backdated and correction semantics, and single-writer coordination remain mandatory"
       ],
       "remote_evidence": [
