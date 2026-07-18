@@ -329,3 +329,21 @@ def test_discover_response_model_product_identities_finds_current_dto_defaults()
         "v1",
     )
     assert identities["InstrumentEnrichmentBulkResponse"] == ("InstrumentReferenceBundle", "v1")
+
+
+def test_trust_certified_snapshot_response_declares_calculation_lineage() -> None:
+    fields = guard.discover_response_model_fields()
+
+    assert guard.evaluate_trust_certified_response_fields(fields) == []
+    assert "calculation_lineage" in fields["CoreSnapshotResponse"]
+
+
+def test_trust_certified_response_fields_fail_closed_for_missing_lineage() -> None:
+    errors = guard.evaluate_trust_certified_response_fields(
+        {"CoreSnapshotResponse": frozenset({"portfolio_id"})}
+    )
+
+    assert errors == [
+        "trust-certified response model 'CoreSnapshotResponse' must declare fields "
+        "['calculation_lineage']"
+    ]

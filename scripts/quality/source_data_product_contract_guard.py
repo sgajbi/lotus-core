@@ -44,6 +44,9 @@ REQUEST_SCOPED_SOURCE_BATCH_NAMES = {
     "request_scope_fingerprint",
     "snapshot_fingerprint",
 }
+REQUIRED_TRUST_CERTIFIED_RESPONSE_FIELDS = {
+    "CoreSnapshotResponse": frozenset({"calculation_lineage"}),
+}
 
 
 @dataclass(frozen=True)
@@ -247,6 +250,47 @@ def discover_response_model_product_identities(
     return identities
 
 
+def discover_response_model_fields(
+    dto_roots: tuple[Path, ...] = DTO_ROOTS,
+) -> dict[str, frozenset[str]]:
+    """Discover directly declared response fields for durable trust-contract checks."""
+
+    fields: dict[str, frozenset[str]] = {}
+    dto_files = (dto_file for dto_root in dto_roots for dto_file in dto_root.glob("*.py"))
+    for dto_file in sorted(dto_files):
+        tree = ast.parse(dto_file.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ClassDef):
+                continue
+            fields[node.name] = frozenset(
+                statement.target.id
+                for statement in node.body
+                if isinstance(statement, ast.AnnAssign) and isinstance(statement.target, ast.Name)
+            )
+    return fields
+
+
+def evaluate_trust_certified_response_fields(
+    response_model_fields: dict[str, frozenset[str]],
+    required_fields: dict[str, frozenset[str]] = REQUIRED_TRUST_CERTIFIED_RESPONSE_FIELDS,
+) -> list[str]:
+    """Fail closed when a certified financial product drops explicit trust evidence."""
+
+    errors: list[str] = []
+    for response_model, expected_fields in sorted(required_fields.items()):
+        actual_fields = response_model_fields.get(response_model)
+        if actual_fields is None:
+            errors.append(f"trust-certified response model {response_model!r} is missing")
+            continue
+        missing_fields = sorted(expected_fields - actual_fields)
+        if missing_fields:
+            errors.append(
+                f"trust-certified response model {response_model!r} must declare fields "
+                f"{missing_fields}"
+            )
+    return errors
+
+
 def evaluate_source_data_product_bindings(
     routes: list[SourceDataProductRoute],
     catalog: tuple[SourceDataProductDefinition, ...] = SOURCE_DATA_PRODUCT_CATALOG,
@@ -355,6 +399,7 @@ def main() -> int:
         response_model_identities=discover_response_model_product_identities(),
     )
     errors.extend(evaluate_source_batch_fingerprint_semantics())
+    errors.extend(evaluate_trust_certified_response_fields(discover_response_model_fields()))
     if errors:
         print("Source-data product contract guard failed:")
         for error in errors:
