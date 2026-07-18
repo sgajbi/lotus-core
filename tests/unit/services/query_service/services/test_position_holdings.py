@@ -333,6 +333,40 @@ async def test_portfolio_positions_response_data_adds_runtime_metadata() -> None
     assert response.generated_at.tzinfo is not None
 
 
+@pytest.mark.parametrize(
+    ("reconciliation_status", "expected_quality"),
+    [
+        ("PARTIAL", "PARTIAL"),
+        ("UNRECONCILED", "UNKNOWN"),
+        ("BLOCKED", "BLOCKED"),
+        ("STALE", "STALE"),
+    ],
+)
+async def test_holdings_response_quality_fails_closed_with_reconciliation(
+    reconciliation_status: str,
+    expected_quality: str,
+) -> None:
+    response = portfolio_positions_response_data(
+        portfolio_id="P1",
+        positions=[
+            Position(
+                security_id="SEC_A",
+                quantity=Decimal("1"),
+                cost_basis=Decimal("100"),
+                position_date=date(2025, 1, 1),
+                instrument_name="Instrument",
+            )
+        ],
+        response_as_of_date=date(2025, 1, 1),
+        data_quality_status="COMPLETE",
+        reconciliation_status=reconciliation_status,
+        latest_evidence_timestamp=datetime(2025, 1, 1, 10, 5, tzinfo=UTC),
+    )
+
+    assert response.data_quality_status == expected_quality
+    assert response.source_evidence_current is False
+
+
 async def test_holdings_content_hash_is_deterministic_for_same_holdings_evidence() -> None:
     evidence_timestamp = datetime(2025, 1, 1, 10, 5, tzinfo=UTC)
     position = Position(

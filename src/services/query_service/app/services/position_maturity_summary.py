@@ -11,6 +11,7 @@ from portfolio_common.reconciliation_quality import (
     STALE,
     UNKNOWN,
     UNRECONCILED,
+    reconciliation_bound_data_quality_status,
 )
 from portfolio_common.source_data_product_metadata import (
     source_data_product_runtime_metadata,
@@ -255,17 +256,13 @@ def _summary_data_quality_status(
     reconciliation_status: str,
     reasons: list[str],
 ) -> str:
-    normalized = _normalized_quality(holdings_data_quality_status)
-    normalized_reconciliation = _normalized_quality(reconciliation_status)
-    if normalized == BLOCKED or normalized_reconciliation == BLOCKED:
-        return BLOCKED
-    if normalized == STALE or normalized_reconciliation == STALE:
-        return STALE
-    if normalized == UNKNOWN or normalized_reconciliation in {UNKNOWN, UNRECONCILED}:
-        return UNKNOWN
-    if reasons:
+    resolved_status = reconciliation_bound_data_quality_status(
+        source_data_quality_status=holdings_data_quality_status,
+        reconciliation_status=reconciliation_status,
+    )
+    if resolved_status == COMPLETE and reasons:
         return PARTIAL
-    return COMPLETE
+    return resolved_status
 
 
 def _supportability_status(

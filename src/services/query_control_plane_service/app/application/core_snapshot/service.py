@@ -9,7 +9,12 @@ from typing import Any, cast
 
 from portfolio_common.domain.calculation_lineage import build_calculation_lineage
 from portfolio_common.domain.currency import normalize_currency_code
-from portfolio_common.reconciliation_quality import COMPLETE, PARTIAL, STALE
+from portfolio_common.reconciliation_quality import (
+    COMPLETE,
+    PARTIAL,
+    STALE,
+    reconciliation_bound_data_quality_status,
+)
 from portfolio_common.reconstruction_identity import CURRENT_RESTATEMENT_VERSION
 from portfolio_common.runtime_providers import Clock
 from portfolio_common.source_data_product_metadata import (
@@ -269,9 +274,13 @@ class CoreSnapshotService:
             request=request,
             governance=governance,
         )
-        data_quality_status = snapshot_data_quality_status(
+        source_data_quality_status = snapshot_data_quality_status(
             freshness=baseline.freshness,
             baseline_count=len(baseline.positions),
+        )
+        data_quality_status = reconciliation_bound_data_quality_status(
+            source_data_quality_status=source_data_quality_status,
+            reconciliation_status=baseline.reconciliation.status,
         )
         source_evidence_current = (
             baseline.reconciliation.status == COMPLETE

@@ -2,7 +2,13 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 
-from portfolio_common.reconciliation_quality import COMPLETE, PARTIAL, STALE, UNKNOWN
+from portfolio_common.reconciliation_quality import (
+    COMPLETE,
+    PARTIAL,
+    STALE,
+    UNKNOWN,
+    reconciliation_bound_data_quality_status,
+)
 from portfolio_common.source_data_product_metadata import (
     SourceDataDegradationSummary,
     source_data_product_runtime_metadata,
@@ -505,11 +511,15 @@ def portfolio_positions_response_data(
     degradation: SourceDataDegradationSummary | None = None,
 ) -> PortfolioPositionsResponse:
     resolved_degradation = degradation or SourceDataDegradationSummary()
+    resolved_data_quality_status = reconciliation_bound_data_quality_status(
+        source_data_quality_status=data_quality_status,
+        reconciliation_status=reconciliation_status,
+    )
     content_hash = holdings_content_hash(
         portfolio_id=portfolio_id,
         positions=positions,
         response_as_of_date=response_as_of_date,
-        data_quality_status=data_quality_status,
+        data_quality_status=resolved_data_quality_status,
         reconciliation_status=reconciliation_status,
         reconciliation_scope_hash=reconciliation_scope_hash,
         latest_evidence_timestamp=latest_evidence_timestamp,
@@ -524,7 +534,7 @@ def portfolio_positions_response_data(
         **source_data_product_runtime_metadata(
             as_of_date=response_as_of_date,
             reconciliation_status=reconciliation_status,
-            data_quality_status=data_quality_status,
+            data_quality_status=resolved_data_quality_status,
             latest_evidence_timestamp=latest_evidence_timestamp,
             snapshot_id=snapshot_id,
             policy_version="holdings-as-of-v1",
@@ -544,15 +554,15 @@ def portfolio_positions_response_data(
             },
             source_evidence_current=(
                 reconciliation_status == COMPLETE
-                and data_quality_status in {COMPLETE, PARTIAL}
+                and resolved_data_quality_status in {COMPLETE, PARTIAL}
                 and latest_evidence_timestamp is not None
             ),
             freshness_status=(
                 "STALE"
-                if reconciliation_status == STALE or data_quality_status == STALE
+                if reconciliation_status == STALE or resolved_data_quality_status == STALE
                 else "CURRENT"
                 if reconciliation_status == COMPLETE
-                and data_quality_status in {COMPLETE, PARTIAL}
+                and resolved_data_quality_status in {COMPLETE, PARTIAL}
                 and latest_evidence_timestamp is not None
                 else "UNAVAILABLE"
             ),

@@ -117,6 +117,28 @@ def classify_data_quality_coverage(signal: DataQualityCoverageSignal) -> str:
     )
 
 
+def reconciliation_bound_data_quality_status(
+    *,
+    source_data_quality_status: str,
+    reconciliation_status: str,
+) -> str:
+    """Reduce source quality and reconciliation trust to one fail-closed status."""
+    source_status = _normalize_status(source_data_quality_status) or UNKNOWN
+    control_status = _normalize_status(reconciliation_status) or UNKNOWN
+    statuses = {source_status, control_status}
+    if BLOCKED in statuses:
+        return BLOCKED
+    if STALE in statuses:
+        return STALE
+    if statuses & {UNKNOWN, UNRECONCILED}:
+        return UNKNOWN
+    if statuses & {PARTIAL, BREAK_OPEN}:
+        return PARTIAL
+    if source_status == COMPLETE and control_status == COMPLETE:
+        return COMPLETE
+    return UNKNOWN
+
+
 def _validate_data_quality_coverage_signal(signal: DataQualityCoverageSignal) -> None:
     _require_non_negative(signal.required_count, "required_count")
     _require_non_negative(signal.observed_count, "observed_count")

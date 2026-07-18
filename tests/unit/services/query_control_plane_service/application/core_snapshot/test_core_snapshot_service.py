@@ -304,12 +304,36 @@ async def test_core_snapshot_uses_injected_clock_for_generated_metadata(mock_dep
 
 
 @pytest.mark.parametrize(
-    ("control_status", "control_timestamp", "expected_status", "expected_freshness"),
+    (
+        "control_status",
+        "control_timestamp",
+        "expected_status",
+        "expected_quality",
+        "expected_freshness",
+    ),
     [
-        (None, None, UNRECONCILED, "UNAVAILABLE"),
-        ("RUNNING", datetime(2026, 2, 27, 10, 10, tzinfo=UTC), PARTIAL, "UNAVAILABLE"),
-        ("FAILED", datetime(2026, 2, 27, 10, 10, tzinfo=UTC), BLOCKED, "UNAVAILABLE"),
-        ("COMPLETED", datetime(2026, 2, 27, 10, 4, tzinfo=UTC), STALE, "STALE"),
+        (None, None, UNRECONCILED, UNKNOWN, "UNAVAILABLE"),
+        (
+            "RUNNING",
+            datetime(2026, 2, 27, 10, 10, tzinfo=UTC),
+            PARTIAL,
+            PARTIAL,
+            "UNAVAILABLE",
+        ),
+        (
+            "FAILED",
+            datetime(2026, 2, 27, 10, 10, tzinfo=UTC),
+            BLOCKED,
+            BLOCKED,
+            "UNAVAILABLE",
+        ),
+        (
+            "COMPLETED",
+            datetime(2026, 2, 27, 10, 4, tzinfo=UTC),
+            STALE,
+            STALE,
+            "STALE",
+        ),
     ],
 )
 async def test_core_snapshot_fails_closed_for_untrusted_reconciliation_controls(
@@ -317,6 +341,7 @@ async def test_core_snapshot_fails_closed_for_untrusted_reconciliation_controls(
     control_status,
     control_timestamp,
     expected_status,
+    expected_quality,
     expected_freshness,
 ):
     (position_repo, _, _, _, _, _) = mock_dependencies
@@ -336,6 +361,7 @@ async def test_core_snapshot_fails_closed_for_untrusted_reconciliation_controls(
     )
 
     assert response.reconciliation_status == expected_status
+    assert response.data_quality_status == expected_quality
     assert response.source_evidence_current is False
     assert response.freshness_status == expected_freshness
 
