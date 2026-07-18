@@ -982,9 +982,11 @@ async def test_openapi_describes_reference_data_shared_schema(async_test_client)
 
     benchmark_definition = components["BenchmarkDefinitionRecord"]
     mandate_binding = components["DiscretionaryMandateBindingRecord"]
+    party_role_assignment = components["PortfolioPartyRoleAssignmentRecord"]
     index_price_series = components["IndexPriceSeriesRecord"]
     benchmark_definition_request = components["BenchmarkDefinitionIngestionRequest"]
     mandate_binding_request = components["DiscretionaryMandateBindingIngestionRequest"]
+    party_role_request = components["PortfolioPartyRoleAssignmentIngestionRequest"]
     index_definition_request = components["IndexDefinitionIngestionRequest"]
     classification_request = components["ClassificationTaxonomyIngestionRequest"]
 
@@ -1002,6 +1004,22 @@ async def test_openapi_describes_reference_data_shared_schema(async_test_client)
     )
     assert mandate_binding_request["properties"]["mandate_bindings"]["description"] == (
         "Effective-dated discretionary mandate binding records to ingest or upsert."
+    )
+    assert party_role_assignment["properties"]["party_id"]["description"].startswith(
+        "Source-owned party identifier."
+    )
+    assert components["PortfolioPartyRoleType"]["enum"] == [
+        "relationship_manager",
+        "investment_advisor",
+        "portfolio_manager",
+        "discretionary_portfolio_manager",
+        "assistant_rm",
+        "service_officer",
+        "external_asset_manager",
+        "temporary_coverage_delegate",
+    ]
+    assert party_role_request["properties"]["party_role_assignments"]["description"] == (
+        "Effective-dated portfolio party-role observations to ingest or upsert."
     )
     assert index_definition_request["properties"]["indices"]["examples"] == [
         [

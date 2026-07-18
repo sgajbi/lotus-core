@@ -87,6 +87,13 @@ REFERENCE_DATA_INGESTION_REGISTRY = ReferenceDataIngestionRegistry(
             persist_method_name="upsert_discretionary_mandate_bindings",
         ),
         ReferenceDataIngestionCommand(
+            command_key="portfolio_party_role_assignment",
+            endpoint="/ingest/portfolio-party-role-assignments",
+            entity_type="portfolio_party_role_assignment",
+            records_attribute="party_role_assignments",
+            persist_method_name="upsert_portfolio_party_role_assignments",
+        ),
+        ReferenceDataIngestionCommand(
             command_key="client_restriction_profile",
             endpoint="/ingest/client-restriction-profiles",
             entity_type="client_restriction_profile",

@@ -26,6 +26,7 @@ from portfolio_common.database_models import (
     PlannedWithdrawalSchedule,
     PortfolioBenchmarkAssignment,
     PortfolioMandateBinding,
+    PortfolioPartyRoleAssignment,
     RiskFreeSeries,
     SustainabilityPreferenceProfile,
 )
@@ -200,6 +201,25 @@ class ReferenceDataIngestionService:
                 "effective_to",
                 "source_system",
                 "source_record_id",
+                "observed_at",
+                "quality_status",
+            ],
+        )
+
+    async def upsert_portfolio_party_role_assignments(
+        self, records: list[dict[str, Any]]
+    ) -> None:
+        await self._commit_upsert_many(
+            model=PortfolioPartyRoleAssignment,
+            records=records,
+            conflict_columns=["source_system", "source_record_id", "assignment_version"],
+            update_columns=[
+                "portfolio_id",
+                "party_id",
+                "role_type",
+                "role_scope",
+                "effective_from",
+                "effective_to",
                 "observed_at",
                 "quality_status",
             ],

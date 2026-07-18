@@ -40,6 +40,12 @@ EXPECTED_COMMANDS = {
         "mandate_bindings",
         "upsert_discretionary_mandate_bindings",
     ),
+    "portfolio_party_role_assignment": (
+        "/ingest/portfolio-party-role-assignments",
+        "portfolio_party_role_assignment",
+        "party_role_assignments",
+        "upsert_portfolio_party_role_assignments",
+    ),
     "client_restriction_profile": (
         "/ingest/client-restriction-profiles",
         "client_restriction_profile",
