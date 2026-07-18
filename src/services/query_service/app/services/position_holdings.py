@@ -496,6 +496,8 @@ def portfolio_positions_response_data(
     response_as_of_date: date,
     data_quality_status: str,
     latest_evidence_timestamp: datetime | None,
+    reconciliation_status: str = UNKNOWN,
+    reconciliation_scope_hash: str | None = None,
     degradation: SourceDataDegradationSummary | None = None,
 ) -> PortfolioPositionsResponse:
     resolved_degradation = degradation or SourceDataDegradationSummary()
@@ -507,6 +509,7 @@ def portfolio_positions_response_data(
         latest_evidence_timestamp=latest_evidence_timestamp,
         degradation=resolved_degradation,
     )
+    snapshot_id = f"holdings_as_of:{content_hash.removeprefix('sha256:')[:24]}"
     return PortfolioPositionsResponse(
         portfolio_id=portfolio_id,
         positions=positions,
@@ -514,8 +517,11 @@ def portfolio_positions_response_data(
         degradation=resolved_degradation,
         **source_data_product_runtime_metadata(
             as_of_date=response_as_of_date,
+            reconciliation_status=reconciliation_status,
             data_quality_status=data_quality_status,
             latest_evidence_timestamp=latest_evidence_timestamp,
+            snapshot_id=snapshot_id,
+            policy_version="holdings-as-of-v1",
             content_hash=content_hash,
             source_refs=[
                 (
@@ -528,7 +534,22 @@ def portfolio_positions_response_data(
                 "source_product": "HoldingsAsOf",
                 "source_product_version": "v1",
                 "degradation_status": resolved_degradation.status,
+                "reconciliation_scope_hash": reconciliation_scope_hash,
             },
+            source_evidence_current=(
+                reconciliation_status == COMPLETE
+                and data_quality_status in {COMPLETE, PARTIAL}
+                and latest_evidence_timestamp is not None
+            ),
+            freshness_status=(
+                "STALE"
+                if reconciliation_status == STALE or data_quality_status == STALE
+                else "CURRENT"
+                if reconciliation_status == COMPLETE
+                and data_quality_status in {COMPLETE, PARTIAL}
+                and latest_evidence_timestamp is not None
+                else "UNAVAILABLE"
+            ),
             use_content_hash_as_source_batch_fingerprint=True,
         ),
     )

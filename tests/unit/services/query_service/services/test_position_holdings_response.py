@@ -10,6 +10,9 @@ from portfolio_common.database_models import (
     PositionState,
 )
 
+from src.services.query_service.app.application.holdings_reconciliation import (
+    FinancialReconciliationControl,
+)
 from src.services.query_service.app.services.position_holdings_response import (
     portfolio_holdings_response,
 )
@@ -30,6 +33,7 @@ async def test_portfolio_holdings_response_assembles_snapshot_holdings() -> None
         unrealized_gain_loss=Decimal("0"),
         unrealized_gain_loss_local=Decimal("0"),
         date=date(2025, 1, 1),
+        epoch=7,
         created_at=datetime(2025, 1, 1, 9, 0, tzinfo=UTC),
         updated_at=datetime(2025, 1, 1, 10, 0, tzinfo=UTC),
     )
@@ -51,6 +55,14 @@ async def test_portfolio_holdings_response_assembles_snapshot_holdings() -> None
     repository.get_latest_snapshot_valuation_map_as_of_date.return_value = {}
     repository.get_held_since_dates.return_value = {("SEC_A", 7): date(2024, 12, 31)}
     repository.get_latest_market_price_dates.return_value = {"SEC_A": date(2025, 1, 1)}
+    repository.get_holdings_reconciliation_controls.return_value = [
+        FinancialReconciliationControl(
+            business_date=date(2025, 1, 1),
+            epoch=7,
+            status="COMPLETED",
+            updated_at=datetime(2025, 1, 1, 10, 6, tzinfo=UTC),
+        )
+    ]
 
     response = await portfolio_holdings_response(
         repository=repository,
@@ -76,6 +88,11 @@ async def test_portfolio_holdings_response_assembles_snapshot_holdings() -> None
     assert response.portfolio_id == "P1"
     assert response.as_of_date == date(2025, 1, 1)
     assert response.data_quality_status == "COMPLETE"
+    assert response.reconciliation_status == "COMPLETE"
+    assert response.freshness_status == "CURRENT"
+    assert response.source_evidence_current is True
+    assert response.snapshot_id is not None
+    assert response.policy_version == "holdings-as-of-v1"
     assert response.latest_evidence_timestamp == datetime(2025, 1, 1, 10, 5, tzinfo=UTC)
     assert response.source_batch_fingerprint == response.content_hash
     assert response.content_hash.startswith("sha256:")
@@ -97,6 +114,7 @@ async def test_portfolio_holdings_response_exposes_fallback_degradation_metadata
         cost_basis=Decimal("200"),
         cost_basis_local=Decimal("198"),
         position_date=date(2025, 1, 1),
+        epoch=3,
         updated_at=datetime(2025, 1, 1, 10, 0, tzinfo=UTC),
     )
     instrument = Instrument(name="History A", asset_class="Equity", currency="USD")
@@ -120,6 +138,7 @@ async def test_portfolio_holdings_response_exposes_fallback_degradation_metadata
     }
     repository.get_held_since_dates.return_value = {("HIST_A", 3): date(2024, 12, 1)}
     repository.get_latest_market_price_dates.return_value = {"HIST_A": date(2025, 1, 1)}
+    repository.get_holdings_reconciliation_controls.return_value = []
 
     response = await portfolio_holdings_response(
         repository=repository,
@@ -128,7 +147,9 @@ async def test_portfolio_holdings_response_exposes_fallback_degradation_metadata
     )
 
     assert response.data_quality_status == "PARTIAL"
-    assert response.freshness_status == "CURRENT"
+    assert response.reconciliation_status == "UNRECONCILED"
+    assert response.freshness_status == "UNAVAILABLE"
+    assert response.source_evidence_current is False
     assert response.source_batch_fingerprint == response.content_hash
     assert response.degradation.status == "PARTIAL"
     assert response.degradation.reason_codes == ["HOLDINGS_VALUATION_FALLBACK"]

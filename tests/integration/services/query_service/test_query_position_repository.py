@@ -1,11 +1,12 @@
 # tests/integration/services/query_service/test_query_position_repository.py
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
 import pytest
 from portfolio_common.database_models import (
     DailyPositionSnapshot,
     Instrument,
+    PipelineStageState,
     Portfolio,
     PositionHistory,
     PositionState,
@@ -14,9 +15,64 @@ from portfolio_common.database_models import (
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
+from src.services.query_service.app.application.holdings_reconciliation import (
+    HoldingsReconciliationScope,
+)
 from src.services.query_service.app.repositories.position_repository import PositionRepository
 
 pytestmark = pytest.mark.asyncio
+
+
+async def test_get_holdings_reconciliation_controls_reads_only_exact_scope(
+    clean_db,
+    db_engine,
+    async_db_session: AsyncSession,
+) -> None:
+    updated_at = datetime(2026, 3, 10, 14, tzinfo=UTC)
+    with Session(db_engine) as session:
+        session.add_all(
+            [
+                PipelineStageState(
+                    stage_name="FINANCIAL_RECONCILIATION",
+                    transaction_id="portfolio-stage:FINANCIAL_RECONCILIATION:P-RECON:2026-03-10",
+                    portfolio_id="P-RECON",
+                    security_id=None,
+                    business_date=date(2026, 3, 10),
+                    epoch=2,
+                    status="COMPLETED",
+                    updated_at=updated_at,
+                ),
+                PipelineStageState(
+                    stage_name="FINANCIAL_RECONCILIATION",
+                    transaction_id="portfolio-stage:FINANCIAL_RECONCILIATION:P-RECON:2026-03-11",
+                    portfolio_id="P-RECON",
+                    security_id=None,
+                    business_date=date(2026, 3, 11),
+                    epoch=3,
+                    status="FAILED",
+                    updated_at=updated_at,
+                ),
+            ]
+        )
+        session.commit()
+
+    repository = PositionRepository(async_db_session)
+    controls = await repository.get_holdings_reconciliation_controls(
+        portfolio_id="P-RECON",
+        scopes=(
+            HoldingsReconciliationScope(
+                business_date=date(2026, 3, 10),
+                epoch=2,
+                latest_evidence_timestamp=updated_at,
+                source_row_count=100_000,
+            ),
+        ),
+    )
+
+    assert len(controls) == 1
+    assert controls[0].business_date == date(2026, 3, 10)
+    assert controls[0].epoch == 2
+    assert controls[0].status == "COMPLETED"
 
 
 @pytest.fixture(scope="function")
