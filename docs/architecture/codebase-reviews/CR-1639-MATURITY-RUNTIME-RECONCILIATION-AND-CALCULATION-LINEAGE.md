@@ -93,6 +93,14 @@ partial handling. The five-state reconciliation regression now asserts data qual
 supportability, reason, reconciliation, and currentness; the focused maturity suite passes `14/14`
 and full MyPy passes all `237` source files.
 
+A later PR review found the shared `HoldingsAsOf:v1` content/source-batch identity included returned
+positions and data quality but omitted the reconciliation status and exact reconciliation scope
+hash. A trust transition could therefore retain the same source receipt. The identity payload now
+binds both fields, so `COMPLETE` to `BLOCKED` transitions and exact-scope corrections produce a new
+content hash, source digest, source-batch fingerprint, and snapshot id. The bounded same-pattern
+scan confirmed the maturity receipt inherits this corrected HoldingsAsOf identity and
+`PortfolioStateSnapshot:v1` already hashes its exact control evidence independently.
+
 ## Documentation And Wiki Decision
 
 The source-data-product declaration, methodology, RFC-0083 catalog, repository context, this
