@@ -71,7 +71,7 @@ rules. No wiki publication is required for this operator-tool implementation det
   instrument-eligibility foreign-key failure and restored the governed portfolio
 - non-destructive branch-qualified verification completed at governed as-of date `2026-04-10`,
   with 10/10 valued positions, performance and return readiness, and no stale or failed aggregation
-- full `make test-unit`: 4,844 passed, 10 deselected
+- full exact-head `make test-unit`: 4,847 passed, 10 deselected
 - `make lint`, `make typecheck`, `make architecture-guard`, and governed documentation gates: passed
 - Docker smoke fix-forward tests: 10 passed; scoped Ruff, format, MyPy, and diff checks: passed
 - exact-head PR CI rerun, merge, and exact-main certification remain required before closure
