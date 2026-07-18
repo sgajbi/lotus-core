@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from decimal import Decimal
+from decimal import Decimal, localcontext
 from typing import Any, cast
 
 from ...domain.core_snapshot import CoreSnapshotInstrument
 from ...domain.simulation import SimulationChange
 from ...domain.simulation_effects import transaction_quantity_effect
 from .baseline_positions import is_cash_asset_class
+from .calculations import CORE_SNAPSHOT_INTERMEDIATE_PRECISION
 
 
 def baseline_projected_positions(
@@ -56,9 +57,11 @@ def apply_projected_position_changes(
     projected: dict[str, dict[str, Any]],
     normalized_changes: list[tuple[str, Any]],
 ) -> None:
-    for security_id, change in normalized_changes:
-        entry = projected[security_id]
-        entry["quantity"] = entry["quantity"] + change_quantity_effect(change)
+    with localcontext() as context:
+        context.prec = CORE_SNAPSHOT_INTERMEDIATE_PRECISION
+        for security_id, change in normalized_changes:
+            entry = projected[security_id]
+            entry["quantity"] = entry["quantity"] + change_quantity_effect(change)
 
 
 def apply_baseline_projected_values(
@@ -86,11 +89,13 @@ def apply_baseline_projected_value(entry: dict[str, Any]) -> bool:
     baseline_qty = entry["baseline_quantity"]
     if baseline_qty <= 0 or entry.get("market_value_base") is None:
         return False
-    unit_base = entry["market_value_base"] / baseline_qty
-    entry["market_value_base"] = unit_base * entry["quantity"]
-    if entry.get("market_value_local") is not None:
-        unit_local = entry["market_value_local"] / baseline_qty
-        entry["market_value_local"] = unit_local * entry["quantity"]
+    with localcontext() as context:
+        context.prec = CORE_SNAPSHOT_INTERMEDIATE_PRECISION
+        unit_base = entry["market_value_base"] / baseline_qty
+        entry["market_value_base"] = unit_base * entry["quantity"]
+        if entry.get("market_value_local") is not None:
+            unit_local = entry["market_value_local"] / baseline_qty
+            entry["market_value_local"] = unit_local * entry["quantity"]
     return True
 
 

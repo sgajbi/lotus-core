@@ -1,5 +1,5 @@
 from datetime import UTC, date, datetime
-from decimal import Decimal
+from decimal import Decimal, localcontext
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -898,6 +898,37 @@ async def test_static_helpers_cover_zero_total_and_delta_paths():
         projected_total=Decimal("0"),
     )
     assert delta_rows[0].delta_quantity == Decimal("-1")
+
+
+async def test_snapshot_totals_and_weights_ignore_ambient_decimal_precision():
+    def calculate(ambient_precision: int) -> tuple[Decimal, Decimal]:
+        items = {
+            "SEC_A": {
+                "security_id": "SEC_A",
+                "quantity": Decimal("1"),
+                "market_value_base": Decimal("1"),
+                "market_value_local": Decimal("1"),
+                "currency": "USD",
+            },
+            "SEC_B": {
+                "security_id": "SEC_B",
+                "quantity": Decimal("1"),
+                "market_value_base": Decimal("2"),
+                "market_value_local": Decimal("2"),
+                "currency": "USD",
+            },
+        }
+        with localcontext() as context:
+            context.prec = ambient_precision
+            total = total_market_value_baseline(items)
+            assign_baseline_weights(items, total)
+            return total, items["SEC_A"]["position_record"].weight
+
+    low_precision = calculate(6)
+    high_precision = calculate(50)
+
+    assert low_precision == high_precision
+    assert low_precision == (Decimal("3"), Decimal("0.3333333333333333333333333333"))
 
 
 async def test_core_snapshot_request_fingerprint_is_deterministic(mock_dependencies):

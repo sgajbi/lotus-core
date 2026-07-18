@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import date
-from decimal import Decimal
+from decimal import Decimal, localcontext
 from typing import Any
 
 from portfolio_common.domain.currency import normalize_currency_code
@@ -13,6 +13,7 @@ from ...domain.core_snapshot import CoreSnapshotInstrument
 from ...domain.simulation import SimulationChange
 from ...ports.core_snapshot import CoreSnapshotSourceReader
 from ...ports.simulation import SimulationStore
+from .calculations import CORE_SNAPSHOT_INTERMEDIATE_PRECISION
 from .errors import CoreSnapshotUnavailableSectionError
 from .market_data import get_fx_rate_or_raise, required_decimal
 from .projected_positions import (
@@ -165,11 +166,13 @@ class CoreSnapshotProjectedPositionResolver:
             portfolio_base_currency=portfolio_base_currency,
             as_of_date=as_of_date,
         )
-        for security_id, (local_value, market_currency) in priced_values.items():
-            entry = projected[security_id]
-            portfolio_value = local_value * market_to_portfolio_fx[market_currency]
-            entry["market_value_local"] = local_value
-            entry["market_value_base"] = portfolio_value * portfolio_to_reporting_fx
+        with localcontext() as context:
+            context.prec = CORE_SNAPSHOT_INTERMEDIATE_PRECISION
+            for security_id, (local_value, market_currency) in priced_values.items():
+                entry = projected[security_id]
+                portfolio_value = local_value * market_to_portfolio_fx[market_currency]
+                entry["market_value_local"] = local_value
+                entry["market_value_base"] = portfolio_value * portfolio_to_reporting_fx
 
     async def _priced_projected_local_values(
         self,
@@ -202,13 +205,15 @@ class CoreSnapshotProjectedPositionResolver:
         missing_price_message = (
             f"positions_projected unavailable: missing market price for {security_id}"
         )
-        local_value = (
-            required_decimal(
-                latest_price.price,
-                message=missing_price_message,
+        with localcontext() as context:
+            context.prec = CORE_SNAPSHOT_INTERMEDIATE_PRECISION
+            local_value = (
+                required_decimal(
+                    latest_price.price,
+                    message=missing_price_message,
+                )
+                * quantity
             )
-            * quantity
-        )
         return local_value, normalize_currency_code(str(latest_price.currency))
 
     async def _market_to_portfolio_fx_rates(
