@@ -146,7 +146,7 @@ async def test_portfolio_holdings_response_exposes_fallback_degradation_metadata
         effective_as_of_date=date(2025, 1, 1),
     )
 
-    assert response.data_quality_status == "PARTIAL"
+    assert response.data_quality_status == "UNKNOWN"
     assert response.reconciliation_status == "UNRECONCILED"
     assert response.freshness_status == "UNAVAILABLE"
     assert response.source_evidence_current is False

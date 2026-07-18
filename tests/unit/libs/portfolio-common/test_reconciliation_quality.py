@@ -13,6 +13,7 @@ from portfolio_common.reconciliation_quality import (
     classify_data_quality_coverage,
     classify_finding_status,
     classify_reconciliation_status,
+    reconciliation_bound_data_quality_status,
     sort_reconciliation_breaks,
 )
 
@@ -73,6 +74,35 @@ def test_classify_finding_status(severity, resolution_state, expected) -> None:
 )
 def test_classify_data_quality_coverage(signal, expected) -> None:
     assert classify_data_quality_coverage(signal) == expected
+
+
+@pytest.mark.parametrize(
+    ("source_status", "reconciliation_status", "expected"),
+    [
+        (COMPLETE, COMPLETE, COMPLETE),
+        (PARTIAL, COMPLETE, PARTIAL),
+        (COMPLETE, PARTIAL, PARTIAL),
+        (COMPLETE, BREAK_OPEN, PARTIAL),
+        (COMPLETE, UNRECONCILED, UNKNOWN),
+        (UNKNOWN, COMPLETE, UNKNOWN),
+        (COMPLETE, STALE, STALE),
+        (STALE, BLOCKED, BLOCKED),
+        (COMPLETE, BLOCKED, BLOCKED),
+        ("unexpected", COMPLETE, UNKNOWN),
+    ],
+)
+def test_reconciliation_bound_data_quality_status_fails_closed(
+    source_status: str,
+    reconciliation_status: str,
+    expected: str,
+) -> None:
+    assert (
+        reconciliation_bound_data_quality_status(
+            source_data_quality_status=source_status,
+            reconciliation_status=reconciliation_status,
+        )
+        == expected
+    )
 
 
 def test_sort_reconciliation_breaks_prioritizes_blocking_severity_age_and_id() -> None:
