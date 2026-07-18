@@ -123,7 +123,7 @@ adjustment, execution-quality assessment, or OMS status inference is performed b
 | `X_c` | reporting FX rate | Latest FX rate from portfolio currency to reporting currency on or before `A`. |
 | `D_mv` | `source_reported_cash_weight_denominator_portfolio_currency` | Sum of same-date Core snapshot market values used as the cash-weight denominator. |
 | `W_c` | `source_reported_cash_weight` | Core-owned cash weight, `sum(C_p) / D_mv`, or null when blocked. |
-| `Q` | `data_quality_status` | `COMPLETE`, `PARTIAL`, `STALE`, or `UNKNOWN` source-data quality posture. |
+| `Q` | `data_quality_status` | Source quality reduced with exact reconciliation trust: `COMPLETE`, `PARTIAL`, `STALE`, `UNKNOWN`, or `BLOCKED`. |
 | `R` | `reconciliation_status` | Fail-closed aggregate trust posture for the exact returned portfolio/date/epoch scopes. |
 | `R_h` | `reconciliation_scope_hash` | Deterministic hash of the exact reconciliation scopes and control evidence used by the response. |
 
@@ -196,16 +196,19 @@ supportability posture is one of:
 9. Fetch latest market-price dates for non-cash positions that have market prices and compare them with response `A` to derive stale posture.
 10. Read and aggregate every exact financial-reconciliation control for the returned
     portfolio/date/epoch scopes, then derive `R` and `R_h` without per-position queries.
-11. Hash the normalized returned positions, data quality, `R`, `R_h`, latest evidence timestamp,
-    and degradation details. Use that digest for content, source-batch, source-digest, and snapshot
-    identity, then return positions with `HoldingsAsOf:v1` metadata.
-12. For cash balances, read all HoldingsAsOf snapshot rows for the resolved portfolio/date, filter
+11. Reduce source-row quality with `R` using fail-closed precedence: `BLOCKED`, `STALE`, `UNKNOWN`
+    for unknown or unreconciled evidence, `PARTIAL`, then `COMPLETE` only when both inputs are
+    complete.
+12. Hash the normalized returned positions, reduced data quality, `R`, `R_h`, latest evidence
+    timestamp, and degradation details. Use that digest for content, source-batch, source-digest,
+    and snapshot identity, then return positions with `HoldingsAsOf:v1` metadata.
+13. For cash balances, read all HoldingsAsOf snapshot rows for the resolved portfolio/date, filter
     cash instruments for account balances, join active/effective cash-account master rows, and read
     transaction-derived fallback account identifiers only for unmatched cash securities.
-13. Accept a transaction-derived fallback account identifier only when the account id and cash
+14. Accept a transaction-derived fallback account identifier only when the account id and cash
     security validate against active/effective `cash_account_masters`; otherwise use the cash
     security id with `cash_account_id_source=cash_security_fallback`.
-14. Build one row per known cash account, sort by account currency and account id, convert
+15. Build one row per known cash account, sort by account currency and account id, convert
     portfolio-currency balances to reporting currency, compute source-reported cash weight from
     same-date portfolio market-value denominator evidence when supportable, and return totals with
     `HoldingsAsOf:v1` metadata.
@@ -222,9 +225,10 @@ supportability posture is one of:
 | Any returned position lacks reprocessing status | Returns `data_quality_status=UNKNOWN`. |
 | Any returned position has non-`CURRENT` reprocessing status | Returns `data_quality_status=STALE`. |
 | Any non-cash priced position lacks market-price freshness through `A` | Returns `data_quality_status=STALE`. |
-| Positions include history-backed supplement rows | Returns `data_quality_status=PARTIAL` unless a stronger `STALE` condition applies. |
-| All positions are current, priced through `A` where required, and snapshot-backed | Returns `data_quality_status=COMPLETE`. |
+| Positions include history-backed supplement rows | Source-row quality is `PARTIAL`; the emitted status may become `UNKNOWN`, `STALE`, or `BLOCKED` when reconciliation has a stronger fail-closed posture. |
+| All positions are current, priced through `A` where required, snapshot-backed, and exactly reconciled | Returns `data_quality_status=COMPLETE`. |
 | Multiple financial-reconciliation controls exist for one business-date/epoch scope | Aggregates every control using fail-closed precedence `BLOCKED`, `STALE`, `UNRECONCILED`, `UNKNOWN`, `PARTIAL`, `COMPLETE`; row order cannot hide an adverse control. |
+| Source rows are otherwise complete but reconciliation is missing/unknown, partial/running, stale, or blocked/failed | Returns reduced `data_quality_status=UNKNOWN`, `PARTIAL`, `STALE`, or `BLOCKED` respectively; `COMPLETE` requires complete source quality and complete reconciliation. |
 | Reconciliation status changes or exact scope/control evidence is corrected | Position-response `content_hash`, `source_digest`, `source_batch_fingerprint`, and `snapshot_id` all change even when returned position values are unchanged. |
 | Cash balance response has no account records | Returns `data_quality_status=UNKNOWN`. |
 | Cash account records exist but no cash snapshot rows back them | Returns `data_quality_status=UNKNOWN`. |

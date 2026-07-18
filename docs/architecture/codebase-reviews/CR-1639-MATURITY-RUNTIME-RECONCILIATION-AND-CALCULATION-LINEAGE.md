@@ -101,6 +101,15 @@ content hash, source digest, source-batch fingerprint, and snapshot id. The boun
 scan confirmed the maturity receipt inherits this corrected HoldingsAsOf identity and
 `PortfolioStateSnapshot:v1` already hashes its exact control evidence independently.
 
+The next PR review identified a shared trust-classification gap in both upstream products: current
+source rows could still emit `data_quality_status=COMPLETE` while exact reconciliation was missing,
+running, failed, or stale. One reusable reducer now combines source quality with reconciliation
+using fail-closed precedence: `BLOCKED`, `STALE`, `UNKNOWN` for unknown/unreconciled evidence,
+`PARTIAL`, then `COMPLETE` only when both inputs are complete. `PortfolioStateSnapshot:v1`,
+`HoldingsAsOf:v1`, and the maturity receipt all use that policy, removing the maturity-local
+duplicate. Focused reconciliation, snapshot, holdings, and maturity validation passes `136` tests;
+strict MyPy passes all `237` sources.
+
 ## Documentation And Wiki Decision
 
 The source-data-product declaration, methodology, RFC-0083 catalog, repository context, this
@@ -109,3 +118,7 @@ truth changed. No new generic lineage guide or duplicate documentation family is
 The review fix requires no additional wiki change: the existing API Surface already states that
 failed/replay-required reconciliation fails closed, while the exact field precedence belongs in
 the implementation methodology, API model, tests, and this review record.
+The shared upstream quality correction likewise requires no additional wiki page or OpenAPI shape
+change. Existing Mesh Data Products and API Surface wiki truth already requires fail-closed exact
+reconciliation; the HoldingsAsOf methodology and executable contracts now make the field-level
+reduction explicit.
