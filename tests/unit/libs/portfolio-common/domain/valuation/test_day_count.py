@@ -7,6 +7,7 @@ import pytest
 from portfolio_common.domain.valuation import (
     BusinessDayCalendar,
     DayCountInputs,
+    IcmaReferencePeriod,
     UnsupportedDayCountError,
     calculate_year_fraction,
     resolve_day_count_convention,
@@ -192,6 +193,113 @@ def test_thirty_e_360_isda_requires_termination_date_source_fact() -> None:
         )
 
 
+def test_actual_actual_isda_splits_elapsed_days_by_calendar_year() -> None:
+    result = calculate_year_fraction(
+        convention="ACT/ACT.ISDA",
+        convention_version=1,
+        inputs=DayCountInputs(
+            period_start=date(2019, 7, 1),
+            period_end=date(2020, 7, 1),
+        ),
+    )
+
+    assert result == Decimal(184) / 365 + Decimal(182) / 366
+
+
+@pytest.mark.parametrize(
+    ("period_start", "period_end", "expected"),
+    [
+        (date(2024, 1, 1), date(2025, 1, 1), Decimal(1)),
+        (date(2024, 2, 28), date(2024, 3, 1), Decimal(2) / 366),
+        (date(2023, 2, 28), date(2023, 3, 1), Decimal(1) / 365),
+    ],
+)
+def test_actual_actual_isda_uses_each_calendar_year_denominator(
+    period_start: date,
+    period_end: date,
+    expected: Decimal,
+) -> None:
+    assert (
+        calculate_year_fraction(
+            convention="ACT/ACT.ISDA",
+            convention_version=1,
+            inputs=DayCountInputs(period_start=period_start, period_end=period_end),
+        )
+        == expected
+    )
+
+
+def test_actual_actual_icma_regular_period_uses_reference_period_and_frequency() -> None:
+    result = calculate_year_fraction(
+        convention="ACT/ACT.ICMA",
+        convention_version=1,
+        inputs=DayCountInputs(
+            period_start=date(2026, 1, 1),
+            period_end=date(2026, 7, 1),
+            icma_reference_periods=(IcmaReferencePeriod(date(2026, 1, 1), date(2026, 7, 1), 2),),
+        ),
+    )
+
+    assert result == Decimal("0.5")
+
+
+def test_actual_actual_icma_short_stub_uses_authoritative_quasi_coupon_period() -> None:
+    result = calculate_year_fraction(
+        convention="ACT/ACT.ICMA",
+        convention_version=1,
+        inputs=DayCountInputs(
+            period_start=date(2026, 2, 15),
+            period_end=date(2026, 7, 1),
+            icma_reference_periods=(IcmaReferencePeriod(date(2026, 1, 1), date(2026, 7, 1), 2),),
+        ),
+    )
+
+    assert result == Decimal(136) / Decimal(181 * 2)
+
+
+def test_actual_actual_icma_long_stub_sums_quasi_coupon_overlaps() -> None:
+    result = calculate_year_fraction(
+        convention="ACT/ACT.ICMA",
+        convention_version=1,
+        inputs=DayCountInputs(
+            period_start=date(2025, 10, 1),
+            period_end=date(2026, 7, 1),
+            icma_reference_periods=(
+                IcmaReferencePeriod(date(2025, 7, 1), date(2026, 1, 1), 2),
+                IcmaReferencePeriod(date(2026, 1, 1), date(2026, 7, 1), 2),
+            ),
+        ),
+    )
+
+    assert result == Decimal(92) / Decimal(184 * 2) + Decimal("0.5")
+
+
+@pytest.mark.parametrize(
+    "references",
+    [
+        (),
+        (IcmaReferencePeriod(date(2026, 1, 1), date(2026, 3, 1), 2),),
+        (
+            IcmaReferencePeriod(date(2026, 1, 1), date(2026, 5, 1), 2),
+            IcmaReferencePeriod(date(2026, 4, 1), date(2026, 7, 1), 2),
+        ),
+    ],
+)
+def test_actual_actual_icma_rejects_missing_gap_or_overlap_reference_periods(
+    references: tuple[IcmaReferencePeriod, ...],
+) -> None:
+    with pytest.raises(UnsupportedDayCountError, match="reference periods"):
+        calculate_year_fraction(
+            convention="ACT/ACT.ICMA",
+            convention_version=1,
+            inputs=DayCountInputs(
+                period_start=date(2026, 1, 1),
+                period_end=date(2026, 7, 1),
+                icma_reference_periods=references,
+            ),
+        )
+
+
 def test_registry_requires_exact_governed_code_and_version() -> None:
     definitions = supported_day_count_conventions()
 
@@ -202,6 +310,8 @@ def test_registry_requires_exact_governed_code_and_version() -> None:
         ("30/360.US", 1),
         ("30E/360", 1),
         ("30E/360.ISDA", 1),
+        ("ACT/ACT.ISDA", 1),
+        ("ACT/ACT.ICMA", 1),
     ]
     assert resolve_day_count_convention(" act/360 ", 1).denominator == 360
     with pytest.raises(UnsupportedDayCountError, match="ACT/ACT@1"):
@@ -223,3 +333,7 @@ def test_invalid_interval_and_calendar_lineage_fail_before_calculation() -> None
             period_end=date(2026, 7, 1),
             contractual_termination_date=date(2026, 6, 30),
         )
+    with pytest.raises(ValueError, match="reference_end"):
+        IcmaReferencePeriod(date(2026, 1, 1), date(2026, 1, 1), 2)
+    with pytest.raises(ValueError, match="coupon_frequency"):
+        IcmaReferencePeriod(date(2026, 1, 1), date(2026, 7, 1), 0)

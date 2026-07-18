@@ -2851,8 +2851,11 @@ Most relevant current governance:
      process-local holiday assumptions. Keep `30/360.US`, `30E/360`, and `30E/360.ISDA` distinct:
      U.S. basis applies the governed February/31st sequence, Eurobond basis adjusts 31st dates, and
      ISDA basis requires the contractual termination date to apply its February exception.
-     Actual/Actual conventions remain unsupported until their convention-specific reference-period
-     and golden-example rules are implemented and registered.
+     `ACT/ACT.ISDA` splits elapsed days by the applicable calendar-year denominator.
+     `ACT/ACT.ICMA` requires source-owned regular or quasi-coupon reference periods and contractual
+     frequency whose overlap covers the calculation interval exactly once; do not generate missing
+     reference periods or infer frequency from broad product type. Regular and short/long stub
+     calculations use the same explicit overlap rule.
 
 ## Context Maintenance Rule
 

@@ -46,6 +46,11 @@ narrow framework-free contract therefore belongs in `portfolio_common.domain.val
   aliases. The U.S. convention applies the SIFMA end-of-February and 31st-day sequence; Eurobond
   basis adjusts 31st dates only; ISDA basis adjusts month ends while preserving a February
   contractual termination date and therefore requires that source fact.
+- Added `ACT/ACT.ISDA` using actual elapsed days split by each calendar year's 365/366 denominator.
+  Added `ACT/ACT.ICMA` only with authoritative regular or quasi-coupon reference periods: each
+  overlap is divided by that reference period's actual days and contractual coupon frequency, and
+  missing, gapped, or overlapping reference coverage fails closed. This supports regular, short-
+  stub, and long-stub calculations without generating an implicit schedule.
 
 ## Ownership Boundary
 
@@ -66,14 +71,15 @@ deleted rather than retained as a fallback when valuation and reconciliation are
 
 ## Validation
 
-- 52 valuation-domain tests passed, including unit/NAV, clean and dirty percent-of-principal,
+- 62 valuation-domain tests passed, including unit/NAV, clean and dirty percent-of-principal,
   factor-adjusted principal, per-unit/per-contract/whole-position supplied values, futures notional,
   settlement variation, FX direction, exact tenant/book/instrument assignment resolution,
   source-version fencing, overlap/gap rejection, conflicting-version rejection, cache identity, and
   backdated replay-date derivation, registry uniqueness, exact-version lookup, and derivative output
   separation, leap-day fixed-denominator examples, business-day boundary semantics, calendar
   coverage, U.S./Eurobond/ISDA month-end and February behavior, contractual-termination handling,
-  and exact day-count convention/version lookup.
+  ISDA leap/non-leap year segmentation, ICMA regular/short/long reference-period cases, ICMA
+  gap/overlap rejection, and exact day-count convention/version lookup.
 - Scoped Ruff lint and formatting passed.
 - Strict MyPy passed for all three valuation-domain source modules.
 - The calculation-kernel commit `608751249` is signed; assignment commit evidence will be recorded
@@ -87,8 +93,10 @@ and including the effective date to but excluding the termination date, and the
 [ISDA 2000/2006 definitions comparison](https://www.isda.org/a/smMDE/Blackline-2000-v-2006-ISDA-Definitions.pdf)
 for `ACT/360`, `ACT/365.FIXED`, `30E/360`, and `30E/360.ISDA`, plus the
 [SIFMA standard formulas](https://www.sifma.org/wp-content/uploads/2017/08/chsf.pdf) for the U.S.
-30/360 end-of-February and 31st-day sequence. Actual/Actual families remain explicitly unsupported
-until their separate reference-period and golden-example slices are implemented.
+30/360 end-of-February and 31st-day sequence. The
+[ICMA Rule 251 guidance](https://www.icmagroup.org/assets/ICMA-PMH-Circular-2022-01-FINAL.pdf) and
+[FpML day-count scheme](https://www.fpml.org/spec/2000/tr-fpml-1-0-2000-09-25/pdf/tr-fpml-1-0-2000-09-25.pdf)
+govern the Actual/Actual ICMA and ISDA distinction and required reference-period semantics.
 
 ## Documentation Decision
 
