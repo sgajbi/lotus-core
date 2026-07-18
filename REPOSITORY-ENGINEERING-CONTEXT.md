@@ -2721,16 +2721,22 @@ Most relevant current governance:
      source observation/content identity and make the stale owner skip snapshot/outbox side
      effects. Never compare transport `correlation_id` as correction identity: distinct accepted
      source observations may share correlation, and one source observation may be redelivered under
-     a different trace. Ordinary readiness duplicates must not set this fence. Claim, stale-reset,
-     and dispatch-recovery paths must clear a consumed fence without discarding a newer correction,
+     a different trace. Each outbox-backed transaction-readiness event is also a source mutation:
+     hash its durable `outbox_id` header to rearm `COMPLETE` work or fence a different mutation that
+     arrives during `PROCESSING`. Redelivery of the same outbox event must remain non-disruptive,
+     while headerless compatibility events retain the legacy non-rearming behavior. Never infer
+     mutation identity from Kafka offset, trace, or correlation. Claim, stale-reset, and
+     dispatch-recovery paths must clear a consumed fence without discarding a newer source mutation,
      including at the normal retry limit.
 192. Correlation ids are diagnostic lineage, not authorization to replay completed work. Valuation
-     scheduler, readiness, recovery, and duplicate-delivery paths must leave an existing
+     scheduler, recovery, duplicate delivery, and headerless readiness paths must leave an existing
      `COMPLETE` same-scope job unchanged even when their correlation differs. A source correction
-     may explicitly rearm completed valuation only after source-owned freshness proves that the
-     authoritative price or FX observation is newer than the materialized snapshot. Preserve this
-     distinction in PostgreSQL conflict-lifecycle tests and workload evidence; do not infer replay
-     intent from correlation inequality.
+     may explicitly rearm completed valuation after source-owned freshness proves that the
+     authoritative price or FX observation is newer than the materialized snapshot. A distinct
+     outbox-backed transaction-readiness mutation may do the same because position/cash state has
+     changed for that valuation scope. Preserve both identities in PostgreSQL conflict-lifecycle,
+     consumer, duplicate-delivery, and workload evidence; do not infer replay intent from
+     correlation inequality.
 193. Transaction raw landing must resolve portfolio, instrument, and optional effective
      cash-account reference availability as one repository read before transaction upsert. Preserve
      portfolio visibility retry, provisional instrument/cash reference policy, idempotency, outbox,
