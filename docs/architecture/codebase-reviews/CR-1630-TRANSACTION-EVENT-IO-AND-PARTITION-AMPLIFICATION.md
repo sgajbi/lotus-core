@@ -79,6 +79,16 @@ rearmed and completed `525` times for one final portfolio-day row.
     A concurrently advanced epoch makes the conditional update affect zero rows, so no epoch is
     exposed and cashflow falls back to the database-backed fence. No-record, stale, coalesced, and
     unsuccessful-rearm paths retain the same fallback.
+17. `BaseConsumer` retains a failed record and retries it in process under the same partition
+    ordering key instead of assuming an uncommitted offset will be redelivered in the same consumer
+    session. Retryable failures use the governed attempt/elapsed budget and bounded backoff. Terminal
+    recovery separately retries DLQ publication and the post-DLQ commit without rerunning business
+    processing or republishing an already confirmed DLQ record.
+18. Transaction valuation readiness treats each durable outbox event as a distinct source mutation.
+    The consumer hashes the existing `outbox_id` Kafka header to rearm a completed natural-key job or
+    request requeue when a different mutation arrives during processing. Same-outbox redelivery is
+    non-disruptive; headerless compatibility records keep the prior non-rearming behavior. The
+    readiness payload, schema version, topic, partition key, and consumer group remain unchanged.
 
 ## Measured Result
 
@@ -330,10 +340,37 @@ the `98.10%` query-count reduction, so the experiment was reverted forward. Do n
 new workload evidence proving end-to-end improvement. Exact hashes and the compatibility decision
 are retained in CR-1631.
 
+Exact-main Main Releasability run `29639937110` then exposed two correctness gaps that ordinary
+unit proof had not closed. A transient `cost_dependency_unavailable` failure on one
+`transactions.persisted` record advanced the consumer fetch position without an in-session retry,
+so its second dual-leg record never reached readiness within the existing 240-second budget. The
+same run's four analytics timeseries nodes observed a later FEE position mutation after the cash
+valuation job had already completed; transaction readiness did not rearm that completed job, so the
+freshness join correctly excluded the stale cash row.
+
+Signed commits `2f34dcd1c` and `92d4eedea` added ordered in-process retry plus phase-specific DLQ and
+post-DLQ-commit recovery. The previously failing dual-leg node then passed without raising its
+timeout. Signed commits `d7ae37da2`, `4c0289900`, and `c79bf0afe` made transaction readiness rearm
+from the durable outbox mutation identity while preserving the event payload and headerless
+compatibility. Exact-head E2E at `c79bf0afe` passed all four affected timeseries contract nodes in
+`155.53s`; an immediately preceding same-runtime run at `2fb5ecb09` also passed `4/4` in `113.72s`.
+Both used isolated dynamic-port Compose projects, retained the original test budgets, removed every
+run-owned resource, and preserved the separately owned 15-container canonical Core stack.
+
 ## Compatibility
 
 HTTP APIs, OpenAPI schemas, Kafka topics, event payload schemas, transaction calculations,
 idempotency identities, outbox atomicity, and database schemas are unchanged.
+
+The shared consumer now retries a failed record in the same process and preserves per-partition
+order until it succeeds or reaches governed terminal recovery. Existing retry budgets, DLQ topics,
+payloads, commit-after-confirmation rule, and consumer groups are unchanged. The new execution
+profile backoff field is additive and defaults to one second.
+
+Transaction readiness reuses the existing dispatcher-owned `outbox_id` header; it does not add an
+event field or require a schema-version transition. A distinct durable outbox mutation can rearm or
+fence valuation work, while the same outbox redelivery and headerless compatibility records remain
+non-disruptive. No migration, public API, or downstream payload change is required.
 
 The workload JSON config changes additively with `source_revision` and `source_tree_state`; neither
 field contains file names, command output, credentials, or runtime configuration. Their presence
@@ -483,12 +520,20 @@ does not publish this key policy; the operator-owned migration runbook is the du
   deterministic lock order while executing both statement families in ordered chunks of at most
   1,000 rows. High-fanout unit proof covers the 1,001-row boundary for both paths; focused and broad
   validation is recorded on PR #804 and issue #799.
+- Shared consumer retry/DLQ recovery passed `114` focused consumer/configuration tests before the
+  first two signed commits. The final affected package run passed `245` tests; full MyPy passed all
+  `235` source files; event-runtime, event-contract, structured-log, and duplicate-delivery guards
+  passed.
+- Exact-main dual-leg reproduction failed before the shared retry fix and passed afterward without
+  increasing its 240-second budget. Exact-head timeseries contract E2E passed `4/4` at signed
+  `c79bf0afe` in `155.53s` with dynamic ports and project-scoped teardown.
 
 Implementation commits include `23fc6faf3`, `d51adb739`, `ad1ad179d`, `57f8c60e2`,
 `4f05be9a5`, `c230d660a`, `f42f6eaa3`, `d56e14dbf`, `2d49fc8f1`, `70ae16f0f`,
 `a3c9eeaac`, `b7e7e1be2`, `35fb5d84f`, `20333978a`, `37abbf19b`, `6640ec911`, `37ffa2fad`, and
-`45295cf24`, `a8d6ee302`, `704358fe0`, and `e79496822`. Evidence alignment continues through
-`e79496822`; human
+`45295cf24`, `a8d6ee302`, `704358fe0`, `e79496822`, `2f34dcd1c`, `92d4eedea`,
+`d7ae37da2`, `4c0289900`, `2fb5ecb09`, and `c79bf0afe`. Evidence alignment continues through
+`c79bf0afe`; human
 contract/context alignment starts in `9d6dbbbf9`.
 
 ## Documentation Decision
@@ -530,3 +575,8 @@ The valuation-job statement bound is an internal persistence safeguard. It prese
 atomicity, normalization, deterministic lock order, rearm/requeue semantics, public contracts, and
 runtime configuration. It requires no OpenAPI, migration, event-contract, calculation-methodology,
 operator-runbook, or wiki-source change.
+The consumer recovery and transaction-readiness convergence fixes change internal delivery and
+job-scheduling behavior only. The readiness event payload/schema, topics, public OpenAPI, database
+schema, calculations, and operator commands remain unchanged. Repository context and this review
+record change because the durable source-mutation and same-session retry rules are reusable
+engineering truth. No migration or authored wiki change is required.
