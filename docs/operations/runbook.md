@@ -338,6 +338,13 @@ The attempt/elapsed counters are in-process. Durable exhaustion evidence starts 
 successfully written to DLQ. Cross-restart durable attempt accounting requires a service-owned
 attempt store and must not be claimed from these shared settings alone.
 
+DLQ publication failure and post-publication offset-commit failure use the same ordered recovery
+posture. The consumer retains the partition key and retries the failed recovery phase in-process;
+it does not rerun terminal business processing after the DLQ record has been published. A positive
+`KAFKA_CONSUMER_DLQ_FAILURE_MAX_ATTEMPTS` stops the consumer without committing when the recovery
+budget is exhausted. Graceful shutdown also leaves an unrecovered offset uncommitted for safe
+restart recovery, and pending same-partition messages are not drained past it.
+
 ## Structured Operational Logs
 
 Operational logs in guarded health, Kafka, outbox, ingestion, query, replay, and scheduler paths

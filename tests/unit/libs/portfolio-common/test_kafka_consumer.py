@@ -576,6 +576,75 @@ async def test_run_loop_failure_does_not_commit_when_dlq_send_fails(
     )
 
 
+async def test_run_loop_retries_dlq_publication_without_reprocessing_message(
+    test_consumer: ConcreteTestConsumer,
+    mock_confluent_consumer: MagicMock,
+):
+    mock_msg = create_mock_message("key-dlq-retry", {"data": "invalid"})
+    mock_confluent_consumer.poll.return_value = mock_msg
+    test_consumer.execution_profile = KafkaConsumerExecutionProfile(
+        retryable_failure_backoff_seconds=0.001
+    )
+    dlq_attempts = 0
+
+    async def terminal_failure(*args, **kwargs):
+        raise ValueError("invalid payload")
+
+    async def publish_after_transient_failure(*args, **kwargs):
+        nonlocal dlq_attempts
+        dlq_attempts += 1
+        if dlq_attempts == 1:
+            return False
+        test_consumer.shutdown()
+        return True
+
+    test_consumer.process_message_mock.side_effect = terminal_failure
+    test_consumer._send_to_dlq_async = AsyncMock(side_effect=publish_after_transient_failure)
+
+    await test_consumer.run()
+
+    test_consumer.process_message_mock.assert_awaited_once_with(mock_msg)
+    assert test_consumer._send_to_dlq_async.await_count == 2
+    mock_confluent_consumer.commit.assert_called_once_with(
+        message=mock_msg,
+        asynchronous=False,
+    )
+    assert test_consumer._dlq_failure_attempts == {}
+
+
+async def test_run_loop_retries_post_dlq_commit_without_republishing(
+    test_consumer: ConcreteTestConsumer,
+    mock_confluent_consumer: MagicMock,
+):
+    mock_msg = create_mock_message("key-dlq-commit-retry", {"data": "invalid"})
+    mock_confluent_consumer.poll.return_value = mock_msg
+    test_consumer.execution_profile = KafkaConsumerExecutionProfile(
+        retryable_failure_backoff_seconds=0.001
+    )
+    commit_attempts = 0
+
+    async def terminal_failure(*args, **kwargs):
+        raise ValueError("invalid payload")
+
+    def commit_after_transient_failure(*args, **kwargs):
+        nonlocal commit_attempts
+        commit_attempts += 1
+        if commit_attempts == 1:
+            raise RuntimeError("coordinator unavailable")
+        test_consumer.shutdown()
+
+    test_consumer.process_message_mock.side_effect = terminal_failure
+    test_consumer._send_to_dlq_async = AsyncMock(return_value=True)
+    mock_confluent_consumer.commit.side_effect = commit_after_transient_failure
+
+    await test_consumer.run()
+
+    test_consumer.process_message_mock.assert_awaited_once_with(mock_msg)
+    test_consumer._send_to_dlq_async.assert_awaited_once_with(mock_msg, ANY)
+    assert mock_confluent_consumer.commit.call_count == 2
+    assert test_consumer._dlq_failure_attempts == {}
+
+
 async def test_run_loop_does_not_commit_when_dlq_support_evidence_fails(
     test_consumer: ConcreteTestConsumer,
     mock_confluent_consumer: MagicMock,

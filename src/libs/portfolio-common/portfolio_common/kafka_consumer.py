@@ -799,8 +799,18 @@ class BaseConsumer(ABC):
             self._active_ordering_keys.discard(ordering_key)
         self._set_in_flight_metric()
         task.result()
-        if ordering_key is not None:
+        if ordering_key is None:
+            return
+        if self._running:
             self._schedule_next_ordered_message_or_resume(ordering_key, loop)
+            return
+        self._discard_pending_ordering_key(ordering_key)
+
+    def _discard_pending_ordering_key(self, ordering_key: str) -> None:
+        pending = self._pending_messages_by_key.pop(ordering_key, None)
+        if pending:
+            self._pending_message_count -= len(pending)
+        self._resume_ordering_partition(ordering_key)
 
     def _schedule_next_ordered_message_or_resume(
         self,
@@ -1044,13 +1054,9 @@ class BaseConsumer(ABC):
             attempts=attempts,
             elapsed_seconds=elapsed_seconds,
         )
-        dlq_succeeded = await self._send_to_dlq_async(msg, error)
-        if dlq_succeeded:
+        recovered = await self._recover_message_via_dlq(msg, error)
+        if recovered:
             self._clear_retryable_failure_attempts(msg)
-            self._clear_dlq_failure_attempts(msg)
-            self._commit_after_dlq_publication(msg)
-            return
-        self._handle_dlq_publication_failed(msg, error)
 
     def _log_retryable_failure_budget_exhausted(
         self,
@@ -1086,13 +1092,28 @@ class BaseConsumer(ABC):
             error_type=type(error).__name__,
             exc_info=True,
         )
-        dlq_succeeded = await self._send_to_dlq_async(msg, error)
-        if dlq_succeeded:
-            self._clear_dlq_failure_attempts(msg)
+        recovered = await self._recover_message_via_dlq(msg, error)
+        if recovered:
             self._clear_retryable_failure_attempts(msg)
-            self._commit_after_dlq_publication(msg)
-        else:
+
+    async def _recover_message_via_dlq(self, msg: Message, error: Exception) -> bool:
+        while True:
+            dlq_succeeded = await self._send_to_dlq_async(msg, error)
+            if dlq_succeeded:
+                break
             self._handle_dlq_publication_failed(msg, error)
+            if not self._running:
+                return False
+            await asyncio.sleep(self.execution_profile.retryable_failure_backoff_seconds)
+
+        while True:
+            if self._commit_after_dlq_publication(msg):
+                self._clear_dlq_failure_attempts(msg)
+                return True
+            self._handle_dlq_offset_commit_failed(msg, error)
+            if not self._running:
+                return False
+            await asyncio.sleep(self.execution_profile.retryable_failure_backoff_seconds)
 
     def _record_processing_metrics(
         self,
@@ -1141,10 +1162,11 @@ class BaseConsumer(ABC):
             reason=reason,
         )
 
-    def _commit_after_dlq_publication(self, msg: Message) -> None:
+    def _commit_after_dlq_publication(self, msg: Message) -> bool:
         try:
             self._consumer.commit(message=msg, asynchronous=False)
             self._observe_committed_message_lag(msg)
+            return True
         except Exception as commit_error:
             self._record_consumer_event("commit_failed", "dlq_publication")
             self._log_consumer_event(
@@ -1156,6 +1178,7 @@ class BaseConsumer(ABC):
                 exc_info=True,
                 error_type=type(commit_error).__name__,
             )
+            return False
 
     def _commit_after_successful_processing(self, msg: Message) -> bool:
         try:
@@ -1210,7 +1233,7 @@ class BaseConsumer(ABC):
     def _log_dlq_publication_failed(self, msg: Message) -> None:
         self._log_consumer_event(
             logging.WARNING,
-            "DLQ publication failed; offset will not be committed so Kafka can redeliver.",
+            "DLQ publication failed; ordered in-process recovery scheduled.",
             event_name="kafka.consumer.dlq_failed",
             status="failed",
             reason_code="dlq_publish_error",
@@ -1226,7 +1249,25 @@ class BaseConsumer(ABC):
         if self._dlq_failure_max_attempts <= 0 or attempts < self._dlq_failure_max_attempts:
             self._log_dlq_publication_failed(msg)
             return
-        self._raise_dlq_publication_budget_exhausted(msg, error, attempts)
+        self._raise_dlq_failure_budget_exhausted(
+            msg,
+            error,
+            attempts,
+            reason_code="dlq_publish_error_budget_exhausted",
+            failure_stage="publication",
+        )
+
+    def _handle_dlq_offset_commit_failed(self, msg: Message, error: Exception) -> None:
+        attempts = self._record_dlq_failure_attempt(msg)
+        if self._dlq_failure_max_attempts <= 0 or attempts < self._dlq_failure_max_attempts:
+            return
+        self._raise_dlq_failure_budget_exhausted(
+            msg,
+            error,
+            attempts,
+            reason_code="dlq_offset_commit_error_budget_exhausted",
+            failure_stage="offset_commit",
+        )
 
     def _record_dlq_failure_attempt(self, msg: Message) -> int:
         message_key = self._dlq_failure_message_key(msg)
@@ -1252,33 +1293,37 @@ class BaseConsumer(ABC):
             f"partition={partition}|offset={offset}|key={original_key}"
         )
 
-    def _raise_dlq_publication_budget_exhausted(
+    def _raise_dlq_failure_budget_exhausted(
         self,
         msg: Message,
         error: Exception,
         attempts: int,
+        *,
+        reason_code: str,
+        failure_stage: str,
     ) -> None:
         self._running = False
-        self._record_consumer_event("dlq_failure_budget_exhausted", "dlq_publish_error")
+        metric_reason = (
+            "dlq_publish_error" if failure_stage == "publication" else "dlq_offset_commit_error"
+        )
+        self._record_consumer_event("dlq_failure_budget_exhausted", metric_reason)
         self._log_consumer_event(
             logging.ERROR,
-            (
-                "Kafka DLQ publication failure budget exhausted; stopping consumer without "
-                "committing offset."
-            ),
+            "Kafka DLQ recovery failure budget exhausted; stopping consumer without committing.",
             event_name="kafka.consumer.dlq_failure_budget_exhausted",
             status="failed",
-            reason_code="dlq_publish_error_budget_exhausted",
+            reason_code=reason_code,
             original_topic=msg.topic(),
             original_partition=_message_attr_or_unknown(msg, "partition"),
             original_offset=_message_attr_or_unknown(msg, "offset"),
             dlq_topic=self.dlq_topic or "unconfigured",
+            failure_stage=failure_stage,
             failure_attempts=attempts,
             max_failure_attempts=self._dlq_failure_max_attempts,
             processing_error_type=type(error).__name__,
         )
         raise DlqPublicationBudgetExhausted(
-            "Kafka DLQ publication failure budget exhausted; consumer stopped without "
+            "Kafka DLQ recovery failure budget exhausted; consumer stopped without "
             "committing the terminal message offset."
         )
 
