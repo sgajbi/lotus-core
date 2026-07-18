@@ -26,6 +26,7 @@ execution-quality assessment, or OMS acknowledgement.
 | `portfolio_id` | Request path | Yes | Portfolio whose cashflow rows are summarized. |
 | `start_date` | Request query | Yes | Inclusive cashflow-date window start. |
 | `end_date` | Request query | Yes | Inclusive cashflow-date window end. The inclusive date window must be 366 days or less. |
+| `X-Tenant-Id` | Request header | No | Tenant or book-of-record scope bound to the deterministic trust receipt when supplied. |
 | `transaction_id` | `cashflows` | Yes | Transaction identity used for latest-row selection. |
 | `id` | `cashflows` | Yes | Tie-breaker for same-epoch cashflow restatements. |
 | `epoch` | `cashflows` | Yes | Cashflow restatement epoch. |
@@ -77,6 +78,8 @@ cash-account balance derivation stay outside this methodology.
 | `N_g` | `cashflow_count` | Count of rows in bucket `g`. |
 | `T_g` | bucket evidence timestamp | Maximum `updated_at` for rows in bucket `g`. |
 | `T_latest` | `latest_evidence_timestamp` | Maximum `T_g` across all buckets. |
+| `SC` | SQL source-row control | Count of every row in `W`, repeated by the grouped query. |
+| `SA_c` | SQL source-currency control | Sum of `amount` for every row in `W` with currency `c`. |
 
 ## Methodology and Formulas
 
@@ -108,6 +111,12 @@ Latest evidence timestamp:
 
 `T_latest = max(T_g for all g)`; null when `W` is empty.
 
+For each currency `c`, Core requires `SA_c = sum(A_g where currency(g)=c)` and requires
+`SC = sum(N_g)`. It never nets unlike currencies. Grouping and total reconciliation run with a
+local 50-digit Decimal context. The response carries separate normalized-input,
+`PORTFOLIO_CASH_MOVEMENT_SUMMARY` algorithm/version/precision, and output SHA-256 hashes; operational
+correlation is not part of those financial identities.
+
 ## Step-by-Step Computation
 
 1. Verify `portfolio_id` exists in `portfolios`. If not, return `404`.
@@ -122,11 +131,11 @@ Latest evidence timestamp:
    position-flow flag descending.
 8. Set response `cashflow_count` to the sum of bucket counts.
 9. Set `latest_evidence_timestamp` to the latest bucket timestamp, or null when no bucket exists.
-10. Set `data_quality_status` to `COMPLETE` when at least one row is included and `MISSING` when
-    the portfolio exists but no latest cashflow rows are present in the requested window.
-11. Set `as_of_date` to `end_date`.
-12. Set `source_batch_fingerprint` to
-    `cash_movement_summary:{portfolio_id}:{start_date}:{end_date}`.
+10. Reconcile summed bucket counts to `SC` and per-currency bucket totals to every `SA_c`.
+11. Treat a zero-row window as explicit supported `EMPTY_SOURCE_WINDOW` evidence without inventing
+    an evidence timestamp; fail closed on populated timestamp, count, or total contradictions.
+12. Build deterministic request, snapshot, content, source-digest, policy, and three-layer
+    calculation-lineage identities, then set `as_of_date=end_date`.
 
 ## Validation and Failure Behavior
 
@@ -134,7 +143,10 @@ Latest evidence timestamp:
 | --- | --- |
 | Missing portfolio | Return `404`; do not fabricate an empty source product. |
 | `start_date > end_date` | Return `400`; do not infer or swap dates. |
-| Existing portfolio with no cashflow rows in window | Return `buckets=[]`, `cashflow_count=0`, `data_quality_status=MISSING`, and null `latest_evidence_timestamp`. |
+| Existing portfolio with no cashflow rows in window | Return `buckets=[]`, `cashflow_count=0`, `COMPLETE`, `SUPPORTED`, `window_status=EMPTY`, `EMPTY_SOURCE_WINDOW`, and null `latest_evidence_timestamp`. |
+| Bucket counts do not equal SQL source-row control | Return `BLOCKED`, `UNAVAILABLE`, and `SOURCE_COUNT_MISMATCH`; do not claim current evidence. |
+| Per-currency totals do not equal SQL controls | Return `BLOCKED`, `UNAVAILABLE`, and `SOURCE_TOTAL_MISMATCH`; never net unlike currencies. |
+| Populated window has no evidence timestamp | Return `BLOCKED`, `UNAVAILABLE`, and `SOURCE_EVIDENCE_TIMESTAMP_MISSING`. |
 | Multiple epochs for one transaction | Use only the latest row by `(epoch DESC, id DESC)`. |
 | Same epoch with multiple rows for one transaction | Use the row with highest `id`. |
 | Mixed currencies | Keep separate buckets by `currency`; do not convert or restate. |
@@ -158,6 +170,7 @@ No runtime policy changes the computation. The caller controls only:
 | `portfolio_id` | Request portfolio id. |
 | `start_date` | Request window start. |
 | `end_date` | Request window end. |
+| `portfolio_currency` | Portfolio base currency; bucket totals remain in each bucket's currency. |
 | `buckets[].classification` | Bucket `classification`. |
 | `buckets[].timing` | Bucket `timing`. |
 | `buckets[].currency` | Bucket `currency`. |
@@ -167,9 +180,12 @@ No runtime policy changes the computation. The caller controls only:
 | `buckets[].total_amount` | `A_g`. |
 | `buckets[].movement_direction` | Direction rule from `A_g`. |
 | `cashflow_count` | Sum of all bucket counts. |
-| `data_quality_status` | `COMPLETE` when rows exist; otherwise `MISSING`. |
+| `data_quality_status`, `reconciliation_status` | `COMPLETE` only when source controls reconcile; otherwise fail-closed `BLOCKED`. |
 | `latest_evidence_timestamp` | `T_latest`. |
-| `source_batch_fingerprint` | Deterministic request fingerprint. |
+| `source_window_trust` | Source/calculated row counts, output bucket count, per-currency controls, window state, supportability, and reasons. |
+| `request_fingerprint`, `snapshot_id`, `policy_version` | Deterministic request/output identities and `cash-movement-summary-v1` policy. |
+| `calculation_lineage` | Normalized-input, algorithm/version/precision, and returned-output SHA-256 hashes. |
+| `source_batch_fingerprint`, `content_hash`, `source_digest` | Same deterministic content digest for downstream proof validation. |
 
 ## Worked Example
 
@@ -197,8 +213,10 @@ Final response mapping:
 | --- | --- |
 | `cashflow_count` | `1 + 1 + 1 + 1 = 4` |
 | `latest_evidence_timestamp` | `2026-03-08T10:00:00Z` |
-| `data_quality_status` | `COMPLETE` |
-| `source_batch_fingerprint` | `cash_movement_summary:P1:2026-03-01:2026-03-31` |
+| `source_window_trust.source_row_count` | `4` |
+| `source_window_trust.source_component_totals.USD` | `6250` |
+| `data_quality_status`, `reconciliation_status` | `COMPLETE`, because count and USD total controls reconcile |
+| `source_batch_fingerprint` | Same `sha256:` digest as `content_hash` and `source_digest` |
 
 The method does not infer funding need, liquidity advice, tax result, execution quality, client
 suitability, or OMS acknowledgement from these rows.

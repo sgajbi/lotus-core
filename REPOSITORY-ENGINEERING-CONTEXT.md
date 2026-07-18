@@ -2930,6 +2930,18 @@ Most relevant current governance:
      financial calculation-lineage primitive. Reporting workflow, DTOs, repository reads, and
      OpenAPI stay in Query Service; do not move them into `portfolio_common` or ask downstream
      consumers to reconstruct discarded look-through lineage from holdings.
+211. Cashflow operational reads publish product-owned trust receipts rather than claiming current
+     evidence from successful serialization alone. `PortfolioCashflowProjection:v1` reconciles
+     SQL-owned booked/projected totals to its 50-digit Decimal accumulation;
+     `PortfolioCashMovementSummary:v1` reconciles SQL source-row count and per-currency totals to
+     returned buckets and never nets unlike currencies. Both bind tenant, bounded request scope,
+     exact source rows/controls, algorithm/version/precision, and returned values through separate
+     input, calculation, and output SHA-256 hashes. A zero-row source window is explicitly
+     `COMPLETE`, `SUPPORTED`, `EMPTY_SOURCE_WINDOW` with no invented evidence timestamp. Populated
+     windows missing a timestamp or mismatching a count/total fail closed as `BLOCKED` and
+     `UNAVAILABLE`. Keep the narrow shared cashflow-window trust policy in Query Service; do not
+     move cashflow workflow or product calculations into `portfolio_common`, and do not treat
+     correlation ids as financial lineage.
 
 ## Context Maintenance Rule
 

@@ -122,7 +122,10 @@ SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = (
         current_routes=("/portfolios/{portfolio_id}/cashflow-projection",),
         paging_mode=NOT_APPLICABLE,
         export_mode=NOT_APPLICABLE,
-        notes="Core-derived daily net cashflow projection for operational liquidity planning.",
+        notes=(
+            "Core-derived daily net cashflow projection with source-total reconciliation, "
+            "tenant-bound identity, empty-window supportability, and calculation lineage."
+        ),
     ),
     SourceDataProductDefinition(
         product_name="PortfolioCashMovementSummary",
@@ -136,8 +139,9 @@ SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = (
         export_mode=NOT_APPLICABLE,
         notes=(
             "Core-owned cash movement summary over latest cashflow rows by classification, "
-            "timing, currency, and flow scope. It is not a forecast, funding recommendation, "
-            "treasury instruction, or OMS acknowledgement."
+            "timing, currency, and flow scope, with source-count/per-currency reconciliation, "
+            "tenant-bound identity, empty-window supportability, and calculation lineage. It is "
+            "not a forecast, funding recommendation, treasury instruction, or OMS acknowledgement."
         ),
     ),
     SourceDataProductDefinition(

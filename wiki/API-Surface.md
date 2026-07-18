@@ -95,6 +95,8 @@ Operational read:
 ```text
 GET /portfolios/{portfolio_id}/positions
 GET /portfolios/{portfolio_id}/maturity-summary?as_of_date=2026-03-10&horizon_days=90&include_projected=false
+GET /portfolios/{portfolio_id}/cashflow-projection?as_of_date=2026-03-10&horizon_days=30&include_projected=true
+GET /portfolios/{portfolio_id}/cash-movement-summary?start_date=2026-03-01&end_date=2026-03-31
 ```
 
 `PortfolioMaturitySummary:v1` is a booked, contractual-instrument-maturity receipt. It publishes
@@ -104,6 +106,15 @@ input, calculation-policy, and output SHA-256 hashes. Only a current `COMPLETE` 
 produce `SUPPORTED`; missing, incomplete, stale, failed, replay-required, or unknown evidence fails
 closed. The route rejects `include_projected=true` and does not infer callable, putable, amortizing,
 structured-note, lockup, expiry, reinvestment, suitability, risk, or execution methodology.
+
+`PortfolioCashflowProjection:v1` and `PortfolioCashMovementSummary:v1` publish tenant-bound
+request/snapshot/content identity plus separate normalized-input, algorithm/version/precision, and
+output hashes. Projection reconciles booked/projected source totals to its daily calculation;
+movement summary reconciles source-row count and per-currency totals to returned buckets without
+netting currencies. A zero-row window is explicit supported `EMPTY_SOURCE_WINDOW` evidence with a
+null evidence timestamp. Count, total, or populated-timestamp contradictions fail closed as
+`BLOCKED`/`UNAVAILABLE`; consumers must accept the scope, digest, reconciliation, supportability,
+and calculation lineage together.
 
 Allocation analysis:
 
