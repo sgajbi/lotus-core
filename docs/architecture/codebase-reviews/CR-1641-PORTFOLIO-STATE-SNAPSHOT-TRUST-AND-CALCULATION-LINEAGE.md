@@ -33,13 +33,20 @@ selected source facts, snapshot policy, and returned sections.
   available source/control timestamps; empty sources remain unknown and unreconciled.
 - Extended the existing source-data-product guard so this trust-certified response cannot silently
   drop its calculation-lineage field.
+- PR review found that duplicate or legacy financial-reconciliation controls for one date/epoch
+  could be collapsed by database row order. The shared policy now groups every exact-scope control
+  and aggregates the worst status, while QCP orders all control facts by normalized status and
+  timestamp before hashing them. Adverse controls cannot be hidden and equivalent input sets retain
+  one deterministic lineage identity regardless of row order.
 
 ## Compatibility And Ownership
 
 The HTTP change is additive: `calculation_lineage` is new and previously unresolved trust metadata
 is now populated from authoritative controls. Existing paths, requests, section names and values,
 simulation behavior, arithmetic, errors, database schema, migrations, events, Kafka contracts, and
-runtime topology are unchanged. No compatibility alias or legacy response path was added.
+runtime topology are unchanged. For duplicate same-scope controls only, reconciliation now
+intentionally fails closed instead of selecting an arbitrary row. No compatibility alias or legacy
+response path was added.
 
 The QCP application owns snapshot assembly and the 28-digit weight/totals calculation policy. Shared
 code is limited to framework-independent calculation hashing and holdings reconciliation policy.
@@ -56,6 +63,12 @@ code is limited to framework-independent calculation hashing and holdings reconc
 - A 10,000-position large-book measurement completed source hashing in `0.649054s` and exact-scope
   coalescing in `0.026176s` with one control scope.
 - Source-data product guard and its `18` unit tests passed.
+- Duplicate-control regressions prove worst-status classification and order-independent QCP control
+  evidence hashing.
+- Final combined coverage gate passed `5,113` unit, `12` unit-database, `55` critical-database,
+  `138` integration-lite, and `284` operations-contract tests with zero warnings. The changed
+  critical-source gate reached `92.38%` branch and `97.55%` line coverage; all critical groups
+  cleared their governed thresholds.
 - OpenAPI quality gate passed.
 - Full MyPy passed across `237` source files.
 - Full Ruff lint/format passed across `2,058` files; the full lint guard chain passed.
@@ -66,3 +79,7 @@ code is limited to framework-independent calculation hashing and holdings reconc
 
 PR CI, exact-main validation, wiki publication, downstream consumer revalidation, and verified issue
 closure remain post-local gates.
+
+No additional wiki source change is required for the review fix: the existing wiki already states
+that currentness is fail-closed and reconciliation-backed; exact duplicate-control precedence is
+methodology and review-ledger detail.
