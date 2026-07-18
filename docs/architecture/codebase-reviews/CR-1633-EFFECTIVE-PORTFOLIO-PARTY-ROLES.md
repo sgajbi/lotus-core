@@ -46,6 +46,12 @@ required source-owned identifier and enforces only portfolio ownership through a
   latest evidence timestamp, and lineage. A same-version correction to an effective interval,
   role/scope, party, or quality disposition therefore changes the receipt identity instead of
   retaining the request-and-version fingerprint.
+- Applied the same evidence-identity rule to `PortfolioManagerBookMembership:v1`. Its receipt now
+  binds the normalized request scope, complete returned member evidence, supportability, latest
+  evidence timestamp, and legacy-versus-authoritative lineage. Replacing a legacy adviser
+  projection with a party-role assignment, or correcting its source-record evidence, changes the
+  snapshot, content, source-batch, and source-digest identities even when portfolio IDs are
+  unchanged.
 
 ## Compatibility And Same-Pattern Review
 
@@ -93,6 +99,9 @@ remains #521.
   91.261% branch, and changed critical sources reached 97.55% line and 92.38% branch coverage;
 - the final full lint chain passed across 2,058 files and strict MyPy passed across 237 source
   files after the PR review correction.
+- two PM-book evidence-transition regressions and the shared-consumer cohort passed in a focused
+  `79`-test run; scoped Ruff and strict MyPy across `237` sources passed at signed fix-forward
+  commit `a86d200c4`.
 
 Local acceptance is complete. PR CI, merge, exact-main validation, wiki publication, and verified
 issue closure remain required before #513 is done.
@@ -112,3 +121,8 @@ in the API contract, executable tests, and this review record.
 The receipt-identity correction likewise needs no additional wiki page. The existing Mesh Data
 Products page owns the audience-facing source-product description; exact hash inputs and correction
 behavior are implementation, executable-test, and review-ledger truth.
+
+PM-book membership is a source data product rather than a financial calculation, so it binds
+request/input and returned-evidence identity but does not invent a calculation-lineage envelope.
+Financial outputs continue to require explicit input, calculation/policy, and output lineage under
+the existing calculation-lineage contract and issue #788.
