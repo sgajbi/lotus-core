@@ -44,11 +44,14 @@ def test_docker_endpoint_smoke_cleanup_sql_purges_legacy_smoke_rows():
     for child_table in (
         "average_cost_pool_state",
         "cost_basis_processing_state",
+        "sustainability_preference_profiles",
+        "client_restriction_profiles",
         "client_income_needs_schedules",
         "client_tax_profiles",
         "client_tax_rule_sets",
         "liquidity_reserve_requirements",
         "planned_withdrawal_schedules",
+        "portfolio_mandate_bindings",
     ):
         assert f"delete from {child_table} where portfolio_id like 'PORT_SMOKE_%';" in sql
 

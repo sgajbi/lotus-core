@@ -127,11 +127,15 @@ def build_smoke_cleanup_sql() -> str:
             "delete from processed_events where portfolio_id like 'PORT_SMOKE_%';",
             "delete from cash_account_masters where portfolio_id like 'PORT_SMOKE_%';",
             "delete from portfolio_benchmark_assignments where portfolio_id like 'PORT_SMOKE_%';",
+            "delete from sustainability_preference_profiles "
+            "where portfolio_id like 'PORT_SMOKE_%';",
+            "delete from client_restriction_profiles where portfolio_id like 'PORT_SMOKE_%';",
             "delete from client_income_needs_schedules where portfolio_id like 'PORT_SMOKE_%';",
             "delete from client_tax_profiles where portfolio_id like 'PORT_SMOKE_%';",
             "delete from client_tax_rule_sets where portfolio_id like 'PORT_SMOKE_%';",
             "delete from liquidity_reserve_requirements where portfolio_id like 'PORT_SMOKE_%';",
             "delete from planned_withdrawal_schedules where portfolio_id like 'PORT_SMOKE_%';",
+            "delete from portfolio_mandate_bindings where portfolio_id like 'PORT_SMOKE_%';",
             "delete from transactions where portfolio_id like 'PORT_SMOKE_%';",
             "delete from market_prices where security_id like 'SEC_SMOKE_%';",
             "delete from instruments "
