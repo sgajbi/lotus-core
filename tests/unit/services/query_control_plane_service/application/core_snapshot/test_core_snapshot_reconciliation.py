@@ -1,8 +1,13 @@
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
+from portfolio_common.domain.holdings_reconciliation import FinancialReconciliationControl
+from portfolio_common.reconciliation_quality import COMPLETE, STALE
+
 from src.services.query_control_plane_service.app.application.core_snapshot.reconciliation import (
+    core_snapshot_reconciliation_evidence,
     core_snapshot_reconciliation_scopes,
+    core_snapshot_source_content_hash,
 )
 from src.services.query_control_plane_service.app.domain.core_snapshot import (
     CoreSnapshotInstrument,
@@ -63,3 +68,58 @@ def test_core_snapshot_scopes_fail_closed_for_unscoped_rows() -> None:
 
     assert scopes.items == ()
     assert scopes.unscoped_source_row_count == 1
+
+
+def test_core_snapshot_source_hash_is_order_independent_and_value_sensitive() -> None:
+    first = _row()
+    second = _row(updated_at=datetime(2026, 4, 10, 3, tzinfo=UTC))
+    corrected = _row(updated_at=datetime(2026, 4, 10, 4, tzinfo=UTC))
+
+    assert core_snapshot_source_content_hash([first, second]) == (
+        core_snapshot_source_content_hash([second, first])
+    )
+    assert core_snapshot_source_content_hash([first, second]) != (
+        core_snapshot_source_content_hash([first, corrected])
+    )
+
+
+def test_core_snapshot_reconciliation_evidence_binds_scopes_and_controls() -> None:
+    source_timestamp = datetime(2026, 4, 10, 2, tzinfo=UTC)
+    control_timestamp = source_timestamp + timedelta(minutes=5)
+    scopes = core_snapshot_reconciliation_scopes([_row(updated_at=source_timestamp)])
+
+    evidence = core_snapshot_reconciliation_evidence(
+        scopes=scopes,
+        controls=[
+            FinancialReconciliationControl(
+                business_date=date(2026, 4, 10),
+                epoch=4,
+                status=" completed ",
+                updated_at=control_timestamp,
+            )
+        ],
+    )
+
+    assert evidence.status == COMPLETE
+    assert len(evidence.scope_content_hash) == 64
+    assert len(evidence.control_content_hash) == 64
+    assert evidence.latest_evidence_timestamp == control_timestamp
+
+
+def test_core_snapshot_reconciliation_evidence_detects_stale_control() -> None:
+    source_timestamp = datetime(2026, 4, 10, 2, tzinfo=UTC)
+    scopes = core_snapshot_reconciliation_scopes([_row(updated_at=source_timestamp)])
+
+    evidence = core_snapshot_reconciliation_evidence(
+        scopes=scopes,
+        controls=[
+            FinancialReconciliationControl(
+                business_date=date(2026, 4, 10),
+                epoch=4,
+                status="COMPLETED",
+                updated_at=source_timestamp - timedelta(minutes=1),
+            )
+        ],
+    )
+
+    assert evidence.status == STALE
