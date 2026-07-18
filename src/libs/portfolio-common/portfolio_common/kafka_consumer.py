@@ -989,7 +989,10 @@ class BaseConsumer(ABC):
             (
                 "Kafka message processing failed retryably; ordered retry scheduled."
                 if retry_budget_enabled
-                else "Kafka message processing failed retryably; offset left uncommitted."
+                else (
+                    "Kafka message processing failed retryably; offset left uncommitted "
+                    "and consumer stopping for Kafka redelivery."
+                )
             ),
             event_name="kafka.consumer.processing_retryable",
             status="retryable_failure",
@@ -1003,6 +1006,11 @@ class BaseConsumer(ABC):
                 "ordered_in_process_retry"
                 if retry_budget_enabled
                 else "kafka_redelivery_after_restart_or_rebalance"
+            ),
+            consumer_action=(
+                "continue_ordered_in_process_retry"
+                if retry_budget_enabled
+                else "stop_before_polling_later_offsets"
             ),
         )
 
@@ -1018,6 +1026,12 @@ class BaseConsumer(ABC):
                 attempts=attempts,
                 elapsed_seconds=elapsed_seconds,
             )
+            if not self._retryable_failure_budget_enabled():
+                self._running = False
+                self._record_consumer_event(
+                    "redelivery_required",
+                    "retryable_consumer_restart_required",
+                )
             return False
         await self._recover_exhausted_retryable_failure(
             msg,

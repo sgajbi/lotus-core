@@ -894,12 +894,122 @@ async def test_default_disabled_retry_budget_returns_for_kafka_redelivery(
     assert retry_log.kwargs["extra"]["retry_disposition"] == (
         "kafka_redelivery_after_restart_or_rebalance"
     )
+    assert retry_log.kwargs["extra"]["consumer_action"] == ("stop_before_polling_later_offsets")
+    assert test_consumer._running is False
     assert (
         test_consumer._retryable_failure_attempts[
             "topic=test-topic|group=test-group|partition=0|offset=42|key=key-retry-redelivery"
         ][0]
         == 1
     )
+
+
+async def test_default_disabled_retry_budget_stops_serial_loop_before_later_offset(
+    test_consumer: ConcreteTestConsumer,
+    mock_confluent_consumer: MagicMock,
+):
+    failed_msg = create_mock_message(
+        "key-retry-serial-failed",
+        {"data": "failed"},
+        partition=0,
+        offset=41,
+    )
+    later_msg = create_mock_message(
+        "key-retry-serial-later",
+        {"data": "later"},
+        partition=0,
+        offset=42,
+    )
+    polled_messages = [failed_msg, later_msg]
+
+    def poll(_timeout):
+        return polled_messages.pop(0) if polled_messages else None
+
+    mock_confluent_consumer.poll.side_effect = poll
+
+    async def fail_first_then_stop(msg):
+        if msg is failed_msg:
+            raise RetryableConsumerError("dependency unavailable")
+        test_consumer.shutdown()
+
+    test_consumer.process_message_mock.side_effect = fail_first_then_stop
+    test_consumer._send_to_dlq_async = AsyncMock()
+
+    await asyncio.wait_for(test_consumer.run(), timeout=1)
+
+    assert test_consumer.process_message_mock.await_args_list == [call(failed_msg)]
+    assert mock_confluent_consumer.poll.call_count == 1
+    mock_confluent_consumer.commit.assert_not_called()
+    test_consumer._send_to_dlq_async.assert_not_awaited()
+    mock_confluent_consumer.close.assert_called_once_with()
+
+
+async def test_default_disabled_retry_budget_discards_queued_same_partition_offset(
+    mock_confluent_consumer: MagicMock,
+    mock_kafka_producer: MagicMock,
+):
+    failed_msg = create_mock_message(
+        "key-retry-concurrent-failed",
+        {"data": "failed"},
+        partition=0,
+        offset=41,
+    )
+    later_msg = create_mock_message(
+        "key-retry-concurrent-later",
+        {"data": "later"},
+        partition=0,
+        offset=42,
+    )
+    polled_messages = [failed_msg, later_msg]
+    event_loop = asyncio.get_running_loop()
+    later_message_polled = asyncio.Event()
+
+    def poll(_timeout):
+        if not polled_messages:
+            return None
+        msg = polled_messages.pop(0)
+        if msg is later_msg:
+            event_loop.call_soon_threadsafe(later_message_polled.set)
+        return msg
+
+    mock_confluent_consumer.poll.side_effect = poll
+    consumer = ConcreteTestConsumer(
+        bootstrap_servers="mock_bs",
+        topic="test-topic",
+        group_id="test-group",
+        execution_profile=KafkaConsumerExecutionProfile(
+            max_in_flight_messages=2,
+            poll_timeout_seconds=0.01,
+        ),
+    )
+
+    async def fail_first_then_stop(msg):
+        if msg is failed_msg:
+            await later_message_polled.wait()
+            raise RetryableConsumerError("dependency unavailable")
+        consumer.shutdown()
+
+    consumer.process_message_mock.side_effect = fail_first_then_stop
+    consumer._send_to_dlq_async = AsyncMock()
+
+    with (
+        patch("portfolio_common.kafka_consumer.Consumer", return_value=mock_confluent_consumer),
+        patch(
+            "portfolio_common.kafka_consumer.get_kafka_producer",
+            return_value=mock_kafka_producer,
+        ),
+        patch("portfolio_common.kafka_consumer.set_kafka_consumer_in_flight"),
+        patch("portfolio_common.kafka_consumer.observe_kafka_consumer_backlog_pressure"),
+    ):
+        await asyncio.wait_for(consumer.run(), timeout=1)
+
+    assert consumer.process_message_mock.await_args_list == [call(failed_msg)]
+    mock_confluent_consumer.commit.assert_not_called()
+    consumer._send_to_dlq_async.assert_not_awaited()
+    mock_confluent_consumer.pause.assert_called_once()
+    mock_confluent_consumer.resume.assert_called_once()
+    assert consumer._pending_message_count == 0
+    assert consumer._pending_messages_by_key == {}
 
 
 async def test_run_loop_retries_transient_failure_in_process_then_commits(
