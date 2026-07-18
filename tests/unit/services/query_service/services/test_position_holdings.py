@@ -301,6 +301,8 @@ async def test_portfolio_positions_response_data_adds_runtime_metadata() -> None
         positions=[position],
         response_as_of_date=date(2025, 1, 1),
         data_quality_status="COMPLETE",
+        reconciliation_status="COMPLETE",
+        reconciliation_scope_hash="sha256:" + "a" * 64,
         latest_evidence_timestamp=evidence_timestamp,
     )
 
@@ -321,11 +323,12 @@ async def test_portfolio_positions_response_data_adds_runtime_metadata() -> None
         "source_product": "HoldingsAsOf",
         "source_product_version": "v1",
         "degradation_status": "NONE",
+        "reconciliation_scope_hash": "sha256:" + "a" * 64,
     }
     assert response.degradation.status == "NONE"
     assert response.degradation.details == []
     assert response.restatement_version == "current"
-    assert response.reconciliation_status == "UNKNOWN"
+    assert response.reconciliation_status == "COMPLETE"
     assert response.correlation_id is None
     assert response.generated_at.tzinfo is not None
 
@@ -353,6 +356,8 @@ async def test_holdings_content_hash_is_deterministic_for_same_holdings_evidence
         positions=[position],
         response_as_of_date=date(2025, 1, 1),
         data_quality_status="COMPLETE",
+        reconciliation_status="COMPLETE",
+        reconciliation_scope_hash="sha256:" + "a" * 64,
         latest_evidence_timestamp=evidence_timestamp,
         degradation=degradation,
     )
@@ -361,6 +366,8 @@ async def test_holdings_content_hash_is_deterministic_for_same_holdings_evidence
         positions=[position],
         response_as_of_date=date(2025, 1, 1),
         data_quality_status="COMPLETE",
+        reconciliation_status="COMPLETE",
+        reconciliation_scope_hash="sha256:" + "a" * 64,
         latest_evidence_timestamp=evidence_timestamp,
         degradation=degradation,
     )
@@ -368,6 +375,42 @@ async def test_holdings_content_hash_is_deterministic_for_same_holdings_evidence
     assert first == second
     assert first.startswith("sha256:")
     assert first != SOURCE_METADATA_UNAVAILABLE_HASH
+
+
+async def test_holdings_content_hash_changes_with_reconciliation_trust() -> None:
+    position = Position(
+        security_id="SEC_A",
+        quantity=Decimal("1"),
+        cost_basis=Decimal("100"),
+        position_date=date(2025, 1, 1),
+        instrument_name="Instrument",
+    )
+    degradation = holdings_degradation_summary(
+        positions=[position],
+        history_supplements=[],
+        fallback_valuation_map={},
+        response_as_of_date=date(2025, 1, 1),
+        latest_market_price_dates={},
+        latest_evidence_timestamp=datetime(2025, 1, 1, 10, 5, tzinfo=UTC),
+    )
+
+    def content_hash(*, status: str, scope_hash: str) -> str:
+        return holdings_content_hash(
+            portfolio_id="P1",
+            positions=[position],
+            response_as_of_date=date(2025, 1, 1),
+            data_quality_status="COMPLETE",
+            reconciliation_status=status,
+            reconciliation_scope_hash=scope_hash,
+            latest_evidence_timestamp=datetime(2025, 1, 1, 10, 5, tzinfo=UTC),
+            degradation=degradation,
+        )
+
+    complete = content_hash(status="COMPLETE", scope_hash="sha256:" + "a" * 64)
+    blocked = content_hash(status="BLOCKED", scope_hash="sha256:" + "a" * 64)
+    changed_scope = content_hash(status="COMPLETE", scope_hash="sha256:" + "b" * 64)
+
+    assert len({complete, blocked, changed_scope}) == 3
 
 
 async def test_position_valuation_data_maps_snapshot_row_values() -> None:
