@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date
 from decimal import Decimal, localcontext
 from enum import StrEnum
 
 from .calculation_lineage import (
     CalculationLineage,
+    FinancialSourceReference,
     build_calculation_lineage,
-    require_sha256_digest,
 )
 from .day_count import (
     BusinessDayCalendar,
@@ -36,23 +36,7 @@ class AccrualRateType(StrEnum):
     FLOATING_SUPPLIED = "FLOATING_SUPPLIED"
 
 
-@dataclass(frozen=True, slots=True)
-class AccrualSourceReference:
-    """Source identity required for one contractual accrual fact."""
-
-    source_system: str
-    source_record_id: str
-    source_revision: str
-    source_content_hash: str
-    observed_at: datetime
-
-    def __post_init__(self) -> None:
-        for field_name in ("source_system", "source_record_id", "source_revision"):
-            if not str(getattr(self, field_name)).strip():
-                raise ValueError(f"{field_name} must be nonblank")
-        require_sha256_digest(self.source_content_hash, "source_content_hash")
-        if self.observed_at.tzinfo is None or self.observed_at.utcoffset() is None:
-            raise ValueError("observed_at must be timezone-aware")
+AccrualSourceReference = FinancialSourceReference
 
 
 @dataclass(frozen=True, slots=True)
@@ -246,10 +230,4 @@ def _segment_output_payload(result: AccrualSegmentResult) -> dict[str, object]:
 
 
 def _source_payload(source: AccrualSourceReference) -> dict[str, object]:
-    return {
-        "observed_at": source.observed_at,
-        "source_content_hash": source.source_content_hash,
-        "source_record_id": source.source_record_id.strip(),
-        "source_revision": source.source_revision.strip(),
-        "source_system": source.source_system.strip(),
-    }
+    return source.lineage_payload()

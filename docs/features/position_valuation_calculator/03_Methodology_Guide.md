@@ -73,7 +73,8 @@ versioned source calendar. `30E/360.ISDA` requires the contractual termination d
 calculation interval exactly once; this is how regular, short-stub, and long-stub periods avoid an
 inferred schedule.
 
-Day-count and accrued-income intermediates use an internal precision of 50 decimal digits,
+Day-count, accrued-income, position scaling, aggregation, and FX-conversion intermediates use an
+internal precision of 50 decimal digits,
 independent of ambient process Decimal precision. No implicit currency rounding occurs in the
 domain kernel; the persisted/API boundary must apply a separately governed currency/product
 rounding policy and retain the unrounded evidence required for reconciliation.
@@ -101,6 +102,13 @@ identity and revision, source-content hash, aware observation time, day-count co
 and the content hash of any source-owned business calendar. The result exposes all three hashes.
 Changing a source revision therefore changes input, calculation, and output lineage even when the
 recalculated monetary amount is unchanged; this is intentional correction and audit evidence.
+
+Position-valuation input lineage binds the exact policy composition and its assignment evidence,
+plus only the price/value, position/principal/factor, accrued-income, multiplier, currencies, and FX
+facts consumed by that composition. A separately calculated accrued-income amount carries its
+upstream calculation lineage into the position input hash. The position result binds clean value,
+accrued income, total market value, notional exposure, settlement variation, current principal,
+currency conversion, and reporting-currency outputs without conflating those measures.
 
 #### Performance contract
 

@@ -37,6 +37,48 @@ class CalculationLineage:
         ):
             require_sha256_digest(str(getattr(self, field_name)), field_name)
 
+    def lineage_payload(self) -> dict[str, object]:
+        """Return the canonical payload used when this calculation is a downstream input."""
+
+        return {
+            "algorithm_id": self.algorithm_id,
+            "algorithm_version": self.algorithm_version,
+            "calculation_content_hash": self.calculation_content_hash,
+            "input_content_hash": self.input_content_hash,
+            "intermediate_precision": self.intermediate_precision,
+            "output_content_hash": self.output_content_hash,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class FinancialSourceReference:
+    """Immutable source evidence for one financial input fact."""
+
+    source_system: str
+    source_record_id: str
+    source_revision: str
+    source_content_hash: str
+    observed_at: datetime
+
+    def __post_init__(self) -> None:
+        for field_name in ("source_system", "source_record_id", "source_revision"):
+            if not str(getattr(self, field_name)).strip():
+                raise ValueError(f"{field_name} must be nonblank")
+        require_sha256_digest(self.source_content_hash, "source_content_hash")
+        if self.observed_at.tzinfo is None or self.observed_at.utcoffset() is None:
+            raise ValueError("observed_at must be timezone-aware")
+
+    def lineage_payload(self) -> dict[str, object]:
+        """Return normalized source fields for a calculation input payload."""
+
+        return {
+            "observed_at": self.observed_at,
+            "source_content_hash": self.source_content_hash,
+            "source_record_id": self.source_record_id.strip(),
+            "source_revision": self.source_revision.strip(),
+            "source_system": self.source_system.strip(),
+        }
+
 
 def build_calculation_lineage(
     *,
