@@ -27,7 +27,7 @@ narrow framework-free contract therefore belongs in `portfolio_common.domain.val
   accrued-income treatment, FX conversion, and output measure.
 - Added one deterministic calculation result that keeps clean value, accrued income, total market
   value, notional exposure, and settlement variation distinct.
-- Added an immutable registry of 19 supported version-1 policy compositions. Resolution requires an
+- Added an immutable registry of 22 supported version-1 policy compositions. Resolution requires an
   exact policy identifier and version; there is no product-class, latest-version, or default-policy
   fallback. Percent-of-principal variants declare face, factor-adjusted, or supplied current
   principal and calculated or supplied accrual explicitly, while futures notional and settlement
@@ -36,6 +36,17 @@ narrow framework-free contract therefore belongs in `portfolio_common.domain.val
   principal, and supplied current principal. These support zero-coupon/stripped discount positions
   without applying a coupon formula; discount accretion, effective-interest, and tax amortization
   remain outside the position market-value kernel.
+- Added explicit calculated ex-coupon compositions for face, factor-adjusted current principal, and
+  supplied current principal. A source-owned entitlement carries the ex-date, next payment date,
+  full coupon segments, and source lineage. Settlement must fall strictly inside the supplied
+  ex-period; the elapsed calculation must be an exact economic prefix of the full coupon. Core
+  recalculates both under the same 50-digit segmented kernel and exposes gross accrual, the signed
+  full-coupon entitlement adjustment, and settlement accrued income separately.
+- Implemented the DMO rebate-interest convention as signed elapsed gross accrual minus the signed
+  full next coupon. Long ex-coupon positions therefore produce negative rebate interest, short
+  positions reverse the sign, and settlement on or before the ex-date fails closed for this policy.
+  Ex-period determination remains source-owned and is never inferred from product class or a local
+  holiday calendar.
 - Added immutable, tenant/legal-book/instrument-scoped valuation-policy assignments with exact-scope
   effective-date resolution, source-version fencing, overlap and gap rejection, deterministic
   content hashing, complete cache identity, and bounded replay-date derivation for corrections.
@@ -67,6 +78,11 @@ narrow framework-free contract therefore belongs in `portfolio_common.domain.val
 - Fixed day-count and accrual intermediate precision at 50 decimal digits inside local Decimal
   contexts so repeating fractions and aggregate results do not depend on ambient process precision.
   Rounding remains a separately governed persistence/API boundary.
+- Advanced the accrued-income lineage algorithm to version 2. Its input now binds any entitlement
+  source, ex-date, next payment date, and complete coupon-period segments; its output binds gross
+  accrual, entitlement adjustment, and settlement accrual as distinct figures. The elapsed/full-
+  coupon consistency check is a linear ordered pass over immutable terms, avoiding nested scans or
+  repeated source-payload construction on the high-volume calculation path.
 - Added reusable deterministic calculation lineage with separate input, calculation, and output
   SHA-256 hashes. Calculation identity binds algorithm ID/version and intermediate precision to the
   canonical input hash; output identity binds named result values to the calculation hash. Decimal,
@@ -112,8 +128,10 @@ deleted rather than retained as a fallback when valuation and reconciliation are
 
 ## Validation
 
-- 93 valuation-domain tests passed, including unit/NAV, clean, dirty, and explicit no-periodic-
+- 101 valuation-domain tests passed, including unit/NAV, clean, dirty, explicit no-periodic-
   accrual percent-of-principal,
+  DMO-style long and short ex-coupon rebate interest, ex-date/payment boundary rejection,
+  full-coupon economic-prefix rejection, entitlement-source correction lineage,
   factor-adjusted principal, per-unit/per-contract/whole-position supplied values, futures notional,
   settlement variation, FX direction, exact tenant/book/instrument assignment resolution,
   source-version fencing, overlap/gap rejection, conflicting-version rejection, UTC-canonical cache
@@ -146,6 +164,10 @@ for `ACT/360`, `ACT/365.FIXED`, `30E/360`, and `30E/360.ISDA`, plus the
 [ICMA Rule 251 guidance](https://www.icmagroup.org/assets/ICMA-PMH-Circular-2022-01-FINAL.pdf) and
 [FpML day-count scheme](https://www.fpml.org/spec/2000/tr-fpml-1-0-2000-09-25/pdf/tr-fpml-1-0-2000-09-25.pdf)
 govern the Actual/Actual ICMA and ISDA distinction and required reference-period semantics.
+The UK Debt Management Office
+[gilt transaction convention](https://www.dmo.gov.uk/responsibilities/gilt-market/about-gilts/)
+and [official formulae](https://www.dmo.gov.uk/publications/gilt-market/formulae-and-examples/)
+govern the ex-dividend rebate-interest example and settlement-date boundary used in this slice.
 
 ## Documentation Decision
 
