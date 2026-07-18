@@ -37,6 +37,9 @@ narrow framework-free contract therefore belongs in `portfolio_common.domain.val
   content hashing, complete cache identity, and bounded replay-date derivation for corrections.
 - Conflicting payloads that claim the same source record and assignment version fail closed instead
   of being selected by arrival time or a lexical source revision.
+- Reused the financial canonical-content normalizer for assignment/cache hashes, deleting a second
+  hand-built JSON/SHA-256 path and ensuring equivalent aware observation instants have one UTC-
+  canonical assignment identity.
 - Added the first versioned day-count registry slice for FpML/ISDA `ACT/365.FIXED`, `ACT/360`, and
   `BUS/252`. Fixed-denominator conventions use actual elapsed calendar days. `BUS/252` counts
   source-owned business dates start-inclusive and end-exclusive and requires a versioned calendar
@@ -94,11 +97,11 @@ deleted rather than retained as a fallback when valuation and reconciliation are
 
 ## Validation
 
-- 87 valuation-domain tests passed, including unit/NAV, clean and dirty percent-of-principal,
+- 88 valuation-domain tests passed, including unit/NAV, clean and dirty percent-of-principal,
   factor-adjusted principal, per-unit/per-contract/whole-position supplied values, futures notional,
   settlement variation, FX direction, exact tenant/book/instrument assignment resolution,
-  source-version fencing, overlap/gap rejection, conflicting-version rejection, cache identity, and
-  backdated replay-date derivation, registry uniqueness, exact-version lookup, and derivative output
+  source-version fencing, overlap/gap rejection, conflicting-version rejection, UTC-canonical cache
+  identity, backdated replay-date derivation, registry uniqueness, exact-version lookup, and derivative output
   separation, leap-day fixed-denominator examples, business-day boundary semantics, calendar
   coverage, U.S./Eurobond/ISDA month-end and February behavior, contractual-termination handling,
   ISDA leap/non-leap year segmentation, ICMA regular/short/long reference-period cases, ICMA
