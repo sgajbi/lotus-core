@@ -75,8 +75,6 @@ PortfolioBenchmarkAssignmentRecord = _mandate_dto.PortfolioBenchmarkAssignmentRe
 PortfolioPartyRoleAssignmentIngestionRequest = (
     _portfolio_party_role_dto.PortfolioPartyRoleAssignmentIngestionRequest
 )
-PortfolioPartyRoleAssignmentRecord = (
-    _portfolio_party_role_dto.PortfolioPartyRoleAssignmentRecord
-)
+PortfolioPartyRoleAssignmentRecord = _portfolio_party_role_dto.PortfolioPartyRoleAssignmentRecord
 RiskFreeSeriesIngestionRequest = _benchmark_dto.RiskFreeSeriesIngestionRequest
 RiskFreeSeriesRecord = _benchmark_dto.RiskFreeSeriesRecord

@@ -20,9 +20,7 @@ class PortfolioPartyRoleAssignmentRequest(BaseModel):
     as_of_date: date = Field(
         ..., description="Business date used to resolve effective role assignments."
     )
-    party_id: str | None = Field(
-        None, description="Optional source-owned party identifier filter."
-    )
+    party_id: str | None = Field(None, description="Optional source-owned party identifier filter.")
     role_types: list[PortfolioPartyRoleType] = Field(
         default_factory=list, description="Optional governed role-type filters."
     )

@@ -188,9 +188,12 @@ def test_portfolio_party_role_assignment_enforces_identity_and_vocabulary() -> N
         "ck_party_role_scope_governed",
         "ck_party_role_quality_governed",
     } <= constraint_names
-    assert [
-        column.name for column in indexes["ix_party_role_portfolio_effective"].columns
-    ] == ["portfolio_id", "effective_from", "effective_to", "role_type"]
+    assert [column.name for column in indexes["ix_party_role_portfolio_effective"].columns] == [
+        "portfolio_id",
+        "effective_from",
+        "effective_to",
+        "role_type",
+    ]
     assert [column.name for column in indexes["ix_party_role_portfolio_history"].columns] == [
         "portfolio_id"
     ]

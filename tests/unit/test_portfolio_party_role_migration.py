@@ -39,9 +39,7 @@ def test_portfolio_party_role_migration_is_constrained_indexed_and_reversible(
         "drop_index",
         lambda name, **kwargs: operations.append(("drop_index", name, kwargs)),
     )
-    monkeypatch.setattr(
-        op, "drop_table", lambda name: operations.append(("drop_table", name))
-    )
+    monkeypatch.setattr(op, "drop_table", lambda name: operations.append(("drop_table", name)))
     migration = runpy.run_path(str(MIGRATION))
 
     migration["upgrade"]()
@@ -63,9 +61,7 @@ def test_portfolio_party_role_migration_is_constrained_indexed_and_reversible(
     _, table_name, definitions = operations[0]
     assert table_name == "portfolio_party_role_assignments"
     columns = {
-        definition.name: definition
-        for definition in definitions
-        if isinstance(definition, Column)
+        definition.name: definition for definition in definitions if isinstance(definition, Column)
     }
     assert columns["source_system"].nullable is False
     assert columns["source_record_id"].nullable is False

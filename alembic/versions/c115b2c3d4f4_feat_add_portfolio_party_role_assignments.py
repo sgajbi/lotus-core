@@ -126,13 +126,9 @@ def upgrade() -> None:
 def downgrade() -> None:
     """Remove the portfolio party-role assignment aggregate."""
 
-    op.drop_index(
-        "ix_party_role_party_effective", table_name="portfolio_party_role_assignments"
-    )
+    op.drop_index("ix_party_role_party_effective", table_name="portfolio_party_role_assignments")
     op.drop_index(
         "ix_party_role_portfolio_effective", table_name="portfolio_party_role_assignments"
     )
-    op.drop_index(
-        "ix_party_role_portfolio_history", table_name="portfolio_party_role_assignments"
-    )
+    op.drop_index("ix_party_role_portfolio_history", table_name="portfolio_party_role_assignments")
     op.drop_table("portfolio_party_role_assignments")

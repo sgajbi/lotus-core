@@ -31,26 +31,23 @@ class SqlAlchemyPortfolioPartyRoleReader:
         role_scopes: tuple[PortfolioPartyRoleScope, ...],
         include_non_accepted: bool,
     ) -> list[PortfolioPartyRoleRecord]:
-        ranked = (
-            select(
-                PortfolioPartyRoleAssignment.id.label("assignment_id"),
-                func.row_number()
-                .over(
-                    partition_by=(
-                        PortfolioPartyRoleAssignment.source_system,
-                        PortfolioPartyRoleAssignment.source_record_id,
-                    ),
-                    order_by=(
-                        PortfolioPartyRoleAssignment.assignment_version.desc(),
-                        PortfolioPartyRoleAssignment.observed_at.desc(),
-                        PortfolioPartyRoleAssignment.updated_at.desc(),
-                        PortfolioPartyRoleAssignment.id.desc(),
-                    ),
-                )
-                .label("source_rank"),
+        ranked = select(
+            PortfolioPartyRoleAssignment.id.label("assignment_id"),
+            func.row_number()
+            .over(
+                partition_by=(
+                    PortfolioPartyRoleAssignment.source_system,
+                    PortfolioPartyRoleAssignment.source_record_id,
+                ),
+                order_by=(
+                    PortfolioPartyRoleAssignment.assignment_version.desc(),
+                    PortfolioPartyRoleAssignment.observed_at.desc(),
+                    PortfolioPartyRoleAssignment.updated_at.desc(),
+                    PortfolioPartyRoleAssignment.id.desc(),
+                ),
             )
-            .cte("ranked_portfolio_party_roles")
-        )
+            .label("source_rank"),
+        ).cte("ranked_portfolio_party_roles")
         statement = (
             select(PortfolioPartyRoleAssignment)
             .join(

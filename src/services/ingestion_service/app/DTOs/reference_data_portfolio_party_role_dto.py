@@ -46,7 +46,7 @@ class PortfolioPartyRoleAssignmentRecord(BaseModel):
     )
     quality_status: PortfolioPartyRoleQualityStatus = Field(
         PortfolioPartyRoleQualityStatus.ACCEPTED,
-        description="Governed data-quality disposition for the source observation."
+        description="Governed data-quality disposition for the source observation.",
     )
 
     @field_validator("portfolio_id", "party_id", "source_system", "source_record_id")

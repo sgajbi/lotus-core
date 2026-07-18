@@ -78,9 +78,7 @@ def _response(
         supportability=PortfolioPartyRoleAssignmentSupportability(
             state="READY" if assignments else "INCOMPLETE",
             reason=(
-                "PARTY_ROLE_ASSIGNMENTS_READY"
-                if assignments
-                else "PARTY_ROLE_ASSIGNMENTS_EMPTY"
+                "PARTY_ROLE_ASSIGNMENTS_READY" if assignments else "PARTY_ROLE_ASSIGNMENTS_EMPTY"
             ),
             returned_assignment_count=len(assignments),
             filters_applied=filters,

@@ -206,9 +206,7 @@ class ReferenceDataIngestionService:
             ],
         )
 
-    async def upsert_portfolio_party_role_assignments(
-        self, records: list[dict[str, Any]]
-    ) -> None:
+    async def upsert_portfolio_party_role_assignments(self, records: list[dict[str, Any]]) -> None:
         await self._commit_upsert_many(
             model=PortfolioPartyRoleAssignment,
             records=records,
