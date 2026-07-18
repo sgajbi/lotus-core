@@ -39,6 +39,7 @@ CashMovementSummaryRow = tuple[str, str, str, bool, bool, int, Decimal, datetime
 class CashMovementSummaryEvidence:
     rows: list[CashMovementSummaryRow]
     source_row_count: int
+    source_currency_totals: dict[str, Decimal]
 
 
 class CashflowRepository:
@@ -96,6 +97,7 @@ class CashflowRepository:
                 latest_cashflows.c.cashflow_date,
                 func.sum(latest_cashflows.c.amount).label("net_amount"),
                 func.count().label("source_row_count"),
+                func.sum(func.sum(latest_cashflows.c.amount)).over().label("source_total"),
                 func.max(latest_cashflows.c.updated_at).label("latest_evidence_timestamp"),
             )
             .where(
@@ -110,24 +112,21 @@ class CashflowRepository:
         return CashflowSeriesEvidence(
             rows=[
                 (flow_date, net_amount)
-                for flow_date, net_amount, _source_row_count, _timestamp in rows
+                for flow_date, net_amount, _source_row_count, _source_total, _timestamp in rows
             ],
             latest_evidence_timestamp=max(
                 (
                     timestamp
-                    for _flow_date, _net_amount, _source_row_count, timestamp in rows
+                    for _flow_date, _net_amount, _source_row_count, _source_total, timestamp in rows
                     if timestamp
                 ),
                 default=None,
             ),
             source_row_count=sum(
                 int(source_row_count or 0)
-                for _flow_date, _net_amount, source_row_count, _timestamp in rows
+                for _flow_date, _net_amount, source_row_count, _source_total, _timestamp in rows
             ),
-            source_total=sum(
-                (Decimal(str(net_amount)) for _flow_date, net_amount, *_rest in rows),
-                start=Decimal("0"),
-            ),
+            source_total=Decimal(str(rows[0][3] or 0)) if rows else Decimal("0"),
         )
 
     async def get_projected_settlement_cashflow_series_with_evidence(
@@ -154,6 +153,7 @@ class CashflowRepository:
                 settlement_date.label("cashflow_date"),
                 func.sum(signed_amount).label("net_amount"),
                 func.count().label("source_row_count"),
+                func.sum(func.sum(signed_amount)).over().label("source_total"),
                 func.max(Transaction.updated_at).label("latest_evidence_timestamp"),
             )
             .where(
@@ -171,24 +171,21 @@ class CashflowRepository:
         return CashflowSeriesEvidence(
             rows=[
                 (flow_date, net_amount)
-                for flow_date, net_amount, _source_row_count, _timestamp in rows
+                for flow_date, net_amount, _source_row_count, _source_total, _timestamp in rows
             ],
             latest_evidence_timestamp=max(
                 (
                     timestamp
-                    for _flow_date, _net_amount, _source_row_count, timestamp in rows
+                    for _flow_date, _net_amount, _source_row_count, _source_total, timestamp in rows
                     if timestamp
                 ),
                 default=None,
             ),
             source_row_count=sum(
                 int(source_row_count or 0)
-                for _flow_date, _net_amount, source_row_count, _timestamp in rows
+                for _flow_date, _net_amount, source_row_count, _source_total, _timestamp in rows
             ),
-            source_total=sum(
-                (Decimal(str(net_amount)) for _flow_date, net_amount, *_rest in rows),
-                start=Decimal("0"),
-            ),
+            source_total=Decimal(str(rows[0][3] or 0)) if rows else Decimal("0"),
         )
 
     @async_timed(repository="CashflowRepository", method="get_portfolio_cash_movement_summary")
@@ -208,6 +205,9 @@ class CashflowRepository:
                 func.sum(latest_cashflows.c.amount).label("total_amount"),
                 func.max(latest_cashflows.c.updated_at).label("latest_evidence_timestamp"),
                 func.sum(func.count()).over().label("source_row_count"),
+                func.sum(func.sum(latest_cashflows.c.amount))
+                .over(partition_by=latest_cashflows.c.currency)
+                .label("source_currency_total"),
             )
             .where(
                 latest_cashflows.c.portfolio_id == portfolio_id,
@@ -244,6 +244,9 @@ class CashflowRepository:
                 for row in rows
             ],
             source_row_count=int(rows[0][8] or 0) if rows else 0,
+            source_currency_totals={
+                str(row[2]): Decimal(str(row[9] or 0)) for row in rows
+            },
         )
 
     @async_timed(repository="CashflowRepository", method="get_external_flows")
