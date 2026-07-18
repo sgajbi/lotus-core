@@ -7,6 +7,7 @@ from portfolio_common.valuation_job_contracts import (
     ValuationJobUpsert as ContractValuationJobUpsert,
 )
 from portfolio_common.valuation_job_repository import (
+    VALUATION_JOB_STATEMENT_CHUNK_SIZE,
     ValuationJobRepository,
     ValuationJobUpsert,
     _valuation_job_upsert_stmt,
@@ -336,3 +337,85 @@ async def test_upsert_jobs_normalizes_reversed_inputs_to_unique_key_lock_order(
         ("P1", "S2", date(2025, 8, 10), 1),
         ("P2", "S1", date(2025, 8, 9), 1),
     ]
+
+
+@patch("portfolio_common.valuation_job_repository._valuation_job_upsert_stmt")
+async def test_high_fanout_upserts_use_bind_safe_ordered_statement_chunks(
+    mock_upsert_statement,
+    repository: ValuationJobRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    returning_statement = MagicMock()
+    mock_upsert_statement.return_value.returning.return_value = returning_statement
+    first_result = MagicMock()
+    first_result.all.return_value = [()] * VALUATION_JOB_STATEMENT_CHUNK_SIZE
+    second_result = MagicMock()
+    second_result.all.return_value = [()]
+    mock_db_session.execute.side_effect = [first_result, second_result]
+    jobs = [
+        ValuationJobUpsert(
+            "P-HIGH-FANOUT",
+            f"S-{index:05d}",
+            date(2025, 8, 12),
+            1,
+            "corr-high-fanout",
+        )
+        for index in range(VALUATION_JOB_STATEMENT_CHUNK_SIZE + 1)
+    ]
+
+    staged_count = await repository._execute_upsert_jobs(
+        jobs,
+        rearm_completed=True,
+        requeue_if_processing=True,
+    )
+
+    assert staged_count == VALUATION_JOB_STATEMENT_CHUNK_SIZE + 1
+    assert [len(call.args[0]) for call in mock_upsert_statement.call_args_list] == [
+        VALUATION_JOB_STATEMENT_CHUNK_SIZE,
+        1,
+    ]
+    assert all(
+        call.kwargs == {"rearm_completed": True, "requeue_if_processing": True}
+        for call in mock_upsert_statement.call_args_list
+    )
+    assert mock_db_session.execute.await_count == 2
+
+
+async def test_high_fanout_epoch_lookup_uses_bind_safe_statement_chunks(
+    repository: ValuationJobRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    first_result = MagicMock()
+    first_result.all.return_value = [("P-HIGH-FANOUT", "S-00000", date(2025, 8, 12), 3)]
+    second_result = MagicMock()
+    second_result.all.return_value = [
+        (
+            "P-HIGH-FANOUT",
+            f"S-{VALUATION_JOB_STATEMENT_CHUNK_SIZE:05d}",
+            date(2025, 8, 12),
+            4,
+        )
+    ]
+    mock_db_session.execute.side_effect = [first_result, second_result]
+    jobs = [
+        ValuationJobUpsert(
+            "P-HIGH-FANOUT",
+            f"S-{index:05d}",
+            date(2025, 8, 12),
+            1,
+            "corr-high-fanout",
+        )
+        for index in range(VALUATION_JOB_STATEMENT_CHUNK_SIZE + 1)
+    ]
+
+    latest_epochs = await repository.get_latest_epochs_for_scopes(jobs)
+
+    assert latest_epochs == {
+        ("P-HIGH-FANOUT", "S-00000", date(2025, 8, 12)): 3,
+        (
+            "P-HIGH-FANOUT",
+            f"S-{VALUATION_JOB_STATEMENT_CHUNK_SIZE:05d}",
+            date(2025, 8, 12),
+        ): 4,
+    }
+    assert mock_db_session.execute.await_count == 2

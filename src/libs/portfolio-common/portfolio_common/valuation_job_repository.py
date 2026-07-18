@@ -1,7 +1,7 @@
 # src/libs/portfolio-common/portfolio_common/valuation_job_repository.py
 import logging
 from datetime import date
-from typing import Iterable, Optional
+from typing import Iterable, Iterator, Optional, TypeVar
 
 from sqlalchemy import and_, case, func, not_, select, tuple_, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -13,6 +13,16 @@ from .logging_utils import normalize_lineage_value
 from .valuation_job_contracts import ValuationJobUpsert
 
 logger = logging.getLogger(__name__)
+
+VALUATION_JOB_STATEMENT_CHUNK_SIZE = 1000
+_ChunkValue = TypeVar("_ChunkValue")
+
+
+def _iter_statement_chunks(values: list[_ChunkValue]) -> Iterator[list[_ChunkValue]]:
+    """Yield bind-safe, order-preserving chunks for valuation-job statements."""
+
+    for start in range(0, len(values), VALUATION_JOB_STATEMENT_CHUNK_SIZE):
+        yield values[start : start + VALUATION_JOB_STATEMENT_CHUNK_SIZE]
 
 
 class ValuationJobRepository:
@@ -139,19 +149,22 @@ class ValuationJobRepository:
         rearm_completed: bool,
         requeue_if_processing: bool,
     ) -> int:
-        result = await self.db.execute(
-            _valuation_job_upsert_stmt(
-                eligible_jobs,
-                rearm_completed=rearm_completed,
-                requeue_if_processing=requeue_if_processing,
-            ).returning(
-                PortfolioValuationJob.portfolio_id,
-                PortfolioValuationJob.security_id,
-                PortfolioValuationJob.valuation_date,
-                PortfolioValuationJob.epoch,
+        staged_count = 0
+        for job_chunk in _iter_statement_chunks(eligible_jobs):
+            result = await self.db.execute(
+                _valuation_job_upsert_stmt(
+                    job_chunk,
+                    rearm_completed=rearm_completed,
+                    requeue_if_processing=requeue_if_processing,
+                ).returning(
+                    PortfolioValuationJob.portfolio_id,
+                    PortfolioValuationJob.security_id,
+                    PortfolioValuationJob.valuation_date,
+                    PortfolioValuationJob.epoch,
+                )
             )
-        )
-        return len(result.all())
+            staged_count += len(result.all())
+        return staged_count
 
     def _normalize_jobs(self, jobs: Iterable[ValuationJobUpsert]) -> list[ValuationJobUpsert]:
         normalized_by_scope: dict[tuple[str, str, date, int], ValuationJobUpsert] = {}
@@ -219,35 +232,39 @@ class ValuationJobRepository:
     async def get_latest_epochs_for_scopes(
         self, jobs: Iterable[ValuationJobUpsert]
     ) -> dict[tuple[str, str, date], int]:
-        scopes = list({(job.portfolio_id, job.security_id, job.valuation_date) for job in jobs})
+        scopes = sorted({(job.portfolio_id, job.security_id, job.valuation_date) for job in jobs})
         if not scopes:
             return {}
 
-        result = await self.db.execute(
-            select(
-                PortfolioValuationJob.portfolio_id,
-                PortfolioValuationJob.security_id,
-                PortfolioValuationJob.valuation_date,
-                func.max(PortfolioValuationJob.epoch),
-            )
-            .where(
-                tuple_(
+        latest_epochs: dict[tuple[str, str, date], int] = {}
+        for scope_chunk in _iter_statement_chunks(scopes):
+            result = await self.db.execute(
+                select(
                     PortfolioValuationJob.portfolio_id,
                     PortfolioValuationJob.security_id,
                     PortfolioValuationJob.valuation_date,
-                ).in_(scopes)
+                    func.max(PortfolioValuationJob.epoch),
+                )
+                .where(
+                    tuple_(
+                        PortfolioValuationJob.portfolio_id,
+                        PortfolioValuationJob.security_id,
+                        PortfolioValuationJob.valuation_date,
+                    ).in_(scope_chunk)
+                )
+                .group_by(
+                    PortfolioValuationJob.portfolio_id,
+                    PortfolioValuationJob.security_id,
+                    PortfolioValuationJob.valuation_date,
+                )
             )
-            .group_by(
-                PortfolioValuationJob.portfolio_id,
-                PortfolioValuationJob.security_id,
-                PortfolioValuationJob.valuation_date,
+            latest_epochs.update(
+                {
+                    (portfolio_id, security_id, valuation_date): latest_epoch
+                    for portfolio_id, security_id, valuation_date, latest_epoch in result.all()
+                }
             )
-        )
-
-        return {
-            (portfolio_id, security_id, valuation_date): latest_epoch
-            for portfolio_id, security_id, valuation_date, latest_epoch in result.all()
-        }
+        return latest_epochs
 
     async def _skip_superseded_pending_jobs(
         self,
