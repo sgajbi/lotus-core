@@ -315,6 +315,16 @@ it must pass exact fan-in before another daily certification run. JSON and Markd
 are respectively `CD19ACE2555FC85385697E1D2A574D75A7367E99CDEE6473F089D52CEF523DB6` and
 `8A6FF684110135E34189C7FE24A963DCEA7DB626490E627556607CF2F2914DEB`.
 
+The bounded five-second cashflow rule source-version interval at signed experiment head
+`31ac198a4` reduced exact fan-in version queries from `999` to `19`, but two consecutive clean runs
+drained in `110.821s` and `110.768s` versus the retained `100.608s` parent. Both runs reconciled
+exactly with attempts `2/2`, zero repeats/errors, one aggregation, and outbox `0/0`; the repeat also
+reduced database pressure to `46/7/16` peak total/active/idle-in-transaction connections and `1/1`
+lock waiters/blocked sessions. The consistent `10.15%` and `10.10%` end-to-end regressions outweigh
+the `98.10%` query-count reduction, so the experiment was reverted forward. Do not repeat it without
+new workload evidence proving end-to-end improvement. Exact hashes and the compatibility decision
+are retained in CR-1631.
+
 ## Compatibility
 
 HTTP APIs, OpenAPI schemas, Kafka topics, event payload schemas, transaction calculations,
@@ -433,6 +443,10 @@ because historical and new keys can map to different partitions after producer r
   teardown removed all run-owned resources. The governed background task
   `eng-task-20260718-082223-lotus-core-derived-state-daily` reconciled to `FAILED` with exit code
   `2`; dependent recovery, poison, duplicate, and restatement gates remain withheld.
+- The bounded source-version interval passed focused and broad static/unit validation at signed
+  `31ac198a4`, but exact fan-in `20260718T030244Z` and repeat `20260718T031229Z` regressed drain to
+  `110.821s` and `110.768s` versus `100.608s` while reducing version queries from `999` to `19`.
+  The implementation was reverted forward; CR-1631 preserves the hashes and no-repeat decision.
 
 Implementation commits include `23fc6faf3`, `d51adb739`, `ad1ad179d`, `57f8c60e2`,
 `4f05be9a5`, `c230d660a`, `f42f6eaa3`, `d56e14dbf`, `2d49fc8f1`, `70ae16f0f`,
@@ -468,3 +482,7 @@ forward. Recording its no-repeat evidence requires no OpenAPI, migration, event-
 calculation-methodology, operator-runbook, or wiki-source change.
 The exact daily failure adds evidence only. It requires no OpenAPI, migration, event-contract,
 calculation-methodology, operator-runbook, or additional wiki-source change.
+The rejected source-version interval and its operator setting were reverted forward. The canonical
+immediate source-version validation contract is restored; retaining the experiment evidence requires
+no OpenAPI, migration, event-contract, calculation-methodology, operator-runbook, or wiki-source
+change.

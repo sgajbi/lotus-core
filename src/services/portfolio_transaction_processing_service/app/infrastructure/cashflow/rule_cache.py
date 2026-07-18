@@ -5,15 +5,12 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from collections.abc import Callable, Mapping
-from dataclasses import dataclass, replace
+from collections.abc import Mapping
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from types import MappingProxyType
 
-from portfolio_common.config import (
-    CASHFLOW_RULE_CACHE_SOURCE_VERSION_CHECK_INTERVAL_SECONDS,
-    CASHFLOW_RULE_CACHE_TTL_SECONDS,
-)
+from portfolio_common.config import CASHFLOW_RULE_CACHE_TTL_SECONDS
 from portfolio_common.domain.transaction_control_codes import (
     normalize_transaction_control_code,
 )
@@ -46,7 +43,6 @@ class CashflowRuleCacheState:
 
     rules_by_transaction_type: Mapping[str, CachedCashflowRule]
     loaded_at_monotonic_seconds: float
-    source_version_checked_at_monotonic_seconds: float
     rule_set_version: str
     rule_set_effective_at_utc: datetime | None
 
@@ -54,18 +50,8 @@ class CashflowRuleCacheState:
 class CashflowRuleCache:
     """Resolve rules from a version-checked cache owned by one application runtime."""
 
-    def __init__(
-        self,
-        *,
-        ttl_seconds: int = CASHFLOW_RULE_CACHE_TTL_SECONDS,
-        source_version_check_interval_seconds: int = (
-            CASHFLOW_RULE_CACHE_SOURCE_VERSION_CHECK_INTERVAL_SECONDS
-        ),
-        clock: Callable[[], float] = time.monotonic,
-    ) -> None:
+    def __init__(self, *, ttl_seconds: int = CASHFLOW_RULE_CACHE_TTL_SECONDS) -> None:
         self._ttl_seconds = ttl_seconds
-        self._source_version_check_interval_seconds = source_version_check_interval_seconds
-        self._clock = clock
         self._state: CashflowRuleCacheState | None = None
         self._lock = asyncio.Lock()
         self._invalidation_generation = 0
@@ -85,17 +71,9 @@ class CashflowRuleCache:
         """Return the effective rule, refreshing stale or incomplete snapshots once."""
 
         transaction_type_key = normalize_transaction_control_code(transaction_type)
-        state = self._state
-        if state is None:
-            observe_cashflow_rule_cache_event("miss", "empty")
-        elif not self._is_fresh(state):
-            observe_cashflow_rule_cache_event("stale", "ttl_expired")
-        elif not self._source_version_check_due(state):
-            rule = state.rules_by_transaction_type.get(transaction_type_key)
-            if rule is not None:
-                observe_cashflow_rule_cache_event("hit", "fresh")
-                return rule
-            observe_cashflow_rule_cache_event("missing_rule", "fresh_cache")
+        rule = await self._fresh_cached_rule_or_none(db_session, transaction_type_key)
+        if rule is not None:
+            return rule
 
         async with self._lock:
             self._state = await self._load_stable_snapshot(db_session)
@@ -119,24 +97,41 @@ class CashflowRuleCache:
                 return state
             observe_cashflow_rule_cache_event("stale", "invalidated_during_reload")
 
+    async def _fresh_cached_rule_or_none(
+        self,
+        db_session: AsyncSession,
+        transaction_type_key: str,
+    ) -> CachedCashflowRule | None:
+        state = self._state
+        if state is None:
+            observe_cashflow_rule_cache_event("miss", "empty")
+            return None
+        if not self._is_fresh(state):
+            observe_cashflow_rule_cache_event("stale", "ttl_expired")
+            return None
+        if not await self._source_version_matches(db_session, state):
+            observe_cashflow_rule_cache_event("stale", "source_version_changed")
+            return None
+        rule = state.rules_by_transaction_type.get(transaction_type_key)
+        if rule is None:
+            observe_cashflow_rule_cache_event("missing_rule", "fresh_cache")
+            return None
+        observe_cashflow_rule_cache_event("hit", "fresh")
+        return rule
+
     async def _fresh_or_reloaded_rule_cache(
         self,
         db_session: AsyncSession,
     ) -> CashflowRuleCacheState:
         state = self._state
-        if state is None or not self._is_fresh(state):
-            logger.info("Cashflow rules cache miss/stale; refreshing from database.")
-            return await self._load(db_session)
-        if not self._source_version_check_due(state):
+        if (
+            state is not None
+            and self._is_fresh(state)
+            and await self._source_version_matches(db_session, state)
+        ):
             return state
-        if not await self._source_version_matches(db_session, state):
-            observe_cashflow_rule_cache_event("stale", "source_version_changed")
-            logger.info("Cashflow rule source version changed; refreshing from database.")
-            return await self._load(db_session)
-        return replace(
-            state,
-            source_version_checked_at_monotonic_seconds=self._clock(),
-        )
+        logger.info("Cashflow rules cache miss/stale; refreshing from database.")
+        return await self._load(db_session)
 
     async def _reload_cache_for_missing_rule(
         self,
@@ -154,7 +149,6 @@ class CashflowRuleCache:
         repository = SqlAlchemyCashflowRuleRepository(db_session)
         rules = await repository.get_all_rules()
         rule_set_version = _rule_set_version(rules)
-        loaded_at = self._clock()
         logger.info("Loaded %s cashflow rules from repository.", len(rules))
         state = CashflowRuleCacheState(
             rules_by_transaction_type=MappingProxyType(
@@ -170,8 +164,7 @@ class CashflowRuleCache:
                     for rule in rules
                 }
             ),
-            loaded_at_monotonic_seconds=loaded_at,
-            source_version_checked_at_monotonic_seconds=loaded_at,
+            loaded_at_monotonic_seconds=time.monotonic(),
             rule_set_version=rule_set_version.fingerprint,
             rule_set_effective_at_utc=rule_set_version.latest_updated_at,
         )
@@ -189,14 +182,8 @@ class CashflowRuleCache:
     def _is_fresh(self, state: CashflowRuleCacheState) -> bool:
         if self._ttl_seconds <= 0:
             return False
-        age_seconds = self._clock() - state.loaded_at_monotonic_seconds
+        age_seconds = time.monotonic() - state.loaded_at_monotonic_seconds
         return age_seconds < self._ttl_seconds
-
-    def _source_version_check_due(self, state: CashflowRuleCacheState) -> bool:
-        if self._source_version_check_interval_seconds <= 0:
-            return True
-        age_seconds = self._clock() - state.source_version_checked_at_monotonic_seconds
-        return age_seconds >= self._source_version_check_interval_seconds
 
 
 def _rule_set_version(rules: list[object]) -> CashflowRuleSetVersion:

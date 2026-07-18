@@ -171,20 +171,16 @@ position, valuation, or idempotency state.
 | Setting | Default | Purpose |
 | --- | ---: | --- |
 | `CASHFLOW_RULE_CACHE_TTL_SECONDS` | `300` | Maximum age for an in-process cashflow rule cache entry before full reload. |
-| `CASHFLOW_RULE_CACHE_SOURCE_VERSION_CHECK_INTERVAL_SECONDS` | `5` | Maximum interval for serving fresh cache hits before one concurrency-coalesced source-version check. |
 
 Each cached rule carries the loaded rule-set version fingerprint and latest effective timestamp.
-Inside the five-second default validation window, the combined transaction runtime serves immutable
-fresh-cache hits without another SQL query. The first lookup after the window single-flights a
-source rule-set version check derived from rule count and max `cashflow_rules.updated_at`. Concurrent
-lookups share that validation result. If the source version changed, the worker reloads before
-calculating the message; TTL expiry still forces a complete snapshot reload.
+Before serving a fresh cached rule, the combined transaction runtime checks the source rule-set
+version derived from rule count and max `cashflow_rules.updated_at`. If that source version changes, the worker treats
+the cache as stale and reloads before calculating the message.
 
 Explicit `CashflowRuleCache.invalidate()` clears only the owning runtime instance. Multi-process
 deployments must make rule changes source-owned by updating `cashflow_rules.updated_at`; workers use
-that source version with a bounded maximum validation delay. Missing rules force one immediate reload
-before the message is classified as no-rule and sent to DLQ. Use explicit invalidation when an
-administrative write path requires visibility sooner than the configured source-version interval.
+that source version to avoid stale reads before TTL expiry. Missing rules force one immediate reload
+before the message is classified as no-rule and sent to DLQ.
 
 | Metric | Labels | Purpose |
 | --- | --- | --- |
