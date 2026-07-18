@@ -469,6 +469,13 @@ does not publish this key policy; the operator-owned migration runbook is the du
   exact transaction identifier in the query ledger before issuing the one-shot replay command.
   It does not retry the side-effecting POST or weaken the required `202` response. All `9` focused
   smoke-script tests, scoped Ruff lint/format, and diff checks passed.
+- PR #804 review identified that price and FX correction fan-out could pass 10,000 valuation jobs
+  into one PostgreSQL multi-VALUES statement and exceed the driver's bind-parameter ceiling. The
+  same-pattern scan found the shared repository also owned configurable backfill callers and an
+  unbounded tuple-scope lookup. The repository boundary now preserves full-call normalization and
+  deterministic lock order while executing both statement families in ordered chunks of at most
+  1,000 rows. High-fanout unit proof covers the 1,001-row boundary for both paths; focused and broad
+  validation is recorded on PR #804 and issue #799.
 
 Implementation commits include `23fc6faf3`, `d51adb739`, `ad1ad179d`, `57f8c60e2`,
 `4f05be9a5`, `c230d660a`, `f42f6eaa3`, `d56e14dbf`, `2d49fc8f1`, `70ae16f0f`,
@@ -512,3 +519,7 @@ The runtime-smoke readiness fix changes only certification sequencing. It preser
 HTTP status contract, source-owned transaction resolution, runtime topology, and production
 behavior, and requires no OpenAPI, migration, event-contract, operator-runbook, or wiki-source
 change.
+The valuation-job statement bound is an internal persistence safeguard. It preserves transaction
+atomicity, normalization, deterministic lock order, rearm/requeue semantics, public contracts, and
+runtime configuration. It requires no OpenAPI, migration, event-contract, calculation-methodology,
+operator-runbook, or wiki-source change.
