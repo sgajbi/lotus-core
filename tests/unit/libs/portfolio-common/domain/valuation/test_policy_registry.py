@@ -19,7 +19,7 @@ def test_supported_policy_keys_are_unique_and_stably_ordered() -> None:
     policies = supported_position_valuation_policies()
     keys = [(policy.policy_id, policy.policy_version) for policy in policies]
 
-    assert len(policies) == 16
+    assert len(policies) == 19
     assert len(set(keys)) == len(keys)
     assert keys[0] == ("UNIT_PRICE_MARKET_VALUE", 1)
     assert keys[-1] == ("SUPPLIED_WHOLE_POSITION_SETTLEMENT_VARIATION", 1)
@@ -54,6 +54,11 @@ def test_resolution_requires_exact_identifier_and_version() -> None:
             "DIRTY_PERCENT_CURRENT_PRINCIPAL_MARKET_VALUE",
             PrincipalBasis.SUPPLIED_CURRENT_PRINCIPAL,
             AccruedIncomeTreatment.INCLUDED_IN_SOURCE_VALUE,
+        ),
+        (
+            "CLEAN_PERCENT_FACE_NO_PERIODIC_ACCRUAL",
+            PrincipalBasis.FACE_AMOUNT,
+            AccruedIncomeTreatment.NO_PERIODIC_ACCRUAL,
         ),
     ],
 )

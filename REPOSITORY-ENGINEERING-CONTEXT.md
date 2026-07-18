@@ -2865,7 +2865,10 @@ Most relevant current governance:
      ex-coupon, or rounding policy. Day-count and accrual kernels use a fixed 50-digit local Decimal
      precision; rounding belongs to an explicit persistence/API boundary. Runtime integration must
      bulk-resolve source facts and prove mixed-book capacity—domain microbenchmarks alone are not
-     release evidence.
+     release evidence. Zero-coupon/stripped discount positions use a named no-periodic-accrual
+     clean-price policy for the applicable principal basis. Do not run them through coupon accrual
+     or infer discount accretion, effective-interest accounting, tax amortization, or yield from
+     clean price.
 207. Financial calculation lineage has three deterministic layers: canonical normalized input
      content, algorithm/version/precision-bound calculation identity, and output values bound to
      that calculation identity. Use separate lowercase SHA-256 hashes for all three. Prohibit

@@ -199,6 +199,26 @@ def test_dirty_factor_based_value_uses_current_principal_without_double_accrual(
     assert result.total_market_value_local == Decimal("716400.0000")
 
 
+def test_zero_coupon_policy_has_explicit_no_periodic_accrual() -> None:
+    result = calculate_position_valuation(
+        policy=_policy(
+            input_basis=ValuationInputBasis.PERCENT_OF_PRINCIPAL_CLEAN,
+            principal_basis=PrincipalBasis.FACE_AMOUNT,
+            scaling=PositionScaling.PRINCIPAL,
+            accrued=AccruedIncomeTreatment.NO_PERIODIC_ACCRUAL,
+            denominator=Decimal("100"),
+        ),
+        inputs=_inputs(
+            source_value=Decimal("82.75"),
+            signed_face_amount=Decimal("1000000"),
+        ),
+    )
+
+    assert result.clean_value_local == Decimal("827500.00")
+    assert result.accrued_income_local is None
+    assert result.total_market_value_local == result.clean_value_local
+
+
 def test_per_underlying_unit_and_per_contract_values_are_not_double_scaled() -> None:
     per_unit = calculate_position_valuation(
         policy=_policy(

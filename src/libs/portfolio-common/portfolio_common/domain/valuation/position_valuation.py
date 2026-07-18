@@ -61,6 +61,7 @@ class AccruedIncomeTreatment(StrEnum):
     """How accrued income relates to the supplied value."""
 
     NOT_APPLICABLE = "NOT_APPLICABLE"
+    NO_PERIODIC_ACCRUAL = "NO_PERIODIC_ACCRUAL"
     INCLUDED_IN_SOURCE_VALUE = "INCLUDED_IN_SOURCE_VALUE"
     CALCULATED_SEPARATELY = "CALCULATED_SEPARATELY"
     SUPPLIED_SEPARATELY = "SUPPLIED_SEPARATELY"
@@ -485,6 +486,7 @@ def _resolve_accrued_income(
     treatment = policy.accrued_income_treatment
     if treatment in {
         AccruedIncomeTreatment.NOT_APPLICABLE,
+        AccruedIncomeTreatment.NO_PERIODIC_ACCRUAL,
         AccruedIncomeTreatment.INCLUDED_IN_SOURCE_VALUE,
     }:
         return None

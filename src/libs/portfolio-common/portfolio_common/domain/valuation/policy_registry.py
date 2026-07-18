@@ -82,6 +82,12 @@ _SUPPORTED_POLICIES = (
         accrued=AccruedIncomeTreatment.INCLUDED_IN_SOURCE_VALUE,
     ),
     _principal_policy(
+        "CLEAN_PERCENT_FACE_NO_PERIODIC_ACCRUAL",
+        input_basis=ValuationInputBasis.PERCENT_OF_PRINCIPAL_CLEAN,
+        principal_basis=PrincipalBasis.FACE_AMOUNT,
+        accrued=AccruedIncomeTreatment.NO_PERIODIC_ACCRUAL,
+    ),
+    _principal_policy(
         "CLEAN_PERCENT_FACTOR_CALCULATED_ACCRUAL",
         input_basis=ValuationInputBasis.PERCENT_OF_PRINCIPAL_CLEAN,
         principal_basis=PrincipalBasis.FACTOR_ADJUSTED_CURRENT_PRINCIPAL,
@@ -100,6 +106,12 @@ _SUPPORTED_POLICIES = (
         accrued=AccruedIncomeTreatment.INCLUDED_IN_SOURCE_VALUE,
     ),
     _principal_policy(
+        "CLEAN_PERCENT_FACTOR_NO_PERIODIC_ACCRUAL",
+        input_basis=ValuationInputBasis.PERCENT_OF_PRINCIPAL_CLEAN,
+        principal_basis=PrincipalBasis.FACTOR_ADJUSTED_CURRENT_PRINCIPAL,
+        accrued=AccruedIncomeTreatment.NO_PERIODIC_ACCRUAL,
+    ),
+    _principal_policy(
         "CLEAN_PERCENT_CURRENT_PRINCIPAL_CALCULATED_ACCRUAL",
         input_basis=ValuationInputBasis.PERCENT_OF_PRINCIPAL_CLEAN,
         principal_basis=PrincipalBasis.SUPPLIED_CURRENT_PRINCIPAL,
@@ -116,6 +128,12 @@ _SUPPORTED_POLICIES = (
         input_basis=ValuationInputBasis.PERCENT_OF_PRINCIPAL_DIRTY,
         principal_basis=PrincipalBasis.SUPPLIED_CURRENT_PRINCIPAL,
         accrued=AccruedIncomeTreatment.INCLUDED_IN_SOURCE_VALUE,
+    ),
+    _principal_policy(
+        "CLEAN_PERCENT_CURRENT_PRINCIPAL_NO_PERIODIC_ACCRUAL",
+        input_basis=ValuationInputBasis.PERCENT_OF_PRINCIPAL_CLEAN,
+        principal_basis=PrincipalBasis.SUPPLIED_CURRENT_PRINCIPAL,
+        accrued=AccruedIncomeTreatment.NO_PERIODIC_ACCRUAL,
     ),
     _policy(
         "SUPPLIED_PER_UNDERLYING_UNIT_MARKET_VALUE",

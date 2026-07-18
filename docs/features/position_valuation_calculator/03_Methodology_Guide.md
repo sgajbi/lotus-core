@@ -38,13 +38,20 @@ effective-dated instrument assignment selects a versioned composition of:
 - principal basis: position units, face amount, factor-adjusted current principal, or supplied
   current principal;
 - scaling: quantity, principal, contract count and multiplier, or no scaling;
-- accrued-income treatment: not applicable, included, calculated separately, or supplied separately;
+- accrued-income treatment: not applicable, explicitly no periodic accrual, included, calculated
+  separately, or supplied separately;
 - direct source-to-reporting FX policy and a separately named output measure.
 
 Missing or conflicting assignments and ambiguous or incomplete inputs fail closed. Futures notional
 and settlement variation cannot populate market value. Core consumes supplied derivative fair value
 and supplied floating all-in rates; it does not price derivatives, forecast rates, construct curves,
 or calculate fund NAV.
+
+Zero-coupon and stripped discount instruments use an explicit no-periodic-accrual composition;
+their clean percent-of-principal value is not silently passed through the coupon-accrual formula.
+The registry supplies face, factor-adjusted current-principal, and supplied-current-principal
+variants. Discount accretion, effective-interest accounting, tax amortization, and yield analytics
+remain separately governed upstream/accounting calculations and are not inferred from clean price.
 
 #### Segmented accrued-income formula
 
