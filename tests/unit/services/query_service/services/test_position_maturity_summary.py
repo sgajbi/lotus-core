@@ -1,7 +1,16 @@
 from datetime import UTC, date, datetime
 from decimal import Decimal
 
-from portfolio_common.reconciliation_quality import COMPLETE, PARTIAL, STALE, UNKNOWN
+import pytest
+from portfolio_common.logging_utils import correlation_id_var
+from portfolio_common.reconciliation_quality import (
+    BLOCKED,
+    COMPLETE,
+    PARTIAL,
+    STALE,
+    UNKNOWN,
+    UNRECONCILED,
+)
 from portfolio_common.source_data_product_metadata import (
     source_data_product_runtime_metadata,
 )
@@ -40,6 +49,7 @@ def _holdings_response(
     *,
     positions: list[Position],
     data_quality_status: str = COMPLETE,
+    reconciliation_status: str = COMPLETE,
 ) -> PortfolioPositionsResponse:
     return PortfolioPositionsResponse(
         portfolio_id="P1",
@@ -48,6 +58,7 @@ def _holdings_response(
             as_of_date=date(2026, 3, 10),
             generated_at=datetime(2026, 3, 10, 1, 2, tzinfo=UTC),
             data_quality_status=data_quality_status,
+            reconciliation_status=reconciliation_status,
             latest_evidence_timestamp=datetime(2026, 3, 10, 1, 1, tzinfo=UTC),
             snapshot_id="holdings-snapshot-1",
             policy_version="policy-v1",
@@ -91,13 +102,23 @@ def test_maturity_summary_counts_maturing_holdings_and_next_date() -> None:
     assert summary.source_refs == [
         "lotus-core://source/PortfolioMaturitySummary/P1/2026-03-10/2026-06-08"
     ]
-    assert summary.source_lineage == {
-        "source_owner": "lotus-core",
-        "source_product": "PortfolioMaturitySummary",
-        "upstream_product": "HoldingsAsOf",
-        "upstream_content_hash": holdings.content_hash,
-    }
+    assert summary.source_lineage["source_owner"] == "lotus-core"
+    assert summary.source_lineage["source_product"] == "PortfolioMaturitySummary"
+    assert summary.source_lineage["upstream_product"] == "HoldingsAsOf"
+    assert summary.source_lineage["upstream_content_hash"] == holdings.content_hash
     assert summary.source_evidence_current is True
+    assert summary.reconciliation_status == COMPLETE
+    assert summary.calculation_lineage.algorithm_id == ("PORTFOLIO_CONTRACTUAL_MATURITY_SUMMARY")
+    assert len(summary.calculation_lineage.input_content_hash) == 64
+    assert summary.source_lineage["input_content_hash"] == (
+        summary.calculation_lineage.input_content_hash
+    )
+    assert summary.source_lineage["calculation_content_hash"] == (
+        summary.calculation_lineage.calculation_content_hash
+    )
+    assert summary.source_lineage["output_content_hash"] == (
+        summary.calculation_lineage.output_content_hash
+    )
 
     repeat_summary = portfolio_maturity_summary_response(
         portfolio_id="P1",
@@ -154,21 +175,25 @@ def test_maturity_summary_marks_unknown_holdings_unavailable() -> None:
     holdings = _holdings_response(
         positions=[],
         data_quality_status=UNKNOWN,
+        reconciliation_status=UNKNOWN,
     )
 
     summary = portfolio_maturity_summary_response(
         portfolio_id="P1",
         holdings=holdings,
         horizon_days=90,
-        include_projected=True,
+        include_projected=False,
     )
 
-    assert summary.include_projected is True
+    assert summary.include_projected is False
     assert summary.next_maturity_date is None
     assert summary.maturing_holding_count == 0
     assert summary.supportability_status == "UNAVAILABLE"
     assert summary.freshness_status == "UNKNOWN"
-    assert summary.supportability_reasons == ["HOLDINGS_UNKNOWN"]
+    assert summary.supportability_reasons == [
+        "HOLDINGS_UNKNOWN",
+        "HOLDINGS_RECONCILIATION_UNKNOWN",
+    ]
 
 
 def test_maturity_summary_flags_unsupported_maturity_features() -> None:
@@ -193,3 +218,124 @@ def test_maturity_summary_flags_unsupported_maturity_features() -> None:
     assert summary.unsupported_maturity_feature_count == 1
     assert summary.supportability_status == "PARTIAL"
     assert summary.supportability_reasons == ["UNSUPPORTED_PRODUCT_MATURITY_FEATURE"]
+
+
+@pytest.mark.parametrize(
+    ("reconciliation_status", "expected_supportability", "expected_reason"),
+    [
+        (PARTIAL, "PARTIAL", "HOLDINGS_RECONCILIATION_PARTIAL"),
+        (STALE, "STALE", "HOLDINGS_RECONCILIATION_STALE"),
+        (UNKNOWN, "UNAVAILABLE", "HOLDINGS_RECONCILIATION_UNKNOWN"),
+        (UNRECONCILED, "UNAVAILABLE", "HOLDINGS_RECONCILIATION_MISSING"),
+        (BLOCKED, "UNAVAILABLE", "HOLDINGS_RECONCILIATION_BLOCKED"),
+    ],
+)
+def test_maturity_summary_fails_closed_for_degraded_reconciliation(
+    reconciliation_status: str,
+    expected_supportability: str,
+    expected_reason: str,
+) -> None:
+    holdings = _holdings_response(
+        positions=[_position("BOND-1", maturity_date=date(2026, 4, 1))],
+        reconciliation_status=reconciliation_status,
+    )
+
+    summary = portfolio_maturity_summary_response(
+        portfolio_id="P1",
+        holdings=holdings,
+        horizon_days=90,
+        include_projected=False,
+    )
+
+    assert summary.reconciliation_status == reconciliation_status
+    assert summary.supportability_status == expected_supportability
+    assert summary.supportability_reasons == [expected_reason]
+    assert summary.source_evidence_current is False
+
+
+def test_maturity_summary_rejects_projected_holdings() -> None:
+    holdings = _holdings_response(positions=[])
+
+    with pytest.raises(ValueError, match="include_projected=false"):
+        portfolio_maturity_summary_response(
+            portfolio_id="P1",
+            holdings=holdings,
+            horizon_days=90,
+            include_projected=True,
+        )
+
+
+def test_maturity_summary_includes_both_horizon_boundaries_only() -> None:
+    holdings = _holdings_response(
+        positions=[
+            _position("START", maturity_date=date(2026, 3, 10)),
+            _position("END", maturity_date=date(2026, 6, 8)),
+            _position("AFTER", maturity_date=date(2026, 6, 9)),
+        ]
+    )
+
+    summary = portfolio_maturity_summary_response(
+        portfolio_id="P1",
+        holdings=holdings,
+        horizon_days=90,
+        include_projected=False,
+    )
+
+    assert summary.window_start_date == date(2026, 3, 10)
+    assert summary.window_end_date == date(2026, 6, 8)
+    assert summary.next_maturity_date == date(2026, 3, 10)
+    assert summary.maturing_holding_count == 2
+
+
+def test_maturity_summary_binds_tenant_and_changes_input_lineage() -> None:
+    holdings = _holdings_response(positions=[_position("BOND-1", maturity_date=date(2026, 4, 1))])
+
+    tenant_a = portfolio_maturity_summary_response(
+        portfolio_id="P1",
+        holdings=holdings,
+        horizon_days=90,
+        include_projected=False,
+        tenant_id="  TENANT-A  ",
+    )
+    tenant_b = portfolio_maturity_summary_response(
+        portfolio_id="P1",
+        holdings=holdings,
+        horizon_days=90,
+        include_projected=False,
+        tenant_id="TENANT-B",
+    )
+
+    assert tenant_a.tenant_id == "TENANT-A"
+    assert tenant_a.calculation_lineage.input_content_hash != (
+        tenant_b.calculation_lineage.input_content_hash
+    )
+    assert tenant_a.content_hash != tenant_b.content_hash
+
+
+def test_maturity_summary_propagates_request_correlation_without_hashing_it() -> None:
+    holdings = _holdings_response(positions=[_position("BOND-1", maturity_date=date(2026, 4, 1))])
+    first_token = correlation_id_var.set("QRY:correlation-one")
+    try:
+        first = portfolio_maturity_summary_response(
+            portfolio_id="P1",
+            holdings=holdings,
+            horizon_days=90,
+            include_projected=False,
+        )
+    finally:
+        correlation_id_var.reset(first_token)
+    second_token = correlation_id_var.set("QRY:correlation-two")
+    try:
+        second = portfolio_maturity_summary_response(
+            portfolio_id="P1",
+            holdings=holdings,
+            horizon_days=90,
+            include_projected=False,
+        )
+    finally:
+        correlation_id_var.reset(second_token)
+
+    assert first.correlation_id == "QRY:correlation-one"
+    assert second.correlation_id == "QRY:correlation-two"
+    assert first.content_hash == second.content_hash
+    assert first.calculation_lineage == second.calculation_lineage

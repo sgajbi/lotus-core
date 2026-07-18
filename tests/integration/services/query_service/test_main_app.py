@@ -806,6 +806,20 @@ async def test_openapi_describes_position_contract_examples(async_test_client):
     )
     assert maturity_horizon["schema"]["maximum"] == 3660
     assert "bounded to ten years" in maturity_horizon["description"]
+    maturity_projection = next(
+        parameter
+        for parameter in maturity_summary["parameters"]
+        if parameter["name"] == "include_projected"
+    )
+    assert maturity_projection["schema"]["const"] is False
+    assert "projected holdings are intentionally excluded" in maturity_projection["description"]
+    maturity_tenant = next(
+        parameter
+        for parameter in maturity_summary["parameters"]
+        if parameter["name"] == "X-Tenant-Id"
+    )
+    assert maturity_tenant["in"] == "header"
+    assert "bound into runtime receipt metadata" in maturity_tenant["description"]
     assert (
         maturity_summary_response["properties"]["product_name"]["default"]
         == "PortfolioMaturitySummary"
@@ -818,6 +832,13 @@ async def test_openapi_describes_position_contract_examples(async_test_client):
         "not an upstream source-batch fingerprint"
         in maturity_summary_response["properties"]["request_fingerprint"]["description"]
     )
+    lineage_reference = maturity_summary_response["properties"]["calculation_lineage"]
+    assert lineage_reference["$ref"] == "#/components/schemas/CalculationLineageResponse"
+    assert "normalized-input" in lineage_reference["description"]
+    lineage_schema = schema["components"]["schemas"]["CalculationLineageResponse"]
+    assert lineage_schema["properties"]["input_content_hash"]["pattern"] == "^[0-9a-f]{64}$"
+    assert lineage_schema["properties"]["calculation_content_hash"]["pattern"] == ("^[0-9a-f]{64}$")
+    assert lineage_schema["properties"]["output_content_hash"]["pattern"] == "^[0-9a-f]{64}$"
 
 
 async def test_openapi_describes_cashflow_projection_contract_examples(async_test_client):

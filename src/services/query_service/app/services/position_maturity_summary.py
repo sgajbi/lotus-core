@@ -1,11 +1,17 @@
 from __future__ import annotations
 
-import hashlib
-import json
-from datetime import date, timedelta
+from datetime import timedelta
 from decimal import Decimal, InvalidOperation
 
-from portfolio_common.reconciliation_quality import COMPLETE, PARTIAL, STALE, UNKNOWN
+from portfolio_common.domain.calculation_lineage import build_calculation_lineage
+from portfolio_common.reconciliation_quality import (
+    BLOCKED,
+    COMPLETE,
+    PARTIAL,
+    STALE,
+    UNKNOWN,
+    UNRECONCILED,
+)
 from portfolio_common.source_data_product_metadata import (
     source_data_product_runtime_metadata,
     stable_content_hash,
@@ -50,8 +56,17 @@ UNAVAILABLE = "UNAVAILABLE"
 HOLDINGS_STALE = "HOLDINGS_STALE"
 HOLDINGS_PARTIAL = "HOLDINGS_PARTIAL"
 HOLDINGS_UNKNOWN = "HOLDINGS_UNKNOWN"
+RECONCILIATION_BLOCKED = "HOLDINGS_RECONCILIATION_BLOCKED"
+RECONCILIATION_PARTIAL = "HOLDINGS_RECONCILIATION_PARTIAL"
+RECONCILIATION_STALE = "HOLDINGS_RECONCILIATION_STALE"
+RECONCILIATION_UNKNOWN = "HOLDINGS_RECONCILIATION_UNKNOWN"
+RECONCILIATION_MISSING = "HOLDINGS_RECONCILIATION_MISSING"
 MISSING_INSTRUMENT_MATURITY_DATE = "MISSING_INSTRUMENT_MATURITY_DATE"
 UNSUPPORTED_PRODUCT_MATURITY_FEATURE = "UNSUPPORTED_PRODUCT_MATURITY_FEATURE"
+
+MATURITY_SUMMARY_ALGORITHM_ID = "PORTFOLIO_CONTRACTUAL_MATURITY_SUMMARY"
+MATURITY_SUMMARY_ALGORITHM_VERSION = 1
+MATURITY_SUMMARY_INTERMEDIATE_PRECISION = 1
 
 
 def portfolio_maturity_summary_response(
@@ -60,7 +75,11 @@ def portfolio_maturity_summary_response(
     holdings: PortfolioPositionsResponse,
     horizon_days: int,
     include_projected: bool,
+    tenant_id: str | None = None,
 ) -> PortfolioMaturitySummaryResponse:
+    if include_projected:
+        raise ValueError("PortfolioMaturitySummary requires include_projected=false")
+    normalized_tenant_id = tenant_id.strip() if tenant_id and tenant_id.strip() else None
     window_start_date = holdings.as_of_date
     window_end_date = window_start_date + timedelta(days=horizon_days)
     maturing_positions = [
@@ -81,6 +100,7 @@ def portfolio_maturity_summary_response(
     )
     reasons = _supportability_reasons(
         data_quality_status=holdings.data_quality_status,
+        reconciliation_status=holdings.reconciliation_status,
         missing_maturity_count=missing_maturity_count,
         unsupported_feature_count=unsupported_feature_count,
     )
@@ -101,14 +121,33 @@ def portfolio_maturity_summary_response(
         "unsupported_maturity_feature_count": unsupported_feature_count,
         "supportability_status": _supportability_status(
             data_quality_status=holdings.data_quality_status,
+            reconciliation_status=holdings.reconciliation_status,
             reasons=reasons,
         ),
         "supportability_reasons": reasons,
     }
-    request_fingerprint = _maturity_summary_fingerprint(
-        holdings=holdings,
-        response_values=response_values,
+    calculation_lineage = build_calculation_lineage(
+        algorithm_id=MATURITY_SUMMARY_ALGORITHM_ID,
+        algorithm_version=MATURITY_SUMMARY_ALGORITHM_VERSION,
+        intermediate_precision=MATURITY_SUMMARY_INTERMEDIATE_PRECISION,
+        input_payload={
+            "portfolio_id": portfolio_id,
+            "tenant_id": normalized_tenant_id,
+            "horizon_days": horizon_days,
+            "include_projected": False,
+            "source_product_name": holdings.product_name,
+            "source_product_version": holdings.product_version,
+            "holdings_as_of_date": holdings.as_of_date,
+            "holdings_snapshot_id": holdings.snapshot_id,
+            "holdings_content_hash": holdings.content_hash,
+            "holdings_source_batch_fingerprint": holdings.source_batch_fingerprint,
+            "holdings_policy_version": holdings.policy_version,
+            "holdings_latest_evidence_timestamp": holdings.latest_evidence_timestamp,
+            "holdings_reconciliation_status": holdings.reconciliation_status,
+        },
+        output_payload=response_values,
     )
+    request_fingerprint = f"maturity_summary:{calculation_lineage.input_content_hash[:16]}"
     content_hash = stable_content_hash(
         {
             "product_name": "PortfolioMaturitySummary",
@@ -116,8 +155,10 @@ def portfolio_maturity_summary_response(
             "source_product_name": holdings.product_name,
             "source_product_version": holdings.product_version,
             "portfolio_id": portfolio_id,
+            "tenant_id": normalized_tenant_id,
             "request_fingerprint": request_fingerprint,
             "response_values": response_values,
+            "calculation_lineage": calculation_lineage.lineage_payload(),
             "holdings_content_hash": holdings.content_hash,
             "holdings_snapshot_id": holdings.snapshot_id,
             "latest_evidence_timestamp": holdings.latest_evidence_timestamp,
@@ -126,17 +167,24 @@ def portfolio_maturity_summary_response(
     return PortfolioMaturitySummaryResponse(
         **response_values,
         request_fingerprint=request_fingerprint,
+        calculation_lineage=calculation_lineage.lineage_payload(),
         **source_data_product_runtime_metadata(
             as_of_date=holdings.as_of_date,
+            tenant_id=normalized_tenant_id,
+            reconciliation_status=holdings.reconciliation_status,
             data_quality_status=_summary_data_quality_status(
                 holdings_data_quality_status=holdings.data_quality_status,
+                reconciliation_status=holdings.reconciliation_status,
                 reasons=reasons,
             ),
             latest_evidence_timestamp=holdings.latest_evidence_timestamp,
             snapshot_id=holdings.snapshot_id,
             policy_version=holdings.policy_version,
             content_hash=content_hash,
-            freshness_status=_freshness_status(holdings.data_quality_status),
+            freshness_status=_freshness_status(
+                data_quality_status=holdings.data_quality_status,
+                reconciliation_status=holdings.reconciliation_status,
+            ),
             source_refs=[
                 "lotus-core://source/PortfolioMaturitySummary/"
                 f"{portfolio_id}/{window_start_date.isoformat()}/{window_end_date.isoformat()}"
@@ -146,7 +194,20 @@ def portfolio_maturity_summary_response(
                 "source_product": "PortfolioMaturitySummary",
                 "upstream_product": holdings.product_name,
                 "upstream_content_hash": holdings.content_hash,
+                "input_content_hash": calculation_lineage.input_content_hash,
+                "calculation_content_hash": calculation_lineage.calculation_content_hash,
+                "output_content_hash": calculation_lineage.output_content_hash,
+                "algorithm_id": calculation_lineage.algorithm_id,
+                "algorithm_version": str(calculation_lineage.algorithm_version),
             },
+            source_evidence_current=(
+                holdings.reconciliation_status == COMPLETE
+                and _freshness_status(
+                    data_quality_status=holdings.data_quality_status,
+                    reconciliation_status=holdings.reconciliation_status,
+                )
+                == FRESHNESS_CURRENT
+            ),
             use_content_hash_as_source_batch_fingerprint=True,
         ),
     )
@@ -178,11 +239,12 @@ def _position_has_live_quantity(position: Position) -> bool:
         return False
 
 
-def _freshness_status(data_quality_status: str) -> str:
+def _freshness_status(*, data_quality_status: str, reconciliation_status: str) -> str:
     normalized = _normalized_quality(data_quality_status)
-    if normalized == STALE:
+    normalized_reconciliation = _normalized_quality(reconciliation_status)
+    if normalized == STALE or normalized_reconciliation == STALE:
         return FRESHNESS_STALE
-    if normalized in {COMPLETE, PARTIAL}:
+    if normalized in {COMPLETE, PARTIAL} and normalized_reconciliation == COMPLETE:
         return FRESHNESS_CURRENT
     return FRESHNESS_UNKNOWN
 
@@ -190,23 +252,28 @@ def _freshness_status(data_quality_status: str) -> str:
 def _summary_data_quality_status(
     *,
     holdings_data_quality_status: str,
+    reconciliation_status: str,
     reasons: list[str],
 ) -> str:
     normalized = _normalized_quality(holdings_data_quality_status)
-    if normalized == STALE:
+    normalized_reconciliation = _normalized_quality(reconciliation_status)
+    if normalized == STALE or normalized_reconciliation == STALE:
         return STALE
-    if normalized == UNKNOWN:
+    if normalized == UNKNOWN or normalized_reconciliation in {UNKNOWN, UNRECONCILED}:
         return UNKNOWN
     if reasons:
         return PARTIAL
     return COMPLETE
 
 
-def _supportability_status(*, data_quality_status: str, reasons: list[str]) -> str:
+def _supportability_status(
+    *, data_quality_status: str, reconciliation_status: str, reasons: list[str]
+) -> str:
     normalized = _normalized_quality(data_quality_status)
-    if normalized == UNKNOWN:
+    normalized_reconciliation = _normalized_quality(reconciliation_status)
+    if normalized == UNKNOWN or normalized_reconciliation in {UNKNOWN, UNRECONCILED, BLOCKED}:
         return UNAVAILABLE
-    if normalized == STALE:
+    if normalized == STALE or normalized_reconciliation == STALE:
         return STALE_SUPPORT
     if reasons:
         return PARTIAL_SUPPORT
@@ -216,6 +283,7 @@ def _supportability_status(*, data_quality_status: str, reasons: list[str]) -> s
 def _supportability_reasons(
     *,
     data_quality_status: str,
+    reconciliation_status: str,
     missing_maturity_count: int,
     unsupported_feature_count: int,
 ) -> list[str]:
@@ -227,6 +295,16 @@ def _supportability_reasons(
         reasons.append(HOLDINGS_STALE)
     elif normalized == PARTIAL:
         reasons.append(HOLDINGS_PARTIAL)
+    normalized_reconciliation = _normalized_quality(reconciliation_status)
+    reconciliation_reason = {
+        BLOCKED: RECONCILIATION_BLOCKED,
+        PARTIAL: RECONCILIATION_PARTIAL,
+        STALE: RECONCILIATION_STALE,
+        UNKNOWN: RECONCILIATION_UNKNOWN,
+        UNRECONCILED: RECONCILIATION_MISSING,
+    }.get(normalized_reconciliation)
+    if reconciliation_reason:
+        reasons.append(reconciliation_reason)
     if missing_maturity_count:
         reasons.append(MISSING_INSTRUMENT_MATURITY_DATE)
     if unsupported_feature_count:
@@ -236,28 +314,3 @@ def _supportability_reasons(
 
 def _normalized_quality(data_quality_status: str) -> str:
     return (data_quality_status or UNKNOWN).strip().upper()
-
-
-def _maturity_summary_fingerprint(
-    *,
-    holdings: PortfolioPositionsResponse,
-    response_values: dict[str, object],
-) -> str:
-    payload = {
-        "product_name": "PortfolioMaturitySummary",
-        "product_version": "v1",
-        "source_product_name": holdings.product_name,
-        "source_product_version": holdings.product_version,
-        "as_of_date": holdings.as_of_date.isoformat(),
-        "latest_evidence_timestamp": (
-            holdings.latest_evidence_timestamp.isoformat()
-            if holdings.latest_evidence_timestamp
-            else None
-        ),
-        **{
-            key: value.isoformat() if isinstance(value, date) else value
-            for key, value in response_values.items()
-        },
-    }
-    digest = hashlib.sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()[:16]
-    return f"maturity_summary:{digest}"

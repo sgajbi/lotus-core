@@ -107,10 +107,13 @@ class PositionService:
         as_of_date: Optional[date] = None,
         horizon_days: int = 90,
         include_projected: bool = False,
+        tenant_id: str | None = None,
     ) -> PortfolioMaturitySummaryResponse:
         """
         Retrieves the Core-owned maturity summary for a portfolio holdings window.
         """
+        if include_projected:
+            raise ValueError("PortfolioMaturitySummary requires include_projected=false")
         logger.info(
             "Portfolio maturity summary query requested.",
             extra=operation_log_extra(
@@ -134,4 +137,5 @@ class PositionService:
             holdings=holdings,
             horizon_days=horizon_days,
             include_projected=include_projected,
+            tenant_id=tenant_id,
         )
