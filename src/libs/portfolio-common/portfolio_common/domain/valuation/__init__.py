@@ -12,6 +12,16 @@ from .assignments import (
     revaluation_start_for_assignment_correction,
     validate_no_overlapping_active_assignments,
 )
+from .day_count import (
+    BusinessDayCalendar,
+    DayCountConvention,
+    DayCountConventionDefinition,
+    DayCountInputs,
+    UnsupportedDayCountError,
+    calculate_year_fraction,
+    resolve_day_count_convention,
+    supported_day_count_conventions,
+)
 from .policy_registry import (
     UnknownValuationPolicyError,
     resolve_position_valuation_policy,
@@ -33,6 +43,10 @@ from .position_valuation import (
 
 __all__ = [
     "AccruedIncomeTreatment",
+    "BusinessDayCalendar",
+    "DayCountConvention",
+    "DayCountConventionDefinition",
+    "DayCountInputs",
     "FxConversionPolicy",
     "InstrumentValuationPolicyAssignment",
     "MissingValuationPolicyAssignmentError",
@@ -44,6 +58,7 @@ __all__ = [
     "PrincipalBasis",
     "ResolvedValuationPolicyAssignment",
     "UnsupportedValuationError",
+    "UnsupportedDayCountError",
     "UnknownValuationPolicyError",
     "ValuationInputBasis",
     "ValuationOutputMeasure",
@@ -51,9 +66,12 @@ __all__ = [
     "ValuationPolicyAssignmentError",
     "ValuationPolicyAssignmentStatus",
     "calculate_position_valuation",
+    "calculate_year_fraction",
+    "resolve_day_count_convention",
     "resolve_valuation_policy_assignment",
     "resolve_position_valuation_policy",
     "revaluation_start_for_assignment_correction",
     "supported_position_valuation_policies",
+    "supported_day_count_conventions",
     "validate_no_overlapping_active_assignments",
 ]

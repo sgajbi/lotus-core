@@ -37,6 +37,11 @@ narrow framework-free contract therefore belongs in `portfolio_common.domain.val
   content hashing, complete cache identity, and bounded replay-date derivation for corrections.
 - Conflicting payloads that claim the same source record and assignment version fail closed instead
   of being selected by arrival time or a lexical source revision.
+- Added the first versioned day-count registry slice for FpML/ISDA `ACT/365.FIXED`, `ACT/360`, and
+  `BUS/252`. Fixed-denominator conventions use actual elapsed calendar days. `BUS/252` counts
+  source-owned business dates start-inclusive and end-exclusive and requires a versioned calendar
+  whose validity covers the calculation interval; it never substitutes weekdays or a local holiday
+  guess.
 
 ## Ownership Boundary
 
@@ -57,16 +62,26 @@ deleted rather than retained as a fallback when valuation and reconciliation are
 
 ## Validation
 
-- 34 valuation-domain tests passed, including unit/NAV, clean and dirty percent-of-principal,
+- 42 valuation-domain tests passed, including unit/NAV, clean and dirty percent-of-principal,
   factor-adjusted principal, per-unit/per-contract/whole-position supplied values, futures notional,
   settlement variation, FX direction, exact tenant/book/instrument assignment resolution,
   source-version fencing, overlap/gap rejection, conflicting-version rejection, cache identity, and
   backdated replay-date derivation, registry uniqueness, exact-version lookup, and derivative output
-  separation.
+  separation, leap-day fixed-denominator examples, business-day boundary semantics, calendar
+  coverage, and exact day-count convention/version lookup.
 - Scoped Ruff lint and formatting passed.
 - Strict MyPy passed for all three valuation-domain source modules.
 - The calculation-kernel commit `608751249` is signed; assignment commit evidence will be recorded
   on GitHub issue #788 after commit.
+
+Primary methodology references for the day-count slice are the
+[FpML day-count scheme publication](https://www.fpml.org/specs_news/publication-of-fpml-set-of-coding-schemes-catalog-version-1-121/),
+which maps `BUS/252` to ISDA Calculation/252, the
+[FpML BUS/252 clarification](https://www.fpml.org/ticket/388/), which specifies business days from
+and including the effective date to but excluding the termination date, and the
+[ISDA 2000/2006 definitions comparison](https://www.isda.org/a/smMDE/Blackline-2000-v-2006-ISDA-Definitions.pdf)
+for `ACT/360` and `ACT/365.FIXED`. Actual/Actual and 30/360 families remain explicitly unsupported
+until their separate golden-example slices are implemented.
 
 ## Documentation Decision
 
