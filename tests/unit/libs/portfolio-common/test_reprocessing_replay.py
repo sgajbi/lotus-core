@@ -16,12 +16,18 @@ from portfolio_common.reprocessing_replay import (
 )
 
 
-def _transaction(transaction_id: str, portfolio_id: str = "P1") -> SimpleNamespace:
+def _transaction(
+    transaction_id: str,
+    portfolio_id: str = "P1",
+    *,
+    security_id: str = "S1",
+    linked_transaction_group_id: str | None = None,
+) -> SimpleNamespace:
     return SimpleNamespace(
         transaction_id=transaction_id,
         portfolio_id=portfolio_id,
         instrument_id="I1",
-        security_id="S1",
+        security_id=security_id,
         transaction_date=datetime(2026, 1, 2, 10, 0, 0),
         transaction_type="BUY",
         quantity=Decimal("10"),
@@ -30,6 +36,7 @@ def _transaction(transaction_id: str, portfolio_id: str = "P1") -> SimpleNamespa
         currency="USD",
         trade_currency="USD",
         trade_fee=Decimal("0"),
+        linked_transaction_group_id=linked_transaction_group_id,
     )
 
 
@@ -81,6 +88,29 @@ def test_plan_transaction_replay_omits_blank_correlation_header() -> None:
     )
 
     assert plan.messages[0].headers == [("lotus-transaction-processing-intent", b"repair")]
+
+
+def test_plan_transaction_replay_keeps_linked_multi_security_legs_together() -> None:
+    plan = plan_transaction_replay(
+        transactions=[
+            _transaction(
+                "CA-OUT-1",
+                security_id="SEC-SOURCE",
+                linked_transaction_group_id="CA-GROUP-1",
+            ),
+            _transaction(
+                "CA-IN-1",
+                security_id="SEC-TARGET",
+                linked_transaction_group_id="CA-GROUP-1",
+            ),
+        ],
+        correlation=ReplayCorrelationMetadata(correlation_id="corr-001"),
+    )
+
+    assert [message.key for message in plan.messages] == [
+        "P1|transaction-group|CA-GROUP-1",
+        "P1|transaction-group|CA-GROUP-1",
+    ]
 
 
 def test_publish_transaction_replay_plan_reports_partial_failure_without_kafka() -> None:

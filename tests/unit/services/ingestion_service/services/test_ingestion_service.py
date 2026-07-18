@@ -125,6 +125,72 @@ async def test_publish_transactions_normalizes_partition_key(
     assert call_args["key"] == "P1|S1"
 
 
+async def test_publish_transactions_keeps_linked_multi_security_legs_together(
+    ingestion_service: IngestionService,
+    mock_kafka_producer: MagicMock,
+) -> None:
+    common = {
+        "portfolio_id": "P1",
+        "transaction_date": datetime.now(),
+        "quantity": Decimal("1"),
+        "price": Decimal("1"),
+        "gross_transaction_amount": Decimal("1"),
+        "trade_currency": "USD",
+        "currency": "USD",
+        "economic_event_id": "CA-EVENT-1",
+        "linked_transaction_group_id": "CA-GROUP-1",
+        "parent_event_reference": "CA-PARENT-1",
+    }
+    source = Transaction(
+        transaction_id="CA-OUT-1",
+        instrument_id="I-SOURCE",
+        security_id="S-SOURCE",
+        transaction_type="EXCHANGE_OUT",
+        **common,
+    )
+    target = Transaction(
+        transaction_id="CA-IN-1",
+        instrument_id="I-TARGET",
+        security_id="S-TARGET",
+        transaction_type="EXCHANGE_IN",
+        dependency_reference_ids=["CA-OUT-1"],
+        **common,
+    )
+
+    await ingestion_service.publish_transactions([source, target])
+
+    assert [call.kwargs["key"] for call in mock_kafka_producer.publish_message.call_args_list] == [
+        "P1|transaction-group|CA-GROUP-1",
+        "P1|transaction-group|CA-GROUP-1",
+    ]
+
+
+async def test_publish_single_linked_transaction_uses_group_partition(
+    ingestion_service: IngestionService,
+    mock_kafka_producer: MagicMock,
+) -> None:
+    transaction = Transaction(
+        transaction_id="CA-OUT-1",
+        portfolio_id="P1",
+        instrument_id="I-SOURCE",
+        security_id="S-SOURCE",
+        transaction_date=datetime.now(),
+        transaction_type="DEMERGER_OUT",
+        quantity=Decimal("1"),
+        price=Decimal("1"),
+        gross_transaction_amount=Decimal("1"),
+        trade_currency="USD",
+        currency="USD",
+        linked_transaction_group_id="CA-GROUP-1",
+    )
+
+    await ingestion_service.publish_transaction(transaction)
+
+    assert mock_kafka_producer.publish_message.call_args.kwargs["key"] == (
+        "P1|transaction-group|CA-GROUP-1"
+    )
+
+
 async def test_publish_transactions_rejects_empty_partition_key(
     ingestion_service: IngestionService, mock_kafka_producer: MagicMock
 ):

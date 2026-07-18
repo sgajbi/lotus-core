@@ -8,7 +8,9 @@ from .partitioning import (
     original_message_partition_key,
     portfolio_partition_key,
     portfolio_security_partition_key,
+    portfolio_transaction_group_partition_key,
     security_partition_key,
+    transaction_partition_key,
 )
 
 __all__ = [
@@ -19,5 +21,7 @@ __all__ = [
     "original_message_partition_key",
     "portfolio_partition_key",
     "portfolio_security_partition_key",
+    "portfolio_transaction_group_partition_key",
     "security_partition_key",
+    "transaction_partition_key",
 ]
