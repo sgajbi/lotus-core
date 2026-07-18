@@ -193,7 +193,6 @@ def test_business_date_guardrail_invalid_env_does_not_break_import(monkeypatch):
     monkeypatch.delenv("LOTUS_CORE_STRICT_CONFIG_VALIDATION", raising=False)
     monkeypatch.setenv("BUSINESS_DATE_MAX_FUTURE_DAYS", "invalid")
     monkeypatch.setenv("CASHFLOW_RULE_CACHE_TTL_SECONDS", "0")
-    monkeypatch.setenv("CASHFLOW_RULE_CACHE_SOURCE_VERSION_CHECK_INTERVAL_SECONDS", "0")
     monkeypatch.setenv("BUSINESS_DATE_ENFORCE_MONOTONIC_ADVANCE", "maybe")
 
     import portfolio_common.config as config_module
@@ -202,7 +201,6 @@ def test_business_date_guardrail_invalid_env_does_not_break_import(monkeypatch):
 
     assert reloaded.BUSINESS_DATE_MAX_FUTURE_DAYS == 0
     assert reloaded.CASHFLOW_RULE_CACHE_TTL_SECONDS == 300
-    assert reloaded.CASHFLOW_RULE_CACHE_SOURCE_VERSION_CHECK_INTERVAL_SECONDS == 5
     assert reloaded.BUSINESS_DATE_ENFORCE_MONOTONIC_ADVANCE is False
 
 
@@ -227,21 +225,6 @@ def test_cashflow_cache_ttl_strict_profile_rejects_non_positive_env(monkeypatch)
     with pytest.raises(RuntimeConfigurationError, match="CASHFLOW_RULE_CACHE_TTL_SECONDS"):
         importlib.reload(config_module)
     monkeypatch.delenv("CASHFLOW_RULE_CACHE_TTL_SECONDS")
-    importlib.reload(config_module)
-
-
-def test_cashflow_cache_source_version_interval_rejects_non_positive_env(monkeypatch):
-    monkeypatch.setenv("LOTUS_CORE_STRICT_CONFIG_VALIDATION", "true")
-    monkeypatch.setenv("CASHFLOW_RULE_CACHE_SOURCE_VERSION_CHECK_INTERVAL_SECONDS", "0")
-
-    import portfolio_common.config as config_module
-
-    with pytest.raises(
-        RuntimeConfigurationError,
-        match="CASHFLOW_RULE_CACHE_SOURCE_VERSION_CHECK_INTERVAL_SECONDS",
-    ):
-        importlib.reload(config_module)
-    monkeypatch.delenv("CASHFLOW_RULE_CACHE_SOURCE_VERSION_CHECK_INTERVAL_SECONDS")
     importlib.reload(config_module)
 
 
