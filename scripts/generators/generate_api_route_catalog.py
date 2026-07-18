@@ -7,7 +7,7 @@ import json
 import os
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 os.environ.setdefault("LOTUS_TOOLING_QUIET", "1")
@@ -38,7 +38,7 @@ FAMILY_DOWNSTREAM_CONSUMERS = {
 
 
 def load_json(path: Path) -> dict[str, Any]:
-    return json.loads(path.read_text(encoding="utf-8"))
+    return cast(dict[str, Any], json.loads(path.read_text(encoding="utf-8")))
 
 
 def route_family_index(registry: dict[str, Any]) -> dict[str, str]:
@@ -126,7 +126,7 @@ def _operation_catalog_entry(
         "filtering": _parameter_semantics(operation, "filtering"),
         "sorting": _parameter_semantics(operation, "sorting"),
         "idempotency_behavior": _idempotency_behavior(operation, method, route_family),
-        "downstream_consumers": FAMILY_DOWNSTREAM_CONSUMERS.get(route_family, []),
+        "downstream_consumers": _downstream_consumers(operation, route_family),
         "deprecated_alias_metadata": {
             "is_deprecated": bool(operation.get("deprecated")),
             "sunset": operation.get("x-sunset-date"),
@@ -176,6 +176,15 @@ def _audit_requirement(route_family: str, method: str) -> str:
     if method in {"POST", "PUT", "PATCH", "DELETE"}:
         return "mutation-audit-required"
     return "read-audit-where-policy-requires"
+
+
+def _downstream_consumers(operation: dict[str, Any], route_family: str) -> list[str]:
+    source_product = operation.get("x-lotus-source-data-product")
+    if isinstance(source_product, dict):
+        consumers = source_product.get("consumers")
+        if isinstance(consumers, list) and all(isinstance(value, str) for value in consumers):
+            return list(consumers)
+    return list(FAMILY_DOWNSTREAM_CONSUMERS.get(route_family, []))
 
 
 def _request_schema(operation: dict[str, Any]) -> str | None:
@@ -248,6 +257,7 @@ def _parameter_semantics(operation: dict[str, Any], semantic: str) -> list[str]:
         for parameter in operation.get("parameters", [])
         if isinstance(parameter, dict) and isinstance(parameter.get("name"), str)
     ]
+    terms: tuple[str, ...]
     if semantic == "pagination":
         terms = ("cursor", "limit", "page", "offset")
     elif semantic == "filtering":
@@ -278,7 +288,7 @@ def _idempotency_behavior(operation: dict[str, Any], method: str, route_family: 
 def load_current_openapi() -> dict[str, dict[str, Any]]:
     from scripts.quality.openapi_quality_gate import service_schemas
 
-    return service_schemas()
+    return cast(dict[str, dict[str, Any]], service_schemas())
 
 
 def validate_catalog(payload: dict[str, Any], generated: dict[str, Any]) -> list[str]:
