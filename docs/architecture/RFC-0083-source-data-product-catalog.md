@@ -457,9 +457,11 @@ input, calculation, and output SHA-256 lineage. The input hash binds portfolio, 
 mode, restatement version, normalized request, selected position/instrument facts, exact
 reconciliation scopes and controls, governance policy, valuation context, and simulation session
 version. The calculation hash binds `PORTFOLIO_STATE_SNAPSHOT`, algorithm version `1`, 28-digit
-Decimal precision, and the input hash. The output hash binds returned sections plus reconciliation,
-quality, and current-evidence posture. Generation time and correlation identifiers remain
-operational evidence and do not change snapshot identity.
+Decimal precision, and the input hash. Snapshot totals, weights, deltas, quantity changes, baseline
+projection scaling, and price/FX valuation enforce that precision in local Decimal contexts rather
+than inheriting ambient process settings. The output hash binds returned sections plus
+reconciliation, quality, and current-evidence posture. Generation time and correlation identifiers
+remain operational evidence and do not change snapshot identity.
 
 Snapshot-backed and historical-fallback baselines both publish the latest timestamp across selected
 source rows and reconciliation controls when available. Current snapshot-backed baselines with a

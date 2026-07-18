@@ -25,6 +25,9 @@ selected source facts, snapshot policy, and returned sections.
 - Added the `PORTFOLIO_STATE_SNAPSHOT` three-layer lineage receipt. Inputs bind portfolio, tenant,
   as-of date, mode, restatement version, request, source/control evidence, governance, valuation,
   and simulation version; the output binds returned sections and trust posture.
+- Enforced the declared 28-digit local Decimal context across totals, weights, deltas, projected
+  quantity and baseline-value scaling, and price/FX valuation; ambient 6- and 50-digit caller
+  contexts now produce identical results.
 - Populated a deterministic `portfolio_state_snapshot:<output-hash>` identity and fail-closed
   reconciliation/currentness metadata. Historical fallback retains partial data quality while using
   available source/control timestamps; empty sources remain unknown and unreconciled.
@@ -43,15 +46,19 @@ code is limited to framework-independent calculation hashing and holdings reconc
 
 ## Validation
 
-- Core snapshot application suite: `90 passed`.
+- Exact-HEAD QCP unit suite: `944 passed`; focused snapshot application suite: `93 passed`.
 - Focused source adapter/scope proof: `6 passed` before response integration; combined focused proof
   reached `41 passed`.
-- QCP router and application integration suite: `172` tests exercised, with the one stale mock
-  updated; the focused route serialization proof passed afterward.
+- QCP router and application integration suite: `172 passed`.
+- Isolated PostgreSQL adapter proof passed in `74.82s` using uniquely reserved Compose project
+  `lotus-integration-db-556bb532`; the project was removed and the pre-existing Core runtime stayed
+  running.
+- A 10,000-position large-book measurement completed source hashing in `0.649054s` and exact-scope
+  coalescing in `0.026176s` with one control scope.
 - Source-data product guard and its `18` unit tests passed.
 - OpenAPI quality gate passed.
-- Scoped MyPy passed for the QCP service, reconciliation helper, and response contract.
-- Scoped Ruff lint/format and diff checks passed.
+- Full MyPy passed across `237` source files.
+- Full Ruff lint/format passed across `2,058` files; the full lint guard chain passed.
 
 PR CI, exact-main validation, wiki publication, downstream consumer revalidation, and verified issue
 closure remain post-local gates.
