@@ -5,9 +5,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
-from typing import Any
+from typing import Any, cast
 
+from portfolio_common.domain.calculation_lineage import build_calculation_lineage
 from portfolio_common.domain.currency import normalize_currency_code
+from portfolio_common.reconciliation_quality import COMPLETE, PARTIAL, STALE
+from portfolio_common.reconstruction_identity import CURRENT_RESTATEMENT_VERSION
 from portfolio_common.runtime_providers import Clock
 from portfolio_common.source_data_product_metadata import (
     source_data_product_runtime_metadata,
@@ -57,6 +60,12 @@ from .instrument_enrichment_reader import CoreSnapshotInstrumentEnrichmentReader
 from .market_data import get_fx_rate_or_raise
 from .projected_valuation import CoreSnapshotProjectedPositionResolver
 from .quality import snapshot_data_quality_status
+from .reconciliation import (
+    CoreSnapshotReconciliationEvidence,
+    core_snapshot_reconciliation_evidence,
+    core_snapshot_reconciliation_scopes,
+    core_snapshot_source_content_hash,
+)
 from .sections import build_core_snapshot_sections
 from .simulation_validation import CoreSnapshotSimulationSessionValidator
 
@@ -82,10 +91,23 @@ class _BaselinePositionRows:
 
 
 @dataclass(frozen=True)
+class _CoreSnapshotBaseline:
+    positions: dict[str, dict[str, Any]]
+    freshness: CoreSnapshotFreshnessMetadata
+    reconciliation: CoreSnapshotReconciliationEvidence
+    source_content_hash: str
+
+
+@dataclass(frozen=True)
 class CoreSnapshotDependencies:
     source_reader: CoreSnapshotSourceReader
     simulation_store: SimulationStore
     clock: Clock
+
+
+CORE_SNAPSHOT_ALGORITHM_ID = "PORTFOLIO_STATE_SNAPSHOT"
+CORE_SNAPSHOT_ALGORITHM_VERSION = 1
+CORE_SNAPSHOT_INTERMEDIATE_PRECISION = 28
 
 
 class CoreSnapshotService:
@@ -123,7 +145,7 @@ class CoreSnapshotService:
             as_of_date=request.as_of_date,
         )
 
-        baseline_positions, freshness_meta = await self._resolve_baseline_positions(
+        baseline = await self._resolve_baseline_positions(
             portfolio_id=portfolio_id,
             as_of_date=request.as_of_date,
             reporting_fx=currency_context.reporting_fx,
@@ -131,18 +153,18 @@ class CoreSnapshotService:
             include_zero=request.options.include_zero_quantity_positions,
         )
 
-        baseline_total = total_market_value_baseline(baseline_positions)
+        baseline_total = total_market_value_baseline(baseline.positions)
         projection = await self._snapshot_projection(
             portfolio_id=portfolio_id,
             request=request,
             portfolio_currency=currency_context.portfolio_currency,
             reporting_fx=currency_context.reporting_fx,
-            baseline_positions=baseline_positions,
+            baseline_positions=baseline.positions,
         )
         projected_positions = projection.positions
         sections_payload = build_core_snapshot_sections(
             requested_sections=request.sections,
-            baseline_positions=baseline_positions,
+            baseline_positions=baseline.positions,
             projected_positions=projected_positions,
             baseline_total=baseline_total,
             projected_total=projection.total_market_value,
@@ -155,11 +177,10 @@ class CoreSnapshotService:
             portfolio_id=portfolio_id,
             request=request,
             currency_context=currency_context,
-            freshness=freshness_meta,
+            baseline=baseline,
             governance=governance_resolution,
             simulation_metadata=projection.simulation_metadata,
             sections=sections_payload,
-            baseline_count=len(baseline_positions),
         )
 
     async def _snapshot_currency_context(
@@ -237,17 +258,62 @@ class CoreSnapshotService:
         portfolio_id: str,
         request: CoreSnapshotRequest,
         currency_context: _CoreSnapshotCurrencyContext,
-        freshness: CoreSnapshotFreshnessMetadata,
+        baseline: _CoreSnapshotBaseline,
         governance: CoreSnapshotGovernanceResolution,
         simulation_metadata: CoreSnapshotSimulationMetadata | None,
         sections: CoreSnapshotSections,
-        baseline_count: int,
     ) -> CoreSnapshotResponse:
         generated_at = self._clock.utc_now()
         request_fingerprint_value = core_snapshot_request_fingerprint(
             portfolio_id=portfolio_id,
             request=request,
             governance=governance,
+        )
+        data_quality_status = snapshot_data_quality_status(
+            freshness=baseline.freshness,
+            baseline_count=len(baseline.positions),
+        )
+        source_evidence_current = (
+            baseline.reconciliation.status == COMPLETE
+            and data_quality_status in {COMPLETE, PARTIAL}
+            and baseline.reconciliation.latest_evidence_timestamp is not None
+        )
+        calculation_lineage = build_calculation_lineage(
+            algorithm_id=CORE_SNAPSHOT_ALGORITHM_ID,
+            algorithm_version=CORE_SNAPSHOT_ALGORITHM_VERSION,
+            intermediate_precision=CORE_SNAPSHOT_INTERMEDIATE_PRECISION,
+            input_payload={
+                "portfolio_id": portfolio_id,
+                "tenant_id": governance.tenant_id,
+                "as_of_date": request.as_of_date,
+                "snapshot_mode": request.snapshot_mode,
+                "restatement_version": CURRENT_RESTATEMENT_VERSION,
+                "request_fingerprint": request_fingerprint_value,
+                "source_content_hash": baseline.source_content_hash,
+                "reconciliation_scope_content_hash": (baseline.reconciliation.scope_content_hash),
+                "reconciliation_control_content_hash": (
+                    baseline.reconciliation.control_content_hash
+                ),
+                "freshness": baseline.freshness.model_dump(mode="python"),
+                "governance_policy": governance.policy_provenance.model_dump(mode="python"),
+                "valuation_context": {
+                    "portfolio_currency": currency_context.portfolio_currency,
+                    "reporting_currency": currency_context.reporting_currency,
+                    "position_basis": request.options.position_basis,
+                    "weight_basis": request.options.weight_basis,
+                },
+                "simulation": (
+                    simulation_metadata.model_dump(mode="python")
+                    if simulation_metadata is not None
+                    else None
+                ),
+            },
+            output_payload={
+                "sections": sections.model_dump(mode="python"),
+                "reconciliation_status": baseline.reconciliation.status,
+                "data_quality_status": data_quality_status,
+                "source_evidence_current": source_evidence_current,
+            },
         )
         content_hash = stable_content_hash(
             {
@@ -256,8 +322,10 @@ class CoreSnapshotService:
                 "portfolio_id": portfolio_id,
                 "as_of_date": request.as_of_date,
                 "snapshot_mode": request.snapshot_mode.value,
+                "restatement_version": CURRENT_RESTATEMENT_VERSION,
                 "request_fingerprint": request_fingerprint_value,
-                "freshness": freshness.model_dump(mode="json"),
+                "source_content_hash": baseline.source_content_hash,
+                "freshness": baseline.freshness.model_dump(mode="json"),
                 "governance": {
                     "consumer_system": governance.consumer_system,
                     "tenant_id": governance.tenant_id,
@@ -281,6 +349,12 @@ class CoreSnapshotService:
                     else None
                 ),
                 "sections": sections.model_dump(mode="json"),
+                "reconciliation_status": baseline.reconciliation.status,
+                "reconciliation_scope_content_hash": (baseline.reconciliation.scope_content_hash),
+                "reconciliation_control_content_hash": (
+                    baseline.reconciliation.control_content_hash
+                ),
+                "calculation_lineage": calculation_lineage.lineage_payload(),
             }
         )
         source_ref = (
@@ -292,7 +366,7 @@ class CoreSnapshotService:
             snapshot_mode=request.snapshot_mode,
             contract_version="rfc_081_v1",
             request_fingerprint=request_fingerprint_value,
-            freshness=freshness,
+            freshness=baseline.freshness,
             governance=CoreSnapshotGovernanceMetadata(
                 consumer_system=governance.consumer_system,
                 tenant_id=governance.tenant_id,
@@ -309,16 +383,18 @@ class CoreSnapshotService:
                 weight_basis=request.options.weight_basis,
             ),
             simulation=simulation_metadata,
+            calculation_lineage=calculation_lineage.lineage_payload(),
             sections=sections,
             **source_data_product_runtime_metadata(
                 as_of_date=request.as_of_date,
                 generated_at=generated_at,
                 tenant_id=governance.tenant_id,
-                data_quality_status=snapshot_data_quality_status(
-                    freshness=freshness,
-                    baseline_count=baseline_count,
+                reconciliation_status=baseline.reconciliation.status,
+                data_quality_status=data_quality_status,
+                latest_evidence_timestamp=(baseline.reconciliation.latest_evidence_timestamp),
+                snapshot_id=(
+                    f"portfolio_state_snapshot:{calculation_lineage.output_content_hash[:24]}"
                 ),
-                latest_evidence_timestamp=freshness.snapshot_timestamp,
                 policy_version=governance.policy_provenance.policy_version,
                 content_hash=content_hash,
                 source_refs=[source_ref],
@@ -326,7 +402,27 @@ class CoreSnapshotService:
                     "source_owner": "lotus-core",
                     "source_product": "PortfolioStateSnapshot",
                     "request_fingerprint": request_fingerprint_value,
+                    "source_content_hash": baseline.source_content_hash,
+                    "reconciliation_scope_content_hash": (
+                        baseline.reconciliation.scope_content_hash
+                    ),
+                    "reconciliation_control_content_hash": (
+                        baseline.reconciliation.control_content_hash
+                    ),
+                    "input_content_hash": calculation_lineage.input_content_hash,
+                    "calculation_content_hash": calculation_lineage.calculation_content_hash,
+                    "output_content_hash": calculation_lineage.output_content_hash,
+                    "algorithm_id": calculation_lineage.algorithm_id,
+                    "algorithm_version": str(calculation_lineage.algorithm_version),
                 },
+                source_evidence_current=source_evidence_current,
+                freshness_status=(
+                    "CURRENT"
+                    if source_evidence_current
+                    else "STALE"
+                    if baseline.reconciliation.status == STALE
+                    else "UNAVAILABLE"
+                ),
                 use_content_hash_as_source_batch_fingerprint=True,
             ),
         )
@@ -338,7 +434,7 @@ class CoreSnapshotService:
         reporting_fx: Decimal,
         include_cash: bool,
         include_zero: bool,
-    ) -> tuple[dict[str, dict[str, Any]], CoreSnapshotFreshnessMetadata]:
+    ) -> _CoreSnapshotBaseline:
         baseline_rows = await self._baseline_position_rows(
             portfolio_id=portfolio_id,
             as_of_date=as_of_date,
@@ -352,10 +448,23 @@ class CoreSnapshotService:
         )
         total_base = total_market_value_baseline(baseline)
         assign_baseline_weights(baseline, total_base)
-        return baseline, baseline_freshness_metadata(
-            rows=baseline_rows.rows,
-            use_snapshot=baseline_rows.use_snapshot,
-            has_baseline=bool(baseline),
+        scopes = core_snapshot_reconciliation_scopes(baseline_rows.rows)
+        controls = await self._source_reader.get_financial_reconciliation_controls(
+            portfolio_id=portfolio_id,
+            scopes=scopes.items,
+        )
+        return _CoreSnapshotBaseline(
+            positions=baseline,
+            freshness=baseline_freshness_metadata(
+                rows=baseline_rows.rows,
+                use_snapshot=baseline_rows.use_snapshot,
+                has_baseline=bool(baseline),
+            ),
+            reconciliation=core_snapshot_reconciliation_evidence(
+                scopes=scopes,
+                controls=controls,
+            ),
+            source_content_hash=core_snapshot_source_content_hash(baseline_rows.rows),
         )
 
     async def _baseline_position_rows(
@@ -379,4 +488,7 @@ class CoreSnapshotService:
     async def get_instrument_enrichment_bulk(
         self, security_ids: list[str]
     ) -> list[InstrumentEnrichmentRecord]:
-        return await self.instrument_enrichment_reader.get_instrument_enrichment_bulk(security_ids)
+        return cast(
+            list[InstrumentEnrichmentRecord],
+            await self.instrument_enrichment_reader.get_instrument_enrichment_bulk(security_ids),
+        )
