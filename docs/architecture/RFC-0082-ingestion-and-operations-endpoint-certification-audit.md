@@ -667,8 +667,9 @@ The route uses the correct single-record ingestion architecture:
 2. it enforces ingestion operating mode before publishing;
 3. it enforces write-rate protection with `record_count=1`;
 4. it propagates `X-Idempotency-Key` into Kafka publish headers for lineage;
-5. it publishes to `transactions.raw.received` using `portfolio_id|security_id` as the partition
-   key;
+5. it publishes to `transactions.raw.received` using the shared transaction partition policy:
+   `portfolio_id|transaction-group|linked_transaction_group_id` for linked groups, otherwise
+   `portfolio_id|security_id`;
 6. it reports publish failures as HTTP `500` with `INGESTION_PUBLISH_FAILED` and the failed
    transaction id.
 

@@ -24,6 +24,7 @@
     "governed_outbox_event": {
       "producer_evidence": [
         "tests/unit/libs/portfolio-common/test_outbox_repository.py",
+        "tests/unit/libs/portfolio-common/domain/eventing/test_partitioning.py",
         "tests/unit/scripts/test_event_runtime_contract_guard.py",
         "make event-runtime-contract-guard"
       ],
@@ -43,6 +44,7 @@
     "direct_kafka_topic": {
       "producer_evidence": [
         "tests/unit/libs/portfolio-common/test_event_publisher.py",
+        "tests/unit/libs/portfolio-common/domain/eventing/test_partitioning.py",
         "tests/unit/boundary_mapping/test_transaction_and_source_data_conformance.py",
         "tests/unit/scripts/test_event_runtime_contract_guard.py"
       ],
@@ -83,7 +85,7 @@
     {"event_type": "TransactionIngested", "topic": "transaction.ingested", "schema_model": "TransactionEvent", "evidence_profile": "governed_outbox_event", "partition_key_policy": "aggregate_id from transaction or portfolio id"},
     {"event_type": "MarketPricePersisted", "topic": "market_prices.persisted", "schema_model": "MarketPricePersistedEvent", "evidence_profile": "governed_outbox_event", "partition_key_policy": "security_id"},
     {"event_type": "FxRatePersisted", "topic": "fx_rates.persisted", "schema_model": "FxRatePersistedEvent", "evidence_profile": "fx_rate_persisted_event", "partition_key_policy": "from_currency|to_currency"},
-    {"event_type": "RawTransactionPersisted", "topic": "transactions.persisted", "schema_model": "TransactionEvent", "evidence_profile": "governed_outbox_event", "partition_key_policy": "portfolio_id|security_id"},
+    {"event_type": "RawTransactionPersisted", "topic": "transactions.persisted", "schema_model": "TransactionEvent", "evidence_profile": "governed_outbox_event", "partition_key_policy": "portfolio_id|transaction-group|linked_transaction_group_id when linked; otherwise portfolio_id|security_id"},
     {"event_type": "ProcessedTransactionPersisted", "topic": "transactions.cost.processed", "schema_model": "TransactionEvent", "evidence_profile": "governed_outbox_event", "partition_key_policy": "portfolio_id"},
     {"event_type": "InstrumentUpserted", "topic": "instruments.received", "schema_model": "InstrumentEvent", "evidence_profile": "governed_outbox_event", "partition_key_policy": "security_id"},
     {"event_type": "DailyPositionSnapshotPersisted", "topic": "valuation.snapshot.persisted", "schema_model": "DailyPositionSnapshotPersistedEvent", "evidence_profile": "governed_outbox_event", "partition_key_policy": "portfolio_id|security_id"},
@@ -99,13 +101,13 @@
   ],
   "direct_kafka_topics": [
     {"name": "RawPortfolioReceived", "topic": "portfolios.raw.received", "payload_contract": "PortfolioEvent", "evidence_profile": "direct_kafka_topic", "partition_key_policy": "portfolio_id"},
-    {"name": "RawTransactionReceived", "topic": "transactions.raw.received", "payload_contract": "TransactionEvent", "evidence_profile": "direct_kafka_topic", "partition_key_policy": "portfolio_id|security_id"},
+    {"name": "RawTransactionReceived", "topic": "transactions.raw.received", "payload_contract": "TransactionEvent", "evidence_profile": "direct_kafka_topic", "partition_key_policy": "portfolio_id|transaction-group|linked_transaction_group_id when linked; otherwise portfolio_id|security_id"},
     {"name": "InstrumentReceived", "topic": "instruments.received", "payload_contract": "InstrumentEvent", "evidence_profile": "direct_kafka_topic", "partition_key_policy": "security_id"},
     {"name": "RawMarketPriceReceived", "topic": "market_prices.raw.received", "payload_contract": "MarketPriceEvent", "evidence_profile": "direct_kafka_topic", "partition_key_policy": "security_id"},
     {"name": "RawFxRateReceived", "topic": "fx_rates.raw.received", "payload_contract": "FxRateEvent", "evidence_profile": "direct_kafka_topic", "partition_key_policy": "from_currency|to_currency"},
     {"name": "RawBusinessDateReceived", "topic": "business_dates.raw.received", "payload_contract": "BusinessDateEvent", "evidence_profile": "direct_kafka_topic", "partition_key_policy": "calendar_code"},
     {"name": "TransactionReprocessingRequested", "topic": "transactions.reprocessing.requested", "payload_contract": "transaction_reprocessing_command", "evidence_profile": "direct_kafka_topic", "partition_key_policy": "portfolio_id"},
-    {"name": "TransactionReprocessingPersistedReplay", "topic": "transactions.persisted", "payload_contract": "TransactionEvent", "evidence_profile": "direct_kafka_topic", "partition_key_policy": "portfolio_id|security_id"},
+    {"name": "TransactionReprocessingPersistedReplay", "topic": "transactions.persisted", "payload_contract": "TransactionEvent", "evidence_profile": "direct_kafka_topic", "partition_key_policy": "portfolio_id|transaction-group|linked_transaction_group_id when linked; otherwise portfolio_id|security_id"},
     {"name": "ValuationJobRequested", "topic": "valuation.job.requested", "payload_contract": "valuation_job_command", "evidence_profile": "direct_kafka_topic", "partition_key_policy": "portfolio_id|security_id"},
     {"name": "PersistenceServiceDlq", "topic": "dlq.persistence_service", "payload_contract": "base_consumer_dlq_payload", "evidence_profile": "direct_kafka_topic", "partition_key_policy": "original_message_key_or_NoKey"},
     {"name": "ValuationServiceDlq", "topic": "dlq.valuation_service", "payload_contract": "base_consumer_dlq_payload", "evidence_profile": "direct_kafka_topic", "partition_key_policy": "original_message_key_or_NoKey"}

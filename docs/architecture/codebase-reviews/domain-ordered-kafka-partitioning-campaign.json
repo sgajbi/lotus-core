@@ -48,11 +48,11 @@
       "tranche_id": "tranche-2-throughput-and-certification",
       "branch": "feat/domain-ordered-kafka-partitioning",
       "base_sha": "b9c55792361557bda56ba498492e962225557dd4",
-      "head_sha": "997d999087fea6165c82e32bd1555ff4894b1161",
+      "head_sha": "dcb1aba71d47ab5d72732921a802135276a21143",
       "post_merge_main_sha": "pending",
       "required_predecessor_main_sha": "b9c55792361557bda56ba498492e962225557dd4",
       "capability_boundary": "Transactional hot-path throughput, twelve-way capacity, valuation-job lock ordering, and exact workload certification",
-      "commit_count": 56,
+      "commit_count": 57,
       "tranche_decision": "Merge the proven throughput, ordering, valuation-concurrency, diagnostics, and CI fix-forward work in PR #804; keep aggregate campaign closure open and append a subsequent tranche only after its first real signed commit from exact validated main.",
       "issue_closure_decision": "close_after_final_validated_main",
       "local_evidence": [
@@ -90,7 +90,8 @@
         "Exact clean fan-in 20260718T030244Z and repeat 20260718T031229Z drained in 110.821 and 110.768 seconds versus the retained 100.608-second parent, consistent 10.15 and 10.10 percent regressions despite the 98.10 percent query-count reduction",
         "The source-version interval was reverted forward and immediate validation remains canonical; CR-1631 retains exact report hashes and prohibits repeating the interval without new end-to-end workload evidence",
         "The bounded ownership-observability investigation is complete; exact daily, recovery, poison, duplicate, price-restatement, and FX-restatement evidence remains required before aggregate campaign closure, and ordered append, full rebuild, method-specific lot state, backdated and correction semantics, and single-writer coordination remain mandatory",
-        "Signed 997d999087fea6165c82e32bd1555ff4894b1161 makes runtime certification await the exact durable transaction ledger row before the one-shot replay command; 9 focused smoke-script tests plus scoped Ruff lint and format checks passed"
+        "Signed 997d999087fea6165c82e32bd1555ff4894b1161 makes runtime certification await the exact durable transaction ledger row before the one-shot replay command; 9 focused smoke-script tests plus scoped Ruff lint and format checks passed",
+        "Signed dcb1aba71d47ab5d72732921a802135276a21143 resolves PR #804 P1 ordering feedback with one shared transaction partition policy: linked multi-security legs use the portfolio-scoped transaction-group key across raw ingestion, persistence, and replay, while unlinked transaction keys remain exactly portfolio_id|security_id; 47 focused tests, full MyPy across 235 source files, and scoped Ruff passed"
       ],
       "remote_evidence": [
         "Remote Feature Lane 29578198110 passed at signed cost-reference commit 2d49fc8f144b6845a862d067cc689ce2bbad5119",
