@@ -65,7 +65,9 @@ benchmark/target allocation, drift, recommendation, suitability, or execution be
 ## Validation
 
 - `114` focused allocation, reporting service/repository/DTO, route/OpenAPI, and advisory-simulation
-  tests passed.
+  tests passed. The applied mixed look-through service contract uses canonical portfolio identity
+  `PB_SG_GLOBAL_BAL_001`, traces every published direct/component contributor, and reconciles each
+  returned bucket.
 - One isolated PostgreSQL test proved the exact active component record, effective interval,
   weight, upstream source reference, component instrument, and expired-record exclusion.
 - The 10,000-row, four-dimension proof retained exactly 50 of 10,000 contributors, reconciled the
@@ -73,7 +75,7 @@ benchmark/target allocation, drift, recommendation, suitability, or execution be
 - Strict MyPy passed on all five touched source modules; scoped pinned Ruff check/format passed.
 - OpenAPI quality, vocabulary, route catalog/family, source-data-product, application-layer, and
   repository-port guards passed.
-- Signed commits: `c3cfed683`, `3b520b10f`, `800de89aa`, and `ef50ca619`.
+- Signed implementation and proof commits run from `c3cfed683` through `2abe9fa5b`.
 
 ## Documentation And Wiki Decision
 
