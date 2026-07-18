@@ -179,7 +179,7 @@ async def test_readiness_event_uses_header_correlation_for_direct_processing(
     assert mock_idempotency_repo.claim_event_processing.await_args.args[3] == "test-corr-id"
 
 
-async def test_legacy_readiness_event_rearms_complete_job_without_processing_requeue(
+async def test_headerless_readiness_event_preserves_non_rearming_compatibility(
     consumer: ValuationReadinessConsumer,
     mock_kafka_message: MagicMock,
     mock_dependencies: dict,
@@ -191,7 +191,7 @@ async def test_legacy_readiness_event_rearms_complete_job_without_processing_req
 
     job_kwargs = mock_dependencies["job_repo"].upsert_job.await_args.kwargs
     assert job_kwargs["source_correction_id"] is None
-    assert job_kwargs["rearm_completed"] is True
+    assert job_kwargs["rearm_completed"] is False
     assert job_kwargs["requeue_if_processing"] is False
 
 
