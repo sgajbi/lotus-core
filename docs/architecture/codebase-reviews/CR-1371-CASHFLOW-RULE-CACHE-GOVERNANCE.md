@@ -5,6 +5,10 @@ Current implementation ownership was refined by
 instance-owned `infrastructure/cashflow/rule_cache.py` adapter rather than mutable workflow-module
 state.
 
+CR-1631 subsequently bounded source-version validation to one concurrency-coalesced check per
+configured interval. This preserves source lineage and explicit stale-read governance without one
+SQL version query per booked transaction.
+
 ## Objective
 
 Fix GitHub issue #576 by governing the cashflow rule cache with source version metadata,
@@ -15,7 +19,8 @@ explicit stale-read behavior, invalidation ownership, metrics, and tests.
 - Added `CashflowRuleSetVersion` and `SqlAlchemyCashflowRuleRepository.get_rule_set_version()`.
 - Added rule-set version and latest effective timestamp metadata to `CashflowRuleCacheState` and
   each `CachedCashflowRule`.
-- Changed fresh cache reads to verify the source rule-set version before serving a cached rule.
+- Changed fresh cache reads to verify the source rule-set version after a bounded validation
+  interval before serving the next cached rule.
 - Kept TTL expiry and missing-rule reload behavior.
 - Kept explicit process-local invalidation through `CashflowRuleCache.invalidate()`.
 - Added `cashflow_rule_cache_events_total` for hit, miss, reload, stale, invalidation, and
@@ -23,8 +28,8 @@ explicit stale-read behavior, invalidation ownership, metrics, and tests.
 
 ## Expected Improvement
 
-- Prevents rule changes from remaining hidden until TTL expiry when `cashflow_rules.updated_at`
-  changes.
+- Bounds existing-rule change visibility to the source-version validation interval when
+  `cashflow_rules.updated_at` changes.
 - Makes cache freshness observable.
 - Preserves low-cost cache hits when the source version is unchanged.
 - Keeps the cache as governed reference data rather than persistence-critical transaction state.
@@ -32,13 +37,14 @@ explicit stale-read behavior, invalidation ownership, metrics, and tests.
 ## Stale-Read And Invalidation Policy
 
 - Default TTL still comes from `CASHFLOW_RULE_CACHE_TTL_SECONDS`.
-- A cached rule is served only when the TTL is fresh and the source version fingerprint matches.
+- A cached rule is served only while the TTL is fresh and the last source-version validation is
+  inside the configured interval. The first later lookup single-flights a new validation.
 - Source version is derived from rule count and max `cashflow_rules.updated_at`.
 - Missing rules force one immediate full reload before the message is classified as no-rule.
 - Explicit invalidation clears only the current process and records an invalidation metric.
 - Multi-process deployments must propagate source-owned invalidation by updating
-  `cashflow_rules.updated_at`; workers detect the changed source version before serving cached
-  rules.
+  `cashflow_rules.updated_at`; workers detect the changed source version within the configured
+  bounded interval. Explicit invalidation remains the immediate process-local path.
 - Raw SQL migrations and their downgrades must set `updated_at = now()` explicitly because ORM
   `onupdate` behavior does not run for those statements.
 

@@ -4,7 +4,7 @@
 | --- | --- |
 | Status | Implemented |
 | Created | 2025-09-02 |
-| Last Updated | 2026-07-14 |
+| Last Updated | 2026-07-18 |
 | Owners | `portfolio_transaction_processing_service` |
 | Depends On | RFC 001 |
 | Scope | DB-driven cashflow rules, runtime rule refresh behavior, business-level cashflow metrics |
@@ -36,8 +36,10 @@ Implemented:
 3. Combined transaction processing uses an instance-owned in-memory cache with deterministic
    refresh controls:
    1. TTL-based refresh (`CASHFLOW_RULE_CACHE_TTL_SECONDS`).
-   2. Explicit runtime-owned invalidation (`CashflowRuleCache.invalidate`).
-   3. Missing-rule forced refresh to pick up newly added rule types immediately.
+   2. Bounded, concurrency-coalesced source-version checks
+      (`CASHFLOW_RULE_CACHE_SOURCE_VERSION_CHECK_INTERVAL_SECONDS`).
+   3. Explicit runtime-owned invalidation (`CashflowRuleCache.invalidate`).
+   4. Missing-rule forced refresh to pick up newly added rule types immediately.
 4. Missing rule path sends event to DLQ as non-retryable configuration error.
 5. `CASHFLOWS_CREATED_TOTAL` counter is defined and incremented in `CashflowLogic.calculate`.
 6. Unit tests cover repository behavior, consumer behavior, and cache refresh semantics.
@@ -59,7 +61,7 @@ Evidence:
 | Original Requirement | Current Implementation in lotus-core | Evidence |
 | --- | --- | --- |
 | Replace hardcoded rules with DB policy table | Implemented (`cashflow_rules`) | migration + repository |
-| Load/cached rule lookup in combined processing | Implemented (instance-owned TTL cache + explicit invalidation + missing-rule forced refresh) | `cashflow/rule_cache.py`; mirrored infrastructure tests |
+| Load/cached rule lookup in combined processing | Implemented (instance-owned TTL cache + bounded source-version validation + explicit invalidation + missing-rule forced refresh) | `cashflow/rule_cache.py`; mirrored infrastructure tests |
 | Metric `cashflows_created_total` with labels | Implemented | `monitoring.py`; domain calculation adapter tests |
 | Dynamic rule updates without restart | Implemented | source-versioned rule cache; `test_rule_cache.py` |
 
@@ -67,10 +69,14 @@ Evidence:
 
 1. DB-driven rules improve governance and remove business-policy code redeploy dependency.
 2. In-memory caching preserves consumer throughput.
-3. TTL + forced refresh keeps runtime agility without requiring restarts.
+3. A five-second default source-version interval bounds update visibility while avoiding one SQL
+   source-version query per booked transaction; concurrent lookups single-flight the validation.
+4. TTL + forced refresh keeps runtime agility without requiring restarts.
 
 Trade-off:
-- Very low-frequency rule changes may still wait up to TTL unless missing-rule path or explicit invalidation is used.
+- Existing-rule updates can wait up to the configured source-version interval (five seconds by
+  default). Missing rules and explicit invalidation retain immediate refresh behavior; the separate
+  TTL remains the maximum age before a complete snapshot reload.
 
 ## Gap Assessment
 
@@ -78,7 +84,9 @@ No blocking implementation gap remains for RFC-022 scope.
 
 ## Proposed Changes
 
-1. Keep cache-policy controls (`CASHFLOW_RULE_CACHE_TTL_SECONDS`, invalidation hook) documented and regression-tested.
+1. Keep cache-policy controls (`CASHFLOW_RULE_CACHE_TTL_SECONDS`,
+   `CASHFLOW_RULE_CACHE_SOURCE_VERSION_CHECK_INTERVAL_SECONDS`, invalidation hook) documented and
+   regression-tested.
 
 ## Test and Validation Evidence
 
