@@ -334,11 +334,14 @@ once, durable queues close, and timeseries reconciliation remains clean. See
 
 ## Kafka Consumer Retryable Failure Budgets
 
-`RetryableConsumerError` keeps the offset uncommitted and retries the same message in-process while
-holding its partition-ordering key. This is intentional: a polled Confluent message advances the
-consumer's fetch position, so non-commit alone does not cause prompt redelivery in the same consumer
-session. Later messages from that partition cannot overtake the retrying message, while configured
-cross-partition concurrency remains available.
+With a positive attempt or elapsed budget, `RetryableConsumerError` keeps the offset uncommitted and
+retries the same message in-process while holding its partition-ordering key. A polled Confluent
+message advances the consumer's fetch position, so non-commit alone does not prevent a later offset
+from being polled and committed. With both budgets at their default `0`, the first retryable failure
+therefore stops the consumer before another offset can overtake it. The failed offset remains
+uncommitted for broker redelivery after the process restarts or the group rebalances. In concurrent
+profiles, already queued messages from the failed partition are discarded; active work on other
+partitions may drain because Kafka commits remain partition-scoped.
 
 The execution profile field `retryable_failure_backoff_seconds` controls the delay between attempts
 and defaults to one second. Override it globally or by consumer group through the existing
@@ -352,11 +355,14 @@ KAFKA_CONSUMER_RETRYABLE_FAILURE_MAX_ATTEMPTS=<positive integer>
 KAFKA_CONSUMER_RETRYABLE_FAILURE_MAX_ELAPSED_SECONDS=<positive integer>
 ```
 
-Default `0` disables each exhaustion budget and preserves fail-closed retry behavior. With a
-positive attempt or elapsed budget, the shared consumer tracks retryable failures for the same
-topic/group/partition/offset/key. When either budget is exhausted, the consumer emits
-`kafka.consumer.retryable_failure_budget_exhausted`, routes the message to DLQ, and commits the
-offset only after DLQ publication succeeds.
+Default `0` disables each exhaustion budget and preserves one-attempt, fail-stop redelivery. The
+shared consumer emits `kafka.consumer.processing_retryable` with
+`retry_disposition=kafka_redelivery_after_restart_or_rebalance` and
+`consumer_action=stop_before_polling_later_offsets`, then shuts down without DLQ publication or an
+offset commit. With a positive attempt or elapsed budget, the shared consumer tracks retryable
+failures for the same topic/group/partition/offset/key. When either budget is exhausted, the
+consumer emits `kafka.consumer.retryable_failure_budget_exhausted`, routes the message to DLQ, and
+commits the offset only after DLQ publication succeeds.
 
 The attempt/elapsed counters are in-process. Durable exhaustion evidence starts when the message is
 successfully written to DLQ. Cross-restart durable attempt accounting requires a service-owned

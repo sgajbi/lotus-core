@@ -83,9 +83,10 @@ rearmed and completed `525` times for one final portfolio-day row.
     ordering key instead of assuming an uncommitted offset will be redelivered in the same consumer
     session when either governed attempt/elapsed budget is positive. Default-zero keeps the
     compatibility posture: one processing attempt, no in-process sleep or DLQ transition, and an
-    uncommitted offset for redelivery after restart or rebalance. Terminal recovery separately
-    retries DLQ publication and the post-DLQ commit without rerunning business processing or
-    republishing an already confirmed DLQ record.
+    uncommitted offset for redelivery after restart or rebalance. It also stops the consumer before
+    a later same-partition offset can be processed or committed and discards already queued records
+    for that partition. Terminal recovery separately retries DLQ publication and the post-DLQ
+    commit without rerunning business processing or republishing an already confirmed DLQ record.
 18. Transaction valuation readiness treats each durable outbox event as a distinct source mutation.
     The consumer hashes the existing `outbox_id` Kafka header to rearm a completed natural-key job or
     request requeue when a different mutation arrives during processing. Same-outbox redelivery is
@@ -364,10 +365,12 @@ run-owned resource, and preserved the separately owned 15-container canonical Co
 HTTP APIs, OpenAPI schemas, Kafka topics, event payload schemas, transaction calculations,
 idempotency identities, outbox atomicity, and database schemas are unchanged.
 
-The shared consumer now retries a failed record in the same process and preserves per-partition
-order until it succeeds or reaches governed terminal recovery. Existing retry budgets, DLQ topics,
-payloads, commit-after-confirmation rule, and consumer groups are unchanged. The new execution
-profile backoff field is additive and defaults to one second.
+With a positive retry budget, the shared consumer retries a failed record in the same process and
+preserves per-partition order until it succeeds or reaches governed terminal recovery. With the
+default disabled budget, it stops after one attempt without committing so restart/rebalance can
+redeliver the failed offset; it cannot process or commit a later offset on that partition first.
+Existing retry settings, DLQ topics, payloads, commit-after-confirmation rule, and consumer groups
+are unchanged. The new execution-profile backoff field is additive and defaults to one second.
 
 Transaction readiness reuses the existing dispatcher-owned `outbox_id` header; it does not add an
 event field or require a schema-version transition. A distinct durable outbox mutation can rearm or
@@ -541,6 +544,14 @@ does not publish this key policy; the operator-owned migration runbook is the du
   `kafka_redelivery_after_restart_or_rebalance` disposition. Positive attempt or elapsed budgets
   remain the only opt-in to ordered in-process retry. The focused shared-consumer and PM-book
   regression run passed `79` tests; scoped Ruff and full MyPy across `237` sources passed.
+- A subsequent PR #807 review proved that returning from the failed message was still insufficient:
+  the serial loop could poll a later record and the concurrent finalizer could resume or schedule a
+  queued same-partition record, allowing its successful commit to skip the failed offset. Signed
+  fix-forward commit `fee372a72` now stops the consumer on the first unbudgeted retryable failure,
+  discards queued records for the failed partition, and emits bounded
+  `redelivery_required/retryable_consumer_restart_required` evidence. Direct serial and concurrent
+  regressions prove the later offset is neither processed nor committed; `95` Kafka-library tests,
+  strict MyPy across `237` sources, and the event-runtime ownership guard pass.
 - Exact-main dual-leg reproduction failed before the shared retry fix and passed afterward without
   increasing its 240-second budget. Exact-head timeseries contract E2E passed `4/4` at signed
   `c79bf0afe` in `155.53s` with dynamic ports and project-scoped teardown.
@@ -600,6 +611,7 @@ engineering truth. No migration or authored wiki change is required.
 The PR review fix clarifies the existing DLQ failure-budget runbook and repository context because
 default-zero and positive-budget behavior are operator-facing recovery truth. It changes no command,
 environment-variable name, API, event, database, calculation, or authored wiki contract.
-The primary-loop correction restores that same documented default-zero contract. No additional
-OpenAPI, event, migration, calculation-methodology, operator-runbook, or wiki-source change is
-required.
+The final primary-loop correction makes the restart/rebalance requirement operationally explicit in
+the existing runbook, repository context, and Operations wiki. It changes no command,
+environment-variable name, OpenAPI, event, migration, database, or calculation-methodology
+contract; no new standalone document is required.
