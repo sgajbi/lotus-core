@@ -41,6 +41,7 @@ INGESTION_WRITE_CAPABILITY_RULES: dict[str, str] = {
     "POST /ingest/client-income-needs-schedules": "ingestion.reference_data.write",
     "POST /ingest/liquidity-reserve-requirements": "ingestion.reference_data.write",
     "POST /ingest/planned-withdrawal-schedules": "ingestion.reference_data.write",
+    "POST /ingest/portfolio-party-role-assignments": "ingestion.reference_data.write",
     "POST /ingest/benchmark-definitions": "ingestion.reference_data.write",
     "POST /ingest/benchmark-compositions": "ingestion.reference_data.write",
     "POST /ingest/indices": "ingestion.reference_data.write",

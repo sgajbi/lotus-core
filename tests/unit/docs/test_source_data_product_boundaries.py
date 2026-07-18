@@ -42,16 +42,18 @@ def test_rfc0083_documents_realized_outcome_source_boundaries() -> None:
     assert "explicit booked withholding-tax and other-interest-deduction evidence" in catalog
     assert "must not claim tax advice, after-tax optimization" in catalog
     assert "| `PortfolioCashflowProjection:v1` |" in catalog
-    assert "Daily booked cashflow, projected settlement cashflow, net cashflow points" in catalog
-    assert "booked/projected/net totals" in catalog
+    assert "Daily booked/projected/net points and totals in portfolio currency" in catalog
+    assert "separate input/calculation/output SHA-256 lineage" in catalog
     assert "must not treat the projection as a liquidity ladder" in catalog
     assert "| `PortfolioCashMovementSummary:v1` |" in catalog
     assert "portfolio-cash-movement-summary.md" in catalog
-    assert "latest cashflow rows by classification, timing, currency, and flow scope" in catalog
+    assert "Latest cashflow rows grouped by classification, timing, currency, and flow scope" in (
+        catalog
+    )
     assert "must not treat the summary as a forecast" in catalog
     assert "| `PortfolioMaturitySummary:v1` |" in catalog
     assert "portfolio-maturity-summary.md" in catalog
-    assert "Core-owned contractual maturity posture over `HoldingsAsOf:v1`" in catalog
+    assert "Core-owned booked contractual maturity posture over exact `HoldingsAsOf:v1`" in catalog
     assert "must not treat this summary as a full callable/putable" in catalog
     assert "| `PortfolioLiquidityLadder:v1` |" in catalog
     assert "cash-availability buckets" in catalog
@@ -357,8 +359,9 @@ def test_portfolio_cash_movement_summary_methodology_is_implementation_backed() 
     )
     assert "A_g = sum(r.amount for r in W where key(r) = g)" in methodology
     assert "movement_direction_g = INFLOW if A_g > 0" in methodology
-    assert "`data_quality_status` | `COMPLETE` when rows exist; otherwise `MISSING`" in (
-        methodology
+    assert (
+        "`data_quality_status`, `reconciliation_status` | `COMPLETE` only when source controls "
+        "reconcile; otherwise fail-closed `BLOCKED`" in methodology
     )
     assert "Mixed currencies are never converted or netted together" in methodology
     assert "not a cashflow forecast, income plan, funding recommendation" in normalized_methodology
@@ -387,7 +390,10 @@ def test_portfolio_maturity_summary_methodology_is_implementation_backed() -> No
     assert "`missing_maturity_date_count`" in methodology
     assert "`unsupported_maturity_feature_count`" in methodology
     assert "`request_fingerprint`" in methodology
-    assert "not an upstream `source_batch_fingerprint`" in methodology
+    assert (
+        "publish the response content hash as the source digest and source-batch fingerprint"
+        in normalized_methodology
+    )
     assert "must remain visible as partial supportability" in normalized_methodology
     assert "not a full maturity schedule, cashflow forecast" in normalized_methodology
     assert "| `next_maturity_date` | `2026-04-15` |" in methodology
