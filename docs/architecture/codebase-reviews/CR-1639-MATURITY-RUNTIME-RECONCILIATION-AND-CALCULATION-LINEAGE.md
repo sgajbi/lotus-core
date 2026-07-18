@@ -75,10 +75,14 @@ Kafka, ingestion, valuation, cashflow, advice, suitability, or execution contrac
   deterministic identity.
 - `94` allocation/reconciliation regression tests passed after promoting the reusable DTO and
   durable control vocabulary.
-- An isolated PostgreSQL integration test returned only the requested portfolio-day/epoch control
-  and excluded an unrelated failed scope.
+- The complete Query Service unit cohort passed `649/649`.
+- The full position-repository PostgreSQL cohort passed `6/6`; the new proof returned only the
+  requested portfolio-day/epoch control and excluded an unrelated failed scope.
 - A 100,000-row scope extraction and classification proof coalesced to one scope, returned
   `COMPLETE`, and completed in `0.297686s`; the database read remains one set-based indexed query.
+- Repository-native MyPy passed all `236` source files. Architecture, application, repository,
+  domain, OpenAPI, API vocabulary/catalog, source-product, domain-product, RFC-0083, docs, and wiki
+  guards passed.
 - Signed implementation commits: `0fb28f742`, `55b9140d3`, and `568588840`.
 
 ## Documentation And Wiki Decision
