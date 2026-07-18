@@ -63,6 +63,7 @@ def test_positions_contract_exposes_field_level_fallback_provenance() -> None:
             ],
             response_as_of_date=date(2026, 4, 10),
             data_quality_status=PARTIAL,
+            reconciliation_status="COMPLETE",
             latest_evidence_timestamp=datetime(2026, 4, 10, 9, tzinfo=UTC),
             degradation=SourceDataDegradationSummary(
                 status="PARTIAL",
