@@ -26,7 +26,7 @@ class UnsupportedAccruedIncomeError(ValueError):
 
 ACCRUED_INCOME_INTERMEDIATE_PRECISION = 50
 ACCRUED_INCOME_ALGORITHM_ID = "SEGMENTED_GROSS_CONTRACTUAL_ACCRUAL"
-ACCRUED_INCOME_ALGORITHM_VERSION = 1
+ACCRUED_INCOME_ALGORITHM_VERSION = 2
 
 
 class AccrualRateType(StrEnum):
@@ -74,6 +74,22 @@ class AccrualSegment:
 
 
 @dataclass(frozen=True, slots=True)
+class ExCouponEntitlement:
+    """Source-owned loss of entitlement to the next contractual coupon."""
+
+    ex_coupon_date: date
+    next_coupon_payment_date: date
+    full_coupon_segments: tuple[AccrualSegment, ...]
+    entitlement_source: AccrualSourceReference
+
+    def __post_init__(self) -> None:
+        if self.next_coupon_payment_date <= self.ex_coupon_date:
+            raise ValueError("next_coupon_payment_date must be after ex_coupon_date")
+        if not self.full_coupon_segments:
+            raise ValueError("full_coupon_segments must not be empty")
+
+
+@dataclass(frozen=True, slots=True)
 class AccrualSegmentResult:
     """Auditable unrounded calculation result for one segment."""
 
@@ -95,14 +111,18 @@ class AccruedIncomeResult:
 
     currency: str
     gross_accrued_income: Decimal
+    ex_coupon_entitlement_adjustment: Decimal
+    settlement_accrued_income: Decimal
     segments: tuple[AccrualSegmentResult, ...]
     lineage: CalculationLineage
 
 
 def calculate_segmented_accrued_income(
     segments: tuple[AccrualSegment, ...],
+    *,
+    ex_coupon_entitlement: ExCouponEntitlement | None = None,
 ) -> AccruedIncomeResult:
-    """Calculate contiguous principal/rate segments without frequency shortcuts."""
+    """Calculate contractual accrual and any explicit ex-coupon settlement rebate."""
 
     if not segments:
         raise UnsupportedAccruedIncomeError("at least one accrual segment is required")
@@ -112,9 +132,66 @@ def calculate_segmented_accrued_income(
     if any(segment.currency.strip().upper() != currency for segment in ordered):
         raise UnsupportedAccruedIncomeError("accrual segments must use one currency")
 
+    result_segments, gross_accrued_income = _calculate_segments(ordered)
+    ex_coupon_entitlement_adjustment = Decimal(0)
+    entitlement_payload: dict[str, object] | None = None
+    if ex_coupon_entitlement is not None:
+        full_coupon_segments = tuple(
+            sorted(
+                ex_coupon_entitlement.full_coupon_segments,
+                key=lambda item: (item.accrual_start, item.accrual_end),
+            )
+        )
+        _validate_ex_coupon_entitlement(
+            accrued_segments=ordered,
+            full_coupon_segments=full_coupon_segments,
+            entitlement=ex_coupon_entitlement,
+            currency=currency,
+        )
+        _, ex_coupon_entitlement_adjustment = _calculate_segments(full_coupon_segments)
+        entitlement_payload = {
+            "entitlement_source": _source_payload(ex_coupon_entitlement.entitlement_source),
+            "ex_coupon_date": ex_coupon_entitlement.ex_coupon_date,
+            "full_coupon_segments": [
+                _segment_input_payload(segment) for segment in full_coupon_segments
+            ],
+            "next_coupon_payment_date": ex_coupon_entitlement.next_coupon_payment_date,
+        }
+    with localcontext() as context:
+        context.prec = ACCRUED_INCOME_INTERMEDIATE_PRECISION
+        settlement_accrued_income = gross_accrued_income - ex_coupon_entitlement_adjustment
+    lineage = build_calculation_lineage(
+        algorithm_id=ACCRUED_INCOME_ALGORITHM_ID,
+        algorithm_version=ACCRUED_INCOME_ALGORITHM_VERSION,
+        intermediate_precision=ACCRUED_INCOME_INTERMEDIATE_PRECISION,
+        input_payload={
+            "ex_coupon_entitlement": entitlement_payload,
+            "segments": [_segment_input_payload(segment) for segment in ordered],
+        },
+        output_payload={
+            "currency": currency,
+            "ex_coupon_entitlement_adjustment": ex_coupon_entitlement_adjustment,
+            "gross_accrued_income": gross_accrued_income,
+            "segments": [_segment_output_payload(result) for result in result_segments],
+            "settlement_accrued_income": settlement_accrued_income,
+        },
+    )
+    return AccruedIncomeResult(
+        currency=currency,
+        gross_accrued_income=gross_accrued_income,
+        ex_coupon_entitlement_adjustment=ex_coupon_entitlement_adjustment,
+        settlement_accrued_income=settlement_accrued_income,
+        segments=result_segments,
+        lineage=lineage,
+    )
+
+
+def _calculate_segments(
+    segments: tuple[AccrualSegment, ...],
+) -> tuple[tuple[AccrualSegmentResult, ...], Decimal]:
     results: list[AccrualSegmentResult] = []
     gross_accrued_income = Decimal(0)
-    for segment in ordered:
+    for segment in segments:
         year_fraction = calculate_year_fraction(
             convention=segment.day_count_convention,
             convention_version=segment.day_count_convention_version,
@@ -146,23 +223,80 @@ def calculate_segmented_accrued_income(
                 schedule_source=segment.schedule_source,
             )
         )
-    result_segments = tuple(results)
-    lineage = build_calculation_lineage(
-        algorithm_id=ACCRUED_INCOME_ALGORITHM_ID,
-        algorithm_version=ACCRUED_INCOME_ALGORITHM_VERSION,
-        intermediate_precision=ACCRUED_INCOME_INTERMEDIATE_PRECISION,
-        input_payload={"segments": [_segment_input_payload(segment) for segment in ordered]},
-        output_payload={
-            "currency": currency,
-            "gross_accrued_income": gross_accrued_income,
-            "segments": [_segment_output_payload(result) for result in result_segments],
-        },
-    )
-    return AccruedIncomeResult(
-        currency=currency,
-        gross_accrued_income=gross_accrued_income,
-        segments=result_segments,
-        lineage=lineage,
+    return tuple(results), gross_accrued_income
+
+
+def _validate_ex_coupon_entitlement(
+    *,
+    accrued_segments: tuple[AccrualSegment, ...],
+    full_coupon_segments: tuple[AccrualSegment, ...],
+    entitlement: ExCouponEntitlement,
+    currency: str,
+) -> None:
+    _validate_contiguous_segments(full_coupon_segments)
+    if any(segment.currency.strip().upper() != currency for segment in full_coupon_segments):
+        raise UnsupportedAccruedIncomeError(
+            "full coupon and accrued segments must use one currency"
+        )
+    settlement_date = accrued_segments[-1].accrual_end
+    if settlement_date <= entitlement.ex_coupon_date:
+        raise UnsupportedAccruedIncomeError(
+            "ex-coupon treatment requires settlement after ex_coupon_date"
+        )
+    if settlement_date >= entitlement.next_coupon_payment_date:
+        raise UnsupportedAccruedIncomeError(
+            "ex-coupon treatment requires settlement before next_coupon_payment_date"
+        )
+    if full_coupon_segments[0].accrual_start != accrued_segments[0].accrual_start:
+        raise UnsupportedAccruedIncomeError(
+            "full coupon and accrued segments must share the coupon-period start"
+        )
+    if full_coupon_segments[-1].accrual_end != entitlement.next_coupon_payment_date:
+        raise UnsupportedAccruedIncomeError(
+            "full coupon segments must end on next_coupon_payment_date"
+        )
+    _validate_accrued_prefix_matches_full_coupon(accrued_segments, full_coupon_segments)
+
+
+def _validate_accrued_prefix_matches_full_coupon(
+    accrued_segments: tuple[AccrualSegment, ...],
+    full_coupon_segments: tuple[AccrualSegment, ...],
+) -> None:
+    full_index = 0
+    for accrued in accrued_segments:
+        cursor = accrued.accrual_start
+        while cursor < accrued.accrual_end:
+            while (
+                full_index < len(full_coupon_segments)
+                and full_coupon_segments[full_index].accrual_end <= cursor
+            ):
+                full_index += 1
+            if full_index >= len(full_coupon_segments):
+                raise UnsupportedAccruedIncomeError(
+                    "accrued segments must be covered by full coupon segments"
+                )
+            full = full_coupon_segments[full_index]
+            if full.accrual_start > cursor or _segment_terms(accrued) != _segment_terms(full):
+                raise UnsupportedAccruedIncomeError(
+                    "accrued segments must be an economic prefix of full coupon segments"
+                )
+            cursor = min(accrued.accrual_end, full.accrual_end)
+
+
+def _segment_terms(segment: AccrualSegment) -> tuple[object, ...]:
+    return (
+        segment.currency.strip().upper(),
+        segment.signed_accrual_principal,
+        segment.annual_effective_rate,
+        segment.rate_type,
+        segment.day_count_convention.strip().upper(),
+        segment.day_count_convention_version,
+        segment.rate_source,
+        segment.principal_source,
+        segment.schedule_source,
+        segment.business_day_calendar,
+        segment.contractual_termination_date,
+        segment.icma_reference_periods,
     )
 
 

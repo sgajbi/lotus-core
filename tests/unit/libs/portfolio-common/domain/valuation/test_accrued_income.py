@@ -9,6 +9,7 @@ from portfolio_common.domain.valuation import (
     AccrualRateType,
     AccrualSegment,
     AccrualSourceReference,
+    ExCouponEntitlement,
     IcmaReferencePeriod,
     UnsupportedAccruedIncomeError,
     UnsupportedDayCountError,
@@ -69,7 +70,143 @@ def test_fixed_rate_regular_coupon_uses_governed_year_fraction() -> None:
 
     assert result.currency == "USD"
     assert result.gross_accrued_income == Decimal("30000.000")
+    assert result.ex_coupon_entitlement_adjustment == Decimal(0)
+    assert result.settlement_accrued_income == result.gross_accrued_income
     assert result.segments[0].year_fraction == Decimal("0.5")
+
+
+def test_ex_coupon_settlement_subtracts_full_coupon_as_rebate_interest() -> None:
+    reference_period = IcmaReferencePeriod(date(2026, 1, 1), date(2026, 7, 1), 2)
+    elapsed = _segment(
+        accrual_end=date(2026, 6, 25),
+        icma_reference_periods=(reference_period,),
+    )
+    full_coupon = replace(elapsed, accrual_end=date(2026, 7, 1))
+
+    result = calculate_segmented_accrued_income(
+        (elapsed,),
+        ex_coupon_entitlement=ExCouponEntitlement(
+            ex_coupon_date=date(2026, 6, 23),
+            next_coupon_payment_date=date(2026, 7, 1),
+            full_coupon_segments=(full_coupon,),
+            entitlement_source=_source("ex-coupon-entitlement"),
+        ),
+    )
+
+    expected_gross = _accrual("1000000", "0.06", 175, 362)
+    expected_settlement = _sum_accruals(expected_gross, Decimal("-30000.000"))
+    assert result.gross_accrued_income == expected_gross
+    assert result.ex_coupon_entitlement_adjustment == Decimal("30000.000")
+    assert result.settlement_accrued_income == expected_settlement
+    assert result.settlement_accrued_income < 0
+    assert result.lineage.algorithm_version == 2
+
+
+def test_ex_coupon_rebate_preserves_short_position_sign() -> None:
+    reference_period = IcmaReferencePeriod(date(2026, 1, 1), date(2026, 7, 1), 2)
+    elapsed = _segment(
+        accrual_end=date(2026, 6, 25),
+        signed_accrual_principal=Decimal("-1000000"),
+        icma_reference_periods=(reference_period,),
+    )
+    full_coupon = replace(elapsed, accrual_end=date(2026, 7, 1))
+
+    result = calculate_segmented_accrued_income(
+        (elapsed,),
+        ex_coupon_entitlement=ExCouponEntitlement(
+            ex_coupon_date=date(2026, 6, 23),
+            next_coupon_payment_date=date(2026, 7, 1),
+            full_coupon_segments=(full_coupon,),
+            entitlement_source=_source("ex-coupon-entitlement"),
+        ),
+    )
+
+    assert result.gross_accrued_income < 0
+    assert result.ex_coupon_entitlement_adjustment == Decimal("-30000.000")
+    assert result.settlement_accrued_income > 0
+
+
+def test_ex_coupon_lineage_changes_when_entitlement_source_is_corrected() -> None:
+    reference_period = IcmaReferencePeriod(date(2026, 1, 1), date(2026, 7, 1), 2)
+    elapsed = _segment(
+        accrual_end=date(2026, 6, 25),
+        icma_reference_periods=(reference_period,),
+    )
+    full_coupon = replace(elapsed, accrual_end=date(2026, 7, 1))
+    entitlement = ExCouponEntitlement(
+        ex_coupon_date=date(2026, 6, 23),
+        next_coupon_payment_date=date(2026, 7, 1),
+        full_coupon_segments=(full_coupon,),
+        entitlement_source=_source("ex-coupon-entitlement"),
+    )
+
+    baseline = calculate_segmented_accrued_income((elapsed,), ex_coupon_entitlement=entitlement)
+    corrected = calculate_segmented_accrued_income(
+        (elapsed,),
+        ex_coupon_entitlement=replace(
+            entitlement,
+            entitlement_source=_source("ex-coupon-entitlement-correction"),
+        ),
+    )
+
+    assert corrected.settlement_accrued_income == baseline.settlement_accrued_income
+    assert corrected.lineage.input_content_hash != baseline.lineage.input_content_hash
+    assert corrected.lineage.calculation_content_hash != baseline.lineage.calculation_content_hash
+    assert corrected.lineage.output_content_hash != baseline.lineage.output_content_hash
+
+
+@pytest.mark.parametrize(
+    ("settlement_date", "message"),
+    [
+        (date(2026, 6, 23), "after ex_coupon_date"),
+        (date(2026, 7, 1), "before next_coupon_payment_date"),
+    ],
+)
+def test_ex_coupon_treatment_rejects_invalid_settlement_boundary(
+    settlement_date: date,
+    message: str,
+) -> None:
+    reference_period = IcmaReferencePeriod(date(2026, 1, 1), date(2026, 7, 1), 2)
+    elapsed = _segment(
+        accrual_end=settlement_date,
+        icma_reference_periods=(reference_period,),
+    )
+    full_coupon = replace(elapsed, accrual_end=date(2026, 7, 1))
+
+    with pytest.raises(UnsupportedAccruedIncomeError, match=message):
+        calculate_segmented_accrued_income(
+            (elapsed,),
+            ex_coupon_entitlement=ExCouponEntitlement(
+                ex_coupon_date=date(2026, 6, 23),
+                next_coupon_payment_date=date(2026, 7, 1),
+                full_coupon_segments=(full_coupon,),
+                entitlement_source=_source("ex-coupon-entitlement"),
+            ),
+        )
+
+
+def test_ex_coupon_treatment_rejects_mismatched_coupon_economics() -> None:
+    reference_period = IcmaReferencePeriod(date(2026, 1, 1), date(2026, 7, 1), 2)
+    elapsed = _segment(
+        accrual_end=date(2026, 6, 25),
+        icma_reference_periods=(reference_period,),
+    )
+    mismatched_full_coupon = replace(
+        elapsed,
+        accrual_end=date(2026, 7, 1),
+        annual_effective_rate=Decimal("0.07"),
+    )
+
+    with pytest.raises(UnsupportedAccruedIncomeError, match="economic prefix"):
+        calculate_segmented_accrued_income(
+            (elapsed,),
+            ex_coupon_entitlement=ExCouponEntitlement(
+                ex_coupon_date=date(2026, 6, 23),
+                next_coupon_payment_date=date(2026, 7, 1),
+                full_coupon_segments=(mismatched_full_coupon,),
+                entitlement_source=_source("ex-coupon-entitlement"),
+            ),
+        )
 
 
 def test_supplied_floating_all_in_rate_is_not_derived_or_divided_by_frequency() -> None:
