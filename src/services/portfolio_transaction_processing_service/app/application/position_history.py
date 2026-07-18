@@ -258,6 +258,7 @@ class PositionHistoryProcessor:
             if await self._state_store.rearm_generation(
                 portfolio_id=state.portfolio_id,
                 security_id=state.security_id,
+                expected_epoch=state.epoch,
                 watermark_date=watermark_date,
             ):
                 locked_state_epoch = state.epoch

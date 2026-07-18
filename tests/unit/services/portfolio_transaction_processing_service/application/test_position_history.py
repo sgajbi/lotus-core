@@ -157,6 +157,7 @@ async def test_processor_materializes_current_history_and_rearms_downstream_gene
     state_store.rearm_generation.assert_awaited_once_with(
         portfolio_id="PB-001",
         security_id="SEC-001",
+        expected_epoch=3,
         watermark_date=date(2026, 4, 9),
     )
     observer.records_staged.assert_called_once_with(epoch=3, record_count=1)

@@ -2814,12 +2814,14 @@ Most relevant current governance:
      evidence, not as a substitute for daily, recovery, poison, duplicate, correction, or
      restatement certification.
 203. Inside the unified transaction-processing unit of work, cashflow may reuse a position epoch
-     only when position materialization successfully rearmed generation through the position-state
-     `UPDATE`. That update holds the state-row write lock until the caller-owned commit, so the
-     returned epoch is safe for the same transaction and position key. No-record, stale,
-     coalesced, or unsuccessful-rearm paths must retain the database-backed `EpochFencer` lookup.
-     Do not reuse pre-lock materialization progress or cache an epoch across unit-of-work
-     boundaries; both would weaken correction and concurrent-reprocessing fences.
+     only when position materialization conditionally rearmed generation for that exact expected
+     epoch through the position-state `UPDATE`. A successful compare-and-set holds the state-row
+     write lock until the caller-owned commit, so the proven epoch is safe for the same transaction
+     and position key. A concurrently advanced epoch affects zero rows and must fall back to the
+     database-backed `EpochFencer`, as must no-record, stale, coalesced, and other unsuccessful-
+     rearm paths. Do not reuse a pre-update epoch merely because a later write touched the row, or
+     cache an epoch across unit-of-work boundaries; both weaken correction and concurrent-
+     reprocessing fences.
 
 ## Context Maintenance Rule
 

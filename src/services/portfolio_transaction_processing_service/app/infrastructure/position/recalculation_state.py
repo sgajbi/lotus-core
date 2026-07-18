@@ -46,13 +46,15 @@ class SqlAlchemyPositionRecalculationStateStore:
         *,
         portfolio_id: str,
         security_id: str,
+        expected_epoch: int,
         watermark_date: date,
     ) -> bool:
-        """Mark downstream generation dirty while preserving the earliest watermark."""
+        """Rearm generation only while this transaction still owns the expected epoch."""
         updated_count = await self._repository.update_watermarks_if_older(
             keys=[(portfolio_id, security_id)],
             new_watermark_date=watermark_date,
             touch_if_already_lagging=True,
+            expected_epoch=expected_epoch,
         )
         return bool(updated_count)
 
