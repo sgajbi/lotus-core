@@ -65,6 +65,7 @@ class TransactionalTransactionReadinessEventStager:
             security_id=stage.security_id,
             valuation_date=stage.business_date,
             epoch=stage.epoch,
+            source_transaction_id=stage.transaction_id,
             readiness_reason=_READINESS_REASON,
             correlation_id=correlation_id,
             traceparent=traceparent,
