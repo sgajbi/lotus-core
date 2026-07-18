@@ -24,8 +24,28 @@ async def test_get_cash_movement_summary_success() -> None:
             as_of_date=date(2026, 3, 31),
             start_date=date(2026, 3, 1),
             end_date=date(2026, 3, 31),
+            portfolio_currency="USD",
             buckets=[],
             cashflow_count=0,
+            request_fingerprint="cash_movement_summary:" + "a" * 16,
+            source_window_trust={
+                "window_status": "EMPTY",
+                "supportability_status": "SUPPORTED",
+                "reason_codes": ["EMPTY_SOURCE_WINDOW"],
+                "source_row_count": 0,
+                "calculated_source_row_count": 0,
+                "output_group_count": 0,
+                "source_component_totals": {},
+                "calculated_component_totals": {},
+            },
+            calculation_lineage={
+                "algorithm_id": "PORTFOLIO_CASH_MOVEMENT_SUMMARY",
+                "algorithm_version": 1,
+                "intermediate_precision": 50,
+                "input_content_hash": "a" * 64,
+                "calculation_content_hash": "b" * 64,
+                "output_content_hash": "c" * 64,
+            },
             notes="Evidence only.",
         )
     )
@@ -34,11 +54,17 @@ async def test_get_cash_movement_summary_success() -> None:
         portfolio_id="P1",
         start_date=date(2026, 3, 1),
         end_date=date(2026, 3, 31),
+        tenant_id="tenant-a",
         service=service,
     )
 
     assert response.portfolio_id == "P1"
-    service.get_cash_movement_summary.assert_awaited_once()
+    service.get_cash_movement_summary.assert_awaited_once_with(
+        portfolio_id="P1",
+        start_date=date(2026, 3, 1),
+        end_date=date(2026, 3, 31),
+        tenant_id="tenant-a",
+    )
 
 
 @pytest.mark.asyncio
@@ -53,6 +79,7 @@ async def test_get_cash_movement_summary_maps_excessive_window_to_400() -> None:
             portfolio_id="P1",
             start_date=date(2026, 1, 1),
             end_date=date(2027, 1, 2),
+            tenant_id=None,
             service=service,
         )
 
@@ -72,6 +99,7 @@ async def test_get_cash_movement_summary_maps_missing_portfolio_to_404() -> None
             portfolio_id="P404",
             start_date=date(2026, 3, 1),
             end_date=date(2026, 3, 31),
+            tenant_id=None,
             service=service,
         )
 
