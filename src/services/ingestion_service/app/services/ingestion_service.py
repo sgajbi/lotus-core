@@ -14,8 +14,8 @@ from portfolio_common.domain.eventing import (
     business_calendar_partition_key,
     currency_pair_partition_key,
     portfolio_partition_key,
-    portfolio_security_partition_key,
     security_partition_key,
+    transaction_partition_key,
 )
 from portfolio_common.event_publisher import (
     EventPublisher,
@@ -223,7 +223,11 @@ class IngestionService:
             key=transaction.security_id,
             field_name="security_id",
         )
-        partition_key = portfolio_security_partition_key(portfolio_id, security_id).value
+        partition_key = transaction_partition_key(
+            portfolio_id,
+            security_id,
+            linked_transaction_group_id=transaction.linked_transaction_group_id,
+        ).value
         try:
             self._publish_event(
                 topic=KAFKA_TRANSACTIONS_RAW_RECEIVED_TOPIC,
@@ -254,7 +258,11 @@ class IngestionService:
                 key=transaction.security_id,
                 field_name="security_id",
             )
-            partition_key = portfolio_security_partition_key(portfolio_id, security_id).value
+            partition_key = transaction_partition_key(
+                portfolio_id,
+                security_id,
+                linked_transaction_group_id=transaction.linked_transaction_group_id,
+            ).value
             try:
                 self._publish_event(
                     topic=KAFKA_TRANSACTIONS_RAW_RECEIVED_TOPIC,

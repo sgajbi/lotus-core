@@ -9,6 +9,7 @@ from portfolio_common.domain.eventing import (
     portfolio_partition_key,
     portfolio_security_partition_key,
     security_partition_key,
+    transaction_partition_key,
 )
 
 
@@ -55,6 +56,34 @@ def test_independent_positions_receive_independent_partition_identities() -> Non
     third = portfolio_security_partition_key("PORT_002", "SEC_A")
 
     assert len({first.value, second.value, third.value}) == 3
+
+
+def test_linked_transaction_group_serializes_multi_security_legs() -> None:
+    source = transaction_partition_key(
+        "PORT_001",
+        "SEC_SOURCE",
+        linked_transaction_group_id="CA-GROUP-001",
+    )
+    target = transaction_partition_key(
+        "PORT_001",
+        "SEC_TARGET",
+        linked_transaction_group_id="CA-GROUP-001",
+    )
+
+    assert source.scope is PartitionKeyScope.PORTFOLIO_TRANSACTION_GROUP
+    assert source.components == ("PORT_001", "transaction-group", "CA-GROUP-001")
+    assert source.value == target.value == "PORT_001|transaction-group|CA-GROUP-001"
+
+
+def test_unlinked_transaction_preserves_position_partition_identity() -> None:
+    key = transaction_partition_key(
+        "PORT_001",
+        "SEC_A",
+        linked_transaction_group_id="  ",
+    )
+
+    assert key.scope is PartitionKeyScope.PORTFOLIO_SECURITY
+    assert key.value == "PORT_001|SEC_A"
 
 
 def test_tenant_is_included_when_source_owned_tenant_identity_is_available() -> None:

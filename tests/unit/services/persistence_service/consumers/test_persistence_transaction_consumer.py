@@ -163,6 +163,20 @@ async def test_process_message_success(
         mock_send_to_dlq.assert_not_called()
 
 
+async def test_persisted_linked_transaction_retains_group_partition_identity(
+    transaction_consumer: TransactionPersistenceConsumer,
+    valid_transaction_event: TransactionEvent,
+) -> None:
+    linked_event = valid_transaction_event.model_copy(
+        update={"linked_transaction_group_id": "CA-GROUP-1"}
+    )
+
+    outbox_event = transaction_consumer.get_outbox_event(linked_event)
+
+    assert outbox_event is not None
+    assert outbox_event["partition_key"].value == ("PORT_UT_01|transaction-group|CA-GROUP-1")
+
+
 async def test_process_message_uses_header_correlation_on_direct_path(
     transaction_consumer: TransactionPersistenceConsumer,
     mock_kafka_message: MagicMock,

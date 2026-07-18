@@ -3,7 +3,7 @@ import logging
 from typing import Any, Dict, Optional
 
 from portfolio_common.config import KAFKA_TRANSACTIONS_PERSISTED_TOPIC
-from portfolio_common.domain.eventing import portfolio_security_partition_key
+from portfolio_common.domain.eventing import transaction_partition_key
 from portfolio_common.event_mapping import outbox_event_payload
 from portfolio_common.events import TransactionEvent
 from portfolio_common.logging_utils import log_operation_event
@@ -109,9 +109,10 @@ class TransactionPersistenceConsumer(GenericPersistenceConsumer):
         return {
             "aggregate_type": "RawTransaction",
             "aggregate_id": str(persisted_object.portfolio_id),
-            "partition_key": portfolio_security_partition_key(
+            "partition_key": transaction_partition_key(
                 persisted_object.portfolio_id,
                 persisted_object.security_id,
+                linked_transaction_group_id=persisted_object.linked_transaction_group_id,
             ),
             "event_type": "RawTransactionPersisted",
             "topic": KAFKA_TRANSACTIONS_PERSISTED_TOPIC,

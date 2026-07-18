@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 
 from .config import KAFKA_TRANSACTIONS_PERSISTED_TOPIC
-from .domain.eventing import portfolio_security_partition_key
+from .domain.eventing import transaction_partition_key
 from .events import TransactionEvent
 from .logging_utils import normalize_lineage_value
 
@@ -175,7 +175,15 @@ def _transaction_replay_message(
         transaction_id=transaction_id,
         portfolio_id=portfolio_id,
         topic=KAFKA_TRANSACTIONS_PERSISTED_TOPIC,
-        key=portfolio_security_partition_key(portfolio_id, security_id).value,
+        key=transaction_partition_key(
+            portfolio_id,
+            security_id,
+            linked_transaction_group_id=getattr(
+                transaction,
+                "linked_transaction_group_id",
+                None,
+            ),
+        ).value,
         payload=event_to_publish.model_dump(mode="json"),
         headers=[
             *headers,
