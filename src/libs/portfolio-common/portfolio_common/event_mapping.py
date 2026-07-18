@@ -32,6 +32,29 @@ def kafka_event_id(msg: Message) -> str:
     return f"{msg.topic()}-{msg.partition()}-{msg.offset()}"
 
 
+def kafka_outbox_id(msg: Message) -> str | None:
+    """Return the durable source outbox identity carried by a Kafka record."""
+
+    try:
+        headers = msg.headers() or []
+    except Exception:
+        return None
+    for name, raw_value in reversed(headers):
+        if name != "outbox_id":
+            continue
+        if isinstance(raw_value, (bytes, bytearray)):
+            try:
+                value = raw_value.decode("utf-8")
+            except UnicodeDecodeError:
+                return None
+        elif isinstance(raw_value, str):
+            value = raw_value
+        else:
+            return None
+        return value.strip() or None
+    return None
+
+
 def decode_kafka_event_payload(msg: Message) -> DecodedKafkaEventPayload:
     """Decode a Kafka message value as a JSON event payload."""
     return DecodedKafkaEventPayload(

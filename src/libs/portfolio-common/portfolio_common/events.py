@@ -531,12 +531,6 @@ class PortfolioDayReadyForValuationEvent(CoreEventModel):
     security_id: str
     valuation_date: date
     epoch: int = 0
-    source_transaction_id: Optional[str] = Field(
-        None,
-        description=(
-            "Transaction mutation that made this valuation scope ready; optional for legacy events."
-        ),
-    )
     readiness_reason: str = "transaction_processing.ready"
     correlation_id: Optional[str] = None
 

@@ -7,6 +7,7 @@ from portfolio_common.db import get_async_db_session
 from portfolio_common.event_mapping import (
     EventContractValidationError,
     decode_kafka_event_payload,
+    kafka_outbox_id,
     validate_kafka_event_payload,
 )
 from portfolio_common.events import PortfolioDayReadyForValuationEvent
@@ -23,20 +24,18 @@ logger = logging.getLogger(__name__)
 SERVICE_NAME = "valuation-readiness-consumer"
 
 
-def _readiness_source_mutation_id(event: PortfolioDayReadyForValuationEvent) -> str | None:
-    """Return transport-neutral identity for the transaction mutation behind readiness."""
+def _readiness_source_mutation_id(msg: Message) -> str | None:
+    """Return stable identity for the durable outbox mutation behind readiness."""
 
-    if event.source_transaction_id is None:
+    outbox_id = kafka_outbox_id(msg)
+    if outbox_id is None:
         return None
     return cast(
         str,
         stable_content_hash(
             {
-                "portfolio_id": event.portfolio_id,
-                "security_id": event.security_id,
-                "valuation_date": event.valuation_date,
-                "epoch": event.epoch,
-                "source_transaction_id": event.source_transaction_id,
+                "event_type": "PortfolioDayReadyForValuation",
+                "outbox_id": outbox_id,
             }
         ),
     )
@@ -70,7 +69,7 @@ class ValuationReadinessConsumer(BaseConsumer):
                         ):
                             return
 
-                        source_mutation_id = _readiness_source_mutation_id(event)
+                        source_mutation_id = _readiness_source_mutation_id(msg)
                         await ValuationJobRepository(db).upsert_job(
                             portfolio_id=event.portfolio_id,
                             security_id=event.security_id,

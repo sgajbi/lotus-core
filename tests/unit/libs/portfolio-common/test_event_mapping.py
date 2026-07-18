@@ -8,6 +8,7 @@ from portfolio_common.event_mapping import (
     EventContractValidationError,
     decode_kafka_event_payload,
     kafka_event_id,
+    kafka_outbox_id,
     outbox_event_payload,
     validate_kafka_event_payload,
 )
@@ -33,6 +34,25 @@ def test_decode_kafka_event_payload_derives_transport_identity() -> None:
     assert decoded.event_id == "transactions.raw.received-3-17"
     assert decoded.data == {"schema_version": "transaction.raw.v1"}
     assert kafka_event_id(_message({})) == "transactions.raw.received-3-17"
+
+
+def test_kafka_outbox_id_uses_last_valid_durable_header() -> None:
+    msg = _message({})
+    msg.headers.return_value = [
+        ("outbox_id", b"stale"),
+        ("correlation_id", b"corr-1"),
+        ("outbox_id", b" 417 "),
+    ]
+
+    assert kafka_outbox_id(msg) == "417"
+
+
+@pytest.mark.parametrize("headers", [[], [("outbox_id", b"")], [("outbox_id", b"\xff")]])
+def test_kafka_outbox_id_rejects_missing_or_invalid_header(headers) -> None:
+    msg = _message({})
+    msg.headers.return_value = headers
+
+    assert kafka_outbox_id(msg) is None
 
 
 def test_decode_kafka_event_payload_rejects_invalid_json() -> None:
