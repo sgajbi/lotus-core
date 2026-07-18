@@ -33,6 +33,7 @@ from ..application.index_catalog import IndexCatalogService
 from ..application.index_series import IndexSeriesService
 from ..application.integration_policy import IntegrationPolicyService
 from ..application.portfolio_manager_book import PortfolioManagerBookService
+from ..application.portfolio_party_roles import PortfolioPartyRoleAssignmentService
 from ..application.reference_coverage import ReferenceCoverageService
 from ..application.risk_free_series import RiskFreeSeriesService
 from ..application.sustainability_preference_profile import SustainabilityPreferenceProfileService
@@ -140,6 +141,10 @@ from ..contracts.portfolio_manager_book import (
     PortfolioManagerBookMembershipRequest,
     PortfolioManagerBookMembershipResponse,
 )
+from ..contracts.portfolio_party_roles import (
+    PortfolioPartyRoleAssignmentRequest,
+    PortfolioPartyRoleAssignmentResponse,
+)
 from ..contracts.portfolio_tax_lots import (
     PortfolioTaxLotWindowRequest,
     PortfolioTaxLotWindowResponse,
@@ -174,6 +179,7 @@ from ..dependencies import (
     get_index_series_service,
     get_integration_policy_service,
     get_portfolio_manager_book_service,
+    get_portfolio_party_role_assignment_service,
     get_reference_coverage_service,
     get_risk_free_series_service,
     get_sustainability_preference_profile_service,
@@ -1303,6 +1309,35 @@ async def resolve_portfolio_manager_book_membership(
             },
         )
     return response
+
+
+@router.post(
+    "/portfolios/{portfolio_id}/party-role-assignments",
+    response_model=PortfolioPartyRoleAssignmentResponse,
+    summary="Resolve effective portfolio party-role assignments",
+    description=(
+        "What: Return effective relationship coverage, investment-advisory, portfolio-management, "
+        "and client-service assignments for one portfolio.\n"
+        "How: Selects the latest version of each source record before applying the requested "
+        "business date, role, scope, party, and quality filters.\n"
+        "When: Use this source product when a consumer must distinguish a relationship manager, "
+        "investment adviser, portfolio manager, delegate, or service officer. The legacy "
+        "portfolio advisor identifier is never interpreted by this endpoint."
+    ),
+    openapi_extra=source_data_product_openapi_extra("PortfolioPartyRoleAssignment"),
+)
+async def resolve_portfolio_party_role_assignments(
+    request: PortfolioPartyRoleAssignmentRequest,
+    portfolio_id: str = Path(
+        ...,
+        description="Canonical portfolio whose effective party roles are requested.",
+        examples=["PB_SG_GLOBAL_BAL_001"],
+    ),
+    service: PortfolioPartyRoleAssignmentService = Depends(
+        get_portfolio_party_role_assignment_service
+    ),
+) -> PortfolioPartyRoleAssignmentResponse:
+    return await service.resolve(portfolio_id=portfolio_id, request=request)
 
 
 @router.post(

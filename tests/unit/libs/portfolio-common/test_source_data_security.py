@@ -145,6 +145,7 @@ def test_analytics_input_products_require_system_access_classification() -> None
         "TransactionCostCurve",
         "MarketDataCoverageWindow",
         "PortfolioManagerBookMembership",
+        "PortfolioPartyRoleAssignment",
         "CioModelChangeAffectedCohort",
         "DpmPortfolioUniverseCandidate",
         "ClientRestrictionProfile",
