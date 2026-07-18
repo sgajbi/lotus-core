@@ -60,9 +60,15 @@ remains #521.
 - Alembic reports the single head `c115b2c3d4f4`; migration contract validation passed.
 - route-catalog generator tests and strict MyPy passed; regenerated consumers now match the
   source-product catalog.
+- isolated PostgreSQL 16 proof applied the full migration chain through `c115b2c3d4f4`, then passed
+  the role-resolution integration test (1 test) covering latest-version quarantine precedence,
+  the migrated-portfolio legacy fence, authoritative accepted-role membership, and idempotent
+  version upsert;
+- migration reversibility was proved by downgrading `c115b2c3d4f4 -> c114b2c3d4f3`, confirming the
+  assignment table was absent, upgrading back to the single head, and confirming it was present.
 
-Focused PostgreSQL migration/API proof, broad repository-native gates, PR CI, merge, exact-main
-validation, wiki publication, and verified issue closure remain required before #513 is done.
+Broad repository-native gates, PR CI, merge, exact-main validation, wiki publication, and verified
+issue closure remain required before #513 is done.
 
 ## Documentation Decision
 
