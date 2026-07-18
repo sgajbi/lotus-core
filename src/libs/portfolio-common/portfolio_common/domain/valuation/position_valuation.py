@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from decimal import Decimal, localcontext
 from enum import StrEnum
 
-from .calculation_lineage import (
+from ..calculation_lineage import (
     CalculationLineage,
     FinancialSourceReference,
     build_calculation_lineage,

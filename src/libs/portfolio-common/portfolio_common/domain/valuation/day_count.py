@@ -9,7 +9,7 @@ from decimal import Decimal, localcontext
 from enum import StrEnum
 from types import MappingProxyType
 
-from .calculation_lineage import canonical_content_hash
+from ..calculation_lineage import canonical_content_hash
 
 
 class UnsupportedDayCountError(ValueError):

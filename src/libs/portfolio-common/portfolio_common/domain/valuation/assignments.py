@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from enum import StrEnum
 
-from .calculation_lineage import canonical_content_hash
+from ..calculation_lineage import canonical_content_hash
 
 
 class ValuationPolicyAssignmentError(ValueError):
