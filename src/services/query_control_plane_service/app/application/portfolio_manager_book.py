@@ -3,9 +3,11 @@
 from datetime import datetime
 from typing import Literal, cast
 
-from portfolio_common.request_fingerprints import request_fingerprint
 from portfolio_common.runtime_providers import Clock
-from portfolio_common.source_data_product_metadata import source_data_product_runtime_metadata
+from portfolio_common.source_data_product_metadata import (
+    source_data_product_runtime_metadata,
+    stable_content_hash,
+)
 
 from ..contracts.portfolio_manager_book import (
     PortfolioManagerBookMember,
@@ -70,42 +72,51 @@ def _membership_response(
 
     state: Literal["READY", "INCOMPLETE"] = "READY" if members else "INCOMPLETE"
     reason = "PM_BOOK_MEMBERSHIP_READY" if members else "PM_BOOK_MEMBERSHIP_EMPTY"
-    fingerprint = request_fingerprint(
+    supportability = PortfolioManagerBookMembershipSupportability(
+        state=state,
+        reason=reason,
+        returned_portfolio_count=len(members),
+        filters_applied=filters_applied,
+    )
+    lineage = {
+        "source_system": "lotus-core",
+        "source_table": _source_table(records),
+        "source_field": _source_field(records),
+        "compatibility_policy": "advisor_id_only_when_no_party_role_history",
+        "contract_version": "rfc_041_pm_book_membership_v1",
+    }
+    data_quality_status = "ACCEPTED" if members else "MISSING"
+    latest_evidence_timestamp = _latest_evidence_timestamp(records)
+    content_hash = stable_content_hash(
         {
             "product_name": "PortfolioManagerBookMembership",
+            "product_version": "v1",
             "portfolio_manager_id": portfolio_manager_id,
-            "as_of_date": request.as_of_date.isoformat(),
-            "booking_center_code": request.booking_center_code,
-            "portfolio_types": portfolio_types,
-            "include_inactive": request.include_inactive,
-            "portfolio_ids": [member.portfolio_id for member in members],
+            "request": request.model_dump(mode="json"),
+            "normalized_portfolio_types": portfolio_types,
+            "members": [member.model_dump(mode="json") for member in members],
+            "data_quality_status": data_quality_status,
+            "latest_evidence_timestamp": latest_evidence_timestamp,
+            "supportability": supportability.model_dump(mode="json"),
+            "lineage": lineage,
         }
     )
     return PortfolioManagerBookMembershipResponse(
         portfolio_manager_id=portfolio_manager_id,
         booking_center_code=request.booking_center_code,
         members=members,
-        supportability=PortfolioManagerBookMembershipSupportability(
-            state=state,
-            reason=reason,
-            returned_portfolio_count=len(members),
-            filters_applied=filters_applied,
-        ),
-        lineage={
-            "source_system": "lotus-core",
-            "source_table": _source_table(records),
-            "source_field": _source_field(records),
-            "compatibility_policy": "advisor_id_only_when_no_party_role_history",
-            "contract_version": "rfc_041_pm_book_membership_v1",
-        },
+        supportability=supportability,
+        lineage=lineage,
         **cast(
             dict[str, object],
             source_data_product_runtime_metadata(
                 as_of_date=request.as_of_date,
                 generated_at=generated_at,
-                data_quality_status="ACCEPTED" if members else "MISSING",
-                latest_evidence_timestamp=_latest_evidence_timestamp(records),
-                snapshot_id=f"pm_book_membership:{fingerprint}",
+                data_quality_status=data_quality_status,
+                latest_evidence_timestamp=latest_evidence_timestamp,
+                snapshot_id=(f"pm_book_membership:{content_hash.removeprefix('sha256:')[:24]}"),
+                content_hash=content_hash,
+                use_content_hash_as_source_batch_fingerprint=True,
             ),
         ),
     )
