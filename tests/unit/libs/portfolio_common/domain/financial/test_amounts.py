@@ -5,6 +5,7 @@ from decimal import Decimal
 
 import pytest
 from portfolio_common.domain.financial.amounts import (
+    MONEY_ROUNDING_POLICY_VERSION,
     CurrencyCode,
     FxRate,
     MoneyAmount,
@@ -17,12 +18,36 @@ def test_currency_code_normalizes_and_compares_by_iso_value() -> None:
     assert str(CurrencyCode.from_raw("sgd")) == "SGD"
 
 
-def test_money_amount_quantizes_with_half_up_rounding_and_serializes_at_boundary() -> None:
+def test_money_amount_quantizes_with_half_even_rounding_and_serializes_at_boundary() -> None:
     money = MoneyAmount.from_raw(amount="12.345", currency="usd").quantized()
 
-    assert money.amount == Decimal("12.35")
+    assert money.amount == Decimal("12.34")
     assert money.currency == CurrencyCode("USD")
-    assert money.as_boundary_payload() == {"amount": "12.35", "currency": "USD"}
+    assert money.as_boundary_payload() == {"amount": "12.34", "currency": "USD"}
+    assert MONEY_ROUNDING_POLICY_VERSION == "1.1.0"
+
+
+@pytest.mark.parametrize(
+    ("amount", "currency", "quantum", "expected"),
+    [
+        ("1.005", "USD", "0.01", "1.00"),
+        ("1.015", "SGD", "0.01", "1.02"),
+        ("-1.005", "EUR", "0.01", "-1.00"),
+        ("0", "JPY", "1", "0"),
+        ("999999.999", "GBP", "0.01", "1000000.00"),
+        ("1.2345", "KWD", "0.001", "1.234"),
+    ],
+)
+def test_money_amount_half_even_golden_vectors_across_currencies_and_quanta(
+    amount: str,
+    currency: str,
+    quantum: str,
+    expected: str,
+) -> None:
+    result = MoneyAmount.from_raw(amount=amount, currency=currency).quantized(Decimal(quantum))
+
+    assert result.amount == Decimal(expected)
+    assert result.currency == CurrencyCode(currency)
 
 
 def test_money_amount_optional_from_raw_skips_missing_amount_before_currency_validation() -> None:
