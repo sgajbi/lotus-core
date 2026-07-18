@@ -2896,6 +2896,16 @@ Most relevant current governance:
      rather than relabeling it as a source record. Run position scaling, aggregation, and FX
      conversion in the governed 50-digit local Decimal context; the returned reporting values and
      output hash must use those same intermediates.
+208. Repository-native Python quality evidence is valid only when the active interpreter's tool
+     version exactly matches `requirements/ci-tooling.lock.txt`. Route module-backed Ruff, MyPy,
+     Bandit, Vulture, Deptry, Xenon, Radon, Interrogate, and pip-audit commands through
+     `scripts/quality/ci_tooling.py`; verify import-linter and other embedded tools before importing
+     them. Missing, ranged, duplicate, or mismatched pins fail with the repository bootstrap
+     remediation. Build subprocess argument lists and reuse the current interpreter; do not create
+     shell strings, separate terminal windows, global-tool assumptions, or a second version source.
+     Quality Baseline workflow jobs must install from the same lock even when a step remains
+     report-only. Tool-version changes require an intentional lock update and the workflow/tooling
+     contract tests; they must not alter application runtime dependencies or lint rules implicitly.
 
 ## Context Maintenance Rule
 

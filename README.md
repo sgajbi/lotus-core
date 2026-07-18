@@ -277,7 +277,9 @@ Important runtime note:
 - `make ci-main`
   main releasability parity
 - `make lint`
-  repository-wide Ruff check and format proof plus the governed domain and contract guards
+  repository-wide Ruff check and format proof plus the governed domain and contract guards; the
+  target verifies the active Ruff version against `requirements/ci-tooling.lock.txt` and fails with
+  a bootstrap remediation instead of accepting ambient tooling
 - `make verify-dependencies`
   integrity-check and reuse the content-addressed dependency-health environment when inputs match
 - `make verify-dependencies-clean`

@@ -25,17 +25,37 @@ The guarded playbook set covers `ingestion-stuck-failed`, `dlq-growth`, `replay-
 ## Initial Quality Baseline Commands
 
 ```powershell
-python -m ruff check . --statistics
+make lint
 python -m pytest --collect-only -q
-python -m radon cc src -s -a
-python -m radon mi src -s
+make quality-complexity-gate
+make quality-maintainability-gate
 python scripts\migration_contract_check.py --mode alembic-sql
+```
+
+Repository quality commands use `scripts/quality/ci_tooling.py` to verify and execute the exact
+versions declared in `requirements/ci-tooling.lock.txt`. They never treat whichever Ruff, MyPy,
+Bandit, Vulture, Deptry, Radon, Xenon, import-linter, Interrogate, or pip-audit happens to be on the
+ambient interpreter as CI-parity evidence. If a tool is missing or has another version, run this
+cross-platform remediation from the repository root and then rerun the Make target:
+
+```powershell
+python scripts/development/bootstrap_dev.py
+```
+
+The runner invokes `python -m <tool>` with an argument list in the current process environment; it
+does not construct a shell command or open a separate terminal window. Direct diagnostic use is
+available when needed, for example:
+
+```powershell
+python scripts/quality/ci_tooling.py verify ruff mypy
+python scripts/quality/ci_tooling.py run ruff check path/to/file.py
 ```
 
 ## CI Posture
 
 1. Existing feature and PR gates remain authoritative for merge readiness.
-2. `Quality Baseline Report` is report-only and should not block PRs yet.
+2. `Quality Baseline Report` is report-only and should not block PRs yet; its quality-tool installs
+   and commands still use the same exact repository lock as blocking local and CI lanes.
 3. The baseline should ratchet from report-only to regression-only once collection and tool
    availability are stable.
 
