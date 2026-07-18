@@ -524,6 +524,14 @@ does not publish this key policy; the operator-owned migration runbook is the du
   first two signed commits. The final affected package run passed `245` tests; full MyPy passed all
   `235` source files; event-runtime, event-contract, structured-log, and duplicate-delivery guards
   passed.
+- PR #807 review found that the ordered DLQ recovery loops treated the default disabled failure
+  budget (`0`) as unlimited retries. A sustained DLQ publication or post-publication commit outage
+  could therefore pin the consumer instead of preserving restart redelivery. Signed fix-forward
+  commit `7c71a77b0` stops after the first failed recovery phase when the budget is disabled, leaves
+  the source offset uncommitted, and emits bounded `dlq_recovery_stopped` evidence. Positive values
+  remain the only way to enable bounded in-process recovery. Both recovery phases have direct
+  regressions; the focused shared-consumer suite passes `73/73` and full MyPy passes all `237`
+  source files.
 - Exact-main dual-leg reproduction failed before the shared retry fix and passed afterward without
   increasing its 240-second budget. Exact-head timeseries contract E2E passed `4/4` at signed
   `c79bf0afe` in `155.53s` with dynamic ports and project-scoped teardown.
@@ -580,3 +588,6 @@ job-scheduling behavior only. The readiness event payload/schema, topics, public
 schema, calculations, and operator commands remain unchanged. Repository context and this review
 record change because the durable source-mutation and same-session retry rules are reusable
 engineering truth. No migration or authored wiki change is required.
+The PR review fix clarifies the existing DLQ failure-budget runbook and repository context because
+default-zero and positive-budget behavior are operator-facing recovery truth. It changes no command,
+environment-variable name, API, event, database, calculation, or authored wiki contract.

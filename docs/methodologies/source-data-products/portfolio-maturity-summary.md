@@ -86,7 +86,7 @@ holdings quality alone.
 | Exact reconciliation is missing | `reconciliation_status=UNRECONCILED`, `supportability_status=UNAVAILABLE`, reason `HOLDINGS_RECONCILIATION_MISSING`. |
 | Exact reconciliation is incomplete | `reconciliation_status=PARTIAL`, `supportability_status=PARTIAL`, reason `HOLDINGS_RECONCILIATION_PARTIAL`. |
 | Exact reconciliation is stale | `reconciliation_status=STALE`, `supportability_status=STALE`, reason `HOLDINGS_RECONCILIATION_STALE`. |
-| Exact reconciliation failed or requires replay | `reconciliation_status=BLOCKED`, `supportability_status=UNAVAILABLE`, reason `HOLDINGS_RECONCILIATION_BLOCKED`. |
+| Exact reconciliation failed or requires replay | `reconciliation_status=BLOCKED`, `data_quality_status=BLOCKED`, `supportability_status=UNAVAILABLE`, reason `HOLDINGS_RECONCILIATION_BLOCKED`. |
 | Exact reconciliation is unknown or a source row cannot be scoped | `reconciliation_status=UNKNOWN`, `supportability_status=UNAVAILABLE`, reason `HOLDINGS_RECONCILIATION_UNKNOWN`. |
 | Maturity-bearing holding lacks `maturity_date` | `supportability_status=PARTIAL`, `supportability_reasons` includes `MISSING_INSTRUMENT_MATURITY_DATE`. |
 | Product classification suggests unsupported lifecycle features | `supportability_status=PARTIAL`, `supportability_reasons` includes `UNSUPPORTED_PRODUCT_MATURITY_FEATURE`. |

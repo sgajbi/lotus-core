@@ -360,10 +360,12 @@ Current repository posture:
     processing attempts, success, retryable/terminal failure, DLQ, commit, poll, critical-exit, and
     shutdown telemetry on the shared consumer boundary; add service-local metrics only as
     registered extensions when the shared fleet-level metrics are insufficient. DLQ publication
-    failures default to no-commit redelivery; operators can set
-    `KAFKA_CONSUMER_DLQ_FAILURE_MAX_ATTEMPTS` to a positive value to stop the consumer with
-    `DlqPublicationBudgetExhausted` and bounded `dlq_failure_budget_exhausted` telemetry after
-    repeated DLQ failure for the same topic/group/partition/offset/key. Do not claim durable local
+    failures default to stopping after one failed DLQ publication or post-publication offset commit
+    without committing the source offset, allowing governed restart redelivery. Operators can set
+    `KAFKA_CONSUMER_DLQ_FAILURE_MAX_ATTEMPTS` to a positive value to enable bounded ordered
+    in-process recovery; exhaustion stops the consumer with `DlqPublicationBudgetExhausted` and
+    `dlq_failure_budget_exhausted` telemetry for the same topic/group/partition/offset/key. Do not
+    claim durable local
     quarantine unless a separate service-owned quarantine store exists. Retryable consumer failures
     default to uncommitted redelivery; operators can set
     `KAFKA_CONSUMER_RETRYABLE_FAILURE_MAX_ATTEMPTS` and/or

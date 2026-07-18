@@ -292,18 +292,22 @@ trace IDs, and raw exception text out of producer metric labels. Use structured 
 
 ## Kafka Consumer DLQ Failure Containment
 
-`BaseConsumer` commits terminal-message offsets only after DLQ publication succeeds. If DLQ
-publication fails, the default behavior remains safe redelivery: the offset is not committed.
+`BaseConsumer` commits terminal-message offsets only after DLQ publication succeeds. With the
+default failure budget, a failed DLQ publication or post-publication offset commit stops the
+consumer after that single recovery attempt and leaves the original offset uncommitted for restart
+redelivery. It does not spin indefinitely on an unavailable DLQ or coordinator.
 
-Operators can bound repeated poison-message redelivery during sustained DLQ outages with:
+Operators can explicitly enable bounded, ordered in-process recovery attempts with:
 
 ```text
 KAFKA_CONSUMER_DLQ_FAILURE_MAX_ATTEMPTS=<positive integer>
 ```
 
-Default `0` disables the budget and preserves existing redelivery behavior. With a positive budget,
-the shared consumer tracks DLQ failures for the same topic/group/partition/offset/key. When the
-budget is exhausted, the consumer stops without committing the offset, raises
+Default `0` disables in-process DLQ recovery retries. The consumer emits
+`kafka.consumer.dlq_recovery_stopped`, stops without committing after the first failed recovery
+phase, and relies on governed restart redelivery. With a positive budget, the shared consumer
+tracks DLQ failures for the same topic/group/partition/offset/key and retries only the failed
+recovery phase. When the budget is exhausted, the consumer stops without committing, raises
 `DlqPublicationBudgetExhausted`, emits `kafka.consumer.dlq_failure_budget_exhausted`, and records
 `kafka_consumer_events_total` with outcome `dlq_failure_budget_exhausted`.
 
@@ -359,11 +363,12 @@ successfully written to DLQ. Cross-restart durable attempt accounting requires a
 attempt store and must not be claimed from these shared settings alone.
 
 DLQ publication failure and post-publication offset-commit failure use the same ordered recovery
-posture. The consumer retains the partition key and retries the failed recovery phase in-process;
-it does not rerun terminal business processing after the DLQ record has been published. A positive
-`KAFKA_CONSUMER_DLQ_FAILURE_MAX_ATTEMPTS` stops the consumer without committing when the recovery
-budget is exhausted. Graceful shutdown also leaves an unrecovered offset uncommitted for safe
-restart recovery, and pending same-partition messages are not drained past it.
+posture. With a positive DLQ failure budget, the consumer retains the partition key and retries the
+failed recovery phase in-process; it does not rerun terminal business processing after the DLQ
+record has been published. With the default disabled budget it stops after the first failed phase.
+A positive budget stops the consumer without committing when exhausted. Graceful shutdown also
+leaves an unrecovered offset uncommitted for safe restart recovery, and pending same-partition
+messages are not drained past it.
 
 ## Structured Operational Logs
 
