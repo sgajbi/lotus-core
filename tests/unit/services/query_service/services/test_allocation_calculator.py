@@ -1,9 +1,12 @@
 from __future__ import annotations
 
-from decimal import Decimal
+from dataclasses import replace
+from datetime import date
+from decimal import Decimal, localcontext
 from types import SimpleNamespace
 
-from src.services.query_service.app.services.allocation_calculator import (
+from portfolio_common.portfolio_allocation import (
+    AllocationContributorInput,
     AllocationInputRow,
     calculate_allocation_views,
 )
@@ -222,3 +225,144 @@ def test_calculate_allocation_views_keeps_zero_total_weights_at_zero() -> None:
     bucket = result.views[0].buckets[0]
     assert result.total_market_value_reporting_currency == Decimal("0")
     assert bucket.weight == Decimal("0")
+
+
+def _direct_contributor(security_id: str, snapshot_id: int) -> AllocationContributorInput:
+    return AllocationContributorInput(
+        contributor_type="direct_position",
+        portfolio_id="PORT_1",
+        security_id=security_id,
+        booked_security_id=security_id,
+        source_snapshot_id=snapshot_id,
+    )
+
+
+def test_calculate_allocation_views_bounds_and_reconciles_contributors() -> None:
+    rows = [
+        AllocationInputRow(
+            instrument=_instrument("SEC1", asset_class="EQUITY"),
+            snapshot=_snapshot("SEC1"),
+            market_value_reporting_currency=Decimal("100"),
+            contributor=_direct_contributor("SEC1", 1),
+        ),
+        AllocationInputRow(
+            instrument=_instrument("SEC2", asset_class="EQUITY"),
+            snapshot=_snapshot("SEC2"),
+            market_value_reporting_currency=Decimal("-90"),
+            contributor=_direct_contributor("SEC2", 2),
+        ),
+        AllocationInputRow(
+            instrument=_instrument("SEC3", asset_class="EQUITY"),
+            snapshot=_snapshot("SEC3"),
+            market_value_reporting_currency=Decimal("50"),
+            contributor=_direct_contributor("SEC3", 3),
+        ),
+    ]
+
+    result = calculate_allocation_views(
+        rows=rows,
+        dimensions=["asset_class"],
+        contributor_limit_per_bucket=2,
+    )
+    bucket = result.views[0].buckets[0]
+
+    assert bucket.market_value_reporting_currency == Decimal("60")
+    assert bucket.position_count == 3
+    assert bucket.contributor_count == 3
+    assert bucket.contributors_truncated is True
+    assert [contributor.contributor.security_id for contributor in bucket.contributors] == [
+        "SEC1",
+        "SEC2",
+    ]
+    assert (
+        sum(
+            (item.market_value_reporting_currency for item in bucket.contributors),
+            Decimal("0"),
+        )
+        + bucket.omitted_market_value_reporting_currency
+        == bucket.market_value_reporting_currency
+    )
+    assert bucket.omitted_market_value_reporting_currency == Decimal("50")
+
+
+def test_allocation_lineage_is_order_independent_and_binds_source_identity() -> None:
+    contributor = AllocationContributorInput(
+        contributor_type="look_through_component",
+        portfolio_id="PORT_1",
+        security_id="ETF_1",
+        booked_security_id="FUND_1",
+        source_snapshot_id=11,
+        component_record_id=21,
+        component_weight=Decimal("0.6"),
+        component_effective_from=date(2026, 1, 1),
+        component_source_system="fund-master",
+        component_source_record_id="COMP_21",
+    )
+    component_row = AllocationInputRow(
+        instrument=_instrument("ETF_1", asset_class="EQUITY"),
+        snapshot=_snapshot("ETF_1"),
+        market_value_reporting_currency=Decimal("60"),
+        contributor=contributor,
+    )
+    direct_row = AllocationInputRow(
+        instrument=_instrument("SEC_2", asset_class="BOND"),
+        snapshot=_snapshot("SEC_2"),
+        market_value_reporting_currency=Decimal("40"),
+        contributor=_direct_contributor("SEC_2", 12),
+    )
+
+    first = calculate_allocation_views(
+        rows=[component_row, direct_row],
+        dimensions=["asset_class"],
+        contributor_limit_per_bucket=50,
+    )
+    reordered = calculate_allocation_views(
+        rows=[direct_row, component_row],
+        dimensions=["asset_class"],
+        contributor_limit_per_bucket=50,
+    )
+    corrected = calculate_allocation_views(
+        rows=[
+            AllocationInputRow(
+                instrument=component_row.instrument,
+                snapshot=component_row.snapshot,
+                market_value_reporting_currency=component_row.market_value_reporting_currency,
+                contributor=replace(
+                    contributor,
+                    component_source_record_id="COMP_21_REV_2",
+                ),
+            ),
+            direct_row,
+        ],
+        dimensions=["asset_class"],
+        contributor_limit_per_bucket=50,
+    )
+
+    assert first.calculation_lineage == reordered.calculation_lineage
+    assert (
+        corrected.calculation_lineage.input_content_hash
+        != first.calculation_lineage.input_content_hash
+    )
+    assert corrected.calculation_lineage.algorithm_id == "PORTFOLIO_ALLOCATION"
+    assert corrected.calculation_lineage.intermediate_precision == 28
+
+
+def test_allocation_weight_is_independent_of_ambient_decimal_precision() -> None:
+    rows = [
+        AllocationInputRow(
+            instrument=_instrument("SEC1", asset_class="EQUITY"),
+            snapshot=_snapshot("SEC1"),
+            market_value_reporting_currency=Decimal("1"),
+        ),
+        AllocationInputRow(
+            instrument=_instrument("SEC2", asset_class="BOND"),
+            snapshot=_snapshot("SEC2"),
+            market_value_reporting_currency=Decimal("2"),
+        ),
+    ]
+
+    with localcontext() as context:
+        context.prec = 6
+        result = calculate_allocation_views(rows=rows, dimensions=["asset_class"])
+
+    assert result.views[0].buckets[0].weight == Decimal("0.6666666666666666666666666667")
