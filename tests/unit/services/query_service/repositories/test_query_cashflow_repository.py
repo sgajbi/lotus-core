@@ -105,8 +105,8 @@ async def test_cashflow_repository_portfolio_cashflow_series_filters_to_portfoli
     second_timestamp = datetime(2026, 4, 19, 10, 45, tzinfo=UTC)
     mock_db_session.execute.return_value = MagicMock(
         all=lambda: [
-            (date(2026, 4, 18), 10, 2, first_timestamp),
-            (date(2026, 4, 19), -2, 1, second_timestamp),
+            (date(2026, 4, 18), 10, 2, 8, first_timestamp),
+            (date(2026, 4, 19), -2, 1, 8, second_timestamp),
         ]
     )
     repository = CashflowRepository(mock_db_session)
@@ -128,6 +128,7 @@ async def test_cashflow_repository_portfolio_cashflow_series_filters_to_portfoli
     assert "anon_1.is_portfolio_flow" in compiled_query
     assert "sum(anon_1.amount)" in compiled_query.lower()
     assert "count(*)" in compiled_query.lower()
+    assert "sum(sum(anon_1.amount)) OVER ()" in compiled_query
     assert "max(anon_1.updated_at)" in compiled_query.lower()
 
 
@@ -153,6 +154,7 @@ async def test_cashflow_repository_cash_movement_summary_groups_latest_cashflow_
     assert "anon_1.is_position_flow" in compiled_query
     assert "anon_1.is_portfolio_flow" in compiled_query
     assert "sum(count(*)) OVER ()" in compiled_query
+    assert "sum(sum(anon_1.amount)) OVER (PARTITION BY anon_1.currency)" in compiled_query
 
 
 async def test_cashflow_repository_cash_movement_summary_returns_source_count(
@@ -161,8 +163,8 @@ async def test_cashflow_repository_cash_movement_summary_returns_source_count(
     latest_timestamp = datetime(2026, 4, 18, 9, 15, tzinfo=UTC)
     mock_db_session.execute.return_value = MagicMock(
         all=lambda: [
-            ("CASHFLOW_IN", "SETTLED", "USD", False, True, 2, 10, latest_timestamp, 3),
-            ("CASHFLOW_OUT", "SETTLED", "USD", False, True, 1, -2, latest_timestamp, 3),
+            ("CASHFLOW_IN", "SETTLED", "USD", False, True, 2, 10, latest_timestamp, 3, 8),
+            ("CASHFLOW_OUT", "SETTLED", "USD", False, True, 1, -2, latest_timestamp, 3, 8),
         ]
     )
     repository = CashflowRepository(mock_db_session)
@@ -174,6 +176,7 @@ async def test_cashflow_repository_cash_movement_summary_returns_source_count(
     )
 
     assert evidence.source_row_count == 3
+    assert evidence.source_currency_totals == {"USD": Decimal("8")}
     assert evidence.rows == [
         ("CASHFLOW_IN", "SETTLED", "USD", False, True, 2, Decimal("10"), latest_timestamp),
         ("CASHFLOW_OUT", "SETTLED", "USD", False, True, 1, Decimal("-2"), latest_timestamp),
