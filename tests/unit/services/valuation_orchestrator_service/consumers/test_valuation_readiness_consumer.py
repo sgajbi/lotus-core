@@ -54,7 +54,6 @@ def mock_event() -> PortfolioDayReadyForValuationEvent:
         security_id="SEC-VAL-1",
         valuation_date=date(2026, 3, 7),
         epoch=0,
-        source_transaction_id="TX-VAL-1",
         event_type="PortfolioDayReadyForValuation",
         schema_version=GOVERNED_EVENT_SCHEMA_VERSION,
     )
@@ -68,7 +67,7 @@ def mock_kafka_message(mock_event: PortfolioDayReadyForValuationEvent) -> MagicM
     msg.topic.return_value = "portfolio_security_day.valuation.ready"
     msg.partition.return_value = 0
     msg.offset.return_value = 1
-    msg.headers.return_value = []
+    msg.headers.return_value = [("outbox_id", b"417")]
     return msg
 
 
@@ -118,7 +117,7 @@ async def test_readiness_event_upserts_valuation_job_and_marks_idempotency(
     assert job_kwargs["valuation_date"] == mock_event.valuation_date
     assert job_kwargs["epoch"] == mock_event.epoch
     assert isinstance(job_kwargs["correlation_id"], str)
-    assert job_kwargs["source_correction_id"] == _readiness_source_mutation_id(mock_event)
+    assert job_kwargs["source_correction_id"] == _readiness_source_mutation_id(mock_kafka_message)
     assert job_kwargs["rearm_completed"] is True
     assert job_kwargs["requeue_if_processing"] is True
 
@@ -169,7 +168,10 @@ async def test_readiness_event_uses_header_correlation_for_direct_processing(
     mock_idempotency_repo = mock_dependencies["idempotency_repo"]
     mock_job_repo = mock_dependencies["job_repo"]
     mock_idempotency_repo.claim_event_processing.return_value = True
-    mock_kafka_message.headers.return_value = [("correlation_id", b"test-corr-id")]
+    mock_kafka_message.headers.return_value = [
+        ("correlation_id", b"test-corr-id"),
+        ("outbox_id", b"417"),
+    ]
 
     await consumer.process_message(mock_kafka_message)
 
@@ -180,12 +182,10 @@ async def test_readiness_event_uses_header_correlation_for_direct_processing(
 async def test_legacy_readiness_event_rearms_complete_job_without_processing_requeue(
     consumer: ValuationReadinessConsumer,
     mock_kafka_message: MagicMock,
-    mock_event: PortfolioDayReadyForValuationEvent,
     mock_dependencies: dict,
 ):
     mock_dependencies["idempotency_repo"].claim_event_processing.return_value = True
-    legacy_event = mock_event.model_copy(update={"source_transaction_id": None})
-    mock_kafka_message.value.return_value = legacy_event.model_dump_json().encode("utf-8")
+    mock_kafka_message.headers.return_value = []
 
     await consumer.process_message(mock_kafka_message)
 
@@ -195,17 +195,16 @@ async def test_legacy_readiness_event_rearms_complete_job_without_processing_req
     assert job_kwargs["requeue_if_processing"] is False
 
 
-async def test_readiness_source_mutation_identity_is_transport_neutral_and_transaction_specific():
-    first = PortfolioDayReadyForValuationEvent(
-        portfolio_id="PORT-VAL-1",
-        security_id="SEC-VAL-1",
-        valuation_date=date(2026, 3, 7),
-        epoch=0,
-        source_transaction_id="TX-VAL-1",
-        correlation_id="transport-a",
-    )
-    duplicate = first.model_copy(update={"correlation_id": "transport-b"})
-    later_mutation = first.model_copy(update={"source_transaction_id": "TX-VAL-2"})
+async def test_readiness_source_mutation_identity_is_redelivery_stable_and_event_specific():
+    first = MagicMock()
+    first.headers.return_value = [("outbox_id", b"417"), ("correlation_id", b"transport-a")]
+    duplicate = MagicMock()
+    duplicate.headers.return_value = [
+        ("correlation_id", b"transport-b"),
+        ("outbox_id", b"417"),
+    ]
+    later_mutation = MagicMock()
+    later_mutation.headers.return_value = [("outbox_id", b"418")]
 
     assert _readiness_source_mutation_id(first) == _readiness_source_mutation_id(duplicate)
     assert _readiness_source_mutation_id(first) != _readiness_source_mutation_id(later_mutation)

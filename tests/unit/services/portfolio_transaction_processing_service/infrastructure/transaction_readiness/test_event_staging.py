@@ -59,7 +59,6 @@ async def test_stages_transaction_and_valuation_readiness_events() -> None:
     assert valuation_call.kwargs["partition_key"].value == "PB-001|SEC-001"
     assert valuation_call.kwargs["event_type"] == "PortfolioDayReadyForValuation"
     assert valuation_call.kwargs["topic"] == KAFKA_PORTFOLIO_SECURITY_DAY_VALUATION_READY_TOPIC
-    assert valuation_call.kwargs["payload"]["source_transaction_id"] == "TX-READY-001"
     assert valuation_call.kwargs["payload"]["traceparent"] == TRACEPARENT
     assert valuation_call.kwargs["traceparent"] == TRACEPARENT
 

@@ -5,6 +5,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 from confluent_kafka import KafkaException, Producer
 
 from .config import KAFKA_BOOTSTRAP_SERVERS
+from .event_mapping import kafka_outbox_id
 from .kafka_producer_policy import (
     DEFAULT_PRODUCER_SERVICE,
     KafkaProducerPolicy,
@@ -255,29 +256,13 @@ def _delivery_report_callback(
     on_delivery: Optional[Callable[[str, bool, Optional[str]], None]],
 ):
     def delivery_report(err, msg):
-        resolved_outbox_id = outbox_id or _outbox_id_from_message_headers(msg)
+        resolved_outbox_id = outbox_id or kafka_outbox_id(msg)
         if err is not None:
             _handle_delivery_failure(err, msg, resolved_outbox_id, on_delivery)
             return
         _handle_delivery_success(msg, resolved_outbox_id, on_delivery)
 
     return delivery_report
-
-
-def _outbox_id_from_message_headers(msg) -> Optional[str]:
-    try:
-        raw = dict(msg.headers() or []).get("outbox_id")
-    except Exception:
-        return None
-    return _decoded_outbox_id(raw)
-
-
-def _decoded_outbox_id(raw: object) -> Optional[str]:
-    if isinstance(raw, (bytes, bytearray)):
-        return raw.decode("utf-8")
-    if isinstance(raw, str):
-        return raw
-    return None
 
 
 def _handle_delivery_failure(
