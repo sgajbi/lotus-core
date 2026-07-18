@@ -14,6 +14,7 @@ class PartitionKeyScope(StrEnum):
 
     PORTFOLIO = "portfolio"
     PORTFOLIO_SECURITY = "portfolio_security"
+    PORTFOLIO_TRANSACTION_GROUP = "portfolio_transaction_group"
     SECURITY = "security"
     CURRENCY_PAIR = "currency_pair"
     BUSINESS_CALENDAR = "business_calendar"
@@ -89,6 +90,32 @@ def portfolio_security_partition_key(
         tenant_id=tenant_id,
         tenant_required=tenant_required,
     )
+
+
+def portfolio_transaction_group_partition_key(
+    portfolio_id: str,
+    linked_transaction_group_id: str,
+) -> EventPartitionKey:
+    """Order every leg in one portfolio-owned transaction group on one stream."""
+
+    return _build_partition_key(
+        scope=PartitionKeyScope.PORTFOLIO_TRANSACTION_GROUP,
+        components=(portfolio_id, "transaction-group", linked_transaction_group_id),
+    )
+
+
+def transaction_partition_key(
+    portfolio_id: str,
+    security_id: str,
+    *,
+    linked_transaction_group_id: str | None = None,
+) -> EventPartitionKey:
+    """Keep linked multi-leg transactions together and unlinked position flows independent."""
+
+    normalized_group_id = (linked_transaction_group_id or "").strip()
+    if normalized_group_id:
+        return portfolio_transaction_group_partition_key(portfolio_id, normalized_group_id)
+    return portfolio_security_partition_key(portfolio_id, security_id)
 
 
 def security_partition_key(
