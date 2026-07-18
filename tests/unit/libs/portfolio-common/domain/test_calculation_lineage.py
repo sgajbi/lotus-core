@@ -5,7 +5,7 @@ from decimal import Decimal
 from enum import StrEnum
 
 import pytest
-from portfolio_common.domain.valuation import (
+from portfolio_common.domain.calculation_lineage import (
     CalculationLineage,
     build_calculation_lineage,
     canonical_content_hash,

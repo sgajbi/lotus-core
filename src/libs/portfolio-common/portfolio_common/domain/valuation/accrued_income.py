@@ -7,7 +7,7 @@ from datetime import date
 from decimal import Decimal, localcontext
 from enum import StrEnum
 
-from .calculation_lineage import (
+from ..calculation_lineage import (
     CalculationLineage,
     FinancialSourceReference,
     build_calculation_lineage,

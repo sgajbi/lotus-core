@@ -1,4 +1,4 @@
-"""Deterministic input, calculation, and output lineage for financial results."""
+"""Cross-domain deterministic lineage for financial calculations."""
 
 from __future__ import annotations
 
