@@ -96,6 +96,20 @@ Operational read:
 GET /portfolios/{portfolio_id}/positions
 ```
 
+Allocation analysis:
+
+```text
+POST /reporting/asset-allocation/query
+```
+
+Allocation buckets retain source-owned contributor lineage. Direct rows identify the portfolio,
+booked security, and exact Core position snapshot. Applied look-through rows additionally identify
+the component security, booked parent, exact component record/effective interval, weight, and
+available upstream source reference. `contributor_limit_per_bucket` bounds response size; the total
+contributor count, truncation flag, and signed omitted-value residual keep every bucket exactly
+reconcilable. The response also carries separate normalized-input, calculation-policy, and output
+SHA-256 hashes. Consumers must not rebuild component lineage from the booked-position route.
+
 Effective policy and capabilities use canonical snake_case query parameters:
 
 ```text

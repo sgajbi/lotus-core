@@ -183,6 +183,7 @@ Inputs:
 - `as_of_date`
 - `reporting_currency`
 - `dimensions`
+- `contributor_limit_per_bucket` (default `50`, minimum `1`, maximum `250`)
 
 Supported dimensions:
 
@@ -210,7 +211,17 @@ Look-through behavior:
 Behavior:
 
 - returns one allocation view per requested dimension
-- every bucket includes reporting-currency market value, weight, and position count
+- every bucket includes reporting-currency market value, weight, allocation-row count, total
+  contributor count, a bounded contributor list, truncation state, and an omitted-value residual
+- direct contributors bind portfolio, booked security, and exact daily-position snapshot
+- look-through contributors additionally bind component security to the booked parent, exact
+  component record, weight, effective interval, and available upstream source reference
+- returned contributor values plus `omitted_market_value_reporting_currency` reconcile exactly to
+  the signed bucket value; contributor `bucket_weight` is null when the bucket nets to zero
+- contributor ordering is descending absolute contribution, then stable portfolio, booked-parent,
+  component/direct security, and source identity
+- the response publishes separate normalized-input, algorithm/version/28-digit-precision, and
+  output SHA-256 lineage hashes; correlation IDs do not replace calculation lineage
 - region is derived from country-of-risk using the source-owned Lotus classification helper
 
 ### Portfolio Summary

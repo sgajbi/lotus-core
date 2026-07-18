@@ -1818,7 +1818,10 @@ For this endpoint, Swagger now makes the following explicit:
 2. consumers should prefer it over mining allocation from `core-snapshot` when only allocation
    buckets are needed;
 3. look-through request versus applied behavior is part of the governed contract;
-4. bucket, view, response, and look-through metadata fields now carry clearer examples.
+4. direct and decomposed contributor identity, parent lineage, exact source snapshots/component
+   records, deterministic ordering, bounded response size, and residual reconciliation are explicit;
+5. three-layer input/calculation/output hashes identify the exact result;
+6. bucket, view, response, and look-through metadata fields carry contract-specific examples.
 
 Focused HTTP-level dependency proof exists in
 `tests/integration/services/query_service/test_reporting_router.py` for successful asset-allocation
@@ -1835,7 +1838,7 @@ route-purpose wording and endpoint-specific schema examples.
 
 | Issue | Assessment | Disposition |
 | --- | --- | --- |
-| `lotus-core` | No open issue | The source route is contract-tight in this pass. No open lotus-core defect remains against `POST /reporting/asset-allocation/query`. |
+| `lotus-core #801` contributor lineage | Fixed locally; PR/main proof pending | Core now preserves direct and decomposed source identity through aggregation, bounds contributor output, reconciles omitted value, and publishes three-layer calculation lineage. Keep open until PR CI, merge, exact-main validation, wiki publication, and downstream Workbench #413 proof. |
 | `lotus-gateway #72` region and look-through allocation support | Closed before this pass. Current gateway code and tests already support region allocation views, look-through request propagation, capability metadata, and OpenAPI coverage. | Keep closed unless new contrary runtime evidence appears. |
 | `lotus-report` | No open issue after direct downstream fix in this pass | Report now uses the dedicated allocation route for summary allocation sections and honors requested allocation dimensions. No tracking issue is needed for this route today. |
 
