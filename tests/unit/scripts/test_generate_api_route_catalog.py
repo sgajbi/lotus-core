@@ -57,6 +57,10 @@ def _openapi_fixture() -> dict:
                         "summary": "List positions",
                         "description": "List positions with pagination and sorting.",
                         "tags": ["Positions"],
+                        "x-lotus-source-data-product": {
+                            "product_name": "HoldingsAsOf",
+                            "consumers": ["lotus-gateway", "lotus-risk"],
+                        },
                         "parameters": [
                             {"name": "portfolio_id", "in": "path"},
                             {"name": "limit", "in": "query"},
@@ -125,6 +129,7 @@ def test_generate_api_route_catalog_enriches_openapi_routes_with_route_family() 
     assert read_entry["filtering"] == ["portfolio_id"]
     assert read_entry["sorting"] == ["sort"]
     assert read_entry["idempotency_behavior"] == "safe-read"
+    assert read_entry["downstream_consumers"] == ["lotus-gateway", "lotus-risk"]
 
     health_entry = entries[("query_service", "GET", "/health/ready")]
     assert health_entry["route_family"] == "Shared Operational"
