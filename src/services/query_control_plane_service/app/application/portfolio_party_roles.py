@@ -1,8 +1,9 @@
 """Application policy for effective portfolio party-role assignments."""
 
 from datetime import datetime
-from typing import cast
+from typing import Literal, cast
 
+from portfolio_common.domain.portfolio_party_roles import PortfolioPartyRoleQualityStatus
 from portfolio_common.request_fingerprints import request_fingerprint
 from portfolio_common.runtime_providers import Clock
 from portfolio_common.source_data_product_metadata import source_data_product_runtime_metadata
@@ -72,14 +73,25 @@ def _response(
             ],
         }
     )
+    data_quality_status = _data_quality_status(records)
+    assignments_ready = data_quality_status == "COMPLETE"
+    supportability_reason: Literal[
+        "PARTY_ROLE_ASSIGNMENTS_READY",
+        "PARTY_ROLE_ASSIGNMENTS_EMPTY",
+        "PARTY_ROLE_ASSIGNMENTS_NON_ACCEPTED",
+    ]
+    if assignments_ready:
+        supportability_reason = "PARTY_ROLE_ASSIGNMENTS_READY"
+    elif assignments:
+        supportability_reason = "PARTY_ROLE_ASSIGNMENTS_NON_ACCEPTED"
+    else:
+        supportability_reason = "PARTY_ROLE_ASSIGNMENTS_EMPTY"
     return PortfolioPartyRoleAssignmentResponse(
         portfolio_id=portfolio_id,
         assignments=assignments,
         supportability=PortfolioPartyRoleAssignmentSupportability(
-            state="READY" if assignments else "INCOMPLETE",
-            reason=(
-                "PARTY_ROLE_ASSIGNMENTS_READY" if assignments else "PARTY_ROLE_ASSIGNMENTS_EMPTY"
-            ),
+            state="READY" if assignments_ready else "INCOMPLETE",
+            reason=supportability_reason,
             returned_assignment_count=len(assignments),
             filters_applied=filters,
         ),
@@ -94,12 +106,20 @@ def _response(
             source_data_product_runtime_metadata(
                 as_of_date=request.as_of_date,
                 generated_at=generated_at,
-                data_quality_status="ACCEPTED" if assignments else "MISSING",
+                data_quality_status=data_quality_status,
                 latest_evidence_timestamp=_latest_evidence_timestamp(records),
                 snapshot_id=f"portfolio_party_roles:{fingerprint}",
             ),
         ),
     )
+
+
+def _data_quality_status(records: list[PortfolioPartyRoleRecord]) -> str:
+    if not records:
+        return "MISSING"
+    if all(record.quality_status is PortfolioPartyRoleQualityStatus.ACCEPTED for record in records):
+        return "COMPLETE"
+    return "PARTIAL"
 
 
 def _item(record: PortfolioPartyRoleRecord) -> PortfolioPartyRoleAssignmentItem:
