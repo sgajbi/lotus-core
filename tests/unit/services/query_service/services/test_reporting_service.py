@@ -563,9 +563,7 @@ async def test_get_asset_allocation_applies_region_and_partial_lookthrough() -> 
         ("direct_position", "SEC2", "SEC2"),
     ]
     assert {
-        item.portfolio_id
-        for bucket in region_view.buckets
-        for item in bucket.contributors
+        item.portfolio_id for bucket in region_view.buckets for item in bucket.contributors
     } == {"PB_SG_GLOBAL_BAL_001"}
     component = north_america_bucket.contributors[0]
     assert component.component_record_id == 101
