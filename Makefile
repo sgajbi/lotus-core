@@ -23,28 +23,30 @@ compile-runtime-lock:
 	python scripts/development/update_shared_runtime_lock.py
 
 quality-ruff-gate:
-	python -m ruff check . --statistics
+	python scripts/quality/ci_tooling.py run ruff check . --statistics
 
 quality-ruff-format-gate:
-	python -m ruff format --check .
+	python scripts/quality/ci_tooling.py run ruff format --check .
 
 quality-import-boundary-gate:
+	python scripts/quality/ci_tooling.py verify import-linter
 	python scripts/quality/import_boundary_gate.py
 
 quality-bandit-gate:
-	python -m bandit -r src -c pyproject.toml
+	python scripts/quality/ci_tooling.py run bandit -r src -c pyproject.toml
 
 quality-vulture-source-gate:
-	python -m vulture src --exclude "*/tests/*" --min-confidence 80
+	python scripts/quality/ci_tooling.py run vulture src --exclude "*/tests/*" --min-confidence 80
 
 quality-deptry-source-gate:
-	python -m deptry src --extend-exclude "src/services/query_service/build" --extend-exclude ".*/tests/"
+	python scripts/quality/ci_tooling.py run deptry src --extend-exclude "src/services/query_service/build" --extend-exclude ".*/tests/"
 
 quality-maintainability-gate:
+	python scripts/quality/ci_tooling.py verify radon
 	python scripts/quality/maintainability_gate.py src
 
 quality-complexity-gate:
-	python -m xenon --max-absolute E --max-modules C --max-average A src
+	python scripts/quality/ci_tooling.py run xenon --max-absolute E --max-modules C --max-average A src
 
 quality-unit-collection-gate:
 	python scripts/quality/test_manifest.py --suite unit --collect-only --quiet
@@ -287,7 +289,7 @@ rfc0083-closure-guard:
 	python scripts/quality/rfc0083_closure_guard.py
 
 typecheck:
-	python -m mypy --config-file mypy.ini
+	python scripts/quality/ci_tooling.py run mypy --config-file mypy.ini
 
 architecture-guard:
 	python scripts/quality/architecture_boundary_guard.py --strict
