@@ -257,6 +257,8 @@ def _summary_data_quality_status(
 ) -> str:
     normalized = _normalized_quality(holdings_data_quality_status)
     normalized_reconciliation = _normalized_quality(reconciliation_status)
+    if normalized == BLOCKED or normalized_reconciliation == BLOCKED:
+        return BLOCKED
     if normalized == STALE or normalized_reconciliation == STALE:
         return STALE
     if normalized == UNKNOWN or normalized_reconciliation in {UNKNOWN, UNRECONCILED}:
