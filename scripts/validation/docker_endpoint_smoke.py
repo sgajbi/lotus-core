@@ -301,6 +301,42 @@ def _wait_portfolio_visible(query_base_url: str, portfolio_id: str, timeout_seco
     )
 
 
+def _wait_transaction_visible(
+    query_base_url: str,
+    portfolio_id: str,
+    transaction_id: str,
+    timeout_seconds: int,
+) -> None:
+    url = f"{query_base_url}/portfolios/{portfolio_id}/transactions?limit=100"
+    deadline = time.time() + timeout_seconds
+    last_status: int | None = None
+    last_error: str | None = None
+    while time.time() < deadline:
+        try:
+            response = requests.get(url, timeout=8)
+            last_status = response.status_code
+            if response.status_code == 200:
+                payload = response.json()
+                transactions = payload.get("transactions", []) if isinstance(payload, dict) else []
+                if any(
+                    isinstance(transaction, dict)
+                    and transaction.get("transaction_id") == transaction_id
+                    for transaction in transactions
+                ):
+                    return
+        except Exception as exc:  # pragma: no cover - defensive runtime capture
+            last_error = str(exc)
+        time.sleep(2)
+
+    failure_context = f"last_status={last_status}" if last_status is not None else "no response"
+    if last_error:
+        failure_context = f"{failure_context}, last_error={last_error}"
+    raise TimeoutError(
+        "Timed out waiting for transaction to appear in the query ledger: "
+        f"{transaction_id} ({failure_context})"
+    )
+
+
 def _wait_expected_status(url: str, expected_statuses: set[int], timeout_seconds: int) -> None:
     deadline = time.time() + timeout_seconds
     last_status: int | None = None
@@ -1036,6 +1072,12 @@ def main(
         expected={200},
         headers=ops_headers,
     )
+    _wait_transaction_visible(
+        query_base_url=query,
+        portfolio_id=portfolio_id,
+        transaction_id=transaction_id,
+        timeout_seconds=args.query_visible_timeout_seconds,
+    )
     _call(
         results,
         name="reprocess tx",
@@ -1045,11 +1087,6 @@ def main(
         json={"transaction_ids": [transaction_id]},
     )
 
-    _wait_portfolio_visible(
-        query_base_url=query,
-        portfolio_id=portfolio_id,
-        timeout_seconds=args.query_visible_timeout_seconds,
-    )
     _wait_expected_status(
         url=f"{query}/portfolios/{portfolio_id}/positions/{security_id}/lots",
         expected_statuses={200},
