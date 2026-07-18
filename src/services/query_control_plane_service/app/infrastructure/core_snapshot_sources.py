@@ -9,13 +9,19 @@ from portfolio_common.database_models import (
     FxRate,
     Instrument,
     MarketPrice,
+    PipelineStageState,
     Portfolio,
     PositionHistory,
     PositionState,
 )
 from portfolio_common.domain.currency import normalize_currency_code
+from portfolio_common.domain.holdings_reconciliation import (
+    FinancialReconciliationControl,
+    HoldingsReconciliationScope,
+)
 from portfolio_common.identifiers import normalize_lookup_identifier
-from sqlalchemy import and_, func, select
+from portfolio_common.reconciliation_quality import FINANCIAL_RECONCILIATION_STAGE
+from sqlalchemy import and_, func, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..domain.core_snapshot import (
@@ -157,6 +163,33 @@ class SqlAlchemyCoreSnapshotSourceReader:
             for row, instrument, state in result.all()
         ]
 
+    async def get_financial_reconciliation_controls(
+        self,
+        *,
+        portfolio_id: str,
+        scopes: tuple[HoldingsReconciliationScope, ...],
+    ) -> list[FinancialReconciliationControl]:
+        """Read exact portfolio-day/epoch controls in one set-based query."""
+
+        scope_keys = sorted({(scope.business_date, scope.epoch) for scope in scopes})
+        if not scope_keys:
+            return []
+        statement = select(PipelineStageState).where(
+            PipelineStageState.stage_name == FINANCIAL_RECONCILIATION_STAGE,
+            PipelineStageState.portfolio_id == portfolio_id,
+            tuple_(PipelineStageState.business_date, PipelineStageState.epoch).in_(scope_keys),
+        )
+        rows = (await self._session.execute(statement)).scalars().all()
+        return [
+            FinancialReconciliationControl(
+                business_date=row.business_date,
+                epoch=row.epoch,
+                status=row.status,
+                updated_at=row.updated_at,
+            )
+            for row in rows
+        ]
+
     async def get_instruments(self, security_ids: list[str]) -> list[CoreSnapshotInstrument]:
         normalized_ids = list(
             dict.fromkeys(
@@ -291,4 +324,5 @@ def _position_source(
         state_created_at=state.created_at,
         state_updated_at=state.updated_at,
         instrument=_instrument_record(instrument),
+        business_date=(row.date if use_snapshot else row.position_date),
     )

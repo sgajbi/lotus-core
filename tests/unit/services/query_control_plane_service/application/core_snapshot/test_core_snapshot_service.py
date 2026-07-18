@@ -119,6 +119,7 @@ def _position_source(
         state_created_at=getattr(state, "created_at", None),
         state_updated_at=getattr(state, "updated_at", None),
         instrument=instrument,
+        business_date=date(2026, 2, 27),
     )
 
 

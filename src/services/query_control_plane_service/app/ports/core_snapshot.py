@@ -5,6 +5,11 @@ from __future__ import annotations
 from datetime import date
 from typing import Protocol
 
+from portfolio_common.domain.holdings_reconciliation import (
+    FinancialReconciliationControl,
+    HoldingsReconciliationScope,
+)
+
 from ..domain.core_snapshot import (
     CoreSnapshotFxRate,
     CoreSnapshotInstrument,
@@ -26,6 +31,13 @@ class CoreSnapshotSourceReader(Protocol):
     async def get_position_history(
         self, *, portfolio_id: str, as_of_date: date
     ) -> list[CoreSnapshotPositionSource]: ...
+
+    async def get_financial_reconciliation_controls(
+        self,
+        *,
+        portfolio_id: str,
+        scopes: tuple[HoldingsReconciliationScope, ...],
+    ) -> list[FinancialReconciliationControl]: ...
 
     async def get_instruments(self, security_ids: list[str]) -> list[CoreSnapshotInstrument]: ...
 

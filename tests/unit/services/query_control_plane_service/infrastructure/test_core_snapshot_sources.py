@@ -110,6 +110,7 @@ async def test_maps_portfolio_instrument_price_and_fx_records() -> None:
 async def test_maps_current_snapshot_position_and_fences_current_epoch() -> None:
     session = AsyncMock(spec=AsyncSession)
     snapshot = SimpleNamespace(
+        date=date(2026, 4, 10),
         security_id=" SEC_1 ",
         quantity=Decimal("10"),
         market_value=Decimal("1000"),
@@ -131,6 +132,7 @@ async def test_maps_current_snapshot_position_and_fences_current_epoch() -> None
     assert records[0].market_value == Decimal("1000")
     assert records[0].cost_basis == Decimal("950")
     assert records[0].epoch == 4
+    assert records[0].business_date == date(2026, 4, 10)
     assert records[0].instrument.name == "Global Bond"
 
     sql = str(
@@ -146,6 +148,7 @@ async def test_maps_current_snapshot_position_and_fences_current_epoch() -> None
 async def test_maps_history_fallback_without_snapshot_market_values() -> None:
     session = AsyncMock(spec=AsyncSession)
     history = SimpleNamespace(
+        position_date=date(2026, 4, 9),
         security_id="SEC_1",
         quantity=Decimal("10"),
         cost_basis=Decimal("950"),
@@ -164,6 +167,7 @@ async def test_maps_history_fallback_without_snapshot_market_values() -> None:
     assert records[0].market_value is None
     assert records[0].market_value_local is None
     assert records[0].cost_basis == Decimal("950")
+    assert records[0].business_date == date(2026, 4, 9)
 
     sql = str(
         session.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True})
@@ -171,3 +175,41 @@ async def test_maps_history_fallback_without_snapshot_market_values() -> None:
     assert "position_history.position_date <= '2026-04-10'" in sql
     assert "position_history.quantity != 0" in sql
     assert "position_history.epoch = position_state.epoch" in sql
+
+
+@pytest.mark.asyncio
+async def test_reads_exact_financial_reconciliation_controls_in_one_query() -> None:
+    from portfolio_common.domain.holdings_reconciliation import HoldingsReconciliationScope
+
+    session = AsyncMock(spec=AsyncSession)
+    updated_at = datetime(2026, 4, 10, 3, tzinfo=UTC)
+    session.execute.return_value = _Result(
+        [
+            SimpleNamespace(
+                business_date=date(2026, 4, 10),
+                epoch=4,
+                status="COMPLETED",
+                updated_at=updated_at,
+            )
+        ]
+    )
+    reader = SqlAlchemyCoreSnapshotSourceReader(session)
+
+    controls = await reader.get_financial_reconciliation_controls(
+        portfolio_id="P1",
+        scopes=(
+            HoldingsReconciliationScope(
+                business_date=date(2026, 4, 10),
+                epoch=4,
+                latest_evidence_timestamp=updated_at,
+                source_row_count=2,
+            ),
+        ),
+    )
+
+    assert controls[0].status == "COMPLETED"
+    statement = session.execute.await_args.args[0]
+    sql = str(statement.compile(compile_kwargs={"literal_binds": True}))
+    assert "pipeline_stage_state.stage_name = 'FINANCIAL_RECONCILIATION'" in sql
+    assert "pipeline_stage_state.portfolio_id = 'P1'" in sql
+    assert "(pipeline_stage_state.business_date, pipeline_stage_state.epoch) IN" in sql

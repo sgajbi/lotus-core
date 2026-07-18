@@ -49,6 +49,7 @@ class CoreSnapshotPositionSource:
     state_created_at: datetime | None
     state_updated_at: datetime | None
     instrument: CoreSnapshotInstrument
+    business_date: date | None = None
 
 
 @dataclass(frozen=True, slots=True)
