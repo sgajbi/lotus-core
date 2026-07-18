@@ -217,6 +217,7 @@ supportability posture is one of:
 | Any non-cash priced position lacks market-price freshness through `A` | Returns `data_quality_status=STALE`. |
 | Positions include history-backed supplement rows | Returns `data_quality_status=PARTIAL` unless a stronger `STALE` condition applies. |
 | All positions are current, priced through `A` where required, and snapshot-backed | Returns `data_quality_status=COMPLETE`. |
+| Multiple financial-reconciliation controls exist for one business-date/epoch scope | Aggregates every control using fail-closed precedence `BLOCKED`, `STALE`, `UNRECONCILED`, `UNKNOWN`, `PARTIAL`, `COMPLETE`; row order cannot hide an adverse control. |
 | Cash balance response has no account records | Returns `data_quality_status=UNKNOWN`. |
 | Cash account records exist but no cash snapshot rows back them | Returns `data_quality_status=UNKNOWN`. |
 | Any cash account record uses `cash_account_id_source=cash_security_fallback` | Returns `data_quality_status=PARTIAL`. |

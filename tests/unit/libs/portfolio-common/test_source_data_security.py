@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 import pytest
 from portfolio_common.source_data_products import SOURCE_DATA_PRODUCT_CATALOG
 from portfolio_common.source_data_security import (
@@ -244,6 +246,11 @@ def test_required_source_data_capability_uses_governed_product_identity() -> Non
     assert capability == "source_data.portfolio_analytics_reference.read"
 
 
+def test_source_data_security_profile_lookup_fails_closed_for_unknown_product() -> None:
+    with pytest.raises(KeyError, match="Unknown source-data security profile"):
+        get_source_data_security_profile("UnregisteredPrivateBankingProduct")
+
+
 def test_source_data_products_have_default_read_capability_rules() -> None:
     rules = source_data_capability_rules()
 
@@ -271,6 +278,31 @@ def test_security_profile_validation_rejects_missing_product_profile() -> None:
 
     with pytest.raises(ValueError, match="HoldingsAsOf"):
         validate_source_data_security_profiles(incomplete_profiles)
+
+
+def test_security_profile_validation_rejects_duplicate_product_identity() -> None:
+    profile = get_source_data_security_profile("PortfolioPartyRoleAssignment")
+
+    with pytest.raises(ValueError, match="Duplicate source-data security profile"):
+        validate_source_data_security_profiles((profile, profile))
+
+
+@pytest.mark.parametrize(
+    ("field_name", "message"),
+    (
+        ("tenant_required", "must require tenant scoping"),
+        ("entitlement_required", "must require entitlement scoping"),
+    ),
+)
+def test_security_profile_validation_requires_tenant_and_entitlement_scope(
+    field_name: str,
+    message: str,
+) -> None:
+    profile = get_source_data_security_profile("PortfolioPartyRoleAssignment")
+    invalid = replace(profile, **{field_name: False})
+
+    with pytest.raises(ValueError, match=message):
+        validate_source_data_security_profiles((invalid,))
 
 
 def test_security_profile_validation_rejects_operator_only_without_operator_access() -> None:

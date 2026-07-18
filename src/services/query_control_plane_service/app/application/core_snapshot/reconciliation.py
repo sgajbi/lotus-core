@@ -118,7 +118,16 @@ def core_snapshot_reconciliation_evidence(
 
     ordered_controls = sorted(
         controls,
-        key=lambda control: (control.business_date, control.epoch),
+        key=lambda control: (
+            control.business_date,
+            control.epoch,
+            control.status.strip().upper(),
+            (
+                _as_utc(control.updated_at)
+                if control.updated_at is not None
+                else datetime.min.replace(tzinfo=UTC)
+            ),
+        ),
     )
     return CoreSnapshotReconciliationEvidence(
         status=holdings_reconciliation_status(scopes=scopes, controls=ordered_controls),

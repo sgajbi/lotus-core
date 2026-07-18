@@ -7,6 +7,8 @@ import pytest
 
 from src.services.ingestion_service.app.application.reference_data_ingestion_registry import (
     REFERENCE_DATA_INGESTION_REGISTRY,
+    ReferenceDataIngestionCommand,
+    ReferenceDataIngestionRegistry,
 )
 
 EXPECTED_COMMANDS = {
@@ -224,6 +226,19 @@ async def test_reference_data_command_dispatches_to_service_with_preserved_recor
 def test_reference_data_registry_rejects_unknown_command_key() -> None:
     with pytest.raises(KeyError, match="Unknown reference-data ingestion command"):
         REFERENCE_DATA_INGESTION_REGISTRY.require("unknown_reference_family")
+
+
+def test_reference_data_registry_rejects_ambiguous_command_keys() -> None:
+    command = ReferenceDataIngestionCommand(
+        command_key="portfolio_party_role_assignment",
+        endpoint="/ingest/portfolio-party-role-assignments",
+        entity_type="portfolio_party_role_assignment",
+        records_attribute="party_role_assignments",
+        persist_method_name="upsert_portfolio_party_role_assignments",
+    )
+
+    with pytest.raises(ValueError, match="command keys must be unique"):
+        ReferenceDataIngestionRegistry([command, command])
 
 
 def test_reference_data_router_does_not_encode_persistence_mapping() -> None:

@@ -2,7 +2,7 @@ from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
 from portfolio_common.domain.holdings_reconciliation import FinancialReconciliationControl
-from portfolio_common.reconciliation_quality import COMPLETE, STALE
+from portfolio_common.reconciliation_quality import BLOCKED, COMPLETE, STALE
 
 from src.services.query_control_plane_service.app.application.core_snapshot.reconciliation import (
     core_snapshot_reconciliation_evidence,
@@ -123,3 +123,32 @@ def test_core_snapshot_reconciliation_evidence_detects_stale_control() -> None:
     )
 
     assert evidence.status == STALE
+
+
+def test_core_snapshot_duplicate_control_evidence_is_order_independent_and_fail_closed() -> None:
+    source_timestamp = datetime(2026, 4, 10, 2, tzinfo=UTC)
+    scopes = core_snapshot_reconciliation_scopes([_row(updated_at=source_timestamp)])
+    controls = [
+        FinancialReconciliationControl(
+            business_date=date(2026, 4, 10),
+            epoch=4,
+            status="COMPLETED",
+            updated_at=source_timestamp + timedelta(minutes=5),
+        ),
+        FinancialReconciliationControl(
+            business_date=date(2026, 4, 10),
+            epoch=4,
+            status="REQUIRES_REPLAY",
+            updated_at=source_timestamp + timedelta(minutes=4),
+        ),
+    ]
+
+    first = core_snapshot_reconciliation_evidence(scopes=scopes, controls=controls)
+    reordered = core_snapshot_reconciliation_evidence(
+        scopes=scopes,
+        controls=list(reversed(controls)),
+    )
+
+    assert first.status == BLOCKED
+    assert reordered.status == BLOCKED
+    assert first.control_content_hash == reordered.control_content_hash

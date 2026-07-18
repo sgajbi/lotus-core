@@ -106,6 +106,12 @@ versioned source calendar. `30E/360.ISDA` requires the contractual termination d
 calculation interval exactly once; this is how regular, short-stub, and long-stub periods avoid an
 inferred schedule.
 
+`30/360.US` version 1 follows the SIFMA sequence exactly: change a last-of-February or 31st start
+day to 30, then change the end day only when the adjusted start is 30 and the end day is 31. It does
+not change a February month-end end day; for example, 2024-02-29 to 2025-02-28 is `358/360`. A
+different market convention requires a distinct governed convention identity and version rather
+than an implicit alias.
+
 Day-count, accrued-income, position scaling, aggregation, and FX-conversion intermediates use an
 internal precision of 50 decimal digits,
 independent of ambient process Decimal precision. No implicit currency rounding occurs in the

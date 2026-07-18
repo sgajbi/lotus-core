@@ -128,7 +128,7 @@ deleted rather than retained as a fallback when valuation and reconciliation are
 
 ## Validation
 
-- 101 valuation-domain tests passed, including unit/NAV, clean, dirty, explicit no-periodic-
+- 102 valuation-domain tests passed, including unit/NAV, clean, dirty, explicit no-periodic-
   accrual percent-of-principal,
   DMO-style long and short ex-coupon rebate interest, ex-date/payment boundary rejection,
   full-coupon economic-prefix rejection, entitlement-source correction lineage,
@@ -144,6 +144,10 @@ deleted rather than retained as a fallback when valuation and reconciliation are
   gap/overlap rejection, exact day-count convention/version lookup, fixed and supplied-floating
   segment accrual, principal/rate changes, sign handling, lineage/currency/continuity rejection,
   and ambient Decimal-precision independence.
+- PR review challenged the February-to-February result for `30/360.US`. The primary SIFMA sequence
+  confirms that only a 31st end day is adjusted after the start-day rules; a last-of-February end is
+  not rewritten. A 2024-02-29 to 2025-02-28 `358/360` golden vector and explicit methodology text
+  now prevent a different 30/360 variant from being introduced under the existing policy identity.
 - Lineage tests prove mapping/set order independence, bounded hash impact for input versus algorithm
   versus output changes, valid digest shape, source-revision sensitivity despite amount equality,
   equivalent-instant timezone normalization, calendar-content sensitivity, and rejection of

@@ -79,6 +79,20 @@ def test_completed_control_before_latest_evidence_is_stale() -> None:
     assert status == STALE
 
 
+@pytest.mark.parametrize("reverse_controls", [False, True])
+def test_duplicate_controls_aggregate_worst_status_independent_of_row_order(
+    reverse_controls: bool,
+) -> None:
+    scopes = holdings_reconciliation_scopes([_source_row()])
+    controls = [_control(status="COMPLETED"), _control(status="REQUIRES_REPLAY")]
+    if reverse_controls:
+        controls.reverse()
+
+    status = holdings_reconciliation_status(scopes=scopes, controls=controls)
+
+    assert status == BLOCKED
+
+
 @pytest.mark.parametrize(
     ("control_status", "expected"),
     [

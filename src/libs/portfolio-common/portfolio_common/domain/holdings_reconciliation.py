@@ -70,11 +70,20 @@ def holdings_reconciliation_status(
     if not scopes.items and scopes.unscoped_source_row_count == 0:
         return UNRECONCILED
 
-    control_by_scope = {(control.business_date, control.epoch): control for control in controls}
+    controls_by_scope: dict[tuple[date, int], list[FinancialReconciliationControl]] = {}
+    for control in controls:
+        controls_by_scope.setdefault((control.business_date, control.epoch), []).append(control)
     statuses = [UNKNOWN] * scopes.unscoped_source_row_count
     for scope in scopes.items:
-        control = control_by_scope.get((scope.business_date, scope.epoch))
-        statuses.append(_scope_reconciliation_status(scope=scope, control=control))
+        scope_controls = controls_by_scope.get((scope.business_date, scope.epoch), [])
+        statuses.append(
+            _aggregate_reconciliation_statuses(
+                [
+                    _scope_reconciliation_status(scope=scope, control=control)
+                    for control in scope_controls
+                ]
+            )
+        )
     return _aggregate_reconciliation_statuses(statuses)
 
 

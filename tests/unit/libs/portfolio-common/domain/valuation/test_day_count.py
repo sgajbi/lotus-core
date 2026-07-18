@@ -114,6 +114,7 @@ def test_business_252_requires_complete_authoritative_calendar_coverage() -> Non
     [
         (date(2006, 2, 28), date(2006, 3, 31), 30),
         (date(2024, 2, 29), date(2024, 3, 31), 30),
+        (date(2024, 2, 29), date(2025, 2, 28), 358),
         (date(2024, 2, 28), date(2024, 3, 31), 33),
         (date(2026, 1, 31), date(2026, 2, 28), 28),
     ],
