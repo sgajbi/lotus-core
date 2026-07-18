@@ -276,6 +276,7 @@ def build_front_office_seed_cleanup_sql(
     )
     return "\n".join(
         [
+            "begin;",
             *business_date_bound_sql,
             build_portfolio_seed_cleanup_sql(portfolio_id=portfolio_id),
             *source_only_candidate_cleanup,
@@ -296,6 +297,7 @@ def build_front_office_seed_cleanup_sql(
             f"delete from index_price_series where index_id in ({benchmark_index_id_list});",
             f"delete from index_return_series where index_id in ({benchmark_index_id_list});",
             f"delete from index_definitions where index_id in ({benchmark_index_id_list});",
+            "commit;",
         ]
     )
 
@@ -2306,6 +2308,8 @@ def _cleanup_existing_front_office_seed(
         "user",
         "-d",
         "portfolio_db",
+        "-v",
+        "ON_ERROR_STOP=1",
         "-c",
         sql,
     ]

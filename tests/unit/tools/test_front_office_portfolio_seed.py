@@ -711,6 +711,8 @@ def test_front_office_cleanup_sql_removes_benchmark_seed_rows_deterministically(
     assert "PB_SG_GLOBAL_GROWTH_003" in sql
     assert DEFAULT_BENCHMARK_ID in sql
     assert DEFAULT_DPM_MODEL_PORTFOLIO_ID in sql
+    assert sql.startswith("begin;\n")
+    assert sql.endswith("\ncommit;")
 
 
 def test_front_office_cleanup_retries_transient_database_conflicts(monkeypatch) -> None:
@@ -741,6 +743,7 @@ def test_front_office_cleanup_retries_transient_database_conflicts(monkeypatch) 
     assert len(cleanup_calls) == 2
     assert len(blocker_cleanup_calls) == 1
     assert cleanup_calls[0] == cleanup_calls[1]
+    assert cleanup_calls[0][8:10] == ["-v", "ON_ERROR_STOP=1"]
     assert "date > '2026-04-10'" in calls[0][-1]
     assert "portfolio_aggregation_jobs" in blocker_cleanup_calls[0][-1]
     assert "portfolio_valuation_jobs" in blocker_cleanup_calls[0][-1]
