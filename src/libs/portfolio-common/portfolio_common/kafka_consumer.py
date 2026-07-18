@@ -280,6 +280,9 @@ class BaseConsumer(ABC):
             max_in_flight_messages=self.execution_profile.max_in_flight_messages,
             ordering_key=self.execution_profile.ordering_key,
             per_key_concurrency=self.execution_profile.per_key_concurrency,
+            retryable_failure_backoff_seconds=(
+                self.execution_profile.retryable_failure_backoff_seconds
+            ),
             shutdown_drain_timeout_seconds=(self.execution_profile.shutdown_drain_timeout_seconds),
             overload_behavior=self.execution_profile.overload_behavior,
         )
@@ -873,7 +876,6 @@ class BaseConsumer(ABC):
         processed_successfully = False
         processing_outcome = "success"
         processing_reason = "processed"
-        self._record_consumer_event("processing_attempt", "message_polled")
         try:
             corr_id = self._resolve_message_correlation_id(msg)
             token = correlation_id_var.set(corr_id)
@@ -881,24 +883,32 @@ class BaseConsumer(ABC):
             if traceparent:
                 traceparent_token = traceparent_var.set(traceparent)
 
-            await self._dispatch_message_for_processing(msg, loop)
-            self._clear_retryable_failure_attempts(msg)
-            processed_successfully = self._commit_after_successful_processing(msg)
-
-        except RetryableConsumerError as e:
-            retry_exhausted = await self._handle_retryable_processing_error(msg, e)
-            if retry_exhausted:
-                processing_outcome = "retryable_exhausted"
-                processing_reason = "retryable_budget_exhausted"
-            else:
-                processing_outcome = "retryable_failure"
-                processing_reason = "retryable_consumer_error"
-
-        except Exception as e:
-            # For terminal errors (poison pills), we send to DLQ and then commit.
-            processing_outcome = "terminal_failure"
-            processing_reason = classify_dlq_reason_code(e)
-            await self._handle_terminal_processing_error(msg, e)
+            while True:
+                self._record_consumer_event("processing_attempt", "message_polled")
+                try:
+                    await self._dispatch_message_for_processing(msg, loop)
+                    self._clear_retryable_failure_attempts(msg)
+                    processed_successfully = self._commit_after_successful_processing(msg)
+                    processing_outcome = "success"
+                    processing_reason = "processed"
+                    break
+                except RetryableConsumerError as error:
+                    retry_exhausted = await self._handle_retryable_processing_error(msg, error)
+                    if retry_exhausted:
+                        processing_outcome = "retryable_exhausted"
+                        processing_reason = "retryable_budget_exhausted"
+                        break
+                    processing_outcome = "retryable_failure"
+                    processing_reason = "retryable_consumer_error"
+                    if not self._running:
+                        break
+                    await asyncio.sleep(self.execution_profile.retryable_failure_backoff_seconds)
+                except Exception as error:
+                    # For terminal errors (poison pills), send to DLQ and then commit.
+                    processing_outcome = "terminal_failure"
+                    processing_reason = classify_dlq_reason_code(error)
+                    await self._handle_terminal_processing_error(msg, error)
+                    break
 
         finally:
             self._record_processing_metrics(
@@ -956,14 +966,24 @@ class BaseConsumer(ABC):
             return
         await loop.run_in_executor(None, functools.partial(self.process_message, msg))
 
-    def _log_retryable_processing_error(self, error: RetryableConsumerError) -> None:
+    def _log_retryable_processing_error(
+        self,
+        error: RetryableConsumerError,
+        *,
+        attempts: int,
+        elapsed_seconds: float,
+    ) -> None:
         self._log_consumer_event(
             logging.WARNING,
-            "Kafka message processing failed retryably; offset not committed.",
+            "Kafka message processing failed retryably; ordered retry scheduled.",
             event_name="kafka.consumer.processing_retryable",
             status="retryable_failure",
             reason_code="retryable_consumer_error",
             error_type=type(error).__name__,
+            retryable_error_reason=_source_safe_error_reason(error),
+            failure_attempts=attempts,
+            failure_elapsed_seconds=round(elapsed_seconds, 3),
+            retry_backoff_seconds=self.execution_profile.retryable_failure_backoff_seconds,
         )
 
     async def _handle_retryable_processing_error(
@@ -973,7 +993,11 @@ class BaseConsumer(ABC):
     ) -> bool:
         attempts, elapsed_seconds = self._record_retryable_failure_attempt(msg)
         if not self._retryable_failure_budget_exhausted(attempts, elapsed_seconds):
-            self._log_retryable_processing_error(error)
+            self._log_retryable_processing_error(
+                error,
+                attempts=attempts,
+                elapsed_seconds=elapsed_seconds,
+            )
             return False
         await self._recover_exhausted_retryable_failure(
             msg,

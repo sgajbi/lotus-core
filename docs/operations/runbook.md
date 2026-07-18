@@ -310,8 +310,16 @@ once, durable queues close, and timeseries reconciliation remains clean. See
 
 ## Kafka Consumer Retryable Failure Budgets
 
-`RetryableConsumerError` keeps the offset uncommitted by default so transient dependency or
-reference-data gaps can recover through Kafka redelivery.
+`RetryableConsumerError` keeps the offset uncommitted and retries the same message in-process while
+holding its partition-ordering key. This is intentional: a polled Confluent message advances the
+consumer's fetch position, so non-commit alone does not cause prompt redelivery in the same consumer
+session. Later messages from that partition cannot overtake the retrying message, while configured
+cross-partition concurrency remains available.
+
+The execution profile field `retryable_failure_backoff_seconds` controls the delay between attempts
+and defaults to one second. Override it globally or by consumer group through the existing
+`LOTUS_CORE_KAFKA_CONSUMER_EXECUTION_DEFAULTS_JSON` and
+`LOTUS_CORE_KAFKA_CONSUMER_EXECUTION_GROUP_OVERRIDES_JSON` contracts.
 
 Operators can bound repeated retryable redelivery with:
 
@@ -320,8 +328,8 @@ KAFKA_CONSUMER_RETRYABLE_FAILURE_MAX_ATTEMPTS=<positive integer>
 KAFKA_CONSUMER_RETRYABLE_FAILURE_MAX_ELAPSED_SECONDS=<positive integer>
 ```
 
-Default `0` disables each budget and preserves existing behavior. With a positive attempt or
-elapsed budget, the shared consumer tracks retryable failures for the same
+Default `0` disables each exhaustion budget and preserves fail-closed retry behavior. With a
+positive attempt or elapsed budget, the shared consumer tracks retryable failures for the same
 topic/group/partition/offset/key. When either budget is exhausted, the consumer emits
 `kafka.consumer.retryable_failure_budget_exhausted`, routes the message to DLQ, and commits the
 offset only after DLQ publication succeeds.

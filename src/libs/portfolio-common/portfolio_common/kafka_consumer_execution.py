@@ -37,6 +37,7 @@ class KafkaConsumerExecutionProfile:
     max_in_flight_messages: int = 1
     ordering_key: str = ORDERING_PARTITION
     per_key_concurrency: int = 1
+    retryable_failure_backoff_seconds: float = 1.0
     shutdown_drain_timeout_seconds: float = 30.0
     overload_behavior: str = OVERLOAD_PAUSE_POLL
 
@@ -45,6 +46,10 @@ class KafkaConsumerExecutionProfile:
         _require_positive_int("max_in_flight_messages", self.max_in_flight_messages)
         _require_supported_value("ordering_key", self.ordering_key, SUPPORTED_ORDERING_KEYS)
         _require_positive_int("per_key_concurrency", self.per_key_concurrency)
+        _require_positive_float(
+            "retryable_failure_backoff_seconds",
+            self.retryable_failure_backoff_seconds,
+        )
         _require_positive_float(
             "shutdown_drain_timeout_seconds",
             self.shutdown_drain_timeout_seconds,
@@ -81,6 +86,13 @@ class KafkaConsumerExecutionProfile:
                 raw.get("per_key_concurrency", defaults.per_key_concurrency),
                 "per_key_concurrency",
             ),
+            retryable_failure_backoff_seconds=_coerce_float(
+                raw.get(
+                    "retryable_failure_backoff_seconds",
+                    defaults.retryable_failure_backoff_seconds,
+                ),
+                "retryable_failure_backoff_seconds",
+            ),
             shutdown_drain_timeout_seconds=_coerce_float(
                 raw.get(
                     "shutdown_drain_timeout_seconds",
@@ -103,6 +115,7 @@ class KafkaConsumerExecutionProfile:
             "max_in_flight_messages": self.max_in_flight_messages,
             "ordering_key": self.ordering_key,
             "per_key_concurrency": self.per_key_concurrency,
+            "retryable_failure_backoff_seconds": self.retryable_failure_backoff_seconds,
             "shutdown_drain_timeout_seconds": self.shutdown_drain_timeout_seconds,
             "overload_behavior": self.overload_behavior,
         }
