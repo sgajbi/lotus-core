@@ -2,7 +2,7 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 
 from portfolio_common.logging_utils import correlation_id_var
-from portfolio_common.reconciliation_quality import COMPLETE, PARTIAL
+from portfolio_common.reconciliation_quality import PARTIAL
 from portfolio_common.source_data_product_metadata import (
     SourceDataDegradationDetail,
     SourceDataDegradationSummary,
@@ -200,7 +200,7 @@ def test_instrument_reference_contract_reports_missing_profiles() -> None:
     assert response.correlation_id == CORRELATION_ID
 
 
-def test_cashflow_contract_cannot_report_current_without_source_evidence_timestamp() -> None:
+def test_populated_cashflow_contract_fails_closed_without_source_evidence_timestamp() -> None:
     response = _with_correlation(
         lambda: CashflowProjectionResponse(
             portfolio_id="PB1",
@@ -213,16 +213,42 @@ def test_cashflow_contract_cannot_report_current_without_source_evidence_timesta
             booked_total_net_cashflow=Decimal("0"),
             projected_settlement_total_cashflow=Decimal("0"),
             projection_days=1,
+            request_fingerprint="cashflow_projection:" + "a" * 16,
+            source_window_trust={
+                "window_status": "DEGRADED",
+                "supportability_status": "UNAVAILABLE",
+                "reason_codes": ["SOURCE_EVIDENCE_TIMESTAMP_MISSING"],
+                "source_row_count": 1,
+                "calculated_source_row_count": 1,
+                "output_group_count": 0,
+                "source_component_totals": {"BOOKED": 0, "PROJECTED": 0},
+                "calculated_component_totals": {"BOOKED": 0, "PROJECTED": 0},
+            },
+            calculation_lineage={
+                "algorithm_id": "PORTFOLIO_CASHFLOW_PROJECTION",
+                "algorithm_version": 1,
+                "intermediate_precision": 50,
+                "input_content_hash": "a" * 64,
+                "calculation_content_hash": "b" * 64,
+                "output_content_hash": "c" * 64,
+            },
             **source_data_product_runtime_metadata(
                 as_of_date=date(2026, 4, 10),
-                data_quality_status=COMPLETE,
+                reconciliation_status="BLOCKED",
+                data_quality_status="BLOCKED",
                 latest_evidence_timestamp=None,
+                source_evidence_current=False,
+                freshness_status="UNAVAILABLE",
             ),
         )
     )
 
     assert response.product_name == "PortfolioCashflowProjection"
-    assert response.data_quality_status == COMPLETE
+    assert response.data_quality_status == "BLOCKED"
+    assert response.reconciliation_status == "BLOCKED"
+    assert response.source_window_trust.reason_codes == [
+        "SOURCE_EVIDENCE_TIMESTAMP_MISSING"
+    ]
     assert response.source_evidence_current is False
     assert response.freshness_status == "UNAVAILABLE"
     assert response.correlation_id == CORRELATION_ID
