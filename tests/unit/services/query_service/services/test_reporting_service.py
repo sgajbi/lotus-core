@@ -491,7 +491,7 @@ async def test_get_portfolio_summary_raises_lookup_error_for_unknown_portfolio()
 
 async def test_get_asset_allocation_applies_region_and_partial_lookthrough() -> None:
     repo = AsyncMock()
-    portfolio = _portfolio("P1", base_currency="USD")
+    portfolio = _portfolio("PB_SG_GLOBAL_BAL_001", base_currency="USD")
     repo.get_latest_business_date.return_value = date(2026, 3, 27)
     repo.list_portfolios.return_value = [portfolio]
     repo.list_latest_snapshot_rows.return_value = [
@@ -536,7 +536,7 @@ async def test_get_asset_allocation_applies_region_and_partial_lookthrough() -> 
         service = ReportingService(AsyncMock(spec=AsyncSession))
         response = await service.get_asset_allocation(
             AssetAllocationQueryRequest(
-                scope=ReportingScope(portfolio_id="P1"),
+                scope=ReportingScope(portfolio_id="PB_SG_GLOBAL_BAL_001"),
                 dimensions=["region", "asset_class"],
                 look_through_mode="prefer_look_through",
             )
@@ -562,6 +562,11 @@ async def test_get_asset_allocation_applies_region_and_partial_lookthrough() -> 
         ("look_through_component", "FUND1", "ETF1"),
         ("direct_position", "SEC2", "SEC2"),
     ]
+    assert {
+        item.portfolio_id
+        for bucket in region_view.buckets
+        for item in bucket.contributors
+    } == {"PB_SG_GLOBAL_BAL_001"}
     component = north_america_bucket.contributors[0]
     assert component.component_record_id == 101
     assert component.component_weight == Decimal("0.6")
