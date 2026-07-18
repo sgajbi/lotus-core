@@ -2950,10 +2950,12 @@ Most relevant current governance:
      normalized request, selected position/instrument source facts, scope/control hashes,
      governance policy, valuation context, and simulation session version in input lineage. Bind
      `PORTFOLIO_STATE_SNAPSHOT`, algorithm version, and 28-digit intermediate precision in
-     calculation lineage; bind returned sections and trust posture in output lineage. Derive the
-     deterministic snapshot id from the output hash. Generation time and correlation ids remain
-     operational evidence and must not alter identity. Keep the DTO/workflow/source extraction in
-     QCP; share only framework-independent reconciliation and calculation-lineage primitives.
+     calculation lineage, and enforce that precision with local Decimal contexts across totals,
+     weights, deltas, projected quantity/value scaling, and price/FX valuation; bind returned
+     sections and trust posture in output lineage. Derive the deterministic snapshot id from the
+     output hash. Generation time and correlation ids remain operational evidence and must not alter
+     identity. Keep the DTO/workflow/source extraction in QCP; share only framework-independent
+     reconciliation and calculation-lineage primitives.
 
 ## Context Maintenance Rule
 
