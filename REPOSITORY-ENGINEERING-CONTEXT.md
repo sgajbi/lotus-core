@@ -2843,6 +2843,14 @@ Most relevant current governance:
      service domain. Explicit quote representation, principal basis, accrued treatment, scaling,
      and FX direction must replace the legacy bond price-magnitude/cost-basis heuristic—never sit
      beside it as a hidden fallback.
+205. Valuation day-count policy resolves an exact governed convention code and version; unknown
+     conventions and versions fail closed. `ACT/365.FIXED` and `ACT/360` use actual elapsed calendar
+     days with their fixed denominators. `BUS/252` requires a source-owned, versioned business-day
+     calendar whose declared validity covers the calculation interval and counts supplied business
+     dates start-inclusive/end-exclusive. Never replace missing calendar evidence with weekday or
+     process-local holiday assumptions. Actual/Actual and 30/360 conventions remain unsupported
+     until their convention-specific reference-period, termination-date, and golden-example rules
+     are implemented and registered.
 
 ## Context Maintenance Rule
 
