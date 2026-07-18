@@ -4,7 +4,7 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
 
 ## Scope and Method
 
-- Source of truth: SQLAlchemy models in `database_models.py` (39 tables).
+- Source of truth: SQLAlchemy models in `database_models.py` (59 tables).
 - Usage evidence: code-reference scan across `src/` (model class and table-name hits).
 - This review distinguishes: `actively used`, `partially implemented`, and `needs decision`.
 
@@ -43,11 +43,31 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
   - `booking_center_code` (String): Controlled code value from a domain taxonomy/configuration.
   - `client_id` (String): Identifier for client.
   - `is_leverage_allowed` (Boolean): Boolean flag controlling behavior/interpretation.
-  - `advisor_id` (String): Identifier for advisor.
+  - `advisor_id` (String): Compatibility-only adviser identifier for portfolios without governed party-role history; it must not be interpreted as a specific banking capacity.
   - `status` (String): Current lifecycle status for the record/work item.
   - `cost_basis_method` (String): Numeric financial measure used in valuation, cost, or analytics calculations.
   - `created_at` (DateTime): Server timestamp when row was created.
   - `updated_at` (DateTime): Server timestamp when row was last updated.
+
+## `portfolio_party_role_assignments`
+
+- **Purpose**: Source-owned, effective-dated private-banking capacity and responsibility assignments for portfolios.
+- **Description**: Distinguishes relationship coverage, investment advice, portfolio management, delegated coverage, and client service without inferring authority from `portfolios.advisor_id`.
+- **Relationships**: `portfolio_id` -> `portfolios.portfolio_id`; `party_id` remains an external source identity until the separately governed Party aggregate is implemented.
+- **Usage (modules/features)**: reference-data ingestion, `PortfolioPartyRoleAssignment:v1`, and authoritative `PortfolioManagerBookMembership:v1` resolution.
+- **Typical access patterns**: latest source-version selection followed by effective-date, quality, party, role, and scope filtering; portfolio history existence checks fence the legacy adviser projection.
+- **Column definitions**:
+  - `id` (Integer): Surrogate primary key.
+  - `portfolio_id` (String): Canonical portfolio identifier.
+  - `party_id` (String): Source-owned party identifier.
+  - `role_type` (String): Governed private-banking capacity.
+  - `role_scope` (String): Governed responsibility boundary.
+  - `effective_from` / `effective_to` (Date): Inclusive effective interval.
+  - `assignment_version` (Integer): Positive source-controlled version.
+  - `source_system` / `source_record_id` (String): Required idempotent source identity.
+  - `observed_at` (DateTime): Required source observation timestamp.
+  - `quality_status` (String): Governed accepted, pending-review, quarantined, or rejected disposition.
+  - `created_at` / `updated_at` (DateTime): Durable row audit timestamps.
 
 ## `simulation_sessions`
 

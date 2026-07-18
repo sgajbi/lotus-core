@@ -66,6 +66,7 @@ evidence reference rather than omitting the concept.
 | `BenchmarkReturnSeriesWindow` | Analytics input | `query_control_plane_service` | performance, risk | `/integration/benchmarks/{benchmark_id}/return-series` |
 | `RiskFreeSeriesWindow` | Analytics input | `query_control_plane_service` | performance, risk | `/integration/reference/risk-free-series` |
 | `PortfolioManagerBookMembership` | Analytics input | `query_control_plane_service` | manage | `/integration/portfolio-manager-books/{portfolio_manager_id}/memberships` |
+| `PortfolioPartyRoleAssignment` | Analytics input | `query_control_plane_service` | gateway, workbench, manage | `/integration/portfolios/{portfolio_id}/party-role-assignments` |
 | `DpmPortfolioUniverseCandidate` | Analytics input | `query_control_plane_service` | manage | `/integration/dpm/portfolio-universe/candidates` |
 | `TransactionCostCurve` | Analytics input | `query_control_plane_service` | manage | `/integration/portfolios/{portfolio_id}/transaction-cost-curve` |
 | `PerformanceComponentEconomics` | Analytics input | `query_control_plane_service` | performance | `/integration/portfolios/{portfolio_id}/performance-component-economics` |
