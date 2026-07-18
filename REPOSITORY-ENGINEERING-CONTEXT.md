@@ -2856,6 +2856,16 @@ Most relevant current governance:
      frequency whose overlap covers the calculation interval exactly once; do not generate missing
      reference periods or infer frequency from broad product type. Regular and short/long stub
      calculations use the same explicit overlap rule.
+206. Gross contractual accrued income is the sum of contiguous source-owned segments' signed
+     accrual principal multiplied by supplied annual effective rate and governed year fraction.
+     Segment whenever principal or the fixed/supplied-floating all-in rate changes; require separate
+     rate, principal, and schedule lineage; reject gaps, overlaps, mixed currencies, non-finite
+     values, or unsupported day counts. Do not divide annual rate by coupon frequency, derive a
+     floating reset, or silently apply tax, default/non-accrual, PIK, inflation, compounding,
+     ex-coupon, or rounding policy. Day-count and accrual kernels use a fixed 50-digit local Decimal
+     precision; rounding belongs to an explicit persistence/API boundary. Runtime integration must
+     bulk-resolve source facts and prove mixed-book capacity—domain microbenchmarks alone are not
+     release evidence.
 
 ## Context Maintenance Rule
 

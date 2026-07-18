@@ -1,5 +1,14 @@
 """Framework-independent position valuation policies and calculations."""
 
+from .accrued_income import (
+    AccrualRateType,
+    AccrualSegment,
+    AccrualSegmentResult,
+    AccrualSourceReference,
+    AccruedIncomeResult,
+    UnsupportedAccruedIncomeError,
+    calculate_segmented_accrued_income,
+)
 from .assignments import (
     InstrumentValuationPolicyAssignment,
     MissingValuationPolicyAssignmentError,
@@ -43,7 +52,12 @@ from .position_valuation import (
 )
 
 __all__ = [
+    "AccrualRateType",
+    "AccrualSegment",
+    "AccrualSegmentResult",
+    "AccrualSourceReference",
     "AccruedIncomeTreatment",
+    "AccruedIncomeResult",
     "BusinessDayCalendar",
     "DayCountConvention",
     "DayCountConventionDefinition",
@@ -61,6 +75,7 @@ __all__ = [
     "ResolvedValuationPolicyAssignment",
     "UnsupportedValuationError",
     "UnsupportedDayCountError",
+    "UnsupportedAccruedIncomeError",
     "UnknownValuationPolicyError",
     "ValuationInputBasis",
     "ValuationOutputMeasure",
@@ -68,6 +83,7 @@ __all__ = [
     "ValuationPolicyAssignmentError",
     "ValuationPolicyAssignmentStatus",
     "calculate_position_valuation",
+    "calculate_segmented_accrued_income",
     "calculate_year_fraction",
     "resolve_day_count_convention",
     "resolve_valuation_policy_assignment",

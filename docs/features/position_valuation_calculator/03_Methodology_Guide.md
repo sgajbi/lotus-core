@@ -22,6 +22,71 @@ The core calculation is performed by the stateless `ValuationLogic` class. It de
 
 * If a required FX rate for a valuation is not found in the database, the valuation cannot be completed. The resulting `daily_position_snapshot` is marked with a status of `FAILED`, and the corresponding valuation job is marked `COMPLETE`. The system **does not** automatically retry this job; a manual reprocessing trigger is required if the missing data is later ingested.
 
+### Governed policy migration status
+
+Issue #788 is replacing the quantity-price and legacy bond-quote heuristic with explicit valuation
+representations. The framework-independent policy, assignment, day-count, and segmented-accrual
+domains are implemented locally, but the production worker and financial reconciliation path are
+not wired to them yet. Until that wiring, persistence, API, and wiki support claims remain limited
+to the current runtime described above.
+
+The target policy never selects behavior from a broad product name or price magnitude. An exact,
+effective-dated instrument assignment selects a versioned composition of:
+
+- source representation: unit price, NAV, clean/dirty percent of principal, supplied per-unit,
+  supplied per-contract, supplied whole-position value, or settlement variation;
+- principal basis: position units, face amount, factor-adjusted current principal, or supplied
+  current principal;
+- scaling: quantity, principal, contract count and multiplier, or no scaling;
+- accrued-income treatment: not applicable, included, calculated separately, or supplied separately;
+- direct source-to-reporting FX policy and a separately named output measure.
+
+Missing or conflicting assignments and ambiguous or incomplete inputs fail closed. Futures notional
+and settlement variation cannot populate market value. Core consumes supplied derivative fair value
+and supplied floating all-in rates; it does not price derivatives, forecast rates, construct curves,
+or calculate fund NAV.
+
+#### Segmented accrued-income formula
+
+For contiguous segments over which principal, supplied annual rate, and day-count facts are
+constant:
+
+```text
+gross_accrued_income = sum(
+    signed_accrual_principal_segment
+    * supplied_annual_effective_rate_segment
+    * governed_year_fraction_segment
+)
+```
+
+| Variable | Meaning | Required behavior |
+|---|---|---|
+| `signed_accrual_principal_segment` | Principal applicable to the segment, including long/short sign | Preserve original face separately; segment on paydown/amortization |
+| `supplied_annual_effective_rate_segment` | Fixed contractual rate or upstream-supplied floating all-in rate in decimal form | Do not divide by frequency or derive index, spread, cap/floor, fallback, or rounding |
+| `governed_year_fraction_segment` | Exact convention/version result for start-inclusive, end-exclusive dates | Reject unknown convention/version and incomplete calendars/reference periods |
+| `gross_accrued_income` | Contractual accrual before separate tax, impairment, PIK, inflation, compounding, or boundary rounding policy | Keep separate from clean value and add exactly once only when policy requires |
+
+The version-1 registry implements `ACT/365.FIXED`, `ACT/360`, `BUS/252`, `30/360.US`,
+`30E/360`, `30E/360.ISDA`, `ACT/ACT.ISDA`, and `ACT/ACT.ICMA`. `BUS/252` requires a
+versioned source calendar. `30E/360.ISDA` requires the contractual termination date.
+`ACT/ACT.ICMA` requires authoritative regular or quasi-coupon reference periods that cover the
+calculation interval exactly once; this is how regular, short-stub, and long-stub periods avoid an
+inferred schedule.
+
+Day-count and accrued-income intermediates use an internal precision of 50 decimal digits,
+independent of ambient process Decimal precision. No implicit currency rounding occurs in the
+domain kernel; the persisted/API boundary must apply a separately governed currency/product
+rounding policy and retain the unrounded evidence required for reconciliation.
+
+#### Performance contract
+
+The pure policies are I/O-free and bounded by the number of supplied segments/reference periods.
+Production integration must bulk-resolve assignment, schedule, calendar, rate, principal/factor,
+multiplier, price, and FX evidence; per-position N+1 reads are not acceptable. Kernel checks can
+detect local regressions, but capacity claims require exact-SHA mixed-book runtime evidence with
+throughput, p95/p99, database operations, lock/connection pressure, Kafka lag, cache invalidation,
+resource use, queue closure, and exact reconciliation.
+
 ## 2. Valuation Scheduler Logic
 
 The `ValuationScheduler` is a powerful background process that orchestrates all valuation and backfill activities. It runs in a continuous loop, performing a series of state management and job creation tasks.

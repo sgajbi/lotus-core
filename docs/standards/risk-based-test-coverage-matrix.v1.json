@@ -399,6 +399,9 @@
           "gap_status": "covered",
           "current_coverage": [
             "tests/unit/libs/portfolio_common/domain/market_data/test_valuation_unit_price.py",
+            "tests/unit/libs/portfolio-common/domain/valuation/test_position_valuation.py",
+            "tests/unit/libs/portfolio-common/domain/valuation/test_day_count.py",
+            "tests/unit/libs/portfolio-common/domain/valuation/test_accrued_income.py",
             "tests/unit/services/calculators/position_valuation_calculator/logic/test_valuation_logic.py"
           ]
         },
