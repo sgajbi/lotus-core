@@ -17,9 +17,11 @@ The governed contract increases only these transaction paths from `8` to `12` pa
 - `transactions.persisted` with `portfolio_transaction_processing_group`.
 
 Both consumer groups have `max_in_flight_messages=12` and retain
-`per_key_concurrency=1`. All producers use `portfolio_id|security_id`, so same-position events stay
-ordered while independent positions can use the additional capacity. Do not increase only the
-topic or only the consumer profile.
+`per_key_concurrency=1`. Unlinked transactions use `portfolio_id|security_id`; transactions with a
+non-blank `linked_transaction_group_id` use
+`portfolio_id|transaction-group|linked_transaction_group_id`. Same-position events stay ordered,
+linked cross-security legs retain their producer order, and independent positions can use the
+additional capacity. Do not increase only the topic or only the consumer profile.
 
 The exact-source fan-in artifact `20260717T003225Z` reduced drain from `110.249s` to `95.247s`
 (`13.61%`) with exact reconciliation, attempts `2/2`, zero repeats/failures, peak active database
@@ -32,11 +34,12 @@ pool, lock, lag, CPU, and exact-daily evidence.
 - Kafka ordering is guaranteed only within one partition.
 - Dates and epochs are not partition-key components. Backdated events, corrections, reversals, and
   restatements must remain on the same business stream as the original state.
-- Transaction ingestion, persistence, replay, and economics are portfolio-security ordered.
-  Backdated arrivals rebuild deterministic position timelines. Cross-security corporate-action and
-  linked-leg correctness is enforced by explicit dependency references, deterministic domain
-  ordering, reconciliation, and portfolio-security mutation locks rather than portfolio-wide
-  transport serialization.
+- Unlinked transaction ingestion, persistence, replay, and economics are portfolio-security
+  ordered. Linked transaction groups are portfolio/group ordered so a canonical
+  parent-before-dependent-leg producer sequence cannot split across Kafka partitions. Backdated
+  arrivals rebuild deterministic position timelines. Explicit dependency references,
+  deterministic domain ordering, reconciliation, and portfolio-security mutation locks remain the
+  downstream correctness controls; the group key does not replace them or serialize the portfolio.
 - Valuation and position timeseries work is portfolio-security ordered.
 - Market prices are security ordered, FX rates are directed-currency-pair ordered, and business
   dates are calendar ordered.
