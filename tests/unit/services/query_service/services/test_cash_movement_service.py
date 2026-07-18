@@ -87,9 +87,7 @@ async def test_cash_movement_summary_preserves_source_buckets(mock_repo: AsyncMo
     assert response.reconciliation_status == "COMPLETE"
     assert response.source_window_trust.source_row_count == 3
     assert response.source_window_trust.calculated_source_row_count == 3
-    assert response.source_window_trust.source_component_totals == {
-        "USD": Decimal("9000.00")
-    }
+    assert response.source_window_trust.source_component_totals == {"USD": Decimal("9000.00")}
     assert response.request_fingerprint.startswith("cash_movement_summary:")
     assert response.snapshot_id.startswith("cash_movement_summary:")
     assert response.policy_version == "cash-movement-summary-v1"
