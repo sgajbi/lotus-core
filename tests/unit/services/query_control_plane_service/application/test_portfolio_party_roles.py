@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, date, datetime
 
 import pytest
@@ -85,6 +86,36 @@ async def test_party_role_service_preserves_governed_filters_and_lineage() -> No
     assert response.assignments[0].party_id == "PARTY_PM_SG_001"
     assert response.lineage["legacy_advisor_inference"] == "disabled"
     assert response.latest_evidence_timestamp == datetime(2026, 7, 17, 9, 2, tzinfo=UTC)
+    assert response.source_batch_fingerprint == response.content_hash
+    assert response.source_digest == response.content_hash
+
+
+@pytest.mark.asyncio
+async def test_party_role_identity_changes_with_returned_row_and_trust_corrections() -> None:
+    accepted = _record()
+    corrected_effective_to = replace(accepted, effective_to=date(2026, 12, 31))
+    corrected_quality = replace(
+        accepted,
+        quality_status=PortfolioPartyRoleQualityStatus.QUARANTINED,
+    )
+    request = PortfolioPartyRoleAssignmentRequest(
+        as_of_date=date(2026, 7, 18),
+        include_non_accepted=True,
+    )
+
+    responses = [
+        await PortfolioPartyRoleAssignmentService(reader=_Reader([record]), clock=_Clock()).resolve(
+            portfolio_id="PB_SG_GLOBAL_BAL_001",
+            request=request,
+        )
+        for record in (accepted, corrected_effective_to, corrected_quality)
+    ]
+
+    assert len({response.snapshot_id for response in responses}) == 3
+    assert len({response.content_hash for response in responses}) == 3
+    assert len({response.source_batch_fingerprint for response in responses}) == 3
+    assert responses[0].data_quality_status == "COMPLETE"
+    assert responses[2].data_quality_status == "PARTIAL"
 
 
 @pytest.mark.asyncio
