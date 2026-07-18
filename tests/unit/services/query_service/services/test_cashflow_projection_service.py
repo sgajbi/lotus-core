@@ -36,9 +36,12 @@ def mock_repo() -> AsyncMock:
     async def _series_with_evidence(
         portfolio_id: str, start_date: date, end_date: date
     ) -> CashflowSeriesEvidence:
+        rows = await _series(portfolio_id, start_date, end_date)
         return CashflowSeriesEvidence(
-            rows=await _series(portfolio_id, start_date, end_date),
+            rows=rows,
             latest_evidence_timestamp=datetime(2026, 3, 3, 12, 30, tzinfo=UTC),
+            source_row_count=len(rows),
+            source_total=sum((amount for _flow_date, amount in rows), start=Decimal("0")),
         )
 
     repo.get_portfolio_cashflow_series_with_evidence.side_effect = _series_with_evidence
@@ -80,13 +83,28 @@ async def test_projection_defaults_to_latest_business_date(mock_repo: AsyncMock)
         assert response.source_refs == [
             "lotus-core://source/PortfolioCashflowProjection/P1/2026-03-01/2026-03-11"
         ]
-        assert response.source_lineage == {
-            "source_owner": "lotus-core",
-            "source_product": "PortfolioCashflowProjection",
-            "portfolio_id": "P1",
-        }
+        assert response.source_lineage["source_owner"] == "lotus-core"
+        assert response.source_lineage["source_product"] == "PortfolioCashflowProjection"
+        assert response.source_lineage["portfolio_id"] == "P1"
+        assert response.source_lineage["input_content_hash"] == (
+            response.calculation_lineage.input_content_hash
+        )
         assert response.source_evidence_current is True
         assert response.freshness_status == "CURRENT"
+        assert response.reconciliation_status == "COMPLETE"
+        assert response.source_window_trust.source_row_count == 2
+        assert response.source_window_trust.calculated_source_row_count == 2
+        assert response.source_window_trust.output_group_count == 11
+        assert response.source_window_trust.source_component_totals == {
+            "BOOKED": Decimal("-750"),
+            "PROJECTED": Decimal("0"),
+        }
+        assert response.source_window_trust.supportability_status == "SUPPORTED"
+        assert response.request_fingerprint.startswith("cashflow_projection:")
+        assert response.snapshot_id.startswith("cashflow_projection:")
+        assert response.policy_version == "cashflow-projection-v1"
+        assert response.calculation_lineage.algorithm_id == "PORTFOLIO_CASHFLOW_PROJECTION"
+        assert response.calculation_lineage.intermediate_precision == 50
         assert response.points[0].projected_cumulative_cashflow == Decimal("-1000")
         assert response.points[0].booked_net_cashflow == Decimal("-1000")
         assert response.points[0].projected_settlement_cashflow == Decimal("0")
@@ -189,6 +207,8 @@ async def test_projection_includes_future_settlement_dated_external_flows(mock_r
         CashflowSeriesEvidence(
             rows=[(date(2026, 3, 4), Decimal("-18000"))],
             latest_evidence_timestamp=datetime(2026, 3, 4, 9, tzinfo=UTC),
+            source_row_count=1,
+            source_total=Decimal("-18000"),
         )
     )
 
@@ -225,11 +245,15 @@ async def test_projection_adds_same_day_booked_and_projected_movements(
     mock_repo.get_portfolio_cashflow_series_with_evidence.return_value = CashflowSeriesEvidence(
         rows=[(date(2026, 3, 2), Decimal("400.25"))],
         latest_evidence_timestamp=datetime(2026, 3, 2, 9, tzinfo=UTC),
+        source_row_count=1,
+        source_total=Decimal("400.25"),
     )
     mock_repo.get_projected_settlement_cashflow_series_with_evidence.return_value = (
         CashflowSeriesEvidence(
             rows=[(date(2026, 3, 2), Decimal("-150.10"))],
             latest_evidence_timestamp=datetime(2026, 3, 2, 10, tzinfo=UTC),
+            source_row_count=1,
+            source_total=Decimal("-150.10"),
         )
     )
 
@@ -273,6 +297,8 @@ async def test_projection_runs_booked_and_projected_reads_sequentially(
         return CashflowSeriesEvidence(
             rows=[(start_date, Decimal("10"))],
             latest_evidence_timestamp=datetime(2026, 3, 1, 9, tzinfo=UTC),
+            source_row_count=1,
+            source_total=Decimal("10"),
         )
 
     async def _projected_evidence(
@@ -284,6 +310,8 @@ async def test_projection_runs_booked_and_projected_reads_sequentially(
         return CashflowSeriesEvidence(
             rows=[(start_date, Decimal("-2"))],
             latest_evidence_timestamp=datetime(2026, 3, 1, 10, tzinfo=UTC),
+            source_row_count=1,
+            source_total=Decimal("-2"),
         )
 
     mock_repo.get_portfolio_cashflow_series_with_evidence.side_effect = _booked_evidence
@@ -318,3 +346,55 @@ async def test_projection_sum_by_date_treats_blank_and_null_amounts_as_zero() ->
     )
 
     assert totals == {date(2026, 3, 2): Decimal("400.25")}
+
+
+async def test_projection_fails_closed_when_source_total_does_not_reconcile(
+    mock_repo: AsyncMock,
+) -> None:
+    mock_repo.get_portfolio_cashflow_series_with_evidence.side_effect = None
+    mock_repo.get_portfolio_cashflow_series_with_evidence.return_value = CashflowSeriesEvidence(
+        rows=[(date(2026, 3, 1), Decimal("10"))],
+        latest_evidence_timestamp=datetime(2026, 3, 1, 9, tzinfo=UTC),
+        source_row_count=1,
+        source_total=Decimal("11"),
+    )
+
+    with patch(
+        "src.services.query_service.app.services.cashflow_projection_service.CashflowRepository",
+        return_value=mock_repo,
+    ):
+        response = await CashflowProjectionService(
+            AsyncMock(spec=AsyncSession)
+        ).get_cashflow_projection(
+            portfolio_id="P1",
+            horizon_days=1,
+            as_of_date=date(2026, 3, 1),
+        )
+
+    assert response.reconciliation_status == "BLOCKED"
+    assert response.data_quality_status == "BLOCKED"
+    assert response.source_evidence_current is False
+    assert response.source_window_trust.reason_codes == ["SOURCE_TOTAL_MISMATCH"]
+
+
+async def test_projection_binds_tenant_to_input_calculation_and_output_identity(
+    mock_repo: AsyncMock,
+) -> None:
+    with patch(
+        "src.services.query_service.app.services.cashflow_projection_service.CashflowRepository",
+        return_value=mock_repo,
+    ):
+        service = CashflowProjectionService(AsyncMock(spec=AsyncSession))
+        tenant_a = await service.get_cashflow_projection(
+            portfolio_id="P1", horizon_days=1, tenant_id=" tenant-a "
+        )
+        tenant_b = await service.get_cashflow_projection(
+            portfolio_id="P1", horizon_days=1, tenant_id="tenant-b"
+        )
+
+    assert tenant_a.tenant_id == "tenant-a"
+    assert tenant_a.calculation_lineage.input_content_hash != (
+        tenant_b.calculation_lineage.input_content_hash
+    )
+    assert tenant_a.content_hash != tenant_b.content_hash
+    assert tenant_a.snapshot_id != tenant_b.snapshot_id

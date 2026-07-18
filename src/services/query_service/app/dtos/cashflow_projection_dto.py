@@ -9,6 +9,9 @@ from portfolio_common.source_data_product_metadata import (
 )
 from pydantic import BaseModel, Field
 
+from .calculation_lineage_dto import CalculationLineageResponse
+from .cashflow_trust_dto import CashflowWindowTrustResponse
+
 
 class CashflowProjectionPoint(BaseModel):
     projection_date: date = Field(..., description="Projection date.", examples=["2026-03-05"])
@@ -99,6 +102,19 @@ class CashflowProjectionResponse(SourceDataProductRuntimeMetadata):
     )
     projection_days: int = Field(
         ..., description="Projection window length in days.", examples=[10]
+    )
+    request_fingerprint: str = Field(
+        ...,
+        description="Deterministic identity of the normalized cashflow projection request.",
+        examples=["cashflow_projection:3a4f5b6c7d8e9f01"],
+    )
+    source_window_trust: CashflowWindowTrustResponse = Field(
+        ...,
+        description="Source-row count and total controls reconciled to this projection.",
+    )
+    calculation_lineage: CalculationLineageResponse = Field(
+        ...,
+        description="Deterministic source-input, calculation-policy, and output lineage.",
     )
     notes: Optional[str] = Field(
         None,

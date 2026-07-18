@@ -20,6 +20,30 @@ from src.services.query_service.app.services.cashflow_projection_service import 
 )
 
 
+def _trust_fields() -> dict[str, object]:
+    return {
+        "request_fingerprint": "cashflow_projection:" + "a" * 16,
+        "source_window_trust": {
+            "window_status": "POPULATED",
+            "supportability_status": "SUPPORTED",
+            "reason_codes": [],
+            "source_row_count": 1,
+            "calculated_source_row_count": 1,
+            "output_group_count": 1,
+            "source_component_totals": {"BOOKED": 1, "PROJECTED": 0},
+            "calculated_component_totals": {"BOOKED": 1, "PROJECTED": 0},
+        },
+        "calculation_lineage": {
+            "algorithm_id": "PORTFOLIO_CASHFLOW_PROJECTION",
+            "algorithm_version": 1,
+            "intermediate_precision": 50,
+            "input_content_hash": "a" * 64,
+            "calculation_content_hash": "b" * 64,
+            "output_content_hash": "c" * 64,
+        },
+    }
+
+
 @pytest.mark.asyncio
 async def test_get_cashflow_projection_success() -> None:
     service = MagicMock(spec=CashflowProjectionService)
@@ -43,6 +67,7 @@ async def test_get_cashflow_projection_success() -> None:
             booked_total_net_cashflow=1,
             projected_settlement_total_cashflow=0,
             projection_days=10,
+            **_trust_fields(),
             **source_data_product_runtime_metadata(
                 as_of_date=date(2026, 3, 1),
                 generated_at=datetime(2026, 3, 1, 1, 5, tzinfo=UTC),
@@ -57,11 +82,18 @@ async def test_get_cashflow_projection_success() -> None:
         horizon_days=10,
         as_of_date=date(2026, 3, 1),
         include_projected=True,
+        tenant_id="tenant-a",
         service=service,
     )
 
     assert response.portfolio_id == "P1"
-    service.get_cashflow_projection.assert_awaited_once()
+    service.get_cashflow_projection.assert_awaited_once_with(
+        portfolio_id="P1",
+        horizon_days=10,
+        as_of_date=date(2026, 3, 1),
+        include_projected=True,
+        tenant_id="tenant-a",
+    )
 
 
 @pytest.mark.asyncio
@@ -77,6 +109,7 @@ async def test_get_cashflow_projection_maps_value_error_to_404() -> None:
             horizon_days=10,
             as_of_date=date(2026, 3, 1),
             include_projected=False,
+            tenant_id=None,
             service=service,
         )
 
@@ -97,6 +130,7 @@ async def test_get_cashflow_projection_maps_resolution_error_to_400() -> None:
             horizon_days=367,
             as_of_date=date(2026, 3, 1),
             include_projected=False,
+            tenant_id=None,
             service=service,
         )
 
