@@ -1233,7 +1233,7 @@ class BaseConsumer(ABC):
     def _log_dlq_publication_failed(self, msg: Message) -> None:
         self._log_consumer_event(
             logging.WARNING,
-            "DLQ publication failed; ordered in-process recovery scheduled.",
+            "DLQ publication failed; original offset remains uncommitted.",
             event_name="kafka.consumer.dlq_failed",
             status="failed",
             reason_code="dlq_publish_error",
@@ -1246,7 +1246,17 @@ class BaseConsumer(ABC):
 
     def _handle_dlq_publication_failed(self, msg: Message, error: Exception) -> None:
         attempts = self._record_dlq_failure_attempt(msg)
-        if self._dlq_failure_max_attempts <= 0 or attempts < self._dlq_failure_max_attempts:
+        if self._dlq_failure_max_attempts <= 0:
+            self._log_dlq_publication_failed(msg)
+            self._stop_after_disabled_dlq_failure(
+                msg,
+                error,
+                attempts,
+                reason_code="dlq_publish_error_budget_disabled",
+                failure_stage="publication",
+            )
+            return
+        if attempts < self._dlq_failure_max_attempts:
             self._log_dlq_publication_failed(msg)
             return
         self._raise_dlq_failure_budget_exhausted(
@@ -1259,7 +1269,16 @@ class BaseConsumer(ABC):
 
     def _handle_dlq_offset_commit_failed(self, msg: Message, error: Exception) -> None:
         attempts = self._record_dlq_failure_attempt(msg)
-        if self._dlq_failure_max_attempts <= 0 or attempts < self._dlq_failure_max_attempts:
+        if self._dlq_failure_max_attempts <= 0:
+            self._stop_after_disabled_dlq_failure(
+                msg,
+                error,
+                attempts,
+                reason_code="dlq_offset_commit_error_budget_disabled",
+                failure_stage="offset_commit",
+            )
+            return
+        if attempts < self._dlq_failure_max_attempts:
             return
         self._raise_dlq_failure_budget_exhausted(
             msg,
@@ -1292,6 +1311,37 @@ class BaseConsumer(ABC):
             f"topic={msg.topic()}|group={self._consumer_config['group.id']}|"
             f"partition={partition}|offset={offset}|key={original_key}"
         )
+
+    def _stop_after_disabled_dlq_failure(
+        self,
+        msg: Message,
+        error: Exception,
+        attempts: int,
+        *,
+        reason_code: str,
+        failure_stage: str,
+    ) -> None:
+        metric_reason = (
+            "dlq_publish_error" if failure_stage == "publication" else "dlq_offset_commit_error"
+        )
+        self._record_consumer_event("dlq_recovery_stopped", metric_reason)
+        self._log_consumer_event(
+            logging.ERROR,
+            "Kafka DLQ recovery failed with in-process retries disabled; stopping consumer "
+            "without committing.",
+            event_name="kafka.consumer.dlq_recovery_stopped",
+            status="failed",
+            reason_code=reason_code,
+            original_topic=msg.topic(),
+            original_partition=_message_attr_or_unknown(msg, "partition"),
+            original_offset=_message_attr_or_unknown(msg, "offset"),
+            dlq_topic=self.dlq_topic or "unconfigured",
+            failure_stage=failure_stage,
+            failure_attempts=attempts,
+            max_failure_attempts=self._dlq_failure_max_attempts,
+            processing_error_type=type(error).__name__,
+        )
+        self.shutdown()
 
     def _raise_dlq_failure_budget_exhausted(
         self,

@@ -585,6 +585,7 @@ async def test_run_loop_retries_dlq_publication_without_reprocessing_message(
     test_consumer.execution_profile = KafkaConsumerExecutionProfile(
         retryable_failure_backoff_seconds=0.001
     )
+    test_consumer._dlq_failure_max_attempts = 2
     dlq_attempts = 0
 
     async def terminal_failure(*args, **kwargs):
@@ -621,6 +622,7 @@ async def test_run_loop_retries_post_dlq_commit_without_republishing(
     test_consumer.execution_profile = KafkaConsumerExecutionProfile(
         retryable_failure_backoff_seconds=0.001
     )
+    test_consumer._dlq_failure_max_attempts = 2
     commit_attempts = 0
 
     async def terminal_failure(*args, **kwargs):
@@ -643,6 +645,56 @@ async def test_run_loop_retries_post_dlq_commit_without_republishing(
     test_consumer._send_to_dlq_async.assert_awaited_once_with(mock_msg, ANY)
     assert mock_confluent_consumer.commit.call_count == 2
     assert test_consumer._dlq_failure_attempts == {}
+
+
+async def test_run_loop_disabled_dlq_budget_stops_after_one_publication_failure(
+    test_consumer: ConcreteTestConsumer,
+    mock_confluent_consumer: MagicMock,
+) -> None:
+    mock_msg = create_mock_message("key-dlq-disabled", {"data": "invalid"})
+    mock_confluent_consumer.poll.return_value = mock_msg
+    test_consumer._dlq_failure_max_attempts = 0
+    test_consumer.process_message_mock.side_effect = ValueError("invalid payload")
+    test_consumer._send_to_dlq_async = AsyncMock(return_value=False)
+
+    with patch("portfolio_common.kafka_consumer.observe_kafka_consumer_event") as event_metric:
+        await asyncio.wait_for(test_consumer.run(), timeout=0.5)
+
+    test_consumer.process_message_mock.assert_awaited_once_with(mock_msg)
+    test_consumer._send_to_dlq_async.assert_awaited_once_with(mock_msg, ANY)
+    mock_confluent_consumer.commit.assert_not_called()
+    assert test_consumer._running is False
+    assert (
+        "dlq_recovery_stopped",
+        "dlq_publish_error",
+    ) in _consumer_event_outcomes(event_metric)
+
+
+async def test_run_loop_disabled_dlq_budget_stops_after_one_offset_commit_failure(
+    test_consumer: ConcreteTestConsumer,
+    mock_confluent_consumer: MagicMock,
+) -> None:
+    mock_msg = create_mock_message("key-dlq-commit-disabled", {"data": "invalid"})
+    mock_confluent_consumer.poll.return_value = mock_msg
+    test_consumer._dlq_failure_max_attempts = 0
+    test_consumer.process_message_mock.side_effect = ValueError("invalid payload")
+    test_consumer._send_to_dlq_async = AsyncMock(return_value=True)
+    mock_confluent_consumer.commit.side_effect = RuntimeError("coordinator unavailable")
+
+    with patch("portfolio_common.kafka_consumer.observe_kafka_consumer_event") as event_metric:
+        await asyncio.wait_for(test_consumer.run(), timeout=0.5)
+
+    test_consumer.process_message_mock.assert_awaited_once_with(mock_msg)
+    test_consumer._send_to_dlq_async.assert_awaited_once_with(mock_msg, ANY)
+    mock_confluent_consumer.commit.assert_called_once_with(
+        message=mock_msg,
+        asynchronous=False,
+    )
+    assert test_consumer._running is False
+    assert (
+        "dlq_recovery_stopped",
+        "dlq_offset_commit_error",
+    ) in _consumer_event_outcomes(event_metric)
 
 
 async def test_run_loop_does_not_commit_when_dlq_support_evidence_fails(
