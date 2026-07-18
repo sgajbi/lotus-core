@@ -1,6 +1,10 @@
 from datetime import date
 from typing import Any
 
+from ..application.holdings_reconciliation import (
+    holdings_reconciliation_scopes,
+    holdings_reconciliation_status,
+)
 from ..dtos.position_dto import PortfolioPositionsResponse
 from .position_holdings import (
     assign_position_weights,
@@ -77,12 +81,22 @@ async def portfolio_holdings_response(
         latest_market_price_dates=latest_market_price_dates,
     )
     latest_evidence_timestamp = latest_holdings_evidence_timestamp(db_results)
+    reconciliation_scopes = holdings_reconciliation_scopes(db_results)
+    reconciliation_controls = await repository.get_holdings_reconciliation_controls(
+        portfolio_id=portfolio_id,
+        scopes=reconciliation_scopes.items,
+    )
     return portfolio_positions_response_data(
         portfolio_id=portfolio_id,
         positions=positions,
         response_as_of_date=response_as_of_date,
         data_quality_status=data_quality_status,
         latest_evidence_timestamp=latest_evidence_timestamp,
+        reconciliation_status=holdings_reconciliation_status(
+            scopes=reconciliation_scopes,
+            controls=reconciliation_controls,
+        ),
+        reconciliation_scope_hash=reconciliation_scopes.content_hash(),
         degradation=holdings_degradation_summary(
             positions=positions,
             history_supplements=history_supplements,

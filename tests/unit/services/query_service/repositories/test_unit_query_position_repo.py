@@ -1,11 +1,14 @@
 # tests/unit/services/query_service/repositories/test_unit_query_position_repo.py
-from datetime import date
+from datetime import UTC, date, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.services.query_service.app.application.holdings_reconciliation import (
+    HoldingsReconciliationScope,
+)
 from src.services.query_service.app.repositories.position_repository import PositionRepository
 
 pytestmark = pytest.mark.asyncio
@@ -27,6 +30,60 @@ def mock_db_session() -> AsyncMock:
 def repository(mock_db_session: AsyncMock) -> PositionRepository:
     """Provides an instance of the repository with a mock session."""
     return PositionRepository(mock_db_session)
+
+
+async def test_get_holdings_reconciliation_controls_uses_one_exact_scope_query(
+    repository: PositionRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    updated_at = datetime(2026, 3, 10, 13, tzinfo=UTC)
+    result = MagicMock()
+    result.scalars.return_value.all.return_value = [
+        SimpleNamespace(
+            business_date=date(2026, 3, 10),
+            epoch=2,
+            status="COMPLETED",
+            updated_at=updated_at,
+        )
+    ]
+    mock_db_session.execute.return_value = result
+
+    controls = await repository.get_holdings_reconciliation_controls(
+        portfolio_id="P1",
+        scopes=(
+            HoldingsReconciliationScope(
+                business_date=date(2026, 3, 10),
+                epoch=2,
+                latest_evidence_timestamp=updated_at,
+                source_row_count=10_000,
+            ),
+        ),
+    )
+
+    assert len(controls) == 1
+    assert controls[0].status == "COMPLETED"
+    assert controls[0].updated_at == updated_at
+    assert mock_db_session.execute.await_count == 1
+    statement = mock_db_session.execute.await_args.args[0]
+    compiled = str(statement.compile(compile_kwargs={"literal_binds": True}))
+    assert "FROM pipeline_stage_state" in compiled
+    assert "pipeline_stage_state.stage_name = 'FINANCIAL_RECONCILIATION'" in compiled
+    assert "pipeline_stage_state.portfolio_id = 'P1'" in compiled
+    assert "pipeline_stage_state.business_date, pipeline_stage_state.epoch" in compiled
+    assert "'2026-03-10', 2" in compiled
+
+
+async def test_get_holdings_reconciliation_controls_skips_empty_scope_query(
+    repository: PositionRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    controls = await repository.get_holdings_reconciliation_controls(
+        portfolio_id="P1",
+        scopes=(),
+    )
+
+    assert controls == []
+    mock_db_session.execute.assert_not_awaited()
 
 
 async def test_get_position_history_with_filters(

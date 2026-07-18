@@ -9,14 +9,20 @@ from portfolio_common.database_models import (
     DailyPositionSnapshot,
     Instrument,
     MarketPrice,
+    PipelineStageState,
     Portfolio,
     PositionHistory,
     PositionState,
 )
 from portfolio_common.logging_utils import operation_log_extra
-from sqlalchemy import and_, func, or_, select, text
+from portfolio_common.reconciliation_quality import FINANCIAL_RECONCILIATION_STAGE
+from sqlalchemy import and_, func, or_, select, text, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..application.holdings_reconciliation import (
+    FinancialReconciliationControl,
+    HoldingsReconciliationScope,
+)
 from .identifier_normalization import normalize_security_id
 
 logger = logging.getLogger(__name__)
@@ -50,6 +56,33 @@ class PositionRepository:
             BusinessDate.calendar_code == DEFAULT_BUSINESS_CALENDAR_CODE
         )
         return (await self.db.execute(stmt)).scalar_one_or_none()
+
+    async def get_holdings_reconciliation_controls(
+        self,
+        *,
+        portfolio_id: str,
+        scopes: tuple[HoldingsReconciliationScope, ...],
+    ) -> list[FinancialReconciliationControl]:
+        """Read exact portfolio-day/epoch aggregate control evidence in one query."""
+
+        scope_keys = sorted({(scope.business_date, scope.epoch) for scope in scopes})
+        if not scope_keys:
+            return []
+        statement = select(PipelineStageState).where(
+            PipelineStageState.stage_name == FINANCIAL_RECONCILIATION_STAGE,
+            PipelineStageState.portfolio_id == portfolio_id,
+            tuple_(PipelineStageState.business_date, PipelineStageState.epoch).in_(scope_keys),
+        )
+        rows = (await self.db.execute(statement)).scalars().all()
+        return [
+            FinancialReconciliationControl(
+                business_date=row.business_date,
+                epoch=row.epoch,
+                status=row.status,
+                updated_at=row.updated_at,
+            )
+            for row in rows
+        ]
 
     async def get_held_since_date(
         self, portfolio_id: str, security_id: str, epoch: int
