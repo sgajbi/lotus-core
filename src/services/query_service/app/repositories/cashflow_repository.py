@@ -244,9 +244,7 @@ class CashflowRepository:
                 for row in rows
             ],
             source_row_count=int(rows[0][8] or 0) if rows else 0,
-            source_currency_totals={
-                str(row[2]): Decimal(str(row[9] or 0)) for row in rows
-            },
+            source_currency_totals={str(row[2]): Decimal(str(row[9] or 0)) for row in rows},
         )
 
     @async_timed(repository="CashflowRepository", method="get_external_flows")

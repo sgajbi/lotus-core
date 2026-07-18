@@ -93,8 +93,7 @@ class CashflowProjectionService:
 
         normalized_tenant_id = tenant_id.strip() if tenant_id and tenant_id.strip() else None
         source_row_count = (
-            cashflow_evidence.booked_source_row_count
-            + cashflow_evidence.projected_source_row_count
+            cashflow_evidence.booked_source_row_count + cashflow_evidence.projected_source_row_count
         )
         source_component_totals = {
             "BOOKED": cashflow_evidence.booked_source_total,
@@ -145,9 +144,7 @@ class CashflowProjectionService:
             },
             output_payload=response_values,
         )
-        request_fingerprint = (
-            f"cashflow_projection:{calculation_lineage.input_content_hash[:16]}"
-        )
+        request_fingerprint = f"cashflow_projection:{calculation_lineage.input_content_hash[:16]}"
 
         source_ref = (
             "lotus-core://source/PortfolioCashflowProjection/"
@@ -201,10 +198,7 @@ class CashflowProjectionService:
                     f"include_projected={str(include_projected).lower()}"
                 ),
                 content_hash=content_hash,
-                snapshot_id=(
-                    "cashflow_projection:"
-                    f"{calculation_lineage.output_content_hash[:24]}"
-                ),
+                snapshot_id=(f"cashflow_projection:{calculation_lineage.output_content_hash[:24]}"),
                 policy_version=CASHFLOW_PROJECTION_POLICY_VERSION,
                 source_refs=[source_ref],
                 lineage={

@@ -137,9 +137,7 @@ class CashMovementService:
             },
             output_payload=response_values,
         )
-        request_fingerprint = (
-            f"cash_movement_summary:{calculation_lineage.input_content_hash[:16]}"
-        )
+        request_fingerprint = f"cash_movement_summary:{calculation_lineage.input_content_hash[:16]}"
         content_hash = stable_content_hash(
             {
                 "product_name": "PortfolioCashMovementSummary",
@@ -177,8 +175,7 @@ class CashMovementService:
                     f"cash_movement_summary:{portfolio_id}:{start_date}:{end_date}"
                 ),
                 snapshot_id=(
-                    "cash_movement_summary:"
-                    f"{calculation_lineage.output_content_hash[:24]}"
+                    f"cash_movement_summary:{calculation_lineage.output_content_hash[:24]}"
                 ),
                 policy_version=CASH_MOVEMENT_POLICY_VERSION,
                 content_hash=content_hash,

@@ -400,8 +400,9 @@ async def test_cash_movement_summary_returns_exact_source_controls(
     assert evidence.source_row_count == 3
     assert evidence.source_currency_totals == {"USD": Decimal("3000")}
     assert sum(row[5] for row in evidence.rows) == evidence.source_row_count
-    assert sum((row[6] for row in evidence.rows), start=Decimal("0")) == (
-        evidence.source_currency_totals["USD"]
+    assert (
+        sum((row[6] for row in evidence.rows), start=Decimal("0"))
+        == (evidence.source_currency_totals["USD"])
     )
 
 

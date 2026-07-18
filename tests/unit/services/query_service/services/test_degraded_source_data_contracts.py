@@ -246,9 +246,7 @@ def test_populated_cashflow_contract_fails_closed_without_source_evidence_timest
     assert response.product_name == "PortfolioCashflowProjection"
     assert response.data_quality_status == "BLOCKED"
     assert response.reconciliation_status == "BLOCKED"
-    assert response.source_window_trust.reason_codes == [
-        "SOURCE_EVIDENCE_TIMESTAMP_MISSING"
-    ]
+    assert response.source_window_trust.reason_codes == ["SOURCE_EVIDENCE_TIMESTAMP_MISSING"]
     assert response.source_evidence_current is False
     assert response.freshness_status == "UNAVAILABLE"
     assert response.correlation_id == CORRELATION_ID
