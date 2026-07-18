@@ -50,6 +50,11 @@ database/Kafka/HTTP endpoints, and a bounded retry. Explicit operator port overr
 Exhausted retries name the failure class, attempts, reallocations, and Compose project so a
 collision is distinguishable from application startup failure.
 
+The root pytest session also releases any reservation still held at session finish. This covers
+unit-only and collection-only commands that never request the Compose fixture; Docker-backed
+fixture teardown and session teardown share the same idempotent release path. A successful test
+command must not defer socket cleanup to interpreter finalization.
+
 Local image builds complete while reservations remain held; the subsequent startup does not use
 `up --build`. This keeps build duration outside the host-bind race interval.
 

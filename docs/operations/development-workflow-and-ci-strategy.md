@@ -78,6 +78,13 @@ reservation immediately before Docker claims the ports and replaces the complete
 generation after a recognized bind conflict. Exhausted retries report
 `host_port_bind_conflict`, attempt count, reallocation count, and Compose project identity.
 
+The root pytest session owns its prepared runtime even when no Docker-backed fixture is selected.
+Its session-finish hook releases every still-held reservation, while the `docker_services` finalizer
+uses the same idempotent release path before project-scoped Compose teardown. Unit-only and
+collection-only commands must therefore finish without interpreter-finalizer `unclosed socket`
+warnings. Do not move reservation cleanup exclusively into a Docker fixture or rely on garbage
+collection/process exit to close bound ports.
+
 When a local gate requests image builds, the helper runs `docker compose build` while host-port
 reservations are still active, then starts the services without `--build` immediately after
 release. This keeps image-build duration outside the bind-race interval and avoids repeating a long
