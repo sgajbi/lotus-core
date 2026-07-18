@@ -440,6 +440,8 @@ def holdings_content_hash(
     positions: list[Position],
     response_as_of_date: date,
     data_quality_status: str,
+    reconciliation_status: str,
+    reconciliation_scope_hash: str | None,
     latest_evidence_timestamp: datetime | None,
     degradation: SourceDataDegradationSummary,
 ) -> str:
@@ -450,6 +452,8 @@ def holdings_content_hash(
             "portfolio_id": portfolio_id,
             "as_of_date": response_as_of_date,
             "data_quality_status": data_quality_status,
+            "reconciliation_status": reconciliation_status,
+            "reconciliation_scope_hash": reconciliation_scope_hash,
             "latest_evidence_timestamp": latest_evidence_timestamp,
             "positions": [
                 position.model_dump(mode="json", exclude_none=True) for position in positions
@@ -506,6 +510,8 @@ def portfolio_positions_response_data(
         positions=positions,
         response_as_of_date=response_as_of_date,
         data_quality_status=data_quality_status,
+        reconciliation_status=reconciliation_status,
+        reconciliation_scope_hash=reconciliation_scope_hash,
         latest_evidence_timestamp=latest_evidence_timestamp,
         degradation=resolved_degradation,
     )
