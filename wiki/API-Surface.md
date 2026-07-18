@@ -94,7 +94,16 @@ Operational read:
 
 ```text
 GET /portfolios/{portfolio_id}/positions
+GET /portfolios/{portfolio_id}/maturity-summary?as_of_date=2026-03-10&horizon_days=90&include_projected=false
 ```
+
+`PortfolioMaturitySummary:v1` is a booked, contractual-instrument-maturity receipt. It publishes
+the exact HoldingsAsOf snapshot/content/source-batch/policy identity, caller tenant and request
+correlation where supplied, portfolio-day/epoch reconciliation posture, and separate normalized
+input, calculation-policy, and output SHA-256 hashes. Only a current `COMPLETE` reconciliation can
+produce `SUPPORTED`; missing, incomplete, stale, failed, replay-required, or unknown evidence fails
+closed. The route rejects `include_projected=true` and does not infer callable, putable, amortizing,
+structured-note, lockup, expiry, reinvestment, suitability, risk, or execution methodology.
 
 Allocation analysis:
 
