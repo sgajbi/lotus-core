@@ -1,6 +1,6 @@
 """Tests for deterministic financial input/calculation/output lineage."""
 
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta, timezone
 from decimal import Decimal
 from enum import StrEnum
 
@@ -62,6 +62,16 @@ def test_hashes_are_stable_across_mapping_and_set_order() -> None:
 
     assert first == second
     assert _lineage() == _lineage()
+
+
+def test_aware_timestamps_are_normalized_to_the_same_utc_instant() -> None:
+    singapore = timezone(timedelta(hours=8))
+    utc_hash = canonical_content_hash({"observed_at": datetime(2026, 1, 2, 8, tzinfo=UTC)})
+    singapore_hash = canonical_content_hash(
+        {"observed_at": datetime(2026, 1, 2, 16, tzinfo=singapore)}
+    )
+
+    assert singapore_hash == utc_hash
 
 
 def test_input_algorithm_and_output_changes_have_bounded_hash_impact() -> None:

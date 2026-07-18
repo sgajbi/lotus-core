@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal, localcontext
 from enum import StrEnum
 
+from .calculation_lineage import (
+    CalculationLineage,
+    build_calculation_lineage,
+    require_sha256_digest,
+)
 from .day_count import (
     BusinessDayCalendar,
     DayCountInputs,
@@ -20,6 +25,8 @@ class UnsupportedAccruedIncomeError(ValueError):
 
 
 ACCRUED_INCOME_INTERMEDIATE_PRECISION = 50
+ACCRUED_INCOME_ALGORITHM_ID = "SEGMENTED_GROSS_CONTRACTUAL_ACCRUAL"
+ACCRUED_INCOME_ALGORITHM_VERSION = 1
 
 
 class AccrualRateType(StrEnum):
@@ -36,11 +43,16 @@ class AccrualSourceReference:
     source_system: str
     source_record_id: str
     source_revision: str
+    source_content_hash: str
+    observed_at: datetime
 
     def __post_init__(self) -> None:
         for field_name in ("source_system", "source_record_id", "source_revision"):
             if not str(getattr(self, field_name)).strip():
                 raise ValueError(f"{field_name} must be nonblank")
+        require_sha256_digest(self.source_content_hash, "source_content_hash")
+        if self.observed_at.tzinfo is None or self.observed_at.utcoffset() is None:
+            raise ValueError("observed_at must be timezone-aware")
 
 
 @dataclass(frozen=True, slots=True)
@@ -100,6 +112,7 @@ class AccruedIncomeResult:
     currency: str
     gross_accrued_income: Decimal
     segments: tuple[AccrualSegmentResult, ...]
+    lineage: CalculationLineage
 
 
 def calculate_segmented_accrued_income(
@@ -149,10 +162,23 @@ def calculate_segmented_accrued_income(
                 schedule_source=segment.schedule_source,
             )
         )
+    result_segments = tuple(results)
+    lineage = build_calculation_lineage(
+        algorithm_id=ACCRUED_INCOME_ALGORITHM_ID,
+        algorithm_version=ACCRUED_INCOME_ALGORITHM_VERSION,
+        intermediate_precision=ACCRUED_INCOME_INTERMEDIATE_PRECISION,
+        input_payload={"segments": [_segment_input_payload(segment) for segment in ordered]},
+        output_payload={
+            "currency": currency,
+            "gross_accrued_income": gross_accrued_income,
+            "segments": [_segment_output_payload(result) for result in result_segments],
+        },
+    )
     return AccruedIncomeResult(
         currency=currency,
         gross_accrued_income=gross_accrued_income,
-        segments=tuple(results),
+        segments=result_segments,
+        lineage=lineage,
     )
 
 
@@ -166,3 +192,64 @@ def _validate_contiguous_segments(segments: tuple[AccrualSegment, ...]) -> None:
                 f"{previous.accrual_end.isoformat()} and {current.accrual_start.isoformat()}"
             )
         previous = current
+
+
+def _segment_input_payload(segment: AccrualSegment) -> dict[str, object]:
+    calendar = segment.business_day_calendar
+    return {
+        "accrual_end": segment.accrual_end,
+        "accrual_start": segment.accrual_start,
+        "annual_effective_rate": segment.annual_effective_rate,
+        "business_day_calendar": (
+            {
+                "calendar_content_hash": calendar.calendar_content_hash,
+                "calendar_id": calendar.calendar_id.strip(),
+                "calendar_version": calendar.calendar_version.strip(),
+                "source_revision": calendar.source_revision.strip(),
+                "source_system": calendar.source_system.strip(),
+                "valid_from": calendar.valid_from,
+                "valid_to": calendar.valid_to,
+            }
+            if calendar is not None
+            else None
+        ),
+        "contractual_termination_date": segment.contractual_termination_date,
+        "currency": segment.currency.strip().upper(),
+        "day_count_convention": segment.day_count_convention.strip().upper(),
+        "day_count_convention_version": segment.day_count_convention_version,
+        "icma_reference_periods": [
+            {
+                "coupon_frequency_per_year": reference.coupon_frequency_per_year,
+                "reference_end": reference.reference_end,
+                "reference_start": reference.reference_start,
+            }
+            for reference in segment.icma_reference_periods
+        ],
+        "principal_source": _source_payload(segment.principal_source),
+        "rate_source": _source_payload(segment.rate_source),
+        "rate_type": segment.rate_type,
+        "schedule_source": _source_payload(segment.schedule_source),
+        "signed_accrual_principal": segment.signed_accrual_principal,
+    }
+
+
+def _segment_output_payload(result: AccrualSegmentResult) -> dict[str, object]:
+    return {
+        "accrual_end": result.accrual_end,
+        "accrual_start": result.accrual_start,
+        "accrued_income": result.accrued_income,
+        "annual_effective_rate": result.annual_effective_rate,
+        "rate_type": result.rate_type,
+        "signed_accrual_principal": result.signed_accrual_principal,
+        "year_fraction": result.year_fraction,
+    }
+
+
+def _source_payload(source: AccrualSourceReference) -> dict[str, object]:
+    return {
+        "observed_at": source.observed_at,
+        "source_content_hash": source.source_content_hash,
+        "source_record_id": source.source_record_id.strip(),
+        "source_revision": source.source_revision.strip(),
+        "source_system": source.source_system.strip(),
+    }

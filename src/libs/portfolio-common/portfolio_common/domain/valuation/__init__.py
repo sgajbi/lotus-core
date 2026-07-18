@@ -25,6 +25,7 @@ from .calculation_lineage import (
     CalculationLineage,
     build_calculation_lineage,
     canonical_content_hash,
+    require_sha256_digest,
 )
 from .day_count import (
     BusinessDayCalendar,
@@ -92,6 +93,7 @@ __all__ = [
     "calculate_segmented_accrued_income",
     "build_calculation_lineage",
     "canonical_content_hash",
+    "require_sha256_digest",
     "calculate_year_fraction",
     "resolve_day_count_convention",
     "resolve_valuation_policy_assignment",

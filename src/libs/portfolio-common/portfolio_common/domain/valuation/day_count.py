@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import calendar
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal, localcontext
 from enum import StrEnum
 from types import MappingProxyType
+
+from .calculation_lineage import canonical_content_hash
 
 
 class UnsupportedDayCountError(ValueError):
@@ -41,6 +43,7 @@ class BusinessDayCalendar:
     business_dates: frozenset[date]
     source_system: str
     source_revision: str
+    calendar_content_hash: str = field(init=False)
 
     def __post_init__(self) -> None:
         for field_name in (
@@ -55,6 +58,21 @@ class BusinessDayCalendar:
             raise ValueError("calendar valid_to must be on or after valid_from")
         if any(day < self.valid_from or day > self.valid_to for day in self.business_dates):
             raise ValueError("business_dates must fall within the calendar validity window")
+        object.__setattr__(
+            self,
+            "calendar_content_hash",
+            canonical_content_hash(
+                {
+                    "business_dates": self.business_dates,
+                    "calendar_id": self.calendar_id.strip(),
+                    "calendar_version": self.calendar_version.strip(),
+                    "source_revision": self.source_revision.strip(),
+                    "source_system": self.source_system.strip(),
+                    "valid_from": self.valid_from,
+                    "valid_to": self.valid_to,
+                }
+            ),
+        )
 
 
 @dataclass(frozen=True, slots=True)
