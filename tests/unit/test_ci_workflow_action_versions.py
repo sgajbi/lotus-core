@@ -202,8 +202,50 @@ def test_lint_scans_the_complete_repository_python_scope() -> None:
     makefile_text = "\n".join(makefile_lines)
 
     assert target_dependencies["lint"] == ["quality-ruff-gate", "quality-ruff-format-gate"]
-    assert "quality-ruff-gate:\n\tpython -m ruff check . --statistics" in makefile_text
-    assert "quality-ruff-format-gate:\n\tpython -m ruff format --check ." in makefile_text
+    assert (
+        "quality-ruff-gate:\n\tpython scripts/quality/ci_tooling.py run ruff check . --statistics"
+    ) in makefile_text
+    assert (
+        "quality-ruff-format-gate:\n"
+        "\tpython scripts/quality/ci_tooling.py run ruff format --check ."
+    ) in makefile_text
+
+
+def test_python_quality_tools_use_the_exact_ci_lock_in_make_and_workflows() -> None:
+    lock_text = Path("requirements/ci-tooling.lock.txt").read_text(encoding="utf-8")
+    makefile_text = Path("Makefile").read_text(encoding="utf-8")
+    workflow_text = Path(".github/workflows/quality-baseline.yml").read_text(encoding="utf-8")
+
+    expected_pins = {
+        "bandit==1.9.4",
+        "coverage==7.15.1",
+        "deptry==0.25.1",
+        "import-linter==2.12",
+        "interrogate==1.7.0",
+        "mypy==2.1.0",
+        "pip-audit==2.10.1",
+        "radon==6.0.1",
+        "ruff==0.15.18",
+        "vulture==2.16",
+        "xenon==0.9.3",
+    }
+    assert expected_pins <= set(lock_text.splitlines())
+    for tool in ("ruff", "mypy", "bandit", "vulture", "deptry", "xenon"):
+        assert f"scripts/quality/ci_tooling.py run {tool}" in makefile_text
+    for tool in ("import-linter", "radon"):
+        assert f"scripts/quality/ci_tooling.py verify {tool}" in makefile_text
+    assert "python -m pip install -r requirements/ci-tooling.lock.txt" in workflow_text
+    for unpinned_install in (
+        "python -m pip install ruff",
+        "python -m pip install mypy",
+        "python -m pip install bandit",
+        "python -m pip install vulture",
+        "python -m pip install deptry",
+        "python -m pip install radon",
+        "python -m pip install xenon",
+        "python -m pip install import-linter",
+    ):
+        assert unpinned_install not in workflow_text
 
 
 def test_workflows_opt_into_node24_action_runtime() -> None:
