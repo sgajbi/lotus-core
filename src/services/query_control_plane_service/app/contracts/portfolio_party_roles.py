@@ -54,7 +54,11 @@ class PortfolioPartyRoleAssignmentItem(BaseModel):
 
 class PortfolioPartyRoleAssignmentSupportability(BaseModel):
     state: Literal["READY", "INCOMPLETE"]
-    reason: Literal["PARTY_ROLE_ASSIGNMENTS_READY", "PARTY_ROLE_ASSIGNMENTS_EMPTY"]
+    reason: Literal[
+        "PARTY_ROLE_ASSIGNMENTS_READY",
+        "PARTY_ROLE_ASSIGNMENTS_EMPTY",
+        "PARTY_ROLE_ASSIGNMENTS_NON_ACCEPTED",
+    ]
     returned_assignment_count: int = Field(..., ge=0)
     filters_applied: list[str] = Field(default_factory=list)
 

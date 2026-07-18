@@ -36,6 +36,11 @@ required source-owned identifier and enforces only portfolio ownership through a
   `advisor_id` projection remains available only for portfolios with no role-assignment history.
 - Fixed the generated route inventory to use each source product's approved consumers instead of
   applying a generic route-family list that contradicted catalog ownership.
+- Fixed PR review trust classification for the explicit `include_non_accepted` diagnostic path.
+  Accepted-only results are `COMPLETE/READY`; empty results remain `MISSING/INCOMPLETE`; any
+  returned pending-review, quarantined, or rejected assignment is now `PARTIAL/INCOMPLETE` with an
+  explicit `PARTY_ROLE_ASSIGNMENTS_NON_ACCEPTED` reason. Diagnostic rows remain visible without
+  being misrepresented as usable relationship authority.
 
 ## Compatibility And Same-Pattern Review
 
@@ -75,6 +80,14 @@ remains #521.
 - the same-pattern endpoint scan in the lint lane found the new write route absent from the
   gateway-owned global ingestion rate-limit contract; the policy was corrected and its four guard
   tests passed.
+- focused application regressions cover accepted-only, empty, and mixed accepted plus each of
+  pending-review, quarantined, and rejected source dispositions.
+- the final exact-worktree combined coverage gate passed 5,116 unit, 12 unit-database, 55
+  critical-database, 138 integration-lite, and 284 operations-contract tests with zero warnings;
+  aggregate query coverage was 97.693%, measured changed-source coverage was 97.401% total and
+  91.261% branch, and changed critical sources reached 97.55% line and 92.38% branch coverage;
+- the final full lint chain passed across 2,058 files and strict MyPy passed across 237 source
+  files after the PR review correction.
 
 Local acceptance is complete. PR CI, merge, exact-main validation, wiki publication, and verified
 issue closure remain required before #513 is done.
@@ -86,3 +99,7 @@ ownership review, the downstream endpoint audit, this ledger, and the existing M
 wiki source change because public ownership truth changed. No new standalone methodology or skill
 was added: existing effective-date, source-product, delivery, review-ledger, and issue-resolution
 governance already covers the reusable procedure without duplicating content.
+
+The PR review correction does not require an additional wiki edit: the existing wiki describes the
+source-owned quality disposition, while exact aggregate quality/supportability precedence belongs
+in the API contract, executable tests, and this review record.
