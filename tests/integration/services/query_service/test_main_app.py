@@ -889,6 +889,9 @@ async def test_openapi_describes_cashflow_projection_contract_examples(async_tes
     assert projection_response["properties"]["booked_total_net_cashflow"]["description"] == (
         "Total booked portfolio-level cashflow across returned projection points."
     )
+    assert "calculation_lineage" in projection_response["properties"]
+    assert "source_window_trust" in projection_response["properties"]
+    assert any(parameter["name"] == "X-Tenant-Id" for parameter in projection["parameters"])
     point_schema = schema["components"]["schemas"]["CashflowProjectionPoint"]
     assert (
         "booked_net_cashflow plus projected_settlement_cashflow"
@@ -928,6 +931,9 @@ async def test_openapi_describes_cash_movement_summary_contract_examples(async_t
     assert (
         "cashflow-date window start" in summary_response["properties"]["start_date"]["description"]
     )
+    assert "calculation_lineage" in summary_response["properties"]
+    assert "source_window_trust" in summary_response["properties"]
+    assert any(parameter["name"] == "X-Tenant-Id" for parameter in summary["parameters"])
     bucket_schema = schema["components"]["schemas"]["CashMovementBucket"]
     assert bucket_schema["properties"]["movement_direction"]["description"] == (
         "Direction derived from the sign of total_amount only."

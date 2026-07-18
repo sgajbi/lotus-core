@@ -9,6 +9,9 @@ from portfolio_common.source_data_product_metadata import (
 )
 from pydantic import BaseModel, Field
 
+from .calculation_lineage_dto import CalculationLineageResponse
+from .cashflow_trust_dto import CashflowWindowTrustResponse
+
 
 class CashMovementBucket(BaseModel):
     classification: str = Field(
@@ -69,6 +72,11 @@ class PortfolioCashMovementSummaryResponse(SourceDataProductRuntimeMetadata):
         description="Inclusive cashflow-date window end.",
         examples=["2026-03-31"],
     )
+    portfolio_currency: str = Field(
+        ...,
+        description="Portfolio base currency; movement bucket amounts retain their own currency.",
+        examples=["USD"],
+    )
     buckets: List[CashMovementBucket] = Field(
         ...,
         description="Cash movement totals grouped by classification, timing, currency, and scope.",
@@ -77,6 +85,19 @@ class PortfolioCashMovementSummaryResponse(SourceDataProductRuntimeMetadata):
         ...,
         description="Total number of latest cashflow source rows included across all buckets.",
         examples=[8],
+    )
+    request_fingerprint: str = Field(
+        ...,
+        description="Deterministic identity of the normalized cash movement summary request.",
+        examples=["cash_movement_summary:3a4f5b6c7d8e9f01"],
+    )
+    source_window_trust: CashflowWindowTrustResponse = Field(
+        ...,
+        description="Source-row count and per-currency totals reconciled to returned buckets.",
+    )
+    calculation_lineage: CalculationLineageResponse = Field(
+        ...,
+        description="Deterministic source-input, grouping calculation, and output lineage.",
     )
     notes: str = Field(
         ...,
