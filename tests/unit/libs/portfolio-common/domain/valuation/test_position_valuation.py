@@ -71,7 +71,7 @@ def _source(fact: str, revision: str = "revision-1") -> FinancialSourceReference
 def _evidence(**overrides: object) -> PositionValuationEvidence:
     calculated_accrual = build_calculation_lineage(
         algorithm_id="SEGMENTED_GROSS_CONTRACTUAL_ACCRUAL",
-        algorithm_version=1,
+        algorithm_version=2,
         intermediate_precision=50,
         input_payload={"schedule": "fixture"},
         output_payload={"gross_accrued_income": Decimal("12500")},
@@ -217,6 +217,33 @@ def test_zero_coupon_policy_has_explicit_no_periodic_accrual() -> None:
     assert result.clean_value_local == Decimal("827500.00")
     assert result.accrued_income_local is None
     assert result.total_market_value_local == result.clean_value_local
+
+
+def test_clean_ex_coupon_policy_adds_signed_rebate_interest_once() -> None:
+    result = calculate_position_valuation(
+        policy=_policy(
+            input_basis=ValuationInputBasis.PERCENT_OF_PRINCIPAL_CLEAN,
+            principal_basis=PrincipalBasis.FACE_AMOUNT,
+            scaling=PositionScaling.PRINCIPAL,
+            accrued=AccruedIncomeTreatment.CALCULATED_EX_COUPON_SEPARATELY,
+            denominator=Decimal("100"),
+        ),
+        inputs=_inputs(
+            source_value=Decimal("101.25"),
+            signed_face_amount=Decimal("1000000"),
+            calculated_accrued_income=Decimal(
+                "-994.4751381215469613259668508287292817679558011050"
+            ),
+        ),
+    )
+
+    assert result.clean_value_local == Decimal("1012500.00")
+    assert result.accrued_income_local == Decimal(
+        "-994.4751381215469613259668508287292817679558011050"
+    )
+    assert result.total_market_value_local == Decimal(
+        "1011505.5248618784530386740331491712707182320441989"
+    )
 
 
 def test_per_underlying_unit_and_per_contract_values_are_not_double_scaled() -> None:
@@ -366,4 +393,9 @@ def test_invalid_policy_combinations_are_rejected_before_calculation() -> None:
         _policy(
             input_basis=ValuationInputBasis.SETTLEMENT_VARIATION_WHOLE_POSITION,
             scaling=PositionScaling.NONE,
+        )
+    with pytest.raises(ValueError, match="clean percent-of-principal"):
+        _policy(
+            input_basis=ValuationInputBasis.UNIT_PRICE,
+            accrued=AccruedIncomeTreatment.CALCULATED_EX_COUPON_SEPARATELY,
         )

@@ -6,6 +6,7 @@ from .accrued_income import (
     AccrualSegmentResult,
     AccrualSourceReference,
     AccruedIncomeResult,
+    ExCouponEntitlement,
     UnsupportedAccruedIncomeError,
     calculate_segmented_accrued_income,
 )
@@ -73,6 +74,7 @@ __all__ = [
     "DayCountInputs",
     "FxConversionPolicy",
     "FinancialSourceReference",
+    "ExCouponEntitlement",
     "InstrumentValuationPolicyAssignment",
     "IcmaReferencePeriod",
     "MissingValuationPolicyAssignmentError",

@@ -64,6 +64,7 @@ class AccruedIncomeTreatment(StrEnum):
     NO_PERIODIC_ACCRUAL = "NO_PERIODIC_ACCRUAL"
     INCLUDED_IN_SOURCE_VALUE = "INCLUDED_IN_SOURCE_VALUE"
     CALCULATED_SEPARATELY = "CALCULATED_SEPARATELY"
+    CALCULATED_EX_COUPON_SEPARATELY = "CALCULATED_EX_COUPON_SEPARATELY"
     SUPPLIED_SEPARATELY = "SUPPLIED_SEPARATELY"
 
 
@@ -160,6 +161,13 @@ class PositionValuationPolicy:
                 raise ValueError("dirty percent-of-principal value must include accrued income")
         elif self.accrued_income_treatment is AccruedIncomeTreatment.INCLUDED_IN_SOURCE_VALUE:
             raise ValueError("included accrued income is valid only for a dirty source value")
+        if (
+            self.accrued_income_treatment is AccruedIncomeTreatment.CALCULATED_EX_COUPON_SEPARATELY
+            and self.input_basis is not ValuationInputBasis.PERCENT_OF_PRINCIPAL_CLEAN
+        ):
+            raise ValueError(
+                "calculated ex-coupon accrual requires a clean percent-of-principal input"
+            )
         if self.output_measure is not ValuationOutputMeasure.MARKET_VALUE and (
             self.accrued_income_treatment is not AccruedIncomeTreatment.NOT_APPLICABLE
         ):
@@ -373,7 +381,10 @@ def _position_input_payload(
             evidence.contract_multiplier,
             "contract_multiplier evidence",
         )
-    if policy.accrued_income_treatment is AccruedIncomeTreatment.CALCULATED_SEPARATELY:
+    if policy.accrued_income_treatment in {
+        AccruedIncomeTreatment.CALCULATED_SEPARATELY,
+        AccruedIncomeTreatment.CALCULATED_EX_COUPON_SEPARATELY,
+    }:
         accrued_lineage = evidence.calculated_accrued_income
         if accrued_lineage is None:
             raise UnsupportedValuationError("calculated_accrued_income lineage is required")
@@ -490,7 +501,10 @@ def _resolve_accrued_income(
         AccruedIncomeTreatment.INCLUDED_IN_SOURCE_VALUE,
     }:
         return None
-    if treatment is AccruedIncomeTreatment.CALCULATED_SEPARATELY:
+    if treatment in {
+        AccruedIncomeTreatment.CALCULATED_SEPARATELY,
+        AccruedIncomeTreatment.CALCULATED_EX_COUPON_SEPARATELY,
+    }:
         return _required(inputs.calculated_accrued_income, "calculated_accrued_income")
     return _required(inputs.supplied_accrued_income, "supplied_accrued_income")
 
