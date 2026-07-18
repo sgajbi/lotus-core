@@ -210,6 +210,8 @@ def build_portfolio_seed_cleanup_sql(*, portfolio_id: str) -> str:
             f"delete from position_history where portfolio_id = '{portfolio_id}';",
             f"delete from position_state where portfolio_id = '{portfolio_id}';",
             f"delete from position_lot_state where portfolio_id = '{portfolio_id}';",
+            f"delete from average_cost_pool_state where portfolio_id = '{portfolio_id}';",
+            f"delete from cost_basis_processing_state where portfolio_id = '{portfolio_id}';",
             f"delete from accrued_income_offset_state where portfolio_id = '{portfolio_id}';",
             f"delete from cashflows where portfolio_id = '{portfolio_id}';",
             (
@@ -233,6 +235,11 @@ def build_portfolio_seed_cleanup_sql(*, portfolio_id: str) -> str:
             "delete from sustainability_preference_profiles "
             f"where portfolio_id = '{portfolio_id}';",
             f"delete from client_restriction_profiles where portfolio_id = '{portfolio_id}';",
+            f"delete from client_income_needs_schedules where portfolio_id = '{portfolio_id}';",
+            f"delete from client_tax_profiles where portfolio_id = '{portfolio_id}';",
+            f"delete from client_tax_rule_sets where portfolio_id = '{portfolio_id}';",
+            f"delete from liquidity_reserve_requirements where portfolio_id = '{portfolio_id}';",
+            f"delete from planned_withdrawal_schedules where portfolio_id = '{portfolio_id}';",
             f"delete from portfolio_mandate_bindings where portfolio_id = '{portfolio_id}';",
             "delete from instrument_eligibility_profiles "
             "where source_system = 'LOTUS_FRONT_OFFICE_SEED';",
