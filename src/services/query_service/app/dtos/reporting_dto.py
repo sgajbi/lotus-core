@@ -15,6 +15,8 @@ from portfolio_common.source_data_product_metadata import (
 )
 from pydantic import BaseModel, Field, model_validator
 
+from .calculation_lineage_dto import CalculationLineageResponse
+
 ReportingScopeType = Literal["portfolio", "portfolio_list", "business_unit"]
 LookThroughMode = Literal["direct_only", "prefer_look_through"]
 
@@ -354,30 +356,6 @@ class AllocationBucket(BaseModel):
     )
 
 
-class AllocationCalculationLineage(BaseModel):
-    algorithm_id: str = Field(..., description="Stable allocation algorithm identity.")
-    algorithm_version: int = Field(..., description="Exact allocation algorithm version.")
-    intermediate_precision: int = Field(
-        ...,
-        description="Decimal precision used for totals and allocation weights.",
-    )
-    input_content_hash: str = Field(
-        ...,
-        pattern="^[0-9a-f]{64}$",
-        description="SHA-256 of normalized source inputs, classifications, dimensions, and limit.",
-    )
-    calculation_content_hash: str = Field(
-        ...,
-        pattern="^[0-9a-f]{64}$",
-        description="SHA-256 binding algorithm/version/precision to the input hash.",
-    )
-    output_content_hash: str = Field(
-        ...,
-        pattern="^[0-9a-f]{64}$",
-        description="SHA-256 binding returned totals, buckets, contributors, and residuals.",
-    )
-
-
 class AllocationView(BaseModel):
     dimension: AllocationDimension = Field(
         ...,
@@ -416,7 +394,7 @@ class AssetAllocationResponse(BaseModel):
         ...,
         description="Applied look-through mode and capability summary for the allocation query.",
     )
-    calculation_lineage: AllocationCalculationLineage = Field(
+    calculation_lineage: CalculationLineageResponse = Field(
         ...,
         description=(
             "Deterministic normalized-input, calculation-policy, and output lineage for the "

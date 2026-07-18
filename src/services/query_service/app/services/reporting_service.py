@@ -17,9 +17,9 @@ from portfolio_common.portfolio_allocation import (
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..domain.strict_decimal import decimal_or_none, decimal_or_zero
+from ..dtos.calculation_lineage_dto import CalculationLineageResponse
 from ..dtos.reporting_dto import (
     AllocationBucket,
-    AllocationCalculationLineage,
     AllocationContributor,
     AllocationLookThroughInfo,
     AllocationView,
@@ -464,7 +464,7 @@ class ReportingService:
                 allocation_result.total_market_value_reporting_currency
             ),
             look_through=look_through_info,
-            calculation_lineage=AllocationCalculationLineage(
+            calculation_lineage=CalculationLineageResponse(
                 **allocation_result.calculation_lineage.lineage_payload()
             ),
             views=views,

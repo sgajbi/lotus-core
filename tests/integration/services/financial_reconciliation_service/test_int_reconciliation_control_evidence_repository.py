@@ -4,11 +4,11 @@ from datetime import date
 
 import pytest
 from portfolio_common.database_models import PipelineStageState
+from portfolio_common.reconciliation_quality import FINANCIAL_RECONCILIATION_STAGE
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.financial_reconciliation_service.app.domain.reconciliation_control import (
-    FINANCIAL_RECONCILIATION_STAGE,
     FinancialReconciliationCompletion,
 )
 from src.services.financial_reconciliation_service.app.infrastructure import (

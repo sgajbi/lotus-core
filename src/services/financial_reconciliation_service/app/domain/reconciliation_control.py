@@ -7,8 +7,6 @@ from datetime import date
 from types import MappingProxyType
 from typing import Mapping
 
-FINANCIAL_RECONCILIATION_STAGE = "FINANCIAL_RECONCILIATION"
-FINANCIAL_RECONCILIATION_SOURCE_EVENT = "portfolio_day.reconciliation.completed"
 CONTROL_BLOCKING_STATUSES = frozenset({"FAILED", "REQUIRES_REPLAY"})
 CONTROL_STATUS_PRIORITY: Mapping[str, int] = MappingProxyType(
     {
