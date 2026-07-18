@@ -198,6 +198,8 @@ def _complete_component_weight_total(weights: list[Decimal | None]) -> Decimal |
     complete_weights = [weight for weight in weights if weight is not None]
     if len(complete_weights) != len(weights) or not complete_weights:
         return None
+    if any(weight < ZERO or weight > Decimal("1") for weight in complete_weights):
+        return None
     return sum(complete_weights, ZERO)
 
 
