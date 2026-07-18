@@ -83,6 +83,14 @@ async def async_test_client():
                 "position_basis": "market_value_base",
                 "weight_basis": "total_market_value_base",
             },
+            "calculation_lineage": {
+                "algorithm_id": "PORTFOLIO_STATE_SNAPSHOT",
+                "algorithm_version": 1,
+                "intermediate_precision": 28,
+                "input_content_hash": "a" * 64,
+                "calculation_content_hash": "b" * 64,
+                "output_content_hash": "c" * 64,
+            },
             "sections": {"positions_baseline": []},
             **source_data_product_runtime_metadata(
                 as_of_date=date(2026, 2, 27),
@@ -828,6 +836,14 @@ async def test_core_snapshot_success(async_test_client):
     )
 
     assert response.status_code == 200
+    assert response.json()["calculation_lineage"] == {
+        "algorithm_id": "PORTFOLIO_STATE_SNAPSHOT",
+        "algorithm_version": 1,
+        "intermediate_precision": 28,
+        "input_content_hash": "a" * 64,
+        "calculation_content_hash": "b" * 64,
+        "output_content_hash": "c" * 64,
+    }
     body = response.json()
     assert body["product_name"] == "PortfolioStateSnapshot"
     assert body["product_version"] == "v1"
