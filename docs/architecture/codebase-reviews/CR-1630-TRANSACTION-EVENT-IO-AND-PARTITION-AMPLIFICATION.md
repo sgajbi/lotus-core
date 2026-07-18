@@ -447,6 +447,13 @@ because historical and new keys can map to different partitions after producer r
   `31ac198a4`, but exact fan-in `20260718T030244Z` and repeat `20260718T031229Z` regressed drain to
   `110.821s` and `110.768s` versus `100.608s` while reducing version queries from `999` to `19`.
   The implementation was reverted forward; CR-1631 preserves the hashes and no-repeat decision.
+- PR Merge Gate run `29628815481` exposed an asynchronous certification-harness race: the runtime
+  surface smoke published a transaction and immediately requested replay before the persistence
+  consumer had made the source-owned transaction row durable. The replay API correctly returned
+  `404`, while the other `65` runtime surface checks passed. Signed `997d99908` now waits for the
+  exact transaction identifier in the query ledger before issuing the one-shot replay command.
+  It does not retry the side-effecting POST or weaken the required `202` response. All `9` focused
+  smoke-script tests, scoped Ruff lint/format, and diff checks passed.
 
 Implementation commits include `23fc6faf3`, `d51adb739`, `ad1ad179d`, `57f8c60e2`,
 `4f05be9a5`, `c230d660a`, `f42f6eaa3`, `d56e14dbf`, `2d49fc8f1`, `70ae16f0f`,
@@ -485,4 +492,8 @@ calculation-methodology, operator-runbook, or additional wiki-source change.
 The rejected source-version interval and its operator setting were reverted forward. The canonical
 immediate source-version validation contract is restored; retaining the experiment evidence requires
 no OpenAPI, migration, event-contract, calculation-methodology, operator-runbook, or wiki-source
+change.
+The runtime-smoke readiness fix changes only certification sequencing. It preserves the replay API,
+HTTP status contract, source-owned transaction resolution, runtime topology, and production
+behavior, and requires no OpenAPI, migration, event-contract, operator-runbook, or wiki-source
 change.
