@@ -85,8 +85,19 @@ Kafka, ingestion, valuation, cashflow, advice, suitability, or execution contrac
   guards passed.
 - Signed implementation commits: `0fb28f742`, `55b9140d3`, and `568588840`.
 
+PR #807 review then found a precedence mismatch: blocked reconciliation already produced
+`supportability_status=UNAVAILABLE`, but the summary data-quality reducer fell through to the
+generic reason branch and emitted `PARTIAL`. Signed fix-forward commit `276693627` now maps blocked
+holdings quality or reconciliation to `data_quality_status=BLOCKED` before stale, unknown, or
+partial handling. The five-state reconciliation regression now asserts data quality as well as
+supportability, reason, reconciliation, and currentness; the focused maturity suite passes `14/14`
+and full MyPy passes all `237` source files.
+
 ## Documentation And Wiki Decision
 
 The source-data-product declaration, methodology, RFC-0083 catalog, repository context, this
 review, review ledger, and existing API Surface wiki change because producer/runtime and consumer
 truth changed. No new generic lineage guide or duplicate documentation family is added.
+The review fix requires no additional wiki change: the existing API Surface already states that
+failed/replay-required reconciliation fails closed, while the exact field precedence belongs in
+the implementation methodology, API model, tests, and this review record.
