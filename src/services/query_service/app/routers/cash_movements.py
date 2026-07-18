@@ -65,9 +65,8 @@ async def get_cash_movement_summary(
         ),
         examples=["2026-03-31"],
     ),
-    tenant_id: str | None = Header(
+    x_tenant_id: str | None = Header(
         None,
-        alias="X-Tenant-Id",
         description="Tenant or book-of-record scope carried into the runtime trust receipt.",
     ),
     service: CashMovementService = Depends(get_cash_movement_service),
@@ -77,7 +76,7 @@ async def get_cash_movement_summary(
             portfolio_id=portfolio_id,
             start_date=start_date,
             end_date=end_date,
-            tenant_id=tenant_id,
+            tenant_id=x_tenant_id,
         )
     except ValueError as exc:
         raise_value_error_as_resolution_http(exc)

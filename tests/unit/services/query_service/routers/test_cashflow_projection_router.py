@@ -82,7 +82,7 @@ async def test_get_cashflow_projection_success() -> None:
         horizon_days=10,
         as_of_date=date(2026, 3, 1),
         include_projected=True,
-        tenant_id="tenant-a",
+        x_tenant_id="tenant-a",
         service=service,
     )
 
@@ -109,7 +109,7 @@ async def test_get_cashflow_projection_maps_value_error_to_404() -> None:
             horizon_days=10,
             as_of_date=date(2026, 3, 1),
             include_projected=False,
-            tenant_id=None,
+            x_tenant_id=None,
             service=service,
         )
 
@@ -130,7 +130,7 @@ async def test_get_cashflow_projection_maps_resolution_error_to_400() -> None:
             horizon_days=367,
             as_of_date=date(2026, 3, 1),
             include_projected=False,
-            tenant_id=None,
+            x_tenant_id=None,
             service=service,
         )
 
