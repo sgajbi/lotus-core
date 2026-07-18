@@ -77,7 +77,7 @@ class ValuationReadinessConsumer(BaseConsumer):
                             epoch=event.epoch,
                             correlation_id=correlation_id,
                             source_correction_id=source_mutation_id,
-                            rearm_completed=True,
+                            rearm_completed=source_mutation_id is not None,
                             requeue_if_processing=source_mutation_id is not None,
                         )
         except (json.JSONDecodeError, ValidationError, EventContractValidationError):
