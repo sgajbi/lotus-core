@@ -5,13 +5,16 @@ from __future__ import annotations
 import calendar
 from dataclasses import dataclass
 from datetime import date
-from decimal import Decimal
+from decimal import Decimal, localcontext
 from enum import StrEnum
 from types import MappingProxyType
 
 
 class UnsupportedDayCountError(ValueError):
     """Raised when source facts cannot support an exact day-count policy."""
+
+
+DAY_COUNT_INTERMEDIATE_PRECISION = 50
 
 
 class DayCountConvention(StrEnum):
@@ -211,7 +214,7 @@ def calculate_year_fraction(
         numerator = (inputs.period_end - inputs.period_start).days
     if definition.denominator is None:
         raise RuntimeError("fixed-denominator convention is missing its denominator")
-    return Decimal(numerator) / Decimal(definition.denominator)
+    return _ratio(numerator, definition.denominator)
 
 
 def _business_day_count(inputs: DayCountInputs) -> int:
@@ -283,18 +286,20 @@ def _is_last_day_of_month(value: date) -> bool:
 
 
 def _actual_actual_isda_fraction(period_start: date, period_end: date) -> Decimal:
-    fraction = Decimal(0)
-    segment_start = period_start
-    while segment_start < period_end:
-        segment_end = (
-            period_end
-            if segment_start.year == period_end.year
-            else date(segment_start.year + 1, 1, 1)
-        )
-        denominator = 366 if calendar.isleap(segment_start.year) else 365
-        fraction += Decimal((segment_end - segment_start).days) / Decimal(denominator)
-        segment_start = segment_end
-    return fraction
+    with localcontext() as context:
+        context.prec = DAY_COUNT_INTERMEDIATE_PRECISION
+        fraction = Decimal(0)
+        segment_start = period_start
+        while segment_start < period_end:
+            segment_end = (
+                period_end
+                if segment_start.year == period_end.year
+                else date(segment_start.year + 1, 1, 1)
+            )
+            denominator = 366 if calendar.isleap(segment_start.year) else 365
+            fraction += Decimal((segment_end - segment_start).days) / Decimal(denominator)
+            segment_start = segment_end
+        return +fraction
 
 
 def _actual_actual_icma_fraction(inputs: DayCountInputs) -> Decimal:
@@ -302,28 +307,36 @@ def _actual_actual_icma_fraction(inputs: DayCountInputs) -> Decimal:
         raise UnsupportedDayCountError(
             "ACT/ACT.ICMA requires authoritative coupon reference periods"
         )
-    fraction = Decimal(0)
-    covered_until = inputs.period_start
-    for reference in sorted(
-        inputs.icma_reference_periods,
-        key=lambda item: (item.reference_start, item.reference_end),
-    ):
-        overlap_start = max(inputs.period_start, reference.reference_start)
-        overlap_end = min(inputs.period_end, reference.reference_end)
-        if overlap_end <= overlap_start:
-            continue
-        if overlap_start != covered_until:
+    with localcontext() as context:
+        context.prec = DAY_COUNT_INTERMEDIATE_PRECISION
+        fraction = Decimal(0)
+        covered_until = inputs.period_start
+        for reference in sorted(
+            inputs.icma_reference_periods,
+            key=lambda item: (item.reference_start, item.reference_end),
+        ):
+            overlap_start = max(inputs.period_start, reference.reference_start)
+            overlap_end = min(inputs.period_end, reference.reference_end)
+            if overlap_end <= overlap_start:
+                continue
+            if overlap_start != covered_until:
+                raise UnsupportedDayCountError(
+                    "ICMA reference periods must cover the calculation interval exactly once"
+                )
+            reference_days = (reference.reference_end - reference.reference_start).days
+            overlap_days = (overlap_end - overlap_start).days
+            fraction += Decimal(overlap_days) / Decimal(
+                reference_days * reference.coupon_frequency_per_year
+            )
+            covered_until = overlap_end
+        if covered_until != inputs.period_end:
             raise UnsupportedDayCountError(
                 "ICMA reference periods must cover the calculation interval exactly once"
             )
-        reference_days = (reference.reference_end - reference.reference_start).days
-        overlap_days = (overlap_end - overlap_start).days
-        fraction += Decimal(overlap_days) / Decimal(
-            reference_days * reference.coupon_frequency_per_year
-        )
-        covered_until = overlap_end
-    if covered_until != inputs.period_end:
-        raise UnsupportedDayCountError(
-            "ICMA reference periods must cover the calculation interval exactly once"
-        )
-    return fraction
+        return +fraction
+
+
+def _ratio(numerator: int, denominator: int) -> Decimal:
+    with localcontext() as context:
+        context.prec = DAY_COUNT_INTERMEDIATE_PRECISION
+        return Decimal(numerator) / Decimal(denominator)

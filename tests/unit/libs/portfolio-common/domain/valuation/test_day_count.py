@@ -1,7 +1,7 @@
 """Golden tests for exact fixed-denominator and business-day conventions."""
 
 from datetime import date
-from decimal import Decimal
+from decimal import Decimal, localcontext
 
 import pytest
 from portfolio_common.domain.valuation import (
@@ -36,12 +36,18 @@ def _business_calendar(**overrides: object) -> BusinessDayCalendar:
     return BusinessDayCalendar(**values)  # type: ignore[arg-type]
 
 
+def _ratio(numerator: int, denominator: int) -> Decimal:
+    with localcontext() as context:
+        context.prec = 50
+        return Decimal(numerator) / Decimal(denominator)
+
+
 @pytest.mark.parametrize(
     ("convention", "period_start", "period_end", "expected"),
     [
-        ("ACT/365.FIXED", date(2023, 7, 1), date(2024, 7, 1), Decimal(366) / 365),
-        ("ACT/365.FIXED", date(2024, 2, 28), date(2024, 3, 1), Decimal(2) / 365),
-        ("ACT/360", date(2024, 2, 28), date(2024, 3, 1), Decimal(2) / 360),
+        ("ACT/365.FIXED", date(2023, 7, 1), date(2024, 7, 1), _ratio(366, 365)),
+        ("ACT/365.FIXED", date(2024, 2, 28), date(2024, 3, 1), _ratio(2, 365)),
+        ("ACT/360", date(2024, 2, 28), date(2024, 3, 1), _ratio(2, 360)),
         ("ACT/360", date(2026, 7, 18), date(2026, 7, 18), Decimal(0)),
     ],
 )
@@ -72,7 +78,7 @@ def test_business_252_counts_start_inclusive_end_exclusive_calendar_facts() -> N
         ),
     )
 
-    assert result == Decimal(4) / 252
+    assert result == _ratio(4, 252)
 
 
 def test_business_252_requires_complete_authoritative_calendar_coverage() -> None:
@@ -106,14 +112,11 @@ def test_thirty_360_us_applies_sifma_end_of_february_and_31st_rules(
     period_end: date,
     expected_days: int,
 ) -> None:
-    assert (
-        calculate_year_fraction(
-            convention="30/360.US",
-            convention_version=1,
-            inputs=DayCountInputs(period_start=period_start, period_end=period_end),
-        )
-        == Decimal(expected_days) / 360
-    )
+    assert calculate_year_fraction(
+        convention="30/360.US",
+        convention_version=1,
+        inputs=DayCountInputs(period_start=period_start, period_end=period_end),
+    ) == _ratio(expected_days, 360)
 
 
 @pytest.mark.parametrize(
@@ -129,14 +132,11 @@ def test_thirty_e_360_adjusts_only_31st_dates(
     period_end: date,
     expected_days: int,
 ) -> None:
-    assert (
-        calculate_year_fraction(
-            convention="30E/360",
-            convention_version=1,
-            inputs=DayCountInputs(period_start=period_start, period_end=period_end),
-        )
-        == Decimal(expected_days) / 360
-    )
+    assert calculate_year_fraction(
+        convention="30E/360",
+        convention_version=1,
+        inputs=DayCountInputs(period_start=period_start, period_end=period_end),
+    ) == _ratio(expected_days, 360)
 
 
 def test_thirty_e_360_isda_preserves_february_contractual_termination() -> None:
@@ -162,23 +162,20 @@ def test_thirty_e_360_isda_preserves_february_contractual_termination() -> None:
         ),
     )
 
-    assert termination_fraction == Decimal(179) / 360
-    assert ordinary_fraction == Decimal(180) / 360
+    assert termination_fraction == _ratio(179, 360)
+    assert ordinary_fraction == _ratio(180, 360)
 
 
 def test_thirty_e_360_isda_adjusts_last_day_of_february_when_not_termination() -> None:
-    assert (
-        calculate_year_fraction(
-            convention="30E/360.ISDA",
-            convention_version=1,
-            inputs=DayCountInputs(
-                period_start=date(2026, 2, 28),
-                period_end=date(2026, 3, 31),
-                contractual_termination_date=date(2028, 2, 29),
-            ),
-        )
-        == Decimal(30) / 360
-    )
+    assert calculate_year_fraction(
+        convention="30E/360.ISDA",
+        convention_version=1,
+        inputs=DayCountInputs(
+            period_start=date(2026, 2, 28),
+            period_end=date(2026, 3, 31),
+            contractual_termination_date=date(2028, 2, 29),
+        ),
+    ) == _ratio(30, 360)
 
 
 def test_thirty_e_360_isda_requires_termination_date_source_fact() -> None:
@@ -203,15 +200,17 @@ def test_actual_actual_isda_splits_elapsed_days_by_calendar_year() -> None:
         ),
     )
 
-    assert result == Decimal(184) / 365 + Decimal(182) / 366
+    with localcontext() as context:
+        context.prec = 50
+        assert result == _ratio(184, 365) + _ratio(182, 366)
 
 
 @pytest.mark.parametrize(
     ("period_start", "period_end", "expected"),
     [
         (date(2024, 1, 1), date(2025, 1, 1), Decimal(1)),
-        (date(2024, 2, 28), date(2024, 3, 1), Decimal(2) / 366),
-        (date(2023, 2, 28), date(2023, 3, 1), Decimal(1) / 365),
+        (date(2024, 2, 28), date(2024, 3, 1), _ratio(2, 366)),
+        (date(2023, 2, 28), date(2023, 3, 1), _ratio(1, 365)),
     ],
 )
 def test_actual_actual_isda_uses_each_calendar_year_denominator(
@@ -254,7 +253,7 @@ def test_actual_actual_icma_short_stub_uses_authoritative_quasi_coupon_period() 
         ),
     )
 
-    assert result == Decimal(136) / Decimal(181 * 2)
+    assert result == _ratio(136, 181 * 2)
 
 
 def test_actual_actual_icma_long_stub_sums_quasi_coupon_overlaps() -> None:
@@ -271,7 +270,7 @@ def test_actual_actual_icma_long_stub_sums_quasi_coupon_overlaps() -> None:
         ),
     )
 
-    assert result == Decimal(92) / Decimal(184 * 2) + Decimal("0.5")
+    assert result == _ratio(92, 184 * 2) + Decimal("0.5")
 
 
 @pytest.mark.parametrize(

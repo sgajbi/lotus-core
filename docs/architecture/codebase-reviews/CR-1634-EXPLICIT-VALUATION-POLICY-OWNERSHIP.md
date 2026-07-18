@@ -51,6 +51,15 @@ narrow framework-free contract therefore belongs in `portfolio_common.domain.val
   overlap is divided by that reference period's actual days and contractual coupon frequency, and
   missing, gapped, or overlapping reference coverage fails closed. This supports regular, short-
   stub, and long-stub calculations without generating an implicit schedule.
+- Added gross contractual accrued-income calculation over contiguous segments carrying explicit
+  signed principal, fixed or upstream-supplied floating all-in annual rate, day-count policy, and
+  separate rate/principal/schedule lineage. Principal changes and rate resets accrue on their own
+  intervals; gaps, overlaps, mixed currencies, non-finite values, missing lineage, and unsupported
+  conventions fail closed. Zero and negative contractual rates and short principal retain their
+  source sign.
+- Fixed day-count and accrual intermediate precision at 50 decimal digits inside local Decimal
+  contexts so repeating fractions and aggregate results do not depend on ambient process precision.
+  Rounding remains a separately governed persistence/API boundary.
 
 ## Ownership Boundary
 
@@ -71,7 +80,7 @@ deleted rather than retained as a fallback when valuation and reconciliation are
 
 ## Validation
 
-- 62 valuation-domain tests passed, including unit/NAV, clean and dirty percent-of-principal,
+- 75 valuation-domain tests passed, including unit/NAV, clean and dirty percent-of-principal,
   factor-adjusted principal, per-unit/per-contract/whole-position supplied values, futures notional,
   settlement variation, FX direction, exact tenant/book/instrument assignment resolution,
   source-version fencing, overlap/gap rejection, conflicting-version rejection, cache identity, and
@@ -79,7 +88,9 @@ deleted rather than retained as a fallback when valuation and reconciliation are
   separation, leap-day fixed-denominator examples, business-day boundary semantics, calendar
   coverage, U.S./Eurobond/ISDA month-end and February behavior, contractual-termination handling,
   ISDA leap/non-leap year segmentation, ICMA regular/short/long reference-period cases, ICMA
-  gap/overlap rejection, and exact day-count convention/version lookup.
+  gap/overlap rejection, exact day-count convention/version lookup, fixed and supplied-floating
+  segment accrual, principal/rate changes, sign handling, lineage/currency/continuity rejection,
+  and ambient Decimal-precision independence.
 - Scoped Ruff lint and formatting passed.
 - Strict MyPy passed for all three valuation-domain source modules.
 - The calculation-kernel commit `608751249` is signed; assignment commit evidence will be recorded
@@ -100,7 +111,8 @@ govern the Actual/Actual ICMA and ISDA distinction and required reference-period
 
 ## Documentation Decision
 
-Repository context and this review ledger change because domain ownership truth changed. No API,
-OpenAPI, migration, operator workflow, README, supported-feature, or wiki truth changes in these
-domain-only slices. Methodology and product/lifecycle wiki updates remain required with runtime and
-source-contract implementation under #788.
+Repository context, the canonical position-valuation methodology, risk-based coverage contract, and
+this review ledger change because calculation and evidence truth changed. The methodology labels
+the new domain as a runtime migration in progress. No API, OpenAPI, migration, operator workflow,
+README, supported-feature, or wiki truth changes in these domain-only slices. Product/lifecycle wiki
+updates remain required with runtime and source-contract implementation under #788.
