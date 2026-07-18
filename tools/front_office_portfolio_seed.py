@@ -10,6 +10,7 @@ from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlencode
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
@@ -90,7 +91,7 @@ FRONT_OFFICE_RESEED_VOLATILE_EVENT_FENCE_SERVICES = (
 FRONT_OFFICE_RESEED_VOLATILE_EVENT_TOPIC_PREFIXES = (
     "business_dates.raw.received-",
     "fx_rates.raw.received-",
-    "instruments.raw.received-",
+    "instruments.received-",
     "market_prices.raw.received-",
     "portfolios.raw.received-",
     "transactions.raw.received-",
@@ -1839,6 +1840,44 @@ def _wait_for_portfolio_persistence(
     )
 
 
+def _instrument_exists(query_base_url: str, security_id: str) -> bool:
+    query = urlencode({"security_id": security_id})
+    _, payload = _request_json("GET", f"{query_base_url}/instruments/?{query}")
+    return any(item.get("security_id") == security_id for item in payload.get("instruments") or [])
+
+
+def _wait_for_instrument_persistence(
+    *,
+    query_base_url: str,
+    security_ids: list[str],
+    wait_seconds: int,
+    poll_interval_seconds: int,
+) -> None:
+    pending = tuple(dict.fromkeys(security_id.strip() for security_id in security_ids))
+    if not pending:
+        return
+
+    deadline = datetime.now(tz=UTC) + timedelta(seconds=wait_seconds)
+    while datetime.now(tz=UTC) <= deadline:
+        pending = tuple(
+            security_id
+            for security_id in pending
+            if not _instrument_exists(query_base_url, security_id)
+        )
+        if not pending:
+            return
+        LOGGER.info(
+            "Waiting for %s instrument(s) to persist before ingesting dependent data.",
+            len(pending),
+        )
+        time.sleep(poll_interval_seconds)
+
+    missing = ", ".join(pending)
+    raise TimeoutError(
+        f"Instruments were not visible in query service within {wait_seconds} seconds: {missing}."
+    )
+
+
 def _ingest_reference_data(ingestion_base_url: str, bundle: dict[str, Any]) -> None:
     reference_payloads = (
         ("/ingest/reference/cash-accounts", {"cash_accounts": bundle["cash_accounts"]}),
@@ -2018,6 +2057,13 @@ def _ingest_front_office_core_data(
             _wait_for_portfolio_persistence(
                 query_base_url=query_base_url,
                 portfolio_id=portfolio_id,
+                wait_seconds=wait_seconds,
+                poll_interval_seconds=poll_interval_seconds,
+            )
+        if endpoint == "/ingest/instruments":
+            _wait_for_instrument_persistence(
+                query_base_url=query_base_url,
+                security_ids=[instrument["security_id"] for instrument in bundle["instruments"]],
                 wait_seconds=wait_seconds,
                 poll_interval_seconds=poll_interval_seconds,
             )

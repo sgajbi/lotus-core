@@ -1,6 +1,6 @@
 import subprocess
 import sys
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
 import pytest
@@ -30,6 +30,7 @@ from tools.front_office_portfolio_seed import (
     _validate_front_office_cash_transactions,
     _validate_front_office_internal_transaction_pairs,
     _verify_front_office_portfolio,
+    _wait_for_instrument_persistence,
     _wait_for_portfolio_persistence,
     _wait_for_required_fx_readiness,
     build_front_office_portfolio_bundle,
@@ -844,7 +845,8 @@ def test_portfolio_seed_cleanup_sql_resets_only_volatile_replay_fences():
     assert "'position-valuation-calculator'" in sql
     assert "event_id like 'business_dates.raw.received-%'" in sql
     assert "event_id like 'fx_rates.raw.received-%'" in sql
-    assert "event_id like 'instruments.raw.received-%'" in sql
+    assert "event_id like 'instruments.received-%'" in sql
+    assert "event_id like 'instruments.raw.received-%'" not in sql
     assert "event_id like 'market_prices.raw.received-%'" in sql
     assert "event_id like 'portfolios.raw.received-%'" in sql
     assert "event_id like 'market_prices.persisted-%'" in sql
@@ -862,15 +864,27 @@ def test_portfolio_seed_cleanup_sql_resets_only_volatile_replay_fences():
 def test_front_office_seed_ingests_core_data_in_parent_first_order(monkeypatch):
     bundle = _build_bundle()
     calls = []
+    timeline = []
     waits = []
+    instrument_waits = []
     fx_waits = []
 
     def capture_request(method, url, *, payload=None):
         calls.append((method, url, payload))
+        timeline.append(url)
         return 202, {"accepted_count": 1}
 
     def capture_wait(**kwargs):
         waits.append(kwargs)
+        timeline.append("portfolio_persisted")
+
+    def capture_instrument_wait(**kwargs):
+        instrument_waits.append(kwargs)
+        timeline.append("instruments_persisted")
+
+    def capture_fx_wait(**kwargs):
+        fx_waits.append(kwargs)
+        timeline.append("fx_ready")
 
     monkeypatch.setattr("tools.front_office_portfolio_seed._request_json", capture_request)
     monkeypatch.setattr(
@@ -879,7 +893,11 @@ def test_front_office_seed_ingests_core_data_in_parent_first_order(monkeypatch):
     )
     monkeypatch.setattr(
         "tools.front_office_portfolio_seed._wait_for_required_fx_readiness",
-        lambda **kwargs: fx_waits.append(kwargs),
+        capture_fx_wait,
+    )
+    monkeypatch.setattr(
+        "tools.front_office_portfolio_seed._wait_for_instrument_persistence",
+        capture_instrument_wait,
     )
 
     _ingest_front_office_core_data(
@@ -899,10 +917,29 @@ def test_front_office_seed_ingests_core_data_in_parent_first_order(monkeypatch):
         "http://ingestion.dev.lotus/ingest/market-prices",
         "http://ingestion.dev.lotus/ingest/transactions",
     ]
+    assert timeline == [
+        "http://ingestion.dev.lotus/ingest/business-dates",
+        "http://ingestion.dev.lotus/ingest/portfolios",
+        "portfolio_persisted",
+        "http://ingestion.dev.lotus/ingest/instruments",
+        "instruments_persisted",
+        "http://ingestion.dev.lotus/ingest/fx-rates",
+        "fx_ready",
+        "http://ingestion.dev.lotus/ingest/market-prices",
+        "http://ingestion.dev.lotus/ingest/transactions",
+    ]
     assert waits == [
         {
             "query_base_url": "http://query.dev.lotus",
             "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+            "wait_seconds": 90,
+            "poll_interval_seconds": 3,
+        }
+    ]
+    assert instrument_waits == [
+        {
+            "query_base_url": "http://query.dev.lotus",
+            "security_ids": [instrument["security_id"] for instrument in bundle["instruments"]],
             "wait_seconds": 90,
             "poll_interval_seconds": 3,
         }
@@ -1176,6 +1213,84 @@ def test_front_office_seed_waits_for_portfolio_persistence_before_reference_inge
         ("http://query.dev.lotus", "PB_SG_GLOBAL_BAL_001"),
         ("http://query.dev.lotus", "PB_SG_GLOBAL_BAL_001"),
     ]
+
+
+def test_front_office_seed_waits_for_every_instrument_before_dependent_data(monkeypatch):
+    observed_calls = []
+    availability = {
+        "FO_EQ_AAPL_US": iter([False, True]),
+        "FO_BOND_UST_2030": iter([True]),
+    }
+
+    def fake_instrument_exists(query_base_url: str, security_id: str) -> bool:
+        observed_calls.append((query_base_url, security_id))
+        return next(availability[security_id])
+
+    monkeypatch.setattr(
+        "tools.front_office_portfolio_seed._instrument_exists",
+        fake_instrument_exists,
+    )
+    monkeypatch.setattr(
+        "tools.front_office_portfolio_seed.time.sleep",
+        lambda _: None,
+    )
+
+    _wait_for_instrument_persistence(
+        query_base_url="http://query.dev.lotus",
+        security_ids=["FO_EQ_AAPL_US", "FO_BOND_UST_2030", "FO_EQ_AAPL_US"],
+        wait_seconds=3,
+        poll_interval_seconds=0,
+    )
+
+    assert observed_calls == [
+        ("http://query.dev.lotus", "FO_EQ_AAPL_US"),
+        ("http://query.dev.lotus", "FO_BOND_UST_2030"),
+        ("http://query.dev.lotus", "FO_EQ_AAPL_US"),
+    ]
+
+
+def test_front_office_seed_fails_closed_when_instruments_remain_missing(monkeypatch):
+    initial_time = datetime(2026, 7, 18, tzinfo=UTC)
+    observed_times = iter(
+        [
+            initial_time,
+            initial_time,
+            initial_time + timedelta(seconds=2),
+        ]
+    )
+
+    class ControlledDateTime:
+        @classmethod
+        def now(cls, *, tz):
+            assert tz is UTC
+            return next(observed_times)
+
+    monkeypatch.setattr(
+        "tools.front_office_portfolio_seed.datetime",
+        ControlledDateTime,
+    )
+    monkeypatch.setattr(
+        "tools.front_office_portfolio_seed._instrument_exists",
+        lambda _query_base_url, _security_id: False,
+    )
+    monkeypatch.setattr(
+        "tools.front_office_portfolio_seed.time.sleep",
+        lambda _: None,
+    )
+
+    with pytest.raises(
+        TimeoutError,
+        match=(
+            "Instruments were not visible in query service within 1 seconds: "
+            "FO_EQ_AAPL_US, FO_BOND_UST_2030"
+        ),
+    ):
+        _wait_for_instrument_persistence(
+            query_base_url="http://query.dev.lotus",
+            security_ids=["FO_EQ_AAPL_US", "FO_BOND_UST_2030"],
+            wait_seconds=1,
+            poll_interval_seconds=0,
+        )
 
 
 def test_front_office_seed_rejects_stale_derived_analytics_state():
