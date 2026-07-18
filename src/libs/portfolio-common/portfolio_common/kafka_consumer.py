@@ -910,7 +910,7 @@ class BaseConsumer(ABC):
                         break
                     processing_outcome = "retryable_failure"
                     processing_reason = "retryable_consumer_error"
-                    if not self._running:
+                    if not self._retryable_failure_budget_enabled() or not self._running:
                         break
                     await asyncio.sleep(self.execution_profile.retryable_failure_backoff_seconds)
                 except Exception as error:
@@ -983,9 +983,14 @@ class BaseConsumer(ABC):
         attempts: int,
         elapsed_seconds: float,
     ) -> None:
+        retry_budget_enabled = self._retryable_failure_budget_enabled()
         self._log_consumer_event(
             logging.WARNING,
-            "Kafka message processing failed retryably; ordered retry scheduled.",
+            (
+                "Kafka message processing failed retryably; ordered retry scheduled."
+                if retry_budget_enabled
+                else "Kafka message processing failed retryably; offset left uncommitted."
+            ),
             event_name="kafka.consumer.processing_retryable",
             status="retryable_failure",
             reason_code="retryable_consumer_error",
@@ -994,6 +999,11 @@ class BaseConsumer(ABC):
             failure_attempts=attempts,
             failure_elapsed_seconds=round(elapsed_seconds, 3),
             retry_backoff_seconds=self.execution_profile.retryable_failure_backoff_seconds,
+            retry_disposition=(
+                "ordered_in_process_retry"
+                if retry_budget_enabled
+                else "kafka_redelivery_after_restart_or_rebalance"
+            ),
         )
 
     async def _handle_retryable_processing_error(
@@ -1039,6 +1049,12 @@ class BaseConsumer(ABC):
             and elapsed_seconds >= self._retryable_failure_max_elapsed_seconds
         )
         return attempt_budget_exhausted or elapsed_budget_exhausted
+
+    def _retryable_failure_budget_enabled(self) -> bool:
+        return (
+            self._retryable_failure_max_attempts > 0
+            or self._retryable_failure_max_elapsed_seconds > 0
+        )
 
     async def _recover_exhausted_retryable_failure(
         self,

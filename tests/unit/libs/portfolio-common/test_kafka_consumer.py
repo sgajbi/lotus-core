@@ -865,6 +865,43 @@ async def test_run_loop_retryable_error_does_not_commit(
     )
 
 
+async def test_default_disabled_retry_budget_returns_for_kafka_redelivery(
+    test_consumer: ConcreteTestConsumer,
+    mock_confluent_consumer: MagicMock,
+):
+    mock_msg = create_mock_message("key-retry-redelivery", {"data": "value-retry-redelivery"})
+    test_consumer._running = True
+    test_consumer.process_message_mock.side_effect = RetryableConsumerError(
+        "dependency unavailable"
+    )
+    test_consumer._send_to_dlq_async = AsyncMock()
+
+    with (
+        patch("portfolio_common.kafka_consumer.asyncio.sleep", new_callable=AsyncMock) as sleep,
+        patch("portfolio_common.kafka_consumer.logger.warning") as warning_log,
+    ):
+        await test_consumer._process_polled_message(mock_msg, asyncio.get_running_loop())
+
+    test_consumer.process_message_mock.assert_awaited_once_with(mock_msg)
+    sleep.assert_not_awaited()
+    test_consumer._send_to_dlq_async.assert_not_awaited()
+    mock_confluent_consumer.commit.assert_not_called()
+    retry_log = next(
+        call
+        for call in warning_log.call_args_list
+        if call.kwargs["extra"]["event_name"] == "kafka.consumer.processing_retryable"
+    )
+    assert retry_log.kwargs["extra"]["retry_disposition"] == (
+        "kafka_redelivery_after_restart_or_rebalance"
+    )
+    assert (
+        test_consumer._retryable_failure_attempts[
+            "topic=test-topic|group=test-group|partition=0|offset=42|key=key-retry-redelivery"
+        ][0]
+        == 1
+    )
+
+
 async def test_run_loop_retries_transient_failure_in_process_then_commits(
     test_consumer: ConcreteTestConsumer,
     mock_confluent_consumer: MagicMock,
@@ -874,6 +911,7 @@ async def test_run_loop_retries_transient_failure_in_process_then_commits(
     test_consumer.execution_profile = KafkaConsumerExecutionProfile(
         retryable_failure_backoff_seconds=0.001
     )
+    test_consumer._retryable_failure_max_attempts = 3
     processing_attempts = 0
 
     async def fail_once_then_succeed(*args, **kwargs):
@@ -940,6 +978,7 @@ async def test_concurrent_profile_retries_before_next_partition_message(
             retryable_failure_backoff_seconds=0.01,
         ),
     )
+    consumer._retryable_failure_max_attempts = 3
 
     async def process_message(msg):
         nonlocal first_message_attempts
