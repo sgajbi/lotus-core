@@ -78,6 +78,24 @@ independent of ambient process Decimal precision. No implicit currency rounding 
 domain kernel; the persisted/API boundary must apply a separately governed currency/product
 rounding policy and retain the unrounded evidence required for reconciliation.
 
+#### Calculation lineage contract
+
+Every governed calculation result must bind three different evidence layers:
+
+1. `input_content_hash` covers normalized financial inputs and source lineage. Decimal scale,
+   effective dates, aware observation timestamps, enum values, ordered sequences, and unordered sets
+   have canonical representations; binary floating-point values are prohibited.
+2. `calculation_content_hash` binds the input hash to the algorithm identifier, algorithm version,
+   and intermediate precision. A methodology version change therefore changes calculation lineage
+   even when the source facts are unchanged.
+3. `output_content_hash` binds the named output values to the calculation hash. It cannot be reused
+   for another algorithm or input set that happens to produce the same monetary total.
+
+The domain contract uses lowercase SHA-256 digests and rejects non-finite Decimal values, naive
+timestamps, non-string mapping keys, unsupported values, and invalid algorithm metadata. Runtime
+persistence, events, API/OpenAPI, diagnostics, and financial reconciliation must carry these hashes
+with policy/assignment and source references; a request correlation ID is not calculation lineage.
+
 #### Performance contract
 
 The pure policies are I/O-free and bounded by the number of supplied segments/reference periods.

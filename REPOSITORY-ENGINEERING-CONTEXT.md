@@ -2866,6 +2866,13 @@ Most relevant current governance:
      precision; rounding belongs to an explicit persistence/API boundary. Runtime integration must
      bulk-resolve source facts and prove mixed-book capacity—domain microbenchmarks alone are not
      release evidence.
+207. Financial calculation lineage has three deterministic layers: canonical normalized input
+     content, algorithm/version/precision-bound calculation identity, and output values bound to
+     that calculation identity. Use separate lowercase SHA-256 hashes for all three. Prohibit
+     binary floats, non-finite Decimal values, naive timestamps, ambiguous mapping keys, and
+     unsupported objects from lineage payloads. Persist and expose policy/assignment/source
+     references with the hashes; correlation and trace IDs are operational request evidence, not a
+     substitute for financial input, calculation, or output lineage.
 
 ## Context Maintenance Rule
 

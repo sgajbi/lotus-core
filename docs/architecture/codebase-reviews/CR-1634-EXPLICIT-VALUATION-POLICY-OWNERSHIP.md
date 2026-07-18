@@ -60,6 +60,11 @@ narrow framework-free contract therefore belongs in `portfolio_common.domain.val
 - Fixed day-count and accrual intermediate precision at 50 decimal digits inside local Decimal
   contexts so repeating fractions and aggregate results do not depend on ambient process precision.
   Rounding remains a separately governed persistence/API boundary.
+- Added reusable deterministic calculation lineage with separate input, calculation, and output
+  SHA-256 hashes. Calculation identity binds algorithm ID/version and intermediate precision to the
+  canonical input hash; output identity binds named result values to the calculation hash. Decimal,
+  dates, aware timestamps, enums, mappings, sequences, and sets normalize deterministically, while
+  floats, non-finite values, naive timestamps, ambiguous keys, and unsupported objects fail closed.
 
 ## Ownership Boundary
 
@@ -80,7 +85,7 @@ deleted rather than retained as a fallback when valuation and reconciliation are
 
 ## Validation
 
-- 75 valuation-domain tests passed, including unit/NAV, clean and dirty percent-of-principal,
+- 84 valuation-domain tests passed, including unit/NAV, clean and dirty percent-of-principal,
   factor-adjusted principal, per-unit/per-contract/whole-position supplied values, futures notional,
   settlement variation, FX direction, exact tenant/book/instrument assignment resolution,
   source-version fencing, overlap/gap rejection, conflicting-version rejection, cache identity, and
@@ -91,6 +96,8 @@ deleted rather than retained as a fallback when valuation and reconciliation are
   gap/overlap rejection, exact day-count convention/version lookup, fixed and supplied-floating
   segment accrual, principal/rate changes, sign handling, lineage/currency/continuity rejection,
   and ambient Decimal-precision independence.
+- Lineage tests prove mapping/set order independence, bounded hash impact for input versus algorithm
+  versus output changes, valid digest shape, and rejection of ambiguous value types/metadata.
 - Scoped Ruff lint and formatting passed.
 - Strict MyPy passed for all three valuation-domain source modules.
 - The calculation-kernel commit `608751249` is signed; assignment commit evidence will be recorded
