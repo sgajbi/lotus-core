@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from decimal import Decimal
+from decimal import Decimal, localcontext
 from types import SimpleNamespace
 
 import pytest
@@ -123,6 +123,30 @@ def test_apply_baseline_projected_values_reuses_baseline_unit_values() -> None:
     assert price_required == {}
     assert projected["SEC_A"]["market_value_base"] == Decimal("60")
     assert projected["SEC_A"]["market_value_local"] == Decimal("48")
+
+
+def test_projected_baseline_values_ignore_ambient_decimal_precision() -> None:
+    def calculate(ambient_precision: int) -> Decimal:
+        projected = {
+            "SEC_A": {
+                "security_id": "SEC_A",
+                "quantity": Decimal("1"),
+                "baseline_quantity": Decimal("3"),
+                "market_value_base": Decimal("1"),
+                "market_value_local": Decimal("1"),
+                "asset_class": "EQUITY",
+            }
+        }
+        with localcontext() as context:
+            context.prec = ambient_precision
+            apply_baseline_projected_values(
+                projected,
+                include_cash=True,
+                include_zero=True,
+            )
+        return projected["SEC_A"]["market_value_base"]
+
+    assert calculate(6) == calculate(50) == Decimal("0.3333333333333333333333333333")
 
 
 def test_apply_baseline_projected_values_tracks_positive_new_positions_for_pricing() -> None:

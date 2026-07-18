@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from decimal import Decimal
+from decimal import Decimal, localcontext
 from typing import Any
 
 from portfolio_common.domain.decimal_amount import decimal_or_none, decimal_or_zero
 
 from ...contracts.core_snapshot import CoreSnapshotDeltaRecord, CoreSnapshotPositionRecord
+
+CORE_SNAPSHOT_INTERMEDIATE_PRECISION = 28
 
 
 @dataclass(frozen=True)
@@ -19,34 +21,42 @@ class DeltaPositionValues:
 
 
 def total_market_value_baseline(items: dict[str, dict[str, Any]]) -> Decimal:
-    total = Decimal(0)
-    for item in items.values():
-        market_value = decimal_or_none(item.get("market_value_base"))
-        if market_value is not None:
-            total += market_value
-    return total
+    with localcontext() as context:
+        context.prec = CORE_SNAPSHOT_INTERMEDIATE_PRECISION
+        total = Decimal(0)
+        for item in items.values():
+            market_value = decimal_or_none(item.get("market_value_base"))
+            if market_value is not None:
+                total += market_value
+        return total
 
 
 def total_market_value_projected(items: dict[str, dict[str, Any]]) -> Decimal:
-    total = Decimal(0)
-    for item in items.values():
-        total += decimal_or_zero(item.get("market_value_base"))
-    return total
+    with localcontext() as context:
+        context.prec = CORE_SNAPSHOT_INTERMEDIATE_PRECISION
+        total = Decimal(0)
+        for item in items.values():
+            total += decimal_or_zero(item.get("market_value_base"))
+        return total
 
 
 def assign_baseline_weights(items: dict[str, dict[str, Any]], total: Decimal) -> None:
-    for item in items.values():
-        if total > 0 and item["market_value_base"] is not None:
-            weight = item["market_value_base"] / total
-        else:
-            weight = Decimal(0)
-        item["position_record"] = _position_record(item=item, weight=weight)
+    with localcontext() as context:
+        context.prec = CORE_SNAPSHOT_INTERMEDIATE_PRECISION
+        for item in items.values():
+            if total > 0 and item["market_value_base"] is not None:
+                weight = item["market_value_base"] / total
+            else:
+                weight = Decimal(0)
+            item["position_record"] = _position_record(item=item, weight=weight)
 
 
 def assign_projected_weights(items: dict[str, dict[str, Any]], total: Decimal) -> None:
-    for item in items.values():
-        weight = (item["market_value_base"] / total) if total > 0 else Decimal(0)
-        item["position_record"] = _position_record(item=item, weight=weight)
+    with localcontext() as context:
+        context.prec = CORE_SNAPSHOT_INTERMEDIATE_PRECISION
+        for item in items.values():
+            weight = (item["market_value_base"] / total) if total > 0 else Decimal(0)
+            item["position_record"] = _position_record(item=item, weight=weight)
 
 
 def build_delta_section(
@@ -55,23 +65,25 @@ def build_delta_section(
     baseline_total: Decimal,
     projected_total: Decimal,
 ) -> list[CoreSnapshotDeltaRecord]:
-    return [
-        _delta_record(
-            security_id=security_id,
-            baseline=_delta_position_values(
-                position=baseline_positions.get(security_id),
-                total=baseline_total,
-            ),
-            projected=_delta_position_values(
-                position=projected_positions.get(security_id),
-                total=projected_total,
-            ),
-        )
-        for security_id in _delta_security_ids(
-            baseline_positions=baseline_positions,
-            projected_positions=projected_positions,
-        )
-    ]
+    with localcontext() as context:
+        context.prec = CORE_SNAPSHOT_INTERMEDIATE_PRECISION
+        return [
+            _delta_record(
+                security_id=security_id,
+                baseline=_delta_position_values(
+                    position=baseline_positions.get(security_id),
+                    total=baseline_total,
+                ),
+                projected=_delta_position_values(
+                    position=projected_positions.get(security_id),
+                    total=projected_total,
+                ),
+            )
+            for security_id in _delta_security_ids(
+                baseline_positions=baseline_positions,
+                projected_positions=projected_positions,
+            )
+        ]
 
 
 def _position_record(*, item: dict[str, Any], weight: Decimal) -> CoreSnapshotPositionRecord:

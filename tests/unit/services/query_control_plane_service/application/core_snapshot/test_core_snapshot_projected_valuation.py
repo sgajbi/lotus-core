@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import date
-from decimal import Decimal
+from decimal import Decimal, localcontext
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -176,6 +176,42 @@ async def test_projected_position_resolver_prices_new_security_with_fx(
         start_date=date.min,
         end_date=date(2026, 2, 27),
     )
+
+
+async def test_projected_market_value_ignores_ambient_decimal_precision(
+    resolver_dependencies,
+):
+    simulation_repo, instrument_repo, price_repo, fx_repo = resolver_dependencies
+    simulation_repo.get_changes.return_value = [
+        SimpleNamespace(
+            security_id="SEC_NEW_EUR",
+            transaction_type="BUY",
+            quantity=Decimal("3.141592653589793238462643383"),
+            amount=None,
+        )
+    ]
+    instrument_repo.get_by_security_ids.return_value = [_instrument("SEC_NEW_EUR", "EUR")]
+    price_repo.get_prices.return_value = [
+        SimpleNamespace(price=Decimal("1.234567890123456789"), currency="EUR")
+    ]
+    fx_repo.get_fx_rates.return_value = [SimpleNamespace(rate=Decimal("1.111111111111111111"))]
+    resolver = _resolver(resolver_dependencies)
+
+    async def calculate(ambient_precision: int) -> Decimal:
+        with localcontext() as context:
+            context.prec = ambient_precision
+            projected = await resolver.resolve_projected_positions(
+                session_id="SIM_1",
+                as_of_date=date(2026, 2, 27),
+                portfolio_base_currency="USD",
+                portfolio_to_reporting_fx=Decimal("0.9876543210987654321"),
+                baseline_positions={},
+                include_zero=True,
+                include_cash=True,
+            )
+        return projected["SEC_NEW_EUR"]["market_value_base"]
+
+    assert await calculate(6) == await calculate(50)
 
 
 async def test_projected_position_resolver_reuses_market_fx_per_currency(

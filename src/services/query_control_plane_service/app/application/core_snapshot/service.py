@@ -34,6 +34,7 @@ from ...ports.simulation import SimulationStore
 from .baseline_metadata import baseline_freshness_metadata
 from .baseline_positions import baseline_position_entries
 from .calculations import (
+    CORE_SNAPSHOT_INTERMEDIATE_PRECISION,
     assign_baseline_weights,
     total_market_value_baseline,
     total_market_value_projected,
@@ -107,7 +108,6 @@ class CoreSnapshotDependencies:
 
 CORE_SNAPSHOT_ALGORITHM_ID = "PORTFOLIO_STATE_SNAPSHOT"
 CORE_SNAPSHOT_ALGORITHM_VERSION = 1
-CORE_SNAPSHOT_INTERMEDIATE_PRECISION = 28
 
 
 class CoreSnapshotService:
