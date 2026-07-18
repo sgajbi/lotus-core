@@ -297,7 +297,9 @@ Current repository posture:
     `CurrencyBasis`, `Quantity`, `UnitPrice`, and named monetary aliases. New calculation and
     reporting-currency paths should normalize DTO/ORM primitives into these value objects at the
     boundary, keep domain rules framework-free, and serialize back to primitive payloads only at
-    API/event/persistence edges.
+    API/event/persistence edges. `MoneyAmount.quantized()` is an explicit output-boundary operation
+    using canonical `ROUND_HALF_EVEN` policy version `1.1.0`; conversion remains unrounded, and a
+    caller must supply the governed quantum when `0.01` is not the applicable boundary scale.
     Cost-engine domain models now follow
     `docs/standards/cost-basis-domain-standard.md`:
     `portfolio_transaction_processing_service/app/domain/cost_basis` must stay free of

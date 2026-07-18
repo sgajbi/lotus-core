@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import ROUND_HALF_EVEN, Decimal
 from enum import StrEnum
 from typing import Any
 
@@ -12,6 +12,8 @@ from ..currency import normalize_currency_code
 from ..decimal_amount import decimal_or_none, required_decimal
 
 DEFAULT_MONEY_QUANTUM = Decimal("0.01")
+MONEY_ROUNDING_MODE = ROUND_HALF_EVEN
+MONEY_ROUNDING_POLICY_VERSION = "1.1.0"
 
 
 class CurrencyBasis(StrEnum):
@@ -55,7 +57,7 @@ class MoneyAmount:
 
     def quantized(self, quantum: Decimal = DEFAULT_MONEY_QUANTUM) -> MoneyAmount:
         return MoneyAmount(
-            amount=self.amount.quantize(quantum, rounding=ROUND_HALF_UP),
+            amount=self.amount.quantize(quantum, rounding=MONEY_ROUNDING_MODE),
             currency=self.currency,
         )
 

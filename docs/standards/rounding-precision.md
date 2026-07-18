@@ -7,6 +7,9 @@ This repository adopts the platform-wide mandatory standard defined in `lotus-pl
 - Monetary/financial calculations use `Decimal`.
 - Intermediate calculations do not round.
 - Output boundaries apply canonical scale + `ROUND_HALF_EVEN` via `precision_policy` helpers.
+- Shared `MoneyAmount.quantized()` uses `ROUND_HALF_EVEN` and declares policy version `1.1.0`.
+  It is an explicit boundary operation: conversion and other intermediates remain unrounded, and
+  callers must supply the governed quantum when the boundary is not the default `0.01`.
 - Runtime policy metadata is exposed as `ROUNDING_POLICY_VERSION = "1.1.0"`.
 - Compatibility policy_version for this repository is `1.1.0`.
 - API/import normalization should call `normalize_input(value, semantic_type)` before domain execution.
@@ -42,4 +45,12 @@ This repository adopts the platform-wide mandatory standard defined in `lotus-pl
 - Platform check: `lotus-platform/automation/Validate-Rounding-Consistency.ps1`.
 - Automation guide: `lotus-platform/automation/docs/Automation-Guide.md`.
 - Evidence artifact: `Rounding Consistency Report`.
+
+## Shared Money Consumer Inventory
+
+- Query reporting-currency mapping uses `MoneyAmount` for currency-safe normalization but delegates
+  conversion and does not call `quantized()`.
+- Query cached FX conversion uses `MoneyAmount.converted()` and preserves the unrounded Decimal.
+- No other production path calls `MoneyAmount.quantized()` as of 2026-07-18; repository search and
+  focused tests are the compatibility proof for issue #761.
 
