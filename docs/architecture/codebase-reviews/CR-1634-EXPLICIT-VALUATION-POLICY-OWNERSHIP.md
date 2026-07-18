@@ -42,6 +42,10 @@ narrow framework-free contract therefore belongs in `portfolio_common.domain.val
   source-owned business dates start-inclusive and end-exclusive and requires a versioned calendar
   whose validity covers the calculation interval; it never substitutes weekdays or a local holiday
   guess.
+- Added `30/360.US`, `30E/360`, and `30E/360.ISDA` as separate exact conventions rather than
+  aliases. The U.S. convention applies the SIFMA end-of-February and 31st-day sequence; Eurobond
+  basis adjusts 31st dates only; ISDA basis adjusts month ends while preserving a February
+  contractual termination date and therefore requires that source fact.
 
 ## Ownership Boundary
 
@@ -62,13 +66,14 @@ deleted rather than retained as a fallback when valuation and reconciliation are
 
 ## Validation
 
-- 42 valuation-domain tests passed, including unit/NAV, clean and dirty percent-of-principal,
+- 52 valuation-domain tests passed, including unit/NAV, clean and dirty percent-of-principal,
   factor-adjusted principal, per-unit/per-contract/whole-position supplied values, futures notional,
   settlement variation, FX direction, exact tenant/book/instrument assignment resolution,
   source-version fencing, overlap/gap rejection, conflicting-version rejection, cache identity, and
   backdated replay-date derivation, registry uniqueness, exact-version lookup, and derivative output
   separation, leap-day fixed-denominator examples, business-day boundary semantics, calendar
-  coverage, and exact day-count convention/version lookup.
+  coverage, U.S./Eurobond/ISDA month-end and February behavior, contractual-termination handling,
+  and exact day-count convention/version lookup.
 - Scoped Ruff lint and formatting passed.
 - Strict MyPy passed for all three valuation-domain source modules.
 - The calculation-kernel commit `608751249` is signed; assignment commit evidence will be recorded
@@ -80,8 +85,10 @@ which maps `BUS/252` to ISDA Calculation/252, the
 [FpML BUS/252 clarification](https://www.fpml.org/ticket/388/), which specifies business days from
 and including the effective date to but excluding the termination date, and the
 [ISDA 2000/2006 definitions comparison](https://www.isda.org/a/smMDE/Blackline-2000-v-2006-ISDA-Definitions.pdf)
-for `ACT/360` and `ACT/365.FIXED`. Actual/Actual and 30/360 families remain explicitly unsupported
-until their separate golden-example slices are implemented.
+for `ACT/360`, `ACT/365.FIXED`, `30E/360`, and `30E/360.ISDA`, plus the
+[SIFMA standard formulas](https://www.sifma.org/wp-content/uploads/2017/08/chsf.pdf) for the U.S.
+30/360 end-of-February and 31st-day sequence. Actual/Actual families remain explicitly unsupported
+until their separate reference-period and golden-example slices are implemented.
 
 ## Documentation Decision
 

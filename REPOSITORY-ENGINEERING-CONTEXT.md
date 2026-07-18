@@ -2848,9 +2848,11 @@ Most relevant current governance:
      days with their fixed denominators. `BUS/252` requires a source-owned, versioned business-day
      calendar whose declared validity covers the calculation interval and counts supplied business
      dates start-inclusive/end-exclusive. Never replace missing calendar evidence with weekday or
-     process-local holiday assumptions. Actual/Actual and 30/360 conventions remain unsupported
-     until their convention-specific reference-period, termination-date, and golden-example rules
-     are implemented and registered.
+     process-local holiday assumptions. Keep `30/360.US`, `30E/360`, and `30E/360.ISDA` distinct:
+     U.S. basis applies the governed February/31st sequence, Eurobond basis adjusts 31st dates, and
+     ISDA basis requires the contractual termination date to apply its February exception.
+     Actual/Actual conventions remain unsupported until their convention-specific reference-period
+     and golden-example rules are implemented and registered.
 
 ## Context Maintenance Rule
 
