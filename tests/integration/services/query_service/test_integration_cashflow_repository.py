@@ -382,6 +382,27 @@ async def test_get_portfolio_cashflow_series_uses_latest_cashflow_epoch(
 
     assert evidence.rows == [(date(2025, 2, 1), Decimal("-50"))]
     assert evidence.latest_evidence_timestamp is not None
+    assert evidence.source_row_count == 1
+    assert evidence.source_total == Decimal("-50")
+
+
+async def test_cash_movement_summary_returns_exact_source_controls(
+    setup_cashflow_data, async_db_session: AsyncSession
+) -> None:
+    repo = CashflowRepository(async_db_session)
+
+    evidence = await repo.get_portfolio_cash_movement_summary(
+        portfolio_id="MWR_TEST_PORT_01",
+        start_date=date(2025, 1, 1),
+        end_date=date(2025, 1, 31),
+    )
+
+    assert evidence.source_row_count == 3
+    assert evidence.source_currency_totals == {"USD": Decimal("3000")}
+    assert sum(row[5] for row in evidence.rows) == evidence.source_row_count
+    assert sum((row[6] for row in evidence.rows), start=Decimal("0")) == (
+        evidence.source_currency_totals["USD"]
+    )
 
 
 async def test_get_income_cashflows_is_epoch_aware(
