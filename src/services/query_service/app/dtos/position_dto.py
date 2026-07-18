@@ -10,6 +10,7 @@ from portfolio_common.source_data_product_metadata import (
 )
 from pydantic import BaseModel, ConfigDict, Field
 
+from .calculation_lineage_dto import CalculationLineageResponse
 from .valuation_dto import ValuationData
 
 
@@ -232,6 +233,13 @@ class PortfolioMaturitySummaryResponse(SourceDataProductRuntimeMetadata):
             "an upstream source-batch fingerprint."
         ),
         examples=["maturity_summary:3a4f5b6c7d8e9f01"],
+    )
+    calculation_lineage: CalculationLineageResponse = Field(
+        ...,
+        description=(
+            "Deterministic normalized-input, contractual maturity calculation, and returned-"
+            "output lineage. Operational correlation does not replace these hashes."
+        ),
     )
 
 

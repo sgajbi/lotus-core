@@ -1,8 +1,8 @@
 # services/query-service/app/routers/positions.py
 from datetime import date
-from typing import Optional
+from typing import Literal, Optional
 
-from fastapi import APIRouter, Depends, Path, Query, status
+from fastapi import APIRouter, Depends, Header, Path, Query, status
 from portfolio_common.source_data_products import source_data_product_openapi_extra
 
 from ..application.collection_window_policy import (
@@ -159,12 +159,15 @@ async def get_latest_positions(
         "What: Return the Core-owned PortfolioMaturitySummary operational read for one portfolio.\n"
         "How: Resolves the same HoldingsAsOf scope as the strategic positions endpoint, then "
         "summarizes source-owned instrument maturity_date facts over a bounded calendar-day "
-        "window with freshness, lineage, and supportability diagnostics.\n"
+        "window. The receipt binds exact portfolio-day/epoch reconciliation controls, booked "
+        "holdings snapshot identity, tenant and correlation scope, and deterministic input, "
+        "calculation, and output lineage.\n"
         "When: Use this route when downstream consumers such as lotus-idea need upcoming "
         "maturity posture without reconstructing bond schedules from raw holdings rows. The "
         "current contract summarizes contractual instrument maturity dates only; it does not "
         "certify callable, putable, amortizing, structured-note, lockup, expiry, advice, "
-        "liquidity, performance, risk, reinvestment, or OMS execution methodology."
+        "liquidity, performance, risk, reinvestment, or OMS execution methodology. Projected "
+        "holdings are intentionally excluded from this trust-certified receipt."
     ),
     openapi_extra=source_data_product_openapi_extra("PortfolioMaturitySummary"),
 )
@@ -192,13 +195,21 @@ async def get_portfolio_maturity_summary(
         ),
         examples=[90],
     ),
-    include_projected: bool = Query(
+    include_projected: Literal[False] = Query(
         False,
         description=(
-            "When true, summarizes the latest projected holdings state even if future-dated "
-            "transactions push holdings beyond the latest booked business_date."
+            "Must remain false. This trust-certified receipt is limited to booked HoldingsAsOf "
+            "state; projected holdings are intentionally excluded."
         ),
         examples=[False],
+    ),
+    tenant_id: str | None = Header(
+        None,
+        alias="X-Tenant-Id",
+        description=(
+            "Tenant scope bound into runtime receipt metadata when supplied by the caller."
+        ),
+        examples=["default"],
     ),
     service: PositionService = Depends(get_position_service),
 ):
@@ -208,6 +219,7 @@ async def get_portfolio_maturity_summary(
             as_of_date=as_of_date,
             horizon_days=horizon_days,
             include_projected=include_projected,
+            tenant_id=tenant_id,
         )
     except LookupError as exc:
         raise lookup_error_to_http(exc) from exc

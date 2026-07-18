@@ -12,6 +12,9 @@ from portfolio_common.database_models import (
     PositionState,
 )
 
+from src.services.query_service.app.application.holdings_reconciliation import (
+    FinancialReconciliationControl,
+)
 from src.services.query_service.app.repositories.position_repository import PositionRepository
 from src.services.query_service.app.services.position_holdings import (
     latest_holdings_evidence_timestamp,
@@ -26,6 +29,7 @@ def mock_position_repo() -> AsyncMock:
     """Provides a mock PositionRepository."""
     repo = AsyncMock(spec=PositionRepository)
     repo.portfolio_exists.return_value = True
+    repo.get_holdings_reconciliation_controls.return_value = []
 
     mock_history_obj = PositionHistory(
         transaction_id="T1",
@@ -463,6 +467,7 @@ async def test_get_portfolio_maturity_summary_reuses_holdings_contract(
             unrealized_gain_loss=Decimal("0"),
             unrealized_gain_loss_local=Decimal("0"),
             date=date(2026, 3, 10),
+            epoch=1,
         )
         mock_position_repo.get_latest_business_date.return_value = date(2026, 3, 10)
         mock_position_repo.get_latest_positions_by_portfolio_as_of_date.return_value = [
@@ -471,11 +476,20 @@ async def test_get_portfolio_maturity_summary_reuses_holdings_contract(
         mock_position_repo.get_latest_position_history_by_portfolio_as_of_date.return_value = []
         mock_position_repo.get_held_since_dates.return_value = {("BOND1", 1): date(2026, 1, 2)}
         mock_position_repo.get_latest_market_price_dates.return_value = {"BOND1": date(2026, 3, 10)}
+        mock_position_repo.get_holdings_reconciliation_controls.return_value = [
+            FinancialReconciliationControl(
+                business_date=date(2026, 3, 10),
+                epoch=1,
+                status="COMPLETED",
+                updated_at=None,
+            )
+        ]
         service = PositionService(AsyncMock())
 
         response = await service.get_portfolio_maturity_summary(
             portfolio_id="P1",
             horizon_days=60,
+            tenant_id="TENANT-PB",
         )
 
         assert response.product_name == "PortfolioMaturitySummary"
@@ -485,6 +499,12 @@ async def test_get_portfolio_maturity_summary_reuses_holdings_contract(
         assert response.maturing_holding_count == 1
         assert response.maturity_bearing_holding_count == 1
         assert response.supportability_status == "SUPPORTED"
+        assert response.reconciliation_status == "COMPLETE"
+        assert response.tenant_id == "TENANT-PB"
+        assert response.snapshot_id is not None
+        assert response.calculation_lineage.algorithm_id == (
+            "PORTFOLIO_CONTRACTUAL_MATURITY_SUMMARY"
+        )
         mock_position_repo.get_latest_positions_by_portfolio_as_of_date.assert_awaited_once_with(
             "P1", date(2026, 3, 10)
         )
