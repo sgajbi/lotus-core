@@ -1,4 +1,6 @@
 # libs/portfolio-common/portfolio_common/database_models.py
+from enum import StrEnum
+
 from sqlalchemy import (
     JSON,
     Boolean,
@@ -19,6 +21,11 @@ from sqlalchemy import (
 from sqlalchemy.orm import relationship
 
 from .db_base import Base
+from .domain.portfolio_party_roles import (
+    PortfolioPartyRoleQualityStatus,
+    PortfolioPartyRoleScope,
+    PortfolioPartyRoleType,
+)
 from .source_lifecycle_predicates import (
     BENCHMARK_DEFINITION_ACTIVE,
     CLIENT_INCOME_NEEDS_ACTIVE,
@@ -437,6 +444,78 @@ class PortfolioMandateBinding(Base):
             "portfolio_id",
             "mandate_id",
             postgresql_where=DPM_DISCRETIONARY_MANDATE_ACTIVE.postgresql_where(),
+        ),
+    )
+
+
+def _enum_check_values(enum_type: type[StrEnum]) -> str:
+    return ", ".join(f"'{member.value}'" for member in enum_type)
+
+
+class PortfolioPartyRoleAssignment(Base):
+    __tablename__ = "portfolio_party_role_assignments"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    portfolio_id = Column(String, ForeignKey("portfolios.portfolio_id"), nullable=False)
+    party_id = Column(String, nullable=False)
+    role_type = Column(String, nullable=False)
+    role_scope = Column(String, nullable=False)
+    effective_from = Column(Date, nullable=False)
+    effective_to = Column(Date, nullable=True)
+    assignment_version = Column(Integer, nullable=False, server_default="1")
+    source_system = Column(String, nullable=False)
+    source_record_id = Column(String, nullable=False)
+    observed_at = Column(DateTime(timezone=True), nullable=False)
+    quality_status = Column(String, nullable=False, server_default="accepted")
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "source_system",
+            "source_record_id",
+            "assignment_version",
+            name="uq_party_role_source_record_version",
+        ),
+        CheckConstraint(
+            "effective_to IS NULL OR effective_to >= effective_from",
+            name="ck_party_role_effective_window",
+        ),
+        CheckConstraint(
+            "assignment_version >= 1",
+            name="ck_party_role_assignment_version_positive",
+        ),
+        CheckConstraint(
+            f"role_type IN ({_enum_check_values(PortfolioPartyRoleType)})",
+            name="ck_party_role_type_governed",
+        ),
+        CheckConstraint(
+            f"role_scope IN ({_enum_check_values(PortfolioPartyRoleScope)})",
+            name="ck_party_role_scope_governed",
+        ),
+        CheckConstraint(
+            f"quality_status IN ({_enum_check_values(PortfolioPartyRoleQualityStatus)})",
+            name="ck_party_role_quality_governed",
+        ),
+        Index(
+            "ix_party_role_portfolio_effective",
+            "portfolio_id",
+            "effective_from",
+            "effective_to",
+            "role_type",
+            postgresql_where=text("quality_status = 'accepted'"),
+        ),
+        Index(
+            "ix_party_role_party_effective",
+            "party_id",
+            "role_type",
+            "role_scope",
+            "effective_from",
+            "effective_to",
+            "portfolio_id",
+            postgresql_where=text("quality_status = 'accepted'"),
         ),
     )
 

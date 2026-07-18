@@ -27,6 +27,7 @@ from portfolio_common.database_models import (
     Portfolio,
     PortfolioAggregationJob,
     PortfolioMandateBinding,
+    PortfolioPartyRoleAssignment,
     PortfolioTimeseries,
     PortfolioValuationJob,
     PositionHistory,
@@ -171,6 +172,36 @@ def test_portfolio_mandate_binding_declares_dpm_source_index():
     assert (
         str(dpm_source.dialect_options["postgresql"]["where"])
         == DPM_DISCRETIONARY_MANDATE_ACTIVE.sql
+    )
+
+
+def test_portfolio_party_role_assignment_enforces_identity_and_vocabulary() -> None:
+    table = PortfolioPartyRoleAssignment.__table__
+    constraint_names = {constraint.name for constraint in table.constraints}
+    indexes = {index.name: index for index in table.indexes}
+
+    assert {
+        "uq_party_role_source_record_version",
+        "ck_party_role_effective_window",
+        "ck_party_role_assignment_version_positive",
+        "ck_party_role_type_governed",
+        "ck_party_role_scope_governed",
+        "ck_party_role_quality_governed",
+    } <= constraint_names
+    assert [
+        column.name for column in indexes["ix_party_role_portfolio_effective"].columns
+    ] == ["portfolio_id", "effective_from", "effective_to", "role_type"]
+    assert [column.name for column in indexes["ix_party_role_party_effective"].columns] == [
+        "party_id",
+        "role_type",
+        "role_scope",
+        "effective_from",
+        "effective_to",
+        "portfolio_id",
+    ]
+    assert all(
+        str(index.dialect_options["postgresql"]["where"]) == "quality_status = 'accepted'"
+        for index in indexes.values()
     )
 
 
