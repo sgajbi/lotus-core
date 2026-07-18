@@ -456,6 +456,21 @@ SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = (
         ),
     ),
     SourceDataProductDefinition(
+        product_name="PortfolioPartyRoleAssignment",
+        product_version="v1",
+        route_family=ANALYTICS_INPUT,
+        serving_plane=QUERY_CONTROL_PLANE_SERVICE,
+        owner="lotus-core",
+        consumers=("lotus-gateway", "lotus-workbench", "lotus-manage"),
+        current_routes=("/integration/portfolios/{portfolio_id}/party-role-assignments",),
+        paging_mode=NOT_APPLICABLE,
+        export_mode=NOT_APPLICABLE,
+        notes=(
+            "Effective-dated relationship coverage, advisory, portfolio-management, and "
+            "client-service assignments without legacy advisor-role inference."
+        ),
+    ),
+    SourceDataProductDefinition(
         product_name="CioModelChangeAffectedCohort",
         product_version="v1",
         route_family=ANALYTICS_INPUT,

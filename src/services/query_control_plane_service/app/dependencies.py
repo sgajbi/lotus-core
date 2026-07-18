@@ -43,6 +43,7 @@ from .application.integration_policy import (
 )
 from .application.operations.service import OperationsService
 from .application.portfolio_manager_book import PortfolioManagerBookService
+from .application.portfolio_party_roles import PortfolioPartyRoleAssignmentService
 from .application.reference_coverage import ReferenceCoverageService
 from .application.risk_free_series import RiskFreeSeriesService
 from .application.simulation import SimulationService
@@ -83,6 +84,7 @@ from .infrastructure.index_series_sources import SqlAlchemyIndexSeriesReader
 from .infrastructure.market_fx_sources import SqlAlchemyMarketFxRateReader
 from .infrastructure.operations.repository import OperationsRepository
 from .infrastructure.portfolio_manager_book_sources import SqlAlchemyPortfolioManagerBookReader
+from .infrastructure.portfolio_party_role_sources import SqlAlchemyPortfolioPartyRoleReader
 from .infrastructure.risk_free_series_sources import SqlAlchemyRiskFreeSeriesReader
 from .infrastructure.scoped_page_tokens import RouteScopedPageTokenCodec
 from .infrastructure.simulation_store import (
@@ -394,6 +396,15 @@ def get_portfolio_manager_book_service(
 ) -> PortfolioManagerBookService:
     return PortfolioManagerBookService(
         reader=SqlAlchemyPortfolioManagerBookReader(db),
+        clock=SystemClock(),
+    )
+
+
+def get_portfolio_party_role_assignment_service(
+    db: AsyncSession = Depends(get_async_db_session),
+) -> PortfolioPartyRoleAssignmentService:
+    return PortfolioPartyRoleAssignmentService(
+        reader=SqlAlchemyPortfolioPartyRoleReader(db),
         clock=SystemClock(),
     )
 
