@@ -59,6 +59,10 @@ code is limited to framework-independent calculation hashing and holdings reconc
 - OpenAPI quality gate passed.
 - Full MyPy passed across `237` source files.
 - Full Ruff lint/format passed across `2,058` files; the full lint guard chain passed.
+- `make lotus-core-validate` passed all static/product checks and rebuilt managed-runtime smoke with
+  `66` endpoint checks passed and `0` failed. Evidence:
+  `output/lotus-core-validation/lotus-core-validation.json` and timestamped
+  `20260718-172109-docker-endpoint-smoke` artifacts.
 
 PR CI, exact-main validation, wiki publication, downstream consumer revalidation, and verified issue
 closure remain post-local gates.
