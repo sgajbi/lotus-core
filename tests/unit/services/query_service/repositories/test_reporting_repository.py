@@ -333,7 +333,21 @@ async def test_reporting_repository_lookthrough_query_skips_database_when_parent
 async def test_reporting_repository_lookthrough_components_return_canonical_security_ids() -> None:
     instrument = SimpleNamespace(security_id=" ETF1 ")
     db = AsyncMock(spec=AsyncSession)
-    db.execute.return_value = _FakeExecuteResult([(" FUND1 ", " ETF1 ", Decimal("1"), instrument)])
+    db.execute.return_value = _FakeExecuteResult(
+        [
+            (
+                71,
+                " FUND1 ",
+                " ETF1 ",
+                date(2026, 1, 1),
+                None,
+                Decimal("1"),
+                "fund-master",
+                "FUND1-ETF1-2026",
+                instrument,
+            )
+        ]
+    )
     repo = ReportingRepository(db)
 
     rows = await repo.list_instrument_lookthrough_components(
@@ -344,5 +358,10 @@ async def test_reporting_repository_lookthrough_components_return_canonical_secu
     assert len(rows) == 1
     assert rows[0].parent_security_id == "FUND1"
     assert rows[0].component_security_id == "ETF1"
+    assert rows[0].component_record_id == 71
+    assert rows[0].effective_from == date(2026, 1, 1)
+    assert rows[0].effective_to is None
     assert rows[0].component_weight == Decimal("1")
+    assert rows[0].source_system == "fund-master"
+    assert rows[0].source_record_id == "FUND1-ETF1-2026"
     assert rows[0].component_instrument is instrument

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal, localcontext
@@ -323,6 +324,7 @@ def calculate_allocation_views(
     rows: list[AllocationInputRow],
     dimensions: list[AllocationDimension],
     contributor_limit_per_bucket: int = 0,
+    calculation_context: Mapping[str, object] | None = None,
 ) -> AllocationCalculationResult:
     if contributor_limit_per_bucket < 0:
         raise ValueError("contributor_limit_per_bucket cannot be negative")
@@ -396,6 +398,7 @@ def calculate_allocation_views(
             algorithm_version=ALLOCATION_ALGORITHM_VERSION,
             intermediate_precision=ALLOCATION_INTERMEDIATE_PRECISION,
             input_payload={
+                "calculation_context": dict(calculation_context or {}),
                 "contributor_limit_per_bucket": contributor_limit_per_bucket,
                 "dimensions": dimensions,
                 "rows": input_rows,

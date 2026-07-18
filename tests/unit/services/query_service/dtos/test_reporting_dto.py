@@ -69,6 +69,17 @@ def test_asset_allocation_request_supports_region_and_lookthrough_mode() -> None
 
     assert request.dimensions == ["region", "asset_class"]
     assert request.look_through_mode == "prefer_look_through"
+    assert request.contributor_limit_per_bucket == 50
+
+
+@pytest.mark.parametrize("value", [0, 251])
+def test_asset_allocation_request_bounds_contributor_response_size(value: int) -> None:
+    with pytest.raises(ValidationError):
+        AssetAllocationQueryRequest(
+            scope=ReportingScope(portfolio_id="P1"),
+            dimensions=["asset_class"],
+            contributor_limit_per_bucket=value,
+        )
 
 
 def test_portfolio_summary_request_is_single_portfolio_contract() -> None:

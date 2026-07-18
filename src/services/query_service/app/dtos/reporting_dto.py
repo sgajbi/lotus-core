@@ -4,7 +4,10 @@ from datetime import date
 from decimal import Decimal
 from typing import Literal
 
-from portfolio_common.portfolio_allocation import AllocationDimension
+from portfolio_common.portfolio_allocation import (
+    AllocationContributorType,
+    AllocationDimension,
+)
 from portfolio_common.source_data_product_metadata import (
     SourceDataProductRuntimeMetadata,
     product_name_field,
@@ -137,6 +140,17 @@ class AssetAllocationQueryRequest(BaseModel):
         ),
         examples=["prefer_look_through"],
     )
+    contributor_limit_per_bucket: int = Field(
+        50,
+        ge=1,
+        le=250,
+        description=(
+            "Maximum contributor rows returned per allocation bucket. Contributors are ordered "
+            "by descending absolute reporting-currency contribution and stable source identity; "
+            "bucket totals always include all contributors."
+        ),
+        examples=[50],
+    )
 
     @model_validator(mode="after")
     def validate_reporting_currency_requirements(self) -> "AssetAllocationQueryRequest":
@@ -229,6 +243,68 @@ class AssetsUnderManagementResponse(BaseModel):
     )
 
 
+class AllocationContributor(BaseModel):
+    contributor_type: AllocationContributorType = Field(
+        ...,
+        description=(
+            "`direct_position` for a booked holding retained as-is or "
+            "`look_through_component` for a source-owned decomposed exposure."
+        ),
+    )
+    portfolio_id: str = Field(..., description="Portfolio that owns the booked position.")
+    security_id: str = Field(
+        ...,
+        description="Contributing security; the component security for look-through exposure.",
+    )
+    booked_security_id: str = Field(
+        ...,
+        description=(
+            "Booked parent-position security. Equal to `security_id` for direct positions."
+        ),
+    )
+    source_snapshot_id: int = Field(
+        ...,
+        description="Exact Core daily-position snapshot used for the booked position value.",
+    )
+    component_record_id: int | None = Field(
+        None,
+        description="Exact Core look-through component record; null for direct positions.",
+    )
+    component_weight: Decimal | None = Field(
+        None,
+        description="Source-owned parent-to-component weight; null for direct positions.",
+    )
+    component_effective_from: date | None = Field(
+        None,
+        description="Inclusive component-record effective date; null for direct positions.",
+    )
+    component_effective_to: date | None = Field(
+        None,
+        description="Inclusive component-record expiry, or null for open-ended/direct rows.",
+    )
+    component_source_system: str | None = Field(
+        None,
+        description="Upstream component source when supplied; null means unavailable at source.",
+    )
+    component_source_record_id: str | None = Field(
+        None,
+        description=(
+            "Upstream component source-record identity when supplied; null means unavailable."
+        ),
+    )
+    market_value_reporting_currency: Decimal = Field(
+        ...,
+        description="Signed contribution value in the response reporting currency.",
+    )
+    bucket_weight: Decimal | None = Field(
+        ...,
+        description=(
+            "Signed contribution divided by the bucket value at 28-digit precision; null when "
+            "the bucket nets to zero."
+        ),
+    )
+
+
 class AllocationBucket(BaseModel):
     dimension_value: str = Field(
         ...,
@@ -247,8 +323,58 @@ class AllocationBucket(BaseModel):
     )
     position_count: int = Field(
         ...,
-        description="Number of positions contributing to the bucket.",
+        description=(
+            "Number of allocation rows in the bucket after the applied mode: booked positions "
+            "in direct mode, and component exposures plus retained direct positions in mixed "
+            "look-through mode."
+        ),
         examples=[3],
+    )
+    contributor_count: int = Field(
+        ...,
+        description="Total source contributor rows included in the bucket total.",
+    )
+    contributors: list[AllocationContributor] = Field(
+        ...,
+        description=(
+            "Bounded contributor lineage ordered by descending absolute contribution then stable "
+            "portfolio/parent/security/source identity."
+        ),
+    )
+    contributors_truncated: bool = Field(
+        ...,
+        description="Whether contributor rows beyond the requested per-bucket limit were omitted.",
+    )
+    omitted_market_value_reporting_currency: Decimal = Field(
+        ...,
+        description=(
+            "Signed value of omitted contributors. Returned contributor values plus this residual "
+            "reconcile exactly to the bucket market value."
+        ),
+    )
+
+
+class AllocationCalculationLineage(BaseModel):
+    algorithm_id: str = Field(..., description="Stable allocation algorithm identity.")
+    algorithm_version: int = Field(..., description="Exact allocation algorithm version.")
+    intermediate_precision: int = Field(
+        ...,
+        description="Decimal precision used for totals and allocation weights.",
+    )
+    input_content_hash: str = Field(
+        ...,
+        pattern="^[0-9a-f]{64}$",
+        description="SHA-256 of normalized source inputs, classifications, dimensions, and limit.",
+    )
+    calculation_content_hash: str = Field(
+        ...,
+        pattern="^[0-9a-f]{64}$",
+        description="SHA-256 binding algorithm/version/precision to the input hash.",
+    )
+    output_content_hash: str = Field(
+        ...,
+        pattern="^[0-9a-f]{64}$",
+        description="SHA-256 binding returned totals, buckets, contributors, and residuals.",
     )
 
 
@@ -289,6 +415,14 @@ class AssetAllocationResponse(BaseModel):
     look_through: "AllocationLookThroughInfo" = Field(
         ...,
         description="Applied look-through mode and capability summary for the allocation query.",
+    )
+    calculation_lineage: AllocationCalculationLineage = Field(
+        ...,
+        description=(
+            "Deterministic normalized-input, calculation-policy, and output lineage for the "
+            "allocation result. Correlation identifiers are operational evidence and do not "
+            "replace these hashes."
+        ),
     )
     views: list[AllocationView] = Field(
         ..., description="Allocation views for the requested classification dimensions."

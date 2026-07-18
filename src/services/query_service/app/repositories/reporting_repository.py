@@ -40,6 +40,11 @@ class InstrumentLookthroughComponentRow:
     component_security_id: str
     component_weight: Decimal
     component_instrument: Instrument | None
+    component_record_id: int = 0
+    effective_from: date | None = None
+    effective_to: date | None = None
+    source_system: str | None = None
+    source_record_id: str | None = None
 
 
 def _normalized_cash_security_ids(cash_security_ids: list[str]) -> list[str]:
@@ -396,9 +401,14 @@ class ReportingRepository:
         instrument_security_id = func.trim(Instrument.security_id)
         stmt = (
             select(
+                InstrumentLookthroughComponent.id,
                 parent_security_id.label("parent_security_id"),
                 component_security_id.label("component_security_id"),
+                InstrumentLookthroughComponent.effective_from,
+                InstrumentLookthroughComponent.effective_to,
                 InstrumentLookthroughComponent.component_weight,
+                InstrumentLookthroughComponent.source_system,
+                InstrumentLookthroughComponent.source_record_id,
                 Instrument,
             )
             .outerjoin(
@@ -422,15 +432,25 @@ class ReportingRepository:
         rows = (await self.db.execute(stmt)).all()
         return [
             InstrumentLookthroughComponentRow(
+                component_record_id=component_record_id,
                 parent_security_id=normalize_security_id(parent_security_id),
                 component_security_id=normalize_security_id(component_security_id),
+                effective_from=effective_from,
+                effective_to=effective_to,
                 component_weight=component_weight,
+                source_system=source_system,
+                source_record_id=source_record_id,
                 component_instrument=component_instrument,
             )
             for (
+                component_record_id,
                 parent_security_id,
                 component_security_id,
+                effective_from,
+                effective_to,
                 component_weight,
+                source_system,
+                source_record_id,
                 component_instrument,
             ) in rows
         ]
