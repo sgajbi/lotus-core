@@ -2906,6 +2906,13 @@ Most relevant current governance:
      Quality Baseline workflow jobs must install from the same lock even when a step remains
      report-only. Tool-version changes require an intentional lock update and the workflow/tooling
      contract tests; they must not alter application runtime dependencies or lint rules implicitly.
+209. The root pytest session owns the module-level `PreparedTestRuntime` reservation independently
+     of Docker fixture selection. Release still-held host-port sockets from `pytest_sessionfinish`;
+     make `docker_services` use the same idempotent release path before project-scoped Compose
+     teardown. Unit-only, collection-only, fixture-failure, and Docker-backed sessions must not
+     depend on interpreter finalization for socket cleanup. Preserve held-port protection until
+     Compose is ready to bind, and do not weaken collision resistance by releasing reservations at
+     collection time.
 
 ## Context Maintenance Rule
 
