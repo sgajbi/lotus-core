@@ -37,6 +37,7 @@ def _record(
     membership_source: Literal[
         "party_role_assignment", "legacy_advisor_projection"
     ] = "legacy_advisor_projection",
+    source_record_id: str | None = None,
 ) -> PortfolioManagerBookRecord:
     return PortfolioManagerBookRecord(
         portfolio_id="PB_SG_GLOBAL_BAL_001",
@@ -58,7 +59,8 @@ def _record(
         source_system=(
             "relationship_master" if membership_source == "party_role_assignment" else None
         ),
-        source_record_id=(
+        source_record_id=source_record_id
+        or (
             "coverage-PB_SG_GLOBAL_BAL_001-PM-001"
             if membership_source == "party_role_assignment"
             else None
@@ -139,3 +141,39 @@ async def test_authoritative_assignment_replaces_legacy_lineage_without_changing
         "advisor_id_only_when_no_party_role_history"
     )
     assert response.latest_evidence_timestamp == datetime(2026, 5, 3, 9, 30, tzinfo=UTC)
+
+
+@pytest.mark.asyncio
+async def test_membership_identity_changes_when_authoritative_role_replaces_legacy() -> None:
+    request = PortfolioManagerBookMembershipRequest(as_of_date=date(2026, 5, 3))
+    legacy = await PortfolioManagerBookService(
+        reader=_Reader([_record(membership_source="legacy_advisor_projection")]),
+        clock=_Clock(),
+    ).resolve_membership(portfolio_manager_id="PM_SG_DPM_001", request=request)
+    authoritative = await PortfolioManagerBookService(
+        reader=_Reader([_record(membership_source="party_role_assignment")]),
+        clock=_Clock(),
+    ).resolve_membership(portfolio_manager_id="PM_SG_DPM_001", request=request)
+
+    assert legacy.members[0].portfolio_id == authoritative.members[0].portfolio_id
+    assert legacy.snapshot_id != authoritative.snapshot_id
+    assert legacy.content_hash != authoritative.content_hash
+    assert legacy.source_batch_fingerprint != authoritative.source_batch_fingerprint
+    assert legacy.source_digest != authoritative.source_digest
+
+
+@pytest.mark.asyncio
+async def test_membership_identity_changes_when_source_record_evidence_changes() -> None:
+    request = PortfolioManagerBookMembershipRequest(as_of_date=date(2026, 5, 3))
+    first = await PortfolioManagerBookService(
+        reader=_Reader([_record(source_record_id="coverage-v1")]),
+        clock=_Clock(),
+    ).resolve_membership(portfolio_manager_id="PM_SG_DPM_001", request=request)
+    corrected = await PortfolioManagerBookService(
+        reader=_Reader([_record(source_record_id="coverage-v2")]),
+        clock=_Clock(),
+    ).resolve_membership(portfolio_manager_id="PM_SG_DPM_001", request=request)
+
+    assert first.members[0].portfolio_id == corrected.members[0].portfolio_id
+    assert first.snapshot_id != corrected.snapshot_id
+    assert first.content_hash != corrected.content_hash
