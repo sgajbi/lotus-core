@@ -188,7 +188,7 @@ async def test_get_latest_positions(mock_position_repo: AsyncMock):
         assert response.generated_at.tzinfo is not None
         assert response.restatement_version == "current"
         assert response.reconciliation_status == "UNKNOWN"
-        assert response.data_quality_status == "COMPLETE"
+        assert response.data_quality_status == "UNKNOWN"
         assert response.latest_evidence_timestamp == datetime(2025, 1, 1, 10, 5, tzinfo=UTC)
         assert response.correlation_id is None
 
@@ -525,6 +525,7 @@ async def test_get_latest_positions_fallback_without_snapshot_valuation_uses_cos
             cost_basis_local=Decimal("123.45"),
             position_date=date(2025, 1, 3),
             transaction_id="T9",
+            epoch=1,
         )
         mock_instrument = Instrument(
             name="No Valuation",
@@ -538,6 +539,14 @@ async def test_get_latest_positions_fallback_without_snapshot_valuation_uses_cos
         mock_position_repo.get_latest_position_history_by_portfolio_as_of_date.return_value = [
             (mock_history_obj, mock_instrument, mock_state)
         ]
+        mock_position_repo.get_holdings_reconciliation_controls.return_value = [
+            FinancialReconciliationControl(
+                business_date=date(2025, 1, 3),
+                epoch=1,
+                status="COMPLETED",
+                updated_at=None,
+            )
+        ]
         mock_position_repo.get_held_since_dates.return_value = {}
         mock_position_repo.get_latest_snapshot_valuation_map.return_value = {}
 
@@ -550,6 +559,7 @@ async def test_get_latest_positions_fallback_without_snapshot_valuation_uses_cos
         assert response.positions[0].valuation.unrealized_gain_loss == Decimal("0")
         assert response.positions[0].held_since_date == date(2025, 1, 3)
         assert response.as_of_date == date(2025, 1, 1)
+        assert response.reconciliation_status == "COMPLETE"
         assert response.data_quality_status == "PARTIAL"
 
 
@@ -672,6 +682,7 @@ async def test_get_latest_positions_normalizes_security_ids_for_holdings_assembl
             unrealized_gain_loss=Decimal("0"),
             unrealized_gain_loss_local=Decimal("0"),
             date=date(2025, 1, 1),
+            epoch=2,
         )
         matching_history_row = PositionHistory(
             security_id="SNAP_ONLY",
@@ -680,6 +691,7 @@ async def test_get_latest_positions_normalizes_security_ids_for_holdings_assembl
             cost_basis_local=Decimal("1000"),
             position_date=date(2025, 1, 1),
             transaction_id="T-SNAP",
+            epoch=2,
         )
         history_row = PositionHistory(
             security_id=" HIST_ONLY ",
@@ -688,6 +700,7 @@ async def test_get_latest_positions_normalizes_security_ids_for_holdings_assembl
             cost_basis_local=Decimal("57195"),
             position_date=date(2025, 1, 1),
             transaction_id="T-HIST",
+            epoch=2,
         )
         instrument = Instrument(
             name="Apple Inc.",
@@ -724,6 +737,14 @@ async def test_get_latest_positions_normalizes_security_ids_for_holdings_assembl
             "SNAP_ONLY": date(2025, 1, 1),
             "HIST_ONLY": date(2025, 1, 1),
         }
+        mock_position_repo.get_holdings_reconciliation_controls.return_value = [
+            FinancialReconciliationControl(
+                business_date=date(2025, 1, 1),
+                epoch=2,
+                status="COMPLETED",
+                updated_at=None,
+            )
+        ]
 
         service = PositionService(AsyncMock())
         response = await service.get_portfolio_positions("P1", as_of_date=date(2025, 1, 1))
@@ -744,6 +765,7 @@ async def test_get_latest_positions_normalizes_security_ids_for_holdings_assembl
             security_ids=["HIST_ONLY", "SNAP_ONLY"],
             as_of_date=date(2025, 1, 1),
         )
+        assert response.reconciliation_status == "COMPLETE"
         assert response.data_quality_status == "PARTIAL"
 
 
