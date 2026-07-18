@@ -1,4 +1,5 @@
 from datetime import UTC, date, datetime
+from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -104,8 +105,8 @@ async def test_cashflow_repository_portfolio_cashflow_series_filters_to_portfoli
     second_timestamp = datetime(2026, 4, 19, 10, 45, tzinfo=UTC)
     mock_db_session.execute.return_value = MagicMock(
         all=lambda: [
-            (date(2026, 4, 18), 10, first_timestamp),
-            (date(2026, 4, 19), -2, second_timestamp),
+            (date(2026, 4, 18), 10, 2, first_timestamp),
+            (date(2026, 4, 19), -2, 1, second_timestamp),
         ]
     )
     repository = CashflowRepository(mock_db_session)
@@ -118,12 +119,15 @@ async def test_cashflow_repository_portfolio_cashflow_series_filters_to_portfoli
 
     assert evidence.rows == [(date(2026, 4, 18), 10), (date(2026, 4, 19), -2)]
     assert evidence.latest_evidence_timestamp == second_timestamp
+    assert evidence.source_row_count == 3
+    assert evidence.source_total == Decimal("8")
     stmt = mock_db_session.execute.call_args[0][0]
     compiled_query = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "anon_1.portfolio_id = 'P1'" in compiled_query
     assert "anon_1.cashflow_date BETWEEN '2026-04-18' AND '2026-04-28'" in compiled_query
     assert "anon_1.is_portfolio_flow" in compiled_query
     assert "sum(anon_1.amount)" in compiled_query.lower()
+    assert "count(*)" in compiled_query.lower()
     assert "max(anon_1.updated_at)" in compiled_query.lower()
 
 
@@ -148,6 +152,32 @@ async def test_cashflow_repository_cash_movement_summary_groups_latest_cashflow_
     assert "GROUP BY anon_1.classification, anon_1.timing, anon_1.currency" in compiled_query
     assert "anon_1.is_position_flow" in compiled_query
     assert "anon_1.is_portfolio_flow" in compiled_query
+    assert "sum(count(*)) OVER ()" in compiled_query
+
+
+async def test_cashflow_repository_cash_movement_summary_returns_source_count(
+    mock_db_session: AsyncMock,
+) -> None:
+    latest_timestamp = datetime(2026, 4, 18, 9, 15, tzinfo=UTC)
+    mock_db_session.execute.return_value = MagicMock(
+        all=lambda: [
+            ("CASHFLOW_IN", "SETTLED", "USD", False, True, 2, 10, latest_timestamp, 3),
+            ("CASHFLOW_OUT", "SETTLED", "USD", False, True, 1, -2, latest_timestamp, 3),
+        ]
+    )
+    repository = CashflowRepository(mock_db_session)
+
+    evidence = await repository.get_portfolio_cash_movement_summary(
+        portfolio_id="P1",
+        start_date=date(2026, 4, 18),
+        end_date=date(2026, 4, 28),
+    )
+
+    assert evidence.source_row_count == 3
+    assert evidence.rows == [
+        ("CASHFLOW_IN", "SETTLED", "USD", False, True, 2, Decimal("10"), latest_timestamp),
+        ("CASHFLOW_OUT", "SETTLED", "USD", False, True, 1, Decimal("-2"), latest_timestamp),
+    ]
 
 
 async def test_cashflow_repository_external_flows_limits_to_investor_movements(
