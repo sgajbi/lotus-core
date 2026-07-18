@@ -16,6 +16,7 @@ from scripts.validation.docker_endpoint_smoke import (
     _bounded_smoke_window_query,
     _resolve_postgres_container,
     _wait_expected_status,
+    _wait_transaction_visible,
     build_smoke_cleanup_sql,
 )
 
@@ -81,6 +82,77 @@ def test_wait_expected_status_raises_with_last_status_context(
 
     with pytest.raises(TimeoutError, match="last_status=404"):
         _wait_expected_status("http://query/missing-endpoint", {200}, timeout_seconds=2)
+
+
+def test_wait_transaction_visible_retries_until_exact_transaction_is_queryable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    responses = iter(
+        [
+            SimpleNamespace(status_code=404),
+            SimpleNamespace(
+                status_code=200,
+                json=lambda: {"transactions": [{"transaction_id": "TX_OTHER"}]},
+            ),
+            SimpleNamespace(
+                status_code=200,
+                json=lambda: {"transactions": [{"transaction_id": SMOKE_TRANSACTION_ID}]},
+            ),
+        ]
+    )
+    get_mock = Mock(side_effect=lambda *args, **kwargs: next(responses))
+    now = iter([0, 1, 2, 3])
+
+    monkeypatch.setattr("scripts.validation.docker_endpoint_smoke.requests.get", get_mock)
+    monkeypatch.setattr(
+        "scripts.validation.docker_endpoint_smoke.time.sleep", lambda *_args, **_kwargs: None
+    )
+    monkeypatch.setattr("scripts.validation.docker_endpoint_smoke.time.time", lambda: next(now))
+
+    _wait_transaction_visible(
+        "http://query",
+        SMOKE_PORTFOLIO_ID,
+        SMOKE_TRANSACTION_ID,
+        timeout_seconds=5,
+    )
+
+    assert get_mock.call_count == 3
+    get_mock.assert_called_with(
+        f"http://query/portfolios/{SMOKE_PORTFOLIO_ID}/transactions?limit=100",
+        timeout=8,
+    )
+
+
+def test_wait_transaction_visible_fails_closed_with_last_ledger_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    get_mock = Mock(
+        return_value=SimpleNamespace(
+            status_code=200,
+            json=lambda: {"transactions": [{"transaction_id": "TX_OTHER"}]},
+        )
+    )
+    now = iter([0, 1, 2, 3])
+
+    monkeypatch.setattr("scripts.validation.docker_endpoint_smoke.requests.get", get_mock)
+    monkeypatch.setattr(
+        "scripts.validation.docker_endpoint_smoke.time.sleep", lambda *_args, **_kwargs: None
+    )
+    monkeypatch.setattr("scripts.validation.docker_endpoint_smoke.time.time", lambda: next(now))
+
+    with pytest.raises(
+        TimeoutError,
+        match=(
+            rf"transaction {SMOKE_TRANSACTION_ID}.*last_status=200.*"
+            r"last_transaction_ids=\['TX_OTHER'\]"
+        ),
+    ):
+        _wait_transaction_visible(
+            "http://query",
+            SMOKE_PORTFOLIO_ID,
+            SMOKE_TRANSACTION_ID,
+            timeout_seconds=2,
+        )
 
 
 def test_resolve_postgres_container_uses_managed_project_environment(
