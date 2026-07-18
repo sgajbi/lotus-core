@@ -81,9 +81,11 @@ rearmed and completed `525` times for one final portfolio-day row.
     unsuccessful-rearm paths retain the same fallback.
 17. `BaseConsumer` retains a failed record and retries it in process under the same partition
     ordering key instead of assuming an uncommitted offset will be redelivered in the same consumer
-    session. Retryable failures use the governed attempt/elapsed budget and bounded backoff. Terminal
-    recovery separately retries DLQ publication and the post-DLQ commit without rerunning business
-    processing or republishing an already confirmed DLQ record.
+    session when either governed attempt/elapsed budget is positive. Default-zero keeps the
+    compatibility posture: one processing attempt, no in-process sleep or DLQ transition, and an
+    uncommitted offset for redelivery after restart or rebalance. Terminal recovery separately
+    retries DLQ publication and the post-DLQ commit without rerunning business processing or
+    republishing an already confirmed DLQ record.
 18. Transaction valuation readiness treats each durable outbox event as a distinct source mutation.
     The consumer hashes the existing `outbox_id` Kafka header to rearm a completed natural-key job or
     request requeue when a different mutation arrives during processing. Same-outbox redelivery is
@@ -532,6 +534,13 @@ does not publish this key policy; the operator-owned migration runbook is the du
   remain the only way to enable bounded in-process recovery. Both recovery phases have direct
   regressions; the focused shared-consumer suite passes `73/73` and full MyPy passes all `237`
   source files.
+- A later PR #807 review found the primary ordered-processing loop had the same default-disabled
+  inversion: because neither zero budget could exhaust, a persistent retryable failure slept and
+  retried forever. Signed fix-forward commit `2f9ba4611` restores the compatibility path before the
+  sleep: one attempt, no DLQ or commit, and an explicit
+  `kafka_redelivery_after_restart_or_rebalance` disposition. Positive attempt or elapsed budgets
+  remain the only opt-in to ordered in-process retry. The focused shared-consumer and PM-book
+  regression run passed `79` tests; scoped Ruff and full MyPy across `237` sources passed.
 - Exact-main dual-leg reproduction failed before the shared retry fix and passed afterward without
   increasing its 240-second budget. Exact-head timeseries contract E2E passed `4/4` at signed
   `c79bf0afe` in `155.53s` with dynamic ports and project-scoped teardown.
@@ -591,3 +600,6 @@ engineering truth. No migration or authored wiki change is required.
 The PR review fix clarifies the existing DLQ failure-budget runbook and repository context because
 default-zero and positive-budget behavior are operator-facing recovery truth. It changes no command,
 environment-variable name, API, event, database, calculation, or authored wiki contract.
+The primary-loop correction restores that same documented default-zero contract. No additional
+OpenAPI, event, migration, calculation-methodology, operator-runbook, or wiki-source change is
+required.
