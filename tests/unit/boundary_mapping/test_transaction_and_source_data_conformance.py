@@ -129,7 +129,7 @@ async def test_transaction_mapping_chain_preserves_event_and_record_invariants()
 
     published = producer.messages[0]
     decoded_headers = {name: value.decode("utf-8") for name, value in published["headers"]}
-    assert published["key"] == "PORT-MAP-001|EQ_US_AAPL"
+    assert published["key"] == "PORT-MAP-001|transaction-group|LTG-TXN-MAP-001"
     assert decoded_headers == {
         "correlation_id": "corr-boundary-001",
         "idempotency_key": "idem-boundary-001",
