@@ -398,6 +398,11 @@ BUSINESS_DATE_ENFORCE_MONOTONIC_ADVANCE = _env_bool(
 
 # Cashflow calculator runtime cache policy
 CASHFLOW_RULE_CACHE_TTL_SECONDS = _env_int("CASHFLOW_RULE_CACHE_TTL_SECONDS", 300, minimum=1)
+CASHFLOW_RULE_CACHE_SOURCE_VERSION_CHECK_INTERVAL_SECONDS = _env_int(
+    "CASHFLOW_RULE_CACHE_SOURCE_VERSION_CHECK_INTERVAL_SECONDS",
+    5,
+    minimum=1,
+)
 
 # Shared Kafka consumer DLQ failure policy. Default 0 preserves current conservative behavior:
 # do not commit offsets when DLQ publication fails, allowing Kafka redelivery.

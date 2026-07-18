@@ -22,9 +22,25 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure.ca
 pytestmark = pytest.mark.asyncio
 
 
-def _rule(*, timing: str = "BOD", updated_at: datetime | None = None) -> CashflowRule:
+class _Clock:
+    def __init__(self) -> None:
+        self.now = 0.0
+
+    def __call__(self) -> float:
+        return self.now
+
+    def advance(self, seconds: float) -> None:
+        self.now += seconds
+
+
+def _rule(
+    *,
+    transaction_type: str = "BUY",
+    timing: str = "BOD",
+    updated_at: datetime | None = None,
+) -> CashflowRule:
     return CashflowRule(
-        transaction_type="BUY",
+        transaction_type=transaction_type,
         classification="INVESTMENT_OUTFLOW",
         timing=timing,
         is_position_flow=True,
@@ -66,9 +82,146 @@ async def test_rule_cache_reloads_when_source_version_changes() -> None:
         [_rule(timing="BOD", updated_at=first_version)],
         [_rule(timing="EOD", updated_at=second_version)],
     ]
-    repository.get_rule_set_version.side_effect = [
-        CashflowRuleSetVersion(rule_count=1, latest_updated_at=second_version),
-        CashflowRuleSetVersion(rule_count=1, latest_updated_at=second_version),
+    repository.get_rule_set_version.return_value = CashflowRuleSetVersion(
+        rule_count=1,
+        latest_updated_at=second_version,
+    )
+    clock = _Clock()
+    cache = CashflowRuleCache(
+        ttl_seconds=3600,
+        source_version_check_interval_seconds=5,
+        clock=clock,
+    )
+
+    with patch.object(
+        rule_cache_module,
+        "SqlAlchemyCashflowRuleRepository",
+        return_value=repository,
+    ):
+        first = await cache.resolve(AsyncMock(spec=AsyncSession), "BUY")
+        clock.advance(5)
+        second = await cache.resolve(AsyncMock(spec=AsyncSession), "BUY")
+
+    assert first is not None and first.timing == "BOD"
+    assert second is not None and second.timing == "EOD"
+    assert first.rule_set_version != second.rule_set_version
+    assert second.rule_set_effective_at_utc == second_version
+
+
+async def test_fresh_rule_cache_does_not_query_source_version_per_lookup() -> None:
+    repository = AsyncMock(spec=SqlAlchemyCashflowRuleRepository)
+    repository.get_all_rules.return_value = [_rule()]
+    clock = _Clock()
+    cache = CashflowRuleCache(
+        ttl_seconds=3600,
+        source_version_check_interval_seconds=5,
+        clock=clock,
+    )
+
+    with patch.object(
+        rule_cache_module,
+        "SqlAlchemyCashflowRuleRepository",
+        return_value=repository,
+    ):
+        resolved = [await cache.resolve(AsyncMock(spec=AsyncSession), "BUY") for _ in range(100)]
+
+    assert all(rule is not None for rule in resolved)
+    assert repository.get_all_rules.await_count == 1
+    repository.get_rule_set_version.assert_not_awaited()
+
+
+async def test_rule_cache_revalidates_unchanged_source_once_per_interval() -> None:
+    rule = _rule(updated_at=datetime(2026, 4, 10, 8, tzinfo=timezone.utc))
+    repository = AsyncMock(spec=SqlAlchemyCashflowRuleRepository)
+    repository.get_all_rules.return_value = [rule]
+    repository.get_rule_set_version.return_value = CashflowRuleSetVersion(
+        rule_count=1,
+        latest_updated_at=rule.updated_at,
+    )
+    clock = _Clock()
+    cache = CashflowRuleCache(
+        ttl_seconds=3600,
+        source_version_check_interval_seconds=5,
+        clock=clock,
+    )
+
+    with patch.object(
+        rule_cache_module,
+        "SqlAlchemyCashflowRuleRepository",
+        return_value=repository,
+    ):
+        await cache.resolve(AsyncMock(spec=AsyncSession), "BUY")
+        clock.advance(5)
+        await cache.resolve(AsyncMock(spec=AsyncSession), "BUY")
+        await cache.resolve(AsyncMock(spec=AsyncSession), "BUY")
+
+    assert repository.get_all_rules.await_count == 1
+    assert repository.get_rule_set_version.await_count == 1
+
+
+async def test_concurrent_revalidation_executes_one_source_version_query() -> None:
+    repository = AsyncMock(spec=SqlAlchemyCashflowRuleRepository)
+    repository.get_all_rules.return_value = [_rule()]
+    repository.get_rule_set_version.return_value = CashflowRuleSetVersion(
+        rule_count=1,
+        latest_updated_at=None,
+    )
+    clock = _Clock()
+    cache = CashflowRuleCache(
+        ttl_seconds=3600,
+        source_version_check_interval_seconds=5,
+        clock=clock,
+    )
+
+    with patch.object(
+        rule_cache_module,
+        "SqlAlchemyCashflowRuleRepository",
+        return_value=repository,
+    ):
+        await cache.resolve(AsyncMock(spec=AsyncSession), "BUY")
+        clock.advance(5)
+        resolved = await asyncio.gather(
+            *(cache.resolve(AsyncMock(spec=AsyncSession), "BUY") for _ in range(20))
+        )
+
+    assert all(rule is not None for rule in resolved)
+    assert repository.get_all_rules.await_count == 1
+    assert repository.get_rule_set_version.await_count == 1
+
+
+async def test_ttl_expiry_forces_full_snapshot_reload_without_version_probe() -> None:
+    repository = AsyncMock(spec=SqlAlchemyCashflowRuleRepository)
+    repository.get_all_rules.side_effect = [
+        [_rule(timing="BOD")],
+        [_rule(timing="EOD")],
+    ]
+    clock = _Clock()
+    cache = CashflowRuleCache(
+        ttl_seconds=5,
+        source_version_check_interval_seconds=60,
+        clock=clock,
+    )
+
+    with patch.object(
+        rule_cache_module,
+        "SqlAlchemyCashflowRuleRepository",
+        return_value=repository,
+    ):
+        first = await cache.resolve(AsyncMock(spec=AsyncSession), "BUY")
+        clock.advance(5)
+        second = await cache.resolve(AsyncMock(spec=AsyncSession), "BUY")
+
+    assert first is not None and first.timing == "BOD"
+    assert second is not None and second.timing == "EOD"
+    assert repository.get_all_rules.await_count == 2
+    repository.get_rule_set_version.assert_not_awaited()
+
+
+async def test_missing_rule_forces_one_full_snapshot_reload() -> None:
+    repository = AsyncMock(spec=SqlAlchemyCashflowRuleRepository)
+    repository.get_all_rules.side_effect = [
+        [_rule()],
+        [_rule(), _rule(transaction_type="SELL")],
     ]
     cache = CashflowRuleCache(ttl_seconds=3600)
 
@@ -77,13 +230,12 @@ async def test_rule_cache_reloads_when_source_version_changes() -> None:
         "SqlAlchemyCashflowRuleRepository",
         return_value=repository,
     ):
-        first = await cache.resolve(AsyncMock(spec=AsyncSession), "BUY")
-        second = await cache.resolve(AsyncMock(spec=AsyncSession), "BUY")
+        await cache.resolve(AsyncMock(spec=AsyncSession), "BUY")
+        resolved = await cache.resolve(AsyncMock(spec=AsyncSession), "SELL")
 
-    assert first is not None and first.timing == "BOD"
-    assert second is not None and second.timing == "EOD"
-    assert first.rule_set_version != second.rule_set_version
-    assert second.rule_set_effective_at_utc == second_version
+    assert resolved is not None
+    assert resolved.classification == "INVESTMENT_OUTFLOW"
+    assert repository.get_all_rules.await_count == 2
 
 
 async def test_explicit_rule_cache_invalidation_reloads_source_snapshot() -> None:

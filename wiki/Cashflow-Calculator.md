@@ -50,6 +50,13 @@ database row only inside the repository adapter. The retired standalone calculat
 compatibility workflow, and event-to-ORM calculation facade are not part of the source tree or
 runtime.
 
+Fresh rule-cache hits are SQL-free only inside a bounded source-version validation interval
+(`CASHFLOW_RULE_CACHE_SOURCE_VERSION_CHECK_INTERVAL_SECONDS`, default five seconds). The first
+lookup after that interval performs one concurrency-coalesced rule-set version check; a changed
+version reloads the immutable snapshot before calculation. The separate 300-second TTL forces a
+full refresh, explicit invalidation remains available for immediate runtime-owned change visibility,
+and a missing rule still forces one reload before terminal configuration classification.
+
 Cash-entry mode validation, generated settlement-leg economics, and upstream product/cash pairing
 are service-owned transaction-domain policies over immutable `BookedTransaction`. Framework event
 DTOs remain at the infrastructure boundary and are not domain inputs.
