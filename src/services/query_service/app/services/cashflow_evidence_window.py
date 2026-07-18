@@ -10,6 +10,10 @@ class CashflowEvidenceWindow:
     booked_rows: list[tuple[date, Decimal]]
     projected_rows: list[tuple[date, Decimal]]
     latest_evidence_timestamp: datetime | None
+    booked_source_row_count: int
+    projected_source_row_count: int
+    booked_source_total: Decimal
+    projected_source_total: Decimal
 
 
 async def read_cashflow_evidence_window(
@@ -33,13 +37,21 @@ async def read_cashflow_evidence_window(
         )
         projected_rows = projected_evidence.rows
         latest_projected_evidence = projected_evidence.latest_evidence_timestamp
+        projected_source_row_count = projected_evidence.source_row_count
+        projected_source_total = projected_evidence.source_total
     else:
         projected_rows = []
         latest_projected_evidence = None
+        projected_source_row_count = 0
+        projected_source_total = Decimal("0")
 
     return CashflowEvidenceWindow(
         booked_rows=booked_evidence.rows,
         projected_rows=projected_rows,
+        booked_source_row_count=booked_evidence.source_row_count,
+        projected_source_row_count=projected_source_row_count,
+        booked_source_total=booked_evidence.source_total,
+        projected_source_total=projected_source_total,
         latest_evidence_timestamp=max(
             (
                 timestamp
