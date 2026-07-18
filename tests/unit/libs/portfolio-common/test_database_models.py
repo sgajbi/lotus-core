@@ -191,6 +191,9 @@ def test_portfolio_party_role_assignment_enforces_identity_and_vocabulary() -> N
     assert [
         column.name for column in indexes["ix_party_role_portfolio_effective"].columns
     ] == ["portfolio_id", "effective_from", "effective_to", "role_type"]
+    assert [column.name for column in indexes["ix_party_role_portfolio_history"].columns] == [
+        "portfolio_id"
+    ]
     assert [column.name for column in indexes["ix_party_role_party_effective"].columns] == [
         "party_id",
         "role_type",
@@ -201,7 +204,8 @@ def test_portfolio_party_role_assignment_enforces_identity_and_vocabulary() -> N
     ]
     assert all(
         str(index.dialect_options["postgresql"]["where"]) == "quality_status = 'accepted'"
-        for index in indexes.values()
+        for index_name, index in indexes.items()
+        if index_name != "ix_party_role_portfolio_history"
     )
 
 

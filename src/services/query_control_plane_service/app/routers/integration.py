@@ -1261,10 +1261,10 @@ async def get_market_data_coverage(
     summary="Resolve portfolio-manager book membership",
     description=(
         "What: Return source-owned portfolio memberships for a portfolio-manager book.\n"
-        "How: Resolves core portfolio master rows where `advisor_id` matches the requested "
-        "portfolio_manager_id, applies as-of lifecycle, active-status, booking-center, and "
-        "portfolio-type filters, and returns deterministic membership rows with supportability "
-        "and lineage.\n"
+        "How: Resolves effective accepted portfolio-manager role assignments first, then uses "
+        "`advisor_id` only for portfolios with no party-role history. It applies as-of lifecycle, "
+        "active-status, booking-center, and portfolio-type filters and returns deterministic "
+        "membership rows with supportability and lineage.\n"
         "When: Use this endpoint when lotus-manage needs automatic PM-book cohort discovery for "
         "DPM rebalance waves. Do not use it as a general staff hierarchy, entitlement, or "
         "relationship-householding API; richer relationship-book ownership remains a separate "
@@ -1283,8 +1283,8 @@ async def resolve_portfolio_manager_book_membership(
     portfolio_manager_id: str = Path(
         ...,
         description=(
-            "Portfolio-manager or relationship-manager identifier backed by core portfolio "
-            "master `advisor_id` in the first-wave contract."
+            "Portfolio-manager party identifier. Unmigrated portfolios retain a bounded "
+            "portfolio-master advisor_id compatibility projection."
         ),
         examples=["PM_SG_DPM_001"],
     ),

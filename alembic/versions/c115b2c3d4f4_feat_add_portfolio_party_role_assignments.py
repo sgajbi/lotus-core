@@ -98,6 +98,11 @@ def upgrade() -> None:
         ),
     )
     op.create_index(
+        "ix_party_role_portfolio_history",
+        "portfolio_party_role_assignments",
+        ["portfolio_id"],
+    )
+    op.create_index(
         "ix_party_role_portfolio_effective",
         "portfolio_party_role_assignments",
         ["portfolio_id", "effective_from", "effective_to", "role_type"],
@@ -126,5 +131,8 @@ def downgrade() -> None:
     )
     op.drop_index(
         "ix_party_role_portfolio_effective", table_name="portfolio_party_role_assignments"
+    )
+    op.drop_index(
+        "ix_party_role_portfolio_history", table_name="portfolio_party_role_assignments"
     )
     op.drop_table("portfolio_party_role_assignments")
