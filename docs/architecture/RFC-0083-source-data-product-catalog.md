@@ -447,17 +447,28 @@ included in their year-to-date aggregation windows while leaving data-quality st
 
 `PortfolioStateSnapshot` additionally populates `tenant_id` and `policy_version` from the resolved
 integration governance context because those values already exist in the core snapshot assembly
-path. Snapshot-backed baseline responses populate `freshness.snapshot_timestamp` and top-level
-`latest_evidence_timestamp` from durable position snapshot and position-state timestamps. Historical
-fallback baselines leave those fields null because they are not resolved snapshot evidence. The
-response derives `data_quality_status` from baseline evidence: current snapshot-backed baselines with
-durable timestamp and one unambiguous position epoch are `COMPLETE`, historical fallback baselines
-are `PARTIAL`, snapshot-backed baselines missing complete epoch or timestamp evidence are `PARTIAL`,
-and empty baselines remain `UNKNOWN`. The response leaves `snapshot_id` null until the
-reconstruction scope can supply complete epoch inputs for deterministic snapshot identity. The core
-snapshot freshness block populates `freshness.snapshot_epoch` only when the returned
-snapshot-backed baseline rows resolve to one unambiguous position epoch; mixed per-security epochs
-remain null rather than claiming a single portfolio-wide epoch.
+path. It extracts the exact business-date/epoch scopes represented by the selected position rows and
+reads their `FINANCIAL_RECONCILIATION` controls in one set-based query. Missing, running, failed,
+unknown, or source-older controls fail closed as `UNRECONCILED`, `PARTIAL`, `BLOCKED`, `UNKNOWN`, or
+`STALE`; only complete controls at least as recent as their source scope are `COMPLETE`.
+
+The response publishes a deterministic `portfolio_state_snapshot:<hash>` identity and explicit
+input, calculation, and output SHA-256 lineage. The input hash binds portfolio, tenant, as-of date,
+mode, restatement version, normalized request, selected position/instrument facts, exact
+reconciliation scopes and controls, governance policy, valuation context, and simulation session
+version. The calculation hash binds `PORTFOLIO_STATE_SNAPSHOT`, algorithm version `1`, 28-digit
+Decimal precision, and the input hash. The output hash binds returned sections plus reconciliation,
+quality, and current-evidence posture. Generation time and correlation identifiers remain
+operational evidence and do not change snapshot identity.
+
+Snapshot-backed and historical-fallback baselines both publish the latest timestamp across selected
+source rows and reconciliation controls when available. Current snapshot-backed baselines with a
+durable timestamp and one unambiguous position epoch are `COMPLETE`; historical fallback baselines
+are `PARTIAL`; snapshot-backed baselines missing complete epoch or timestamp evidence are `PARTIAL`;
+and empty baselines remain `UNKNOWN`. `source_evidence_current` is true only when reconciliation is
+`COMPLETE`, data quality is `COMPLETE` or `PARTIAL`, and timestamp evidence exists. The nested
+freshness block continues to expose a snapshot epoch only for one unambiguous current-state epoch;
+mixed per-security epochs remain null rather than claiming a portfolio-wide epoch.
 
 The analytics-input timeseries products reuse their existing `lineage.generated_at` timestamp for
 the top-level `generated_at` supportability field so lineage and envelope metadata stay internally
@@ -532,6 +543,8 @@ The source-data product contract guard statically checks both sides of the bindi
    `product_name` and `product_version` defaults,
 3. every catalog-backed route helper must expose `x-lotus-source-data-security` metadata that
    matches the governed RFC-0083 Slice 9 security profile.
+4. trust-certified `PortfolioStateSnapshot` responses must continue to declare their explicit
+   calculation-lineage receipt.
 
 The analytics-input consumer contract guard adds explicit downstream-consumer conformance checks for
 `lotus-performance` and `lotus-risk`. It verifies that the declared performance-facing products are

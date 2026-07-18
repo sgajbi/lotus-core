@@ -2942,6 +2942,18 @@ Most relevant current governance:
      `UNAVAILABLE`. Keep the narrow shared cashflow-window trust policy in Query Service; do not
      move cashflow workflow or product calculations into `portfolio_common`, and do not treat
      correlation ids as financial lineage.
+212. `PortfolioStateSnapshot:v1` is a QCP-owned portfolio-state calculation receipt. Extract exact
+     business-date/epoch scopes from the selected snapshot or history rows and read all matching
+     `FINANCIAL_RECONCILIATION` controls in one set-based adapter query. Missing, in-flight, failed,
+     unknown, or source-older controls fail closed; successful response construction is not proof
+     of reconciliation. Bind portfolio, tenant, as-of date, mode, current restatement version,
+     normalized request, selected position/instrument source facts, scope/control hashes,
+     governance policy, valuation context, and simulation session version in input lineage. Bind
+     `PORTFOLIO_STATE_SNAPSHOT`, algorithm version, and 28-digit intermediate precision in
+     calculation lineage; bind returned sections and trust posture in output lineage. Derive the
+     deterministic snapshot id from the output hash. Generation time and correlation ids remain
+     operational evidence and must not alter identity. Keep the DTO/workflow/source extraction in
+     QCP; share only framework-independent reconciliation and calculation-lineage primitives.
 
 ## Context Maintenance Rule
 
