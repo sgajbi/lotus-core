@@ -83,8 +83,8 @@ rounding policy and retain the unrounded evidence required for reconciliation.
 Every governed calculation result must bind three different evidence layers:
 
 1. `input_content_hash` covers normalized financial inputs and source lineage. Decimal scale,
-   effective dates, aware observation timestamps, enum values, ordered sequences, and unordered sets
-   have canonical representations; binary floating-point values are prohibited.
+   effective dates, UTC-normalized aware observation timestamps, enum values, ordered sequences,
+   and unordered sets have canonical representations; binary floating-point values are prohibited.
 2. `calculation_content_hash` binds the input hash to the algorithm identifier, algorithm version,
    and intermediate precision. A methodology version change therefore changes calculation lineage
    even when the source facts are unchanged.
@@ -96,6 +96,12 @@ timestamps, non-string mapping keys, unsupported values, and invalid algorithm m
 persistence, events, API/OpenAPI, diagnostics, and financial reconciliation must carry these hashes
 with policy/assignment and source references; a request correlation ID is not calculation lineage.
 
+Segmented accrued-income input lineage includes the ordered economic periods, source-record
+identity and revision, source-content hash, aware observation time, day-count convention/version,
+and the content hash of any source-owned business calendar. The result exposes all three hashes.
+Changing a source revision therefore changes input, calculation, and output lineage even when the
+recalculated monetary amount is unchanged; this is intentional correction and audit evidence.
+
 #### Performance contract
 
 The pure policies are I/O-free and bounded by the number of supplied segments/reference periods.
@@ -104,6 +110,11 @@ multiplier, price, and FX evidence; per-position N+1 reads are not acceptable. K
 detect local regressions, but capacity claims require exact-SHA mixed-book runtime evidence with
 throughput, p95/p99, database operations, lock/connection pressure, Kafka lag, cache invalidation,
 resource use, queue closure, and exact reconciliation.
+
+An immutable business calendar computes its content hash once when the calendar value object is
+constructed. Each accrued-income calculation binds that digest instead of reserializing every
+business date for every position; calendar loading and reuse remain application/infrastructure
+responsibilities.
 
 ## 2. Valuation Scheduler Logic
 

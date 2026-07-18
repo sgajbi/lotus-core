@@ -6,7 +6,7 @@ import hashlib
 import json
 from collections.abc import Mapping, Sequence, Set
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from enum import Enum
 from typing import Any
@@ -35,7 +35,7 @@ class CalculationLineage:
             "calculation_content_hash",
             "output_content_hash",
         ):
-            _require_sha256(str(getattr(self, field_name)), field_name)
+            require_sha256_digest(str(getattr(self, field_name)), field_name)
 
 
 def build_calculation_lineage(
@@ -101,7 +101,7 @@ def _normalize_lineage_value(value: object) -> Any:
     if isinstance(value, datetime):
         if value.tzinfo is None or value.utcoffset() is None:
             raise ValueError("lineage datetime values must be timezone-aware")
-        return {"datetime": value.isoformat()}
+        return {"datetime": value.astimezone(UTC).isoformat()}
     if isinstance(value, date):
         return {"date": value.isoformat()}
     if isinstance(value, Enum):
@@ -125,6 +125,9 @@ def _canonical_sort_key(value: Any) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
 
 
-def _require_sha256(value: str, field_name: str) -> None:
+def require_sha256_digest(value: str, field_name: str) -> str:
+    """Validate and return a canonical lowercase SHA-256 digest."""
+
     if len(value) != 64 or any(character not in "0123456789abcdef" for character in value):
         raise ValueError(f"{field_name} must be a lowercase SHA-256 hex digest")
+    return value

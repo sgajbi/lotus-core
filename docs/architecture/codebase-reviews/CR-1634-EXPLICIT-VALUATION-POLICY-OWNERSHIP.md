@@ -63,8 +63,17 @@ narrow framework-free contract therefore belongs in `portfolio_common.domain.val
 - Added reusable deterministic calculation lineage with separate input, calculation, and output
   SHA-256 hashes. Calculation identity binds algorithm ID/version and intermediate precision to the
   canonical input hash; output identity binds named result values to the calculation hash. Decimal,
-  dates, aware timestamps, enums, mappings, sequences, and sets normalize deterministically, while
-  floats, non-finite values, naive timestamps, ambiguous keys, and unsupported objects fail closed.
+  dates, UTC-normalized aware timestamps, enums, mappings, sequences, and sets normalize
+  deterministically, while floats, non-finite values, naive timestamps, ambiguous keys, and
+  unsupported objects fail closed.
+- Attached the three-layer lineage to segmented accrued-income results. Each source reference now
+  carries an immutable source-content hash and aware observation timestamp; calendar-backed inputs
+  bind a precomputed calendar-content hash. A corrected source revision changes every downstream
+  lineage layer even when the monetary amount remains equal, while caller segment order does not
+  alter the canonical result.
+- Business-calendar content hashing occurs once when the immutable calendar is constructed, not
+  once per accrued-income calculation, preserving deterministic evidence without introducing
+  business-date serialization on the high-volume per-position path.
 
 ## Ownership Boundary
 
@@ -85,7 +94,7 @@ deleted rather than retained as a fallback when valuation and reconciliation are
 
 ## Validation
 
-- 84 valuation-domain tests passed, including unit/NAV, clean and dirty percent-of-principal,
+- 87 valuation-domain tests passed, including unit/NAV, clean and dirty percent-of-principal,
   factor-adjusted principal, per-unit/per-contract/whole-position supplied values, futures notional,
   settlement variation, FX direction, exact tenant/book/instrument assignment resolution,
   source-version fencing, overlap/gap rejection, conflicting-version rejection, cache identity, and
@@ -97,9 +106,11 @@ deleted rather than retained as a fallback when valuation and reconciliation are
   segment accrual, principal/rate changes, sign handling, lineage/currency/continuity rejection,
   and ambient Decimal-precision independence.
 - Lineage tests prove mapping/set order independence, bounded hash impact for input versus algorithm
-  versus output changes, valid digest shape, and rejection of ambiguous value types/metadata.
+  versus output changes, valid digest shape, source-revision sensitivity despite amount equality,
+  equivalent-instant timezone normalization, calendar-content sensitivity, and rejection of
+  ambiguous value types/metadata.
 - Scoped Ruff lint and formatting passed.
-- Strict MyPy passed for all three valuation-domain source modules.
+- Strict MyPy passed for all seven valuation-domain source modules.
 - The calculation-kernel commit `608751249` is signed; assignment commit evidence will be recorded
   on GitHub issue #788 after commit.
 

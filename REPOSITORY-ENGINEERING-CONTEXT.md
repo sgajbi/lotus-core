@@ -2870,9 +2870,14 @@ Most relevant current governance:
      content, algorithm/version/precision-bound calculation identity, and output values bound to
      that calculation identity. Use separate lowercase SHA-256 hashes for all three. Prohibit
      binary floats, non-finite Decimal values, naive timestamps, ambiguous mapping keys, and
-     unsupported objects from lineage payloads. Persist and expose policy/assignment/source
+     unsupported objects from lineage payloads; normalize aware timestamps to UTC before hashing so
+     equivalent instants cannot create false revisions. Persist and expose policy/assignment/source
      references with the hashes; correlation and trace IDs are operational request evidence, not a
-     substitute for financial input, calculation, or output lineage.
+     substitute for financial input, calculation, or output lineage. Source references used by a
+     calculation carry source-record identity/revision, source-content hash, and aware observation
+     time. Precompute immutable reference-data content hashes, such as a business-calendar digest,
+     when constructing or loading the value object; bind that digest on the high-volume calculation
+     path instead of repeatedly serializing the complete reference dataset.
 
 ## Context Maintenance Rule
 

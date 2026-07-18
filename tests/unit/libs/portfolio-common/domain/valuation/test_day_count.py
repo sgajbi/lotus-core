@@ -81,6 +81,17 @@ def test_business_252_counts_start_inclusive_end_exclusive_calendar_facts() -> N
     assert result == _ratio(4, 252)
 
 
+def test_business_calendar_content_hash_is_order_independent_and_date_sensitive() -> None:
+    baseline = _business_calendar()
+    reordered = _business_calendar(
+        business_dates=frozenset(reversed(sorted(baseline.business_dates)))
+    )
+    changed = _business_calendar(business_dates=baseline.business_dates | {date(2026, 7, 16)})
+
+    assert reordered.calendar_content_hash == baseline.calendar_content_hash
+    assert changed.calendar_content_hash != baseline.calendar_content_hash
+
+
 def test_business_252_requires_complete_authoritative_calendar_coverage() -> None:
     inputs = DayCountInputs(period_start=date(2026, 7, 13), period_end=date(2026, 7, 18))
     with pytest.raises(UnsupportedDayCountError, match="authoritative business-day calendar"):

@@ -1,7 +1,7 @@
 """Golden tests for segmented gross contractual accrued income."""
 
 from dataclasses import replace
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal, localcontext
 
 import pytest
@@ -13,6 +13,7 @@ from portfolio_common.domain.valuation import (
     UnsupportedAccruedIncomeError,
     UnsupportedDayCountError,
     calculate_segmented_accrued_income,
+    canonical_content_hash,
 )
 
 
@@ -21,6 +22,8 @@ def _source(fact: str) -> AccrualSourceReference:
         source_system="security_master",
         source_record_id=f"BOND-001:{fact}",
         source_revision="revision-9",
+        source_content_hash=canonical_content_hash({"fact": fact, "revision": 9}),
+        observed_at=datetime(2026, 1, 2, 8, tzinfo=UTC),
     )
 
 
@@ -108,6 +111,9 @@ def test_principal_change_segments_accrue_on_each_authoritative_balance() -> Non
         _accrual("1000000", "0.06", 90, 365),
         _accrual("800000", "0.06", 91, 365),
     )
+    assert len(result.lineage.input_content_hash) == 64
+    assert len(result.lineage.calculation_content_hash) == 64
+    assert len(result.lineage.output_content_hash) == 64
 
 
 def test_rate_reset_segments_use_each_supplied_all_in_rate() -> None:
@@ -143,6 +149,29 @@ def test_calculation_is_independent_of_ambient_decimal_precision() -> None:
         actual = calculate_segmented_accrued_income((segment,))
 
     assert actual == expected
+
+
+def test_lineage_is_input_order_independent_but_source_revision_sensitive() -> None:
+    first = _segment(
+        accrual_end=date(2026, 4, 1),
+        day_count_convention="ACT/360",
+        icma_reference_periods=(),
+    )
+    second = replace(first, accrual_start=date(2026, 4, 1), accrual_end=date(2026, 7, 1))
+
+    ordered = calculate_segmented_accrued_income((first, second))
+    reversed_input = calculate_segmented_accrued_income((second, first))
+    revised_source = calculate_segmented_accrued_income(
+        (first, replace(second, rate_source=_source("rate-revision-10")))
+    )
+
+    assert reversed_input.lineage == ordered.lineage
+    assert revised_source.gross_accrued_income == ordered.gross_accrued_income
+    assert revised_source.lineage.input_content_hash != ordered.lineage.input_content_hash
+    assert (
+        revised_source.lineage.calculation_content_hash != ordered.lineage.calculation_content_hash
+    )
+    assert revised_source.lineage.output_content_hash != ordered.lineage.output_content_hash
 
 
 @pytest.mark.parametrize(
@@ -210,4 +239,12 @@ def test_missing_day_count_support_and_invalid_source_facts_fail_closed() -> Non
     with pytest.raises(ValueError, match="finite"):
         _segment(annual_effective_rate=Decimal("NaN"))
     with pytest.raises(ValueError, match="source_revision"):
-        AccrualSourceReference("security_master", "BOND-001:rate", " ")
+        AccrualSourceReference(
+            "security_master",
+            "BOND-001:rate",
+            " ",
+            "a" * 64,
+            datetime(2026, 1, 1, tzinfo=UTC),
+        )
+    with pytest.raises(ValueError, match="timezone-aware"):
+        replace(_source("rate"), observed_at=datetime(2026, 1, 1))
