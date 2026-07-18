@@ -39,7 +39,7 @@ effective-dated instrument assignment selects a versioned composition of:
   current principal;
 - scaling: quantity, principal, contract count and multiplier, or no scaling;
 - accrued-income treatment: not applicable, explicitly no periodic accrual, included, calculated
-  separately, or supplied separately;
+  separately, calculated with an explicit ex-coupon entitlement adjustment, or supplied separately;
 - direct source-to-reporting FX policy and a separately named output measure.
 
 Missing or conflicting assignments and ambiguous or incomplete inputs fail closed. Futures notional
@@ -64,6 +64,15 @@ gross_accrued_income = sum(
     * supplied_annual_effective_rate_segment
     * governed_year_fraction_segment
 )
+
+ex_coupon_entitlement_adjustment = sum(
+    signed_full_coupon_principal_segment
+    * supplied_annual_effective_rate_segment
+    * governed_full_coupon_year_fraction_segment
+)
+
+settlement_accrued_income =
+    gross_accrued_income - ex_coupon_entitlement_adjustment
 ```
 
 | Variable | Meaning | Required behavior |
@@ -72,6 +81,23 @@ gross_accrued_income = sum(
 | `supplied_annual_effective_rate_segment` | Fixed contractual rate or upstream-supplied floating all-in rate in decimal form | Do not divide by frequency or derive index, spread, cap/floor, fallback, or rounding |
 | `governed_year_fraction_segment` | Exact convention/version result for start-inclusive, end-exclusive dates | Reject unknown convention/version and incomplete calendars/reference periods |
 | `gross_accrued_income` | Contractual accrual before separate tax, impairment, PIK, inflation, compounding, or boundary rounding policy | Keep separate from clean value and add exactly once only when policy requires |
+| `ex_coupon_entitlement_adjustment` | Signed full next coupon forfeited by an ex-coupon buyer | Recalculate from complete authoritative coupon-period segments; never infer it from product type or a default ex-period |
+| `settlement_accrued_income` | Signed accrued amount included with the clean settlement value | Equal gross accrual for cum-coupon settlement; for ex-coupon settlement subtract the signed full coupon exactly once |
+
+Ex-coupon treatment is activated only by an exact valuation-policy assignment and a source-owned
+`ExCouponEntitlement`. Settlement must be strictly after the supplied ex-coupon date and before the
+next coupon payment date. The complete coupon-period segments must start with the same coupon
+period, end on that payment date, and match the elapsed segments' principal, rate, day-count,
+calendar, schedule, and source evidence over every shared interval. Core recalculates the full
+signed coupon with the same segmented kernel. For a long position this produces negative rebate
+interest during the ex-coupon period; the sign reverses for a short position. Settlement on or
+before the ex-date remains cum-coupon and must not carry an ex-coupon entitlement input.
+
+This is the DMO convention expressed as `elapsed accrued interest - full next coupon` for settlement
+after the ex-dividend date. The source system, not Core, owns market-specific ex-date and payment-date
+determination. The accrued-income lineage algorithm is version 2 because its input and output
+contracts now bind the entitlement source, full coupon segments, gross accrual, adjustment, and
+settlement accrual separately.
 
 The version-1 registry implements `ACT/365.FIXED`, `ACT/360`, `BUS/252`, `30/360.US`,
 `30E/360`, `30E/360.ISDA`, `ACT/ACT.ISDA`, and `ACT/ACT.ICMA`. `BUS/252` requires a
@@ -109,6 +135,9 @@ identity and revision, source-content hash, aware observation time, day-count co
 and the content hash of any source-owned business calendar. The result exposes all three hashes.
 Changing a source revision therefore changes input, calculation, and output lineage even when the
 recalculated monetary amount is unchanged; this is intentional correction and audit evidence.
+For ex-coupon settlement, the input hash also binds the entitlement source, ex-date, next payment
+date, and complete full-coupon segments; the output hash distinguishes gross contractual accrual,
+the signed entitlement adjustment, and settlement accrued income.
 
 Position-valuation input lineage binds the exact policy composition and its assignment evidence,
 plus only the price/value, position/principal/factor, accrued-income, multiplier, currencies, and FX
@@ -120,6 +149,8 @@ currency conversion, and reporting-currency outputs without conflating those mea
 #### Performance contract
 
 The pure policies are I/O-free and bounded by the number of supplied segments/reference periods.
+Ex-coupon prefix validation uses one ordered pass across elapsed and full-coupon segments and does
+not expand dates or rebuild source payloads while comparing economic terms.
 Production integration must bulk-resolve assignment, schedule, calendar, rate, principal/factor,
 multiplier, price, and FX evidence; per-position N+1 reads are not acceptable. Kernel checks can
 detect local regressions, but capacity claims require exact-SHA mixed-book runtime evidence with
@@ -130,6 +161,11 @@ An immutable business calendar computes its content hash once when the calendar 
 constructed. Each accrued-income calculation binds that digest instead of reserializing every
 business date for every position; calendar loading and reuse remain application/infrastructure
 responsibilities.
+
+Primary ex-coupon methodology references are the UK Debt Management Office
+[gilt transaction convention](https://www.dmo.gov.uk/responsibilities/gilt-market/about-gilts/),
+which describes negative rebate interest after the ex-dividend date, and its
+[official formulae publication](https://www.dmo.gov.uk/publications/gilt-market/formulae-and-examples/).
 
 ## 2. Valuation Scheduler Logic
 

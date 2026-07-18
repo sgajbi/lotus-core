@@ -2863,14 +2863,21 @@ Most relevant current governance:
      Segment whenever principal or the fixed/supplied-floating all-in rate changes; require separate
      rate, principal, and schedule lineage; reject gaps, overlaps, mixed currencies, non-finite
      values, or unsupported day counts. Do not divide annual rate by coupon frequency, derive a
-     floating reset, or silently apply tax, default/non-accrual, PIK, inflation, compounding,
-     ex-coupon, or rounding policy. Day-count and accrual kernels use a fixed 50-digit local Decimal
+     floating reset, or silently apply tax, default/non-accrual, PIK, inflation, compounding, or
+     rounding policy. Day-count and accrual kernels use a fixed 50-digit local Decimal
      precision; rounding belongs to an explicit persistence/API boundary. Runtime integration must
      bulk-resolve source facts and prove mixed-book capacity—domain microbenchmarks alone are not
      release evidence. Zero-coupon/stripped discount positions use a named no-periodic-accrual
      clean-price policy for the applicable principal basis. Do not run them through coupon accrual
      or infer discount accretion, effective-interest accounting, tax amortization, or yield from
      clean price.
+     Ex-coupon settlement requires a separately assigned treatment plus a source-owned entitlement
+     carrying the ex-date, next coupon payment date, and complete full-coupon segments. Require
+     settlement strictly after the ex-date and before payment, prove the elapsed segments are an
+     economic prefix of the full coupon, and calculate signed settlement accrual as elapsed gross
+     accrual minus the full signed coupon. Preserve gross accrual, entitlement adjustment, and
+     settlement accrual as separate outputs and lineage facts. Never infer an ex-period from product
+     class, market, settlement cycle, or a process-local calendar.
 207. Financial calculation lineage has three deterministic layers: canonical normalized input
      content, algorithm/version/precision-bound calculation identity, and output values bound to
      that calculation identity. Use separate lowercase SHA-256 hashes for all three. Prohibit
