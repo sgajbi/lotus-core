@@ -2877,7 +2877,13 @@ Most relevant current governance:
      calculation carry source-record identity/revision, source-content hash, and aware observation
      time. Precompute immutable reference-data content hashes, such as a business-calendar digest,
      when constructing or loading the value object; bind that digest on the high-volume calculation
-     path instead of repeatedly serializing the complete reference dataset.
+     path instead of repeatedly serializing the complete reference dataset. Position-valuation
+     lineage binds the exact policy and assignment plus only the price/value, currency,
+     position/principal/factor, multiplier, accrued-income, and FX evidence that policy consumes.
+     When accrued income is calculated separately, bind its calculation lineage as a derived input
+     rather than relabeling it as a source record. Run position scaling, aggregation, and FX
+     conversion in the governed 50-digit local Decimal context; the returned reporting values and
+     output hash must use those same intermediates.
 
 ## Context Maintenance Rule
 

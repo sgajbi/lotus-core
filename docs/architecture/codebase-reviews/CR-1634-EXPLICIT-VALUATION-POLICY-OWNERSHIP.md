@@ -77,6 +77,17 @@ narrow framework-free contract therefore belongs in `portfolio_common.domain.val
 - Business-calendar content hashing occurs once when the immutable calendar is constructed, not
   once per accrued-income calculation, preserving deterministic evidence without introducing
   business-date serialization on the high-volume per-position path.
+- Consolidated source-system/record/revision/content-hash/observation evidence into one immutable
+  financial source-reference value shared by accrued income and position valuation; the existing
+  accrued reference name remains an alias rather than a duplicate structure.
+- Attached the same three-layer lineage to the complete position-valuation result. Input identity
+  binds the exact policy composition, assignment source, and only the price/value, currency,
+  position/principal/factor, multiplier, derived-or-supplied accrued income, and direct FX evidence
+  consumed by that policy. Output identity keeps clean value, accrued income, total market value,
+  notional, settlement variation, current principal, and local/reporting amounts distinct.
+- Fixed position-scaling, aggregation, and FX conversion to a 50-digit local Decimal context. A
+  regression test caught reporting-currency conversion escaping the context; both returned values
+  and output lineage now use the identical fixed-precision results.
 
 ## Ownership Boundary
 
@@ -89,7 +100,7 @@ to that service's domain package.
 
 ## Compatibility
 
-The two domain slices do not change runtime valuation behavior, HTTP/OpenAPI contracts, event
+These domain slices do not change runtime valuation behavior, HTTP/OpenAPI contracts, event
 payloads, database schema, topics, deployment topology, or downstream fields. Existing correct
 unit-price behavior is characterized under an explicit policy. The legacy bond heuristic remains in
 the runtime path until authoritative representation and assignment facts are available; it will be
@@ -97,13 +108,15 @@ deleted rather than retained as a fallback when valuation and reconciliation are
 
 ## Validation
 
-- 88 valuation-domain tests passed, including unit/NAV, clean and dirty percent-of-principal,
+- 91 valuation-domain tests passed, including unit/NAV, clean and dirty percent-of-principal,
   factor-adjusted principal, per-unit/per-contract/whole-position supplied values, futures notional,
   settlement variation, FX direction, exact tenant/book/instrument assignment resolution,
   source-version fencing, overlap/gap rejection, conflicting-version rejection, UTC-canonical cache
-  identity, backdated replay-date derivation, registry uniqueness, exact-version lookup, and derivative output
-  separation, leap-day fixed-denominator examples, business-day boundary semantics, calendar
-  coverage, U.S./Eurobond/ISDA month-end and February behavior, contractual-termination handling,
+  identity, backdated replay-date derivation, registry uniqueness, exact-version lookup, derivative
+  output separation, position source-revision lineage, missing consumed-evidence rejection,
+  fixed-precision position/FX conversion, leap-day fixed-denominator examples, business-day boundary
+  semantics, calendar coverage, U.S./Eurobond/ISDA month-end and February behavior,
+  contractual-termination handling,
   ISDA leap/non-leap year segmentation, ICMA regular/short/long reference-period cases, ICMA
   gap/overlap rejection, exact day-count convention/version lookup, fixed and supplied-floating
   segment accrual, principal/rate changes, sign handling, lineage/currency/continuity rejection,
@@ -113,9 +126,8 @@ deleted rather than retained as a fallback when valuation and reconciliation are
   equivalent-instant timezone normalization, calendar-content sensitivity, and rejection of
   ambiguous value types/metadata.
 - Scoped Ruff lint and formatting passed.
-- Strict MyPy passed for all seven valuation-domain source modules.
-- The calculation-kernel commit `608751249` is signed; assignment commit evidence will be recorded
-  on GitHub issue #788 after commit.
+- Strict MyPy passed for all seven valuation-domain source modules and the focused position test.
+- Signed slice commits and validation evidence are recorded on GitHub issue #788.
 
 Primary methodology references for the day-count slice are the
 [FpML day-count scheme publication](https://www.fpml.org/specs_news/publication-of-fpml-set-of-coding-schemes-catalog-version-1-121/),

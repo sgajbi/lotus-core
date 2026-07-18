@@ -7,12 +7,23 @@ not price securities, infer quote conventions, forecast rates, or derive derivat
 from __future__ import annotations
 
 from dataclasses import dataclass
-from decimal import Decimal
+from decimal import Decimal, localcontext
 from enum import StrEnum
+
+from .calculation_lineage import (
+    CalculationLineage,
+    FinancialSourceReference,
+    build_calculation_lineage,
+)
 
 
 class UnsupportedValuationError(ValueError):
     """Raised when supplied facts cannot support the declared valuation policy."""
+
+
+POSITION_VALUATION_ALGORITHM_ID = "POSITION_VALUATION_SCALING"
+POSITION_VALUATION_ALGORITHM_VERSION = 1
+POSITION_VALUATION_INTERMEDIATE_PRECISION = 50
 
 
 class ValuationInputBasis(StrEnum):
@@ -155,13 +166,32 @@ class PositionValuationPolicy:
 
 
 @dataclass(frozen=True, slots=True)
+class PositionValuationEvidence:
+    """Source and derived-calculation evidence for position-valuation inputs."""
+
+    policy_assignment: FinancialSourceReference
+    source_value: FinancialSourceReference
+    source_currency: FinancialSourceReference
+    reporting_currency: FinancialSourceReference
+    signed_quantity: FinancialSourceReference | None = None
+    signed_face_amount: FinancialSourceReference | None = None
+    principal_factor: FinancialSourceReference | None = None
+    signed_current_principal: FinancialSourceReference | None = None
+    contract_multiplier: FinancialSourceReference | None = None
+    calculated_accrued_income: CalculationLineage | None = None
+    supplied_accrued_income: FinancialSourceReference | None = None
+    direct_source_to_reporting_fx_rate: FinancialSourceReference | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class PositionValuationInputs:
-    """Authoritative facts required by a position valuation policy."""
+    """Authoritative facts and evidence required by a position valuation policy."""
 
     source_value: Decimal
     signed_quantity: Decimal
     source_currency: str
     reporting_currency: str
+    evidence: PositionValuationEvidence
     signed_face_amount: Decimal | None = None
     principal_factor: Decimal | None = None
     signed_current_principal: Decimal | None = None
@@ -195,6 +225,7 @@ class PositionValuationResult:
     notional_exposure_reporting: Decimal | None
     settlement_variation_local: Decimal | None
     settlement_variation_reporting: Decimal | None
+    lineage: CalculationLineage
 
 
 def calculate_position_valuation(
@@ -204,46 +235,198 @@ def calculate_position_valuation(
 ) -> PositionValuationResult:
     """Apply one declared policy without quote, product, or pricing inference."""
 
+    evidence = inputs.evidence
     _validate_source_value(policy, inputs.source_value)
-    current_principal = _resolve_current_principal(policy, inputs)
-    scaled_value = _scale_source_value(policy, inputs, current_principal)
-    accrued_income = _resolve_accrued_income(policy, inputs)
-    fx_rate = _resolve_fx_rate(policy, inputs)
+    with localcontext() as context:
+        context.prec = POSITION_VALUATION_INTERMEDIATE_PRECISION
+        current_principal = _resolve_current_principal(policy, inputs)
+        scaled_value = _scale_source_value(policy, inputs, current_principal)
+        accrued_income = _resolve_accrued_income(policy, inputs)
+        fx_rate = _resolve_fx_rate(policy, inputs)
 
-    clean_value: Decimal | None = None
-    total_market_value: Decimal | None = None
-    notional_exposure: Decimal | None = None
-    settlement_variation: Decimal | None = None
+        clean_value: Decimal | None = None
+        total_market_value: Decimal | None = None
+        notional_exposure: Decimal | None = None
+        settlement_variation: Decimal | None = None
 
-    if policy.output_measure is ValuationOutputMeasure.MARKET_VALUE:
-        if policy.input_basis is ValuationInputBasis.PERCENT_OF_PRINCIPAL_DIRTY:
-            total_market_value = scaled_value
-        elif policy.input_basis is ValuationInputBasis.PERCENT_OF_PRINCIPAL_CLEAN:
-            clean_value = scaled_value
-            total_market_value = scaled_value + (accrued_income or Decimal(0))
+        if policy.output_measure is ValuationOutputMeasure.MARKET_VALUE:
+            if policy.input_basis is ValuationInputBasis.PERCENT_OF_PRINCIPAL_DIRTY:
+                total_market_value = scaled_value
+            elif policy.input_basis is ValuationInputBasis.PERCENT_OF_PRINCIPAL_CLEAN:
+                clean_value = scaled_value
+                total_market_value = scaled_value + (accrued_income or Decimal(0))
+            else:
+                total_market_value = scaled_value + (accrued_income or Decimal(0))
+        elif policy.output_measure is ValuationOutputMeasure.NOTIONAL_EXPOSURE:
+            notional_exposure = scaled_value
         else:
-            total_market_value = scaled_value + (accrued_income or Decimal(0))
-    elif policy.output_measure is ValuationOutputMeasure.NOTIONAL_EXPOSURE:
-        notional_exposure = scaled_value
-    else:
-        settlement_variation = scaled_value
+            settlement_variation = scaled_value
 
+        source_currency = _normalize_currency(inputs.source_currency)
+        reporting_currency = _normalize_currency(inputs.reporting_currency)
+        accrued_income_reporting = _convert(accrued_income, fx_rate)
+        clean_value_reporting = _convert(clean_value, fx_rate)
+        notional_exposure_reporting = _convert(notional_exposure, fx_rate)
+        settlement_variation_reporting = _convert(settlement_variation, fx_rate)
+        total_market_value_reporting = _convert(total_market_value, fx_rate)
+        output_payload = {
+            "accrued_income_local": accrued_income,
+            "accrued_income_reporting": accrued_income_reporting,
+            "clean_value_local": clean_value,
+            "clean_value_reporting": clean_value_reporting,
+            "current_principal": current_principal,
+            "notional_exposure_local": notional_exposure,
+            "notional_exposure_reporting": notional_exposure_reporting,
+            "reporting_currency": reporting_currency,
+            "settlement_variation_local": settlement_variation,
+            "settlement_variation_reporting": settlement_variation_reporting,
+            "source_currency": source_currency,
+            "source_to_reporting_fx_rate": fx_rate,
+            "total_market_value_local": total_market_value,
+            "total_market_value_reporting": total_market_value_reporting,
+        }
+    lineage = build_calculation_lineage(
+        algorithm_id=POSITION_VALUATION_ALGORITHM_ID,
+        algorithm_version=POSITION_VALUATION_ALGORITHM_VERSION,
+        intermediate_precision=POSITION_VALUATION_INTERMEDIATE_PRECISION,
+        input_payload=_position_input_payload(policy=policy, inputs=inputs, evidence=evidence),
+        output_payload=output_payload,
+    )
     return PositionValuationResult(
-        source_currency=_normalize_currency(inputs.source_currency),
-        reporting_currency=_normalize_currency(inputs.reporting_currency),
+        source_currency=source_currency,
+        reporting_currency=reporting_currency,
         source_to_reporting_fx_rate=fx_rate,
         current_principal=current_principal,
         clean_value_local=clean_value,
-        clean_value_reporting=_convert(clean_value, fx_rate),
+        clean_value_reporting=clean_value_reporting,
         accrued_income_local=accrued_income,
-        accrued_income_reporting=_convert(accrued_income, fx_rate),
+        accrued_income_reporting=accrued_income_reporting,
         total_market_value_local=total_market_value,
-        total_market_value_reporting=_convert(total_market_value, fx_rate),
+        total_market_value_reporting=total_market_value_reporting,
         notional_exposure_local=notional_exposure,
-        notional_exposure_reporting=_convert(notional_exposure, fx_rate),
+        notional_exposure_reporting=notional_exposure_reporting,
         settlement_variation_local=settlement_variation,
-        settlement_variation_reporting=_convert(settlement_variation, fx_rate),
+        settlement_variation_reporting=settlement_variation_reporting,
+        lineage=lineage,
     )
+
+
+def _position_input_payload(
+    *,
+    policy: PositionValuationPolicy,
+    inputs: PositionValuationInputs,
+    evidence: PositionValuationEvidence,
+) -> dict[str, object]:
+    consumed_inputs: dict[str, object] = {
+        "reporting_currency": _sourced_fact_payload(
+            _normalize_currency(inputs.reporting_currency),
+            evidence.reporting_currency,
+            "reporting_currency evidence",
+        ),
+        "source_currency": _sourced_fact_payload(
+            _normalize_currency(inputs.source_currency),
+            evidence.source_currency,
+            "source_currency evidence",
+        ),
+        "source_value": _sourced_fact_payload(
+            inputs.source_value,
+            evidence.source_value,
+            "source_value evidence",
+        ),
+    }
+    if policy.position_scaling in {
+        PositionScaling.QUANTITY,
+        PositionScaling.CONTRACT_COUNT_AND_MULTIPLIER,
+    }:
+        consumed_inputs["signed_quantity"] = _sourced_fact_payload(
+            inputs.signed_quantity,
+            evidence.signed_quantity,
+            "signed_quantity evidence",
+        )
+    if policy.principal_basis is PrincipalBasis.FACE_AMOUNT:
+        consumed_inputs["signed_face_amount"] = _sourced_fact_payload(
+            _required(inputs.signed_face_amount, "signed_face_amount"),
+            evidence.signed_face_amount,
+            "signed_face_amount evidence",
+        )
+    elif policy.principal_basis is PrincipalBasis.FACTOR_ADJUSTED_CURRENT_PRINCIPAL:
+        consumed_inputs["signed_face_amount"] = _sourced_fact_payload(
+            _required(inputs.signed_face_amount, "signed_face_amount"),
+            evidence.signed_face_amount,
+            "signed_face_amount evidence",
+        )
+        consumed_inputs["principal_factor"] = _sourced_fact_payload(
+            _required(inputs.principal_factor, "principal_factor"),
+            evidence.principal_factor,
+            "principal_factor evidence",
+        )
+    elif policy.principal_basis is PrincipalBasis.SUPPLIED_CURRENT_PRINCIPAL:
+        consumed_inputs["signed_current_principal"] = _sourced_fact_payload(
+            _required(inputs.signed_current_principal, "signed_current_principal"),
+            evidence.signed_current_principal,
+            "signed_current_principal evidence",
+        )
+    if policy.position_scaling is PositionScaling.CONTRACT_COUNT_AND_MULTIPLIER:
+        consumed_inputs["contract_multiplier"] = _sourced_fact_payload(
+            _required(inputs.contract_multiplier, "contract_multiplier"),
+            evidence.contract_multiplier,
+            "contract_multiplier evidence",
+        )
+    if policy.accrued_income_treatment is AccruedIncomeTreatment.CALCULATED_SEPARATELY:
+        accrued_lineage = evidence.calculated_accrued_income
+        if accrued_lineage is None:
+            raise UnsupportedValuationError("calculated_accrued_income lineage is required")
+        consumed_inputs["calculated_accrued_income"] = {
+            "calculation_lineage": accrued_lineage.lineage_payload(),
+            "value": _required(
+                inputs.calculated_accrued_income,
+                "calculated_accrued_income",
+            ),
+        }
+    elif policy.accrued_income_treatment is AccruedIncomeTreatment.SUPPLIED_SEPARATELY:
+        consumed_inputs["supplied_accrued_income"] = _sourced_fact_payload(
+            _required(inputs.supplied_accrued_income, "supplied_accrued_income"),
+            evidence.supplied_accrued_income,
+            "supplied_accrued_income evidence",
+        )
+    if (
+        policy.fx_conversion is FxConversionPolicy.DIRECT_SOURCE_TO_REPORTING
+        and _normalize_currency(inputs.source_currency)
+        != _normalize_currency(inputs.reporting_currency)
+    ):
+        consumed_inputs["direct_source_to_reporting_fx_rate"] = _sourced_fact_payload(
+            _required(
+                inputs.direct_source_to_reporting_fx_rate,
+                "direct_source_to_reporting_fx_rate",
+            ),
+            evidence.direct_source_to_reporting_fx_rate,
+            "direct_source_to_reporting_fx_rate evidence",
+        )
+    return {
+        "inputs": consumed_inputs,
+        "policy": {
+            "accrued_income_treatment": policy.accrued_income_treatment,
+            "fx_conversion": policy.fx_conversion,
+            "input_basis": policy.input_basis,
+            "output_measure": policy.output_measure,
+            "policy_id": policy.policy_id.strip(),
+            "policy_version": policy.policy_version,
+            "position_scaling": policy.position_scaling,
+            "principal_basis": policy.principal_basis,
+            "quote_denominator": policy.quote_denominator,
+        },
+        "policy_assignment": evidence.policy_assignment.lineage_payload(),
+    }
+
+
+def _sourced_fact_payload(
+    value: object,
+    source: FinancialSourceReference | None,
+    field_name: str,
+) -> dict[str, object]:
+    if source is None:
+        raise UnsupportedValuationError(f"{field_name} is required")
+    return {"source": source.lineage_payload(), "value": value}
 
 
 def _validate_source_value(policy: PositionValuationPolicy, source_value: Decimal) -> None:
