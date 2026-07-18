@@ -14,6 +14,7 @@ from scripts.validation.docker_endpoint_smoke import (
     SMOKE_TRANSACTION_ID,
     SMOKE_TRANSACTION_ID_2,
     _bounded_smoke_window_query,
+    _cleanup_existing_smoke_state,
     _resolve_postgres_container,
     _wait_expected_status,
     _wait_transaction_visible,
@@ -34,10 +35,51 @@ def test_docker_endpoint_smoke_uses_deterministic_identifiers():
 def test_docker_endpoint_smoke_cleanup_sql_purges_legacy_smoke_rows():
     sql = build_smoke_cleanup_sql()
 
+    assert sql.startswith("begin;\n")
+    assert sql.endswith("\ncommit;")
     assert "delete from transactions where portfolio_id like 'PORT_SMOKE_%';" in sql
     assert "delete from portfolios where portfolio_id like 'PORT_SMOKE_%';" in sql
     assert "delete from market_prices where security_id like 'SEC_SMOKE_%';" in sql
     assert "delete from transaction_costs where transaction_id like 'TX%_SMOKE_%';" in sql
+    for child_table in (
+        "average_cost_pool_state",
+        "cost_basis_processing_state",
+        "client_income_needs_schedules",
+        "client_tax_profiles",
+        "client_tax_rule_sets",
+        "liquidity_reserve_requirements",
+        "planned_withdrawal_schedules",
+    ):
+        assert f"delete from {child_table} where portfolio_id like 'PORT_SMOKE_%';" in sql
+
+
+def test_docker_endpoint_smoke_cleanup_fails_closed_on_sql_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run_mock = Mock()
+    monkeypatch.setattr(
+        docker_endpoint_smoke,
+        "_resolve_postgres_container",
+        Mock(return_value="postgres-container"),
+    )
+    monkeypatch.setattr(docker_endpoint_smoke, "_run", run_mock)
+
+    _cleanup_existing_smoke_state(
+        repo_root=Path("/repo"),
+        compose_file="/repo/docker-compose.yml",
+        postgres_service="postgres",
+    )
+
+    command = run_mock.call_args.args[0]
+    assert command[:6] == [
+        "docker",
+        "exec",
+        "postgres-container",
+        "psql",
+        "-v",
+        "ON_ERROR_STOP=1",
+    ]
+    assert command[-2:] == ["-c", build_smoke_cleanup_sql()]
 
 
 def test_docker_endpoint_smoke_uses_bounded_raw_series_window():

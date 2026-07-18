@@ -101,6 +101,7 @@ def _run_capture(
 def build_smoke_cleanup_sql() -> str:
     return "\n".join(
         [
+            "begin;",
             "delete from financial_reconciliation_findings where portfolio_id like 'PORT_SMOKE_%';",
             "delete from financial_reconciliation_runs where portfolio_id like 'PORT_SMOKE_%';",
             "delete from simulation_changes where portfolio_id like 'PORT_SMOKE_%';",
@@ -114,6 +115,8 @@ def build_smoke_cleanup_sql() -> str:
             "delete from position_history where portfolio_id like 'PORT_SMOKE_%';",
             "delete from position_state where portfolio_id like 'PORT_SMOKE_%';",
             "delete from position_lot_state where portfolio_id like 'PORT_SMOKE_%';",
+            "delete from average_cost_pool_state where portfolio_id like 'PORT_SMOKE_%';",
+            "delete from cost_basis_processing_state where portfolio_id like 'PORT_SMOKE_%';",
             "delete from accrued_income_offset_state where portfolio_id like 'PORT_SMOKE_%';",
             "delete from cashflows where portfolio_id like 'PORT_SMOKE_%';",
             "delete from transaction_costs where transaction_id like 'TX%_SMOKE_%';",
@@ -124,12 +127,18 @@ def build_smoke_cleanup_sql() -> str:
             "delete from processed_events where portfolio_id like 'PORT_SMOKE_%';",
             "delete from cash_account_masters where portfolio_id like 'PORT_SMOKE_%';",
             "delete from portfolio_benchmark_assignments where portfolio_id like 'PORT_SMOKE_%';",
+            "delete from client_income_needs_schedules where portfolio_id like 'PORT_SMOKE_%';",
+            "delete from client_tax_profiles where portfolio_id like 'PORT_SMOKE_%';",
+            "delete from client_tax_rule_sets where portfolio_id like 'PORT_SMOKE_%';",
+            "delete from liquidity_reserve_requirements where portfolio_id like 'PORT_SMOKE_%';",
+            "delete from planned_withdrawal_schedules where portfolio_id like 'PORT_SMOKE_%';",
             "delete from transactions where portfolio_id like 'PORT_SMOKE_%';",
             "delete from market_prices where security_id like 'SEC_SMOKE_%';",
             "delete from instruments "
             "where portfolio_id like 'PORT_SMOKE_%' "
             "or security_id like 'SEC_SMOKE_%';",
             "delete from portfolios where portfolio_id like 'PORT_SMOKE_%';",
+            "commit;",
         ]
     )
 
@@ -177,6 +186,8 @@ def _cleanup_existing_smoke_state(
             "exec",
             postgres_container,
             "psql",
+            "-v",
+            "ON_ERROR_STOP=1",
             "-U",
             "user",
             "-d",
