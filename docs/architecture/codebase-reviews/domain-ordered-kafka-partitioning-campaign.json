@@ -48,11 +48,11 @@
       "tranche_id": "tranche-2-throughput-and-certification",
       "branch": "feat/domain-ordered-kafka-partitioning",
       "base_sha": "b9c55792361557bda56ba498492e962225557dd4",
-      "head_sha": "e794968221a6a6ad5489388488883efc5eb067b5",
+      "head_sha": "45fe19d1e3eecdd72c6c1d7dd2cd60c1824301ab",
       "post_merge_main_sha": "pending",
       "required_predecessor_main_sha": "b9c55792361557bda56ba498492e962225557dd4",
       "capability_boundary": "Transactional hot-path throughput, twelve-way capacity, valuation-job lock ordering, and exact workload certification",
-      "commit_count": 50,
+      "commit_count": 51,
       "issue_closure_decision": "close_after_final_validated_main",
       "local_evidence": [
         "Focused #799 unit, domain, lint, format, and type checks pass at signed campaign commits through 349ee126c66415c9bf683baa43b51656e6c8905d",
@@ -81,6 +81,10 @@
         "The bounded synchronous Kafka commit executor-offload experiment at signed 704358fe09996e44bdede33b6c46d051e7b4ac67 passed 4886 full-lane unit tests, 68 focused Kafka-consumer tests, full MyPy, the duplicate-delivery concurrency guard, architecture, Ruff, and documentation gates while preserving synchronous post-processing commit and same-partition ordering semantics",
         "Exact clean fan-in 20260717T234511Z at 704358fe09996e44bdede33b6c46d051e7b4ac67 reconciled exactly with 100.783-second drain, attempts 2/2, zero repeats, errors, DLQ, or outbox residue, and one aggregation completion; this was a 0.17 percent regression versus its 100.608-second parent and did not justify added executor complexity",
         "Signed e794968221a6a6ad5489388488883efc5eb067b5 reverted synchronous Kafka commit executor offload forward; do not repeat it without a workload that directly proves commit latency is the limiting factor",
+        "Cleanup-fenced exact daily 20260718T002619Z at clean signed head 45fe19d1e3eecdd72c6c1d7dd2cd60c1824301ab made all 100000 source transactions durable but reached only 89163 completed transaction operations and 89012 snapshots before the fixed deadline; this is a valid certifying capacity failure, not an external-kill diagnostic",
+        "Daily 20260718T002619Z improved snapshots by 1462 (1.67 percent) over valid daily 20260717T201508Z while attempts remained 2/2, repeats and governed errors remained zero, failed outbox remained zero, and scoped teardown removed every run-owned container, network, and volume without touching the separately owned canonical UI project",
+        "The exact daily recorded 57 peak database connections, 21 active, 28 idle in transaction, 7 lock waiters and blocked sessions, and 89138 cashflow rule-set version queries versus only 25 full rule-snapshot loads; any fix must retain bounded source freshness, explicit invalidation, missing-rule refresh, and concurrency safety and must pass exact fan-in before another daily run",
+        "Governed task eng-task-20260718-082223-lotus-core-derived-state-daily reconciled to FAILED with exit code 2; JSON SHA-256 CD19ACE2555FC85385697E1D2A574D75A7367E99CDEE6473F089D52CEF523DB6 and Markdown SHA-256 8A6FF684110135E34189C7FE24A963DCEA7DB626490E627556607CF2F2914DEB",
         "The bounded ownership-observability investigation is complete; exact daily, recovery, poison, duplicate, price-restatement, and FX-restatement evidence remains required before PR readiness, and ordered append, full rebuild, method-specific lot state, backdated and correction semantics, and single-writer coordination remain mandatory"
       ],
       "remote_evidence": [
