@@ -6,6 +6,7 @@ from . import reference_data_client_preference_dto as _client_preference_dto
 from . import reference_data_instrument_eligibility_dto as _instrument_eligibility_dto
 from . import reference_data_mandate_dto as _mandate_dto
 from . import reference_data_model_portfolio_dto as _model_portfolio_dto
+from . import reference_data_portfolio_party_role_dto as _portfolio_party_role_dto
 from . import reference_data_support_dto as _support_dto
 from . import reference_data_tax_dto as _tax_dto
 
@@ -71,5 +72,11 @@ PortfolioBenchmarkAssignmentIngestionRequest = (
     _mandate_dto.PortfolioBenchmarkAssignmentIngestionRequest
 )
 PortfolioBenchmarkAssignmentRecord = _mandate_dto.PortfolioBenchmarkAssignmentRecord
+PortfolioPartyRoleAssignmentIngestionRequest = (
+    _portfolio_party_role_dto.PortfolioPartyRoleAssignmentIngestionRequest
+)
+PortfolioPartyRoleAssignmentRecord = (
+    _portfolio_party_role_dto.PortfolioPartyRoleAssignmentRecord
+)
 RiskFreeSeriesIngestionRequest = _benchmark_dto.RiskFreeSeriesIngestionRequest
 RiskFreeSeriesRecord = _benchmark_dto.RiskFreeSeriesRecord

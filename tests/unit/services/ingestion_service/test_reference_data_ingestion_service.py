@@ -104,6 +104,27 @@ from src.services.ingestion_service.app.services.reference_data_ingestion_servic
             ],
         ),
         (
+            "upsert_portfolio_party_role_assignments",
+            [
+                {
+                    "source_system": "relationship_master",
+                    "source_record_id": "coverage-PB_SG_GLOBAL_BAL_001-PM-001",
+                    "assignment_version": "1",
+                }
+            ],
+            ["source_system", "source_record_id", "assignment_version"],
+            [
+                "portfolio_id",
+                "party_id",
+                "role_type",
+                "role_scope",
+                "effective_from",
+                "effective_to",
+                "observed_at",
+                "quality_status",
+            ],
+        ),
+        (
             "upsert_instrument_eligibility_profiles",
             [
                 {

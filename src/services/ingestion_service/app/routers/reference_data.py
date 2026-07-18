@@ -35,6 +35,7 @@ from ..DTOs.reference_data_dto import (
     ModelPortfolioTargetIngestionRequest,
     PlannedWithdrawalScheduleIngestionRequest,
     PortfolioBenchmarkAssignmentIngestionRequest,
+    PortfolioPartyRoleAssignmentIngestionRequest,
     RiskFreeSeriesIngestionRequest,
     SustainabilityPreferenceProfileIngestionRequest,
 )
@@ -280,6 +281,38 @@ async def ingest_mandate_bindings(
     return await _handle_reference_ingestion(
         http_request=http_request,
         command=REFERENCE_DATA_INGESTION_REGISTRY.require("mandate_binding"),
+        request=request,
+        command_handler=command_handler,
+    )
+
+
+@router.post(
+    "/ingest/portfolio-party-role-assignments",
+    status_code=status.HTTP_202_ACCEPTED,
+    response_model=BatchIngestionAcceptedResponse,
+    responses=REFERENCE_INGESTION_RESPONSES,
+    tags=["Reference Data"],
+    summary="Ingest portfolio party-role assignments",
+    description=(
+        "What: Accept source-owned, effective-dated private-banking role assignments for a "
+        "portfolio.\n"
+        "How: Validate governed role, responsibility scope, effective interval, source identity, "
+        "observation time, and quality disposition before idempotent persistence.\n"
+        "When: Use when relationship coverage, investment advisory, portfolio-management, or "
+        "client-service responsibilities change. This endpoint does not infer roles from the "
+        "legacy portfolio advisor identifier."
+    ),
+)
+async def ingest_portfolio_party_role_assignments(
+    request: PortfolioPartyRoleAssignmentIngestionRequest,
+    http_request: Request,
+    command_handler: ReferenceDataIngestionCommandHandler = Depends(
+        get_reference_data_ingestion_command_handler
+    ),
+) -> BatchIngestionAcceptedResponse:
+    return await _handle_reference_ingestion(
+        http_request=http_request,
+        command=REFERENCE_DATA_INGESTION_REGISTRY.require("portfolio_party_role_assignment"),
         request=request,
         command_handler=command_handler,
     )
