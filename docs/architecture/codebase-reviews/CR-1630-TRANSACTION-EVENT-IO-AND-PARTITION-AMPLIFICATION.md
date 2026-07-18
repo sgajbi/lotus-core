@@ -294,6 +294,27 @@ That `0.17%` regression is effectively neutral and does not justify the executor
 without a workload that directly proves commit latency is the limiting factor. JSON SHA-256 is
 `D73EADB166CCC9591E8AA1E15CB1B20E75E43AEF794604EFF3E24AAF76673B34`.
 
+Cleanup-fenced exact daily `20260718T002619Z` at clean signed head `45fe19d1e` is a valid
+certifying capacity failure, not an external-kill diagnostic. All `100,000` source transactions
+became durable in `126.893s`, but the fixed deadline ended after `7,564.478s` with `89,163`
+completed transaction operations, `89,012` valuation snapshots, `87,878` position time-series
+rows, and `957` portfolio time-series rows. This improves completed snapshots by `1,462` (`1.67%`)
+over valid daily `20260717T201508Z`, confirming the retained lock-scoped epoch reuse helped without
+closing the remaining capacity gap. Valuation attempts remained exactly `2/2`, repeated processing
+and governed error lines remained zero, failed outbox remained zero, and all run-owned containers,
+networks, and volumes were removed while the separate canonical UI project remained untouched.
+
+The report recorded `57` peak database connections, `21` active connections, `28`
+idle-in-transaction connections, and `7/7` lock waiters/blocked sessions. It also exposes one
+bounded same-pattern amplification: the runtime loaded the effective cashflow-rule snapshot only
+`25` times but executed `89,138` `get_rule_set_version` queries, totalling `1,730.304179s` across
+concurrent observations at a `0.019411521s` mean. These cumulative durations are attribution, not
+wall-clock savings. Any retained fix must preserve governed rule-update visibility through a
+bounded freshness contract, explicit invalidation, missing-rule refresh, and concurrency proof;
+it must pass exact fan-in before another daily certification run. JSON and Markdown SHA-256 values
+are respectively `CD19ACE2555FC85385697E1D2A574D75A7367E99CDEE6473F089D52CEF523DB6` and
+`8A6FF684110135E34189C7FE24A963DCEA7DB626490E627556607CF2F2914DEB`.
+
 ## Compatibility
 
 HTTP APIs, OpenAPI schemas, Kafka topics, event payload schemas, transaction calculations,
@@ -406,6 +427,12 @@ because historical and new keys can map to different partitions after producer r
 - Exact clean fan-in `20260717T234511Z` passed at `704358fe0` but was neutral at `100.783s` drain
   versus `100.608s` at its parent. Signed `e79496822` reverted the unproven executor complexity
   forward; scoped teardown preserved the cleanup fence and all 15 canonical UI containers.
+- Cleanup-fenced exact daily `20260718T002619Z` failed validly at clean signed head `45fe19d1e`
+  after making all `100,000` source transactions durable and reaching `89,012` snapshots before
+  the fixed deadline. Attempts stayed `2/2`, repeats/errors/failed outbox stayed zero, and scoped
+  teardown removed all run-owned resources. The governed background task
+  `eng-task-20260718-082223-lotus-core-derived-state-daily` reconciled to `FAILED` with exit code
+  `2`; dependent recovery, poison, duplicate, and restatement gates remain withheld.
 
 Implementation commits include `23fc6faf3`, `d51adb739`, `ad1ad179d`, `57f8c60e2`,
 `4f05be9a5`, `c230d660a`, `f42f6eaa3`, `d56e14dbf`, `2d49fc8f1`, `70ae16f0f`,
@@ -439,3 +466,5 @@ wiki-source change.
 The rejected synchronous-commit executor experiment changed no durable contract and was reverted
 forward. Recording its no-repeat evidence requires no OpenAPI, migration, event-contract,
 calculation-methodology, operator-runbook, or wiki-source change.
+The exact daily failure adds evidence only. It requires no OpenAPI, migration, event-contract,
+calculation-methodology, operator-runbook, or additional wiki-source change.
