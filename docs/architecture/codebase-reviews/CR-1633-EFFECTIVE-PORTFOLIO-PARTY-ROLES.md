@@ -66,8 +66,17 @@ remains #521.
   version upsert;
 - migration reversibility was proved by downgrading `c115b2c3d4f4 -> c114b2c3d4f3`, confirming the
   assignment table was absent, upgrading back to the single head, and confirming it was present.
+- the complete non-database #513 regression cohort passed with 206 tests after final formatting and
+  gateway-policy reconciliation;
+- full repository Ruff lint/format and MyPy across 235 source files passed;
+- architecture, application-layer/port/dependency-inversion, ingestion-framework,
+  infrastructure-adapter, source/domain-product, route-family, OpenAPI, API-vocabulary,
+  documentation, and wiki-source gates passed;
+- the same-pattern endpoint scan in the lint lane found the new write route absent from the
+  gateway-owned global ingestion rate-limit contract; the policy was corrected and its four guard
+  tests passed.
 
-Broad repository-native gates, PR CI, merge, exact-main validation, wiki publication, and verified
+Local acceptance is complete. PR CI, merge, exact-main validation, wiki publication, and verified
 issue closure remain required before #513 is done.
 
 ## Documentation Decision
