@@ -1,5 +1,17 @@
 """Framework-independent position valuation policies and calculations."""
 
+from .assignments import (
+    InstrumentValuationPolicyAssignment,
+    MissingValuationPolicyAssignmentError,
+    OverlappingValuationPolicyAssignmentError,
+    ResolvedValuationPolicyAssignment,
+    ValuationPolicyAssignmentCacheKey,
+    ValuationPolicyAssignmentError,
+    ValuationPolicyAssignmentStatus,
+    resolve_valuation_policy_assignment,
+    revaluation_start_for_assignment_correction,
+    validate_no_overlapping_active_assignments,
+)
 from .position_valuation import (
     AccruedIncomeTreatment,
     FxConversionPolicy,
@@ -17,13 +29,23 @@ from .position_valuation import (
 __all__ = [
     "AccruedIncomeTreatment",
     "FxConversionPolicy",
+    "InstrumentValuationPolicyAssignment",
+    "MissingValuationPolicyAssignmentError",
+    "OverlappingValuationPolicyAssignmentError",
     "PositionScaling",
     "PositionValuationInputs",
     "PositionValuationPolicy",
     "PositionValuationResult",
     "PrincipalBasis",
+    "ResolvedValuationPolicyAssignment",
     "UnsupportedValuationError",
     "ValuationInputBasis",
     "ValuationOutputMeasure",
+    "ValuationPolicyAssignmentCacheKey",
+    "ValuationPolicyAssignmentError",
+    "ValuationPolicyAssignmentStatus",
     "calculate_position_valuation",
+    "resolve_valuation_policy_assignment",
+    "revaluation_start_for_assignment_correction",
+    "validate_no_overlapping_active_assignments",
 ]
