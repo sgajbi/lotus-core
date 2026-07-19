@@ -56,3 +56,8 @@ class PortfolioAggregationCompletion:
     portfolio_id: str
     aggregation_date: date
     epoch: int
+    aggregation_revision: int
+
+    def __post_init__(self) -> None:
+        if self.aggregation_revision < 1:
+            raise ValueError("Portfolio aggregation completion revision must be positive.")

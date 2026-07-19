@@ -343,6 +343,7 @@ def _claimed_aggregation_job(row: PortfolioAggregationJob) -> ClaimedAggregation
         id=int(row.id),
         portfolio_id=str(row.portfolio_id),
         aggregation_date=cast(date, row.aggregation_date),
+        aggregation_revision=int(row.attempt_count),
         correlation_id=str(row.correlation_id) if row.correlation_id is not None else None,
         lease=AggregationJobLease(
             owner=str(row.lease_owner),

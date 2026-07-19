@@ -572,6 +572,7 @@ class PortfolioAggregationDayCompletedEvent(CoreEventModel):
     portfolio_id: str
     aggregation_date: date
     epoch: int = 0
+    aggregation_revision: int = Field(default=0, ge=0)
     correlation_id: Optional[str] = None
 
 
@@ -584,6 +585,7 @@ class FinancialReconciliationRequestedEvent(CoreEventModel):
     portfolio_id: str
     business_date: date
     epoch: int = 0
+    aggregation_revision: int = Field(default=0, ge=0)
     reconciliation_types: list[str] = Field(
         default_factory=lambda: [
             "transaction_cashflow",

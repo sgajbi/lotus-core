@@ -35,6 +35,7 @@ class TransactionalAggregationCompletionEventStager:
             portfolio_id=completion.portfolio_id,
             aggregation_date=completion.aggregation_date,
             epoch=completion.epoch,
+            aggregation_revision=completion.aggregation_revision,
             correlation_id=correlation_id,
         )
         await self._outbox_repository.create_outbox_event(
@@ -53,6 +54,7 @@ class TransactionalAggregationCompletionEventStager:
             portfolio_id=completion.portfolio_id,
             business_date=completion.aggregation_date,
             epoch=completion.epoch,
+            aggregation_revision=completion.aggregation_revision,
             correlation_id=correlation_id,
         )
         await self._outbox_repository.create_outbox_event(

@@ -28,6 +28,7 @@ async def test_stager_preserves_existing_completion_and_reconciliation_contracts
             portfolio_id="PORT-1",
             aggregation_date=date(2026, 7, 15),
             epoch=4,
+            aggregation_revision=7,
         ),
         correlation_id="corr-1",
     )
@@ -45,6 +46,7 @@ async def test_stager_preserves_existing_completion_and_reconciliation_contracts
     }
     assert completion_call.kwargs["payload"]["portfolio_id"] == "PORT-1"
     assert completion_call.kwargs["payload"]["aggregation_date"] == "2026-07-15"
+    assert completion_call.kwargs["payload"]["aggregation_revision"] == 7
     assert reconciliation_call.kwargs == {
         "aggregate_type": "FinancialReconciliation",
         "aggregate_id": "PORT-1:2026-07-15:4",
@@ -57,4 +59,5 @@ async def test_stager_preserves_existing_completion_and_reconciliation_contracts
     assert reconciliation_call.kwargs["payload"]["portfolio_id"] == "PORT-1"
     assert reconciliation_call.kwargs["payload"]["business_date"] == "2026-07-15"
     assert reconciliation_call.kwargs["payload"]["epoch"] == 4
+    assert reconciliation_call.kwargs["payload"]["aggregation_revision"] == 7
     assert reconciliation_call.kwargs["payload"]["correlation_id"] == "corr-1"

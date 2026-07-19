@@ -67,6 +67,7 @@ class ProcessClaimedAggregationJobs:
                             lease_token=job.lease.token,
                             portfolio_id=job.portfolio_id,
                             aggregation_date=job.aggregation_date,
+                            aggregation_revision=job.aggregation_revision,
                             correlation_id=job.correlation_id,
                         )
                     )

@@ -96,6 +96,7 @@ async def test_stale_lease_cannot_persist_portfolio_output_or_completion_event(
                 lease_token="expired-lease-token",
                 portfolio_id=portfolio_id,
                 aggregation_date=aggregation_date,
+                aggregation_revision=1,
                 correlation_id="corr-agg-int-01",
             )
         )

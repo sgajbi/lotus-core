@@ -120,6 +120,7 @@ class MaterializePortfolioTimeseries:
                 portfolio_id=command.portfolio_id,
                 aggregation_date=command.aggregation_date,
                 epoch=target_epoch,
+                aggregation_revision=command.aggregation_revision,
             ),
             correlation_id=command.correlation_id,
         )
