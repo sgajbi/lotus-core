@@ -2985,6 +2985,17 @@ Most relevant current governance:
      evidence that the service's owned consumer is running; stack contract tests must bind the
      command, Kafka address, and dependency set so canonical holdings cannot remain silently
      `UNRECONCILED` after aggregation completes.
+214. Authoritative instrument valuation-policy history is resolved through the position-valuation
+     service's application port and SQLAlchemy adapter. Rank the latest correction for each exact
+     tenant/legal-book/instrument/source-system/source-record identity before filtering ACTIVE
+     lifecycle and inclusive effective dates; then use the framework-independent assignment domain
+     to reject gaps/overlaps and the exact-version policy registry to reject unsupported authority.
+     Do not move SQLAlchemy selection into `portfolio_common`, infer legal book from booking centre,
+     revive an older ACTIVE row after a later suspension/retirement, or fall back to product type.
+     The current single-scope resolver is a migration primitive, not approval for per-position N+1
+     reads: production cutover requires authoritative portfolio scope, complete valuation facts,
+     bulk/cache invalidation proof, both valuation/reconciliation consumers, heuristic deletion, and
+     exact-SHA mixed-book capacity evidence under #788.
 
 ## Context Maintenance Rule
 
