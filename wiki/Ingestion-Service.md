@@ -48,6 +48,7 @@ Current router coverage includes:
   - reference classification taxonomy
   - reference cash accounts
   - reference instrument lookthrough components
+  - effective-dated instrument valuation-policy assignments
 - controlled reprocessing initiation
   - reprocessing routes hosted in the ingestion service contract family
 
@@ -129,7 +130,15 @@ match for supported CSV/XLSX media types.
 ### Reference-data onboarding
 
 Reference-data routes are part of the ingestion surface because benchmark, index, risk-free,
-classification, and lookthrough inputs are upstream canonical data products for downstream analytics.
+classification, lookthrough, and valuation-policy inputs are upstream canonical data products for
+downstream processing and analytics.
+
+`POST /ingest/instrument-valuation-policy-assignments` accepts exact
+tenant/legal-book/instrument-scoped policy authority. It rejects unknown policy versions, duplicate
+source-version identities, invalid effective windows, and overlapping active sources. Exact-scope
+writes are transactionally serialized before the incoming batch is checked against durable
+history. The route does not infer legal book from booking centre or activate the new policy in the
+production valuation worker by itself.
 
 ## Operational notes
 

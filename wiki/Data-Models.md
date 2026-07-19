@@ -75,9 +75,12 @@ Primary position and valuation tables include:
 - `accrued_income_offset_states`
 - `daily_position_snapshots`
 - `position_states`
+- `instrument_valuation_policy_assignments`
 
 This layer carries the reconstruction and valuation state needed to explain holdings as of a given
-business date.
+business date. Valuation-policy assignment rows preserve exact tenant, legal-book, instrument,
+policy/version, effective-window, lifecycle, source revision, observation time, and rationale
+history; runtime valuation migration remains separately governed.
 
 ### Timeseries and analytics-input foundations
 

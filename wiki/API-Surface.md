@@ -174,6 +174,7 @@ Write ingress:
 ```text
 POST /ingest/transactions
 POST /ingest/portfolio-bundle
+POST /ingest/instrument-valuation-policy-assignments
 POST /ingest/uploads/preview
 POST /ingest/uploads/commit
 ```
