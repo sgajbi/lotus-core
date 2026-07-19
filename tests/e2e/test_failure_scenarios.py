@@ -135,7 +135,10 @@ def test_db_outage_recovery(
     dlq_consumer = Consumer(dlq_consumer_conf)
     dlq_consumer.subscribe([KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC])
 
-    # 3. ARRANGE: Ingest prerequisite portfolio data
+    # 3. ARRANGE: Ingest and settle the reference data this database-recovery
+    # scenario is not intended to exercise. Leaving the instrument unresolved
+    # creates a permanent downstream dependency failure that contaminates later
+    # E2E modules and obscures the PostgreSQL recovery contract under test.
     portfolio_payload = {
         "portfolios": [
             {
@@ -152,6 +155,28 @@ def test_db_outage_recovery(
         ]
     }
     e2e_api_client.ingest("/ingest/portfolios", portfolio_payload)
+    e2e_api_client.ingest(
+        "/ingest/instruments",
+        {
+            "instruments": [
+                {
+                    "security_id": security_id,
+                    "name": "Database Recovery Test Instrument",
+                    "isin": f"FAIL_ISIN_{suffix}",
+                    "currency": "USD",
+                    "product_type": "Equity",
+                }
+            ]
+        },
+    )
+    e2e_api_client.poll_for_data(
+        f"/portfolios?portfolio_id={portfolio_id}",
+        lambda data: data.get("portfolios") and len(data["portfolios"]) == 1,
+    )
+    e2e_api_client.poll_for_data(
+        f"/instruments?security_id={security_id}",
+        lambda data: data.get("instruments") and len(data["instruments"]) == 1,
+    )
 
     # 4. ARRANGE: Persist one transaction before outage.
     transaction_payload_before = {
