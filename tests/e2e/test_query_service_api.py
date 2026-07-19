@@ -41,6 +41,33 @@ def setup_e2e_data(clean_db_module, e2e_api_client: E2EApiClient):
         },
     )
 
+    # Settle reference data before the transaction batch. These tests exercise
+    # query semantics, so an unresolved instrument would be unrelated poison for
+    # the downstream ordered transaction consumer.
+    e2e_api_client.ingest(
+        "/ingest/instruments",
+        {
+            "instruments": [
+                {
+                    "security_id": security_id,
+                    "name": f"Query Test Instrument {security_id}",
+                    "isin": f"QUERY_ISIN_{index}_{suffix}",
+                    "currency": "USD",
+                    "product_type": "Equity",
+                }
+                for index, security_id in enumerate(
+                    (security_1, security_2, security_3),
+                    start=1,
+                )
+            ]
+        },
+    )
+    for security_id in (security_1, security_2, security_3):
+        e2e_api_client.poll_for_data(
+            f"/instruments?security_id={security_id}",
+            lambda data: data.get("instruments") and len(data["instruments"]) == 1,
+        )
+
     # Ingest a diverse set of transactions for filtering and sorting
     transactions = [
         {

@@ -101,13 +101,14 @@ def test_transaction_persists_after_portfolio_arrives(e2e_api_client: E2EApiClie
     # ARRANGE
     portfolio_id = f"E2E_RETRY_PORT_{uuid.uuid4()}"
     transaction_id = f"TXN_RETRY_{uuid.uuid4()}"
+    security_id = f"SEC_RETRY_{uuid.uuid4()}"
     transaction_payload = {
         "transactions": [
             {
                 "transaction_id": transaction_id,
                 "portfolio_id": portfolio_id,
-                "instrument_id": "RETRY",
-                "security_id": "SEC_RETRY",
+                "instrument_id": security_id,
+                "security_id": security_id,
                 "transaction_date": "2025-08-01T10:00:00Z",
                 "transaction_type": "BUY",
                 "quantity": 10,
@@ -133,6 +134,31 @@ def test_transaction_persists_after_portfolio_arrives(e2e_api_client: E2EApiClie
             }
         ]
     }
+
+    # Settle the instrument first so this scenario isolates the intentionally
+    # late portfolio dependency instead of leaving a second, permanent missing
+    # reference in the downstream transaction lifecycle.
+    assert (
+        e2e_api_client.ingest(
+            "/ingest/instruments",
+            {
+                "instruments": [
+                    {
+                        "security_id": security_id,
+                        "name": "Late Portfolio Test Instrument",
+                        "isin": f"RETRY_ISIN_{uuid.uuid4()}",
+                        "currency": "USD",
+                        "product_type": "Equity",
+                    }
+                ]
+            },
+        ).status_code
+        == 202
+    )
+    e2e_api_client.poll_for_data(
+        f"/instruments?security_id={security_id}",
+        lambda data: data.get("instruments") and len(data["instruments"]) == 1,
+    )
 
     # ACT: Ingest the transaction first and prove it is not queryable before the
     # dependent portfolio arrives.
