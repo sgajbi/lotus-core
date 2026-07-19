@@ -2806,6 +2806,71 @@
     {
       "service_app": "ingestion_service",
       "method": "POST",
+      "path": "/ingest/instrument-valuation-policy-assignments",
+      "route_key": "POST /ingest/instrument-valuation-policy-assignments",
+      "operation_id": "ingest_instrument_valuation_policy_assignments_ingest_instrument_valuation_policy_assignments_post",
+      "summary": "Ingest instrument valuation-policy assignments",
+      "tags": [
+        "Reference Data"
+      ],
+      "route_family": "Write Ingress",
+      "api_version": "unversioned-current",
+      "api_status": "active",
+      "owner": "ingestion_service",
+      "auth_requirement": "governed-enterprise-readiness",
+      "audit_requirement": "audit-required",
+      "request_schema": "InstrumentValuationPolicyAssignmentIngestionRequest",
+      "response_schemas": [
+        {
+          "status_code": "202",
+          "schema": "BatchIngestionAcceptedResponse",
+          "description": "Successful Response"
+        }
+      ],
+      "error_models": [
+        {
+          "status_code": "409",
+          "schema": "none",
+          "description": "The idempotency key conflicts with an earlier payload or authoritative reference-data state conflicts with the requested assignment."
+        },
+        {
+          "status_code": "422",
+          "schema": "HTTPValidationError",
+          "description": "Validation Error"
+        },
+        {
+          "status_code": "429",
+          "schema": "none",
+          "description": "Write-rate protection blocked the reference-data request."
+        },
+        {
+          "status_code": "500",
+          "schema": "none",
+          "description": "Reference-data persistence failed after job metadata was recorded."
+        },
+        {
+          "status_code": "503",
+          "schema": "none",
+          "description": "Ingestion operating mode blocked writes."
+        }
+      ],
+      "pagination": [],
+      "filtering": [],
+      "sorting": [],
+      "idempotency_behavior": "ingestion-job-idempotency-supported-where-header-present",
+      "downstream_consumers": [
+        "source-adapters",
+        "operations"
+      ],
+      "deprecated_alias_metadata": {
+        "is_deprecated": false,
+        "sunset": null,
+        "compatibility": "not_applicable"
+      }
+    },
+    {
+      "service_app": "ingestion_service",
+      "method": "POST",
       "path": "/ingest/instruments",
       "route_key": "POST /ingest/instruments",
       "operation_id": "ingest_instruments_ingest_instruments_post",

@@ -20,6 +20,7 @@ from portfolio_common.database_models import (
     IndexReturnSeries,
     InstrumentEligibilityProfile,
     InstrumentLookthroughComponent,
+    InstrumentValuationPolicyAssignmentRecord,
     LiquidityReserveRequirement,
     ModelPortfolioDefinition,
     ModelPortfolioTarget,
@@ -33,6 +34,8 @@ from portfolio_common.database_models import (
 from portfolio_common.domain.currency import normalize_currency_code
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from .valuation_policy_assignment_write_guard import ValuationPolicyAssignmentWriteGuard
 
 
 @dataclass(frozen=True)
@@ -222,6 +225,40 @@ class ReferenceDataIngestionService:
                 "quality_status",
             ],
         )
+
+    async def upsert_instrument_valuation_policy_assignments(
+        self, records: list[dict[str, Any]]
+    ) -> None:
+        if not records:
+            return
+        try:
+            await ValuationPolicyAssignmentWriteGuard(self._db).validate(records)
+            await self._upsert_many(
+                model=InstrumentValuationPolicyAssignmentRecord,
+                records=records,
+                conflict_columns=[
+                    "tenant_id",
+                    "legal_book_id",
+                    "security_id",
+                    "source_system",
+                    "source_record_id",
+                    "assignment_version",
+                ],
+                update_columns=[
+                    "policy_id",
+                    "policy_version",
+                    "valid_from",
+                    "valid_to",
+                    "assignment_status",
+                    "source_revision",
+                    "observed_at",
+                    "assignment_reason",
+                ],
+            )
+            await self._db.commit()
+        except Exception:
+            await self._db.rollback()
+            raise
 
     async def upsert_instrument_eligibility_profiles(self, records: list[dict[str, Any]]) -> None:
         await self._commit_upsert_many(

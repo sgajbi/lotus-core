@@ -36,6 +36,12 @@ EXPECTED_COMMANDS = {
         "eligibility_profiles",
         "upsert_instrument_eligibility_profiles",
     ),
+    "instrument_valuation_policy_assignment": (
+        "/ingest/instrument-valuation-policy-assignments",
+        "instrument_valuation_policy_assignment",
+        "valuation_policy_assignments",
+        "upsert_instrument_valuation_policy_assignments",
+    ),
     "mandate_binding": (
         "/ingest/mandate-bindings",
         "mandate_binding",

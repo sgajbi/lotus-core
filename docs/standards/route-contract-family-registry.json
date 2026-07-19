@@ -61,6 +61,7 @@
         "POST /ingest/index-return-series",
         "POST /ingest/indices",
         "POST /ingest/instrument-eligibility",
+        "POST /ingest/instrument-valuation-policy-assignments",
         "POST /ingest/instruments",
         "POST /ingest/liquidity-reserve-requirements",
         "POST /ingest/market-prices",

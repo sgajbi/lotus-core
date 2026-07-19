@@ -4,6 +4,8 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
+from portfolio_common.domain.valuation.assignments import ValuationPolicyAssignmentError
+
 from ..application.reference_data_ingestion_registry import (
     ReferenceDataIngestionCommand as ReferenceDataRegistryCommand,
 )
@@ -18,6 +20,7 @@ from .reference_data_ingestion_service import ReferenceDataIngestionService
 logger = logging.getLogger(__name__)
 
 HTTP_TOO_MANY_REQUESTS = 429
+HTTP_CONFLICT = 409
 HTTP_SERVICE_UNAVAILABLE = 503
 HTTP_INTERNAL_SERVER_ERROR = 500
 
@@ -136,6 +139,16 @@ class ReferenceDataIngestionCommandHandler:
     ) -> None:
         try:
             await command.registry_command.persist(self.reference_data_service, command.request)
+        except ValuationPolicyAssignmentError as exc:
+            await self.ingestion_job_service.mark_failed(job_id, str(exc), failure_phase="persist")
+            raise ReferenceDataIngestionCommandError(
+                HTTP_CONFLICT,
+                {
+                    "code": "VALUATION_POLICY_ASSIGNMENT_CONFLICT",
+                    "message": str(exc),
+                    "job_id": job_id,
+                },
+            ) from exc
         except Exception as exc:
             await self.ingestion_job_service.mark_failed(job_id, str(exc), failure_phase="persist")
             raise ReferenceDataIngestionCommandError(
