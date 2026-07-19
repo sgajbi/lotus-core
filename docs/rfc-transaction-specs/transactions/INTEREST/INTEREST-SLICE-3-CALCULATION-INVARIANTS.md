@@ -16,7 +16,7 @@ Slice 3 hardens INTEREST calculation behavior in the cost engine and introduces 
   - `INTEREST_012_INVALID_INTEREST_DIRECTION`
 - `src/services/portfolio_transaction_processing_service/app/domain/transaction/validation/income.py`
   - direction validation rule
-- `tests/unit/services/portfolio_transaction_processing_service/cost/test_cost_calculator.py`
+- `tests/unit/services/portfolio_transaction_processing_service/domain/cost_basis/calculation/test_cost_calculator.py`
   - INTEREST invariant and direction tests
 - `tests/unit/services/portfolio_transaction_processing_service/domain/transaction/validation/test_income.py`
   - canonical direction validation tests

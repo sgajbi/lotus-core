@@ -24,8 +24,8 @@ Make the cost engine's canonical FX boundary explicit, statically checkable, and
 ## Validation
 
 - `python -m mypy --strict --no-incremental src/services/portfolio_transaction_processing_service/app`
-- `python -m pytest -q tests/unit/services/portfolio_transaction_processing_service/cost/test_cost_calculator.py tests/unit/services/portfolio_transaction_processing_service/domain/transaction/fx/test_package_structure.py`
-- `python -m ruff check src/services/portfolio_transaction_processing_service/app/domain/transaction/fx src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_calculator.py tests/unit/services/portfolio_transaction_processing_service/cost/test_cost_calculator.py tests/unit/services/portfolio_transaction_processing_service/domain/transaction/fx/test_package_structure.py`
+- `python -m pytest -q tests/unit/services/portfolio_transaction_processing_service/domain/cost_basis/calculation/test_cost_calculator.py tests/unit/services/portfolio_transaction_processing_service/domain/transaction/fx/test_package_structure.py`
+- `python -m ruff check src/services/portfolio_transaction_processing_service/app/domain/transaction/fx src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_calculator.py tests/unit/services/portfolio_transaction_processing_service/domain/cost_basis/calculation/test_cost_calculator.py tests/unit/services/portfolio_transaction_processing_service/domain/transaction/fx/test_package_structure.py`
 - `git diff --check`
 
 ## Compatibility And Documentation Decision

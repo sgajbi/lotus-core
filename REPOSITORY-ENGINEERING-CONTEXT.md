@@ -2627,8 +2627,11 @@ Most relevant current governance:
      transactions through ports. Open-lot persistence scope and FIFO/AVCO checkpoint decisions also
      belong in the cost-basis application package; concrete SQL persistence remains infrastructure.
      SQL-backed AVCO reconciliation belongs under `app/infrastructure/cost_basis`. Mirror these
-     packages in tests;
-     do not return these responsibilities to an infrastructure workflow, create flat compatibility
+     packages in tests. Pure cost-basis calculation policy tests belong under
+     `tests/unit/services/portfolio_transaction_processing_service/domain/cost_basis/calculation`;
+     do not restore calculator, strategy, disposition, parser, ordering, engine-input, error,
+     source-allocation, or property-invariant suites to the generic `tests/.../cost` root.
+     Do not return these responsibilities to an infrastructure workflow, create flat compatibility
      modules, or place application behavior in infrastructure.
      Generated settlement cash-leg validation, creation, ordered persistence, and product-leg
      linking belong in `app/application/settlement_processing/cash_leg_linking.py` over the narrow

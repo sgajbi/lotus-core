@@ -1,3 +1,5 @@
+"""Verify domain-owned lot-disposition orchestration."""
+
 from datetime import datetime
 from decimal import Decimal
 from unittest.mock import MagicMock

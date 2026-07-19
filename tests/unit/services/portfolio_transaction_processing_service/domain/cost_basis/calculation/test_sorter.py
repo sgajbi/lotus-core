@@ -1,3 +1,5 @@
+"""Verify deterministic domain transaction ordering."""
+
 from datetime import datetime
 from decimal import Decimal
 

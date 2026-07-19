@@ -1,3 +1,5 @@
+"""Verify cost-basis calculation invariants across generated transaction sequences."""
+
 from __future__ import annotations
 
 from datetime import datetime

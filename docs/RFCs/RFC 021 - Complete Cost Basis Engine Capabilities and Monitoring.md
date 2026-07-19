@@ -45,7 +45,7 @@ Evidence:
 - `src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_strategies.py`
 - `src/services/portfolio_transaction_processing_service/app/infrastructure/cost_basis/metrics.py`
 - `src/services/portfolio_transaction_processing_service/app/application/cost_basis_processing/timeline.py`
-- `tests/unit/services/portfolio_transaction_processing_service/cost/test_cost_basis_strategies.py`
+- `tests/unit/services/portfolio_transaction_processing_service/domain/cost_basis/calculation/test_cost_basis_strategies.py`
 - `tests/unit/services/portfolio_transaction_processing_service/application/cost_basis_processing/test_execution.py`
 - `tests/integration/services/persistence_service/repositories/test_repositories.py`
 - `tests/e2e/test_avco_workflow.py`
@@ -89,7 +89,7 @@ No material implementation gap remains for RFC 021 core intent.
 ## Test and Validation Evidence
 
 1. Engine AVCO correctness tests (including dual currency):
-   - `tests/unit/services/portfolio_transaction_processing_service/cost/test_cost_basis_strategies.py`
+   - `tests/unit/services/portfolio_transaction_processing_service/domain/cost_basis/calculation/test_cost_basis_strategies.py`
 2. Consumer strategy-selection tests:
    - `tests/unit/services/portfolio_transaction_processing_service/application/cost_basis_processing/test_execution.py`
 3. Persistence/model integration for `cost_basis_method`:

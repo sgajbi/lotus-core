@@ -1,3 +1,5 @@
+"""Verify domain-owned FIFO and average-cost strategy behavior."""
+
 from collections import deque
 from datetime import datetime
 from decimal import Decimal

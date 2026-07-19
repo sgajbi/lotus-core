@@ -1,3 +1,5 @@
+"""Verify domain-owned average-cost source allocation policy."""
+
 from decimal import Decimal
 
 import pytest

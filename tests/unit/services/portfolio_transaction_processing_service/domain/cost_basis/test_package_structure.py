@@ -18,6 +18,19 @@ COST_BASIS_DOMAIN_ROOT = (
     / "domain"
     / "cost_basis"
 )
+COST_BASIS_CALCULATION_TEST_ROOT = SERVICE_TEST_ROOT / "domain" / "cost_basis" / "calculation"
+LEGACY_COST_TEST_ROOT = SERVICE_TEST_ROOT / "cost"
+CALCULATION_TEST_MODULES = {
+    "test_average_cost_source_allocation.py",
+    "test_cost_basis_property_invariants.py",
+    "test_cost_basis_strategies.py",
+    "test_cost_calculator.py",
+    "test_disposition_engine.py",
+    "test_engine_input.py",
+    "test_error_reporter.py",
+    "test_parser.py",
+    "test_sorter.py",
+}
 RETIRED_COST_ENGINE_ROOT = (
     REPO_ROOT
     / "src"
@@ -35,6 +48,13 @@ LEGACY_COST_APPLICATION_ROOT = (
 def test_cost_basis_structure_guard_is_domain_owned() -> None:
     assert Path(__file__).resolve().parent == SERVICE_TEST_ROOT / "domain" / "cost_basis"
     assert not (SERVICE_TEST_ROOT / "test_cost_basis_domain_structure.py").exists()
+
+
+def test_cost_basis_calculation_tests_are_domain_owned() -> None:
+    current_modules = {path.name for path in COST_BASIS_CALCULATION_TEST_ROOT.glob("test_*.py")}
+
+    assert CALCULATION_TEST_MODULES <= current_modules
+    assert all(not (LEGACY_COST_TEST_ROOT / name).exists() for name in CALCULATION_TEST_MODULES)
 
 
 def test_cost_basis_domain_modules_have_responsibility_docstrings() -> None:

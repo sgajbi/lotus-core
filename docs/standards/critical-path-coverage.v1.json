@@ -124,6 +124,7 @@
       "required_test_globs": [
         "tests/unit/libs/portfolio_common/domain/**/*.py",
         "tests/unit/services/portfolio_transaction_processing_service/cost/**/*.py",
+        "tests/unit/services/portfolio_transaction_processing_service/domain/cost_basis/calculation/**/*.py",
         "tests/unit/services/portfolio_transaction_processing_service/application/cost_basis_processing/**/*.py",
         "tests/unit/services/portfolio_transaction_processing_service/application/cashflow_processing/*.py",
         "tests/unit/services/portfolio_transaction_processing_service/infrastructure/cost_basis/**/*.py",
