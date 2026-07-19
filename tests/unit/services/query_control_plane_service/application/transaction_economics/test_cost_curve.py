@@ -1,11 +1,11 @@
 """Application tests for QCP-owned transaction-cost curve evidence."""
 
-import asyncio
 from dataclasses import replace
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from types import SimpleNamespace
 
+import pytest
 from portfolio_common.logging_utils import correlation_id_var
 
 from src.services.query_control_plane_service.app.application.transaction_economics.cost_curve import (  # noqa: E501
@@ -364,7 +364,8 @@ def test_transaction_cost_curve_page_token_suppresses_terminal_page() -> None:
     )
 
 
-def test_resolve_transaction_cost_curve_response_orchestrates_repository_reads() -> None:
+@pytest.mark.asyncio
+async def test_resolve_transaction_cost_curve_response_orchestrates_repository_reads() -> None:
     async def run_case() -> tuple[
         object, list[tuple[str, dict[str, object]]], list[dict[str, object]]
     ]:
@@ -420,7 +421,7 @@ def test_resolve_transaction_cost_curve_response_orchestrates_repository_reads()
         )
         return response, calls, encoded_payloads
 
-    response, calls, encoded_payloads = asyncio.run(run_case())
+    response, calls, encoded_payloads = await run_case()
 
     assert response.portfolio_id == "PB_SG_GLOBAL_BAL_001"
     assert response.page.next_page_token == "encoded-token"
@@ -481,7 +482,8 @@ def test_resolve_transaction_cost_curve_response_orchestrates_repository_reads()
     ]
 
 
-def test_resolve_transaction_cost_curve_response_requires_existing_portfolio() -> None:
+@pytest.mark.asyncio
+async def test_resolve_transaction_cost_curve_response_requires_existing_portfolio() -> None:
     async def run_case() -> None:
         class Repository:
             async def portfolio_exists(self, portfolio_id: str) -> bool:
@@ -510,15 +512,14 @@ def test_resolve_transaction_cost_curve_response_requires_existing_portfolio() -
             generated_at=datetime(2026, 4, 10, 15, tzinfo=UTC),
         )
 
-    try:
-        asyncio.run(run_case())
-    except LookupError as exc:
-        assert "Portfolio with id PB_UNKNOWN not found" in str(exc)
-    else:
-        raise AssertionError("Expected missing portfolio lookup failure")
+    with pytest.raises(LookupError, match="Portfolio with id PB_UNKNOWN not found"):
+        await run_case()
 
 
-def test_resolve_transaction_cost_curve_response_skips_evidence_read_without_page_keys() -> None:
+@pytest.mark.asyncio
+async def test_resolve_transaction_cost_curve_response_skips_evidence_read_without_page_keys() -> (
+    None
+):
     async def run_case() -> object:
         class Repository:
             async def portfolio_exists(self, portfolio_id: str) -> bool:
@@ -542,7 +543,7 @@ def test_resolve_transaction_cost_curve_response_skips_evidence_read_without_pag
             generated_at=datetime(2026, 4, 10, 15, tzinfo=UTC),
         )
 
-    response = asyncio.run(run_case())
+    response = await run_case()
 
     assert response.supportability.state == "UNAVAILABLE"
     assert response.curve_points == []
