@@ -69,6 +69,14 @@ code is limited to framework-independent calculation hashing and holdings reconc
 - Source-data product guard and its `18` unit tests passed.
 - Duplicate-control regressions prove worst-status classification and order-independent QCP control
   evidence hashing.
+- Fresh branch-qualified canonical proof at signed SHA
+  `a3d8dee29859f5ddd3749590039642b81e17fda8` used 11 security rows at epochs `0`, `1`, and `3`.
+  The new epoch-3 financial control examined all 11 rows with zero findings; completion and control
+  events were processed with zero retries. HoldingsAsOf returned 11 complete/current/reconciled
+  positions. QCP returned 11 baseline positions, the requested sections, reconciliation
+  `COMPLETE`, current source evidence, deterministic snapshot/content identity, and populated
+  input/calculation/output hashes. QCP data quality remained `PARTIAL` for its independently
+  reported enrichment degradation; the reconciliation stage itself was completed and non-blocking.
 - Final combined coverage gate passed `5,113` unit, `12` unit-database, `55` critical-database,
   `138` integration-lite, and `284` operations-contract tests with zero warnings. The changed
   critical-source gate reached `92.38%` branch and `97.55%` line coverage; all critical groups
@@ -90,5 +98,5 @@ methodology and review-ledger detail.
 
 The mixed-epoch correction does update Query Control Plane and Mesh Data Products wiki source
 because the earlier “exact business-date/epoch” wording could be misread as one control per
-security-row epoch. PR CI, fresh-control runtime proof, exact-main validation, wiki publication,
-and downstream revalidation remain pending.
+security-row epoch. Fresh-control runtime proof is complete. PR CI, exact-main validation, wiki
+publication, and downstream revalidation remain pending.
