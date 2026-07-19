@@ -29,9 +29,12 @@ representations. The framework-independent policy, assignment, day-count, and se
 domains are implemented locally. Authoritative tenant/legal-book/instrument assignments can be
 submitted through `POST /ingest/instrument-valuation-policy-assignments`; ingestion validates an
 exact supported policy/version and serializes concurrent scope writes before comparing them with
-durable source-version history. The production worker and financial reconciliation path are not
-wired to these policies yet, so the endpoint is source-governance capability rather than a claim
-that runtime valuation has migrated.
+durable source-version history. The position-valuation service now owns an internal resolver that
+ranks durable source corrections before lifecycle/effective-date selection and binds the sole
+assignment to its exact registered policy. The production worker and financial reconciliation path
+are not wired to these policies yet because portfolio tenant/legal-book authority and the complete
+valuation-fact bundle are not available there; the endpoint and resolver are migration capability,
+not a claim that runtime valuation has migrated.
 
 The target policy never selects behavior from a broad product name or price magnitude. An exact,
 effective-dated instrument assignment selects a versioned composition of:
@@ -165,6 +168,11 @@ multiplier, price, and FX evidence; per-position N+1 reads are not acceptable. K
 detect local regressions, but capacity claims require exact-SHA mixed-book runtime evidence with
 throughput, p95/p99, database operations, lock/connection pressure, Kafka lag, cache invalidation,
 resource use, queue closure, and exact reconciliation.
+
+The service-local single-scope assignment resolver is the fail-closed query primitive for that
+future integration, not permission to invoke another database round trip for every position in a
+mixed-book batch. Batch reference-data loading or a source-versioned cache must reuse the same exact
+scope/date and correction-ranking semantics and prove invalidation plus bounded database work.
 
 An immutable business calendar computes its content hash once when the calendar value object is
 constructed. Each accrued-income calculation binds that digest instead of reserializing every

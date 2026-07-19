@@ -69,6 +69,13 @@ narrow framework-free contract therefore belongs in `portfolio_common.domain.val
   advisory locks in stable order, loads durable assignment history, ranks source corrections, and
   rejects conflicts before one atomic upsert/commit. This closes both the existing-history and
   concurrent-writer gaps that request-only validation would leave open.
+- Added a position-valuation-service application port and SQLAlchemy resolver for durable assignment
+  history. One indexed query ranks each source record's correction versions before applying ACTIVE
+  lifecycle and inclusive effective-date filters, then the framework-independent domain rejects a
+  missing or overlapping authority and the exact-version registry rejects an unsupported policy.
+  The returned runtime value binds the resolved assignment/cache identity to the executable policy;
+  persistence and query construction remain service-local rather than moving into
+  `portfolio_common`.
 - Added the first versioned day-count registry slice for FpML/ISDA `ACT/365.FIXED`, `ACT/360`, and
   `BUS/252`. Fixed-denominator conventions use actual elapsed calendar days. `BUS/252` counts
   source-owned business dates start-inclusive and end-exclusive and requires a versioned calendar
@@ -126,7 +133,8 @@ narrow framework-free contract therefore belongs in `portfolio_common.domain.val
 ## Ownership Boundary
 
 Only immutable valuation vocabulary, value objects, calculation policy, and deterministic assignment
-resolution belong in the shared domain package. Ingestion DTOs, assignment persistence, approval and
+resolution belong in the shared domain package. The position-valuation service owns the runtime
+resolution port and SQLAlchemy query adapter. Ingestion DTOs, assignment persistence, approval and
 migration workflows, impact previews, replay scheduling, caches, Kafka adapters, API contracts, and
 service orchestration remain with their owning deployables. Before runtime wiring, production
 consumer imports must prove the shared boundary; if only one deployable consumes a policy, move it
@@ -134,12 +142,13 @@ to that service's domain package.
 
 ## Compatibility
 
-The assignment slice adds one reversible table, two evidence-backed indexes, and one source-write
-HTTP/OpenAPI contract. Existing routes, event payloads, topics, deployment topology, downstream
-fields, and runtime valuation behavior are unchanged. Existing correct unit-price behavior is
-characterized under an explicit policy. The legacy bond heuristic remains in the runtime path until
-authoritative valuation facts and portfolio tenant/legal-book ownership are available; it will be
-deleted rather than retained as a fallback when valuation and reconciliation are rewired.
+The assignment slices add one reversible table, two evidence-backed indexes, one source-write
+HTTP/OpenAPI contract, and one internal service-local read port/adapter. Existing routes, event
+payloads, topics, deployment topology, downstream fields, and runtime valuation behavior are
+unchanged. Existing correct unit-price behavior is characterized under an explicit policy. The
+legacy bond heuristic remains in the runtime path until authoritative valuation facts and portfolio
+tenant/legal-book ownership are available; it will be deleted rather than retained as a fallback
+when valuation and reconciliation are rewired.
 
 ## Validation
 
@@ -178,6 +187,13 @@ deleted rather than retained as a fallback when valuation and reconciliation are
   durable-overlap rejection rolls back without inserting a second authority, a source-versioned
   retirement plus replacement commits as three auditable history rows, and concurrent writers
   serialize to one winner and one conflict without deadlock.
+- The service-local resolution slice passed 31 warning-strict assignment, registry, and adapter
+  tests. Adapter tests prove one SQLAlchemy round trip, correction ranking by source-record identity,
+  exact scope normalization, cache/source-revision evidence, and fail-closed missing, overlapping,
+  blank-scope, and unsupported-version cases. One isolated PostgreSQL test proved correction ranking
+  occurs before lifecycle/effective filtering, a suspended latest source version cannot revive its
+  older ACTIVE version, an unrelated tenant/book cannot leak into selection, and pre-effective
+  dates remain unsupported.
 - Signed slice commits and validation evidence are recorded on GitHub issue #788.
 
 Primary methodology references for the day-count slice are the
@@ -202,6 +218,7 @@ govern the ex-dividend rebate-interest example and settlement-date boundary used
 Repository context, the canonical position-valuation methodology, risk-based coverage contract, and
 this review ledger change because calculation and evidence truth changed. The methodology labels
 the new domain as a runtime migration in progress. The new source-write API updates the generated
-route/vocabulary catalogs plus the ingestion, API-surface, and data-model wiki sources. README and
-supported-feature status do not change because the production valuation/reconciliation consumers
-are not wired; broader product/lifecycle wiki updates remain required with that runtime slice.
+route/vocabulary catalogs plus the ingestion, API-surface, and data-model wiki sources. The
+service-local resolver does not add another wiki change: it is an internal migration seam and is not
+yet invoked by production valuation or reconciliation. README and supported-feature status do not
+change; broader product/lifecycle wiki updates remain required with that runtime slice.
