@@ -54,6 +54,7 @@ def mock_event() -> FinancialReconciliationRequestedEvent:
         portfolio_id="PORT-RECON-1",
         business_date=date(2026, 3, 8),
         epoch=1,
+        aggregation_revision=7,
         correlation_id="corr-recon",
     )
 
@@ -82,6 +83,7 @@ def mock_dependencies():
         return RecordedReconciliationControl(
             status=completion.outcome_status,
             latest_epoch=completion.epoch,
+            accepted_revision=True,
         )
 
     mock_control_evidence_repo.record_completion.side_effect = _record_completion
@@ -165,6 +167,7 @@ async def test_reconciliation_request_runs_automatic_bundle_and_marks_idempotenc
     assert request.epoch == mock_event.epoch
     assert request.requested_by == mock_event.requested_by
     assert call.kwargs["reconciliation_types"] == mock_event.reconciliation_types
+    assert call.kwargs["aggregation_revision"] == 7
     mock_service.determine_automatic_bundle_outcome.assert_called_once()
     outbox_calls = mock_outbox_repo.create_outbox_event.await_args_list
     assert [call.kwargs["event_type"] for call in outbox_calls] == [
@@ -175,6 +178,7 @@ async def test_reconciliation_request_runs_automatic_bundle_and_marks_idempotenc
     assert outbox_call.kwargs["event_type"] == "FinancialReconciliationCompleted"
     payload = FinancialReconciliationCompletedEvent.model_validate(outbox_call.kwargs["payload"])
     assert payload.outcome_status == "REQUIRES_REPLAY"
+    assert payload.aggregation_revision == 7
     assert payload.blocking_reconciliation_types == ["transaction_cashflow"]
     assert payload.run_ids == {
         "transaction_cashflow": "recon-tx",

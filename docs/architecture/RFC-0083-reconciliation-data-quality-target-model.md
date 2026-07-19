@@ -21,8 +21,10 @@ Current useful building blocks:
 
 1. `financial_reconciliation_service` executes transaction-to-cashflow, position valuation, and
    timeseries integrity controls.
-2. `financial_reconciliation_runs` records run status, requested-by, correlation, dedupe, tolerance,
-   summary, failure, start, and completion metadata.
+2. `financial_reconciliation_runs` records run status, requested-by, correlation, dedupe,
+   aggregation revision, tolerance, summary, failure, start, and completion metadata. Automatic
+   runs reconcile each durable aggregation revision exactly once; manual and legacy runs may have
+   no revision.
 3. `financial_reconciliation_findings` records finding type, severity, portfolio, security,
    transaction, business date, epoch, expected value, observed value, detail, and creation timestamp.
 4. `query_control_plane_service` exposes support routes for reconciliation runs and findings.

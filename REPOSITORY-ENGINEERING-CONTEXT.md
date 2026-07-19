@@ -2996,6 +2996,15 @@ Most relevant current governance:
      reads: production cutover requires authoritative portfolio scope, complete valuation facts,
      bulk/cache invalidation proof, both valuation/reconciliation consumers, heuristic deletion, and
      exact-SHA mixed-book capacity evidence under #788.
+215. Portfolio aggregation claim generation is the authoritative processing sequence for
+     reconciliation within one portfolio/business-date/epoch scope. Preserve the positive durable
+     `portfolio_aggregation_jobs.attempt_count` as `aggregation_revision` through aggregation
+     completion, reconciliation request/run/completion, control evidence, and support APIs. New
+     automatic runs dedupe per reconciliation type plus portfolio/date/epoch/revision; legacy
+     revision `0` retains its prior key. Only a higher revision may replace same-epoch control
+     status; older and identical revisions are no-ops, and contradictory outcomes for one revision
+     fail closed. Do not substitute Kafka arrival order, timestamps, debounce, or severity merging
+     for this database-backed generation.
 
 ## Context Maintenance Rule
 

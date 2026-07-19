@@ -278,7 +278,7 @@ async def test_run_position_valuation_records_invalid_market_price_without_deriv
 
 
 @pytest.mark.asyncio
-async def test_run_automatic_bundle_applies_dedupe_for_system_pipeline():
+async def test_run_automatic_bundle_dedupes_each_aggregation_revision():
     transaction_run = SimpleNamespace(run_id="recon-tx")
     valuation_run = SimpleNamespace(run_id="recon-val")
     timeseries_run = SimpleNamespace(run_id="recon-ts")
@@ -310,6 +310,7 @@ async def test_run_automatic_bundle_applies_dedupe_for_system_pipeline():
             "position_valuation",
             "timeseries_integrity",
         ],
+        aggregation_revision=7,
     )
 
     assert result == {
@@ -319,10 +320,31 @@ async def test_run_automatic_bundle_applies_dedupe_for_system_pipeline():
     }
     dedupe_keys = [call.kwargs["dedupe_key"] for call in repository.create_run.await_args_list]
     assert dedupe_keys == [
-        "auto:transaction_cashflow:PORT-AUTO:2026-03-08:4",
-        "auto:position_valuation:PORT-AUTO:2026-03-08:4",
-        "auto:timeseries_integrity:PORT-AUTO:2026-03-08:4",
+        "auto:transaction_cashflow:PORT-AUTO:2026-03-08:4:aggregation-revision:7",
+        "auto:position_valuation:PORT-AUTO:2026-03-08:4:aggregation-revision:7",
+        "auto:timeseries_integrity:PORT-AUTO:2026-03-08:4:aggregation-revision:7",
     ]
+    assert [
+        call.kwargs["aggregation_revision"] for call in repository.create_run.await_args_list
+    ] == [7, 7, 7]
+
+
+def test_legacy_automatic_dedupe_key_preserves_pre_revision_identity() -> None:
+    request = ReconciliationRunRequest(
+        portfolio_id="PORT-AUTO",
+        business_date=date(2026, 3, 8),
+        epoch=4,
+        requested_by="system_pipeline",
+    )
+
+    assert (
+        ReconciliationService._automatic_dedupe_key(
+            reconciliation_type="transaction_cashflow",
+            request=request,
+            aggregation_revision=0,
+        )
+        == "auto:transaction_cashflow:PORT-AUTO:2026-03-08:4"
+    )
 
 
 def test_determine_automatic_bundle_outcome_requires_replay_for_error_findings():

@@ -2762,6 +2762,7 @@ class PipelineStageState(Base):
     security_id = Column(String, nullable=True, index=True)
     business_date = Column(Date, nullable=False, index=True)
     epoch = Column(Integer, nullable=False, default=0, server_default="0", index=True)
+    aggregation_revision = Column(Integer, nullable=False, default=0, server_default="0")
     status = Column(String, nullable=False, default="PENDING", server_default="PENDING", index=True)
     cost_event_seen = Column(Boolean, nullable=False, default=False, server_default="f")
     cashflow_event_seen = Column(Boolean, nullable=False, default=False, server_default="f")
@@ -2778,6 +2779,10 @@ class PipelineStageState(Base):
             "transaction_id",
             "epoch",
             name="_pipeline_stage_state_stage_tx_epoch_uc",
+        ),
+        CheckConstraint(
+            "aggregation_revision >= 0",
+            name="ck_pipeline_stage_aggregation_revision_nonnegative",
         ),
         Index(
             "ix_pipeline_stage_state_portfolio_date_stage_status",
@@ -2820,6 +2825,7 @@ class FinancialReconciliationRun(Base):
     portfolio_id = Column(String, nullable=True, index=True)
     business_date = Column(Date, nullable=True, index=True)
     epoch = Column(Integer, nullable=True, index=True)
+    aggregation_revision = Column(Integer, nullable=True)
     status = Column(String, nullable=False, default="RUNNING", server_default="RUNNING", index=True)
     requested_by = Column(String, nullable=True)
     dedupe_key = Column(String, nullable=True, unique=True, index=True)
@@ -2835,6 +2841,18 @@ class FinancialReconciliationRun(Base):
     )
 
     __table_args__ = (
+        CheckConstraint(
+            "aggregation_revision IS NULL OR aggregation_revision >= 0",
+            name="ck_fin_recon_aggregation_revision_nonnegative",
+        ),
+        Index(
+            "ix_fin_recon_scope_revision_type",
+            "portfolio_id",
+            "business_date",
+            "epoch",
+            "aggregation_revision",
+            "reconciliation_type",
+        ),
         Index(
             "ix_financial_reconciliation_runs_type_status_started_at",
             "reconciliation_type",

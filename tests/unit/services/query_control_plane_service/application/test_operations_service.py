@@ -1976,6 +1976,7 @@ async def test_get_reconciliation_runs(service: OperationsService, mock_ops_repo
                 "status": " failed ",
                 "business_date": date(2026, 3, 13),
                 "epoch": 3,
+                "aggregation_revision": 7,
                 "started_at": started_at,
                 "completed_at": completed_at,
                 "requested_by": "pipeline_orchestrator_service",
@@ -2008,6 +2009,7 @@ async def test_get_reconciliation_runs(service: OperationsService, mock_ops_repo
     assert response.items[0].status == " failed "
     assert response.items[0].requested_by == "pipeline_orchestrator_service"
     assert response.items[0].dedupe_key == "recon:transaction_cashflow:P1:2026-03-13:3"
+    assert response.items[0].aggregation_revision == 7
     assert response.items[0].correlation_id == "corr-recon-20260313-001"
     assert response.items[0].failure_reason == "Tolerance exceeded for portfolio totals."
     assert response.items[0].is_terminal_failure is True
@@ -2861,6 +2863,7 @@ async def test_get_support_overview_marks_publish_blocked_when_controls_require_
             "correlation_id": "corr-recon-20250830-failed",
             "requested_by": "pipeline_orchestrator_service",
             "dedupe_key": "recon:transaction_cashflow:P1:2025-08-30:2",
+            "aggregation_revision": 7,
             "failure_reason": "Tolerance exceeded for portfolio totals.",
         },
     )()
@@ -2890,6 +2893,7 @@ async def test_get_support_overview_marks_publish_blocked_when_controls_require_
         response.controls_latest_reconciliation_dedupe_key
         == "recon:transaction_cashflow:P1:2025-08-30:2"
     )
+    assert response.controls_latest_reconciliation_aggregation_revision == 7
     assert (
         response.controls_latest_reconciliation_failure_reason
         == "Tolerance exceeded for portfolio totals."

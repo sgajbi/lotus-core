@@ -23,11 +23,13 @@ def _completion(
     portfolio_id: str,
     epoch: int,
     outcome_status: str,
+    aggregation_revision: int = 1,
 ) -> FinancialReconciliationCompletion:
     return FinancialReconciliationCompletion(
         portfolio_id=portfolio_id,
         business_date=date(2026, 3, 7),
         epoch=epoch,
+        aggregation_revision=aggregation_revision,
         outcome_status=outcome_status,
         reconciliation_types=("transaction_cashflow",),
         blocking_reconciliation_types=("transaction_cashflow",)
@@ -41,7 +43,7 @@ def _completion(
     )
 
 
-async def test_record_completion_preserves_monotonic_status(
+async def test_newer_aggregation_revision_replaces_prior_control_status(
     async_db_session: AsyncSession,
     clean_db,
 ) -> None:
@@ -57,7 +59,12 @@ async def test_record_completion_preserves_monotonic_status(
         )
     )
     second = await repository.record_completion(
-        _completion(portfolio_id="PORT-CTRL-1", epoch=2, outcome_status="COMPLETED")
+        _completion(
+            portfolio_id="PORT-CTRL-1",
+            epoch=2,
+            aggregation_revision=2,
+            outcome_status="COMPLETED",
+        )
     )
     await async_db_session.commit()
 
@@ -69,12 +76,15 @@ async def test_record_completion_preserves_monotonic_status(
         )
     )
     assert first.status == "REQUIRES_REPLAY"
-    assert second.status == "REQUIRES_REPLAY"
+    assert first.accepted_revision is True
+    assert second.status == "COMPLETED"
+    assert second.accepted_revision is True
     assert persisted is not None
-    assert persisted.status == "REQUIRES_REPLAY"
+    assert persisted.status == "COMPLETED"
+    assert persisted.aggregation_revision == 2
 
 
-async def test_record_completion_escalates_control_status_to_failed(
+async def test_duplicate_aggregation_revision_is_a_durable_noop(
     async_db_session: AsyncSession,
     clean_db,
 ) -> None:
@@ -82,15 +92,63 @@ async def test_record_completion_escalates_control_status_to_failed(
         async_db_session
     )
 
-    await repository.record_completion(
+    first = await repository.record_completion(
         _completion(portfolio_id="PORT-CTRL-2", epoch=2, outcome_status="COMPLETED")
     )
-    recorded = await repository.record_completion(
-        _completion(portfolio_id="PORT-CTRL-2", epoch=2, outcome_status="FAILED")
+    duplicate = await repository.record_completion(
+        _completion(portfolio_id="PORT-CTRL-2", epoch=2, outcome_status="COMPLETED")
     )
     await async_db_session.commit()
 
-    assert recorded.status == "FAILED"
+    assert first.accepted_revision is True
+    assert duplicate.accepted_revision is False
+    assert duplicate.status == "COMPLETED"
+
+
+async def test_conflicting_outcome_for_same_revision_fails_closed(
+    async_db_session: AsyncSession,
+    clean_db,
+) -> None:
+    repository = control_evidence_repository.SqlAlchemyReconciliationControlEvidenceRepository(
+        async_db_session
+    )
+    await repository.record_completion(
+        _completion(portfolio_id="PORT-CTRL-CONFLICT", epoch=2, outcome_status="COMPLETED")
+    )
+
+    with pytest.raises(ValueError, match="Conflicting reconciliation outcomes"):
+        await repository.record_completion(
+            _completion(portfolio_id="PORT-CTRL-CONFLICT", epoch=2, outcome_status="FAILED")
+        )
+
+
+async def test_older_aggregation_revision_cannot_overwrite_newer_control(
+    async_db_session: AsyncSession,
+    clean_db,
+) -> None:
+    repository = control_evidence_repository.SqlAlchemyReconciliationControlEvidenceRepository(
+        async_db_session
+    )
+    await repository.record_completion(
+        _completion(
+            portfolio_id="PORT-CTRL-ORDERED",
+            epoch=2,
+            aggregation_revision=3,
+            outcome_status="COMPLETED",
+        )
+    )
+
+    stale = await repository.record_completion(
+        _completion(
+            portfolio_id="PORT-CTRL-ORDERED",
+            epoch=2,
+            aggregation_revision=2,
+            outcome_status="REQUIRES_REPLAY",
+        )
+    )
+
+    assert stale.accepted_revision is False
+    assert stale.status == "COMPLETED"
 
 
 async def test_record_completion_returns_latest_portfolio_day_epoch(

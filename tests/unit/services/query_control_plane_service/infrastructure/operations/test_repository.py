@@ -43,6 +43,7 @@ def _reconciliation_run_row() -> SimpleNamespace:
         correlation_id="corr-001",
         requested_by="operations",
         dedupe_key="P1:2025-08-30:2",
+        aggregation_revision=7,
         failure_reason=None,
     )
 
@@ -1257,6 +1258,7 @@ async def test_get_latest_reconciliation_run_for_portfolio_day(
         correlation_id="corr-001",
         requested_by="operations",
         dedupe_key="P1:2025-08-30:2",
+        aggregation_revision=7,
         failure_reason=None,
     )
     stmt = mock_db_session.execute.call_args[0][0]
@@ -1286,6 +1288,7 @@ async def test_get_latest_reconciliation_run_for_portfolio_day_honors_as_of(
         correlation_id="corr-001",
         requested_by="operations",
         dedupe_key="P1:2025-08-30:2",
+        aggregation_revision=7,
         failure_reason=None,
     )
     stmt = mock_db_session.execute.call_args[0][0]

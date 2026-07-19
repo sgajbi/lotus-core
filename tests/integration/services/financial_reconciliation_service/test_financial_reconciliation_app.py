@@ -260,6 +260,9 @@ async def test_openapi_describes_reconciliation_schema_fields(async_test_client:
 
     assert run_response["run_id"]["description"] == "Unique reconciliation run identifier."
     assert run_response["status"]["description"] == "Lifecycle status of the run."
+    assert run_response["aggregation_revision"]["description"].startswith(
+        "Durable portfolio-aggregation revision reconciled"
+    )
     assert run_response["summary"]["description"].startswith("Structured summary")
 
     assert finding_response["finding_type"]["description"] == (

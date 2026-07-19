@@ -71,6 +71,7 @@ class ReconciliationRequestedConsumer(BaseConsumer):
                             request=request,
                             correlation_id=correlation_id,
                             reconciliation_types=event.reconciliation_types,
+                            aggregation_revision=event.aggregation_revision,
                         )
                         outcome = service.determine_automatic_bundle_outcome(runs)
                         completion_recorder = RecordFinancialReconciliationCompletion(
@@ -86,6 +87,7 @@ class ReconciliationRequestedConsumer(BaseConsumer):
                                 portfolio_id=event.portfolio_id,
                                 business_date=event.business_date,
                                 epoch=event.epoch,
+                                aggregation_revision=event.aggregation_revision,
                                 outcome_status=outcome.outcome_status,
                                 reconciliation_types=tuple(event.reconciliation_types),
                                 blocking_reconciliation_types=tuple(

@@ -21,6 +21,7 @@ def _completion(*, epoch: int = 3, status: str = "COMPLETED") -> FinancialReconc
         portfolio_id="PORT-CTRL-1",
         business_date=date(2026, 3, 8),
         epoch=epoch,
+        aggregation_revision=5,
         outcome_status=status,
         reconciliation_types=("transaction_cashflow", "position_valuation"),
         blocking_reconciliation_types=("transaction_cashflow",) if status != "COMPLETED" else (),
@@ -38,6 +39,7 @@ async def test_latest_completion_records_evidence_and_stages_both_contracts() ->
     evidence_repository.record_completion.return_value = RecordedReconciliationControl(
         status="REQUIRES_REPLAY",
         latest_epoch=3,
+        accepted_revision=True,
     )
     use_case = record_reconciliation_completion.RecordFinancialReconciliationCompletion(
         evidence_repository=evidence_repository,
@@ -66,6 +68,7 @@ async def test_stale_completion_preserves_completion_contract_without_controls_e
     evidence_repository.record_completion.return_value = RecordedReconciliationControl(
         status="REQUIRES_REPLAY",
         latest_epoch=4,
+        accepted_revision=True,
     )
     use_case = record_reconciliation_completion.RecordFinancialReconciliationCompletion(
         evidence_repository=evidence_repository,
@@ -76,4 +79,23 @@ async def test_stale_completion_preserves_completion_contract_without_controls_e
     await use_case.execute(completion, correlation_id="corr-stale")
 
     event_stager.stage_reconciliation_completed.assert_awaited_once()
+    event_stager.stage_controls_evaluated.assert_not_awaited()
+
+
+async def test_duplicate_revision_stages_no_downstream_contracts() -> None:
+    evidence_repository = AsyncMock()
+    event_stager = AsyncMock()
+    evidence_repository.record_completion.return_value = RecordedReconciliationControl(
+        status="COMPLETED",
+        latest_epoch=3,
+        accepted_revision=False,
+    )
+    use_case = record_reconciliation_completion.RecordFinancialReconciliationCompletion(
+        evidence_repository=evidence_repository,
+        event_stager=event_stager,
+    )
+
+    await use_case.execute(_completion(), correlation_id="corr-duplicate")
+
+    event_stager.stage_reconciliation_completed.assert_not_awaited()
     event_stager.stage_controls_evaluated.assert_not_awaited()

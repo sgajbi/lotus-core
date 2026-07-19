@@ -81,6 +81,7 @@ class ReconciliationRunEvidence:
     correlation_id: str | None
     requested_by: str | None
     dedupe_key: str | None
+    aggregation_revision: int | None
     failure_reason: str | None
 
 

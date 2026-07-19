@@ -17,7 +17,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..domain.reconciliation_control import (
     FinancialReconciliationCompletion,
     RecordedReconciliationControl,
-    merge_control_status,
 )
 
 
@@ -46,6 +45,7 @@ class SqlAlchemyReconciliationControlEvidenceRepository:
                 security_id=None,
                 business_date=completion.business_date,
                 epoch=completion.epoch,
+                aggregation_revision=completion.aggregation_revision,
                 status=completion.outcome_status,
                 cost_event_seen=False,
                 cashflow_event_seen=False,
@@ -54,7 +54,8 @@ class SqlAlchemyReconciliationControlEvidenceRepository:
             )
             .on_conflict_do_nothing(index_elements=["stage_name", "transaction_id", "epoch"])
         )
-        await self._db_session.execute(insert_statement)
+        insert_result = await self._db_session.execute(insert_statement)
+        created = int(insert_result.rowcount or 0) == 1
         stage = (
             await self._db_session.execute(
                 select(PipelineStageState)
@@ -73,14 +74,25 @@ class SqlAlchemyReconciliationControlEvidenceRepository:
                 f"{stage_key}/{completion.epoch} existing={stage.portfolio_id} "
                 f"incoming={completion.portfolio_id}"
             )
-        stage.status = merge_control_status(stage.status, completion.outcome_status)
-        stage.security_id = None
-        stage.business_date = completion.business_date
-        stage.last_source_event_type = FINANCIAL_RECONCILIATION_SOURCE_EVENT
-        if stage.ready_emitted_at is None:
-            stage.ready_emitted_at = func.now()
-        await self._db_session.flush()
-        await self._db_session.refresh(stage)
+        current_revision = int(stage.aggregation_revision or 0)
+        accepted_revision = created or completion.aggregation_revision > current_revision
+        if completion.aggregation_revision == current_revision and not created:
+            if stage.status != completion.outcome_status:
+                raise ValueError(
+                    "Conflicting reconciliation outcomes for one aggregation revision: "
+                    f"{stage_key}/{completion.epoch}/{completion.aggregation_revision} "
+                    f"existing={stage.status} incoming={completion.outcome_status}"
+                )
+        if accepted_revision:
+            stage.status = completion.outcome_status
+            stage.aggregation_revision = completion.aggregation_revision
+            stage.security_id = None
+            stage.business_date = completion.business_date
+            stage.last_source_event_type = FINANCIAL_RECONCILIATION_SOURCE_EVENT
+            if stage.ready_emitted_at is None:
+                stage.ready_emitted_at = func.now()
+            await self._db_session.flush()
+            await self._db_session.refresh(stage)
 
         latest_epoch_statement = select(func.max(PipelineStageState.epoch)).where(
             PipelineStageState.stage_name == FINANCIAL_RECONCILIATION_STAGE,
@@ -94,6 +106,7 @@ class SqlAlchemyReconciliationControlEvidenceRepository:
         return RecordedReconciliationControl(
             status=stage.status,
             latest_epoch=latest_epoch,
+            accepted_revision=accepted_revision,
         )
 
     @staticmethod

@@ -608,6 +608,7 @@ class FinancialReconciliationCompletedEvent(CoreEventModel):
     portfolio_id: str
     business_date: date
     epoch: int = 0
+    aggregation_revision: int = Field(default=0, ge=0)
     outcome_status: str
     reconciliation_types: list[str]
     blocking_reconciliation_types: list[str] = Field(default_factory=list)
@@ -627,6 +628,7 @@ class PortfolioDayControlsEvaluatedEvent(CoreEventModel):
     portfolio_id: str
     business_date: date
     epoch: int = 0
+    aggregation_revision: int = Field(default=0, ge=0)
     stage_name: str = "FINANCIAL_RECONCILIATION"
     status: str
     controls_blocking: bool = False

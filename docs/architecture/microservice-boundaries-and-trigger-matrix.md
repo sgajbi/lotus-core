@@ -100,7 +100,7 @@ transaction processing.
 | Valuation orchestration | `valuation_orchestrator_service` | valuation readiness and market-price facts | `valuation.job.requested` | Job identity, claim lease, epoch, dispatch recovery, and bounded backfill. | Valuation jobs and reprocessing state. |
 | Valuation compute | `position_valuation_calculator` | `valuation.job.requested` | `valuation.snapshot.persisted` | Job-event claim, snapshot mutation transaction, and outbox handoff. | Valued daily position snapshots. |
 | Timeseries and aggregation | `portfolio_derived_state_service` | valuation snapshots and durable aggregation jobs | `portfolio_day.aggregation.completed`, `portfolio_day.reconciliation.requested` | Atomic position write/job staging, lease-fenced claim, epoch, stale recovery, and completion outbox. | Position and portfolio timeseries. |
-| Financial controls | `portfolio_derived_state_service`, `financial_reconciliation_service` | aggregation completion | reconciliation request, completion compatibility fact, and `portfolio_day.controls.evaluated` | Deterministic run key, monotonic control status, latest-epoch suppression, and one DB/outbox transaction. | Reconciliation findings and publishability evidence. |
+| Financial controls | `portfolio_derived_state_service`, `financial_reconciliation_service` | aggregation completion | reconciliation request, completion compatibility fact, and `portfolio_day.controls.evaluated` | Durable aggregation revision, revision-aware deterministic run key, newest-revision control replacement, old/duplicate revision suppression, latest-epoch suppression, and one DB/outbox transaction. | Reconciliation findings and publishability evidence. |
 
 Architecture CI blocks both retired calculator paths and the unified transaction-processing package
 from orchestrator/query internals. It also blocks orchestrators from calculator, unified transaction,
@@ -142,7 +142,7 @@ runtime-boundary catalog.
    fenced ownership, computes portfolio timeseries through bounded workers, and atomically stages
    both the `portfolio_day.aggregation.completed` compatibility fact and
    `portfolio_day.reconciliation.requested`.
-10. `financial_reconciliation_service` consumes `portfolio_day.reconciliation.requested`, runs the automatic reconciliation bundle with deterministic dedupe keys per `(reconciliation_type, portfolio_id, business_date, epoch)`, persists monotonic/latest-epoch control evidence, and atomically stages `portfolio_day.reconciliation.completed` plus `portfolio_day.controls.evaluated` for the latest epoch.
+10. `financial_reconciliation_service` consumes `portfolio_day.reconciliation.requested`, runs the automatic reconciliation bundle with deterministic dedupe keys per `(reconciliation_type, portfolio_id, business_date, epoch, aggregation_revision)`, persists only the newest aggregation revision as authoritative control evidence, suppresses old or duplicate revisions, and atomically stages `portfolio_day.reconciliation.completed` plus `portfolio_day.controls.evaluated` for an accepted latest-epoch revision.
 11. `portfolio_day.controls.evaluated` is the canonical portfolio-day controls decision:
     `controls_blocking=true` and `publish_allowed=false` for `FAILED` / `REQUIRES_REPLAY`,
     otherwise `controls_blocking=false` and `publish_allowed=true`.

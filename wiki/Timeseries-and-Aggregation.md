@@ -22,6 +22,13 @@ application/domain modules, not one mixed calculation module.
 The durable database queue provides coalescing, replay, backdated-restatement, retry, and fan-in
 control. There is no private Kafka command between the two modules.
 
+Each fenced aggregation claim increments the durable job `attempt_count`; a successful claim carries
+that value as `aggregation_revision` into both completion events. This distinguishes a materially
+reopened portfolio day from Kafka redelivery without inventing arrival-time order. Financial
+reconciliation therefore calculates each new revision once while duplicate or older revisions are
+safe no-ops. Epoch remains the portfolio correction/restatement generation; aggregation revision is
+the ordered materialization generation within that epoch.
+
 ## Compatibility
 
 - Input topic: `valuation.snapshot.persisted`

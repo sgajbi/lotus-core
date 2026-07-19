@@ -128,6 +128,7 @@ async def test_create_run_deduplicates_concurrent_requests(
                 portfolio_id="P-CONC",
                 business_date=date(2026, 3, 14),
                 epoch=7,
+                aggregation_revision=11,
                 requested_by="system_pipeline",
                 dedupe_key=dedupe_key,
                 correlation_id="corr-conc",
@@ -157,3 +158,4 @@ async def test_create_run_deduplicates_concurrent_requests(
 
     assert len(rows) == 1
     assert rows[0].run_id == first[0]
+    assert rows[0].aggregation_revision == 11

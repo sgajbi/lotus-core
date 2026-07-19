@@ -38,6 +38,7 @@ async def test_create_run_normalizes_sentinel_correlation(mock_db_session: Async
         portfolio_id="P1",
         business_date=date(2025, 8, 10),
         epoch=1,
+        aggregation_revision=4,
         requested_by="system",
         dedupe_key="dedupe-1",
         correlation_id="<not-set>",
@@ -46,6 +47,7 @@ async def test_create_run_normalizes_sentinel_correlation(mock_db_session: Async
 
     assert created is True
     assert run.correlation_id is None
+    assert run.aggregation_revision == 4
     mock_db_session.add.assert_called_once_with(run)
     mock_db_session.refresh.assert_awaited_once_with(run)
 
@@ -62,6 +64,7 @@ async def test_create_run_uses_injected_run_id_suffix_provider(mock_db_session: 
         portfolio_id="P1",
         business_date=date(2025, 8, 10),
         epoch=1,
+        aggregation_revision=None,
         requested_by="system",
         dedupe_key=None,
         correlation_id="corr-1",
@@ -85,6 +88,7 @@ async def test_create_run_returns_existing_row_after_dedupe_integrity_race(
         portfolio_id="P1",
         business_date=date(2025, 8, 10),
         epoch=1,
+        aggregation_revision=4,
         requested_by="system",
         dedupe_key="dedupe-1",
         correlation_id="corr-1",

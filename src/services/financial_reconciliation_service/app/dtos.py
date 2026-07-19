@@ -160,6 +160,7 @@ class ReconciliationRunResponse(BaseModel):
                 "portfolio_id": "PORT-OPS-001",
                 "business_date": "2026-03-06",
                 "epoch": 0,
+                "aggregation_revision": 7,
                 "status": "completed",
                 "requested_by": "ops_control_plane",
                 "correlation_id": "CTL:9b4db9d1-1a39-42f2-9f55-2b2a4f9a4700",
@@ -199,6 +200,15 @@ class ReconciliationRunResponse(BaseModel):
         default=None,
         description="Epoch scope for the run when supplied.",
         examples=[0],
+    )
+    aggregation_revision: int | None = Field(
+        default=None,
+        ge=0,
+        description=(
+            "Durable portfolio-aggregation revision reconciled by this automatic run. "
+            "Manual and legacy runs may not carry one."
+        ),
+        examples=[7],
     )
     status: str = Field(
         description="Lifecycle status of the run.",
