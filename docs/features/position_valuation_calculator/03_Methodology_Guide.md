@@ -26,9 +26,12 @@ The core calculation is performed by the stateless `ValuationLogic` class. It de
 
 Issue #788 is replacing the quantity-price and legacy bond-quote heuristic with explicit valuation
 representations. The framework-independent policy, assignment, day-count, and segmented-accrual
-domains are implemented locally, but the production worker and financial reconciliation path are
-not wired to them yet. Until that wiring, persistence, API, and wiki support claims remain limited
-to the current runtime described above.
+domains are implemented locally. Authoritative tenant/legal-book/instrument assignments can be
+submitted through `POST /ingest/instrument-valuation-policy-assignments`; ingestion validates an
+exact supported policy/version and serializes concurrent scope writes before comparing them with
+durable source-version history. The production worker and financial reconciliation path are not
+wired to these policies yet, so the endpoint is source-governance capability rather than a claim
+that runtime valuation has migrated.
 
 The target policy never selects behavior from a broad product name or price magnitude. An exact,
 effective-dated instrument assignment selects a versioned composition of:
