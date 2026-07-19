@@ -124,13 +124,10 @@ async def test_backdated_correction_queues_visible_keys_and_preserves_replay() -
     )
 
 
-@pytest.mark.parametrize("latest_business_date", [None, date(2026, 4, 9)])
 @pytest.mark.asyncio
-async def test_out_of_horizon_correction_only_stages_durable_replay(
-    latest_business_date: date | None,
-) -> None:
+async def test_future_correction_only_stages_durable_replay() -> None:
     handler, repository, valuation_jobs = use_case()
-    repository.latest_business_date.return_value = latest_business_date
+    repository.latest_business_date.return_value = date(2026, 4, 9)
 
     result = await handler.execute(
         correction=correction(),
@@ -140,6 +137,24 @@ async def test_out_of_horizon_correction_only_stages_durable_replay(
 
     assert result.immediate_job_count == 0
     repository.stage_durable_replay.assert_awaited_once()
+    repository.find_position_keys_requiring_revaluation.assert_not_awaited()
+    valuation_jobs.upsert_jobs.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_source_fact_before_business_horizon_defers_to_position_readiness() -> None:
+    handler, repository, valuation_jobs = use_case()
+    repository.latest_business_date.return_value = None
+
+    result = await handler.execute(
+        correction=correction(),
+        correlation_id="corr-bootstrap",
+        source_correction_id="sha256:" + ("5" * 64),
+    )
+
+    assert result.immediate_job_count == 0
+    assert result.durable_replay_staged is False
+    repository.stage_durable_replay.assert_not_awaited()
     repository.find_position_keys_requiring_revaluation.assert_not_awaited()
     valuation_jobs.upsert_jobs.assert_not_awaited()
 

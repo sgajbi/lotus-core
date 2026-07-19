@@ -398,33 +398,35 @@ It does not need:
 It does need to cover the current gateway/UI build path honestly and
 meaningfully.
 
-## Implementation Recommendation
+## Implementation Contract
 
-Implement this as a new dedicated seed tool in `lotus-core`, separate from the
-current narrow benchmark patch tool.
+The governed implementation is `tools/front_office_portfolio_seed.py`, separate from the narrow
+benchmark patch tool.
 
-Recommended shape:
+Owned tools:
 
 - keep `tools/manual_performance_seed.py` as the focused benchmark-repair tool
-- add a new tool for the broader scenario, for example:
-  - `tools/front_office_portfolio_seed.py`
+- use `tools/front_office_portfolio_seed.py` for the broader scenario
 
-That tool should:
+The Core ingest phase must:
 
-1. seed or refresh the portfolio master and context
-2. seed instruments with classification coverage
-3. seed historical transactions
-4. seed prices and FX with enough history depth
-5. seed benchmark definitions, compositions, return series, and assignments
-6. seed DPM source-owner records for mandate binding, model targets, eligibility, tax lots,
+1. seed or refresh the portfolio master and prove it query visible
+2. seed instruments with classification coverage and prove every instrument query visible
+3. seed FX and price history before activating the business-date horizon
+4. fail closed until every required FX window and each security's ordered price-history tail are
+   query visible
+5. activate the business-date horizon, then seed historical transactions so transaction-owned
+   readiness performs the first valuation without treating bootstrap facts as corrections
+6. seed benchmark definitions, compositions, return series, and assignments
+7. seed DPM source-owner records for mandate binding, model targets, eligibility, tax lots,
    market-data coverage, client restrictions, and sustainability preferences
-7. wait for downstream calculators
-8. run a governed validation checklist across core, performance, gateway, and source-product
+8. wait for downstream calculators
+9. run a governed validation checklist across core, performance, gateway, and source-product
    routes
 
 ## Validation Contract
 
-The future seed tool should validate at least:
+The seed tool must validate at least:
 
 - positions non-empty
 - cash balances non-empty

@@ -33,17 +33,18 @@ def decide_source_revaluation_schedule(
     """
     Select the minimum work that preserves effective-dated valuation correctness.
 
-    Current-date observations do not need replay for positions that do not exist yet:
-    the transaction-owned valuation-readiness event will value every later position
-    against the already committed source fact. Backdated and future observations retain
-    durable replay because they can affect state outside that immediate readiness path.
+    Before a governed business-date horizon exists, observations are bootstrap facts,
+    not corrections: later transaction-owned valuation readiness consumes the persisted
+    history. Current-date observations use the same readiness path for positions that do
+    not exist yet. Backdated and future observations retain durable replay only after a
+    horizon exists because they can then affect already-governed state.
     """
 
     if latest_business_date is None:
         return SourceRevaluationSchedule(
             timing=SourceRevaluationTiming.NO_BUSINESS_DATE,
             scan_visible_positions=False,
-            stage_durable_replay=True,
+            stage_durable_replay=False,
         )
     if effective_date > latest_business_date:
         return SourceRevaluationSchedule(

@@ -25,6 +25,7 @@ from tools.front_office_portfolio_seed import (
     _ingest_reference_data,
     _reprocess_front_office_transactions,
     _required_cross_currency_fx_windows,
+    _required_market_price_windows,
     _should_reprocess_after_ingest,
     _terminate_front_office_seed_cleanup_blockers,
     _validate_front_office_cash_transactions,
@@ -33,6 +34,7 @@ from tools.front_office_portfolio_seed import (
     _wait_for_instrument_persistence,
     _wait_for_portfolio_persistence,
     _wait_for_required_fx_readiness,
+    _wait_for_required_market_price_readiness,
     build_front_office_portfolio_bundle,
     build_front_office_seed_cleanup_sql,
     build_portfolio_seed_cleanup_sql,
@@ -877,13 +879,14 @@ def test_portfolio_seed_cleanup_sql_resets_only_volatile_replay_fences():
     assert "event_id like 'portfolio_day.reconciliation.%'" not in sql
 
 
-def test_front_office_seed_ingests_core_data_in_parent_first_order(monkeypatch):
+def test_front_office_seed_persists_sources_before_activating_business_horizon(monkeypatch):
     bundle = _build_bundle()
     calls = []
     timeline = []
     waits = []
     instrument_waits = []
     fx_waits = []
+    price_waits = []
 
     def capture_request(method, url, *, payload=None):
         calls.append((method, url, payload))
@@ -902,6 +905,10 @@ def test_front_office_seed_ingests_core_data_in_parent_first_order(monkeypatch):
         fx_waits.append(kwargs)
         timeline.append("fx_ready")
 
+    def capture_price_wait(**kwargs):
+        price_waits.append(kwargs)
+        timeline.append("prices_ready")
+
     monkeypatch.setattr("tools.front_office_portfolio_seed._request_json", capture_request)
     monkeypatch.setattr(
         "tools.front_office_portfolio_seed._wait_for_portfolio_persistence",
@@ -915,6 +922,10 @@ def test_front_office_seed_ingests_core_data_in_parent_first_order(monkeypatch):
         "tools.front_office_portfolio_seed._wait_for_instrument_persistence",
         capture_instrument_wait,
     )
+    monkeypatch.setattr(
+        "tools.front_office_portfolio_seed._wait_for_required_market_price_readiness",
+        capture_price_wait,
+    )
 
     _ingest_front_office_core_data(
         ingestion_base_url="http://ingestion.dev.lotus",
@@ -926,15 +937,14 @@ def test_front_office_seed_ingests_core_data_in_parent_first_order(monkeypatch):
     )
 
     assert [call[1] for call in calls] == [
-        "http://ingestion.dev.lotus/ingest/business-dates",
         "http://ingestion.dev.lotus/ingest/portfolios",
         "http://ingestion.dev.lotus/ingest/instruments",
         "http://ingestion.dev.lotus/ingest/fx-rates",
         "http://ingestion.dev.lotus/ingest/market-prices",
+        "http://ingestion.dev.lotus/ingest/business-dates",
         "http://ingestion.dev.lotus/ingest/transactions",
     ]
     assert timeline == [
-        "http://ingestion.dev.lotus/ingest/business-dates",
         "http://ingestion.dev.lotus/ingest/portfolios",
         "portfolio_persisted",
         "http://ingestion.dev.lotus/ingest/instruments",
@@ -942,6 +952,8 @@ def test_front_office_seed_ingests_core_data_in_parent_first_order(monkeypatch):
         "http://ingestion.dev.lotus/ingest/fx-rates",
         "fx_ready",
         "http://ingestion.dev.lotus/ingest/market-prices",
+        "prices_ready",
+        "http://ingestion.dev.lotus/ingest/business-dates",
         "http://ingestion.dev.lotus/ingest/transactions",
     ]
     assert waits == [
@@ -961,6 +973,14 @@ def test_front_office_seed_ingests_core_data_in_parent_first_order(monkeypatch):
         }
     ]
     assert fx_waits == [
+        {
+            "query_base_url": "http://query.dev.lotus",
+            "bundle": bundle,
+            "wait_seconds": 90,
+            "poll_interval_seconds": 3,
+        }
+    ]
+    assert price_waits == [
         {
             "query_base_url": "http://query.dev.lotus",
             "bundle": bundle,
@@ -1019,6 +1039,21 @@ def test_front_office_seed_derives_required_cross_currency_fx_windows():
 
     assert _required_cross_currency_fx_windows(bundle) == [
         ("EUR", "USD", "2025-04-02", "2025-07-27")
+    ]
+
+
+def test_front_office_seed_derives_required_market_price_windows():
+    bundle = {
+        "market_prices": [
+            {"security_id": "SEC-B", "price_date": "2026-04-10"},
+            {"security_id": "SEC-A", "price_date": "2026-04-09"},
+            {"security_id": "SEC-A", "price_date": "2026-04-10"},
+        ]
+    }
+
+    assert _required_market_price_windows(bundle) == [
+        ("SEC-A", "2026-04-09", "2026-04-10"),
+        ("SEC-B", "2026-04-10", "2026-04-10"),
     ]
 
 
@@ -1081,6 +1116,75 @@ def test_front_office_seed_wait_for_required_fx_readiness_times_out(monkeypatch)
 
     with pytest.raises(RuntimeError, match="Timed out waiting for FX readiness"):
         _wait_for_required_fx_readiness(
+            query_base_url="http://query.dev.lotus",
+            bundle=bundle,
+            wait_seconds=0,
+            poll_interval_seconds=0,
+        )
+
+
+def test_front_office_seed_waits_for_market_price_tail_before_calendar(monkeypatch):
+    bundle = {
+        "market_prices": [
+            {"security_id": "SEC-A", "price_date": "2026-04-09"},
+            {"security_id": "SEC-A", "price_date": "2026-04-10"},
+        ]
+    }
+    observed_urls = []
+    responses = iter(
+        [
+            (200, {"prices": [{"price_date": "2026-04-09", "price": "100"}]}),
+            (
+                200,
+                {
+                    "prices": [
+                        {"price_date": "2026-04-09", "price": "100"},
+                        {"price_date": "2026-04-10", "price": "101"},
+                    ]
+                },
+            ),
+        ]
+    )
+
+    def fake_request(method, url, *, payload=None):
+        observed_urls.append((method, url, payload))
+        return next(responses)
+
+    monkeypatch.setattr("tools.front_office_portfolio_seed._request_json", fake_request)
+    monkeypatch.setattr("tools.front_office_portfolio_seed.time.sleep", lambda _: None)
+
+    _wait_for_required_market_price_readiness(
+        query_base_url="http://query.dev.lotus",
+        bundle=bundle,
+        wait_seconds=1,
+        poll_interval_seconds=0,
+    )
+
+    assert observed_urls == [
+        (
+            "GET",
+            "http://query.dev.lotus/prices/"
+            "?security_id=SEC-A&start_date=2026-04-09&end_date=2026-04-10",
+            None,
+        ),
+        (
+            "GET",
+            "http://query.dev.lotus/prices/"
+            "?security_id=SEC-A&start_date=2026-04-09&end_date=2026-04-10",
+            None,
+        ),
+    ]
+
+
+def test_front_office_seed_market_price_readiness_times_out(monkeypatch):
+    bundle = {"market_prices": [{"security_id": "SEC-A", "price_date": "2026-04-10"}]}
+    monkeypatch.setattr(
+        "tools.front_office_portfolio_seed._request_json",
+        lambda method, url, *, payload=None: (200, {"prices": []}),
+    )
+
+    with pytest.raises(RuntimeError, match="Timed out waiting for market-price readiness"):
+        _wait_for_required_market_price_readiness(
             query_base_url="http://query.dev.lotus",
             bundle=bundle,
             wait_seconds=0,

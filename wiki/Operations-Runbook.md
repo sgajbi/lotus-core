@@ -134,6 +134,12 @@ of canonical private-banking proof. Governed Workbench and platform QA startup s
 `DEMO_DATA_PACK_ENABLED=false`; canonical `PB_SG_GLOBAL_BAL_001` data must come from
 `tools/front_office_portfolio_seed.py`.
 
+Canonical clean bootstrap is source first: persist portfolio and instrument parents, then FX and
+market-price history, and fail closed until the required source windows are query visible before
+activating the business-date horizon. Transactions are posted only after that fence. This prevents
+initial history from being misclassified as late corrections while preserving durable replay for
+backdated or future observations against an existing horizon.
+
 The canonical seed includes planned withdrawal evidence for both the fixed contract as-of window
 and the current Workbench forward-liquidity horizon. After reseeding, `PortfolioCashflowProjection`
 should show at least one non-zero point for the canonical window and one non-zero current-horizon
