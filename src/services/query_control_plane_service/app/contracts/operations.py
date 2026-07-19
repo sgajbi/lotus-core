@@ -424,6 +424,15 @@ class SupportOverviewResponse(BaseModel):
         ),
         examples=["recon:transaction_cashflow:PF-001:2025-08-31:3"],
     )
+    controls_latest_reconciliation_aggregation_revision: Optional[int] = Field(
+        None,
+        ge=0,
+        description=(
+            "Durable portfolio-aggregation revision verified by the latest reconciliation run "
+            "on the same portfolio-day and epoch as the latest control stage."
+        ),
+        examples=[7],
+    )
     controls_latest_reconciliation_failure_reason: Optional[str] = Field(
         None,
         description=(
@@ -2320,6 +2329,15 @@ class ReconciliationRunRecord(BaseModel):
         None,
         description="Epoch scope for the reconciliation run when applicable.",
         examples=[3],
+    )
+    aggregation_revision: Optional[int] = Field(
+        None,
+        ge=0,
+        description=(
+            "Durable portfolio-aggregation revision verified by this automatic run. "
+            "Manual and legacy runs may not carry one."
+        ),
+        examples=[7],
     )
     started_at: datetime = Field(
         ...,

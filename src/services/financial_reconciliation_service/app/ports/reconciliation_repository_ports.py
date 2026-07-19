@@ -21,6 +21,7 @@ class ReconciliationRunWriter(Protocol):
         portfolio_id: str | None,
         business_date: date | None,
         epoch: int | None,
+        aggregation_revision: int | None,
         requested_by: str | None,
         dedupe_key: str | None,
         correlation_id: str | None,

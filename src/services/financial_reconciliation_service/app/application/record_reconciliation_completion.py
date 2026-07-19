@@ -34,6 +34,8 @@ class RecordFinancialReconciliationCompletion:
         """Record one completion and emit controls only for the latest epoch."""
 
         recorded_control = await self._evidence_repository.record_completion(completion)
+        if not recorded_control.accepted_revision:
+            return
         await self._event_stager.stage_reconciliation_completed(
             completion,
             correlation_id=correlation_id,

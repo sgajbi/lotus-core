@@ -199,6 +199,9 @@ def _reconciliation_run_fields(snapshot: SupportOverviewSnapshot) -> dict[str, A
         "controls_latest_reconciliation_dedupe_key": _field_value(
             latest_reconciliation_run, "dedupe_key"
         ),
+        "controls_latest_reconciliation_aggregation_revision": _field_value(
+            latest_reconciliation_run, "aggregation_revision"
+        ),
         "controls_latest_reconciliation_failure_reason": _field_value(
             latest_reconciliation_run, "failure_reason"
         ),

@@ -838,6 +838,9 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert support_overview["properties"]["controls_latest_reconciliation_dedupe_key"][
         "description"
     ].startswith("Stable deduplication key for the latest reconciliation run")
+    assert support_overview["properties"]["controls_latest_reconciliation_aggregation_revision"][
+        "description"
+    ].startswith("Durable portfolio-aggregation revision verified")
     assert support_overview["properties"]["controls_latest_reconciliation_failure_reason"][
         "description"
     ].startswith("Failure reason recorded on the latest reconciliation run")
@@ -1255,6 +1258,9 @@ async def test_openapi_describes_analytics_reference_contract(async_test_client)
     assert reconciliation_run_record["properties"]["dedupe_key"]["description"].startswith(
         "Stable deduplication key for the run"
     )
+    assert reconciliation_run_record["properties"]["aggregation_revision"][
+        "description"
+    ].startswith("Durable portfolio-aggregation revision verified")
     assert reconciliation_run_record["properties"]["failure_reason"]["description"] == (
         "Failure reason when the reconciliation run reaches FAILED state."
     )

@@ -633,6 +633,7 @@ class OperationsRepository:
             correlation_id=row.correlation_id,
             requested_by=row.requested_by,
             dedupe_key=row.dedupe_key,
+            aggregation_revision=row.aggregation_revision,
             failure_reason=row.failure_reason,
         )
 

@@ -31,6 +31,12 @@ For a requested reconciliation scope, the service:
 4. records a durable reconciliation run result
 5. persists any findings with portfolio, security, transaction, date, and epoch context
 
+Automatic portfolio-day requests also carry the durable `aggregation_revision` assigned by the
+lease-fenced aggregation job. Run identity includes reconciliation type, portfolio, business date,
+epoch, and aggregation revision. A newer revision replaces same-epoch control status; an older or
+identical revision cannot overwrite or republish it, and contradictory outcomes for one revision
+fail closed. Legacy events deserialize as revision `0`, preserving their existing dedupe identity.
+
 The current control families cover:
 
 - `transaction_cashflow`
@@ -50,6 +56,9 @@ Primary durable outputs include:
 - `financial_reconciliation_runs`
 - `financial_reconciliation_findings`
 - control evidence surfaced through reconciliation APIs
+
+Run and support responses expose `aggregation_revision` so operators can join the aggregate input
+generation to its independent control calculation and published control decision.
 
 These outputs feed:
 

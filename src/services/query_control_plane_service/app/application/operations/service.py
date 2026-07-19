@@ -1235,6 +1235,7 @@ class OperationsService:
                     status=run.status,
                     business_date=run.business_date,
                     epoch=run.epoch,
+                    aggregation_revision=run.aggregation_revision,
                     started_at=run.started_at,
                     completed_at=run.completed_at,
                     requested_by=run.requested_by,

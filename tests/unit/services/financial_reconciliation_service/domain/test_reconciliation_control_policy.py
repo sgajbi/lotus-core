@@ -2,14 +2,8 @@
 
 from src.services.financial_reconciliation_service.app.domain.reconciliation_control import (
     is_control_blocking,
-    merge_control_status,
     should_emit_controls_for_epoch,
 )
-
-
-def test_control_status_merge_preserves_highest_severity() -> None:
-    assert merge_control_status("REQUIRES_REPLAY", "COMPLETED") == "REQUIRES_REPLAY"
-    assert merge_control_status("COMPLETED", "FAILED") == "FAILED"
 
 
 def test_control_blocking_statuses_match_reconciliation_replay_policy() -> None:

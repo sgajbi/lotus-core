@@ -280,16 +280,20 @@ class ReconciliationService:
         *,
         reconciliation_type: str,
         request: ReconciliationRunRequest,
+        aggregation_revision: int | None,
     ) -> str | None:
         if request.requested_by != "system_pipeline":
             return None
         if request.portfolio_id is None or request.business_date is None:
             return None
         epoch = request.epoch if request.epoch is not None else 0
-        return (
+        scope_key = (
             f"auto:{reconciliation_type}:{request.portfolio_id}:"
             f"{request.business_date.isoformat()}:{epoch}"
         )
+        if not aggregation_revision:
+            return scope_key
+        return f"{scope_key}:aggregation-revision:{aggregation_revision}"
 
     @staticmethod
     def determine_automatic_bundle_outcome(
@@ -312,16 +316,31 @@ class ReconciliationService:
         request: ReconciliationRunRequest,
         correlation_id: str | None,
     ):
+        return await self._run_transaction_cashflow(
+            request=request,
+            correlation_id=correlation_id,
+            aggregation_revision=None,
+        )
+
+    async def _run_transaction_cashflow(
+        self,
+        *,
+        request: ReconciliationRunRequest,
+        correlation_id: str | None,
+        aggregation_revision: int | None = None,
+    ):
         started_at = self._monotonic_timer.seconds()
         dedupe_key = self._automatic_dedupe_key(
             reconciliation_type="transaction_cashflow",
             request=request,
+            aggregation_revision=aggregation_revision,
         )
         run, created = await self.repository.create_run(
             reconciliation_type="transaction_cashflow",
             portfolio_id=request.portfolio_id,
             business_date=request.business_date,
             epoch=request.epoch,
+            aggregation_revision=aggregation_revision,
             requested_by=request.requested_by,
             dedupe_key=dedupe_key,
             correlation_id=correlation_id,
@@ -459,17 +478,32 @@ class ReconciliationService:
         request: ReconciliationRunRequest,
         correlation_id: str | None,
     ):
+        return await self._run_position_valuation(
+            request=request,
+            correlation_id=correlation_id,
+            aggregation_revision=None,
+        )
+
+    async def _run_position_valuation(
+        self,
+        *,
+        request: ReconciliationRunRequest,
+        correlation_id: str | None,
+        aggregation_revision: int | None = None,
+    ):
         started_at = self._monotonic_timer.seconds()
         tolerance = request.tolerance or DEFAULT_VALUE_TOLERANCE
         dedupe_key = self._automatic_dedupe_key(
             reconciliation_type="position_valuation",
             request=request,
+            aggregation_revision=aggregation_revision,
         )
         run, created = await self.repository.create_run(
             reconciliation_type="position_valuation",
             portfolio_id=request.portfolio_id,
             business_date=request.business_date,
             epoch=request.epoch,
+            aggregation_revision=aggregation_revision,
             requested_by=request.requested_by,
             dedupe_key=dedupe_key,
             correlation_id=correlation_id,
@@ -526,17 +560,32 @@ class ReconciliationService:
         request: ReconciliationRunRequest,
         correlation_id: str | None,
     ):
+        return await self._run_timeseries_integrity(
+            request=request,
+            correlation_id=correlation_id,
+            aggregation_revision=None,
+        )
+
+    async def _run_timeseries_integrity(
+        self,
+        *,
+        request: ReconciliationRunRequest,
+        correlation_id: str | None,
+        aggregation_revision: int | None = None,
+    ):
         started_at = self._monotonic_timer.seconds()
         tolerance = request.tolerance or DEFAULT_VALUE_TOLERANCE
         dedupe_key = self._automatic_dedupe_key(
             reconciliation_type="timeseries_integrity",
             request=request,
+            aggregation_revision=aggregation_revision,
         )
         run, created = await self.repository.create_run(
             reconciliation_type="timeseries_integrity",
             portfolio_id=request.portfolio_id,
             business_date=request.business_date,
             epoch=request.epoch,
+            aggregation_revision=aggregation_revision,
             requested_by=request.requested_by,
             dedupe_key=dedupe_key,
             correlation_id=correlation_id,
@@ -764,25 +813,29 @@ class ReconciliationService:
         request: ReconciliationRunRequest,
         correlation_id: str | None,
         reconciliation_types: list[str],
+        aggregation_revision: int | None = None,
     ) -> dict[str, object]:
         results: dict[str, object] = {}
         for reconciliation_type in reconciliation_types:
             if reconciliation_type == "transaction_cashflow":
-                results[reconciliation_type] = await self.run_transaction_cashflow(
+                results[reconciliation_type] = await self._run_transaction_cashflow(
                     request=request,
                     correlation_id=correlation_id,
+                    aggregation_revision=aggregation_revision,
                 )
                 continue
             if reconciliation_type == "position_valuation":
-                results[reconciliation_type] = await self.run_position_valuation(
+                results[reconciliation_type] = await self._run_position_valuation(
                     request=request,
                     correlation_id=correlation_id,
+                    aggregation_revision=aggregation_revision,
                 )
                 continue
             if reconciliation_type == "timeseries_integrity":
-                results[reconciliation_type] = await self.run_timeseries_integrity(
+                results[reconciliation_type] = await self._run_timeseries_integrity(
                     request=request,
                     correlation_id=correlation_id,
+                    aggregation_revision=aggregation_revision,
                 )
                 continue
             raise ValueError(f"Unsupported reconciliation type '{reconciliation_type}'.")
