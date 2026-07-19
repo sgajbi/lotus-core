@@ -34,6 +34,11 @@ when existing metadata conflicts with the governed contract. Use the
 pause, drain, expansion, replacement-topic, and rollback procedures; do not bypass the mismatch
 check or use a global partition-count override.
 
+The transaction raw/persisted pair and market-price raw/persisted pair each use twelve aligned
+partitions and bounded in-flight tasks. Transaction capacity is position/group ordered;
+market-price capacity is security ordered. Change both sides of an event-family contract together,
+and never expand a live topic until the affected lag and outbox work are fully drained.
+
 ## Transaction-processing runtime
 
 App-local Compose runs one `portfolio_transaction_processing_service` on host port `8090`; it owns

@@ -2781,6 +2781,12 @@ Most relevant current governance:
      connections remained `11`, and lock/blocked peaks remained `2/2`. Do not change only one side
      of the topic/group contract, apply twelve as a global topic default, or increase beyond twelve
      without exact reconciliation plus pool, lock, lag, CPU, recovery, and daily-volume evidence.
+     `market_prices.raw.received` / `persistence_group_market_prices` and
+     `market_prices.persisted` / `valuation_orchestrator_group_price_events` also use twelve aligned
+     partitions/in-flight tasks. This is a separate source-bootstrap decision: eight partitions
+     placed five of ten canonical security series (`1,880/3,760` facts) on one ordered lane;
+     twelve reduces the hottest lane to three series (`1,128` facts), or `40%` less serial work.
+     Preserve the `security_id` key, pinned CRC32 partitioner, and per-partition serialization.
 196. Cost-basis processing and AVCO rebuild must resolve portfolio policy and optional instrument
      facts through one typed application-port bundle and one repository statement. Preserve the
      distinct missing-portfolio retry and missing-instrument preparation/rebuild behavior. Do not

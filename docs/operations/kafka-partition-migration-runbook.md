@@ -9,14 +9,19 @@ Core services fail startup when an existing governed topic has a different parti
 is intentional: starting against an unreviewed topology can break domain ordering even when event
 schemas and payloads are unchanged.
 
-## Current Transaction Cutover
+## Current Bounded Cutovers
 
-The governed contract increases only these transaction paths from `8` to `12` partitions:
+The governed contract increases these measured paths from `8` to `12` partitions:
 
 - `transactions.raw.received` with `persistence_group_transactions`;
 - `transactions.persisted` with `portfolio_transaction_processing_group`.
 
-Both consumer groups have `max_in_flight_messages=12` and retain
+The clean canonical source-first proof also increases the aligned market-price pair:
+
+- `market_prices.raw.received` with `persistence_group_market_prices`;
+- `market_prices.persisted` with `valuation_orchestrator_group_price_events`.
+
+Each paired consumer group has `max_in_flight_messages=12` and retains
 `per_key_concurrency=1`. Unlinked transactions use `portfolio_id|security_id`; transactions with a
 non-blank `linked_transaction_group_id` use
 `portfolio_id|transaction-group|linked_transaction_group_id`. Same-position events stay ordered,
@@ -28,6 +33,12 @@ The exact-source fan-in artifact `20260717T003225Z` reduced drain from `110.249s
 connections `11`, and peak lock waiters/blocked sessions `2/2`. Twelve is deliberately below the
 service's default maximum pool capacity of fifteen connections. A further increase requires fresh
 pool, lock, lag, CPU, and exact-daily evidence.
+
+The exact canonical ten-security price history produced `3,760` raw facts. With eight partitions,
+the pinned CRC32 keyed partitioner assigned five securities (`1,880` facts) to one serial lane.
+Twelve partitions reduce the hottest lane to three securities (`1,128` facts), a `40%` reduction,
+while retaining security ordering. Both market-price topics and both consumer profiles must move
+together. This evidence does not authorize a global default or any count above twelve.
 
 ## Ordering Invariants
 
@@ -43,6 +54,8 @@ pool, lock, lag, CPU, and exact-daily evidence.
 - Valuation and position timeseries work is portfolio-security ordered.
 - Market prices are security ordered, FX rates are directed-currency-pair ordered, and business
   dates are calendar ordered.
+- Keyed producers pin librdkafka `consistent_random` (CRC32) so partition planning and migration
+  evidence do not depend on a client-library default.
 - Transaction reprocessing requests resolve `portfolio_id` from the authoritative transaction
   ledger before publication and are portfolio ordered. Unknown transactions are rejected before
   Kafka publication.

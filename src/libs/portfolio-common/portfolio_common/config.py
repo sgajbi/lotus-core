@@ -190,7 +190,7 @@ KAFKA_TOPIC_DEFINITIONS = (
         lifecycle_status="active",
         semantic_type="fact",
         scope="market_price",
-        partition_count=8,
+        partition_count=12,
     ),
     KafkaTopicDefinition(
         canonical_name="fx_rates.raw.received",
@@ -222,7 +222,7 @@ KAFKA_TOPIC_DEFINITIONS = (
         lifecycle_status="active",
         semantic_type="fact",
         scope="market_price",
-        partition_count=8,
+        partition_count=12,
     ),
     KafkaTopicDefinition(
         canonical_name="fx_rates.persisted",
