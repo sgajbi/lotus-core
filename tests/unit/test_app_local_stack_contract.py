@@ -111,6 +111,11 @@ def test_demo_data_loader_uses_internal_service_urls() -> None:
     assert 'ingest_only_args=\\"--ingest-only\\";' in command
     assert "$$portfolio_args" in command
     assert "$$ingest_only_args" in command
+    assert "force_ingest_args='';" in command
+    assert 'if [ \\"$$DEMO_DATA_PACK_FORCE_INGEST\\" = \\"true\\" ]; then' in command
+    assert 'force_ingest_args=\\"--force-ingest\\";' in command
+    assert "$$force_ingest_args" in command
+    assert "--force-ingest" not in command.replace('force_ingest_args=\\"--force-ingest\\";', "")
     assert "depends_on" not in demo_loader["environment"]
     assert demo_loader["environment"]["DEMO_DATA_PACK_WAIT_SECONDS"] == (
         "${DEMO_DATA_PACK_WAIT_SECONDS:-900}"
@@ -126,6 +131,9 @@ def test_demo_data_loader_uses_internal_service_urls() -> None:
     )
     assert demo_loader["environment"]["DEMO_DATA_PACK_INGEST_ONLY"] == (
         "${DEMO_DATA_PACK_INGEST_ONLY:-false}"
+    )
+    assert demo_loader["environment"]["DEMO_DATA_PACK_FORCE_INGEST"] == (
+        "${DEMO_DATA_PACK_FORCE_INGEST:-false}"
     )
     assert sorted(depends_on) == [
         "ingestion_service",

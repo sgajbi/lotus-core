@@ -28,6 +28,11 @@ docker compose logs --tail=200 kafka-topic-creator
 make test-docker-smoke
 ```
 
+The one-shot app-local demo loader treats an unchanged retained-volume restart as a complete-pack
+no-op and logs `reason=unchanged_pack_present`. Set `DEMO_DATA_PACK_FORCE_INGEST=true` only for an
+intentional full sample-data refresh; routine restarts must not republish unchanged source history
+or create avoidable valuation work.
+
 Kafka topic counts and ordering scopes are source-owned. The topic creator and service startup fail
 when existing metadata conflicts with the governed contract. Use the
 [Kafka Partition Migration Runbook](../docs/operations/kafka-partition-migration-runbook.md) for

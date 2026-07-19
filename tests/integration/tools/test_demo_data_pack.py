@@ -198,6 +198,75 @@ def test_all_demo_portfolios_exist_checks_every_expected_portfolio(monkeypatch):
     assert set(seen) == {item.portfolio_id for item in demo_data_pack.DEMO_EXPECTATIONS}
 
 
+def test_existing_demo_pack_skips_all_source_ingestion(monkeypatch, caplog):
+    caplog.set_level("INFO", logger=demo_data_pack.LOGGER.name)
+    bundle = demo_data_pack.build_demo_bundle(
+        history_days=demo_data_pack.MIN_DEMO_HISTORY_DAYS,
+        portfolio_ids=("DEMO_DPM_EUR_001",),
+    )
+    expectations = demo_data_pack._expectations_for_portfolio_ids(("DEMO_DPM_EUR_001",))
+    monkeypatch.setattr(demo_data_pack, "_all_demo_portfolios_exist", lambda *_args: True)
+    monkeypatch.setattr(
+        demo_data_pack,
+        "_ingest_demo_portfolio_data",
+        lambda *_args, **_kwargs: pytest.fail("portfolio data must not be replayed"),
+    )
+    monkeypatch.setattr(
+        demo_data_pack,
+        "_ingest_demo_reference_data",
+        lambda *_args, **_kwargs: pytest.fail("reference data must not be replayed"),
+    )
+
+    ingested = demo_data_pack._ingest_demo_pack_if_needed(
+        ingestion_base_url="http://ingestion",
+        query_base_url="http://query",
+        bundle=bundle,
+        expectations=expectations,
+        force_ingest=False,
+    )
+
+    assert ingested is False
+    assert "reason=unchanged_pack_present" in caplog.text
+
+
+@pytest.mark.parametrize("force_ingest,portfolios_exist", [(False, False), (True, True)])
+def test_first_boot_and_explicit_refresh_ingest_complete_demo_pack(
+    monkeypatch, force_ingest, portfolios_exist
+):
+    bundle = demo_data_pack.build_demo_bundle(
+        history_days=demo_data_pack.MIN_DEMO_HISTORY_DAYS,
+        portfolio_ids=("DEMO_DPM_EUR_001",),
+    )
+    expectations = demo_data_pack._expectations_for_portfolio_ids(("DEMO_DPM_EUR_001",))
+    calls: list[str] = []
+    monkeypatch.setattr(
+        demo_data_pack,
+        "_all_demo_portfolios_exist",
+        lambda *_args: portfolios_exist,
+    )
+    monkeypatch.setattr(
+        demo_data_pack,
+        "_ingest_demo_portfolio_data",
+        lambda *_args, **_kwargs: calls.append("portfolio"),
+    )
+    monkeypatch.setattr(
+        demo_data_pack,
+        "_ingest_demo_reference_data",
+        lambda *_args, **_kwargs: calls.append("reference"),
+    )
+
+    ingested = demo_data_pack._ingest_demo_pack_if_needed(
+        ingestion_base_url="http://ingestion",
+        query_base_url="http://query",
+        bundle=bundle,
+        expectations=expectations,
+        force_ingest=force_ingest,
+    )
+
+    assert ingested is True
+    assert calls == ["portfolio", "reference"]
+
+
 def test_verify_portfolio_timeout_reports_last_observed_state(monkeypatch):
     expected = demo_data_pack.PortfolioExpectation(
         "DEMO_TEST_001",

@@ -1525,6 +1525,31 @@ def _all_demo_portfolios_exist(
     return all(_portfolio_exists(query_base_url, item.portfolio_id) for item in expectations)
 
 
+def _ingest_demo_pack_if_needed(
+    *,
+    ingestion_base_url: str,
+    query_base_url: str,
+    bundle: dict[str, Any],
+    expectations: tuple[PortfolioExpectation, ...],
+    force_ingest: bool,
+) -> bool:
+    if not force_ingest and _all_demo_portfolios_exist(query_base_url, expectations):
+        LOGGER.info(
+            "Demo pack already present. Skipping portfolio and reference ingestion "
+            "reason=unchanged_pack_present"
+        )
+        return False
+
+    _ingest_demo_portfolio_data(ingestion_base_url, bundle)
+    _ingest_demo_reference_data(ingestion_base_url, bundle)
+    LOGGER.info(
+        "Ingested benchmark reference seed: benchmark=%s assigned_portfolio=%s",
+        bundle["benchmark_verification"]["benchmark_id"],
+        bundle["benchmark_verification"]["portfolio_id"],
+    )
+    return True
+
+
 def _format_verification_state(state: dict[str, Any]) -> str:
     return ", ".join(f"{key}={value}" for key, value in state.items())
 
@@ -1743,15 +1768,12 @@ def main() -> int:
     )
     demo_bundle = build_demo_bundle(history_days=args.history_days, portfolio_ids=portfolio_ids)
     if not args.verify_only:
-        if args.force_ingest or not _all_demo_portfolios_exist(query_base_url, expectations):
-            _ingest_demo_portfolio_data(ingestion_base_url, demo_bundle)
-        else:
-            LOGGER.info("Demo portfolios already present. Skipping ingestion.")
-        _ingest_demo_reference_data(ingestion_base_url, demo_bundle)
-        LOGGER.info(
-            "Ingested benchmark reference seed: benchmark=%s assigned_portfolio=%s",
-            demo_bundle["benchmark_verification"]["benchmark_id"],
-            demo_bundle["benchmark_verification"]["portfolio_id"],
+        _ingest_demo_pack_if_needed(
+            ingestion_base_url=ingestion_base_url,
+            query_base_url=query_base_url,
+            bundle=demo_bundle,
+            expectations=expectations,
+            force_ingest=args.force_ingest,
         )
     if not args.ingest_only:
         verification_results: list[dict[str, Any]] = []
