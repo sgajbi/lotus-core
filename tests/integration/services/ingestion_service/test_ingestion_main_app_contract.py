@@ -983,10 +983,12 @@ async def test_openapi_describes_reference_data_shared_schema(async_test_client)
     benchmark_definition = components["BenchmarkDefinitionRecord"]
     mandate_binding = components["DiscretionaryMandateBindingRecord"]
     party_role_assignment = components["PortfolioPartyRoleAssignmentRecord"]
+    valuation_policy_assignment = components["InstrumentValuationPolicyAssignmentRecord"]
     index_price_series = components["IndexPriceSeriesRecord"]
     benchmark_definition_request = components["BenchmarkDefinitionIngestionRequest"]
     mandate_binding_request = components["DiscretionaryMandateBindingIngestionRequest"]
     party_role_request = components["PortfolioPartyRoleAssignmentIngestionRequest"]
+    valuation_policy_request = components["InstrumentValuationPolicyAssignmentIngestionRequest"]
     index_definition_request = components["IndexDefinitionIngestionRequest"]
     classification_request = components["ClassificationTaxonomyIngestionRequest"]
 
@@ -1020,6 +1022,25 @@ async def test_openapi_describes_reference_data_shared_schema(async_test_client)
     ]
     assert party_role_request["properties"]["party_role_assignments"]["description"] == (
         "Effective-dated portfolio party-role observations to ingest or upsert."
+    )
+    assert valuation_policy_assignment["properties"]["legal_book_id"]["description"] == (
+        "Legal booking entity or governed accounting book. This field must not be inferred "
+        "from booking centre or jurisdiction."
+    )
+    assert valuation_policy_assignment["properties"]["policy_id"]["examples"] == [
+        "CLEAN_PERCENT_FACE_CALCULATED_ACCRUAL"
+    ]
+    assert (
+        valuation_policy_request["properties"]["valuation_policy_assignments"]["maxItems"] == 1000
+    )
+    valuation_policy_conflicts = response.json()["paths"][
+        "/ingest/instrument-valuation-policy-assignments"
+    ]["post"]["responses"]["409"]["content"]["application/json"]["examples"]
+    assert valuation_policy_conflicts["policy_blocked"]["value"]["detail"]["code"] == (
+        "VALUATION_POLICY_ASSIGNMENT_CONFLICT"
+    )
+    assert valuation_policy_conflicts["idempotency_conflict"]["value"]["detail"]["code"] == (
+        "INGESTION_IDEMPOTENCY_CONFLICT"
     )
     assert index_definition_request["properties"]["indices"]["examples"] == [
         [

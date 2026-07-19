@@ -80,6 +80,13 @@ REFERENCE_DATA_INGESTION_REGISTRY = ReferenceDataIngestionRegistry(
             persist_method_name="upsert_instrument_eligibility_profiles",
         ),
         ReferenceDataIngestionCommand(
+            command_key="instrument_valuation_policy_assignment",
+            endpoint="/ingest/instrument-valuation-policy-assignments",
+            entity_type="instrument_valuation_policy_assignment",
+            records_attribute="valuation_policy_assignments",
+            persist_method_name="upsert_instrument_valuation_policy_assignments",
+        ),
+        ReferenceDataIngestionCommand(
             command_key="mandate_binding",
             endpoint="/ingest/mandate-bindings",
             entity_type="mandate_binding",

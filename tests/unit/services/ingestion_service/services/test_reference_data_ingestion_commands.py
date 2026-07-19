@@ -2,6 +2,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from portfolio_common.domain.valuation.assignments import ValuationPolicyAssignmentError
 
 from src.services.ingestion_service.app.services.reference_data_ingestion_commands import (
     ReferenceDataBookkeepingFailed,
@@ -115,6 +116,36 @@ async def test_reference_data_command_marks_failed_on_persist_error() -> None:
     handler.ingestion_job_service.mark_failed.assert_awaited_once_with(
         "ref-job-1",
         "db unavailable",
+        failure_phase="persist",
+    )
+
+
+@pytest.mark.asyncio
+async def test_reference_data_command_maps_valuation_authority_conflict_to_409() -> None:
+    handler = _handler()
+    registry_command = _registry_command(
+        persist_side_effect=ValuationPolicyAssignmentError("overlapping valuation authority")
+    )
+
+    with pytest.raises(ReferenceDataIngestionCommandError) as exc_info:
+        await handler.ingest_reference_data(
+            ReferenceDataIngestionCommand(
+                endpoint="/ingest/instrument-valuation-policy-assignments",
+                idempotency_key="valuation-policy-conflict",
+                registry_command=registry_command,
+                request=SimpleNamespace(records=[{"id": "R1"}]),
+            )
+        )
+
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail == {
+        "code": "VALUATION_POLICY_ASSIGNMENT_CONFLICT",
+        "message": "overlapping valuation authority",
+        "job_id": "ref-job-1",
+    }
+    handler.ingestion_job_service.mark_failed.assert_awaited_once_with(
+        "ref-job-1",
+        "overlapping valuation authority",
         failure_phase="persist",
     )
 

@@ -9,6 +9,7 @@ from . import reference_data_model_portfolio_dto as _model_portfolio_dto
 from . import reference_data_portfolio_party_role_dto as _portfolio_party_role_dto
 from . import reference_data_support_dto as _support_dto
 from . import reference_data_tax_dto as _tax_dto
+from . import reference_data_valuation_policy_dto as _valuation_policy_dto
 
 ClientRestrictionProfileIngestionRequest = (
     _client_preference_dto.ClientRestrictionProfileIngestionRequest
@@ -30,6 +31,12 @@ InstrumentEligibilityProfileIngestionRequest = (
     _instrument_eligibility_dto.InstrumentEligibilityProfileIngestionRequest
 )
 InstrumentEligibilityProfileRecord = _instrument_eligibility_dto.InstrumentEligibilityProfileRecord
+InstrumentValuationPolicyAssignmentIngestionRequest = (
+    _valuation_policy_dto.InstrumentValuationPolicyAssignmentIngestionRequest
+)
+InstrumentValuationPolicyAssignmentRecord = (
+    _valuation_policy_dto.InstrumentValuationPolicyAssignmentRecord
+)
 ModelPortfolioDefinitionIngestionRequest = (
     _model_portfolio_dto.ModelPortfolioDefinitionIngestionRequest
 )

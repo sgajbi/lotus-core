@@ -38,6 +38,7 @@
     "/ingest/index-return-series",
     "/ingest/indices",
     "/ingest/instrument-eligibility",
+    "/ingest/instrument-valuation-policy-assignments",
     "/ingest/instruments",
     "/ingest/liquidity-reserve-requirements",
     "/ingest/mandate-bindings",

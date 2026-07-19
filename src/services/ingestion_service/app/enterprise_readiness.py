@@ -33,6 +33,7 @@ INGESTION_WRITE_CAPABILITY_RULES: dict[str, str] = {
     "POST /ingest/model-portfolios": "ingestion.reference_data.write",
     "POST /ingest/model-portfolio-targets": "ingestion.reference_data.write",
     "POST /ingest/instrument-eligibility": "ingestion.reference_data.write",
+    "POST /ingest/instrument-valuation-policy-assignments": "ingestion.reference_data.write",
     "POST /ingest/mandate-bindings": "ingestion.reference_data.write",
     "POST /ingest/client-restriction-profiles": "ingestion.reference_data.write",
     "POST /ingest/sustainability-preferences": "ingestion.reference_data.write",

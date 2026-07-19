@@ -1038,6 +1038,7 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
                 "classification_taxonomy": [],
                 "cash_accounts": [],
                 "lookthrough_components": [],
+                "valuation_policy_assignments": [],
             }
 
         async def upsert_portfolio_benchmark_assignments(
@@ -1106,6 +1107,11 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             self, records: list[dict[str, object]]
         ) -> None:
             self.persisted["lookthrough_components"].extend(records)
+
+        async def upsert_instrument_valuation_policy_assignments(
+            self, records: list[dict[str, object]]
+        ) -> None:
+            self.persisted["valuation_policy_assignments"].extend(records)
 
     class FakeBusinessCalendarRepository:
         def __init__(self):
@@ -8178,3 +8184,81 @@ async def test_reference_data_ingestion_marks_job_failed_when_persist_fn_raises(
     failure_history = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/failures")
     assert failure_history.status_code == 200
     assert failure_history.json()["failures"][0]["failure_phase"] == "persist"
+
+
+async def test_ingest_instrument_valuation_policy_assignment_preserves_authority_lineage(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    response = await async_test_client.post(
+        "/ingest/instrument-valuation-policy-assignments",
+        json={
+            "valuation_policy_assignments": [
+                {
+                    "tenant_id": " LOTUS_PB_SG ",
+                    "legal_book_id": " SG_PRIVATE_BANK_BOOK ",
+                    "security_id": " BOND_US_CORP_2031 ",
+                    "policy_id": " CLEAN_PERCENT_FACE_CALCULATED_ACCRUAL ",
+                    "policy_version": 1,
+                    "valid_from": "2026-01-01",
+                    "assignment_status": "ACTIVE",
+                    "assignment_version": 1,
+                    "source_system": " security_master ",
+                    "source_record_id": " VALPOL-BOND_US_CORP_2031-SG ",
+                    "source_revision": " rev-001 ",
+                    "observed_at": "2026-01-02T08:00:00+08:00",
+                    "assignment_reason": " Clean-price fixed-rate bond treatment. ",
+                }
+            ]
+        },
+        headers={"X-Idempotency-Key": "valuation-policy-assignment-idem-001"},
+    )
+
+    assert response.status_code == 202
+    assert response.json()["entity_type"] == "instrument_valuation_policy_assignment"
+    persisted = ingestion_test_harness["fake_reference_data_service"].persisted[
+        "valuation_policy_assignments"
+    ]
+    assert len(persisted) == 1
+    assert persisted[0]["tenant_id"] == "LOTUS_PB_SG"
+    assert persisted[0]["legal_book_id"] == "SG_PRIVATE_BANK_BOOK"
+    assert persisted[0]["policy_id"] == "CLEAN_PERCENT_FACE_CALCULATED_ACCRUAL"
+    assert persisted[0]["source_revision"] == "rev-001"
+
+
+async def test_ingest_instrument_valuation_policy_assignment_rejects_batch_overlap(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    base = {
+        "tenant_id": "LOTUS_PB_SG",
+        "legal_book_id": "SG_PRIVATE_BANK_BOOK",
+        "security_id": "BOND_US_CORP_2031",
+        "policy_id": "CLEAN_PERCENT_FACE_CALCULATED_ACCRUAL",
+        "policy_version": 1,
+        "valid_from": "2026-01-01",
+        "assignment_status": "ACTIVE",
+        "assignment_version": 1,
+        "source_system": "security_master",
+        "source_revision": "rev-001",
+        "observed_at": "2026-01-02T08:00:00+08:00",
+        "assignment_reason": "Clean-price fixed-rate bond treatment.",
+    }
+    response = await async_test_client.post(
+        "/ingest/instrument-valuation-policy-assignments",
+        json={
+            "valuation_policy_assignments": [
+                {**base, "source_record_id": "AUTHORITY-A"},
+                {**base, "source_record_id": "AUTHORITY-B"},
+            ]
+        },
+    )
+
+    assert response.status_code == 422
+    assert "windows overlap" in response.text
+    assert (
+        ingestion_test_harness["fake_reference_data_service"].persisted[
+            "valuation_policy_assignments"
+        ]
+        == []
+    )

@@ -30,6 +30,7 @@ from ..DTOs.reference_data_dto import (
     IndexReturnSeriesIngestionRequest,
     InstrumentEligibilityProfileIngestionRequest,
     InstrumentLookthroughComponentIngestionRequest,
+    InstrumentValuationPolicyAssignmentIngestionRequest,
     LiquidityReserveRequirementIngestionRequest,
     ModelPortfolioDefinitionIngestionRequest,
     ModelPortfolioTargetIngestionRequest,
@@ -49,7 +50,10 @@ from ..services.reference_data_ingestion_commands import (
     ReferenceDataIngestionCommand as ReferenceDataServiceCommand,
 )
 from .job_bookkeeping import post_publish_bookkeeping_failure_detail
-from .publish_errors import ingestion_idempotency_conflict_response
+from .publish_errors import (
+    ingestion_conflict_response_with_idempotency_example,
+    ingestion_idempotency_conflict_response,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -70,6 +74,16 @@ REFERENCE_PERSIST_FAILED_EXAMPLE = {
     "detail": {
         "code": "REFERENCE_DATA_PERSIST_FAILED",
         "message": "Benchmark assignment persistence failed.",
+        "job_id": "ing_01HZY3W6K8QF5B3Z7R9M2N1P0A",
+    }
+}
+VALUATION_POLICY_ASSIGNMENT_CONFLICT_EXAMPLE = {
+    "detail": {
+        "code": "VALUATION_POLICY_ASSIGNMENT_CONFLICT",
+        "message": (
+            "active valuation-policy assignment windows overlap for tenant=LOTUS_PB_SG, "
+            "legal_book=SG_PRIVATE_BANK_BOOK, security=BOND_US_CORP_2031"
+        ),
         "job_id": "ing_01HZY3W6K8QF5B3Z7R9M2N1P0A",
     }
 }
@@ -129,6 +143,17 @@ REFERENCE_INGESTION_RESPONSES = {
         "description": "Ingestion operating mode blocked writes.",
         "content": {"application/json": {"example": REFERENCE_MODE_BLOCKED_EXAMPLE}},
     },
+}
+
+VALUATION_POLICY_INGESTION_RESPONSES = {
+    **REFERENCE_INGESTION_RESPONSES,
+    status.HTTP_409_CONFLICT: ingestion_conflict_response_with_idempotency_example(
+        description=(
+            "The idempotency key conflicts with an earlier payload or authoritative "
+            "reference-data state conflicts with the requested assignment."
+        ),
+        policy_blocked_example=VALUATION_POLICY_ASSIGNMENT_CONFLICT_EXAMPLE,
+    ),
 }
 
 
@@ -281,6 +306,40 @@ async def ingest_mandate_bindings(
     return await _handle_reference_ingestion(
         http_request=http_request,
         command=REFERENCE_DATA_INGESTION_REGISTRY.require("mandate_binding"),
+        request=request,
+        command_handler=command_handler,
+    )
+
+
+@router.post(
+    "/ingest/instrument-valuation-policy-assignments",
+    status_code=status.HTTP_202_ACCEPTED,
+    response_model=BatchIngestionAcceptedResponse,
+    responses=VALUATION_POLICY_INGESTION_RESPONSES,
+    tags=["Reference Data"],
+    summary="Ingest instrument valuation-policy assignments",
+    description=(
+        "What: Accept source-owned, effective-dated assignments from instruments to exact "
+        "versioned valuation policies for a tenant and legal book.\n"
+        "How: Validate the supported policy catalog, source-version identity, lifecycle state, "
+        "effective windows, and timezone-aware provenance; serialize each exact scope and reject "
+        "overlaps against durable assignment history before atomic persistence.\n"
+        "When: Use when security master or valuation governance establishes or corrects the "
+        "authoritative treatment for unit-priced instruments, clean or dirty fixed-income "
+        "quotes, factor-adjusted principal, derivatives, or supplied whole-position values. "
+        "No product-type heuristic or policy-version fallback is applied."
+    ),
+)
+async def ingest_instrument_valuation_policy_assignments(
+    request: InstrumentValuationPolicyAssignmentIngestionRequest,
+    http_request: Request,
+    command_handler: ReferenceDataIngestionCommandHandler = Depends(
+        get_reference_data_ingestion_command_handler
+    ),
+) -> BatchIngestionAcceptedResponse:
+    return await _handle_reference_ingestion(
+        http_request=http_request,
+        command=REFERENCE_DATA_INGESTION_REGISTRY.require("instrument_valuation_policy_assignment"),
         request=request,
         command_handler=command_handler,
     )
