@@ -1,8 +1,9 @@
 """Application tests for QCP-owned performance-component economics."""
 
-import asyncio
 from datetime import UTC, date, datetime
 from decimal import Decimal
+
+import pytest
 
 from src.services.query_control_plane_service.app.application.transaction_economics.performance import (  # noqa: E501
     build_performance_component_economics_rows,
@@ -552,7 +553,10 @@ def test_performance_component_economics_empty_response_is_unavailable() -> None
     assert response.data_quality_status == "UNKNOWN"
 
 
-def test_resolve_performance_component_economics_response_orchestrates_repository_read() -> None:
+@pytest.mark.asyncio
+async def test_resolve_performance_component_economics_response_orchestrates_repository_read() -> (
+    None
+):
     async def run_case():
         calls: list[tuple[str, dict[str, object]]] = []
 
@@ -596,7 +600,7 @@ def test_resolve_performance_component_economics_response_orchestrates_repositor
         )
         return response, calls, encoded_payloads
 
-    response, calls, encoded_payloads = asyncio.run(run_case())
+    response, calls, encoded_payloads = await run_case()
 
     assert response.portfolio_id == "PB_SG_GLOBAL_BAL_001"
     assert response.page.next_page_token == "encoded-token"
