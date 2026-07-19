@@ -44,6 +44,8 @@ class TransactionProcessingConsumer(BaseConsumer):
         service_prefix: str = "SVC",
         metrics: dict[str, object] | None = None,
         execution_profile: KafkaConsumerExecutionProfile | None = None,
+        retryable_failure_max_attempts: int | None = None,
+        retryable_failure_max_elapsed_seconds: int | None = None,
         *,
         use_case: ProcessTransactionUseCase,
     ) -> None:
@@ -55,6 +57,8 @@ class TransactionProcessingConsumer(BaseConsumer):
             service_prefix=service_prefix,
             metrics=metrics,
             execution_profile=execution_profile,
+            retryable_failure_max_attempts=retryable_failure_max_attempts,
+            retryable_failure_max_elapsed_seconds=(retryable_failure_max_elapsed_seconds),
         )
         self._use_case = use_case
 
@@ -82,9 +86,7 @@ class TransactionProcessingConsumer(BaseConsumer):
                 raise
             except TransactionProcessingError as exc:
                 if exc.retryable:
-                    raise RetryableConsumerError(
-                        f"Transaction processing dependency unavailable: {exc.reason_code}"
-                    ) from exc
+                    raise RetryableConsumerError(_retryable_dependency_reason(exc)) from exc
                 raise
             except (DBAPIError, IntegrityError) as exc:
                 raise RetryableConsumerError(
@@ -140,6 +142,16 @@ def _message_processing_intent(msg: Message) -> TransactionProcessingIntent:
     if intent_values != [TRANSACTION_PROCESSING_REPAIR_VALUE]:
         raise ValueError("Transaction processing intent header is invalid")
     return TransactionProcessingIntent.REPAIR
+
+
+def _retryable_dependency_reason(error: TransactionProcessingError) -> str:
+    dependency_error = None
+    if isinstance(error.detail, dict):
+        raw_dependency_error = error.detail.get("dependency_error")
+        if isinstance(raw_dependency_error, str) and raw_dependency_error.isidentifier():
+            dependency_error = raw_dependency_error
+    reason = f"Transaction processing dependency unavailable: {error.reason_code}"
+    return f"{reason}:{dependency_error}" if dependency_error else reason
 
 
 def _log_acknowledged_rejection(

@@ -56,11 +56,13 @@ def test_composition_builds_exactly_one_live_and_one_replay_request_consumer() -
     assert live["group_id"] == "portfolio_transaction_processing_group"
     assert live["service_prefix"] == "TXNPROC"
     assert live["use_case"] is process_use_case
+    assert live["retryable_failure_max_elapsed_seconds"] == 30
     replay = calls[1][1]
     assert replay["topic"] == "transactions.reprocessing.requested"
     assert replay["group_id"] == "portfolio_transaction_replay_request_group"
     assert replay["service_prefix"] == "TXNREPLAY"
     assert replay["use_case"] is replay_use_case
+    assert replay["retryable_failure_max_elapsed_seconds"] == 30
     assert all(values["dlq_topic"] == "dlq.persistence_service" for _, values in calls)
 
 

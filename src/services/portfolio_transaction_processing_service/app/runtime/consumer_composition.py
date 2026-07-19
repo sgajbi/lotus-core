@@ -26,6 +26,10 @@ from .dependency_composition import (
 
 TRANSACTION_PROCESSING_CONSUMER_GROUP = "portfolio_transaction_processing_group"
 TRANSACTION_REPLAY_REQUEST_CONSUMER_GROUP = "portfolio_transaction_replay_request_group"
+# Source/reference events arrive on independent topics. Keep the failed partition ordered while
+# allowing that dependency to converge, then use the existing DLQ recovery path instead of
+# restarting this entire service indefinitely behind a permanently unresolved reference.
+TRANSACTION_DEPENDENCY_RETRY_MAX_ELAPSED_SECONDS = 30
 
 ConsumerFactory = Callable[..., BaseConsumer]
 ExecutionProfileLoader = Callable[[str], KafkaConsumerExecutionProfile]
@@ -60,6 +64,7 @@ def build_transaction_processing_consumers(
         service_prefix="TXNPROC",
         use_case=process_use_case,
         execution_profile=live_execution_profile,
+        retryable_failure_max_elapsed_seconds=(TRANSACTION_DEPENDENCY_RETRY_MAX_ELAPSED_SECONDS),
     )
     replay_consumer = replay_request_consumer_factory(
         bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
@@ -69,5 +74,6 @@ def build_transaction_processing_consumers(
         service_prefix="TXNREPLAY",
         use_case=replay_use_case,
         execution_profile=replay_execution_profile,
+        retryable_failure_max_elapsed_seconds=(TRANSACTION_DEPENDENCY_RETRY_MAX_ELAPSED_SECONDS),
     )
     return live_consumer, replay_consumer
