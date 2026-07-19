@@ -255,14 +255,17 @@ services:
       - "${LOTUS_FINANCIAL_RECONCILIATION_HOST_PORT:-8210}:8010"
     environment:
       <<: *shared_python_env
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9093
       DATABASE_URL: ${DATABASE_URL:-postgresql://user:password@postgres:5432/portfolio_db}
     depends_on:
+      kafka-topic-creator:
+        condition: service_completed_successfully
       migration-runner:
         condition: service_completed_successfully
     volumes:
       - ./src/services/financial_reconciliation_service/app:/app/app
       - ./src/libs/portfolio-common:/app/src/libs/portfolio-common
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8010 --no-access-log
+    command: ["python", "-m", "app.runtime"]
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8010/health/ready || exit 1"]

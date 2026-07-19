@@ -2971,6 +2971,14 @@ Most relevant current governance:
      output hash. Generation time and correlation ids remain operational evidence and must not alter
      identity. Keep the DTO/workflow/source extraction in QCP; share only framework-independent
      reconciliation and calculation-lineage primitives.
+213. App-local Compose must start every worker-capable service through the same owned runtime entry
+     point as its Dockerfile. Do not override `financial_reconciliation_service` with the pure HTTP
+     `app.main` application: `app.runtime` owns the reconciliation-request consumer, outbox
+     dispatcher, and supervised HTTP server. Compose must declare Kafka topic creation as a
+     dependency and use the internal `kafka:9093` bootstrap address. Health-only HTTP startup is not
+     evidence that the service's owned consumer is running; stack contract tests must bind the
+     command, Kafka address, and dependency set so canonical holdings cannot remain silently
+     `UNRECONCILED` after aggregation completes.
 
 ## Context Maintenance Rule
 
