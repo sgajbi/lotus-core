@@ -32,9 +32,12 @@ accepted projected holdings even though downstream opportunity evidence requires
 
 ## Reconciliation And Calculation Contract
 
-Every selected snapshot or history row must map to an exact portfolio, business date, and current
-epoch. `COMPLETED` control evidence is complete only when its update is not older than any selected
-row, instrument, or position-state evidence in that scope. Incomplete controls are partial;
+Every selected snapshot or history row must map to an exact portfolio, business date, and matching
+row/state epoch. Valid rows on one business date form a collective portfolio-day scope at their
+maximum selected epoch because per-security epochs represent last mutation, not separate control
+requirements. Position-valuation reconciliation at that target reads the latest row per security at
+or below the target epoch. `COMPLETED` control evidence is complete only when its update is not older
+than any selected row, instrument, or position-state evidence in that scope. Incomplete controls are partial;
 failed, blocked, or replay-required controls are blocked; missing controls are unreconciled;
 unrecognized or unscoped rows are unknown. The most severe exact-scope posture wins. Empty holdings
 without an exact durable control remain unreconciled.
@@ -139,3 +142,20 @@ const posture, reconciliation, identity, lineage, and downstream authority bound
 unchanged. Existing API Surface wiki and methodology truth therefore require no further update.
 Issue #792 remains open until Lotus Idea's real runtime artifact qualifies against this exact Core
 fix and the fix reaches exact main.
+
+## Canonical Mixed-Epoch Correction
+
+Canonical retained-state proof exposed snapshots at epochs `0`, `1`, and `3` for one business date
+with one completed portfolio control at epoch `3`. The original reader incorrectly required three
+controls, while the original position-valuation reconciliation at epoch `3` examined only the
+single row mutated at epoch `3`; accepting either behavior would misstate the certified book.
+
+The shared framework-independent policy now produces one order-independent collective scope at the
+maximum valid row epoch and retains the latest evidence timestamp across every included security.
+Query Service and QCP keep their source adapters. Financial reconciliation now selects one latest
+snapshot per normalized security at the exact business date with `epoch <= target`, excluding a
+later epoch and any superseded lower row. Mismatched or invalid row/state epochs still fail closed.
+This changes no HTTP, OpenAPI, database, event, or Kafka shape; mixed-epoch scope/content hashes
+intentionally change. Focused warning-strict proof passes `33` unit tests and one isolated
+PostgreSQL selection scenario. Fresh canonical controls and downstream proof remain required; an
+older control created under the superseded calculation is not valid certification evidence.

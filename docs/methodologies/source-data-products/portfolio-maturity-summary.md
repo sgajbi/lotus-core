@@ -32,12 +32,14 @@ It inherits HoldingsAsOf effective-date resolution, current-epoch position selec
 history supplement behavior, market-price freshness posture, latest evidence timestamp, and
 runtime source-data metadata.
 
-For each selected snapshot or history row, Core preserves the exact source business date and
-current epoch before DTO mapping. One set-based indexed read resolves the durable
-`FINANCIAL_RECONCILIATION` aggregate control row for every unique portfolio-day/epoch scope. Core
-does not perform one reconciliation query per holding. A missing scope, an epoch mismatch, or an
-empty book without control evidence remains unreconciled; it is never promoted to complete from
-holdings quality alone.
+For each selected snapshot or history row, Core preserves the source business date and current
+security epoch before DTO mapping. Rows on the same business date form one collective portfolio-day
+scope at the maximum selected row epoch. One set-based indexed read resolves the durable
+`FINANCIAL_RECONCILIATION` aggregate control for that target scope. The position-valuation control
+evaluates the latest row per security at or below the target epoch, so unchanged lower-epoch
+securities remain part of the certified state while superseded rows do not. Core does not perform
+one reconciliation query per holding. A missing scope, a row/state epoch mismatch, or an empty book
+without control evidence remains unreconciled.
 
 ## Methodology
 
@@ -54,13 +56,14 @@ holdings quality alone.
 7. Count returned non-zero holdings whose source-owned `maturity_date` falls within the inclusive
    window as `maturing_holding_count`.
 8. Set `next_maturity_date` to the earliest in-window maturity date, or null when none exists.
-9. Classify each exact HoldingsAsOf source scope from its durable aggregate control:
+9. Classify each collective HoldingsAsOf portfolio-day target scope from its durable aggregate
+   control:
    - `COMPLETED` at or after the latest selected source evidence -> `COMPLETE`,
    - `PENDING`, `RUNNING`, `PROCESSING`, or `QUEUED` -> `PARTIAL`,
    - `FAILED`, `REQUIRES_REPLAY`, or `BLOCKED` -> `BLOCKED`,
    - a completed control older than selected source evidence -> `STALE`,
    - missing control -> `UNRECONCILED`, and an unrecognized or unscoped row -> `UNKNOWN`.
-   The response uses the most severe posture across all exact source scopes.
+   The response uses the most severe posture across all collective source scopes.
 10. Set `freshness_status=CURRENT` only when holdings quality is `COMPLETE` or `PARTIAL` and
     reconciliation is `COMPLETE`; preserve `STALE` when either source or control evidence is stale.
 11. Derive supportability reason codes from HoldingsAsOf quality, reconciliation posture, missing
@@ -111,7 +114,7 @@ remain visible as partial supportability rather than being reconstructed in down
 | `unsupported_maturity_feature_count` | Count of holdings with classification terms outside the current contractual-date certification. |
 | `tenant_id`, `correlation_id` | Caller tenant when supplied and request correlation propagated by Core middleware. |
 | `snapshot_id`, `content_hash`, `source_digest`, `source_batch_fingerprint`, `policy_version` | Exact HoldingsAsOf source identity and deterministic maturity receipt identity. |
-| `reconciliation_status` | Aggregate exact-scope portfolio-day/epoch control posture. |
+| `reconciliation_status` | Aggregate collective portfolio-day target-epoch control posture. |
 | `freshness_status` | Combined HoldingsAsOf evidence and reconciliation freshness posture. |
 | `supportability_status`, `supportability_reasons` | Bounded posture and reason codes for downstream fail-closed handling. |
 | `request_fingerprint` | Deterministic product/request fingerprint for replay and lineage. |
@@ -144,6 +147,6 @@ Output posture:
 | `supportability_status` | `SUPPORTED` |
 | `calculation_lineage.algorithm_id` | `PORTFOLIO_CONTRACTUAL_MATURITY_SUMMARY` |
 
-The worked example is supported only when every selected source business-date/epoch scope has a
-current `COMPLETED` financial-reconciliation control. The same holdings rows with missing control
-evidence return the same bounded maturity counts but an unavailable trust posture.
+The worked example is supported only when every selected business date has a current `COMPLETED`
+financial-reconciliation control at its collective maximum row epoch. The same holdings rows with
+missing control evidence return the same bounded maturity counts but an unavailable trust posture.

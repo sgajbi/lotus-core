@@ -20,9 +20,10 @@ def _row(
     business_date: date | None = date(2026, 4, 10),
     epoch: int = 4,
     updated_at: datetime = datetime(2026, 4, 10, 2, tzinfo=UTC),
+    security_id: str = "SEC_1",
 ) -> CoreSnapshotPositionSource:
     return CoreSnapshotPositionSource(
-        security_id="SEC_1",
+        security_id=security_id,
         quantity=Decimal("1"),
         market_value=Decimal("100"),
         market_value_local=Decimal("100"),
@@ -34,8 +35,8 @@ def _row(
         state_created_at=None,
         state_updated_at=updated_at - timedelta(minutes=1),
         instrument=CoreSnapshotInstrument(
-            security_id="SEC_1",
-            name="Instrument",
+            security_id=security_id,
+            name=f"Instrument {security_id}",
             currency="USD",
             asset_class="EQUITY",
             sector=None,
@@ -61,6 +62,24 @@ def test_core_snapshot_scopes_coalesce_exact_date_epoch_rows() -> None:
     assert scopes.items[0].latest_evidence_timestamp == datetime(2026, 4, 10, 2, tzinfo=UTC)
     assert scopes.unscoped_source_row_count == 0
     assert len(scopes.content_hash()) == 64
+
+
+def test_core_snapshot_scopes_coalesce_mixed_epochs_at_collective_target() -> None:
+    latest_evidence = datetime(2026, 4, 10, 5, tzinfo=UTC)
+    rows = [
+        _row(epoch=0, updated_at=latest_evidence, security_id="SEC_0"),
+        _row(epoch=1, security_id="SEC_1"),
+        _row(epoch=3, security_id="SEC_3"),
+    ]
+
+    scopes = core_snapshot_reconciliation_scopes(rows)
+    reordered = core_snapshot_reconciliation_scopes(list(reversed(rows)))
+
+    assert len(scopes.items) == 1
+    assert scopes.items[0].epoch == 3
+    assert scopes.items[0].source_row_count == 3
+    assert scopes.items[0].latest_evidence_timestamp == latest_evidence
+    assert scopes.content_hash() == reordered.content_hash()
 
 
 def test_core_snapshot_scopes_fail_closed_for_unscoped_rows() -> None:

@@ -10,7 +10,8 @@
 - Product role: authoritative portfolio state snapshot for downstream performance, risk, advisory, reporting, management, opportunity-intelligence, gateway, and Workbench discovery flows
 - Source declaration: `contracts/domain-data-products/`
 - Trust telemetry: `contracts/trust-telemetry/`
-- Runtime trust receipt: exact position business-date/epoch reconciliation controls, deterministic
+- Runtime trust receipt: collective portfolio-day reconciliation controls at each maximum selected
+  row epoch, deterministic
   snapshot identity, and separate normalized-input, algorithm/version/precision, and returned-output
   lineage hashes for both baseline and simulation modes
 
