@@ -989,8 +989,11 @@ Most relevant current governance:
     publishes `next_maturity_date`, `maturing_holding_count`, freshness, supportability reasons,
     and deterministic input/calculation/output lineage. The trust-certified receipt is booked-only,
     carries caller tenant and correlation scope, binds deterministic HoldingsAsOf snapshot/content/
-    source-batch/policy identity, and derives reconciliation from one set-based read of every exact
-    selected portfolio-day/epoch control scope. Missing, incomplete, stale, failed, replay-required,
+    source-batch/policy identity, and derives reconciliation from one set-based read of each
+    collective selected portfolio-day scope at its maximum valid row epoch. Per-security epochs
+    are last-mutation versions, so the financial position-valuation control must read the latest
+    row per security at or below that target epoch rather than only rows equal to it. Missing,
+    incomplete, stale, failed, replay-required,
     unknown, or source-newer-than-control evidence must not produce `SUPPORTED`. This prevents
     downstream services such as `lotus-idea` from
     reconstructing maturity windows from raw holdings rows. The current implementation is

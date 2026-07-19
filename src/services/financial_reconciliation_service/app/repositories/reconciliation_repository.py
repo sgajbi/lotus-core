@@ -179,6 +179,28 @@ class ReconciliationRepository:
     ):
         instrument_security_id = func.trim(Instrument.security_id)
         snapshot_security_id = func.trim(DailyPositionSnapshot.security_id)
+        ranked_snapshot_rows = None
+        if business_date is not None and epoch is not None:
+            ranked_snapshot_rows = select(
+                DailyPositionSnapshot.id.label("snapshot_id"),
+                func.row_number()
+                .over(
+                    partition_by=(
+                        DailyPositionSnapshot.portfolio_id,
+                        snapshot_security_id,
+                    ),
+                    order_by=(DailyPositionSnapshot.epoch.desc(), DailyPositionSnapshot.id.desc()),
+                )
+                .label("rn"),
+            ).where(
+                DailyPositionSnapshot.date == business_date,
+                DailyPositionSnapshot.epoch <= epoch,
+            )
+            if portfolio_id is not None:
+                ranked_snapshot_rows = ranked_snapshot_rows.where(
+                    DailyPositionSnapshot.portfolio_id == portfolio_id
+                )
+            ranked_snapshot_rows = ranked_snapshot_rows.subquery()
         stmt = (
             select(DailyPositionSnapshot, Instrument, Portfolio)
             .join(Instrument, instrument_security_id == snapshot_security_id)
@@ -190,11 +212,16 @@ class ReconciliationRepository:
                 DailyPositionSnapshot.unrealized_gain_loss_local.is_not(None),
             )
         )
-        if portfolio_id is not None:
+        if ranked_snapshot_rows is not None:
+            stmt = stmt.join(
+                ranked_snapshot_rows,
+                DailyPositionSnapshot.id == ranked_snapshot_rows.c.snapshot_id,
+            ).where(ranked_snapshot_rows.c.rn == 1)
+        elif portfolio_id is not None:
             stmt = stmt.where(DailyPositionSnapshot.portfolio_id == portfolio_id)
-        if business_date is not None:
+        if business_date is not None and ranked_snapshot_rows is None:
             stmt = stmt.where(DailyPositionSnapshot.date == business_date)
-        if epoch is not None:
+        if epoch is not None and ranked_snapshot_rows is None:
             stmt = stmt.where(DailyPositionSnapshot.epoch == epoch)
         result = await self.db.execute(
             stmt.order_by(

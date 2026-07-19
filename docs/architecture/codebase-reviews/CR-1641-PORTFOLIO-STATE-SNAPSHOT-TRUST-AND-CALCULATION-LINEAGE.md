@@ -38,6 +38,10 @@ selected source facts, snapshot policy, and returned sections.
   and aggregates the worst status, while QCP orders all control facts by normalized status and
   timestamp before hashing them. Adverse controls cannot be hidden and equivalent input sets retain
   one deterministic lineage identity regardless of row order.
+- Canonical proof later exposed mixed per-security epochs on one portfolio day. QCP now uses the
+  shared collective scope at the maximum valid row epoch instead of requiring one control per last-
+  mutation epoch. The corresponding financial position-valuation read certifies every latest
+  security row at or below that target, so the scope does not overstate what was calculated.
 
 ## Compatibility And Ownership
 
@@ -83,3 +87,8 @@ closure remain post-local gates.
 No additional wiki source change is required for the review fix: the existing wiki already states
 that currentness is fail-closed and reconciliation-backed; exact duplicate-control precedence is
 methodology and review-ledger detail.
+
+The mixed-epoch correction does update Query Control Plane and Mesh Data Products wiki source
+because the earlier “exact business-date/epoch” wording could be misread as one control per
+security-row epoch. PR CI, fresh-control runtime proof, exact-main validation, wiki publication,
+and downstream revalidation remain pending.

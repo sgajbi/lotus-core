@@ -447,8 +447,9 @@ included in their year-to-date aggregation windows while leaving data-quality st
 
 `PortfolioStateSnapshot` additionally populates `tenant_id` and `policy_version` from the resolved
 integration governance context because those values already exist in the core snapshot assembly
-path. It extracts the exact business-date/epoch scopes represented by the selected position rows and
-reads their `FINANCIAL_RECONCILIATION` controls in one set-based query. Missing, running, failed,
+path. It groups selected position rows by business date at the collective maximum valid row epoch
+and reads those exact `FINANCIAL_RECONCILIATION` controls in one set-based query. Lower-epoch rows
+for unchanged securities remain included in the collective source scope. Missing, running, failed,
 unknown, or source-older controls fail closed as `UNRECONCILED`, `PARTIAL`, `BLOCKED`, `UNKNOWN`, or
 `STALE`; only complete controls at least as recent as their source scope are `COMPLETE`.
 

@@ -194,7 +194,7 @@ async def test_fetch_transaction_cashflow_rows_uses_index_friendly_business_date
     assert "date(transactions.transaction_date)" not in compiled_query.lower()
 
 
-async def test_fetch_position_valuation_rows_uses_normalized_instrument_join(
+async def test_fetch_position_valuation_rows_selects_authoritative_rows_through_target_epoch(
     mock_db_session: AsyncMock,
 ):
     repository = reconciliation_repo.ReconciliationRepository(mock_db_session)
@@ -218,7 +218,11 @@ async def test_fetch_position_valuation_rows_uses_normalized_instrument_join(
     ) in compiled_query
     assert "daily_position_snapshots.portfolio_id = 'P1'" in compiled_query
     assert "daily_position_snapshots.date = '2026-05-28'" in compiled_query
-    assert "daily_position_snapshots.epoch = 4" in compiled_query
+    assert "daily_position_snapshots.epoch <= 4" in compiled_query
+    assert "row_number() over" in compiled_query.lower()
+    assert "partition by daily_position_snapshots.portfolio_id" in compiled_query.lower()
+    assert "order by daily_position_snapshots.epoch desc" in compiled_query.lower()
+    assert "anon_1.rn = 1" in compiled_query.lower()
 
 
 async def test_fetch_authoritative_position_timeseries_rows_uses_normalized_instrument_join(

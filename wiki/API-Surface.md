@@ -101,10 +101,10 @@ GET /portfolios/{portfolio_id}/cash-movement-summary?start_date=2026-03-01&end_d
 
 `PortfolioMaturitySummary:v1` is a booked, contractual-instrument-maturity receipt. It publishes
 the exact HoldingsAsOf snapshot/content/source-batch/policy identity, caller tenant and request
-correlation where supplied, portfolio-day/epoch reconciliation posture, and separate normalized
-input, calculation-policy, and output SHA-256 hashes. Only a current `COMPLETE` reconciliation can
-produce `SUPPORTED`; missing, incomplete, stale, failed, replay-required, or unknown evidence fails
-closed. The route rejects `include_projected=true` and does not infer callable, putable, amortizing,
+correlation where supplied, collective portfolio-day target-epoch reconciliation posture, and
+separate normalized input, calculation-policy, and output SHA-256 hashes. Only a current `COMPLETE`
+reconciliation can produce `SUPPORTED`; missing, incomplete, stale, failed, replay-required, or
+unknown evidence fails closed. The route rejects `include_projected=true` and does not infer callable, putable, amortizing,
 structured-note, lockup, expiry, reinvestment, suitability, risk, or execution methodology.
 
 `PortfolioCashflowProjection:v1` and `PortfolioCashMovementSummary:v1` publish tenant-bound

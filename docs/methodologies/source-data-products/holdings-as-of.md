@@ -55,7 +55,7 @@ execution-quality assessment, or OMS acknowledgement.
 | `transactions` | `settlement_cash_account_id`, `settlement_cash_instrument_id`, `transaction_date` | Supplies a last-known fallback cash-account mapping only when the settlement account id validates against active/effective `cash_account_masters` for the same portfolio and cash instrument. |
 | `fx_rates` | `from_currency`, `to_currency`, `rate_date`, `rate` | Used only for optional cash reporting-currency restatement. |
 | `market_prices` | `security_id`, `price_date` | Used to classify non-cash holdings as stale when latest price coverage does not reach the response `as_of_date`. |
-| `pipeline_stage_state` | portfolio, business date, epoch, stage, status, timestamps | Supplies exact `FINANCIAL_RECONCILIATION` trust evidence for every returned position scope; every same-scope control is aggregated fail closed. |
+| `pipeline_stage_state` | portfolio, business date, epoch, stage, status, timestamps | Supplies `FINANCIAL_RECONCILIATION` trust evidence for the collective returned portfolio-day state at its maximum selected row epoch; every same-scope control is aggregated fail closed. |
 
 ## Unit Conventions
 
@@ -124,8 +124,8 @@ adjustment, execution-quality assessment, or OMS status inference is performed b
 | `D_mv` | `source_reported_cash_weight_denominator_portfolio_currency` | Sum of same-date Core snapshot market values used as the cash-weight denominator. |
 | `W_c` | `source_reported_cash_weight` | Core-owned cash weight, `sum(C_p) / D_mv`, or null when blocked. |
 | `Q` | `data_quality_status` | Source quality reduced with exact reconciliation trust: `COMPLETE`, `PARTIAL`, `STALE`, `UNKNOWN`, or `BLOCKED`. |
-| `R` | `reconciliation_status` | Fail-closed aggregate trust posture for the exact returned portfolio/date/epoch scopes. |
-| `R_h` | `reconciliation_scope_hash` | Deterministic hash of the exact reconciliation scopes and control evidence used by the response. |
+| `R` | `reconciliation_status` | Fail-closed aggregate trust posture for each returned portfolio-day at its collective target epoch. |
+| `R_h` | `reconciliation_scope_hash` | Deterministic hash of the collective reconciliation scopes and control evidence used by the response. |
 
 ## Methodology and Formulas
 
@@ -194,8 +194,10 @@ supportability posture is one of:
 7. Compute position weights from returned position values.
 8. Resolve `held_since_date` as the earliest position-history date in the current continuous non-zero holding period after the last zero-quantity break in the active epoch. If no epoch exists, use the row position date.
 9. Fetch latest market-price dates for non-cash positions that have market prices and compare them with response `A` to derive stale posture.
-10. Read and aggregate every exact financial-reconciliation control for the returned
-    portfolio/date/epoch scopes, then derive `R` and `R_h` without per-position queries.
+10. Group returned rows by business date, set each collective target epoch to the maximum selected
+    row epoch, and retain the latest evidence timestamp across every row. Read and aggregate every
+    exact financial-reconciliation control for those collective portfolio-day target scopes, then
+    derive `R` and `R_h` without per-position queries. A row/state epoch mismatch remains unscoped.
 11. Reduce source-row quality with `R` using fail-closed precedence: `BLOCKED`, `STALE`, `UNKNOWN`
     for unknown or unreconciled evidence, `PARTIAL`, then `COMPLETE` only when both inputs are
     complete.
@@ -228,6 +230,7 @@ supportability posture is one of:
 | Positions include history-backed supplement rows | Source-row quality is `PARTIAL`; the emitted status may become `UNKNOWN`, `STALE`, or `BLOCKED` when reconciliation has a stronger fail-closed posture. |
 | All positions are current, priced through `A` where required, snapshot-backed, and exactly reconciled | Returns `data_quality_status=COMPLETE`. |
 | Multiple financial-reconciliation controls exist for one business-date/epoch scope | Aggregates every control using fail-closed precedence `BLOCKED`, `STALE`, `UNRECONCILED`, `UNKNOWN`, `PARTIAL`, `COMPLETE`; row order cannot hide an adverse control. |
+| Returned securities have different last-mutation epochs on the same business date | Uses one collective scope at the maximum selected epoch. The corresponding position-valuation reconciliation evaluates the latest row per security at or below that target epoch; older superseded rows are excluded. |
 | Source rows are otherwise complete but reconciliation is missing/unknown, partial/running, stale, or blocked/failed | Returns reduced `data_quality_status=UNKNOWN`, `PARTIAL`, `STALE`, or `BLOCKED` respectively; `COMPLETE` requires complete source quality and complete reconciliation. |
 | Reconciliation status changes or exact scope/control evidence is corrected | Position-response `content_hash`, `source_digest`, `source_batch_fingerprint`, and `snapshot_id` all change even when returned position values are unchanged. |
 | Cash balance response has no account records | Returns `data_quality_status=UNKNOWN`. |
@@ -268,8 +271,8 @@ supportability posture is one of:
 | `as_of_date` | Effective booked-state cap or resolved response date. |
 | `data_quality_status` | Completeness and freshness posture for returned holdings or cash balances. |
 | `latest_evidence_timestamp` | Latest durable position, position-state, instrument, or cash snapshot timestamp used by the response. |
-| `reconciliation_status` | Fail-closed exact-scope reconciliation posture for position responses. |
-| `source_lineage.reconciliation_scope_hash` | Exact reconciliation scope/control identity used to classify a position response. |
+| `reconciliation_status` | Fail-closed collective portfolio-day reconciliation posture for position responses. |
+| `source_lineage.reconciliation_scope_hash` | Collective target-epoch scope/control identity used to classify a position response. |
 | `content_hash`, `source_digest`, `source_batch_fingerprint` | For position responses, one deterministic digest over returned rows plus data quality, reconciliation status/scope, latest evidence, and degradation. Cash responses retain their deterministic cash-account/totals/supportability evidence fingerprint. |
 | `snapshot_id` | Deterministic `holdings_as_of:<fingerprint-prefix>` identity for position responses or `holdings_as_of_cash_balances:<fingerprint>` for cash responses. |
 
