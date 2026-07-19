@@ -13,7 +13,12 @@ class MaterializePortfolioTimeseriesCommand:
     lease_token: str
     portfolio_id: str
     aggregation_date: date
+    aggregation_revision: int
     correlation_id: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.aggregation_revision < 1:
+            raise ValueError("Portfolio aggregation revision must be positive.")
 
 
 class PortfolioTimeseriesMaterializationStatus(StrEnum):

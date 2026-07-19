@@ -34,6 +34,7 @@ async def test_use_case_delegates_domain_completion_to_event_port() -> None:
         portfolio_id="PORT-1",
         aggregation_date=date(2026, 7, 15),
         epoch=4,
+        aggregation_revision=7,
     )
 
     await use_case.execute(completion, correlation_id="corr-1")

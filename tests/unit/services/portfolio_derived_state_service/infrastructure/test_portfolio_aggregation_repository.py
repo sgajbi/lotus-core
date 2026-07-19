@@ -176,6 +176,7 @@ async def test_claim_eligible_jobs_increments_attempt_count(
             id=1,
             portfolio_id="P1",
             aggregation_date=date(2025, 1, 1),
+            attempt_count=4,
             correlation_id=None,
             lease_owner=_lease().owner,
             lease_token=_lease().token,
@@ -184,7 +185,7 @@ async def test_claim_eligible_jobs_increments_attempt_count(
     ]
     mock_db_session.execute.side_effect = [eligible_result, claimed_result]
 
-    await repository.claim_eligible_jobs(batch_size=5, lease=_lease())
+    claimed_jobs = await repository.claim_eligible_jobs(batch_size=5, lease=_lease())
 
     executed_stmt = mock_db_session.execute.await_args_list[1].args[0]
     compiled_query = str(
@@ -194,6 +195,7 @@ async def test_claim_eligible_jobs_increments_attempt_count(
     assert "UPDATE portfolio_aggregation_jobs" in compiled_query
     assert "SET status='PROCESSING'" in compiled_query
     assert "attempt_count=(portfolio_aggregation_jobs.attempt_count + 1)" in compiled_query
+    assert claimed_jobs[0].aggregation_revision == 4
 
 
 async def test_claim_eligible_jobs_returns_claimed_jobs_in_claim_order(
@@ -207,6 +209,7 @@ async def test_claim_eligible_jobs_returns_claimed_jobs_in_claim_order(
             portfolio_id="P2",
             aggregation_date=date(2025, 1, 1),
             id=2,
+            attempt_count=8,
             correlation_id=None,
             lease_owner=_lease().owner,
             lease_token=_lease().token,
@@ -216,6 +219,7 @@ async def test_claim_eligible_jobs_returns_claimed_jobs_in_claim_order(
             portfolio_id="P1",
             aggregation_date=date(2025, 1, 2),
             id=3,
+            attempt_count=7,
             correlation_id=None,
             lease_owner=_lease().owner,
             lease_token=_lease().token,
@@ -225,6 +229,7 @@ async def test_claim_eligible_jobs_returns_claimed_jobs_in_claim_order(
             portfolio_id="P1",
             aggregation_date=date(2025, 1, 1),
             id=1,
+            attempt_count=6,
             correlation_id=None,
             lease_owner=_lease().owner,
             lease_token=_lease().token,
@@ -240,6 +245,7 @@ async def test_claim_eligible_jobs_returns_claimed_jobs_in_claim_order(
         ("P1", date(2025, 1, 2), 3),
         ("P2", date(2025, 1, 1), 2),
     ]
+    assert [job.aggregation_revision for job in claimed_jobs] == [6, 7, 8]
 
 
 async def test_get_job_queue_stats_returns_pending_failed_and_oldest_pending(
@@ -405,6 +411,7 @@ async def test_claim_eligible_jobs_persists_and_returns_lease_identity(
             id=7,
             portfolio_id="P1",
             aggregation_date=date(2026, 7, 15),
+            attempt_count=9,
             correlation_id="corr-1",
             lease_owner=lease.owner,
             lease_token=lease.token,
@@ -416,6 +423,7 @@ async def test_claim_eligible_jobs_persists_and_returns_lease_identity(
     claimed_jobs = await repository.claim_eligible_jobs(batch_size=5, lease=lease)
 
     assert claimed_jobs[0].lease == lease
+    assert claimed_jobs[0].aggregation_revision == 9
     claim_statement = mock_db_session.execute.await_args_list[1].args[0]
     compiled = str(
         claim_statement.compile(

@@ -161,6 +161,7 @@ def _command() -> MaterializePortfolioTimeseriesCommand:
         lease_token="lease-token-71",
         portfolio_id="PB_SG_GLOBAL_BAL_001",
         aggregation_date=date(2026, 4, 10),
+        aggregation_revision=7,
         correlation_id="corr-derived-portfolio-001",
     )
 
@@ -198,6 +199,7 @@ async def test_materialization_persists_aggregate_and_stages_completion_atomical
                 portfolio_id="PB_SG_GLOBAL_BAL_001",
                 aggregation_date=date(2026, 4, 10),
                 epoch=4,
+                aggregation_revision=7,
             ),
             "corr-derived-portfolio-001",
         )
