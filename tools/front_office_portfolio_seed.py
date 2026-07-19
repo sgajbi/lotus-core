@@ -1988,17 +1988,21 @@ def _required_cross_currency_fx_windows(bundle: dict[str, Any]) -> list[tuple[st
     ]
 
 
-def _fx_window_is_covered(
-    actual_rates: list[dict[str, Any]], expected_start: str, expected_end: str
+def _dated_source_window_is_covered(
+    actual_records: list[dict[str, Any]],
+    *,
+    date_field: str,
+    expected_start: str,
+    expected_end: str,
 ) -> bool:
-    if not actual_rates:
+    if not actual_records:
         return False
     expected_start_date = date.fromisoformat(expected_start)
     expected_end_date = date.fromisoformat(expected_end)
     actual_dates = sorted(
-        date.fromisoformat(rate["rate_date"])
-        for rate in actual_rates
-        if isinstance(rate, dict) and isinstance(rate.get("rate_date"), str)
+        date.fromisoformat(record[date_field])
+        for record in actual_records
+        if isinstance(record, dict) and isinstance(record.get(date_field), str)
     )
     if not actual_dates:
         return False
@@ -2028,7 +2032,12 @@ def _wait_for_required_fx_readiness(
                 f"&start_date={start_date}&end_date={end_date}",
             )
             rates = payload.get("rates") or []
-            if not _fx_window_is_covered(rates, start_date, end_date):
+            if not _dated_source_window_is_covered(
+                rates,
+                date_field="rate_date",
+                expected_start=start_date,
+                expected_end=end_date,
+            ):
                 still_pending.append((from_currency, to_currency, start_date, end_date))
         if not still_pending:
             return
@@ -2042,6 +2051,67 @@ def _wait_for_required_fx_readiness(
     raise RuntimeError(f"Timed out waiting for FX readiness: {outstanding}")
 
 
+def _required_market_price_windows(bundle: dict[str, Any]) -> list[tuple[str, str, str]]:
+    windows: dict[str, tuple[date, date]] = {}
+    for price in bundle.get("market_prices", []):
+        if not isinstance(price, dict):
+            continue
+        security_id = price.get("security_id")
+        price_date = price.get("price_date")
+        if not isinstance(security_id, str) or not isinstance(price_date, str):
+            continue
+        observation_date = date.fromisoformat(price_date)
+        current_window = windows.get(security_id)
+        if current_window is None:
+            windows[security_id] = (observation_date, observation_date)
+            continue
+        windows[security_id] = (
+            min(current_window[0], observation_date),
+            max(current_window[1], observation_date),
+        )
+    return [
+        (security_id, start_date.isoformat(), end_date.isoformat())
+        for security_id, (start_date, end_date) in sorted(windows.items())
+    ]
+
+
+def _wait_for_required_market_price_readiness(
+    *,
+    query_base_url: str,
+    bundle: dict[str, Any],
+    wait_seconds: int,
+    poll_interval_seconds: int,
+) -> None:
+    pending = _required_market_price_windows(bundle)
+    deadline = datetime.now(tz=UTC) + timedelta(seconds=wait_seconds)
+    while pending and datetime.now(tz=UTC) < deadline:
+        still_pending: list[tuple[str, str, str]] = []
+        for security_id, start_date, end_date in pending:
+            _, payload = _request_json(
+                "GET",
+                f"{query_base_url}/prices/"
+                f"?security_id={security_id}&start_date={start_date}&end_date={end_date}",
+            )
+            if not _dated_source_window_is_covered(
+                payload.get("prices") or [],
+                date_field="price_date",
+                expected_start=start_date,
+                expected_end=end_date,
+            ):
+                still_pending.append((security_id, start_date, end_date))
+        if not still_pending:
+            return
+        time.sleep(poll_interval_seconds)
+        pending = still_pending
+
+    if not pending:
+        return
+    outstanding = ", ".join(
+        f"{security_id} {start_date}..{end_date}" for security_id, start_date, end_date in pending
+    )
+    raise RuntimeError(f"Timed out waiting for market-price readiness: {outstanding}")
+
+
 def _ingest_front_office_core_data(
     *,
     ingestion_base_url: str,
@@ -2051,12 +2121,15 @@ def _ingest_front_office_core_data(
     wait_seconds: int,
     poll_interval_seconds: int,
 ) -> None:
+    # Persist source history before activating the governed valuation horizon. This keeps
+    # clean bootstrap facts distinct from late corrections; transaction readiness performs
+    # the first valuation after the calendar is active.
     core_payloads = (
-        ("/ingest/business-dates", {"business_dates": bundle["business_dates"]}),
         ("/ingest/portfolios", {"portfolios": bundle["portfolios"]}),
         ("/ingest/instruments", {"instruments": bundle["instruments"]}),
         ("/ingest/fx-rates", {"fx_rates": bundle["fx_rates"]}),
         ("/ingest/market-prices", {"market_prices": bundle["market_prices"]}),
+        ("/ingest/business-dates", {"business_dates": bundle["business_dates"]}),
         ("/ingest/transactions", {"transactions": bundle["transactions"]}),
     )
 
@@ -2078,6 +2151,13 @@ def _ingest_front_office_core_data(
             )
         if endpoint == "/ingest/fx-rates":
             _wait_for_required_fx_readiness(
+                query_base_url=query_base_url,
+                bundle=bundle,
+                wait_seconds=wait_seconds,
+                poll_interval_seconds=poll_interval_seconds,
+            )
+        if endpoint == "/ingest/market-prices":
+            _wait_for_required_market_price_readiness(
                 query_base_url=query_base_url,
                 bundle=bundle,
                 wait_seconds=wait_seconds,

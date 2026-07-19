@@ -22,7 +22,7 @@ pytestmark = pytest.mark.domain
             SourceRevaluationSchedule(
                 timing=SourceRevaluationTiming.NO_BUSINESS_DATE,
                 scan_visible_positions=False,
-                stage_durable_replay=True,
+                stage_durable_replay=False,
             ),
         ),
         (

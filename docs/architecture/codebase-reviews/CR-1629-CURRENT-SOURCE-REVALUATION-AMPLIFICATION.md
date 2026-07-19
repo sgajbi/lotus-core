@@ -36,8 +36,10 @@ Correlation identity describes operational lineage and cannot authorize replay o
 3. A current-date observation with no visible positions relies on the later transaction-owned
    valuation-readiness fact.
 4. Backdated observations retain immediate visible-position jobs plus durable replay.
-5. Future observations and observations received before a business-date horizon retain durable
-   replay and defer the visible-position scan.
+5. Before a business-date horizon exists, source observations are bootstrap facts: they defer to
+   transaction-owned valuation readiness after their persisted histories are fenced as query
+   visible. Future observations after a horizon exists retain durable replay and defer the
+   visible-position scan.
 6. FX plans expose whether replay was actually staged rather than defaulting the evidence to true.
 7. Immediate price and FX selection compares the persisted source row's `updated_at` with the
    same-day snapshot. Missing or older snapshots are queued; snapshots materialized after the
@@ -66,7 +68,9 @@ unchanged. Migration `c114b2c3d4f3` adds two internal job columns: one non-null,
 queue fence and one nullable source-correction identity. This keeps accepted source revisions
 distinct from transport tracing. The intentional internal behavior change removes redundant
 current-date replay while preserving a newer correction that races with active valuation work.
-Backdated and future correction contracts remain unchanged.
+Backdated and future correction contracts remain unchanged. The no-horizon behavior intentionally
+stops classifying initial source history as correction replay; canonical bootstrap must persist and
+fence price and FX history before activating the business-date horizon.
 
 ## Validation
 

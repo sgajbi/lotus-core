@@ -92,6 +92,12 @@ rearmed and completed `525` times for one final portfolio-day row.
     request requeue when a different mutation arrives during processing. Same-outbox redelivery is
     non-disruptive; headerless compatibility records keep the prior non-rearming behavior. The
     readiness payload, schema version, topic, partition key, and consumer group remain unchanged.
+19. Canonical clean bootstrap persists FX and market-price histories before activating the governed
+    business-date horizon and fails closed until each required source window is query visible.
+    Price and FX observations received before any horizon are bootstrap facts rather than late
+    corrections; transaction-owned readiness performs the first valuation after calendar
+    activation. Backdated and future observations against an existing horizon keep correction
+    replay semantics.
 
 ## Measured Result
 
@@ -377,6 +383,11 @@ event field or require a schema-version transition. A distinct durable outbox mu
 fence valuation work, while the same outbox redelivery and headerless compatibility records remain
 non-disruptive. No migration, public API, or downstream payload change is required.
 
+The bootstrap sequencing change affects only the canonical local seed workflow and the internal
+no-horizon source schedule. It adds no API, OpenAPI, event, migration, database, calculation,
+partition, readiness, or downstream contract. Existing-horizon backdated and future corrections
+retain their durable replay behavior.
+
 The workload JSON config changes additively with `source_revision` and `source_tree_state`; neither
 field contains file names, command output, credentials, or runtime configuration. Their presence
 does not elevate local workload evidence to CI or production certification.
@@ -555,6 +566,14 @@ does not publish this key policy; the operator-owned migration runbook is the du
 - Exact-main dual-leg reproduction failed before the shared retry fix and passed afterward without
   increasing its 240-second budget. Exact-head timeseries contract E2E passed `4/4` at signed
   `c79bf0afe` in `155.53s` with dynamic ports and project-scoped teardown.
+- Canonical branch-qualified run `20260719T042919Z` proved the prior DNS/port conflict resolved and
+  then timed out after `900s` with all source facts durable but no valuation readiness: source-first
+  ordering was absent, producing `6,567` completed reset watermarks, `6,101` completed FX reset
+  watermarks, and repeated portfolio aggregation while historical sources drained. The bounded fix
+  makes no-horizon source observations non-replaying and fences both price and FX query visibility
+  before calendar activation. Focused source-scheduling/consumer/seed proof passed `81` tests and
+  the wider valuation-orchestrator package passed `163` tests with warnings treated as errors before
+  final validation.
 
 Implementation commits include `23fc6faf3`, `d51adb739`, `ad1ad179d`, `57f8c60e2`,
 `4f05be9a5`, `c230d660a`, `f42f6eaa3`, `d56e14dbf`, `2d49fc8f1`, `70ae16f0f`,
@@ -615,3 +634,7 @@ The final primary-loop correction makes the restart/rebalance requirement operat
 the existing runbook, repository context, and Operations wiki. It changes no command,
 environment-variable name, OpenAPI, event, migration, database, or calculation-methodology
 contract; no new standalone document is required.
+The canonical bootstrap correction changes the existing seed contract, repository context, and
+Operations wiki because source-first ordering and bounded readiness fences are operator truth. It
+requires no OpenAPI, migration, event-contract, calculation-methodology, partition, or additional
+standalone documentation change.

@@ -866,6 +866,11 @@ Most relevant current governance:
     or obsolete alias. The complete cleanup must remain one `ON_ERROR_STOP` PostgreSQL transaction
     and include every direct portfolio foreign-key child, so schema drift rolls back before retry
     instead of leaving `PB_SG_GLOBAL_BAL_001` partially deleted.
+    Clean bootstrap must also persist FX and market-price histories and fail closed on their bounded
+    query-visibility fences before activating the business-date horizon; no-horizon observations
+    are initial source facts, while existing-horizon backdated and future observations retain
+    durable correction replay. Transactions follow calendar activation so their readiness events
+    own the first valuation pass.
 40. `PerformanceComponentEconomics:v1` is active at
     `/integration/portfolios/{portfolio_id}/performance-component-economics` for
     `lotus-performance` contribution analytics sourcing. It returns source-authored transaction,
