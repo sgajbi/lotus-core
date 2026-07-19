@@ -523,7 +523,7 @@
           "gap_status": "covered",
           "current_coverage": [
             "tests/unit/libs/portfolio_common/domain/test_cost_basis_method.py",
-            "tests/unit/services/portfolio_transaction_processing_service/cost/test_cost_calculator.py"
+            "tests/unit/services/portfolio_transaction_processing_service/domain/cost_basis/calculation/test_cost_calculator.py"
           ]
         },
         {

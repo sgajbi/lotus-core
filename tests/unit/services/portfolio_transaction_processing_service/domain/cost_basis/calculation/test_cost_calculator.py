@@ -1,3 +1,5 @@
+"""Verify canonical cost-basis calculation policy across transaction families."""
+
 from datetime import datetime
 from decimal import Decimal
 from unittest.mock import MagicMock

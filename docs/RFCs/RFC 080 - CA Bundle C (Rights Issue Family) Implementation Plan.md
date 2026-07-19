@@ -160,7 +160,7 @@ Executed suites include:
 - `tests/unit/services/portfolio_transaction_processing_service/domain/cashflow/test_calculation.py`
 - `tests/unit/services/query_service/services/test_position_flow_effects.py`
 - `tests/unit/services/portfolio_transaction_processing_service/domain/transaction/corporate_action/test_ordering.py`
-- `tests/unit/services/portfolio_transaction_processing_service/cost/test_sorter.py`
+- `tests/unit/services/portfolio_transaction_processing_service/domain/cost_basis/calculation/test_sorter.py`
 
 ## 9. Current Status
 
