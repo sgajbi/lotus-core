@@ -1184,6 +1184,42 @@ async def test_run_loop_retryable_elapsed_budget_exhaustion_sends_to_dlq(
     mock_confluent_consumer.commit.assert_called_once_with(message=mock_msg, asynchronous=False)
 
 
+async def test_consumer_accepts_explicit_service_owned_retryable_failure_budget() -> None:
+    consumer = ConcreteTestConsumer(
+        bootstrap_servers="mock_bs",
+        topic="test-topic",
+        group_id="test-group",
+        retryable_failure_max_attempts=7,
+        retryable_failure_max_elapsed_seconds=30,
+    )
+
+    assert consumer._retryable_failure_max_attempts == 7
+    assert consumer._retryable_failure_max_elapsed_seconds == 30
+
+
+@pytest.mark.parametrize(
+    ("field_name", "kwargs"),
+    [
+        ("retryable_failure_max_attempts", {"retryable_failure_max_attempts": -1}),
+        (
+            "retryable_failure_max_elapsed_seconds",
+            {"retryable_failure_max_elapsed_seconds": -1},
+        ),
+    ],
+)
+async def test_consumer_rejects_negative_service_owned_retryable_failure_budget(
+    field_name: str,
+    kwargs: dict[str, int],
+) -> None:
+    with pytest.raises(ValueError, match=field_name):
+        ConcreteTestConsumer(
+            bootstrap_servers="mock_bs",
+            topic="test-topic",
+            group_id="test-group",
+            **kwargs,
+        )
+
+
 async def test_run_loop_retryable_error_emits_standard_consumer_metrics(
     test_consumer: ConcreteTestConsumer, mock_confluent_consumer: MagicMock
 ):

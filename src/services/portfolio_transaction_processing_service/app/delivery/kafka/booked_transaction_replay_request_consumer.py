@@ -33,6 +33,8 @@ class BookedTransactionReplayRequestConsumer(BaseConsumer):
         service_prefix: str = "SVC",
         metrics: dict[str, object] | None = None,
         execution_profile: KafkaConsumerExecutionProfile | None = None,
+        retryable_failure_max_attempts: int | None = None,
+        retryable_failure_max_elapsed_seconds: int | None = None,
         *,
         use_case: ReplayBookedTransactionUseCase,
     ) -> None:
@@ -44,6 +46,8 @@ class BookedTransactionReplayRequestConsumer(BaseConsumer):
             service_prefix=service_prefix,
             metrics=metrics,
             execution_profile=execution_profile,
+            retryable_failure_max_attempts=retryable_failure_max_attempts,
+            retryable_failure_max_elapsed_seconds=(retryable_failure_max_elapsed_seconds),
         )
         self._use_case = use_case
 

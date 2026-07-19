@@ -191,6 +191,19 @@ def _source_safe_error_traceback(error: Exception) -> str:
     return redact_sensitive_text(traceback.format_exc())
 
 
+def _resolve_retryable_failure_budget_value(
+    field_name: str,
+    configured_value: int | None,
+    *,
+    default: int,
+) -> int:
+    """Resolve an optional consumer-owned retry budget without weakening shared defaults."""
+    value = default if configured_value is None else configured_value
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ValueError(f"{field_name} must be a non-negative integer")
+    return value
+
+
 def _redacted_dlq_header(header: tuple[str, bytes | None]) -> tuple[str, bytes]:
     key, value = header
     if _is_sensitive_dlq_header(key):
@@ -227,6 +240,8 @@ class BaseConsumer(ABC):
         service_prefix: str = "SVC",
         metrics: Optional[Dict] = None,
         execution_profile: KafkaConsumerExecutionProfile | None = None,
+        retryable_failure_max_attempts: int | None = None,
+        retryable_failure_max_elapsed_seconds: int | None = None,
     ) -> None:
         self.topic = topic
         self._group_id = group_id
@@ -257,9 +272,15 @@ class BaseConsumer(ABC):
         self._dlq_failure_attempts: dict[str, int] = {}
         self._dlq_failure_max_attempts = KAFKA_CONSUMER_DLQ_FAILURE_MAX_ATTEMPTS
         self._retryable_failure_attempts: dict[str, tuple[int, float]] = {}
-        self._retryable_failure_max_attempts = KAFKA_CONSUMER_RETRYABLE_FAILURE_MAX_ATTEMPTS
-        self._retryable_failure_max_elapsed_seconds = (
-            KAFKA_CONSUMER_RETRYABLE_FAILURE_MAX_ELAPSED_SECONDS
+        self._retryable_failure_max_attempts = _resolve_retryable_failure_budget_value(
+            "retryable_failure_max_attempts",
+            retryable_failure_max_attempts,
+            default=KAFKA_CONSUMER_RETRYABLE_FAILURE_MAX_ATTEMPTS,
+        )
+        self._retryable_failure_max_elapsed_seconds = _resolve_retryable_failure_budget_value(
+            "retryable_failure_max_elapsed_seconds",
+            retryable_failure_max_elapsed_seconds,
+            default=KAFKA_CONSUMER_RETRYABLE_FAILURE_MAX_ELAPSED_SECONDS,
         )
         self.execution_profile = execution_profile or load_kafka_consumer_execution_profile(
             group_id
@@ -283,6 +304,8 @@ class BaseConsumer(ABC):
             retryable_failure_backoff_seconds=(
                 self.execution_profile.retryable_failure_backoff_seconds
             ),
+            retryable_failure_max_attempts=self._retryable_failure_max_attempts,
+            retryable_failure_max_elapsed_seconds=(self._retryable_failure_max_elapsed_seconds),
             shutdown_drain_timeout_seconds=(self.execution_profile.shutdown_drain_timeout_seconds),
             overload_behavior=self.execution_profile.overload_behavior,
         )

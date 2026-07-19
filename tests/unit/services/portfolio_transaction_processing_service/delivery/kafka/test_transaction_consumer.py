@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import datetime
 from decimal import Decimal
@@ -9,6 +10,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from portfolio_common.exceptions import RetryableConsumerError
+from portfolio_common.kafka_consumer_execution import KafkaConsumerExecutionProfile
 from sqlalchemy.exc import IntegrityError
 
 from src.services.portfolio_transaction_processing_service.app.application import (
@@ -118,12 +120,46 @@ async def test_consumer_converts_retryable_application_error() -> None:
     use_case = AsyncMock()
     use_case.execute.side_effect = TransactionProcessingError(
         reason_code="cost_dependency_unavailable",
-        detail={"transaction_id": "TX-001"},
+        detail={
+            "transaction_id": "TX-001",
+            "dependency_error": "InstrumentReferenceUnavailableError",
+        },
         retryable=True,
     )
 
-    with pytest.raises(RetryableConsumerError, match="cost_dependency_unavailable"):
+    with pytest.raises(
+        RetryableConsumerError,
+        match="cost_dependency_unavailable:InstrumentReferenceUnavailableError",
+    ):
         await _consumer(use_case).process_message(_message())
+
+
+async def test_consumer_exhausts_owned_dependency_budget_without_runtime_restart() -> None:
+    use_case = AsyncMock()
+    use_case.execute.side_effect = TransactionProcessingError(
+        reason_code="cost_dependency_unavailable",
+        detail={"dependency_error": "InstrumentReferenceUnavailableError"},
+        retryable=True,
+    )
+    consumer = TransactionProcessingConsumer(
+        bootstrap_servers="mock_server",
+        topic="transactions.persisted",
+        group_id="portfolio_transaction_processing_group",
+        dlq_topic="dlq.persistence_service",
+        use_case=use_case,
+        execution_profile=KafkaConsumerExecutionProfile(retryable_failure_backoff_seconds=0.001),
+        retryable_failure_max_attempts=2,
+    )
+    consumer._consumer = MagicMock()
+    consumer._send_to_dlq_async = AsyncMock(return_value=True)
+    message = _message()
+
+    await consumer._process_polled_message(message, asyncio.get_running_loop())
+
+    assert use_case.execute.await_count == 2
+    consumer._send_to_dlq_async.assert_awaited_once()
+    consumer._consumer.commit.assert_called_once_with(message=message, asynchronous=False)
+    assert consumer._running is True
 
 
 async def test_consumer_converts_database_failure_to_retryable_delivery_error() -> None:
