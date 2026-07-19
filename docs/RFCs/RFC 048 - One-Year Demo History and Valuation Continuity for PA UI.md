@@ -4,7 +4,7 @@
 | --- | --- |
 | Status | Implemented |
 | Created | 2026-02-24 |
-| Last Updated | 2026-03-04 |
+| Last Updated | 2026-07-19 |
 | Owners | demo bootstrap + query-service valuation continuity |
 | Depends On | RFC 046, RFC 047 |
 | Scope | Extend demo horizon and guarantee non-null holdings valuation continuity in degraded paths |
@@ -13,7 +13,8 @@
 
 RFC 048 objectives are implemented:
 1. Demo data pack now generates rolling one-year business-date history.
-2. Compose demo loader runs with `--force-ingest` to avoid stale local drift.
+2. Compose demo loader seeds the complete pack on first boot, skips unchanged retained data, and
+   exposes explicit force refresh for intentionally dirty sample state.
 3. Position query fallback path enriches valuation from latest snapshots when possible.
 4. When snapshot valuation is absent, fallback valuation continuity uses cost-basis values to avoid null holdings valuation fields.
 
@@ -27,11 +28,16 @@ Original RFC 048 requested:
 3. Forced refresh behavior in startup bootstrap.
 4. Valuation continuity for fallback holdings when snapshots lag.
 
+The original automatic force-refresh request was superseded by the restart-idempotency correction
+in #811. Explicit force refresh remains available without replaying unchanged sources on every
+retained-volume restart.
+
 ## Current Implementation Reality
 
 Implemented:
 1. Demo bundle window is derived from `date.today() - 365 days` through current date using business-day generation.
-2. Demo loader command in compose includes `--force-ingest`.
+2. Demo loader skips the complete unchanged pack on retained-volume restart and exposes explicit
+   `DEMO_DATA_PACK_FORCE_INGEST=true` refresh control.
 3. Position service fallback logic:
    - uses latest snapshot valuation map when available,
    - otherwise emits non-null valuation continuity using cost basis.
@@ -39,7 +45,7 @@ Implemented:
 
 Evidence:
 - `tools/demo_data_pack.py`
-- `docker-compose.yml` (`demo_data_loader` command includes `--force-ingest`)
+- `docker-compose.yml` (`demo_data_loader` restart-idempotency and explicit force control)
 - `src/services/query_service/app/services/position_service.py`
 - `tests/unit/services/query_service/services/test_position_service.py`
 
@@ -48,14 +54,16 @@ Evidence:
 | Original Requirement | Current Implementation in lotus-core | Evidence |
 | --- | --- | --- |
 | One-year demo history | Implemented | `demo_data_pack.py` business date window |
-| Force refresh on startup | Implemented | compose loader command |
+| Restart-idempotent bootstrap with explicit force refresh | Implemented | compose loader command |
 | Fallback valuation enrichment | Implemented | position service fallback valuation map usage |
 | Non-null continuity when snapshots absent | Implemented | cost-basis fallback valuation path + unit tests |
 
 ## Design Reasoning and Trade-offs
 
 1. One-year horizon enables realistic analytics windows for downstream UI/performance flows.
-2. Forced ingest keeps demo state deterministic across developer environments.
+2. One complete-pack decision keeps retained restarts deterministic without publishing unchanged
+   source history; operators retain an explicit complete refresh control for intentionally dirty
+   sample state.
 3. Cost-basis fallback avoids null-value UI failure while asynchronous snapshot materialization catches up.
 
 Trade-off:
