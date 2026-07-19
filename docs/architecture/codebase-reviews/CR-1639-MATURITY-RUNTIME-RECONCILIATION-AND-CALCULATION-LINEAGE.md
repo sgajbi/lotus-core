@@ -159,3 +159,18 @@ This changes no HTTP, OpenAPI, database, event, or Kafka shape; mixed-epoch scop
 intentionally change. Focused warning-strict proof passes `33` unit tests and one isolated
 PostgreSQL selection scenario. Fresh canonical controls and downstream proof remain required; an
 older control created under the superseded calculation is not valid certification evidence.
+
+Fresh branch-qualified proof at signed SHA `a3d8dee29859f5ddd3749590039642b81e17fda8`
+used canonical book `PB_SG_GLOBAL_BAL_001` on `2026-04-10`, where 11 security rows span epochs
+`0`, `1`, and `3`. Correlation `CTL:a3d8dee:PB_SG_GLOBAL_BAL_001:2026-04-10:3` produced three new
+completed runs. Position valuation examined all 11 authoritative rows with zero findings, compared
+with one examined row in the pre-fix control. Completion and controls-evaluated outbox rows were
+processed with zero retries. HoldingsAsOf and PortfolioMaturitySummary both reported complete,
+current, reconciled evidence; the maturity receipt was `SUPPORTED` with all three calculation-
+lineage hashes populated.
+
+The real Lotus Idea adapter retrieved that receipt successfully but exposed a consumer-owned empty-
+window decision defect: a supported zero-count/null-next-date receipt was classified as
+`blocked/missing_source` instead of `not_eligible`. `lotus-idea#482` was reopened with the exact live
+evidence and root cause. Core issue #792 therefore remains in progress until the consumer fix-forward
+passes and the producer change completes PR, exact-main, wiki-publication, and closure gates.

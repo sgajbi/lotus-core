@@ -595,9 +595,14 @@ does not publish this key policy; the operator-owned migration runbook is the du
   `docker compose config --quiet` passed. A targeted one-service recreation then started the
   reconciliation consumer and outbox dispatcher, created
   `portfolio_day.reconciliation.requested_group`, drained partition 3 from offset `0` to `376`, and
-  produced completed reconciliation runs without service errors. Exact verify-only remained
-  fail-closed because mixed source-row epochs did not match the one latest-portfolio-epoch control;
-  that separate HoldingsAsOf scope-model correction remains pending under #792/#809.
+  produced completed reconciliation runs without service errors. Exact verify-only initially
+  remained fail-closed because mixed source-row epochs did not match the one latest-portfolio-epoch
+  control. Signed fix `a3d8dee29859f5ddd3749590039642b81e17fda8` then made those rows one
+  collective portfolio-day scope and selected every authoritative security row at or below the
+  target epoch. Fresh correlation `CTL:a3d8dee:PB_SG_GLOBAL_BAL_001:2026-04-10:3` completed all
+  three controls; position valuation examined 11 mixed-epoch securities with zero findings and both
+  completion outbox events processed with zero retries. Full canonical queue convergence and the
+  remaining #795 load/recovery/correction profiles are still required.
 
 Implementation commits include `23fc6faf3`, `d51adb739`, `ad1ad179d`, `57f8c60e2`,
 `4f05be9a5`, `c230d660a`, `f42f6eaa3`, `d56e14dbf`, `2d49fc8f1`, `70ae16f0f`,
