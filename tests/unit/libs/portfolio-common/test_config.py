@@ -319,9 +319,11 @@ def test_kafka_consumer_execution_profile_defaults_preserve_serial_behavior(monk
     ("group_id", "expected_max_in_flight"),
     [
         ("persistence_group_transactions", 12),
+        ("persistence_group_market_prices", 12),
         ("portfolio_transaction_processing_group", 12),
         ("portfolio_transaction_replay_request_group", 8),
         ("valuation_orchestrator_group_fx_events", 4),
+        ("valuation_orchestrator_group_price_events", 12),
         ("position_valuation_worker_group", 1),
         ("timeseries_generator_group_positions", 8),
         ("portfolio_day.reconciliation.requested_group", 4),
@@ -458,5 +460,7 @@ def test_active_topic_registry_has_explicit_source_owned_partition_counts():
     assert config_module.KAFKA_TOPIC_PARTITION_COUNTS["business_dates.raw.received"] == 1
     assert config_module.KAFKA_TOPIC_PARTITION_COUNTS["transactions.raw.received"] == 12
     assert config_module.KAFKA_TOPIC_PARTITION_COUNTS["transactions.persisted"] == 12
+    assert config_module.KAFKA_TOPIC_PARTITION_COUNTS["market_prices.raw.received"] == 12
+    assert config_module.KAFKA_TOPIC_PARTITION_COUNTS["market_prices.persisted"] == 12
     assert config_module.KAFKA_TOPIC_PARTITION_COUNTS["transactions.reprocessing.requested"] == 8
     assert len(set(config_module.KAFKA_TOPIC_PARTITION_COUNTS.values())) > 1

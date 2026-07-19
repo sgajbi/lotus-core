@@ -1,7 +1,8 @@
 {
   "schema_version": "lotus-core.kafka-topic-runtime-contract.v1",
-  "contract_version": "1.0.0",
+  "contract_version": "1.1.0",
   "ordering_contract": "Kafka ordering is guaranteed only within a partition. Dates and epochs must not be key components for backdated corrections or restatements.",
+  "keyed_partitioner": "consistent_random_crc32",
   "tenant_identity_status": "not_source_owned_in_current_event_family",
   "topics": [
     {
@@ -42,12 +43,12 @@
     },
     {
       "topic": "market_prices.raw.received",
-      "partitions": 8,
+      "partitions": 12,
       "producer_services": ["ingestion_service"],
       "current_key": "security_id",
       "ordering_scope": "security",
       "consumer_groups": ["persistence_group_market_prices"],
-      "consumer_max_in_flight": 8,
+      "consumer_max_in_flight": 12,
       "state_owner": "persistence_service.market_prices",
       "duplicate_policy": "idempotency_claim_then_observation_upsert",
       "replay_contract": "replay_with_original_security_key"
@@ -90,12 +91,12 @@
     },
     {
       "topic": "market_prices.persisted",
-      "partitions": 8,
+      "partitions": 12,
       "producer_services": ["persistence_service"],
       "current_key": "security_id",
       "ordering_scope": "security",
       "consumer_groups": ["valuation_orchestrator_group_price_events"],
-      "consumer_max_in_flight": 8,
+      "consumer_max_in_flight": 12,
       "state_owner": "valuation_orchestrator_service.price_reprocessing_queue",
       "duplicate_policy": "source_observation_identity_and_bounded_reprocessing_upsert",
       "replay_contract": "replay_preserves_security_key"

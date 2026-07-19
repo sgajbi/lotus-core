@@ -25,6 +25,7 @@ def test_kafka_producer_initialization(MockProducer):
     assert config["enable.idempotence"] is True
     assert config["acks"] == "all"
     assert config["max.in.flight.requests.per.connection"] == 5
+    assert config["partitioner"] == "consistent_random"
     assert config["client.id"] == "portfolio-analytics-producer"
     assert config["retries"] == 5
     assert config["linger.ms"] == 5

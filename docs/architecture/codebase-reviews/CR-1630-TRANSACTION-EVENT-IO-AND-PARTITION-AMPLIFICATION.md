@@ -98,6 +98,10 @@ rearmed and completed `525` times for one final portfolio-day row.
     corrections; transaction-owned readiness performs the first valuation after calendar
     activation. Backdated and future observations against an existing horizon keep correction
     replay semantics.
+20. The aligned raw/persisted market-price topics and their live consumer groups use twelve
+    partitions/in-flight tasks. The producer pins librdkafka's stable CRC32 keyed partitioner.
+    Security ordering is unchanged; the canonical ten-key maximum lane falls from five series
+    (`1,880` facts) at eight partitions to three (`1,128` facts) at twelve.
 
 ## Measured Result
 
@@ -123,6 +127,12 @@ upstream arrival and disappeared after the domain-correct partition fix. Adding 
 result would increase freshness latency without a remaining measured defect.
 
 Subsequent bounded evidence kept measurement claims conservative:
+
+- clean canonical source-first diagnostic at `73fa4ada3` proved the new fence but exposed exact
+  CRC32 key skew: partition 4 owned five of ten price series and `1,880/3,760` raw facts. The
+  measured ordered lane threatened the unchanged 900-second source-readiness budget. Twelve
+  partitions spread the same keys across seven lanes and reduce maximum serial work `40%`; final
+  canonical pass evidence remains required before closure;
 
 - cashflow persistence fan-in `20260716T205744Z` completed exactly with `105.245s` drain;
 - deferred position-history flush fan-in `20260716T231755Z` completed exactly with `105.234s`

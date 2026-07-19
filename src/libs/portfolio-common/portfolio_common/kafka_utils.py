@@ -53,6 +53,9 @@ class KafkaProducer:
                 "acks": "all",
                 "max.in.flight.requests.per.connection": 5,  # safe with idempotence
                 "socket.keepalive.enable": True,
+                # Pin librdkafka's stable keyed CRC32 partitioner. Domain ordering and
+                # migration evidence must not depend on an implicit client default.
+                "partitioner": "consistent_random",
             }
             conf.update(self.producer_policy.as_confluent_config())
 
