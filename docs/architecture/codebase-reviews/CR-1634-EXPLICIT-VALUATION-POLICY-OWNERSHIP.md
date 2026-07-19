@@ -55,6 +55,11 @@ narrow framework-free contract therefore belongs in `portfolio_common.domain.val
 - Reused the financial canonical-content normalizer for assignment/cache hashes, deleting a second
   hand-built JSON/SHA-256 path and ensuring equivalent aware observation instants have one UTC-
   canonical assignment identity.
+- Added reversible persistence for source-versioned valuation-policy assignments. The table keeps
+  tenant, legal book, instrument, policy, effective interval, lifecycle, source revision,
+  observation time, and assignment reason as separate facts; database checks enforce governed
+  lifecycle and positive versions, while partial effective-scope and descending source-history
+  indexes support deterministic resolution without a product-class fallback.
 - Added the first versioned day-count registry slice for FpML/ISDA `ACT/365.FIXED`, `ACT/360`, and
   `BUS/252`. Fixed-denominator conventions use actual elapsed calendar days. `BUS/252` counts
   source-owned business dates start-inclusive and end-exclusive and requires a versioned calendar
@@ -120,11 +125,12 @@ to that service's domain package.
 
 ## Compatibility
 
-These domain slices do not change runtime valuation behavior, HTTP/OpenAPI contracts, event
-payloads, database schema, topics, deployment topology, or downstream fields. Existing correct
-unit-price behavior is characterized under an explicit policy. The legacy bond heuristic remains in
-the runtime path until authoritative representation and assignment facts are available; it will be
-deleted rather than retained as a fallback when valuation and reconciliation are rewired.
+The persistence slice adds one reversible table and two evidence-backed indexes. It does not change
+runtime valuation behavior, HTTP/OpenAPI contracts, event payloads, topics, deployment topology, or
+downstream fields. Existing correct unit-price behavior is characterized under an explicit policy.
+The legacy bond heuristic remains in the runtime path until authoritative representation and
+assignment ingestion facts are available; it will be deleted rather than retained as a fallback
+when valuation and reconciliation are rewired.
 
 ## Validation
 
@@ -154,6 +160,9 @@ deleted rather than retained as a fallback when valuation and reconciliation are
   ambiguous value types/metadata.
 - Scoped Ruff lint and formatting passed.
 - Strict MyPy passed for all seven valuation-domain source modules and the focused position test.
+- The persistence contract passed 35 focused domain/model/migration tests under the warning gate;
+  Alembic reports the new revision as the single head and the repository migration contract accepts
+  the exact `c115b2c3d4f4 -> c116b2c3d4f5` reversible edge.
 - Signed slice commits and validation evidence are recorded on GitHub issue #788.
 
 Primary methodology references for the day-count slice are the
@@ -177,6 +186,7 @@ govern the ex-dividend rebate-interest example and settlement-date boundary used
 
 Repository context, the canonical position-valuation methodology, risk-based coverage contract, and
 this review ledger change because calculation and evidence truth changed. The methodology labels
-the new domain as a runtime migration in progress. No API, OpenAPI, migration, operator workflow,
-README, supported-feature, or wiki truth changes in these domain-only slices. Product/lifecycle wiki
-updates remain required with runtime and source-contract implementation under #788.
+the new domain as a runtime migration in progress. The assignment-persistence slice adds a migration
+but no API, OpenAPI, operator workflow, README, supported-feature, or wiki truth change. Wiki change
+remains an explicit no-change decision until runtime/source-product behavior becomes consumable;
+product/lifecycle wiki updates remain required with that implementation under #788.

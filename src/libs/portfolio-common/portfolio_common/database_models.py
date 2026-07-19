@@ -353,6 +353,78 @@ class Instrument(Base):
     )
 
 
+class InstrumentValuationPolicyAssignmentRecord(Base):
+    """Source-versioned assignment of one instrument to one valuation policy."""
+
+    __tablename__ = "instrument_valuation_policy_assignments"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    tenant_id = Column(String, nullable=False)
+    legal_book_id = Column(String, nullable=False)
+    security_id = Column(String, ForeignKey("instruments.security_id"), nullable=False)
+    policy_id = Column(String, nullable=False)
+    policy_version = Column(Integer, nullable=False)
+    valid_from = Column(Date, nullable=False)
+    valid_to = Column(Date, nullable=True)
+    assignment_status = Column(String, nullable=False)
+    assignment_version = Column(Integer, nullable=False)
+    source_system = Column(String, nullable=False)
+    source_record_id = Column(String, nullable=False)
+    source_revision = Column(String, nullable=False)
+    observed_at = Column(DateTime(timezone=True), nullable=False)
+    assignment_reason = Column(String, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "legal_book_id",
+            "security_id",
+            "source_system",
+            "source_record_id",
+            "assignment_version",
+            name="uq_inst_val_policy_source_version",
+        ),
+        CheckConstraint(
+            "valid_to IS NULL OR valid_to >= valid_from",
+            name="ck_inst_val_policy_effective_window",
+        ),
+        CheckConstraint(
+            "policy_version >= 1",
+            name="ck_inst_val_policy_version_positive",
+        ),
+        CheckConstraint(
+            "assignment_version >= 1",
+            name="ck_inst_val_assignment_version_positive",
+        ),
+        CheckConstraint(
+            "assignment_status IN ('ACTIVE', 'SUSPENDED', 'RETIRED')",
+            name="ck_inst_val_assignment_status_governed",
+        ),
+        Index(
+            "ix_inst_val_policy_scope_effective",
+            "tenant_id",
+            "legal_book_id",
+            "security_id",
+            "valid_from",
+            "valid_to",
+            postgresql_where=text("assignment_status = 'ACTIVE'"),
+        ),
+        Index(
+            "ix_inst_val_policy_source_history",
+            "tenant_id",
+            "legal_book_id",
+            "security_id",
+            "source_system",
+            "source_record_id",
+            assignment_version.desc(),
+        ),
+    )
+
+
 class PortfolioBenchmarkAssignment(Base):
     __tablename__ = "portfolio_benchmark_assignments"
 

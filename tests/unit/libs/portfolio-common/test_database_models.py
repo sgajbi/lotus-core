@@ -18,6 +18,7 @@ from portfolio_common.database_models import (
     Instrument,
     InstrumentEligibilityProfile,
     InstrumentLookthroughComponent,
+    InstrumentValuationPolicyAssignmentRecord,
     LiquidityReserveRequirement,
     MarketPrice,
     ModelPortfolioDefinition,
@@ -210,6 +211,41 @@ def test_portfolio_party_role_assignment_enforces_identity_and_vocabulary() -> N
         for index_name, index in indexes.items()
         if index_name != "ix_party_role_portfolio_history"
     )
+
+
+def test_instrument_valuation_policy_assignment_enforces_source_safe_history() -> None:
+    table = InstrumentValuationPolicyAssignmentRecord.__table__
+    constraint_names = {constraint.name for constraint in table.constraints}
+    indexes = {index.name: index for index in table.indexes}
+
+    assert {
+        "uq_inst_val_policy_source_version",
+        "ck_inst_val_policy_effective_window",
+        "ck_inst_val_policy_version_positive",
+        "ck_inst_val_assignment_version_positive",
+        "ck_inst_val_assignment_status_governed",
+    } <= constraint_names
+    assert [column.name for column in indexes["ix_inst_val_policy_scope_effective"].columns] == [
+        "tenant_id",
+        "legal_book_id",
+        "security_id",
+        "valid_from",
+        "valid_to",
+    ]
+    assert (
+        str(indexes["ix_inst_val_policy_scope_effective"].dialect_options["postgresql"]["where"])
+        == "assignment_status = 'ACTIVE'"
+    )
+    assert [
+        str(expression) for expression in indexes["ix_inst_val_policy_source_history"].expressions
+    ] == [
+        "instrument_valuation_policy_assignments.tenant_id",
+        "instrument_valuation_policy_assignments.legal_book_id",
+        "instrument_valuation_policy_assignments.security_id",
+        "instrument_valuation_policy_assignments.source_system",
+        "instrument_valuation_policy_assignments.source_record_id",
+        "instrument_valuation_policy_assignments.assignment_version DESC",
+    ]
 
 
 def test_model_portfolio_tables_declare_dpm_source_indexes():
