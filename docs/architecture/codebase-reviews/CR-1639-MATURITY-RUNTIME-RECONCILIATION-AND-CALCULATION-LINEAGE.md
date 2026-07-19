@@ -122,3 +122,20 @@ The shared upstream quality correction likewise requires no additional wiki page
 change. Existing Mesh Data Products and API Surface wiki truth already requires fail-closed exact
 reconciliation; the HoldingsAsOf methodology and executable contracts now make the field-level
 reduction explicit.
+
+## Downstream Consumer-Path Fix-Forward
+
+PR #807 merged the producer contract to exact main `6e4dbf2a6bc17adf4b95937b1d2b8338216f976e`.
+A live Lotus Idea request then exposed an HTTP binding defect: FastAPI did not coerce the query
+string `include_projected=false` into the route's `Literal[False]`, so the governed explicit request
+returned 422 even though omission returned a complete, current, supported receipt. The route now
+parses the parameter as a boolean, rejects `true` before service execution, and retains OpenAPI
+`const: false` through explicit schema metadata. Focused route and OpenAPI validation passes 48
+tests with warnings treated as errors. The same-pattern production scan found no other
+`Literal[False]` HTTP parameter.
+
+This corrects transport binding only. Booked-only maturity methodology, response shape, OpenAPI
+const posture, reconciliation, identity, lineage, and downstream authority boundaries are
+unchanged. Existing API Surface wiki and methodology truth therefore require no further update.
+Issue #792 remains open until Lotus Idea's real runtime artifact qualifies against this exact Core
+fix and the fix reaches exact main.

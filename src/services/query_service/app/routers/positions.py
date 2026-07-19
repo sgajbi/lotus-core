@@ -1,8 +1,8 @@
 # services/query-service/app/routers/positions.py
 from datetime import date
-from typing import Literal, Optional
+from typing import Optional
 
-from fastapi import APIRouter, Depends, Header, Path, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Path, Query, status
 from portfolio_common.source_data_products import source_data_product_openapi_extra
 
 from ..application.collection_window_policy import (
@@ -195,13 +195,14 @@ async def get_portfolio_maturity_summary(
         ),
         examples=[90],
     ),
-    include_projected: Literal[False] = Query(
+    include_projected: bool = Query(
         False,
         description=(
             "Must remain false. This trust-certified receipt is limited to booked HoldingsAsOf "
             "state; projected holdings are intentionally excluded."
         ),
         examples=[False],
+        json_schema_extra={"const": False},
     ),
     x_tenant_id: str | None = Header(
         None,
@@ -212,6 +213,11 @@ async def get_portfolio_maturity_summary(
     ),
     service: PositionService = Depends(get_position_service),
 ):
+    if include_projected:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="include_projected must be false for PortfolioMaturitySummary",
+        )
     try:
         return await service.get_portfolio_maturity_summary(
             portfolio_id=portfolio_id,

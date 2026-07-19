@@ -27,6 +27,34 @@ def _calculation_lineage() -> dict[str, object]:
     }
 
 
+def _empty_maturity_summary_response() -> dict[str, object]:
+    return {
+        "portfolio_id": "P1",
+        "source_product_name": "HoldingsAsOf",
+        "source_product_version": "v1",
+        "window_start_date": date(2026, 2, 28),
+        "window_end_date": date(2026, 4, 29),
+        "horizon_days": 60,
+        "include_projected": False,
+        "maturity_basis": "CONTRACTUAL_INSTRUMENT_MATURITY_DATE",
+        "freshness_status": "CURRENT",
+        "next_maturity_date": None,
+        "maturing_holding_count": 0,
+        "maturity_bearing_holding_count": 0,
+        "missing_maturity_date_count": 0,
+        "unsupported_maturity_feature_count": 0,
+        "supportability_status": "SUPPORTED",
+        "supportability_reasons": [],
+        "request_fingerprint": "maturity_summary:def456",
+        "calculation_lineage": _calculation_lineage(),
+        **source_data_product_runtime_metadata(
+            as_of_date=date(2026, 2, 28),
+            reconciliation_status="COMPLETE",
+            source_evidence_current=True,
+        ),
+    }
+
+
 @pytest_asyncio.fixture
 async def async_test_client():
     mock_service = AsyncMock()
@@ -246,30 +274,6 @@ async def test_get_portfolio_maturity_summary_success(async_test_client):
 
 async def test_get_portfolio_maturity_summary_rejects_projected_state(async_test_client):
     client, mock_service = async_test_client
-    mock_service.get_portfolio_maturity_summary.return_value = {
-        "portfolio_id": "P1",
-        "source_product_name": "HoldingsAsOf",
-        "source_product_version": "v1",
-        "window_start_date": date(2026, 2, 28),
-        "window_end_date": date(2026, 4, 29),
-        "horizon_days": 60,
-        "include_projected": False,
-        "maturity_basis": "CONTRACTUAL_INSTRUMENT_MATURITY_DATE",
-        "freshness_status": "CURRENT",
-        "next_maturity_date": None,
-        "maturing_holding_count": 0,
-        "maturity_bearing_holding_count": 0,
-        "missing_maturity_date_count": 0,
-        "unsupported_maturity_feature_count": 0,
-        "supportability_status": "SUPPORTED",
-        "supportability_reasons": [],
-        "request_fingerprint": "maturity_summary:def456",
-        "calculation_lineage": _calculation_lineage(),
-        **source_data_product_runtime_metadata(
-            as_of_date=date(2026, 2, 28),
-            source_evidence_current=True,
-        ),
-    }
 
     response = await client.get(
         "/portfolios/P1/maturity-summary?"
@@ -278,6 +282,25 @@ async def test_get_portfolio_maturity_summary_rejects_projected_state(async_test
 
     assert response.status_code == 422
     mock_service.get_portfolio_maturity_summary.assert_not_awaited()
+
+
+async def test_get_portfolio_maturity_summary_accepts_explicit_booked_state(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_portfolio_maturity_summary.return_value = _empty_maturity_summary_response()
+
+    response = await client.get(
+        "/portfolios/P1/maturity-summary?"
+        "as_of_date=2026-02-28&horizon_days=60&include_projected=false"
+    )
+
+    assert response.status_code == 200
+    mock_service.get_portfolio_maturity_summary.assert_awaited_once_with(
+        portfolio_id="P1",
+        as_of_date=date(2026, 2, 28),
+        horizon_days=60,
+        include_projected=False,
+        tenant_id=None,
+    )
 
 
 @pytest.mark.parametrize("horizon_days", [0, 3661])
