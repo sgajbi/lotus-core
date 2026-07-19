@@ -584,6 +584,20 @@ does not publish this key policy; the operator-owned migration runbook is the du
   before calendar activation. Focused source-scheduling/consumer/seed proof passed `81` tests and
   the wider valuation-orchestrator package passed `163` tests with warnings treated as errors before
   final validation.
+- The retained-volume canonical rerun at exact signed head `f5aa531e0` drained both twelve-partition
+  market-price groups to zero and then converged valuation and aggregation queues to zero without a
+  deadlock, stale lease, failed job, PANIC, OOM, or exit-137 signature. It exposed a separate
+  app-local composition defect: all `376` reconciliation requests were durably published, but
+  Compose launched only `uvicorn app.main:app`, so the required consumer group did not exist and
+  holdings correctly remained `UNRECONCILED`/`UNKNOWN`.
+- The bounded fix restores the Dockerfile-owned `python -m app.runtime` entry point, explicit
+  `kafka:9093` configuration, and topic-creator dependency. Ten focused stack/runtime tests and
+  `docker compose config --quiet` passed. A targeted one-service recreation then started the
+  reconciliation consumer and outbox dispatcher, created
+  `portfolio_day.reconciliation.requested_group`, drained partition 3 from offset `0` to `376`, and
+  produced completed reconciliation runs without service errors. Exact verify-only remained
+  fail-closed because mixed source-row epochs did not match the one latest-portfolio-epoch control;
+  that separate HoldingsAsOf scope-model correction remains pending under #792/#809.
 
 Implementation commits include `23fc6faf3`, `d51adb739`, `ad1ad179d`, `57f8c60e2`,
 `4f05be9a5`, `c230d660a`, `f42f6eaa3`, `d56e14dbf`, `2d49fc8f1`, `70ae16f0f`,
@@ -648,3 +662,9 @@ The canonical bootstrap correction changes the existing seed contract, repositor
 Operations wiki because source-first ordering and bounded readiness fences are operator truth. It
 requires no OpenAPI, migration, event-contract, calculation-methodology, partition, or additional
 standalone documentation change.
+The financial-reconciliation Compose correction restores the already documented service ownership
+and runtime topology. Repository context and the review ledger change because worker-entrypoint
+parity is reusable engineering guidance. No OpenAPI, migration, event, calculation, operator
+command, or authored wiki truth changes; the existing wiki already states that financial
+reconciliation consumes portfolio-day requests, so this slice records an explicit no-wiki-change
+decision.

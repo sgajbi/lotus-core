@@ -75,6 +75,18 @@ def test_app_local_stack_declares_measured_outbox_capacity_profile() -> None:
         )
 
 
+def test_app_local_stack_runs_financial_reconciliation_worker_runtime() -> None:
+    compose = _read_yaml(ROOT / "docker-compose.yml")
+    target = compose["services"]["financial_reconciliation_service"]
+
+    assert target["command"] == ["python", "-m", "app.runtime"]
+    assert target["environment"]["KAFKA_BOOTSTRAP_SERVERS"] == "kafka:9093"
+    assert target["depends_on"] == {
+        "kafka-topic-creator": {"condition": "service_completed_successfully"},
+        "migration-runner": {"condition": "service_completed_successfully"},
+    }
+
+
 def test_demo_data_loader_uses_internal_service_urls() -> None:
     compose = _read_yaml(ROOT / "docker-compose.yml")
     demo_loader = compose["services"]["demo_data_loader"]
