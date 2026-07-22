@@ -868,7 +868,9 @@ Most relevant current governance:
     structured evidence must bind portfolio and manager identity, governed business date, role and
     scope, effective interval, assignment version, source system/record/product, observation time,
     quality status, ingestion endpoint, and exact assignment count; partial identity evidence is
-    not canonical seed proof.
+    not canonical seed proof. The reported source product must be resolved from Core's executable
+    source-data-product registry and match the Platform contract; echoing contract text is not
+    product-binding evidence.
     Canonical parent reference ingestion remains asynchronous: before posting eligibility or other
     dependent reference products, the seed must prove every unique instrument is query-visible
     within a bounded wait and fail closed with the unresolved security ids. Local reseed fence
