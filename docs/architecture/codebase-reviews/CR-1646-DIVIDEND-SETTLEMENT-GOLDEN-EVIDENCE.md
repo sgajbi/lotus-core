@@ -2,8 +2,9 @@
 
 ## Status
 
-Hardened locally on `feat/transaction-lifecycle-correctness`; issue #731 remains open for the
-broader independent transaction-economics oracle.
+Locally complete on `feat/transaction-lifecycle-correctness` after signed rebase onto exact merged
+main `db8cdf464852d8d886971fdd4741e0a2f28a331b`; PR, merge, and exact-main proof remain pending.
+Issue #731 remains open for the broader independent transaction-economics oracle.
 
 ## Objective and bounded scope
 
@@ -41,8 +42,9 @@ property/metamorphic, mutation, reporting, or remaining-family criteria.
 - Reference evaluator import guard rejects `src` and `portfolio_common` roots.
 - The test covers settlement, cashflow, position reducer, and cost-basis outputs from one reviewed
   vector set.
-- Primary review findings from #731 comment `5044729433` were fixed forward without rewriting
-  signed commit `423fcf042`: the DIVIDEND oracle now uses `CashflowTiming.EOD`, asserts the
+- Primary review findings from #731 comment `5044729433` were fixed forward without rewriting the
+  original implementation commit. Signed rebase preserved that commit as `d499c7f10` and the
+  review fix-forward as `308495158`. The DIVIDEND oracle now uses `CashflowTiming.EOD`, asserts the
   emitted timing separately from the settlement/payment date, carries each vector fee into the
   production cost-basis input boundary, and reconciles fixture-owned trade/local basis plus
   trade/local realized P&L expected values.
@@ -55,18 +57,21 @@ property/metamorphic, mutation, reporting, or remaining-family criteria.
   -> 286 passed.
 - `python scripts\quality\test_manifest.py --suite transaction-interest-contract --quiet`
   -> 317 passed.
-- `C:\Users\Sandeep\projects\lotus-core\.venv\Scripts\python.exe -m ruff check tests/test_support/transaction_economics_reference.py tests/unit/transaction_specs/test_dividend_settlement_golden_vectors.py tests/unit/transaction_specs/test_interest_settlement_golden_vectors.py`
+- `uvx --from ruff==0.15.18 ruff check tests/test_support/transaction_economics_reference.py tests/unit/transaction_specs/test_dividend_settlement_golden_vectors.py tests/unit/transaction_specs/test_interest_settlement_golden_vectors.py`
   -> passed with pinned Ruff 0.15.18.
-- `C:\Users\Sandeep\projects\lotus-core\.venv\Scripts\python.exe -m ruff format --check tests/test_support/transaction_economics_reference.py tests/unit/transaction_specs/test_dividend_settlement_golden_vectors.py tests/unit/transaction_specs/test_interest_settlement_golden_vectors.py`
+- `uvx --from ruff==0.15.18 ruff format --check tests/test_support/transaction_economics_reference.py tests/unit/transaction_specs/test_dividend_settlement_golden_vectors.py tests/unit/transaction_specs/test_interest_settlement_golden_vectors.py`
   -> passed.
+- `make architecture-guard` -> passed the complete repository-native architecture chain.
+- Wiki/docs, front-door, architecture-catalog, RFC-ledger, incident-playbook, supported-features,
+  test-lane, and risk-based coverage guards -> passed.
+- Platform branch-budget validator -> `within_budget` at two commits before this evidence commit.
 - JSON fixture parse for `dividend_settlement.v1.json` and `interest_settlement.v1.json` -> passed.
-- `git diff --check -- <changed #731 oracle files>` -> passed; Git reported CRLF working-copy
-  warnings only.
+- `git diff --check origin/main...HEAD` -> passed.
 - The plain warning-strict command is currently blocked before collection by an environment-level
   `pytest_benchmark` `datetime.utcnow()` deprecation warning; the repository test body is warning
   strict with that unrelated plugin disabled.
-- The repository-native Ruff wrapper correctly failed closed because the active interpreter has
-  Ruff 0.15.22 while `requirements/ci-tooling.lock.txt` requires 0.15.18; the pinned existing
-  interpreter above was used for lint and format proof without changing source.
+- The repository-native Ruff wrapper correctly fails closed because the ambient interpreter has
+  Ruff 0.15.22 while `requirements/ci-tooling.lock.txt` requires 0.15.18; isolated `uvx` execution
+  supplied the exact governed version without reading or modifying the primary worktree.
 - Wiki decision: no repo-local wiki source change. This is test evidence only and does not change
   operator-facing behavior or support guidance.
