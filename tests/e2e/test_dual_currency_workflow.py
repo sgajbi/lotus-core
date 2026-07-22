@@ -121,11 +121,24 @@ def setup_dual_currency_data(clean_db_module, e2e_api_client: E2EApiClient):
     pos_url = f"/portfolios/{portfolio_id}/positions"
 
     def pos_validation(data):
+        valuation = (
+            data["positions"][0].get("valuation", {})
+            if data.get("positions") and len(data["positions"]) == 1
+            else {}
+        )
         return (
             data.get("positions")
             and len(data["positions"]) == 1
-            and data["positions"][0].get("valuation", {}).get("unrealized_gain_loss") is not None
-        )  # noqa: E501
+            and all(
+                valuation.get(field_name) is not None
+                for field_name in (
+                    "market_value",
+                    "market_value_local",
+                    "unrealized_gain_loss",
+                    "unrealized_gain_loss_local",
+                )
+            )
+        )
 
     e2e_api_client.poll_for_data(pos_url, pos_validation, timeout=120)
 

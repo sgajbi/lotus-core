@@ -3005,6 +3005,14 @@ Most relevant current governance:
      status; older and identical revisions are no-ops, and contradictory outcomes for one revision
      fail closed. Do not substitute Kafka arrival order, timestamps, debounce, or severity merging
      for this database-backed generation.
+216. Transaction replay load gates must treat both `transaction/processed` and
+     `transaction/duplicate` as successful terminal delivery outcomes. A safely deduplicated
+     at-least-once delivery permits its Kafka offset to advance and is not unfinished work.
+     Rejected and failed outcomes remain excluded. Collect the closed successful set from one
+     bounded metric scrape, preserve the governed replay volume and timeout, and use heavy PR/main
+     runtime lanes to prove the drain. E2E readiness predicates must wait for every field their
+     scenario asserts; dual-currency position proof requires base/local market value and base/local
+     unrealized P&L before the fixture yields.
 
 ## Context Maintenance Rule
 
