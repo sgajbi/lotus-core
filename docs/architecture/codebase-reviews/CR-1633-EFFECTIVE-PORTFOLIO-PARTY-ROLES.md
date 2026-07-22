@@ -131,6 +131,10 @@ remains #521.
 - canonical seed proof passed 63 focused tests; the executable advisor-book validator reported one
   `PM_SG_001` assignment at `/ingest/portfolio-party-role-assignments` with governed source record
   `pb_sg_global_bal_001_pm_sg_001_portfolio_manager_v1`.
+- exact-head Platform review then found the proof shape could accept a wrong business date,
+  source-product/version/effective-date lineage, role, or scope. The source-owned validator now
+  emits the complete persisted assignment identity plus canonical `as_of_date` and governed source
+  product; Platform compares every field to its own contract-derived expectation.
 
 Local acceptance is complete. PR CI, merge, exact-main validation, wiki publication, and verified
 issue closure remain required before #513 is done.
@@ -162,6 +166,8 @@ while the wiki states the customer- and operator-facing fail-closed behavior.
 The canonical seed correction also updates that row rather than adding another page. The runtime
 builder, executable validator, and tests own exact payload mechanics; the wiki records that
 canonical proof now requires authoritative assignment lineage rather than compatibility fallback.
+The review hardening updates that same row to name the contract-bound role/scope, business date,
+effective interval, assignment version, and source lineage; no second page is warranted.
 
 PM-book membership is a source data product rather than a financial calculation, so it binds
 request/input and returned-evidence identity but does not invent a calculation-lineage envelope.

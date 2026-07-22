@@ -864,7 +864,11 @@ Most relevant current governance:
     Canonical verification must observe the portfolio through Gateway with
     `governed_role_assignment` lineage and current source evidence before Workbench proof can pass.
     `tools/validate_front_office_advisor_book_seed.py` exercises the same bundle and dependency-
-    ordered request builders as the live seed and is the cross-repository contract proof.
+    ordered request builders as the live seed and is the cross-repository contract proof. Its
+    structured evidence must bind portfolio and manager identity, governed business date, role and
+    scope, effective interval, assignment version, source system/record/product, observation time,
+    quality status, ingestion endpoint, and exact assignment count; partial identity evidence is
+    not canonical seed proof.
     Canonical parent reference ingestion remains asynchronous: before posting eligibility or other
     dependent reference products, the seed must prove every unique instrument is query-visible
     within a bounded wait and fail closed with the unresolved security ids. Local reseed fence
