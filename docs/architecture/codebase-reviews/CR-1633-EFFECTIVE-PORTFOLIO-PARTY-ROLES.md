@@ -61,6 +61,13 @@ required source-owned identifier and enforces only portfolio ownership through a
   `ACCEPTED`. The response boundary now derives currentness from both returned membership and a
   linked evidence timestamp, emits `true` / `CURRENT` only when both exist, keeps empty or
   timestamp-free evidence fail-closed, and binds the resulting trust fields into receipt identity.
+- Cross-repository pre-merge review then found that the canonical contract promised an
+  authoritative `PM_SG_001` book assignment while Core's executable seed still populated only the
+  compatibility `advisor_id`. The canonical bundle now derives the effective-dated assignment
+  from the platform contract, posts it through the real party-role ingestion endpoint, removes it
+  during bounded reseed cleanup, and refuses runtime verification until Gateway returns the
+  portfolio with `governed_role_assignment` lineage and current source evidence. A standalone
+  executable validator proves the bundle and ingestion request use the same runtime builders.
 
 ## Compatibility And Same-Pattern Review
 
@@ -121,6 +128,9 @@ remains #521.
   router, and shared source-product cohort; strict MyPy passed all 237 source files, and the full
   architecture, domain-product, source-product, RFC-0083, route-catalog, documentation, and wiki
   guard set passed.
+- canonical seed proof passed 63 focused tests; the executable advisor-book validator reported one
+  `PM_SG_001` assignment at `/ingest/portfolio-party-role-assignments` with governed source record
+  `pb_sg_global_bal_001_pm_sg_001_portfolio_manager_v1`.
 
 Local acceptance is complete. PR CI, merge, exact-main validation, wiki publication, and verified
 issue closure remain required before #513 is done.
@@ -148,6 +158,10 @@ downstream merge dependencies; catalog approval alone is not end-to-end certific
 The trust-metadata correction updates the same Mesh Data Products row. No standalone trust page is
 needed: executable response tests and this review record own the precise currentness algorithm,
 while the wiki states the customer- and operator-facing fail-closed behavior.
+
+The canonical seed correction also updates that row rather than adding another page. The runtime
+builder, executable validator, and tests own exact payload mechanics; the wiki records that
+canonical proof now requires authoritative assignment lineage rather than compatibility fallback.
 
 PM-book membership is a source data product rather than a financial calculation, so it binds
 request/input and returned-evidence identity but does not invent a calculation-lineage envelope.
