@@ -603,6 +603,16 @@ does not publish this key policy; the operator-owned migration runbook is the du
   three controls; position valuation examined 11 mixed-epoch securities with zero findings and both
   completion outbox events processed with zero retries. Full canonical queue convergence and the
   remaining #795 load/recovery/correction profiles are still required.
+- Exact-main canonical validation later exposed eight terminal transaction semantic conflicts even
+  though the 31 canonical transactions were durable and all derived-state queues drained. The eight
+  DLQ records were the three missing BUYs plus their cash legs and a dividend plus its cash leg.
+  PostgreSQL retained 45 `portfolio-transaction-processing` physical fences from other demo
+  portfolios, including reused `transactions.persisted-{partition}-{offset}` identities, because
+  the destructive local reseed reset that topic family but omitted the unified transaction consumer
+  from its volatile service fence set. The bounded correction adds only that service to the existing
+  topic/service cleanup cross-product; the same-pattern scan confirmed the other physical-offset
+  consumers are either already covered (`position-valuation-calculator`) or intentionally outside
+  the canonical seed's reset topic family (`financial-reconciliation-requested`).
 
 Implementation commits include `23fc6faf3`, `d51adb739`, `ad1ad179d`, `57f8c60e2`,
 `4f05be9a5`, `c230d660a`, `f42f6eaa3`, `d56e14dbf`, `2d49fc8f1`, `70ae16f0f`,
@@ -673,3 +683,8 @@ parity is reusable engineering guidance. No OpenAPI, migration, event, calculati
 command, or authored wiki truth changes; the existing wiki already states that financial
 reconciliation consumes portfolio-day requests, so this slice records an explicit no-wiki-change
 decision.
+The canonical reseed physical-fence correction changes only destructive app-local certification
+cleanup. It preserves production consumer idempotency, semantic-conflict protection, APIs, events,
+topics, partitions, database schema, calculations, and operator commands. Repository context,
+executable cleanup tests, this review record, and #795 own the reusable rule; no OpenAPI, migration,
+runbook, or authored wiki change is required.

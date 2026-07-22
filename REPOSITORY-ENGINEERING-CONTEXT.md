@@ -3043,6 +3043,14 @@ Most relevant current governance:
      continuity may publish cost-basis market values and zero unrealized P&L before a daily
      valuation snapshot exists. Reuse `has_expected_valuation_snapshot` for this proof and scan
      adjacent E2E predicates for the same fallback-readiness defect.
+217. Destructive app-local canonical reseed cleanup must align every reset Kafka topic family with
+     every consumer that persists the physical `topic-partition-offset` identity. Portfolio-scoped
+     row deletion is insufficient after offset reuse: a stale fence from another demo portfolio can
+     collide before semantic portfolio/transaction identity is evaluated. The canonical
+     `transactions.persisted` reset therefore includes `portfolio-transaction-processing` in the
+     existing volatile service/topic fence cross-product. Preserve semantic-conflict protection in
+     production; do not generalize this local reset into runtime fence deletion or a daemon-wide
+     Kafka/PostgreSQL cleanup.
 
 ## Context Maintenance Rule
 
