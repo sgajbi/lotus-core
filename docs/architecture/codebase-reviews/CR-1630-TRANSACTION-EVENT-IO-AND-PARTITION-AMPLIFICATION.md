@@ -613,6 +613,13 @@ does not publish this key policy; the operator-owned migration runbook is the du
   topic/service cleanup cross-product; the same-pattern scan confirmed the other physical-offset
   consumers are either already covered (`position-valuation-calculator`) or intentionally outside
   the canonical seed's reset topic family (`financial-reconciliation-requested`).
+- A fresh governed rerun after the physical-fence correction accepted all `31` canonical
+  transactions and materialized `11` positions, all `11` with valuations. Position and cash data
+  quality both reached `COMPLETE`; analytics, performance, and return evidence reached
+  `2026-04-10`; advisor-book governed membership and source evidence remained current; and every
+  valuation and aggregation pending/processing/stale/failed count reached zero. The pre-existing
+  eight DLQ records did not increase. This is live acceptance for the reseed-fence slice, not the
+  remaining daily/recovery/poison/duplicate/correction/restatement acceptance of #795.
 
 Implementation commits include `23fc6faf3`, `d51adb739`, `ad1ad179d`, `57f8c60e2`,
 `4f05be9a5`, `c230d660a`, `f42f6eaa3`, `d56e14dbf`, `2d49fc8f1`, `70ae16f0f`,
