@@ -157,9 +157,31 @@ remains #521.
   and diff hygiene passed. After rebuilding only Query Control Plane, the live Gateway facade
   returned exactly one `PB_SG_GLOBAL_BAL_001` member with `governed_role_assignment` lineage,
   `PortfolioManagerBookMembership:v1`, `ACCEPTED` quality, and `CURRENT` freshness.
+- PR #818 rebase-merged the signed correction commits to exact Core main
+  `87ef72183f9e50d21d420d352fe28527f617f222`. The exact-main canonical Workbench run repeatedly
+  returned the governed `PB_SG_GLOBAL_BAL_001` membership for `PM_SG_001` with current source
+  evidence, while positions/cash quality became `COMPLETE`, analytics/performance/return evidence
+  reached `2026-04-10`, and all valuation and aggregation queues drained.
+- The umbrella canonical command correctly remained red for a separate #795 acceptance failure:
+  retained replay deliveries produced `transaction_semantic_conflict` for three durable BUYs and
+  their cash legs, leaving 8 positions against the governed minimum of 10. That failure neither
+  changes nor invalidates the exact-main assignment, selection, lineage, or currentness proof; its
+  command, transaction identities, terminal observation, and ownership are recorded on #795 rather
+  than weakening the canonical threshold or duplicating an issue.
+- PR #820 repaired that separate local destructive-reseed physical fence without weakening
+  production semantic-conflict protection. Its fresh governed seed accepted all 31 transactions,
+  produced 11/11 valued positions, reached `COMPLETE` position/cash quality and the governed
+  `2026-04-10` horizon, drained every valuation and aggregation queue, and added no DLQ records.
+- PR #820 then rebase-merged to Core main
+  `3ed571a1c1b448f2b915d71b3d24131a2d744d52`. Main Releasability run `29962158940`
+  passed all 22 required jobs at that exact SHA, including full integration, exact-source image
+  provenance, full load, E2E Full, and both recovery gates. The broader #795 capacity matrix and
+  #809 exact-main canonical repeat remain independently owned and do not weaken the already proven
+  #513 assignment contract.
 
-The runtime correction is locally proven. Its PR CI, merge, exact-main validation, final canonical
-validation, closure evidence, and verified issue closure remain required before #513 is done.
+The runtime correction and final release lane are proven on exact main. #513 closure now requires
+only this closure record on main and verified issue closure; broader canonical capacity and queue
+certification remain separately owned by #795 and #809.
 
 ## Documentation Decision
 
