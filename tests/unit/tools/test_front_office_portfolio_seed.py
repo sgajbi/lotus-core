@@ -1232,6 +1232,37 @@ def test_front_office_seed_verifies_against_canonical_gateway_by_default(monkeyp
     assert not args.reprocess_after_ingest
 
 
+@pytest.mark.parametrize("poll_interval_seconds", ["0", "-1"])
+def test_front_office_seed_rejects_non_positive_cli_poll_interval(
+    monkeypatch, capsys, poll_interval_seconds
+):
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "front_office_portfolio_seed.py",
+            "--poll-interval-seconds",
+            poll_interval_seconds,
+        ],
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        parse_args()
+
+    assert exc_info.value.code == 2
+    assert "--poll-interval-seconds: must be a positive integer" in capsys.readouterr().err
+
+
+def test_front_office_seed_accepts_positive_cli_poll_interval(monkeypatch):
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["front_office_portfolio_seed.py", "--poll-interval-seconds", "1"],
+    )
+
+    assert parse_args().poll_interval_seconds == 1
+
+
 def test_front_office_seed_contract_loads_platform_governed_defaults() -> None:
     contract = load_front_office_seed_contract()
 
