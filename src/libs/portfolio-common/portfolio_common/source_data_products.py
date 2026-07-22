@@ -450,13 +450,14 @@ SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = (
         route_family=ANALYTICS_INPUT,
         serving_plane=QUERY_CONTROL_PLANE_SERVICE,
         owner="lotus-core",
-        consumers=("lotus-manage",),
+        consumers=("lotus-manage", "lotus-gateway"),
         current_routes=("/integration/portfolio-manager-books/{portfolio_manager_id}/memberships",),
         paging_mode=INLINE_PAGED,
         export_mode=NOT_APPLICABLE,
         notes=(
-            "DPM source product backed by effective portfolio-manager role assignments, with a "
-            "bounded advisor_id projection only for portfolios without role-assignment history."
+            "Advisor-book and DPM source product backed by effective portfolio-manager role "
+            "assignments, with a bounded advisor_id projection only for portfolios without "
+            "role-assignment history."
         ),
     ),
     SourceDataProductDefinition(

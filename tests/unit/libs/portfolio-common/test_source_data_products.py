@@ -119,6 +119,13 @@ def test_products_for_consumer_maps_performance_to_analytics_inputs() -> None:
     )
 
 
+def test_advisor_book_product_approves_implemented_consumers() -> None:
+    product = get_source_data_product("PortfolioManagerBookMembership")
+
+    assert product.consumers == ("lotus-manage", "lotus-gateway")
+    assert product in products_for_consumer("lotus-gateway")
+
+
 def test_catalog_keeps_performance_snapshot_outputs_out_of_core() -> None:
     product_names = {product.product_name for product in SOURCE_DATA_PRODUCT_CATALOG}
     performance_products = products_for_consumer("lotus-performance")
