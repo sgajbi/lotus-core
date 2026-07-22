@@ -2779,6 +2779,13 @@ def _verify_front_office_portfolio(
     )
 
 
+def _positive_int(value: str) -> int:
+    parsed = int(value)
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError("must be a positive integer")
+    return parsed
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Seed a realistic front-office portfolio scenario."
@@ -2796,7 +2803,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--query-control-plane-base-url", default="http://127.0.0.1:8202")
     parser.add_argument("--gateway-base-url", default="http://gateway.dev.lotus")
     parser.add_argument("--wait-seconds", type=int, default=300)
-    parser.add_argument("--poll-interval-seconds", type=int, default=3)
+    parser.add_argument("--poll-interval-seconds", type=_positive_int, default=3)
     parser.add_argument("--postgres-container", default=DEFAULT_POSTGRES_CONTAINER)
     parser.add_argument("--skip-cleanup", action="store_true")
     parser.add_argument("--verify-only", action="store_true")
