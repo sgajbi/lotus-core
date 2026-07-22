@@ -164,6 +164,45 @@ def test_wait_for_pipeline_quiescence_does_not_bypass_quiet_window_without_activ
     assert reads == 3
 
 
+def test_wait_for_pipeline_quiescence_restarts_zero_timer_after_observed_activity(
+    monkeypatch,
+) -> None:
+    snapshot = {"outbox_pending": 0, "ingestion_backlog": 0}
+    times = iter((0, 0, 0, 1, 1, 4, 4, 9))
+    now = datetime(2026, 3, 10, 10, 0, tzinfo=timezone.utc)
+    activity_times = iter((now - timedelta(seconds=2), None, None))
+    reads = 0
+
+    def _read_snapshot() -> dict[str, int]:
+        nonlocal reads
+        reads += 1
+        return snapshot
+
+    class _FixedDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return now if tz is None else now.astimezone(tz)
+
+    monkeypatch.setattr("tests.test_support.pipeline_quiescence.time.sleep", lambda _: None)
+    monkeypatch.setattr("tests.test_support.pipeline_quiescence.datetime", _FixedDateTime)
+    monkeypatch.setattr(
+        "tests.test_support.pipeline_quiescence.time.time",
+        lambda: next(times),
+    )
+
+    result = wait_for_pipeline_quiescence(
+        timeout_seconds=10,
+        poll_seconds=0,
+        stable_cycles=1,
+        quiet_seconds=8,
+        snapshot_reader=_read_snapshot,
+        last_activity_reader=lambda: next(activity_times),
+    )
+
+    assert result == snapshot
+    assert reads == 3
+
+
 def test_wait_for_pipeline_quiescence_times_out_with_last_snapshot(monkeypatch) -> None:
     snapshots = deque(
         [

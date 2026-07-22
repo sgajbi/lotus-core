@@ -210,6 +210,8 @@ def wait_for_pipeline_quiescence(
                         0.0,
                         (datetime.now(timezone.utc) - last_activity_at).total_seconds(),
                     )
+                    if quiet_age_seconds < quiet_seconds:
+                        quiescent_since = time.time()
                 if quiet_age_seconds >= quiet_seconds:
                     return snapshot
         else:
