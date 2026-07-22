@@ -2,32 +2,33 @@
 
 ## Status
 
-Exact source-head Docker proof passed; final evidence commit, protected PR merge, and exact-main proof
-pending.
+Review correction applied locally; request-safe exact-head Docker proof, protected PR merge, and
+exact-main proof pending.
 
 ## Scope
 
 GitHub issue #795 and Main Releasability run
 [29892371749](https://github.com/sgajbi/lotus-core/actions/runs/29892371749): make
-transaction replay and dual-currency E2E completion evidence reflect the runtime's governed
-terminal contracts.
+transaction replay and dual-currency E2E completion evidence reflect the runtime's governed,
+request-safe completion contracts.
 
 ## Finding
 
 The exact-main workflow failed in two evidence paths even though the adjacent static, unit,
 integration, Docker smoke, latency, and fast performance jobs passed:
 
-1. The full replay-storm profile publishes repeated repair deliveries for the same source
-   transactions, but its drain probe counted only the `transaction/processed` metric. A delivery
-   safely classified as `transaction/duplicate` is also terminal and permits the consumer offset
-   to advance. Excluding that outcome made valid at-least-once deduplication indistinguishable from
-   unfinished work.
+1. The first diagnosis treated global `transaction/duplicate` observations as interchangeable
+   with completions for the repair requests issued by the profile. Review found that inference was
+   unsafe: an unrelated at-least-once redelivery could increment the global duplicate metric and
+   mask one missing repair. Canonical repair requests intentionally re-enter the unified financial
+   flow, so this request-count gate must retain its incremental `transaction/processed` threshold
+   unless future evidence is correlated to the individual requests.
 2. The dual-currency fixture declared readiness when base-currency unrealized P&L became available,
    then asserted local market value and local unrealized P&L in a later test. The incomplete
    predicate allowed the test to read an intermediate response and intermittently convert
    `None` to `Decimal`.
-3. Exact-head run `29899570356` proved the terminal-outcome correction was necessary but not
-   sufficient. Same-portfolio replay requests are correctly ordered onto one partition, but the
+3. Exact-head run `29899570356` exposed the actual replay-drain defect. Same-portfolio replay
+   requests are correctly ordered onto one partition, but the
    shared concurrent consumer performed its full one-second idle poll while work was active on the
    paused busy partition. Although each replay publication completed in milliseconds, the loop
    added approximately 1.0-1.5 seconds between ordered messages and was still publishing the next
@@ -39,18 +40,16 @@ one failure among 69 E2E tests.
 
 ## Remediation
 
-1. Define one source-safe transaction-delivery completion count over the closed successful
-   terminal set `processed|duplicate`.
-2. Scrape both outcomes atomically through the existing bounded operation-evidence collector.
-   Exclude rejected and failed outcomes so the gate cannot turn an invalid repair into a pass.
-3. Make the replay baseline and drain wait use the successful terminal count without changing
-   volume, timeout, partition count, concurrency, or idempotency behavior.
-4. Require the dual-currency fixture to observe base/local market values and base/local unrealized
+1. Preserve the replay baseline and drain wait on the incremental
+   `stage="transaction",outcome="processed"` count. Remove the speculative global
+   processed-plus-duplicate helper and its tests so unrelated duplicate traffic cannot satisfy a
+   request-count threshold.
+2. Require the dual-currency fixture to observe base/local market values and base/local unrealized
    P&L before yielding.
-5. Bound Kafka polls to 100 milliseconds while concurrent processing tasks are active, while
+3. Bound Kafka polls to 100 milliseconds while concurrent processing tasks are active, while
    retaining the configured one-second idle poll. Preserve per-partition ordering, the governed
    in-flight limit, retry handling, and synchronous offset commits.
-6. Scan the E2E suite for the same local-valuation readiness pattern. The exact mismatch was limited
+4. Scan the E2E suite for the same local-valuation readiness pattern. The exact mismatch was limited
    to `test_dual_currency_workflow.py`; other polling call sites do not assert the same four-field
    dual-currency contract.
 
@@ -60,11 +59,12 @@ No API, OpenAPI, event, database, migration, topic, partition, consumer-group, r
 timeout, or financial-calculation contract changes. The internal concurrent-consumer scheduler now
 uses a bounded active-work poll so completed ordered work is drained promptly; idle polling,
 ordering, capacity, retry, and commit contracts remain unchanged. Test and CI evidence semantics
-also now measure successful duplicate handling and complete dual-currency readiness truthfully.
+retain request-safe processed-repair evidence and now measure complete dual-currency readiness.
 
 ## Validation
 
-- `109` focused shared-consumer, replay-consumer, and performance-gate unit tests passed.
+- `107` focused shared-consumer, replay-consumer, and performance-gate unit tests passed with
+  warnings treated as errors after removing the rejected global duplicate-count implementation.
 - Scoped Ruff lint and format passed for all four touched Python files.
 - The complete repository-native `make lint` pack passed, including ingestion, concurrency,
   observability, event-contract, and synthetic-fixture guards.
@@ -86,9 +86,14 @@ also now measure successful duplicate handling and complete dual-currency readin
   replay storm drained all `360` repair requests in `90.354s`; all profiles added zero DLQ events.
   Compared with diagnostic run `29899570356`, steady drain improved `62.05%`, burst improved
   `29.16%`, and replay moved from timeout to completion with `89.646s` of threshold headroom.
+  Because that source head still allowed an unscoped duplicate count to satisfy the repair
+  threshold, this run proves the scheduler and E2E behavior but is not final request-safe replay
+  evidence.
 
 ## Remaining evidence
 
-Push this evidence-only commit and require final-head Feature Lane plus the protected PR Merge Gate.
-After protected merge, run exact-main Main Releasability, record the no-wiki-change decision, update
-#795, and restore one clean Core worktree on synchronized `main`.
+Run focused and repository-native static validation, commit and push the review correction, then
+require final-head Feature Lane, protected PR Merge Gate, and exact-head Main Releasability with the
+processed-only repair threshold. After protected merge, run exact-main Main Releasability, record
+the no-wiki-change decision, update #795, and restore one clean Core worktree on synchronized
+`main`.
