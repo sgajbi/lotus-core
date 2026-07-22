@@ -200,8 +200,9 @@ Products page owns the audience-facing source-product description; exact hash in
 behavior are implementation, executable-test, and review-ledger truth.
 
 The consumer-approval correction updates that existing wiki row rather than adding a new page.
-Gateway's repo-native consumer declaration and federated platform discovery artifacts remain
-downstream merge dependencies; catalog approval alone is not end-to-end certification.
+Gateway's repo-native consumer declaration, federated platform discovery artifacts, and controlled
+Core/Gateway/Workbench live proof are complete for #513; catalog approval alone remains
+insufficient evidence for future consumers.
 
 The trust-metadata correction updates the same Mesh Data Products row. No standalone trust page is
 needed: executable response tests and this review record own the precise currentness algorithm,
