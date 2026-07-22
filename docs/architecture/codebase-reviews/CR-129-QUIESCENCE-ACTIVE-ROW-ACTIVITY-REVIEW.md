@@ -29,7 +29,9 @@ measures the quiet interval from the first all-zero snapshot when no active time
 exists. It retains the active-only query, so unrelated completed history cannot extend
 the fence indefinitely. If a timestamp read observes new active work between two
 all-zero count snapshots, the zero-state timer restarts before that row can disappear;
-the older zero observation cannot satisfy the fence after intervening activity.
+the older zero observation cannot satisfy the fence after intervening activity. The
+active row blocks regardless of timestamp age because PostgreSQL `now()` can reflect a
+long-running transaction's start rather than the time of its latest write.
 
 ## Why It Matters
 
