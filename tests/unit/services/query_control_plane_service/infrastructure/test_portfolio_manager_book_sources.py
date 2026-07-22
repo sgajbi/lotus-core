@@ -59,6 +59,8 @@ async def test_reader_prefers_effective_portfolio_manager_role_assignments() -> 
     assert "portfolio_party_role_assignments.role_type IN" in authoritative_sql
     assert "portfolio_party_role_assignments.quality_status" in authoritative_sql
     assert "portfolios.booking_center_code" in authoritative_sql
+    assert "portfolios.portfolio_type IN" in authoritative_sql
+    assert "portfolios.status IN" in authoritative_sql
     legacy_sql = str(session.execute.await_args_list[1].args[0])
     assert "portfolios.advisor_id" in legacy_sql
     assert "NOT (EXISTS" in legacy_sql
@@ -98,3 +100,16 @@ async def test_reader_retains_advisor_projection_only_for_unmigrated_portfolios(
     assert records[0].membership_source == "legacy_advisor_projection"
     assert records[0].role_type is None
     assert records[0].source_record_id is None
+
+
+def test_storage_case_variants_preserve_index_friendly_canonical_spellings() -> None:
+    assert portfolio_manager_book_sources._storage_case_variants(
+        ("DISCRETIONARY", " advisory ", "discretionary")
+    ) == (
+        "DISCRETIONARY",
+        "discretionary",
+        "Discretionary",
+        "ADVISORY",
+        "advisory",
+        "Advisory",
+    )

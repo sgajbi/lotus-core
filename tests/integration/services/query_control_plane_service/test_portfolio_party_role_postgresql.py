@@ -43,7 +43,9 @@ def _async_database_url() -> str:
     return database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
 
 
-def _portfolio(portfolio_id: str) -> Portfolio:
+def _portfolio(
+    portfolio_id: str, *, portfolio_type: str = "discretionary", status: str = "active"
+) -> Portfolio:
     return Portfolio(
         portfolio_id=portfolio_id,
         base_currency="SGD",
@@ -51,13 +53,13 @@ def _portfolio(portfolio_id: str) -> Portfolio:
         close_date=None,
         risk_exposure="BALANCED",
         investment_time_horizon="LONG_TERM",
-        portfolio_type="DISCRETIONARY",
+        portfolio_type=portfolio_type,
         objective="CAPITAL_GROWTH",
         booking_center_code="Singapore",
         client_id=f"CLIENT_{portfolio_id}",
         is_leverage_allowed=False,
         advisor_id=PORTFOLIO_MANAGER,
-        status="ACTIVE",
+        status=status,
     )
 
 
@@ -92,7 +94,16 @@ async def test_latest_role_version_fences_stale_acceptance_and_legacy_projection
             await session.execute(
                 delete(Portfolio).where(Portfolio.portfolio_id.in_(portfolio_ids))
             )
-            session.add_all([_portfolio(portfolio_id) for portfolio_id in portfolio_ids])
+            session.add_all(
+                [
+                    _portfolio(MIGRATED_PORTFOLIO),
+                    _portfolio(
+                        LEGACY_PORTFOLIO,
+                        portfolio_type="Discretionary",
+                        status="ACTIVE",
+                    ),
+                ]
+            )
             await session.commit()
 
             ingestion = ReferenceDataIngestionService(session)
@@ -130,7 +141,7 @@ async def test_latest_role_version_fences_stale_acceptance_and_legacy_projection
                 portfolio_manager_id=PORTFOLIO_MANAGER,
                 as_of_date=date(2026, 7, 18),
                 booking_center_code=None,
-                portfolio_types=(),
+                portfolio_types=("DISCRETIONARY",),
                 include_inactive=False,
             )
             assert [member.portfolio_id for member in quarantined_book] == [LEGACY_PORTFOLIO]
@@ -143,7 +154,7 @@ async def test_latest_role_version_fences_stale_acceptance_and_legacy_projection
                 portfolio_manager_id=PORTFOLIO_MANAGER,
                 as_of_date=date(2026, 7, 18),
                 booking_center_code=None,
-                portfolio_types=(),
+                portfolio_types=("DISCRETIONARY",),
                 include_inactive=False,
             )
             assert {member.portfolio_id: member.membership_source for member in accepted_book} == {

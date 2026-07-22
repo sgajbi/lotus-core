@@ -68,6 +68,14 @@ required source-owned identifier and enforces only portfolio ownership through a
   during bounded reseed cleanup, and refuses runtime verification until Gateway returns the
   portfolio with `governed_role_assignment` lineage and current source evidence. A standalone
   executable validator proves the bundle and ingestion request use the same runtime builders.
+- Controlled runtime proof exposed a storage-contract compatibility defect after the governed
+  assignment was successfully persisted: canonical front-office portfolio events retain lowercase
+  `discretionary` and `active` values, while the PM-book request policy normalized its filters to
+  uppercase. The indexed SQL predicates now enumerate only the uppercase and lowercase stored
+  and title-case spellings on the right-hand side instead of applying a function to the indexed
+  columns. This
+  restores deterministic membership for both historically persisted forms without weakening the
+  role, scope, effective-date, quality, or legacy-projection fences.
 
 ## Compatibility And Same-Pattern Review
 
@@ -143,9 +151,15 @@ remains #521.
   PM-book route or approved consumers. The proof now also pins the single route, exact
   `lotus-gateway`/`lotus-manage` consumer set, Core owner, query-control-plane serving plane, and
   analytics-input family, with a negative regression for each metadata dimension.
+- focused PM-book application/infrastructure/router/seed proof passed `159` tests; the lowercase
+  storage integration regression passed against PostgreSQL; the same-pattern database scan also
+  confirmed and covered the retained title-case demo/legacy spelling. Targeted strict MyPy, Ruff, format,
+  and diff hygiene passed. After rebuilding only Query Control Plane, the live Gateway facade
+  returned exactly one `PB_SG_GLOBAL_BAL_001` member with `governed_role_assignment` lineage,
+  `PortfolioManagerBookMembership:v1`, `ACCEPTED` quality, and `CURRENT` freshness.
 
-Local acceptance is complete. PR CI, merge, exact-main validation, wiki publication, and verified
-issue closure remain required before #513 is done.
+The runtime correction is locally proven. Its PR CI, merge, exact-main validation, final canonical
+validation, closure evidence, and verified issue closure remain required before #513 is done.
 
 ## Documentation Decision
 
@@ -176,6 +190,11 @@ builder, executable validator, and tests own exact payload mechanics; the wiki r
 canonical proof now requires authoritative assignment lineage rather than compatibility fallback.
 The review hardening updates that same row to name the contract-bound role/scope, business date,
 effective interval, assignment version, and source lineage; no second page is warranted.
+
+The storage-case correction requires no additional wiki or OpenAPI change: route shape, accepted
+request vocabulary, response semantics, source-product ownership, and operator procedure are
+unchanged. The indexed compatibility behavior is owned by executable SQL-shape/PostgreSQL tests and
+this review record rather than duplicated in audience-facing documentation.
 
 PM-book membership is a source data product rather than a financial calculation, so it binds
 request/input and returned-evidence identity but does not invent a calculation-lineage envelope.
