@@ -2,7 +2,8 @@
 
 ## Status
 
-Fix-forward completed locally; second exact-head Docker-backed proof and exact-main proof pending.
+Exact source-head Docker proof passed; final evidence commit, protected PR merge, and exact-main proof
+pending.
 
 ## Scope
 
@@ -77,10 +78,17 @@ also now measure successful duplicate handling and complete dual-currency readin
   performance artifact passed steady (`37.151s`) and burst (`161.666s`) with zero added DLQ events,
   then exposed the active-poll latency in replay. This red run is diagnostic evidence only and is
   not merge evidence.
+- Exact source-head Main Releasability run
+  [`29902479829`](https://github.com/sgajbi/lotus-core/actions/runs/29902479829) passed all `22`
+  jobs on `0d0fd96867c239dccb802cb0d44694d26c54d7a5`, including full E2E and downstream failure
+  recovery. Artifact `20260722T083223Z-performance-load-gate.json` passed every unchanged full
+  profile: steady drained `200` records in `14.099s`, burst drained `640` in `114.519s`, and the
+  replay storm drained all `360` repair requests in `90.354s`; all profiles added zero DLQ events.
+  Compared with diagnostic run `29899570356`, steady drain improved `62.05%`, burst improved
+  `29.16%`, and replay moved from timeout to completion with `89.646s` of threshold headroom.
 
 ## Remaining evidence
 
-Push the signed scheduling fix and rerun Feature Lane, the full PR Merge Gate, and exact-head Main
-Releasability. The full performance job must pass without changed workload, timeout, partition, or
-capacity settings. After protected merge, run exact-main Main Releasability, record the
-no-wiki-change decision, update #795, and restore one clean Core worktree on synchronized `main`.
+Push this evidence-only commit and require final-head Feature Lane plus the protected PR Merge Gate.
+After protected merge, run exact-main Main Releasability, record the no-wiki-change decision, update
+#795, and restore one clean Core worktree on synchronized `main`.
