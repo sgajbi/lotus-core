@@ -2,8 +2,8 @@
 
 ## Status
 
-Final-head review corrections applied locally; request-safe exact-head Docker proof, protected PR
-merge, and exact-main proof pending.
+Request-safe source-head Docker proof passed; evidence-only final-head checks, protected PR merge,
+and exact-main proof pending.
 
 ## Scope
 
@@ -95,11 +95,24 @@ retain request-safe processed-repair evidence and now measure complete dual-curr
   Because that source head still allowed an unscoped duplicate count to satisfy the repair
   threshold, this run proves the scheduler and E2E behavior but is not final request-safe replay
   evidence.
+- Request-safe source-head Main Releasability run
+  [`29910832613`](https://github.com/sgajbi/lotus-core/actions/runs/29910832613), attempt `1`, passed
+  all `22` applicable jobs on signed commit
+  `2a34508fe64fd8bd86a9b85f9b4cbb6c4f3937a2`. The successful jobs included full E2E, full
+  performance, and deterministic failure recovery; only the two institution-only jobs were
+  inapplicable and skipped. The processed-only replay gate observed the exact `360` repair
+  completions for `120` unique source transactions. Full-performance artifact `8526629993`
+  (`20260722T103819Z-performance-load-gate.json`, SHA-256
+  `869C18AD9E62851CEFD28A6A6E1120F594A99BE3D62FE8E136524BC35FAA8F72`) passed every unchanged
+  profile with zero added DLQ events: steady drained `200` records in `13.069s`, burst drained
+  `640` in `124.598s`, and replay storm drained `480` records, including all `360` repair
+  requests, in `89.859s`. Failure-recovery artifact `8526765077` was published by the successful
+  recovery job. This is the final request-safe runtime proof for the code-bearing head; the next
+  commit changes evidence documents only.
 
 ## Remaining evidence
 
-Run focused and repository-native static validation, commit and push the review correction, then
-require final-head Feature Lane, protected PR Merge Gate, and exact-head Main Releasability with the
-processed-only repair threshold. After protected merge, run exact-main Main Releasability, record
-the no-wiki-change decision, update #795, and restore one clean Core worktree on synchronized
-`main`.
+Commit this evidence-only update, require final-head Feature Lane, protected PR Merge Gate, and
+exact-head Main Releasability, then merge by the governed rebase method. After protected merge, run
+exact-main Main Releasability, record the no-wiki-change decision, update #795, and reconcile both
+governed Core worktrees without discarding the approved #731 follow-on branch.
