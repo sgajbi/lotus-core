@@ -20,6 +20,13 @@ from src.services.portfolio_transaction_processing_service.app.application impor
 from src.services.portfolio_transaction_processing_service.app.domain import BookedTransaction
 from src.services.portfolio_transaction_processing_service.app.domain.cashflow import (
     CashflowCalculationContext,
+    CashflowClassification,
+    CashflowRule,
+    CashflowTiming,
+    calculate_transaction_cashflow,
+)
+from src.services.portfolio_transaction_processing_service.app.domain.transaction import (
+    build_generated_settlement_cash_leg,
 )
 from src.services.portfolio_transaction_processing_service.app.ports import (
     CashflowProcessingResult,
@@ -135,11 +142,13 @@ class _Cashflow:
     def __init__(self, calls: list[str], *, error: Exception | None = None) -> None:
         self.calls = calls
         self.error = error
+        self.transactions: list[BookedTransaction] = []
         self.calculation_contexts: list[CashflowCalculationContext | None] = []
         self.locked_position_epochs: list[int | None] = []
 
     async def process(self, transaction: BookedTransaction, **kwargs) -> CashflowProcessingResult:
         self.calls.append(f"cashflow:{transaction.transaction_id}:{transaction.epoch or 0}")
+        self.transactions.append(transaction)
         self.calculation_contexts.append(kwargs.get("calculation_context"))
         self.locked_position_epochs.append(kwargs.get("locked_position_epoch"))
         if self.error is not None:
@@ -312,11 +321,24 @@ async def test_use_case_processes_cost_cashflow_and_each_position_leg_atomically
 @pytest.mark.asyncio
 async def test_use_case_stages_cashflows_from_inline_position_rebuild_epoch() -> None:
     calls: list[str] = []
-    incoming = _transaction("TX-BACKDATED")
+    incoming = replace(
+        _transaction("TX-BACKDATED"),
+        transaction_type="DIVIDEND",
+        quantity=Decimal("0"),
+        price=Decimal("0"),
+        gross_transaction_amount=Decimal("100"),
+        withholding_tax_amount=Decimal("10"),
+        trade_fee=Decimal("2"),
+        cash_entry_mode="AUTO_GENERATE",
+        settlement_cash_account_id="CASH-SGD",
+        settlement_cash_instrument_id="CASH-SGD",
+    )
     rebuilt_incoming = replace(incoming, epoch=3)
     rebuilt_suffix = replace(
-        _transaction("TX-LATER"),
+        incoming,
+        transaction_id="TX-LATER",
         transaction_date=datetime(2026, 4, 12, 9, 30, tzinfo=timezone.utc),
+        gross_transaction_amount=Decimal("50"),
         epoch=3,
     )
     unit_of_work = _UnitOfWork(
@@ -330,12 +352,12 @@ async def test_use_case_stages_cashflows_from_inline_position_rebuild_epoch() ->
     result = await ProcessTransactionUseCase(
         lambda: unit_of_work,
         observer=_RecordingObserver(),
-    ).execute(_command())
+    ).execute(replace(_command(), transaction=incoming))
 
     assert calls == [
         "enter",
         "idempotency",
-        "cost:TX-001",
+        "cost:TX-BACKDATED",
         "position:TX-BACKDATED",
         "cashflow:TX-BACKDATED:3",
         "cashflow:TX-LATER:3",
@@ -347,9 +369,33 @@ async def test_use_case_stages_cashflows_from_inline_position_rebuild_epoch() ->
     assert result.cashflow_record_count == 2
     assert result.position_record_count == 1
     assert unit_of_work.cashflow.calculation_contexts == [
-        CashflowCalculationContext.HISTORICAL_REBUILD,
+        CashflowCalculationContext.CURRENT_BOOKING,
         CashflowCalculationContext.HISTORICAL_REBUILD,
     ]
+    rule = CashflowRule(
+        classification=CashflowClassification.INCOME,
+        timing=CashflowTiming.EOD,
+        is_position_flow=True,
+        is_portfolio_flow=False,
+    )
+    cashflow_amounts = [
+        calculate_transaction_cashflow(
+            cashflow_transaction,
+            rule,
+            calculation_context=calculation_context,
+        ).amount
+        for cashflow_transaction, calculation_context in zip(
+            unit_of_work.cashflow.transactions,
+            unit_of_work.cashflow.calculation_contexts,
+            strict=True,
+        )
+        if calculation_context is not None
+    ]
+    assert cashflow_amounts == [Decimal("88"), Decimal("48")]
+    assert (
+        build_generated_settlement_cash_leg(rebuilt_incoming).gross_transaction_amount
+        == (cashflow_amounts[0])
+    )
 
 
 @pytest.mark.asyncio

@@ -101,7 +101,9 @@ For current DIVIDEND booking, the existing nullable `withholding_tax_amount` is 
 separate ledger/query evidence and reduces available settlement proceeds before the fee. Negative
 withholding, withholding above gross, or non-positive resulting cash fails closed with stable
 `DIVIDEND_014`, `DIVIDEND_015`, or `DIVIDEND_013` reason codes. Null and zero withholding preserve
-the prior gross-minus-fee result. Historical rebuild does not silently restate accepted rows.
+the prior gross-minus-fee result. A current command retains current-booking economics when it
+participates in an inline rebuild; only previously accepted suffix rows receive the explicit
+historical-rebuild context and retain legacy arithmetic.
 Withholding-rate derivation, other receipt deductions, a supplied-net identity, return-of-capital,
 basis reduction, and advanced timing remain tracked under #448. FX fee currency and two-leg
 settlement ownership remain a separate decision under #754.
