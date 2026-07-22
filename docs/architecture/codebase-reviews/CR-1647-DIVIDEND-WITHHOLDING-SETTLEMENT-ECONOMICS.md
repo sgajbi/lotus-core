@@ -2,15 +2,15 @@
 
 ## Status
 
-Locally implementation-complete on `feat/dividend-withholding-economics`, based on exact main
-`b49f05d127ad4d9a1d5660753ac28dfa13fa1bc9`. The runtime/contracts/tests are preserved in signed
-commit `27a0ca044188c53826416b6b6a1ff004b94f1975`; self-review hardening is signed through
-`260779b7b72275c53b46d46ae7d37b9246b0a684`. Agent 1's application-boundary review finding is
-fixed in signed commit `ab7504f4c755c9e7bde81a8c19ad7933ed88cc64`; the same-pattern
-transformed/split-output hardening is signed in
-`227986d4d11a562cee7981e7e685403b54ebf44e`. Final review, protected CI, merge, exact-main
-validation, and wiki publication remain pending. Issue #448 remains open because this is only its
-source-recorded withholding-amount slice.
+Locally implementation-complete on `feat/dividend-withholding-economics`, rebased once onto exact
+main `3ed571a1c1b448f2b915d71b3d24131a2d744d52`. The signed runtime, contract, test, self-review,
+application-boundary review-fix, and transformed/split-output commits remain patch-equivalent to
+the clean series independently reviewed by Agent 1; the documentation commit differs only where
+the rebase retained both newer mainline context entries before this slice's entry. Final local
+non-Docker gates passed; protected CI, merge, exact-main validation, and wiki publication remain
+pending. Issue #448
+remains open because this is only its source-recorded withholding-amount slice; exact commit and
+validation evidence belongs on the issue and PR rather than in this durable methodology record.
 
 ## Objective and bounded scope
 
