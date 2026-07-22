@@ -32,6 +32,17 @@ class OrdinarySettlementCashReferenceResult:
         return self.rejection_reason_code is None
 
 
+@dataclass(frozen=True, slots=True)
+class DividendSettlementReferenceResult:
+    """Expected DIVIDEND settlement and unchanged-position economics."""
+
+    settlement_cash_amount: Decimal
+    signed_cashflow_amount: Decimal
+    quantity_delta: Decimal
+    cost_basis_delta: Decimal
+    realized_total_pnl: Decimal
+
+
 def evaluate_interest_settlement(
     inputs: Mapping[str, object],
 ) -> InterestSettlementReferenceResult:
@@ -104,4 +115,24 @@ def evaluate_ordinary_settlement_cash(
         fee_amount=fee,
         signed_cash_amount=signed_cash,
         rejection_reason_code=None,
+    )
+
+
+def evaluate_dividend_settlement(
+    inputs: Mapping[str, object],
+) -> DividendSettlementReferenceResult:
+    """Evaluate supported DIVIDEND cash and zero-position-impact economics."""
+    gross_dividend = Decimal(str(inputs["gross_dividend_amount"]))
+    transaction_fee = Decimal(str(inputs["transaction_fee_amount"]))
+    settlement_cash = gross_dividend - transaction_fee
+    if gross_dividend <= Decimal(0):
+        raise ValueError("DIVIDEND gross amount must be greater than zero")
+    if settlement_cash <= Decimal(0):
+        raise ValueError("DIVIDEND settlement cash must remain greater than zero")
+    return DividendSettlementReferenceResult(
+        settlement_cash_amount=settlement_cash,
+        signed_cashflow_amount=settlement_cash,
+        quantity_delta=Decimal(0),
+        cost_basis_delta=Decimal(0),
+        realized_total_pnl=Decimal(0),
     )

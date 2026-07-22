@@ -1,0 +1,65 @@
+{
+  "pack_id": "dividend-settlement",
+  "pack_version": "1.0.0",
+  "methodology_policy": {
+    "id": "dividend-settlement-economics",
+    "version": "1.0.0"
+  },
+  "rounding": {
+    "mode": "none",
+    "scale": null
+  },
+  "vectors": [
+    {
+      "vector_id": "dividend-fee-free",
+      "vector_version": "1.0.0",
+      "inputs": {
+        "gross_dividend_amount": "602.5",
+        "transaction_fee_amount": "0"
+      },
+      "expected": {
+        "settlement_cash_amount": "602.5",
+        "signed_cashflow_amount": "602.5",
+        "quantity_delta": "0",
+        "cost_basis_delta": "0",
+        "realized_total_pnl": "0"
+      },
+      "tolerance": "0",
+      "rationale": "A fee-free dividend is a positive income cashflow and does not change position quantity or basis."
+    },
+    {
+      "vector_id": "dividend-with-fee",
+      "vector_version": "1.0.0",
+      "inputs": {
+        "gross_dividend_amount": "602.5",
+        "transaction_fee_amount": "2.5"
+      },
+      "expected": {
+        "settlement_cash_amount": "600.0",
+        "signed_cashflow_amount": "600.0",
+        "quantity_delta": "0",
+        "cost_basis_delta": "0",
+        "realized_total_pnl": "0"
+      },
+      "tolerance": "0",
+      "rationale": "The resolved transaction fee reduces dividend settlement cash exactly once while position and cost policy remain neutral."
+    },
+    {
+      "vector_id": "dividend-high-precision-fee",
+      "vector_version": "1.0.0",
+      "inputs": {
+        "gross_dividend_amount": "100.005",
+        "transaction_fee_amount": "0.005"
+      },
+      "expected": {
+        "settlement_cash_amount": "100.000",
+        "signed_cashflow_amount": "100.000",
+        "quantity_delta": "0",
+        "cost_basis_delta": "0",
+        "realized_total_pnl": "0"
+      },
+      "tolerance": "0",
+      "rationale": "Decimal arithmetic preserves the exact supported dividend settlement boundary without binary rounding."
+    }
+  ]
+}
