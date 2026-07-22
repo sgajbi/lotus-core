@@ -6092,7 +6092,8 @@
       "sorting": [],
       "idempotency_behavior": "not-declared",
       "downstream_consumers": [
-        "lotus-manage"
+        "lotus-manage",
+        "lotus-gateway"
       ],
       "deprecated_alias_metadata": {
         "is_deprecated": false,
