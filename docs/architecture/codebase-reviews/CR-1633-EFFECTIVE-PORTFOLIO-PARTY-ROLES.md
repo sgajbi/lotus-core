@@ -139,6 +139,10 @@ remains #521.
   contract. The validator now resolves `PortfolioManagerBookMembership:v1` from Core's executable
   source-data-product registry, refuses mismatched contract identity before returning `pass`, and
   has a regression for a drifted `v2` declaration.
+- follow-up review found product/version still insufficient if the executable catalog lost its
+  PM-book route or approved consumers. The proof now also pins the single route, exact
+  `lotus-gateway`/`lotus-manage` consumer set, Core owner, query-control-plane serving plane, and
+  analytics-input family, with a negative regression for each metadata dimension.
 
 Local acceptance is complete. PR CI, merge, exact-main validation, wiki publication, and verified
 issue closure remain required before #513 is done.
