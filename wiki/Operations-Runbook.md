@@ -150,6 +150,13 @@ activating the business-date horizon. Transactions are posted only after that fe
 initial history from being misclassified as late corrections while preserving durable replay for
 backdated or future observations against an existing horizon.
 
+A canonical seed is complete only after valuation and aggregation queues have no pending,
+processing, stale-processing, or failed work for three consecutive observations at the configured
+poll interval. Any reopened work resets the stability fence. Pending/processing aggregation is not
+background success: keep it inside the existing readiness deadline so an exit-zero result proves a
+stable terminal state. The verifier sleeps for the configured poll interval between observations;
+it must not busy-loop against the shared runtime.
+
 The canonical seed includes planned withdrawal evidence for both the fixed contract as-of window
 and the current Workbench forward-liquidity horizon. After reseeding, `PortfolioCashflowProjection`
 should show at least one non-zero point for the canonical window and one non-zero current-horizon

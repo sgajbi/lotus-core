@@ -2,7 +2,8 @@
 
 ## Status
 
-Fixed locally; retained-runtime, PR, mainline, and wiki publication proof pending.
+Runtime convergence proved on exact main; verifier hardening fixed locally; PR, exact-main rerun,
+and wiki publication proof pending.
 
 ## Scope
 
@@ -72,11 +73,30 @@ introduced.
 - Query Control Plane repository/application and both OpenAPI surfaces passed.
 - Full repository lint and strict MyPy passed, together with architecture, event-contract,
   API-vocabulary, docs/wiki, migration, RFC-0083, and `git diff --check` gates.
+- The terminal-state verifier follow-up passed all `69` seed-tool unit tests warning-strict. Its
+  regression starts with a downstream request failure, observes zero, reopens aggregation work,
+  and then requires three new zero observations; it also proves the configured poll interval is
+  used instead of a busy loop.
+- The full repository-native lint and contract guard chain passed, strict MyPy reported zero issues
+  across all `237` source files, and `git diff --check` passed.
+- A non-mutating `--verify-only --wait-seconds 60 --poll-interval-seconds 3` run against the retained
+  exact-main state completed in `11.18` seconds and returned valuation `0/0`, aggregation
+  `0/0/0/0`, complete position/cash quality, and all analytics dates at `2026-04-10` only after the
+  three-observation stability fence.
 
 ## Remaining evidence
 
-Rebuild only the affected retained-stack services after the inherited legacy queue drains, apply the
-migration, and prove one new material revision creates exactly one three-control bundle and one
-downstream control decision while an unchanged retained restart creates none. Then complete #809's
-fresh 900-second canonical certification, PR gates, exact-main validation, wiki publication, and
-verified issue closure.
+An exact-main canonical run at `3ed571a1c1b448f2b915d71b3d24131a2d744d52` accepted all `31`
+transactions, produced `11/11` valued positions, reached complete position/cash quality and the
+`2026-04-10` analytics horizon, and exited zero while aggregation still reported `284` pending and
+`100` processing jobs. Read-only monitoring with no further ingestion observed first all-zero
+valuation/aggregation state about `587` seconds after seed start and three consecutive all-zero
+observations about `617` seconds after start, inside the unchanged `900`-second budget.
+
+The remaining local defect was therefore the validation boundary, not runtime capacity. The seed
+now treats pending/processing aggregation as readiness blockers, requires three consecutive
+terminal all-zero observations, resets the fence when work reopens, and sleeps for the configured
+poll interval instead of busy-looping. Complete focused and repository-native gates, preserve the
+change through PR review/CI, rerun from exact main, publish the Operations wiki source, and verify
+#809 closure. The broader #795 daily/recovery/correction capacity matrix remains independently
+open.
