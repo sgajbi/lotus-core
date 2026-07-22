@@ -4,9 +4,11 @@
 
 Locally implementation-complete on `feat/dividend-withholding-economics`, based on exact main
 `b49f05d127ad4d9a1d5660753ac28dfa13fa1bc9`. The runtime/contracts/tests are preserved in signed
-commit `27a0ca044188c53826416b6b6a1ff004b94f1975`; this evidence commit, PR review, protected CI,
-merge, exact-main validation, and wiki publication remain pending. Issue #448 remains open because
-this is only its source-recorded withholding-amount slice.
+commit `27a0ca044188c53826416b6b6a1ff004b94f1975`; self-review hardening is signed through
+`260779b7b72275c53b46d46ae7d37b9246b0a684`. Agent 1's application-boundary review finding is
+fixed forward in this slice. Final review, protected CI, merge, exact-main validation, and wiki
+publication remain pending. Issue #448 remains open because this is only its source-recorded
+withholding-amount slice.
 
 ## Objective and bounded scope
 
@@ -26,8 +28,10 @@ publishing; `DIVIDEND_014` is defense in depth for direct domain adapters.
 ## Compatibility and no-claim boundary
 
 Null and zero withholding preserve the previous gross-minus-fee result. No field, event version,
-topic, database schema, or migration changed. Historical rebuild retains its explicit legacy
-arithmetic and does not silently restate accepted rows.
+topic, database schema, or migration changed. A newly accepted command uses current-booking
+economics even when its position processing returns it inside an inline rebuild. Only previously
+accepted suffix rows use the historical-rebuild context and retain legacy arithmetic, so the fix
+does not silently restate existing history.
 
 This slice does not implement a supplied net-dividend identity, withholding-rate derivation or
 tolerance, other receipt deductions, jurisdiction policy, return-of-capital classification, basis
@@ -50,14 +54,21 @@ backfill. Those acceptance areas remain under #448; this evidence does not claim
   fully-consumed withholding rejection codes as well.
 - Application-boundary tests prove stable non-retryable rejections, source-safe diagnostics,
   rollback, and absence of cost, position, cashflow, or commit work.
+- Agent 1's cross-review found that inline rebuild originally classified both the current command
+  and prior suffix rows as historical. The application boundary now identifies the current command
+  by portfolio and transaction identity, applies net-of-withholding current economics to it, and
+  keeps legacy gross-minus-fee arithmetic only for a pre-existing suffix row. The regression also
+  proves the current product cashflow equals its generated settlement leg.
 - Database-backed generated-leg and rejection tests were updated for the new arithmetic. They were
   not executed locally because this lane is prohibited from touching Docker; protected GitHub CI
   remains required before merge.
-- No dead compatibility path was removed: the historical-rebuild arithmetic is intentional replay
-  compatibility, while the current-booking path is the corrected policy.
+- No dead compatibility path was removed: historical-rebuild arithmetic remains intentional replay
+  compatibility for previously accepted rows, while every currently accepted command uses the
+  corrected policy.
 
 ## Validation
 
+- Agent 1 review-fix application/cashflow/settlement cohort: 89 passed warning-strict.
 - Warning-strict touched-surface pack: 172 passed after oracle hardening.
 - Warning-strict `transaction-dividend-contract`: 302 passed after oracle hardening.
 - Warning-strict `transaction-interest-contract`: 326 passed after oracle hardening.
@@ -67,6 +78,8 @@ backfill. Those acceptance areas remain under #448; this evidence does not claim
   boundaries, testability, modularity, mapping, repository, and transaction-replay guards.
 - Wiki, front-door, architecture-documentation, RFC-status, supported-features,
   incident-playbook, test-lane, and transaction-capability guards passed.
+- Strict MyPy passed across all 237 source files after the review fix; the complete architecture
+  guard chain and wiki/docs gate also passed.
 - Exact-worktree wiki parity precheck reported three expected source changes under
   `-AllowUnpublishedSourceChanges`; publish after merge and then run strict parity.
 

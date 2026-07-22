@@ -209,13 +209,22 @@ class ProcessTransactionUseCase:
                 position_results,
             )
             cashflow_results = []
-            rebuilt_cashflow_keys = {
+            current_transaction_key = (
+                transaction.portfolio_id,
+                transaction.transaction_id,
+            )
+            historical_rebuild_cashflow_keys = {
                 (
                     rebuilt_transaction.portfolio_id,
                     rebuilt_transaction.transaction_id,
                     rebuilt_transaction.epoch or 0,
                 )
                 for rebuilt_transaction in rebuilt_transactions
+                if (
+                    rebuilt_transaction.portfolio_id,
+                    rebuilt_transaction.transaction_id,
+                )
+                != current_transaction_key
             }
             for cashflow_transaction in financial_effect_transactions:
                 with self._observer.observe(TransactionProcessingOperation.CASHFLOW):
@@ -241,7 +250,7 @@ class ProcessTransactionUseCase:
                                     cashflow_transaction.transaction_id,
                                     cashflow_transaction.epoch or 0,
                                 )
-                                in rebuilt_cashflow_keys
+                                in historical_rebuild_cashflow_keys
                                 else CashflowCalculationContext.CURRENT_BOOKING
                             ),
                         )
