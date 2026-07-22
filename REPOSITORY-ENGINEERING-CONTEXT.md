@@ -2507,6 +2507,12 @@ Most relevant current governance:
      explicit historical-rebuild context may reproduce a previously accepted mismatch. Keep the
      independent Decimal golden vectors in the governed INTEREST contract when extending this
      methodology.
+     The governed transaction-economics oracle now also includes the DIVIDEND settlement pack at
+     `tests/fixtures/transaction_economics/dividend_settlement.v1.json`, with an independent
+     Decimal-only evaluator and cross-layer warning-strict conformance tests. This bounded evidence
+     covers currently supported gross-minus-fee DIVIDEND settlement, payment-date cashflow, and
+     zero position/cost/P&L impact only; withholding tax, return of capital, basis reduction, and
+     timing policy remain open under #448 and are not promoted by the pack.
 174. Canonical ordinary signed settlement cash lives in
      `portfolio_transaction_processing_service.app.domain.transaction.settlement.cash_movement`.
      Resolve component fees before aggregate `trade_fee`; BUY and INTEREST expense include the fee
