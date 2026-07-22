@@ -3051,6 +3051,12 @@ Most relevant current governance:
      existing volatile service/topic fence cross-product. Preserve semantic-conflict protection in
      production; do not generalize this local reset into runtime fence deletion or a daemon-wide
      Kafka/PostgreSQL cleanup.
+218. E2E module cleanup must observe both sides of the quiescence contract. Active-row timestamp
+     queries remain predicate-scoped so completed history cannot create false cleanup timeouts. If
+     an all-zero blocking snapshot has no active timestamp, it must still remain continuously zero
+     for the configured quiet interval before destructive truncation; `None` is not permission to
+     bypass the fence. Do not replace this with whole-table timestamp history or weaker readiness
+     timeouts.
 
 ## Context Maintenance Rule
 
