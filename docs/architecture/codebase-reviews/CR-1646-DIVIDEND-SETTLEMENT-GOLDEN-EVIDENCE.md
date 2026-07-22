@@ -48,15 +48,19 @@ property/metamorphic, mutation, reporting, or remaining-family criteria.
   emitted timing separately from the settlement/payment date, carries each vector fee into the
   production cost-basis input boundary, and reconciles fixture-owned trade/local basis plus
   trade/local realized P&L expected values.
+- PR #814 review then found that the new oracle was absent from the governed
+  `transaction-dividend-contract` manifest. The suite now includes the oracle, and a direct
+  manifest-composition regression prevents silent removal from the repository-native lane.
 
 ## Validation
 
 - `python -W error -m pytest -p no:benchmark tests/unit/transaction_specs/test_dividend_settlement_golden_vectors.py tests/unit/transaction_specs/test_interest_settlement_golden_vectors.py tests/unit/transaction_specs/test_dividend_slice0_characterization.py tests/unit/transaction_specs/test_interest_slice0_characterization.py -q`
   -> 26 passed.
 - `python scripts\quality\test_manifest.py --suite transaction-dividend-contract --quiet`
-  -> 286 passed.
+  -> 292 passed, including the six independent DIVIDEND oracle tests.
 - `python scripts\quality\test_manifest.py --suite transaction-interest-contract --quiet`
   -> 317 passed.
+- Warning-strict manifest-composition plus DIVIDEND oracle review pack -> 20 passed.
 - `uvx --from ruff==0.15.18 ruff check tests/test_support/transaction_economics_reference.py tests/unit/transaction_specs/test_dividend_settlement_golden_vectors.py tests/unit/transaction_specs/test_interest_settlement_golden_vectors.py`
   -> passed with pinned Ruff 0.15.18.
 - `uvx --from ruff==0.15.18 ruff format --check tests/test_support/transaction_economics_reference.py tests/unit/transaction_specs/test_dividend_settlement_golden_vectors.py tests/unit/transaction_specs/test_interest_settlement_golden_vectors.py`

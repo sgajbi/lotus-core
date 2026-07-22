@@ -59,6 +59,12 @@ def test_sell_contract_suite_includes_sell_query_contract_tests() -> None:
     assert "tests/integration/services/query_service/test_sell_state_router.py" in sell_suite
 
 
+def test_dividend_contract_suite_includes_independent_settlement_oracle() -> None:
+    assert "tests/unit/transaction_specs/test_dividend_settlement_golden_vectors.py" in get_suite(
+        "transaction-dividend-contract"
+    )
+
+
 def test_fx_contract_suite_includes_fx_contract_surfaces() -> None:
     fx_suite = get_suite("transaction-fx-contract")
     assert (
