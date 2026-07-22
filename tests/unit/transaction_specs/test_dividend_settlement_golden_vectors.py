@@ -13,7 +13,9 @@ from unittest.mock import MagicMock
 import pytest
 
 from src.services.portfolio_transaction_processing_service.app.domain.cashflow import (
+    CashflowClassification,
     CashflowRule,
+    CashflowTiming,
     calculate_transaction_cashflow,
 )
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
@@ -75,7 +77,9 @@ def _cost_basis_transaction(vector: dict[str, Any]) -> CostBasisTransaction:
         transaction_type="DIVIDEND",
         transaction_date=datetime(2026, 4, 10, 10, 0),
         quantity=Decimal(0),
+        price=Decimal(0),
         gross_transaction_amount=Decimal(inputs["gross_dividend_amount"]),
+        fees={"brokerage": Decimal(inputs["transaction_fee_amount"])},
         trade_currency="USD",
         portfolio_base_currency="USD",
         transaction_fx_rate=Decimal("1"),
@@ -124,8 +128,8 @@ def test_dividend_settlement_matches_independent_golden_vector(
     cashflow = calculate_transaction_cashflow(
         transaction,
         CashflowRule(
-            classification="INCOME",
-            timing="PAYMENT_DATE",
+            classification=CashflowClassification.INCOME,
+            timing=CashflowTiming.EOD,
             is_position_flow=True,
             is_portfolio_flow=False,
         ),
@@ -145,14 +149,32 @@ def test_dividend_settlement_matches_independent_golden_vector(
 
     assert reference.settlement_cash_amount == Decimal(expected["settlement_cash_amount"])
     assert reference.signed_cashflow_amount == Decimal(expected["signed_cashflow_amount"])
+    assert reference.quantity_delta == Decimal(expected["quantity_delta"])
+    assert reference.cost_basis_delta == Decimal(expected["cost_basis_delta"])
+    assert reference.cost_basis_local_delta == Decimal(expected["cost_basis_local_delta"])
+    assert reference.net_cost_amount == Decimal(expected["net_cost_amount"])
+    assert reference.net_cost_local_amount == Decimal(expected["net_cost_local_amount"])
+    assert reference.realized_total_pnl == Decimal(expected["realized_total_pnl"])
+    assert reference.realized_total_pnl_local == Decimal(expected["realized_total_pnl_local"])
     assert movement.signed_amount == reference.settlement_cash_amount
     assert cashflow.amount == reference.signed_cashflow_amount
     assert cashflow.cashflow_date.isoformat() == "2026-04-12"
     assert cashflow.classification == "INCOME"
+    assert cashflow.timing == expected["cashflow_timing"]
     assert after.quantity - before.quantity == reference.quantity_delta
     assert after.cost_basis - before.cost_basis == reference.cost_basis_delta
-    assert cost_transaction.net_cost == Decimal(expected["cost_basis_delta"])
+    assert after.cost_basis_local - before.cost_basis_local == reference.cost_basis_local_delta
+    assert cost_transaction.net_cost == reference.net_cost_amount
+    assert cost_transaction.net_cost_local == reference.net_cost_local_amount
+    assert cost_transaction.net_cost == Decimal(expected["net_cost_amount"])
+    assert cost_transaction.net_cost_local == Decimal(expected["net_cost_local_amount"])
+    assert cost_transaction.gross_cost == Decimal(expected["net_cost_amount"])
     assert cost_transaction.realized_gain_loss == Decimal(expected["realized_total_pnl"])
+    assert cost_transaction.realized_gain_loss == reference.realized_total_pnl
+    assert cost_transaction.realized_gain_loss_local == reference.realized_total_pnl_local
+    assert cost_transaction.realized_gain_loss_local == Decimal(
+        expected["realized_total_pnl_local"]
+    )
 
 
 def test_reference_evaluator_rejects_non_positive_dividend_settlement() -> None:

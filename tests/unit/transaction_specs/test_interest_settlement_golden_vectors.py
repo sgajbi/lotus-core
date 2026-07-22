@@ -12,7 +12,9 @@ from typing import Any
 import pytest
 
 from src.services.portfolio_transaction_processing_service.app.domain.cashflow import (
+    CashflowClassification,
     CashflowRule,
+    CashflowTiming,
     calculate_transaction_cashflow,
 )
 from src.services.portfolio_transaction_processing_service.app.domain.transaction import (
@@ -130,8 +132,8 @@ def test_interest_settlement_matches_independent_golden_vector(
     cashflow = calculate_transaction_cashflow(
         transaction,
         CashflowRule(
-            classification="INCOME",
-            timing="PAYMENT_DATE",
+            classification=CashflowClassification.INCOME,
+            timing=CashflowTiming.EOD,
             is_position_flow=True,
             is_portfolio_flow=False,
         ),
@@ -143,3 +145,5 @@ def test_interest_settlement_matches_independent_golden_vector(
     assert production.net_interest_amount == reference.net_interest_amount
     assert production.settlement_cash_amount == reference.settlement_cash_amount
     assert cashflow.amount == reference.signed_cashflow_amount
+    assert cashflow.cashflow_date.isoformat() == "2026-04-12"
+    assert cashflow.timing == expected["cashflow_timing"]
