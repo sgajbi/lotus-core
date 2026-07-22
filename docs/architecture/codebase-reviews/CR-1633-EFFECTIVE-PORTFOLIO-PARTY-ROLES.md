@@ -56,6 +56,11 @@ required source-owned identifier and enforces only portfolio ownership through a
   the producer's approved-consumer tuple. The live source catalog and repo-native RFC-0084
   declaration now approve `lotus-gateway` alongside `lotus-manage`; a direct regression protects
   both declaration parity and `products_for_consumer("lotus-gateway")` discovery.
+- A final contract/runtime review found that accepted PM-book results inherited the shared
+  `false` / `UNAVAILABLE` trust default because this product uses the source quality term
+  `ACCEPTED`. The response boundary now derives currentness from both returned membership and a
+  linked evidence timestamp, emits `true` / `CURRENT` only when both exist, keeps empty or
+  timestamp-free evidence fail-closed, and binds the resulting trust fields into receipt identity.
 
 ## Compatibility And Same-Pattern Review
 
@@ -109,6 +114,13 @@ remains #521.
 - the Gateway-consumer correction passed 25 focused source-product/declaration/audit tests plus the
   repo-native domain-product validator, source-data-product contract guard, RFC-0083 closure guard,
   and diff hygiene.
+- populated, empty, timestamp-free, authoritative-role, and evidence-transition PM-book trust
+  regressions protect the product-specific currentness policy without changing its
+  `ACCEPTED`/`MISSING` data-quality vocabulary.
+- the final trust fix passed 39 warning-strict metadata/application tests and a 120-test PM-book,
+  router, and shared source-product cohort; strict MyPy passed all 237 source files, and the full
+  architecture, domain-product, source-product, RFC-0083, route-catalog, documentation, and wiki
+  guard set passed.
 
 Local acceptance is complete. PR CI, merge, exact-main validation, wiki publication, and verified
 issue closure remain required before #513 is done.
@@ -132,6 +144,10 @@ behavior are implementation, executable-test, and review-ledger truth.
 The consumer-approval correction updates that existing wiki row rather than adding a new page.
 Gateway's repo-native consumer declaration and federated platform discovery artifacts remain
 downstream merge dependencies; catalog approval alone is not end-to-end certification.
+
+The trust-metadata correction updates the same Mesh Data Products row. No standalone trust page is
+needed: executable response tests and this review record own the precise currentness algorithm,
+while the wiki states the customer- and operator-facing fail-closed behavior.
 
 PM-book membership is a source data product rather than a financial calculation, so it binds
 request/input and returned-evidence identity but does not invent a calculation-lineage envelope.
