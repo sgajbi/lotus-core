@@ -299,8 +299,10 @@ async def test_concurrent_profile_preserves_partition_order(
         offset=2,
     )
     polled_messages = [first_msg, second_msg]
+    poll_timeouts = []
 
-    def poll(_timeout):
+    def poll(timeout):
+        poll_timeouts.append(timeout)
         return polled_messages.pop(0) if polled_messages else None
 
     mock_confluent_consumer.poll.side_effect = poll
@@ -315,7 +317,7 @@ async def test_concurrent_profile_preserves_partition_order(
         group_id="test-group",
         execution_profile=KafkaConsumerExecutionProfile(
             max_in_flight_messages=2,
-            poll_timeout_seconds=0.01,
+            poll_timeout_seconds=1.0,
         ),
     )
 
@@ -348,6 +350,7 @@ async def test_concurrent_profile_preserves_partition_order(
         await run_task
 
     assert processed_offsets == [1, 2]
+    assert poll_timeouts[:2] == [1.0, 0.1]
     committed_messages = [
         call.kwargs["message"] for call in mock_confluent_consumer.commit.call_args_list
     ]
