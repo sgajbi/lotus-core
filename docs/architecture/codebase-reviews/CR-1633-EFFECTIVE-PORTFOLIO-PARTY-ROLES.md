@@ -52,6 +52,10 @@ required source-owned identifier and enforces only portfolio ownership through a
   projection with a party-role assignment, or correcting its source-record evidence, changes the
   snapshot, content, source-batch, and source-digest identities even when portfolio IDs are
   unchanged.
+- A downstream canonical-proof review found Gateway's implemented advisor-book facade absent from
+  the producer's approved-consumer tuple. The live source catalog and repo-native RFC-0084
+  declaration now approve `lotus-gateway` alongside `lotus-manage`; a direct regression protects
+  both declaration parity and `products_for_consumer("lotus-gateway")` discovery.
 
 ## Compatibility And Same-Pattern Review
 
@@ -102,6 +106,9 @@ remains #521.
 - two PM-book evidence-transition regressions and the shared-consumer cohort passed in a focused
   `79`-test run; scoped Ruff and strict MyPy across `237` sources passed at signed fix-forward
   commit `a86d200c4`.
+- the Gateway-consumer correction passed 25 focused source-product/declaration/audit tests plus the
+  repo-native domain-product validator, source-data-product contract guard, RFC-0083 closure guard,
+  and diff hygiene.
 
 Local acceptance is complete. PR CI, merge, exact-main validation, wiki publication, and verified
 issue closure remain required before #513 is done.
@@ -121,6 +128,10 @@ in the API contract, executable tests, and this review record.
 The receipt-identity correction likewise needs no additional wiki page. The existing Mesh Data
 Products page owns the audience-facing source-product description; exact hash inputs and correction
 behavior are implementation, executable-test, and review-ledger truth.
+
+The consumer-approval correction updates that existing wiki row rather than adding a new page.
+Gateway's repo-native consumer declaration and federated platform discovery artifacts remain
+downstream merge dependencies; catalog approval alone is not end-to-end certification.
 
 PM-book membership is a source data product rather than a financial calculation, so it binds
 request/input and returned-evidence identity but does not invent a calculation-lineage envelope.
