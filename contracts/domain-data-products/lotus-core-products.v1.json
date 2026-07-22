@@ -2072,7 +2072,11 @@
         "snapshot_id",
         "content_hash",
         "policy_version",
-        "correlation_id"
+        "correlation_id",
+        "portfolio_manager_id",
+        "booking_center_code",
+        "source_evidence_current",
+        "freshness_status"
       ],
       "serving_plane": "query_control_plane_service",
       "current_routes": [

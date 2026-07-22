@@ -36,6 +36,14 @@ DEFAULT_REQUIRED_METADATA_FIELDS = (
     "correlation_id",
 )
 
+PORTFOLIO_MANAGER_BOOK_REQUIRED_METADATA_FIELDS = (
+    *DEFAULT_REQUIRED_METADATA_FIELDS,
+    "portfolio_manager_id",
+    "booking_center_code",
+    "source_evidence_current",
+    "freshness_status",
+)
+
 
 @dataclass(frozen=True)
 class SourceDataProductDefinition:
@@ -452,6 +460,7 @@ SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = (
         owner="lotus-core",
         consumers=("lotus-manage", "lotus-gateway"),
         current_routes=("/integration/portfolio-manager-books/{portfolio_manager_id}/memberships",),
+        required_metadata_fields=PORTFOLIO_MANAGER_BOOK_REQUIRED_METADATA_FIELDS,
         paging_mode=INLINE_PAGED,
         export_mode=NOT_APPLICABLE,
         notes=(

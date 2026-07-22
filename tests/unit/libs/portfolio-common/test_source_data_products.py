@@ -124,6 +124,12 @@ def test_advisor_book_product_approves_implemented_consumers() -> None:
 
     assert product.consumers == ("lotus-manage", "lotus-gateway")
     assert product in products_for_consumer("lotus-gateway")
+    assert {
+        "portfolio_manager_id",
+        "booking_center_code",
+        "source_evidence_current",
+        "freshness_status",
+    } <= set(product.required_metadata_fields)
 
 
 def test_catalog_keeps_performance_snapshot_outputs_out_of_core() -> None:
