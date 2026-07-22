@@ -420,6 +420,15 @@ def test_transaction_model_accepts_interest_semantic_fields() -> None:
     assert model.net_interest_amount == Decimal("110.0")
 
 
+def test_transaction_schema_describes_withholding_for_dividend_and_interest() -> None:
+    description = Transaction.model_json_schema()["properties"]["withholding_tax_amount"][
+        "description"
+    ]
+
+    assert "DIVIDEND or INTEREST" in description
+    assert "jurisdiction-specific tax policy" in description
+
+
 def test_transaction_model_accepts_corporate_action_synthetic_flow_fields() -> None:
     payload = {
         "transaction_id": "CA_FIELDS_001",

@@ -119,6 +119,25 @@
       "rationale": "Fees cannot silently invert dividend income into an expense."
     },
     {
+      "vector_id": "dividend-withholding-and-fee-below-proceeds",
+      "vector_version": "1.1.0",
+      "inputs": {
+        "transaction_type": "DIVIDEND",
+        "gross_transaction_amount": "82.00",
+        "withholding_tax_amount": "12.30",
+        "transaction_fee_amount": "0.70"
+      },
+      "expected": {
+        "accepted": true,
+        "available_proceeds_amount": "69.70",
+        "fee_amount": "0.70",
+        "signed_cash_amount": "69.00",
+        "rejection_reason_code": null
+      },
+      "tolerance": "0",
+      "rationale": "Source-recorded withholding reduces available dividend proceeds before the separately resolved transaction fee."
+    },
+    {
       "vector_id": "interest-income-fee-below-net-interest",
       "vector_version": "1.0.0",
       "inputs": {

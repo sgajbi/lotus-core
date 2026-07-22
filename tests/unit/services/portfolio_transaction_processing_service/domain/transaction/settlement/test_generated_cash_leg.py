@@ -152,6 +152,20 @@ def test_generated_cash_leg_uses_component_fee_precedence() -> None:
     assert cash_leg.movement_direction == "INFLOW"
 
 
+def test_generated_dividend_cash_leg_uses_net_withholding_proceeds() -> None:
+    cash_leg = build_generated_settlement_cash_leg(
+        replace(
+            _dividend_transaction(),
+            withholding_tax_amount=Decimal("12.30"),
+            trade_fee=Decimal("0.70"),
+        )
+    )
+
+    assert cash_leg.gross_transaction_amount == Decimal("87.00")
+    assert cash_leg.movement_direction == "INFLOW"
+    assert cash_leg.adjustment_reason == "DIVIDEND_SETTLEMENT"
+
+
 @pytest.mark.parametrize("fee", [Decimal("100.00"), Decimal("100.01")])
 def test_generated_cash_leg_rejects_non_positive_net_settlement(fee: Decimal) -> None:
     transaction = replace(

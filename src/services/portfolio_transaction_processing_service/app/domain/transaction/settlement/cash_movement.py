@@ -106,12 +106,48 @@ def _calculate_dividend_movement(
     transaction: BookedTransaction,
     fee: Decimal,
 ) -> SettlementCashMovement:
+    withholding_tax = transaction.withholding_tax_amount or Decimal(0)
+    available_proceeds = transaction.gross_transaction_amount - withholding_tax
+    net_settlement = available_proceeds - fee
+    if withholding_tax < 0:
+        raise SettlementCashValidationError(
+            reason_code=(SettlementCashRejectionReasonCode.DIVIDEND_NEGATIVE_WITHHOLDING_TAX),
+            field="withholding_tax_amount",
+            message="DIVIDEND withholding_tax_amount must be greater than or equal to zero.",
+            available_proceeds=available_proceeds,
+            fee_amount=fee,
+            net_settlement_amount=net_settlement,
+        )
+    if withholding_tax > transaction.gross_transaction_amount:
+        raise SettlementCashValidationError(
+            reason_code=(
+                SettlementCashRejectionReasonCode.DIVIDEND_WITHHOLDING_EXCEEDS_GROSS_AMOUNT
+            ),
+            field="withholding_tax_amount",
+            message=("DIVIDEND withholding_tax_amount must not exceed gross_transaction_amount."),
+            available_proceeds=available_proceeds,
+            fee_amount=fee,
+            net_settlement_amount=net_settlement,
+        )
+    if available_proceeds == 0:
+        raise SettlementCashValidationError(
+            reason_code=(SettlementCashRejectionReasonCode.DIVIDEND_NON_POSITIVE_NET_SETTLEMENT),
+            field="withholding_tax_amount",
+            message=(
+                "DIVIDEND settlement cash must remain greater than zero after "
+                "withholding tax and transaction fees."
+            ),
+            available_proceeds=available_proceeds,
+            fee_amount=fee,
+            net_settlement_amount=net_settlement,
+        )
     return _calculate_positive_proceeds_movement(
         transaction=transaction,
-        available_proceeds=transaction.gross_transaction_amount,
+        available_proceeds=available_proceeds,
         fee=fee,
         reason_code=SettlementCashRejectionReasonCode.DIVIDEND_NON_POSITIVE_NET_SETTLEMENT,
         adjustment_reason="DIVIDEND_SETTLEMENT",
+        deduction_description="withholding tax and transaction fees",
     )
 
 
@@ -172,6 +208,7 @@ def _calculate_positive_proceeds_movement(
     fee: Decimal,
     reason_code: SettlementCashRejectionReasonCode,
     adjustment_reason: str,
+    deduction_description: str = "transaction fees",
 ) -> SettlementCashMovement:
     net_settlement = available_proceeds - fee
     if net_settlement <= 0:
@@ -181,7 +218,7 @@ def _calculate_positive_proceeds_movement(
             field="trade_fee",
             message=(
                 f"{transaction_type} settlement cash must remain greater than zero "
-                "after transaction fees."
+                f"after {deduction_description}."
             ),
             available_proceeds=available_proceeds,
             fee_amount=fee,

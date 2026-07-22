@@ -49,7 +49,11 @@ def _booked_transaction(vector: dict[str, Any]) -> BookedTransaction:
         trade_currency="USD",
         currency="USD",
         trade_fee=Decimal(inputs["transaction_fee_amount"]),
-        withholding_tax_amount=(Decimal(inputs["withholding_tax_amount"]) if is_interest else None),
+        withholding_tax_amount=(
+            Decimal(inputs.get("withholding_tax_amount", "0"))
+            if transaction_type in {"DIVIDEND", "INTEREST"}
+            else None
+        ),
         other_interest_deductions_amount=(
             Decimal(inputs["other_interest_deductions_amount"]) if is_interest else None
         ),
@@ -67,7 +71,7 @@ def test_ordinary_settlement_vector_pack_declares_governance_metadata() -> None:
     }
     assert _VECTOR_PACK["rounding"] == {"mode": "none", "scale": None}
 
-    assert len(_VECTOR_PACK["vectors"]) == 9
+    assert len(_VECTOR_PACK["vectors"]) == 10
     for vector in _VECTOR_PACK["vectors"]:
         assert vector["vector_version"]
         assert vector["tolerance"] == "0"

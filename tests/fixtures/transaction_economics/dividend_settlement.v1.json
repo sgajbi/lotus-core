@@ -1,9 +1,9 @@
 {
   "pack_id": "dividend-settlement",
-  "pack_version": "1.0.0",
+  "pack_version": "1.1.0",
   "methodology_policy": {
     "id": "dividend-settlement-economics",
-    "version": "1.0.0"
+    "version": "1.1.0"
   },
   "rounding": {
     "mode": "none",
@@ -15,6 +15,7 @@
       "vector_version": "1.0.0",
       "inputs": {
         "gross_dividend_amount": "602.5",
+        "withholding_tax_amount": "0",
         "transaction_fee_amount": "0"
       },
       "expected": {
@@ -37,6 +38,7 @@
       "vector_version": "1.0.0",
       "inputs": {
         "gross_dividend_amount": "602.5",
+        "withholding_tax_amount": "0",
         "transaction_fee_amount": "2.5"
       },
       "expected": {
@@ -59,6 +61,7 @@
       "vector_version": "1.0.0",
       "inputs": {
         "gross_dividend_amount": "100.005",
+        "withholding_tax_amount": "0",
         "transaction_fee_amount": "0.005"
       },
       "expected": {
@@ -75,6 +78,29 @@
       },
       "tolerance": "0",
       "rationale": "Decimal arithmetic preserves the exact supported dividend settlement boundary without binary rounding."
+    },
+    {
+      "vector_id": "dividend-with-source-withholding",
+      "vector_version": "1.1.0",
+      "inputs": {
+        "gross_dividend_amount": "82.00",
+        "withholding_tax_amount": "12.30",
+        "transaction_fee_amount": "0"
+      },
+      "expected": {
+        "settlement_cash_amount": "69.70",
+        "signed_cashflow_amount": "69.70",
+        "cashflow_timing": "EOD",
+        "quantity_delta": "0",
+        "cost_basis_delta": "0",
+        "cost_basis_local_delta": "0",
+        "net_cost_amount": "0",
+        "net_cost_local_amount": "0",
+        "realized_total_pnl": "0",
+        "realized_total_pnl_local": "0"
+      },
+      "tolerance": "0",
+      "rationale": "Explicit source-recorded withholding remains visible while generated settlement cash receives the gross dividend less withholding."
     }
   ]
 }

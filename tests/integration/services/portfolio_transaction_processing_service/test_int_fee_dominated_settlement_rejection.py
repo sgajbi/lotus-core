@@ -85,6 +85,8 @@ def _fee_dominated_event(
                 "interest_direction": "INCOME",
             }
         )
+    elif transaction_type == "DIVIDEND":
+        domain_fields["withholding_tax_amount"] = Decimal("10")
     return booked_transaction_event(
         transaction_id=transaction_id,
         portfolio_id="PORT-FEE-DOMINATED-01",
@@ -104,8 +106,8 @@ def _fee_dominated_event(
     [
         ("SELL", "100", "SELL_010_NON_POSITIVE_NET_SETTLEMENT"),
         ("SELL", "100.01", "SELL_010_NON_POSITIVE_NET_SETTLEMENT"),
-        ("DIVIDEND", "100", "DIVIDEND_013_NON_POSITIVE_NET_SETTLEMENT"),
-        ("DIVIDEND", "100.01", "DIVIDEND_013_NON_POSITIVE_NET_SETTLEMENT"),
+        ("DIVIDEND", "90", "DIVIDEND_013_NON_POSITIVE_NET_SETTLEMENT"),
+        ("DIVIDEND", "90.01", "DIVIDEND_013_NON_POSITIVE_NET_SETTLEMENT"),
         ("INTEREST", "8", "INTEREST_017_NON_POSITIVE_NET_SETTLEMENT"),
         ("INTEREST", "8.01", "INTEREST_017_NON_POSITIVE_NET_SETTLEMENT"),
     ],
@@ -155,7 +157,7 @@ async def test_replay_repeats_settlement_rejection_without_claiming_idempotency(
     event = _fee_dominated_event(
         "DIVIDEND",
         transaction_id=transaction_id,
-        fee_amount="101",
+        fee_amount="91",
     )
     async_db_session.add_all(
         [

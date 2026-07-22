@@ -73,6 +73,74 @@ def test_component_fees_take_precedence_over_aggregate_trade_fee() -> None:
     assert movement.signed_amount == Decimal("97.00")
 
 
+def test_dividend_withholding_reduces_available_settlement_proceeds() -> None:
+    movement = calculate_settlement_cash_movement(
+        _transaction(
+            "DIVIDEND",
+            gross_transaction_amount=Decimal("82.00"),
+            withholding_tax_amount=Decimal("12.30"),
+            trade_fee=Decimal("0.70"),
+        )
+    )
+
+    assert movement.signed_amount == Decimal("69.00")
+    assert movement.fee_amount == Decimal("0.70")
+    assert movement.adjustment_reason == "DIVIDEND_SETTLEMENT"
+
+
+@pytest.mark.parametrize(
+    ("withholding_tax", "reason_code", "available_proceeds", "net_settlement"),
+    [
+        (
+            Decimal("-0.01"),
+            SettlementCashRejectionReasonCode.DIVIDEND_NEGATIVE_WITHHOLDING_TAX,
+            Decimal("100.01"),
+            Decimal("98.01"),
+        ),
+        (
+            Decimal("100.01"),
+            SettlementCashRejectionReasonCode.DIVIDEND_WITHHOLDING_EXCEEDS_GROSS_AMOUNT,
+            Decimal("-0.01"),
+            Decimal("-2.01"),
+        ),
+    ],
+)
+def test_dividend_rejects_invalid_withholding_before_cash_generation(
+    withholding_tax: Decimal,
+    reason_code: SettlementCashRejectionReasonCode,
+    available_proceeds: Decimal,
+    net_settlement: Decimal,
+) -> None:
+    with pytest.raises(SettlementCashValidationError) as raised:
+        calculate_settlement_cash_movement(
+            _transaction("DIVIDEND", withholding_tax_amount=withholding_tax)
+        )
+
+    assert raised.value.reason_code is reason_code
+    assert raised.value.field == "withholding_tax_amount"
+    assert raised.value.available_proceeds == available_proceeds
+    assert raised.value.fee_amount == Decimal("2")
+    assert raised.value.net_settlement_amount == net_settlement
+
+
+def test_dividend_rejects_withholding_that_consumes_all_gross_proceeds() -> None:
+    with pytest.raises(SettlementCashValidationError) as raised:
+        calculate_settlement_cash_movement(
+            _transaction(
+                "DIVIDEND",
+                withholding_tax_amount=Decimal("100"),
+                trade_fee=Decimal("0"),
+            )
+        )
+
+    assert raised.value.reason_code is (
+        SettlementCashRejectionReasonCode.DIVIDEND_NON_POSITIVE_NET_SETTLEMENT
+    )
+    assert raised.value.field == "withholding_tax_amount"
+    assert raised.value.available_proceeds == Decimal("0")
+    assert raised.value.net_settlement_amount == Decimal("0")
+
+
 @pytest.mark.parametrize(
     ("transaction_type", "fee", "reason_code"),
     [
@@ -187,6 +255,19 @@ def test_decimal_precision_is_not_quantized_by_settlement_policy() -> None:
         _transaction(
             "DIVIDEND",
             gross_transaction_amount=Decimal("0.00000000000000000003"),
+            trade_fee=Decimal("0.00000000000000000001"),
+        )
+    )
+
+    assert movement.signed_amount == Decimal("0.00000000000000000002")
+
+
+def test_dividend_withholding_precision_is_not_quantized_by_settlement_policy() -> None:
+    movement = calculate_settlement_cash_movement(
+        _transaction(
+            "DIVIDEND",
+            gross_transaction_amount=Decimal("0.00000000000000000005"),
+            withholding_tax_amount=Decimal("0.00000000000000000002"),
             trade_fee=Decimal("0.00000000000000000001"),
         )
     )

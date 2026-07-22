@@ -64,6 +64,7 @@ def _booked_dividend(vector: dict[str, Any]) -> BookedTransaction:
         trade_currency="USD",
         currency="USD",
         trade_fee=Decimal(inputs["transaction_fee_amount"]),
+        withholding_tax_amount=Decimal(inputs["withholding_tax_amount"]),
     )
 
 
@@ -100,10 +101,10 @@ def test_reference_evaluator_has_no_production_imports() -> None:
 
 def test_dividend_vector_pack_declares_governance_metadata() -> None:
     assert _VECTOR_PACK["pack_id"] == "dividend-settlement"
-    assert _VECTOR_PACK["pack_version"] == "1.0.0"
+    assert _VECTOR_PACK["pack_version"] == "1.1.0"
     assert _VECTOR_PACK["methodology_policy"] == {
         "id": "dividend-settlement-economics",
-        "version": "1.0.0",
+        "version": "1.1.0",
     }
     assert _VECTOR_PACK["rounding"] == {"mode": "none", "scale": None}
     for vector in _VECTOR_PACK["vectors"]:
@@ -182,5 +183,9 @@ def test_dividend_settlement_matches_independent_golden_vector(
 def test_reference_evaluator_rejects_non_positive_dividend_settlement() -> None:
     with pytest.raises(ValueError, match="settlement cash"):
         evaluate_dividend_settlement(
-            {"gross_dividend_amount": "100", "transaction_fee_amount": "100"}
+            {
+                "gross_dividend_amount": "100",
+                "withholding_tax_amount": "0",
+                "transaction_fee_amount": "100",
+            }
         )

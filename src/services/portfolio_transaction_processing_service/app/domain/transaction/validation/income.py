@@ -304,6 +304,12 @@ def _validate_income_settlement(
         calculate_settlement_cash_movement(transaction)
     except SettlementCashValidationError as exc:
         reason_code: IncomeValidationReasonCode = policy.non_positive_net_settlement_code
+        if exc.reason_code is SettlementCashRejectionReasonCode.DIVIDEND_NEGATIVE_WITHHOLDING_TAX:
+            reason_code = DividendValidationReasonCode.NEGATIVE_WITHHOLDING_TAX
+        elif exc.reason_code is (
+            SettlementCashRejectionReasonCode.DIVIDEND_WITHHOLDING_EXCEEDS_GROSS_AMOUNT
+        ):
+            reason_code = DividendValidationReasonCode.WITHHOLDING_EXCEEDS_GROSS_AMOUNT
         if exc.reason_code is (
             SettlementCashRejectionReasonCode.INTEREST_NET_RECONCILIATION_MISMATCH
         ):

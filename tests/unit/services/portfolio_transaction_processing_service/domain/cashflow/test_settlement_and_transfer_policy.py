@@ -320,6 +320,34 @@ def test_product_and_generated_leg_cashflows_share_settlement_economics(
     assert settlement_transaction.movement_direction == "INFLOW"
 
 
+def test_dividend_product_and_generated_leg_share_withholding_adjusted_cash() -> None:
+    product_transaction = _booked_transaction(
+        transaction_type="DIVIDEND",
+        quantity=Decimal(0),
+        price=Decimal(0),
+        gross_transaction_amount=Decimal("82.00"),
+        withholding_tax_amount=Decimal("12.30"),
+        trade_fee=Decimal("0.70"),
+        cash_entry_mode="AUTO_GENERATE",
+        settlement_cash_account_id="CASH-USD-001",
+        settlement_cash_instrument_id="CASH-USD",
+    )
+    settlement_transaction = build_generated_settlement_cash_leg(product_transaction)
+
+    product_cashflow = calculate_transaction_cashflow(
+        product_transaction,
+        _rule(CashflowClassification.INCOME),
+    )
+    settlement_cashflow = calculate_transaction_cashflow(
+        settlement_transaction,
+        _rule(CashflowClassification.TRANSFER),
+    )
+
+    assert product_cashflow.amount == Decimal("69.00")
+    assert settlement_transaction.gross_transaction_amount == Decimal("69.00")
+    assert settlement_cashflow.amount == product_cashflow.amount
+
+
 def test_synthetic_position_transfer_uses_source_owned_market_value() -> None:
     transaction = _booked_transaction(
         transaction_type="TRANSFER_IN",
