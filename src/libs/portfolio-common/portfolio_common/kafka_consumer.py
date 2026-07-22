@@ -53,6 +53,8 @@ from .monitoring import (
 
 logger = logging.getLogger(__name__)
 
+_ACTIVE_PROCESSING_POLL_TIMEOUT_SECONDS = 0.1
+
 DLQ_REASON_CODE_VALIDATION = "VALIDATION_ERROR"
 DLQ_REASON_CODE_DESERIALIZATION = "DESERIALIZATION_ERROR"
 DLQ_REASON_CODE_DATA_INTEGRITY = "DATA_INTEGRITY_ERROR"
@@ -692,7 +694,10 @@ class BaseConsumer(ABC):
                 await self._wait_for_next_processing_task(loop)
                 continue
 
-            msg = await self._poll_next_message(loop)
+            msg = await self._poll_next_message(
+                loop,
+                timeout_seconds=self._concurrent_poll_timeout_seconds(),
+            )
             if msg is None:
                 continue
             if self._should_skip_polled_message(msg):
@@ -703,16 +708,34 @@ class BaseConsumer(ABC):
 
         await self._drain_in_flight_on_shutdown(loop)
 
-    async def _poll_next_message(self, loop: asyncio.AbstractEventLoop) -> Message | None:
+    def _concurrent_poll_timeout_seconds(self) -> float:
+        """Keep idle polling quiet while bounding latency around active ordered work."""
+
+        configured_timeout = self.execution_profile.poll_timeout_seconds
+        if not self._in_flight_tasks:
+            return configured_timeout
+        return min(configured_timeout, _ACTIVE_PROCESSING_POLL_TIMEOUT_SECONDS)
+
+    async def _poll_next_message(
+        self,
+        loop: asyncio.AbstractEventLoop,
+        *,
+        timeout_seconds: float | None = None,
+    ) -> Message | None:
         started_at = time.monotonic()
         consumer = self._consumer
         if consumer is None:
             raise RuntimeError("Kafka consumer must be initialized before polling.")
+        resolved_timeout_seconds = (
+            self.execution_profile.poll_timeout_seconds
+            if timeout_seconds is None
+            else timeout_seconds
+        )
         try:
             msg = await loop.run_in_executor(
                 None,
                 consumer.poll,
-                self.execution_profile.poll_timeout_seconds,
+                resolved_timeout_seconds,
             )
         except Exception:
             if not self._running:
