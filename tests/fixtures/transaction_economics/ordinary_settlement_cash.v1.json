@@ -1,9 +1,9 @@
 {
   "pack_id": "ordinary-settlement-cash",
-  "pack_version": "1.0.0",
+  "pack_version": "1.1.0",
   "methodology_policy": {
     "id": "ordinary-settlement-cash-boundary",
-    "version": "1.0.0"
+    "version": "1.1.0"
   },
   "rounding": {
     "mode": "none",
@@ -136,6 +136,63 @@
       },
       "tolerance": "0",
       "rationale": "Source-recorded withholding reduces available dividend proceeds before the separately resolved transaction fee."
+    },
+    {
+      "vector_id": "dividend-negative-withholding",
+      "vector_version": "1.1.0",
+      "inputs": {
+        "transaction_type": "DIVIDEND",
+        "gross_transaction_amount": "100.00",
+        "withholding_tax_amount": "-0.01",
+        "transaction_fee_amount": "0"
+      },
+      "expected": {
+        "accepted": false,
+        "available_proceeds_amount": "100.01",
+        "fee_amount": "0",
+        "signed_cash_amount": null,
+        "rejection_reason_code": "DIVIDEND_014_NEGATIVE_WITHHOLDING_TAX"
+      },
+      "tolerance": "0",
+      "rationale": "Negative source withholding is invalid even though subtraction would otherwise increase settlement cash."
+    },
+    {
+      "vector_id": "dividend-withholding-exceeds-gross",
+      "vector_version": "1.1.0",
+      "inputs": {
+        "transaction_type": "DIVIDEND",
+        "gross_transaction_amount": "100.00",
+        "withholding_tax_amount": "100.01",
+        "transaction_fee_amount": "0"
+      },
+      "expected": {
+        "accepted": false,
+        "available_proceeds_amount": "-0.01",
+        "fee_amount": "0",
+        "signed_cash_amount": null,
+        "rejection_reason_code": "DIVIDEND_015_WITHHOLDING_EXCEEDS_GROSS_AMOUNT"
+      },
+      "tolerance": "0",
+      "rationale": "Recorded withholding cannot exceed the gross dividend and must not create a negative cash receipt."
+    },
+    {
+      "vector_id": "dividend-withholding-consumes-gross",
+      "vector_version": "1.1.0",
+      "inputs": {
+        "transaction_type": "DIVIDEND",
+        "gross_transaction_amount": "100.00",
+        "withholding_tax_amount": "100.00",
+        "transaction_fee_amount": "0"
+      },
+      "expected": {
+        "accepted": false,
+        "available_proceeds_amount": "0.00",
+        "fee_amount": "0",
+        "signed_cash_amount": null,
+        "rejection_reason_code": "DIVIDEND_013_NON_POSITIVE_NET_SETTLEMENT"
+      },
+      "tolerance": "0",
+      "rationale": "Withholding that consumes all gross proceeds is rejected rather than emitted as a directionless cash leg."
     },
     {
       "vector_id": "interest-income-fee-below-net-interest",

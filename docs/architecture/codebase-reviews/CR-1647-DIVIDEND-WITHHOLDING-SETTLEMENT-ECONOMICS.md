@@ -45,6 +45,9 @@ backfill. Those acceptance areas remain under #448; this evidence does not claim
   state DIVIDEND/INTEREST applicability and the source-evidence boundary.
 - The independent DIVIDEND and ordinary-settlement vector packs now include withholding inputs and
   exact Decimal reconciliation.
+- Self-review found the ordinary-settlement oracle initially covered only accepted withholding
+  arithmetic. Three implementation-independent vectors now lock negative, over-gross, and
+  fully-consumed withholding rejection codes as well.
 - Application-boundary tests prove stable non-retryable rejections, source-safe diagnostics,
   rollback, and absence of cost, position, cashflow, or commit work.
 - Database-backed generated-leg and rejection tests were updated for the new arithmetic. They were
@@ -55,9 +58,9 @@ backfill. Those acceptance areas remain under #448; this evidence does not claim
 
 ## Validation
 
-- Warning-strict touched-surface pack: 169 passed.
-- Warning-strict `transaction-dividend-contract`: 299 passed.
-- Warning-strict `transaction-interest-contract`: 323 passed.
+- Warning-strict touched-surface pack: 172 passed after oracle hardening.
+- Warning-strict `transaction-dividend-contract`: 302 passed after oracle hardening.
+- Warning-strict `transaction-interest-contract`: 326 passed after oracle hardening.
 - Pinned Ruff 0.15.18 check and format check passed for every changed Python file.
 - Both changed JSON vector packs parsed successfully; `git diff --check` passed.
 - Full `make architecture-guard` chain passed, including domain/application/infrastructure

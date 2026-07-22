@@ -64,14 +64,14 @@ def _booked_transaction(vector: dict[str, Any]) -> BookedTransaction:
 
 def test_ordinary_settlement_vector_pack_declares_governance_metadata() -> None:
     assert _VECTOR_PACK["pack_id"] == "ordinary-settlement-cash"
-    assert _VECTOR_PACK["pack_version"] == "1.0.0"
+    assert _VECTOR_PACK["pack_version"] == "1.1.0"
     assert _VECTOR_PACK["methodology_policy"] == {
         "id": "ordinary-settlement-cash-boundary",
-        "version": "1.0.0",
+        "version": "1.1.0",
     }
     assert _VECTOR_PACK["rounding"] == {"mode": "none", "scale": None}
 
-    assert len(_VECTOR_PACK["vectors"]) == 10
+    assert len(_VECTOR_PACK["vectors"]) == 13
     for vector in _VECTOR_PACK["vectors"]:
         assert vector["vector_version"]
         assert vector["tolerance"] == "0"
