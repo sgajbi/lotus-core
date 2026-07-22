@@ -189,25 +189,32 @@ def wait_for_pipeline_quiescence(
     deadline = time.time() + timeout_seconds
     last_snapshot: dict[str, int] | None = None
     stable_hits = 0
+    quiescent_since: float | None = None
 
     while time.time() < deadline:
         snapshot = snapshot_reader()
         if is_pipeline_quiescent(snapshot):
+            if quiescent_since is None:
+                quiescent_since = time.time()
             stable_hits = stable_hits + 1 if snapshot == last_snapshot else 1
             if stable_hits >= stable_cycles:
-                if quiet_seconds <= 0 or last_activity_reader is None:
+                if quiet_seconds <= 0:
                     return snapshot
-                last_activity_at = last_activity_reader()
-                if last_activity_at is None:
-                    return snapshot
-                quiet_age_seconds = max(
-                    0.0,
-                    (datetime.now(timezone.utc) - last_activity_at).total_seconds(),
+                last_activity_at = (
+                    last_activity_reader() if last_activity_reader is not None else None
                 )
+                if last_activity_at is None:
+                    quiet_age_seconds = time.time() - quiescent_since
+                else:
+                    quiet_age_seconds = max(
+                        0.0,
+                        (datetime.now(timezone.utc) - last_activity_at).total_seconds(),
+                    )
                 if quiet_age_seconds >= quiet_seconds:
                     return snapshot
         else:
             stable_hits = 0
+            quiescent_since = None
 
         last_snapshot = snapshot
         time.sleep(poll_seconds)
