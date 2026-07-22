@@ -859,6 +859,12 @@ Most relevant current governance:
     canonical front-office contract's RFC-0026 advisor-cockpit scenario, with fallback
     `advisor_sg_001`. This keeps Core portfolio master membership aligned with downstream
     advisor-cockpit validation instead of hard-coding a separate relationship-manager identifier.
+    It separately derives and persists the canonical `PM_SG_001` portfolio-management assignment
+    through `/ingest/portfolio-party-role-assignments`; `advisor_id` remains compatibility-only.
+    Canonical verification must observe the portfolio through Gateway with
+    `governed_role_assignment` lineage and current source evidence before Workbench proof can pass.
+    `tools/validate_front_office_advisor_book_seed.py` exercises the same bundle and dependency-
+    ordered request builders as the live seed and is the cross-repository contract proof.
     Canonical parent reference ingestion remains asynchronous: before posting eligibility or other
     dependent reference products, the seed must prove every unique instrument is query-visible
     within a bounded wait and fail closed with the unresolved security ids. Local reseed fence
