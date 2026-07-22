@@ -27,7 +27,9 @@ permission to skip the configured quiet interval. The next module then deadlocke
 global `TRUNCATE` against an in-flight valuation-job terminal update. The wait loop now
 measures the quiet interval from the first all-zero snapshot when no active timestamp
 exists. It retains the active-only query, so unrelated completed history cannot extend
-the fence indefinitely.
+the fence indefinitely. If a timestamp read observes new active work between two
+all-zero count snapshots, the zero-state timer restarts before that row can disappear;
+the older zero observation cannot satisfy the fence after intervening activity.
 
 ## Why It Matters
 
