@@ -27,6 +27,7 @@ class FrontOfficeSeedContract:
     advisor_book_source_system: str
     advisor_book_source_record_id: str
     advisor_book_quality_status: str
+    advisor_book_source_product: str
     canonical_as_of_date: str
     benchmark_start_date: str
     seed_start_date: str
@@ -85,6 +86,7 @@ def _build_fallback_contract() -> FrontOfficeSeedContract:
         advisor_book_source_system="LOTUS_FRONT_OFFICE_SEED",
         advisor_book_source_record_id=("pb_sg_global_bal_001_pm_sg_001_portfolio_manager_v1"),
         advisor_book_quality_status="accepted",
+        advisor_book_source_product="PortfolioManagerBookMembership:v1",
         canonical_as_of_date="2026-04-10",
         benchmark_start_date="2025-01-06",
         seed_start_date="2025-03-31",
@@ -132,6 +134,7 @@ def _to_seed_contract(
         advisor_book_source_system=advisor_book["source_system"],
         advisor_book_source_record_id=advisor_book["source_record_id"],
         advisor_book_quality_status=advisor_book["quality_status"],
+        advisor_book_source_product=advisor_book["source_product"],
         canonical_as_of_date=date_policy["canonical_as_of_date"],
         benchmark_start_date=date_policy["warmup_start_date"],
         seed_start_date=date_policy["seed_start_date"],

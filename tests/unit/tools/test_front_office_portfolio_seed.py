@@ -1242,6 +1242,7 @@ def test_front_office_seed_contract_loads_platform_governed_defaults() -> None:
     assert contract.advisor_book_source_record_id == (
         "pb_sg_global_bal_001_pm_sg_001_portfolio_manager_v1"
     )
+    assert contract.advisor_book_source_product == "PortfolioManagerBookMembership:v1"
     assert contract.canonical_as_of_date == "2026-04-10"
     assert contract.seed_start_date == "2025-03-31"
     assert contract.benchmark_start_date == "2025-01-06"
@@ -1291,7 +1292,17 @@ def test_executable_advisor_book_seed_validator_proves_runtime_ingestion_plan() 
         "status": "pass",
         "portfolio_id": "PB_SG_GLOBAL_BAL_001",
         "portfolio_manager_id": "PM_SG_001",
+        "as_of_date": "2026-04-10",
+        "role_type": "portfolio_manager",
+        "role_scope": "portfolio_management",
+        "effective_from": "2025-03-31",
+        "effective_to": None,
+        "assignment_version": 1,
+        "source_system": "LOTUS_FRONT_OFFICE_SEED",
         "source_record_id": "pb_sg_global_bal_001_pm_sg_001_portfolio_manager_v1",
+        "observed_at": "2026-04-10T09:00:00Z",
+        "quality_status": "accepted",
+        "source_product": "PortfolioManagerBookMembership:v1",
         "ingestion_endpoint": "/ingest/portfolio-party-role-assignments",
         "assignment_count": 1,
     }
