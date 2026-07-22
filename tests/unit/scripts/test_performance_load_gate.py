@@ -167,35 +167,81 @@ def test_database_operation_evidence_retains_sorted_bounded_repository_timings(
     assert evidence[1].average_duration_seconds == 0.2
 
 
-def test_repair_replay_completion_uses_processed_transaction_outcome(monkeypatch) -> None:
-    counted: list[tuple[str, str, str]] = []
-    waited: list[tuple[str, str, str, int, int]] = []
+def test_successful_terminal_count_includes_processed_and_duplicate_outcomes(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        transaction_processing_load_support.requests,
+        "get",
+        lambda _url, *, timeout: _MetricsResponse(),
+    )
 
-    def count(*, transaction_processing_base_url: str, stage: str, outcome: str) -> int:
-        counted.append((transaction_processing_base_url, stage, outcome))
+    count = transaction_processing_load_support.successful_transaction_delivery_count(
+        transaction_processing_base_url="http://localhost:8090"
+    )
+
+    assert count == 180
+
+
+def test_wait_for_successful_terminal_count_accepts_safe_duplicate_completion(
+    monkeypatch,
+) -> None:
+    observed_urls: list[str] = []
+
+    def count(*, transaction_processing_base_url: str) -> int:
+        observed_urls.append(transaction_processing_base_url)
+        return 180
+
+    monkeypatch.setattr(
+        transaction_processing_load_support,
+        "successful_transaction_delivery_count",
+        count,
+    )
+    monkeypatch.setattr(
+        transaction_processing_load_support.time,
+        "sleep",
+        lambda _seconds: pytest.fail("completed terminal work must not sleep"),
+    )
+
+    wait_for_terminal_count = (
+        transaction_processing_load_support.wait_for_successful_transaction_deliveries
+    )
+    elapsed = wait_for_terminal_count(
+        transaction_processing_base_url="http://localhost:8090",
+        expected_minimum=180,
+        timeout_seconds=1,
+    )
+
+    assert elapsed is not None
+    assert 0 <= elapsed < 1
+    assert observed_urls == ["http://localhost:8090"]
+
+
+def test_repair_replay_completion_uses_successful_terminal_outcomes(monkeypatch) -> None:
+    counted: list[str] = []
+    waited: list[tuple[str, int, int]] = []
+
+    def count(*, transaction_processing_base_url: str) -> int:
+        counted.append(transaction_processing_base_url)
         return 41
 
     def wait(
         *,
         transaction_processing_base_url: str,
-        stage: str,
-        outcome: str,
         expected_minimum: int,
         timeout_seconds: int,
     ) -> float:
         waited.append(
             (
                 transaction_processing_base_url,
-                stage,
-                outcome,
                 expected_minimum,
                 timeout_seconds,
             )
         )
         return 2.5
 
-    monkeypatch.setattr(performance_load_gate, "_transaction_processing_operation_count", count)
-    monkeypatch.setattr(performance_load_gate, "_wait_for_operation_count", wait)
+    monkeypatch.setattr(performance_load_gate, "_successful_terminal_count", count)
+    monkeypatch.setattr(performance_load_gate, "_wait_for_terminal_count", wait)
 
     baseline = performance_load_gate._repair_replay_completion_count(
         transaction_processing_base_url="http://localhost:8090"
@@ -208,8 +254,8 @@ def test_repair_replay_completion_uses_processed_transaction_outcome(monkeypatch
 
     assert baseline == 41
     assert drain_seconds == 2.5
-    assert counted == [("http://localhost:8090", "transaction", "processed")]
-    assert waited == [("http://localhost:8090", "transaction", "processed", 45, 180)]
+    assert counted == ["http://localhost:8090"]
+    assert waited == [("http://localhost:8090", 45, 180)]
 
 
 def test_transaction_batch_uses_the_seeded_portfolio_and_instrument_namespace() -> None:
