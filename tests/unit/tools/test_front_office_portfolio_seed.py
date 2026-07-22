@@ -16,12 +16,12 @@ from tools.front_office_portfolio_seed import (
     FRONT_OFFICE_EXPECTATION,
     FRONT_OFFICE_GATEWAY_CALLER_HEADERS,
     FRONT_OFFICE_SEED_CONTRACT,
+    FRONT_OFFICE_TERMINAL_QUEUE_STABLE_OBSERVATIONS,
     _cleanup_existing_front_office_seed,
     _collect_front_office_readiness_diagnostics,
     _extract_readiness_summary,
     _extract_support_overview_summary,
     _front_office_analytics_are_fresh,
-    _front_office_background_work,
     _front_office_readiness_blockers,
     _ingest_front_office_core_data,
     _ingest_reference_data,
@@ -1752,17 +1752,6 @@ def test_front_office_seed_verification_counts_projected_transactions(monkeypatc
             200,
             {"performance_end_date": "2026-04-10"},
         ),
-        "http://cp.dev/support/portfolios/P1/overview": (
-            200,
-            {
-                "pending_valuation_jobs": 0,
-                "processing_valuation_jobs": 0,
-                "pending_aggregation_jobs": 14,
-                "processing_aggregation_jobs": 2,
-                "stale_processing_aggregation_jobs": 0,
-                "failed_aggregation_jobs": 0,
-            },
-        ),
         (
             "http://query.dev/portfolios/P1/cashflow-projection"
             "?as_of_date=2026-04-10&horizon_days=30&include_projected=true"
@@ -1802,14 +1791,49 @@ def test_front_office_seed_verification_counts_projected_transactions(monkeypatc
     }
 
     gateway_header_calls: list[dict[str, str]] = []
+    positions_url = "http://query.dev/portfolios/P1/positions?as_of_date=2026-04-10"
+    positions_calls = 0
+    support_overview_url = "http://cp.dev/support/portfolios/P1/overview"
+    support_overview_sequence = [
+        (0, 0),
+        (1, 0),
+        (0, 0),
+        (0, 0),
+        (0, 0),
+    ]
+    support_overview_calls = 0
+    sleep_calls: list[int] = []
 
     def fake_request(method, url, *, payload=None, headers=None):
+        nonlocal positions_calls, support_overview_calls
         requested_urls.append(url)
+        if url == positions_url:
+            positions_calls += 1
+            if positions_calls == 1:
+                raise RuntimeError("positions still starting")
         if url.startswith("http://gateway.dev/"):
             gateway_header_calls.append(headers or {})
+        if url == support_overview_url:
+            pending, processing = support_overview_sequence[support_overview_calls]
+            support_overview_calls += 1
+            return (
+                200,
+                {
+                    "pending_valuation_jobs": 0,
+                    "processing_valuation_jobs": 0,
+                    "pending_aggregation_jobs": pending,
+                    "processing_aggregation_jobs": processing,
+                    "stale_processing_aggregation_jobs": 0,
+                    "failed_aggregation_jobs": 0,
+                },
+            )
         return responses[url]
 
     monkeypatch.setattr("tools.front_office_portfolio_seed._request_json", fake_request)
+    monkeypatch.setattr(
+        "tools.front_office_portfolio_seed.time.sleep",
+        lambda seconds: sleep_calls.append(seconds),
+    )
 
     verification = _verify_front_office_portfolio(
         query_base_url="http://query.dev",
@@ -1836,21 +1860,23 @@ def test_front_office_seed_verification_counts_projected_transactions(monkeypatc
     assert verification["income_types"] == 2
     assert verification["activity_buckets"] == 3
     assert verification["positions_data_quality_status"] == "COMPLETE"
-    assert verification["pending_aggregation_jobs"] == 14
-    assert verification["processing_aggregation_jobs"] == 2
+    assert verification["pending_aggregation_jobs"] == 0
+    assert verification["processing_aggregation_jobs"] == 0
     assert verification["failed_aggregation_jobs"] == 0
     assert verification["advisor_book_governed_membership"] is True
     assert verification["advisor_book_source_evidence_current"] is True
+    assert positions_calls == len(support_overview_sequence) + 1
+    assert support_overview_calls == FRONT_OFFICE_TERMINAL_QUEUE_STABLE_OBSERVATIONS + 2
+    assert sleep_calls == [1] * len(support_overview_sequence)
     assert any("include_projected=true" in url for url in requested_urls)
     assert all("income-summary/query" not in url for url in requested_urls)
     assert all("activity-summary/query" not in url for url in requested_urls)
     assert any("period=EXPLICIT" in url for url in requested_urls)
     assert any("report_start_date=2025-03-31" in url for url in requested_urls)
     assert any("report_end_date=2026-04-10" in url for url in requested_urls)
-    assert gateway_header_calls == [
-        FRONT_OFFICE_GATEWAY_CALLER_HEADERS,
-        FRONT_OFFICE_GATEWAY_CALLER_HEADERS,
-    ]
+    assert gateway_header_calls == [FRONT_OFFICE_GATEWAY_CALLER_HEADERS] * (
+        len(support_overview_sequence) * 2
+    )
 
 
 def test_front_office_readiness_blockers_surface_runtime_gaps() -> None:
@@ -1875,6 +1901,8 @@ def test_front_office_readiness_blockers_surface_runtime_gaps() -> None:
     assert blockers == [
         "cash_data_quality_not_complete",
         "pending_valuation_jobs=3",
+        "pending_aggregation_jobs=2",
+        "processing_aggregation_jobs=1",
         "stale_processing_aggregation_jobs=1",
         "failed_aggregation_jobs=4",
         "gateway_performance_benchmark_missing",
@@ -1885,16 +1913,28 @@ def test_front_office_readiness_blockers_surface_runtime_gaps() -> None:
     ]
 
 
-def test_front_office_background_work_reports_non_blocking_aggregation_drain() -> None:
-    background = _front_office_background_work(
+def test_front_office_readiness_blocks_open_aggregation_work() -> None:
+    blockers = _front_office_readiness_blockers(
         {
+            "positions_data_quality_status": "COMPLETE",
+            "cash_data_quality_status": "COMPLETE",
+            "pending_valuation_jobs": 0,
+            "processing_valuation_jobs": 0,
             "pending_aggregation_jobs": 12,
             "processing_aggregation_jobs": 3,
+            "stale_processing_aggregation_jobs": 0,
             "failed_aggregation_jobs": 0,
-        }
+            "benchmark_code": "BMK-1",
+            "analytics_performance_end_date": "2026-04-10",
+            "performance_report_end_date": "2026-04-10",
+            "return_path_latest_available_date": "2026-04-10",
+            "advisor_book_governed_membership": True,
+            "advisor_book_source_evidence_current": True,
+        },
+        expected_end_date="2026-04-10",
     )
 
-    assert background == [
+    assert blockers == [
         "pending_aggregation_jobs=12",
         "processing_aggregation_jobs=3",
     ]

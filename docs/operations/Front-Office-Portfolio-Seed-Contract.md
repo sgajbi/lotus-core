@@ -441,16 +441,17 @@ The seed tool must validate at least:
 - portfolio timeseries non-empty
 - gateway performance summary non-empty
 - gateway performance details non-empty
+- valuation and aggregation queues have no pending, processing, stale-processing, or failed work
+- the terminal all-zero queue state is observed three consecutive times at the configured polling
+  interval; any reopened work resets the stability fence
 
-## Current Gap
+Validation polling must use `--poll-interval-seconds`; it must not busy-loop against Core, Gateway,
+or downstream analytics while work is converging. Pending or processing aggregation is readiness
+work, not a non-blocking success diagnostic. The stability fence is inside the existing
+`--wait-seconds` budget and does not extend or relax that deadline.
 
-Today we have:
+## Current Posture
 
-- a manual portfolio bootstrap
-- a separate manual benchmark/performance patch seed
-
-That is enough to unblock narrow UI development, but not enough to provide one
-realistic front-office example covering the product surface coherently.
-
-This contract exists to close that gap with one governed seed scenario rather
-than more ad hoc local fixes.
+`tools/front_office_portfolio_seed.py` implements the governed coherent scenario. The separate
+manual benchmark/performance tool remains a narrow repair path and is not evidence that this
+contract passed. Canonical certification requires the complete validation contract above.

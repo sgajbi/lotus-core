@@ -79,6 +79,7 @@ FRONT_OFFICE_GATEWAY_CALLER_HEADERS = {
     "X-Caller-Capabilities": "advisor.book.read",
     "X-Correlation-Id": "canonical-front-office-seed",
 }
+FRONT_OFFICE_TERMINAL_QUEUE_STABLE_OBSERVATIONS = 3
 FRONT_OFFICE_RESEED_VOLATILE_EVENT_FENCE_SERVICES = (
     "persistence-business-dates",
     "persistence-fx-rates",
@@ -2263,6 +2264,8 @@ def _front_office_readiness_blockers(
     for field_name in (
         "pending_valuation_jobs",
         "processing_valuation_jobs",
+        "pending_aggregation_jobs",
+        "processing_aggregation_jobs",
         "stale_processing_aggregation_jobs",
         "failed_aggregation_jobs",
     ):
@@ -2294,18 +2297,6 @@ def _front_office_readiness_blockers(
     if observation.get("advisor_book_source_evidence_current") is not True:
         blockers.append("advisor_book_source_evidence_not_current")
     return blockers
-
-
-def _front_office_background_work(observation: dict[str, Any]) -> list[str]:
-    background: list[str] = []
-    for field_name in (
-        "pending_aggregation_jobs",
-        "processing_aggregation_jobs",
-    ):
-        job_count = int(observation.get(field_name) or 0)
-        if job_count:
-            background.append(f"{field_name}={job_count}")
-    return background
 
 
 def _extract_readiness_summary(readiness_payload: dict[str, Any]) -> dict[str, Any]:
@@ -2545,6 +2536,7 @@ def _verify_front_office_portfolio(
     last_observation: dict[str, Any] | None = None
     last_logged_blockers: tuple[str, ...] | None = None
     last_logged_at: datetime | None = None
+    stable_terminal_queue_observations = 0
     while datetime.now(tz=UTC) < deadline:
         try:
             _, positions_payload = _request_json(
@@ -2607,6 +2599,8 @@ def _verify_front_office_portfolio(
             )
         except RuntimeError as exc:
             LOGGER.info("Verification still waiting on downstream services: %s", exc)
+            stable_terminal_queue_observations = 0
+            time.sleep(poll_interval_seconds)
             continue
 
         positions = positions_payload.get("positions") or []
@@ -2691,6 +2685,8 @@ def _verify_front_office_portfolio(
             and cash_payload.get("data_quality_status") == "COMPLETE"
             and int(support_overview.get("pending_valuation_jobs") or 0) == 0
             and int(support_overview.get("processing_valuation_jobs") or 0) == 0
+            and int(support_overview.get("pending_aggregation_jobs") or 0) == 0
+            and int(support_overview.get("processing_aggregation_jobs") or 0) == 0
             and int(support_overview.get("stale_processing_aggregation_jobs") or 0) == 0
             and int(support_overview.get("failed_aggregation_jobs") or 0) == 0
             and benchmark_assignment.get("benchmark_id")
@@ -2703,6 +2699,11 @@ def _verify_front_office_portfolio(
             and governed_advisor_book_membership is not None
             and (advisor_book.get("provenance") or {}).get("source_evidence_current") is True
         ):
+            stable_terminal_queue_observations += 1
+        else:
+            stable_terminal_queue_observations = 0
+
+        if stable_terminal_queue_observations >= FRONT_OFFICE_TERMINAL_QUEUE_STABLE_OBSERVATIONS:
             return {
                 "portfolio_id": expected.portfolio_id,
                 "positions": len(positions),
@@ -2740,7 +2741,6 @@ def _verify_front_office_portfolio(
             last_observation,
             expected_end_date=end_date,
         )
-        background_work = _front_office_background_work(last_observation)
         blocker_categories = tuple(blocker.split("=", maxsplit=1)[0] for blocker in blockers)
         logged_blocker_categories = (
             tuple(blocker.split("=", maxsplit=1)[0] for blocker in last_logged_blockers)
@@ -2755,14 +2755,16 @@ def _verify_front_office_portfolio(
         ):
             LOGGER.info(
                 "Front-office verification waiting on readiness for %s: blockers=%s "
-                "background_work=%s observation=%s",
+                "terminal_queue_stability=%s/%s observation=%s",
                 expected.portfolio_id,
                 blockers,
-                background_work,
+                stable_terminal_queue_observations,
+                FRONT_OFFICE_TERMINAL_QUEUE_STABLE_OBSERVATIONS,
                 last_observation,
             )
             last_logged_blockers = tuple(blockers)
             last_logged_at = now
+        time.sleep(poll_interval_seconds)
 
     readiness_diagnostics = _collect_front_office_readiness_diagnostics(
         query_control_plane_base_url=query_control_plane_base_url,
