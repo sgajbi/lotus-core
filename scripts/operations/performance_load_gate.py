@@ -40,13 +40,13 @@ from scripts.operations.transaction_processing_load_support import (  # noqa: E4
     seed_load_context as _seed_load_context,
 )
 from scripts.operations.transaction_processing_load_support import (  # noqa: E402
-    transaction_processing_operation_count as _transaction_processing_operation_count,
+    successful_transaction_delivery_count as _successful_terminal_count,
+)
+from scripts.operations.transaction_processing_load_support import (  # noqa: E402
+    wait_for_successful_transaction_deliveries as _wait_for_terminal_count,
 )
 from scripts.operations.transaction_processing_load_support import (  # noqa: E402
     wait_for_transaction_processing as _wait_for_transaction_processing,
-)
-from scripts.operations.transaction_processing_load_support import (  # noqa: E402
-    wait_for_transaction_processing_operation_count as _wait_for_operation_count,
 )
 from scripts.quality.ci_service_sets import PERFORMANCE_GATE_SERVICES  # noqa: E402
 from tests.test_support.managed_compose_run import (  # noqa: E402
@@ -148,11 +148,9 @@ def _trigger_replay_storm(
 
 
 def _repair_replay_completion_count(*, transaction_processing_base_url: str) -> int:
-    """Return completed canonical repairs, which finish as processed transactions."""
-    return _transaction_processing_operation_count(
-        transaction_processing_base_url=transaction_processing_base_url,
-        stage="transaction",
-        outcome="processed",
+    """Return repair deliveries that completed or safely deduplicated."""
+    return _successful_terminal_count(
+        transaction_processing_base_url=transaction_processing_base_url
     )
 
 
@@ -162,11 +160,9 @@ def _wait_for_repair_replay_completion(
     expected_minimum: int,
     timeout_seconds: int,
 ) -> float | None:
-    """Wait until canonical repair deliveries complete the unified processing flow."""
-    return _wait_for_operation_count(
+    """Wait until canonical repair deliveries reach successful terminal outcomes."""
+    return _wait_for_terminal_count(
         transaction_processing_base_url=transaction_processing_base_url,
-        stage="transaction",
-        outcome="processed",
         expected_minimum=expected_minimum,
         timeout_seconds=timeout_seconds,
     )
