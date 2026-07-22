@@ -122,16 +122,27 @@ def _portfolio_filters(
     if booking_center_code:
         filters.append(Portfolio.booking_center_code == booking_center_code)
     if portfolio_types:
-        filters.append(Portfolio.portfolio_type.in_(portfolio_types))
+        filters.append(Portfolio.portfolio_type.in_(_storage_case_variants(portfolio_types)))
     if not include_inactive:
         filters.extend(
             (
                 Portfolio.open_date <= as_of_date,
                 or_(Portfolio.close_date.is_(None), Portfolio.close_date >= as_of_date),
-                Portfolio.status == "ACTIVE",
+                Portfolio.status.in_(_storage_case_variants(("ACTIVE",))),
             )
         )
     return filters
+
+
+def _storage_case_variants(values: tuple[str, ...]) -> tuple[str, ...]:
+    """Return known persisted enum casings without wrapping indexed columns."""
+
+    variants: list[str] = []
+    for value in values:
+        normalized = value.strip().upper()
+        if normalized:
+            variants.extend((normalized, normalized.lower(), normalized.title()))
+    return tuple(dict.fromkeys(variants))
 
 
 def _portfolio_manager_book_record(
