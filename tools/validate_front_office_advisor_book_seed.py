@@ -15,6 +15,11 @@ from typing import Any
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
+PORTFOLIO_COMMON_ROOT = REPO_ROOT / "src" / "libs" / "portfolio-common"
+if str(PORTFOLIO_COMMON_ROOT) not in sys.path:
+    sys.path.insert(0, str(PORTFOLIO_COMMON_ROOT))
+
+from portfolio_common.source_data_products import get_source_data_product  # noqa: E402
 
 from tools.front_office_portfolio_seed import (  # noqa: E402
     FRONT_OFFICE_SEED_CONTRACT,
@@ -23,6 +28,7 @@ from tools.front_office_portfolio_seed import (  # noqa: E402
 )
 
 ADVISOR_BOOK_INGESTION_ENDPOINT = "/ingest/portfolio-party-role-assignments"
+ADVISOR_BOOK_SOURCE_PRODUCT_NAME = "PortfolioManagerBookMembership"
 
 
 def _expected_assignment() -> dict[str, Any]:
@@ -66,6 +72,15 @@ def validate_advisor_book_seed() -> dict[str, Any]:
             "canonical ingestion plan must persist the governed advisor-book assignment"
         )
 
+    source_product = get_source_data_product(ADVISOR_BOOK_SOURCE_PRODUCT_NAME)
+    executable_source_product = f"{source_product.product_name}:{source_product.product_version}"
+    if contract.advisor_book_source_product != executable_source_product:
+        raise ValueError(
+            "canonical advisor-book source product must match the executable Core registry: "
+            f"expected {executable_source_product}, observed "
+            f"{contract.advisor_book_source_product}"
+        )
+
     return {
         "status": "pass",
         "portfolio_id": expected["portfolio_id"],
@@ -80,7 +95,7 @@ def validate_advisor_book_seed() -> dict[str, Any]:
         "source_record_id": expected["source_record_id"],
         "observed_at": expected["observed_at"],
         "quality_status": expected["quality_status"],
-        "source_product": contract.advisor_book_source_product,
+        "source_product": executable_source_product,
         "ingestion_endpoint": ADVISOR_BOOK_INGESTION_ENDPOINT,
         "assignment_count": 1,
     }

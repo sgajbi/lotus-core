@@ -1,11 +1,13 @@
 import subprocess
 import sys
+from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
 import pytest
 
 import tools.front_office_seed_contract as front_office_seed_contract_module
+import tools.validate_front_office_advisor_book_seed as advisor_book_seed_validator
 from tools.front_office_portfolio_seed import (
     DEFAULT_BENCHMARK_ID,
     DEFAULT_DPM_MODEL_PORTFOLIO_ID,
@@ -1306,6 +1308,29 @@ def test_executable_advisor_book_seed_validator_proves_runtime_ingestion_plan() 
         "ingestion_endpoint": "/ingest/portfolio-party-role-assignments",
         "assignment_count": 1,
     }
+
+
+def test_executable_advisor_book_seed_validator_rejects_source_product_registry_drift(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        advisor_book_seed_validator,
+        "FRONT_OFFICE_SEED_CONTRACT",
+        replace(
+            advisor_book_seed_validator.FRONT_OFFICE_SEED_CONTRACT,
+            advisor_book_source_product="PortfolioManagerBookMembership:v2",
+        ),
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            "canonical advisor-book source product must match the executable Core registry: "
+            "expected PortfolioManagerBookMembership:v1, observed "
+            "PortfolioManagerBookMembership:v2"
+        ),
+    ):
+        advisor_book_seed_validator.validate_advisor_book_seed()
 
 
 def test_front_office_seed_reprocesses_all_seed_transactions(monkeypatch):
