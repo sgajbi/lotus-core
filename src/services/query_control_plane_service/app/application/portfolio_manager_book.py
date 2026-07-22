@@ -87,6 +87,8 @@ def _membership_response(
     }
     data_quality_status = "ACCEPTED" if members else "MISSING"
     latest_evidence_timestamp = _latest_evidence_timestamp(records)
+    source_evidence_current = bool(members) and latest_evidence_timestamp is not None
+    freshness_status = "CURRENT" if source_evidence_current else "UNAVAILABLE"
     content_hash = stable_content_hash(
         {
             "product_name": "PortfolioManagerBookMembership",
@@ -97,6 +99,8 @@ def _membership_response(
             "members": [member.model_dump(mode="json") for member in members],
             "data_quality_status": data_quality_status,
             "latest_evidence_timestamp": latest_evidence_timestamp,
+            "source_evidence_current": source_evidence_current,
+            "freshness_status": freshness_status,
             "supportability": supportability.model_dump(mode="json"),
             "lineage": lineage,
         }
@@ -114,6 +118,8 @@ def _membership_response(
                 generated_at=generated_at,
                 data_quality_status=data_quality_status,
                 latest_evidence_timestamp=latest_evidence_timestamp,
+                source_evidence_current=source_evidence_current,
+                freshness_status=freshness_status,
                 snapshot_id=(f"pm_book_membership:{content_hash.removeprefix('sha256:')[:24]}"),
                 content_hash=content_hash,
                 use_content_hash_as_source_batch_fingerprint=True,
