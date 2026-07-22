@@ -6,9 +6,11 @@ Locally implementation-complete on `feat/dividend-withholding-economics`, based 
 `b49f05d127ad4d9a1d5660753ac28dfa13fa1bc9`. The runtime/contracts/tests are preserved in signed
 commit `27a0ca044188c53826416b6b6a1ff004b94f1975`; self-review hardening is signed through
 `260779b7b72275c53b46d46ae7d37b9246b0a684`. Agent 1's application-boundary review finding is
-fixed forward in this slice. Final review, protected CI, merge, exact-main validation, and wiki
-publication remain pending. Issue #448 remains open because this is only its source-recorded
-withholding-amount slice.
+fixed in signed commit `ab7504f4c755c9e7bde81a8c19ad7933ed88cc64`; the same-pattern
+transformed/split-output hardening is signed in
+`227986d4d11a562cee7981e7e685403b54ebf44e`. Final review, protected CI, merge, exact-main
+validation, and wiki publication remain pending. Issue #448 remains open because this is only its
+source-recorded withholding-amount slice.
 
 ## Objective and bounded scope
 
