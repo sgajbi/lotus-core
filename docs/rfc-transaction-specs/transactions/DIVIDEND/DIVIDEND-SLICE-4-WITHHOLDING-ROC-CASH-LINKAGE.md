@@ -5,7 +5,10 @@ Slice 4 implements the dual cash-entry mode requirement for `DIVIDEND` without i
 1. `AUTO_GENERATE` mode: service-managed cashflow generation remains the default path.
 2. `UPSTREAM_PROVIDED` mode: upstream cash entry is authoritative, and calculator flow enforces explicit linkage.
 
-This slice focuses on deterministic linkage semantics and replay-safe behavior. Withholding/ROC decomposition remains reserved for subsequent extension on top of this linkage contract.
+This slice originally focused on deterministic linkage semantics and replay-safe behavior. The
+subsequent bounded #448 extension now consumes the existing source-recorded
+`withholding_tax_amount` field for current DIVIDEND settlement. ROC decomposition remains reserved
+for later policy work on top of this linkage contract.
 
 ## Implemented Changes
 1. Canonical mode helpers in `portfolio_transaction_processing_service.app.domain.transaction.settlement.cash_entry`:
@@ -29,6 +32,11 @@ This slice focuses on deterministic linkage semantics and replay-safe behavior. 
  - `transactions.cash_entry_mode`
  - `transactions.external_cash_transaction_id`
  - index on `external_cash_transaction_id`
+7. Current-booking settlement now derives cash as
+   `gross_transaction_amount - withholding_tax_amount - resolved transaction fee`.
+   Negative withholding, withholding above gross, and non-positive resulting cash fail closed with
+   `DIVIDEND_014`, `DIVIDEND_015`, and `DIVIDEND_013` reason codes respectively. Existing nullable
+   event/database/query fields are reused; this extension adds no migration or public field.
 
 ## Deterministic Behavior Contract
 1. Missing/unknown mode input normalizes to `AUTO_GENERATE`.
@@ -53,6 +61,9 @@ This slice focuses on deterministic linkage semantics and replay-safe behavior. 
  - mode/link fields propagated into event + DTO + persistence contracts for traceability.
 
 ## Residual Gaps
-1. Withholding-tax and ROC component decomposition fields/identities are not introduced in this slice.
-2. Reconciliation reporting surfaces for full income decomposition remain for later slice work.
+1. Source-recorded withholding amount is preserved and consumed, but withholding-rate derivation,
+   tolerance policy, other receipt deductions, and a separately supplied net-dividend identity are
+   not introduced in this slice.
+2. ROC component identity, classification, and basis-reduction policy remain unimplemented.
+3. Reconciliation reporting surfaces for full income/ROC decomposition remain for later work.
 

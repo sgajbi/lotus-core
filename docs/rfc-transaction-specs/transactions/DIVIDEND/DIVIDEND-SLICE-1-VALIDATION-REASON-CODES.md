@@ -16,10 +16,14 @@ This document defines the initial DIVIDEND validation reason-code catalog introd
 | `DIVIDEND_010_MISSING_POLICY_METADATA` | `calculation_policy_id` | Strict mode requires policy id and version. |
 | `DIVIDEND_011_MISSING_EXTERNAL_CASH_LINK` | `external_cash_transaction_id` | Upstream-provided cash mode requires the linked cash transaction. |
 | `DIVIDEND_012_MISSING_SETTLEMENT_CASH_ACCOUNT` | `settlement_cash_account_id` | Auto-generated cash mode requires a settlement cash account. |
-| `DIVIDEND_013_NON_POSITIVE_NET_SETTLEMENT` | `trade_fee` | Resolved transaction fees leave zero or negative settlement proceeds. |
+| `DIVIDEND_013_NON_POSITIVE_NET_SETTLEMENT` | `trade_fee` or `withholding_tax_amount` | Recorded withholding tax and resolved transaction fees leave zero or negative settlement proceeds. |
+| `DIVIDEND_014_NEGATIVE_WITHHOLDING_TAX` | `withholding_tax_amount` | Recorded withholding tax is negative. This is a domain defense for direct adapters; governed ingestion schemas reject negative amounts before publishing. |
+| `DIVIDEND_015_WITHHOLDING_EXCEEDS_GROSS_AMOUNT` | `withholding_tax_amount` | Recorded withholding tax exceeds the gross dividend amount. |
 
 ## Notes
 
 - Slice 1 introduces this catalog and validator foundation.
-- Runtime processing rejects `DIVIDEND_013_NON_POSITIVE_NET_SETTLEMENT` before financial writes.
+- Runtime processing rejects `DIVIDEND_013_NON_POSITIVE_NET_SETTLEMENT`,
+  `DIVIDEND_014_NEGATIVE_WITHHOLDING_TAX`, and
+  `DIVIDEND_015_WITHHOLDING_EXCEEDS_GROSS_AMOUNT` before financial writes.
 - Strict mode is currently available through domain validator invocation (`strict_metadata=True`).

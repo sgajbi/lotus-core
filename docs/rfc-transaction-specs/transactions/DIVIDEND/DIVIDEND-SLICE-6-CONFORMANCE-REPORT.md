@@ -13,7 +13,7 @@ This report maps RFC-DIVIDEND-01 requirements to implementation evidence deliver
 | Section 10 dual cash-entry mode | Covered (naming normalization) | `AUTO_GENERATE`/`UPSTREAM_PROVIDED` mode support, external-link enforcement, skip-auto-cashflow path |
 | Section 13 query/output visibility over existing surfaces | Covered | transaction query DTO exposes mode/linkage fields; router/service tests |
 | Section 16 required test matrix (validation/calc/cash/query/idempotency) | Partially Covered | dedicated `transaction-dividend-contract` suite + targeted unit/integration tests |
-| Section 11 withholding-tax decomposition | Partially Covered | gross amount and cash linkage handled; dedicated withholding decomposition pending |
+| Section 11 withholding-tax decomposition | Partially Covered | existing source-recorded withholding amount is preserved and reduces current-booking settlement cash; rate derivation, other deductions, supplied-net identity, and jurisdiction policy remain pending |
 | Section 11 return-of-capital separation and basis reduction | Not Covered | ROC decomposition and basis-reduction policy path pending |
 | Section 12 advanced timing dimensions (`EX_DATE`, `RECORD_DATE`, etc.) | Not Covered | current implementation remains transaction/settlement-date centric |
 
@@ -32,7 +32,9 @@ This report maps RFC-DIVIDEND-01 requirements to implementation evidence deliver
 3. `python -m ruff check scripts/quality/test_manifest.py tests/unit/transaction_specs/test_dividend_slice0_characterization.py tests/unit/services/portfolio_transaction_processing_service/domain/transaction/validation/test_income.py tests/unit/services/portfolio_transaction_processing_service/domain/transaction/test_booking_metadata.py tests/unit/services/portfolio_transaction_processing_service/domain/transaction/settlement/test_cash_entry.py tests/unit/services/portfolio_transaction_processing_service/application/cashflow_processing/test_use_case.py tests/integration/services/query_service/test_transactions_router.py --ignore E501`
 
 ## Residual Gaps (Explicit)
-1. Withholding-tax canonical decomposition fields and reconciliation identities are not yet implemented end-to-end.
+1. Source-recorded withholding amount is consumed by settlement and remains query-visible, but
+   withholding-rate derivation/tolerance, other receipt deductions, supplied-net identity, and
+   jurisdiction-specific policy are not implemented.
 2. Return-of-capital decomposition and cost-basis-reduction policy behavior are not yet implemented.
 3. Advanced timing policy dimensions (`EX_DATE`/`RECORD_DATE`/`PAYMENT_DATE` separation) are not yet implemented.
 4. Late-link reconciliation SLA workflows for external cash-link arrival are only partially represented.

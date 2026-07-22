@@ -3057,6 +3057,16 @@ Most relevant current governance:
      for the configured quiet interval before destructive truncation; `None` is not permission to
      bypass the fence. Do not replace this with whole-table timestamp history or weaker readiness
      timeouts.
+219. Current-booking DIVIDEND settlement consumes the existing source-recorded
+     `withholding_tax_amount` as separate evidence and computes cash as gross dividend less
+     withholding less the resolved transaction fee. Null/zero withholding preserves the prior
+     gross-minus-fee result. Negative withholding, withholding above gross, and non-positive
+     resulting settlement fail closed with stable `DIVIDEND_014`, `DIVIDEND_015`, and
+     `DIVIDEND_013` reason codes before derived writes. Generated cash legs and product cashflows
+     consume the same transaction-domain result. Historical rebuild does not silently restate
+     accepted rows. This does not implement withholding-rate derivation, other receipt deductions,
+     a supplied-net identity, jurisdiction-specific tax policy, return-of-capital, basis reduction,
+     or advanced timing; keep those residuals under #448.
 
 ## Context Maintenance Rule
 
