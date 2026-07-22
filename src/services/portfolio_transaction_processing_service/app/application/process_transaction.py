@@ -209,10 +209,13 @@ class ProcessTransactionUseCase:
                 position_results,
             )
             cashflow_results = []
-            current_transaction_key = (
-                transaction.portfolio_id,
-                transaction.transaction_id,
-            )
+            current_transaction_keys = {
+                (
+                    processed_transaction.portfolio_id,
+                    processed_transaction.transaction_id,
+                )
+                for processed_transaction in cost_result.processed_transactions
+            }
             historical_rebuild_cashflow_keys = {
                 (
                     rebuilt_transaction.portfolio_id,
@@ -224,7 +227,7 @@ class ProcessTransactionUseCase:
                     rebuilt_transaction.portfolio_id,
                     rebuilt_transaction.transaction_id,
                 )
-                != current_transaction_key
+                not in current_transaction_keys
             }
             for cashflow_transaction in financial_effect_transactions:
                 with self._observer.observe(TransactionProcessingOperation.CASHFLOW):

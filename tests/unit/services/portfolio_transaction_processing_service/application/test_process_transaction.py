@@ -322,7 +322,7 @@ async def test_use_case_processes_cost_cashflow_and_each_position_leg_atomically
 async def test_use_case_stages_cashflows_from_inline_position_rebuild_epoch() -> None:
     calls: list[str] = []
     incoming = replace(
-        _transaction("TX-BACKDATED"),
+        _transaction("TX-BACKDATED-COST-OUTPUT"),
         transaction_type="DIVIDEND",
         quantity=Decimal("0"),
         price=Decimal("0"),
@@ -348,24 +348,25 @@ async def test_use_case_stages_cashflows_from_inline_position_rebuild_epoch() ->
             incoming.transaction_id: (rebuilt_incoming, rebuilt_suffix),
         },
     )
+    command_transaction = replace(incoming, transaction_id="TX-BACKDATED-COMMAND")
 
     result = await ProcessTransactionUseCase(
         lambda: unit_of_work,
         observer=_RecordingObserver(),
-    ).execute(replace(_command(), transaction=incoming))
+    ).execute(replace(_command(), transaction=command_transaction))
 
     assert calls == [
         "enter",
         "idempotency",
-        "cost:TX-BACKDATED",
-        "position:TX-BACKDATED",
-        "cashflow:TX-BACKDATED:3",
+        "cost:TX-BACKDATED-COMMAND",
+        "position:TX-BACKDATED-COST-OUTPUT",
+        "cashflow:TX-BACKDATED-COST-OUTPUT:3",
         "cashflow:TX-LATER:3",
-        "readiness:TX-BACKDATED:3",
+        "readiness:TX-BACKDATED-COST-OUTPUT:3",
         "readiness:TX-LATER:3",
         "commit",
     ]
-    assert result.processed_transaction_ids == ("TX-BACKDATED",)
+    assert result.processed_transaction_ids == ("TX-BACKDATED-COST-OUTPUT",)
     assert result.cashflow_record_count == 2
     assert result.position_record_count == 1
     assert unit_of_work.cashflow.calculation_contexts == [

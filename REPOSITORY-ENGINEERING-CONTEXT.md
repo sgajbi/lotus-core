@@ -3064,8 +3064,9 @@ Most relevant current governance:
      resulting settlement fail closed with stable `DIVIDEND_014`, `DIVIDEND_015`, and
      `DIVIDEND_013` reason codes before derived writes. Generated cash legs and product cashflows
      consume the same transaction-domain result. When current acceptance triggers an inline
-     rebuild, the current command retains current-booking economics; only previously accepted
-     suffix rows use the explicit historical-rebuild context and retain legacy arithmetic. This
+     rebuild, every output produced by the current cost-processing step retains current-booking
+     economics, including transformed or split identities; only previously accepted suffix rows
+     use the explicit historical-rebuild context and retain legacy arithmetic. This
      does not implement withholding-rate derivation, other receipt deductions,
      a supplied-net identity, jurisdiction-specific tax policy, return-of-capital, basis reduction,
      or advanced timing; keep those residuals under #448.
