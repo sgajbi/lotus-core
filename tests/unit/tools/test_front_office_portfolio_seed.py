@@ -882,6 +882,7 @@ def test_portfolio_seed_cleanup_sql_resets_only_volatile_replay_fences():
     assert "'persistence-market-prices'" in sql
     assert "'persistence-portfolios'" in sql
     assert "'persistence-transactions'" in sql
+    assert "'portfolio-transaction-processing'" in sql
     assert "'cost-calculator'" in sql
     assert "'position-calculator'" in sql
     assert "'cashflow-calculator'" in sql

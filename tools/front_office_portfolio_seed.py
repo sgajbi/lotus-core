@@ -86,6 +86,7 @@ FRONT_OFFICE_RESEED_VOLATILE_EVENT_FENCE_SERVICES = (
     "persistence-market-prices",
     "persistence-portfolios",
     "persistence-transactions",
+    "portfolio-transaction-processing",
     "cost-calculator",
     "position-calculator",
     "cashflow-calculator",
@@ -196,8 +197,10 @@ def build_portfolio_seed_cleanup_sql(*, portfolio_id: str) -> str:
     Build the destructive local reseed cleanup SQL for the canonical front-office seed.
 
     This cleanup stays scoped to portfolio-owned rows and known local replay fences. The Docker
-    local stack may retain Postgres idempotency rows while Kafka offsets are reset or reused; clear
-    only the canonical seed topic/service fences that can block a deterministic front-office reseed.
+    local stack may retain Postgres idempotency rows while Kafka offsets are reset or reused. The
+    transaction-processing consumer claims the physical topic/partition/offset identity, so stale
+    rows from another demo portfolio can collide before portfolio-scoped cleanup applies. Clear only
+    the canonical seed topic/service fences that can block a deterministic front-office reseed.
     """
     return "\n".join(
         [
