@@ -135,6 +135,10 @@ remains #521.
   source-product/version/effective-date lineage, role, or scope. The source-owned validator now
   emits the complete persisted assignment identity plus canonical `as_of_date` and governed source
   product; Platform compares every field to its own contract-derived expectation.
+- exact-head Core review then rejected source-product evidence that merely echoed the Platform
+  contract. The validator now resolves `PortfolioManagerBookMembership:v1` from Core's executable
+  source-data-product registry, refuses mismatched contract identity before returning `pass`, and
+  has a regression for a drifted `v2` declaration.
 
 Local acceptance is complete. PR CI, merge, exact-main validation, wiki publication, and verified
 issue closure remain required before #513 is done.
