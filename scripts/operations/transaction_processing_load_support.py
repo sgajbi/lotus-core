@@ -20,7 +20,6 @@ _COST_RECALCULATION_DURATION_METRIC = "recalculation_duration_seconds"
 _COST_RECALCULATION_DEPTH_METRIC = "recalculation_depth"
 _COST_RESTORED_OPEN_LOTS_METRIC = "cost_processing_open_lots_restored"
 _DATABASE_OPERATION_LATENCY_METRIC = "db_operation_latency_seconds"
-_SUCCESSFUL_TRANSACTION_TERMINAL_OUTCOMES = frozenset({"processed", "duplicate"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -414,26 +413,6 @@ def transaction_processing_operation_evidence(
     return evidence
 
 
-def successful_transaction_delivery_count(
-    *,
-    transaction_processing_base_url: str,
-) -> int:
-    """Count transaction deliveries that reached a successful terminal outcome.
-
-    A replay delivery is complete when it was processed or when at-least-once
-    delivery was safely identified as a duplicate. Both outcomes allow the
-    consumer offset to advance; rejected and failed outcomes remain excluded.
-    """
-
-    return sum(
-        item.operation_count
-        for item in transaction_processing_operation_evidence(
-            transaction_processing_base_url=transaction_processing_base_url
-        )
-        if item.stage == "transaction" and item.outcome in _SUCCESSFUL_TRANSACTION_TERMINAL_OUTCOMES
-    )
-
-
 def cost_processing_runtime_evidence(
     *,
     transaction_processing_base_url: str,
@@ -583,28 +562,6 @@ def wait_for_transaction_processing_operation_count(
                 transaction_processing_base_url=transaction_processing_base_url,
                 stage=stage,
                 outcome=outcome,
-            )
-            >= expected_minimum
-        ):
-            return round(time.time() - started, 3)
-        time.sleep(1)
-    return None
-
-
-def wait_for_successful_transaction_deliveries(
-    *,
-    transaction_processing_base_url: str,
-    expected_minimum: int,
-    timeout_seconds: int,
-) -> float | None:
-    """Wait for processed plus safely deduplicated transaction deliveries."""
-
-    started = time.time()
-    deadline = started + timeout_seconds
-    while time.time() < deadline:
-        if (
-            successful_transaction_delivery_count(
-                transaction_processing_base_url=transaction_processing_base_url
             )
             >= expected_minimum
         ):
