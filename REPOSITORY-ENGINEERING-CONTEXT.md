@@ -3005,12 +3005,14 @@ Most relevant current governance:
      status; older and identical revisions are no-ops, and contradictory outcomes for one revision
      fail closed. Do not substitute Kafka arrival order, timestamps, debounce, or severity merging
      for this database-backed generation.
-216. Transaction replay load gates must treat both `transaction/processed` and
-     `transaction/duplicate` as successful terminal delivery outcomes. A safely deduplicated
-     at-least-once delivery permits its Kafka offset to advance and is not unfinished work.
-     Rejected and failed outcomes remain excluded. Collect the closed successful set from one
-     bounded metric scrape, preserve the governed replay volume and timeout, and use heavy PR/main
-     runtime lanes to prove the drain. Concurrent Kafka consumers must retain the configured idle
+216. Canonical repair replay load gates issue requests that intentionally complete the unified
+     financial flow. Their request-count threshold must use the incremental
+     `stage="transaction",outcome="processed"` count. A global `transaction/duplicate` count cannot
+     satisfy that threshold because unrelated at-least-once redelivery could mask a missing repair;
+     duplicate evidence is valid only when the gate is explicitly testing ordinary duplicate
+     delivery or can correlate the evidence to each issued request. Preserve the governed replay
+     volume and timeout, and use heavy PR/main runtime lanes to prove the drain. Concurrent Kafka
+     consumers must retain the configured idle
      poll timeout while bounding polls to 100 milliseconds whenever processing tasks are active;
      otherwise a paused busy partition can add the full idle timeout between ordered messages even
      after the prior task completed. This scheduling rule does not relax per-partition ordering,
