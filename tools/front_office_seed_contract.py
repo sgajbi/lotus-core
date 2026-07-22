@@ -19,6 +19,14 @@ class FrontOfficeSeedContract:
     portfolio_id: str
     benchmark_id: str
     advisor_id: str
+    portfolio_manager_id: str
+    advisor_book_role_type: str
+    advisor_book_role_scope: str
+    advisor_book_assignment_effective_from: str
+    advisor_book_assignment_version: int
+    advisor_book_source_system: str
+    advisor_book_source_record_id: str
+    advisor_book_quality_status: str
     canonical_as_of_date: str
     benchmark_start_date: str
     seed_start_date: str
@@ -69,6 +77,14 @@ def _build_fallback_contract() -> FrontOfficeSeedContract:
         portfolio_id="PB_SG_GLOBAL_BAL_001",
         benchmark_id="BMK_PB_GLOBAL_BALANCED_60_40",
         advisor_id="advisor_sg_001",
+        portfolio_manager_id="PM_SG_001",
+        advisor_book_role_type="portfolio_manager",
+        advisor_book_role_scope="portfolio_management",
+        advisor_book_assignment_effective_from="2025-03-31",
+        advisor_book_assignment_version=1,
+        advisor_book_source_system="LOTUS_FRONT_OFFICE_SEED",
+        advisor_book_source_record_id=("pb_sg_global_bal_001_pm_sg_001_portfolio_manager_v1"),
+        advisor_book_quality_status="accepted",
         canonical_as_of_date="2026-04-10",
         benchmark_start_date="2025-01-06",
         seed_start_date="2025-03-31",
@@ -95,11 +111,27 @@ def _to_seed_contract(
     date_policy = contract_payload["date_policy"]
     thresholds = invariant_payload["minimum_thresholds"]
     advisor_cockpit = contract_payload.get("advisor_cockpit", {})
+    advisor_book = contract_payload["advisor_book"]
+    effective_from_policy = advisor_book["assignment_effective_from_policy"]
+    if effective_from_policy != "date_policy.seed_start_date":
+        raise ValueError(
+            "advisor_book.assignment_effective_from_policy must be date_policy.seed_start_date"
+        )
+    if advisor_book["portfolio_id"] != portfolio["portfolio_id"]:
+        raise ValueError("advisor_book.portfolio_id must match portfolio.portfolio_id")
 
     return FrontOfficeSeedContract(
         portfolio_id=portfolio["portfolio_id"],
         benchmark_id=benchmark["benchmark_code"],
         advisor_id=advisor_cockpit.get("advisor_id", "advisor_sg_001"),
+        portfolio_manager_id=advisor_book["portfolio_manager_id"],
+        advisor_book_role_type=advisor_book["role_type"],
+        advisor_book_role_scope=advisor_book["role_scope"],
+        advisor_book_assignment_effective_from=date_policy["seed_start_date"],
+        advisor_book_assignment_version=int(advisor_book["assignment_version"]),
+        advisor_book_source_system=advisor_book["source_system"],
+        advisor_book_source_record_id=advisor_book["source_record_id"],
+        advisor_book_quality_status=advisor_book["quality_status"],
         canonical_as_of_date=date_policy["canonical_as_of_date"],
         benchmark_start_date=date_policy["warmup_start_date"],
         seed_start_date=date_policy["seed_start_date"],

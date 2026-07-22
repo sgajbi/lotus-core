@@ -70,9 +70,14 @@ DPM_SOURCE_ONLY_CANDIDATE_PORTFOLIOS = (
     },
 )
 FRONT_OFFICE_GATEWAY_CALLER_HEADERS = {
-    "X-Actor-Id": "workbench-system",
+    "X-Actor-Id": FRONT_OFFICE_SEED_CONTRACT.portfolio_manager_id,
+    "X-Caller-Application": "lotus-workbench",
     "X-Tenant-Id": "tenant-sg",
     "X-Region": "APAC",
+    "X-Booking-Center-Code": "Singapore",
+    "X-Role": "ADVISOR",
+    "X-Caller-Capabilities": "advisor.book.read",
+    "X-Correlation-Id": "canonical-front-office-seed",
 }
 FRONT_OFFICE_RESEED_VOLATILE_EVENT_FENCE_SERVICES = (
     "persistence-business-dates",
@@ -107,6 +112,7 @@ FRONT_OFFICE_RESEED_VOLATILE_EVENT_TOPIC_PREFIXES = (
 @dataclass(frozen=True)
 class FrontOfficePortfolioExpectation:
     portfolio_id: str
+    portfolio_manager_id: str
     min_positions: int
     min_valued_positions: int
     min_transactions: int
@@ -120,6 +126,7 @@ def _build_front_office_expectation(
 ) -> FrontOfficePortfolioExpectation:
     return FrontOfficePortfolioExpectation(
         portfolio_id=contract.portfolio_id,
+        portfolio_manager_id=contract.portfolio_manager_id,
         min_positions=contract.min_positions,
         min_valued_positions=contract.min_valued_positions,
         min_transactions=contract.min_transactions,
@@ -231,6 +238,7 @@ def build_portfolio_seed_cleanup_sql(*, portfolio_id: str) -> str:
             ),
             f"delete from processed_events where portfolio_id = '{portfolio_id}';",
             f"delete from cash_account_masters where portfolio_id = '{portfolio_id}';",
+            f"delete from portfolio_party_role_assignments where portfolio_id = '{portfolio_id}';",
             f"delete from portfolio_benchmark_assignments where portfolio_id = '{portfolio_id}';",
             "delete from sustainability_preference_profiles "
             f"where portfolio_id = '{portfolio_id}';",
@@ -1801,6 +1809,22 @@ def build_front_office_portfolio_bundle(
             ]
         )
 
+    portfolio_party_role_assignments = [
+        {
+            "portfolio_id": portfolio_id,
+            "party_id": FRONT_OFFICE_SEED_CONTRACT.portfolio_manager_id,
+            "role_type": FRONT_OFFICE_SEED_CONTRACT.advisor_book_role_type,
+            "role_scope": FRONT_OFFICE_SEED_CONTRACT.advisor_book_role_scope,
+            "effective_from": FRONT_OFFICE_SEED_CONTRACT.advisor_book_assignment_effective_from,
+            "effective_to": None,
+            "assignment_version": (FRONT_OFFICE_SEED_CONTRACT.advisor_book_assignment_version),
+            "source_system": FRONT_OFFICE_SEED_CONTRACT.advisor_book_source_system,
+            "source_record_id": FRONT_OFFICE_SEED_CONTRACT.advisor_book_source_record_id,
+            "observed_at": f"{FRONT_OFFICE_SEED_CONTRACT.canonical_as_of_date}T09:00:00Z",
+            "quality_status": FRONT_OFFICE_SEED_CONTRACT.advisor_book_quality_status,
+        }
+    ]
+
     return {
         "source_system": "LOTUS_FRONT_OFFICE_SEED",
         "mode": "UPSERT",
@@ -1818,6 +1842,7 @@ def build_front_office_portfolio_bundle(
         "client_restriction_profiles": client_restriction_profiles,
         "sustainability_preference_profiles": sustainability_preference_profiles,
         "instrument_eligibility_profiles": instrument_eligibility_profiles,
+        "portfolio_party_role_assignments": portfolio_party_role_assignments,
         **benchmark_reference,
         **risk_free_reference,
     }
@@ -1887,9 +1912,16 @@ def _wait_for_instrument_persistence(
     )
 
 
-def _ingest_reference_data(ingestion_base_url: str, bundle: dict[str, Any]) -> None:
-    reference_payloads = (
+def build_reference_ingestion_requests(
+    bundle: dict[str, Any],
+) -> tuple[tuple[str, dict[str, Any]], ...]:
+    """Return the dependency-ordered requests used by canonical reference-data ingestion."""
+    return (
         ("/ingest/reference/cash-accounts", {"cash_accounts": bundle["cash_accounts"]}),
+        (
+            "/ingest/portfolio-party-role-assignments",
+            {"party_role_assignments": bundle["portfolio_party_role_assignments"]},
+        ),
         ("/ingest/indices", {"indices": bundle["indices"]}),
         ("/ingest/index-price-series", {"index_price_series": bundle["index_price_series"]}),
         ("/ingest/index-return-series", {"index_return_series": bundle["index_return_series"]}),
@@ -1935,7 +1967,10 @@ def _ingest_reference_data(ingestion_base_url: str, bundle: dict[str, Any]) -> N
         ),
         ("/ingest/risk-free-series", {"risk_free_series": bundle["risk_free_series"]}),
     )
-    for endpoint, payload in reference_payloads:
+
+
+def _ingest_reference_data(ingestion_base_url: str, bundle: dict[str, Any]) -> None:
+    for endpoint, payload in build_reference_ingestion_requests(bundle):
         _request_json("POST", f"{ingestion_base_url}{endpoint}", payload=payload)
 
 
@@ -2251,6 +2286,10 @@ def _front_office_readiness_blockers(
             "gateway_return_path_stale="
             f"{observation.get('return_path_latest_available_date') or 'missing'}"
         )
+    if observation.get("advisor_book_governed_membership") is not True:
+        blockers.append("advisor_book_governed_membership_missing")
+    if observation.get("advisor_book_source_evidence_current") is not True:
+        blockers.append("advisor_book_source_evidence_not_current")
     return blockers
 
 
@@ -2557,6 +2596,12 @@ def _verify_front_office_portfolio(
                 f"&report_start_date={start_date}&report_end_date={end_date}",
                 headers=FRONT_OFFICE_GATEWAY_CALLER_HEADERS,
             )
+            _, advisor_book = _request_json(
+                "GET",
+                f"{gateway_base_url}/api/v1/advisor-book/portfolios"
+                f"?asOfDate={as_of_date}&sortBy=portfolio_id&sortOrder=asc&offset=0&limit=100",
+                headers=FRONT_OFFICE_GATEWAY_CALLER_HEADERS,
+            )
         except RuntimeError as exc:
             LOGGER.info("Verification still waiting on downstream services: %s", exc)
             continue
@@ -2578,6 +2623,17 @@ def _verify_front_office_portfolio(
             end_date=end_date,
         )
         projected_cashflow_points = cashflow_projection.get("points") or []
+        advisor_book_items = advisor_book.get("items") or []
+        governed_advisor_book_membership = next(
+            (
+                item
+                for item in advisor_book_items
+                if item.get("portfolio_id") == expected.portfolio_id
+                and item.get("membership_source") == "PortfolioManagerBookMembership:v1"
+                and item.get("membership_basis") == "governed_role_assignment"
+            ),
+            None,
+        )
         has_non_zero_projection = any(
             str(point.get("net_cashflow")) not in {"0", "0.0", "0.00", "0.0000", "0E-10"}
             for point in projected_cashflow_points
@@ -2611,6 +2667,11 @@ def _verify_front_office_portfolio(
                 .get("return_path", {})
                 .get("latest_available_date")
             ),
+            "advisor_book_portfolio_manager_id": expected.portfolio_manager_id,
+            "advisor_book_governed_membership": governed_advisor_book_membership is not None,
+            "advisor_book_source_evidence_current": (advisor_book.get("provenance") or {}).get(
+                "source_evidence_current"
+            ),
         }
 
         if (
@@ -2636,6 +2697,8 @@ def _verify_front_office_portfolio(
                 performance_summary=performance_summary,
                 expected_end_date=end_date,
             )
+            and governed_advisor_book_membership is not None
+            and (advisor_book.get("provenance") or {}).get("source_evidence_current") is True
         ):
             return {
                 "portfolio_id": expected.portfolio_id,
@@ -2665,6 +2728,9 @@ def _verify_front_office_portfolio(
                     .get("return_path", {})
                     .get("latest_available_date")
                 ),
+                "advisor_book_portfolio_manager_id": expected.portfolio_manager_id,
+                "advisor_book_governed_membership": True,
+                "advisor_book_source_evidence_current": True,
             }
 
         blockers = _front_office_readiness_blockers(

@@ -41,6 +41,7 @@ from tools.front_office_portfolio_seed import (
     parse_args,
 )
 from tools.front_office_seed_contract import load_front_office_seed_contract
+from tools.validate_front_office_advisor_book_seed import validate_advisor_book_seed
 
 
 def _build_bundle():
@@ -69,6 +70,26 @@ def test_front_office_bundle_uses_real_business_names_and_context():
     assert "Siemens Financieringsmaatschappij NV 2.500% 2031" in instrument_names
     assert "Private Credit Opportunities Fund A" in instrument_names
     assert all("MANUAL_" not in instrument["name"] for instrument in bundle["instruments"])
+
+
+def test_front_office_bundle_includes_governed_advisor_book_assignment():
+    bundle = _build_bundle()
+
+    assert bundle["portfolio_party_role_assignments"] == [
+        {
+            "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+            "party_id": "PM_SG_001",
+            "role_type": "portfolio_manager",
+            "role_scope": "portfolio_management",
+            "effective_from": "2025-03-31",
+            "effective_to": None,
+            "assignment_version": 1,
+            "source_system": "LOTUS_FRONT_OFFICE_SEED",
+            "source_record_id": "pb_sg_global_bal_001_pm_sg_001_portfolio_manager_v1",
+            "observed_at": "2026-04-10T09:00:00Z",
+            "quality_status": "accepted",
+        }
+    ]
 
 
 def test_front_office_bundle_includes_source_only_dpm_candidate_portfolios():
@@ -795,6 +816,10 @@ def test_portfolio_seed_cleanup_sql_removes_portfolio_owned_state_before_reseed(
     )
     assert "delete from cash_account_masters where portfolio_id = 'PB_SG_GLOBAL_BAL_001';" in sql
     assert (
+        "delete from portfolio_party_role_assignments "
+        "where portfolio_id = 'PB_SG_GLOBAL_BAL_001';" in sql
+    )
+    assert (
         "delete from client_restriction_profiles where portfolio_id = 'PB_SG_GLOBAL_BAL_001';"
         in sql
     )
@@ -1004,6 +1029,7 @@ def test_front_office_seed_ingests_reference_data_in_dependency_order(monkeypatc
 
     assert [call[1] for call in calls] == [
         "http://ingestion.dev.lotus/ingest/reference/cash-accounts",
+        "http://ingestion.dev.lotus/ingest/portfolio-party-role-assignments",
         "http://ingestion.dev.lotus/ingest/indices",
         "http://ingestion.dev.lotus/ingest/index-price-series",
         "http://ingestion.dev.lotus/ingest/index-return-series",
@@ -1019,19 +1045,20 @@ def test_front_office_seed_ingests_reference_data_in_dependency_order(monkeypatc
         "http://ingestion.dev.lotus/ingest/instrument-eligibility",
         "http://ingestion.dev.lotus/ingest/risk-free-series",
     ]
-    assert calls[8][2]["model_portfolios"][0]["model_portfolio_id"] == (
+    assert calls[1][2] == {"party_role_assignments": bundle["portfolio_party_role_assignments"]}
+    assert calls[9][2]["model_portfolios"][0]["model_portfolio_id"] == (
         DEFAULT_DPM_MODEL_PORTFOLIO_ID
     )
-    assert calls[9][2]["model_portfolio_targets"]
-    assert calls[10][2]["mandate_bindings"][0]["mandate_id"] == "MANDATE_PB_SG_GLOBAL_BAL_001"
-    assert {row["portfolio_id"] for row in calls[10][2]["mandate_bindings"]} == {
+    assert calls[10][2]["model_portfolio_targets"]
+    assert calls[11][2]["mandate_bindings"][0]["mandate_id"] == "MANDATE_PB_SG_GLOBAL_BAL_001"
+    assert {row["portfolio_id"] for row in calls[11][2]["mandate_bindings"]} == {
         "PB_SG_GLOBAL_BAL_001",
         "PB_SG_GLOBAL_INC_002",
         "PB_SG_GLOBAL_GROWTH_003",
     }
-    assert calls[11][2]["restriction_profiles"]
-    assert calls[12][2]["sustainability_preferences"]
-    assert calls[13][2]["eligibility_profiles"]
+    assert calls[12][2]["restriction_profiles"]
+    assert calls[13][2]["sustainability_preferences"]
+    assert calls[14][2]["eligibility_profiles"]
 
 
 def test_front_office_seed_derives_required_cross_currency_fx_windows():
@@ -1208,6 +1235,13 @@ def test_front_office_seed_contract_loads_platform_governed_defaults() -> None:
     assert contract.portfolio_id == "PB_SG_GLOBAL_BAL_001"
     assert contract.benchmark_id == "BMK_PB_GLOBAL_BALANCED_60_40"
     assert contract.advisor_id == "advisor_sg_001"
+    assert contract.portfolio_manager_id == "PM_SG_001"
+    assert contract.advisor_book_role_type == "portfolio_manager"
+    assert contract.advisor_book_role_scope == "portfolio_management"
+    assert contract.advisor_book_assignment_effective_from == "2025-03-31"
+    assert contract.advisor_book_source_record_id == (
+        "pb_sg_global_bal_001_pm_sg_001_portfolio_manager_v1"
+    )
     assert contract.canonical_as_of_date == "2026-04-10"
     assert contract.seed_start_date == "2025-03-31"
     assert contract.benchmark_start_date == "2025-01-06"
@@ -1247,8 +1281,20 @@ def test_front_office_seed_contract_has_governed_fallback_when_platform_contract
     assert contract.portfolio_id == "PB_SG_GLOBAL_BAL_001"
     assert contract.benchmark_id == "BMK_PB_GLOBAL_BALANCED_60_40"
     assert contract.advisor_id == "advisor_sg_001"
+    assert contract.portfolio_manager_id == "PM_SG_001"
     assert contract.canonical_as_of_date == "2026-04-10"
     assert contract.min_transactions == 30
+
+
+def test_executable_advisor_book_seed_validator_proves_runtime_ingestion_plan() -> None:
+    assert validate_advisor_book_seed() == {
+        "status": "pass",
+        "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+        "portfolio_manager_id": "PM_SG_001",
+        "source_record_id": "pb_sg_global_bal_001_pm_sg_001_portfolio_manager_v1",
+        "ingestion_endpoint": "/ingest/portfolio-party-role-assignments",
+        "assignment_count": 1,
+    }
 
 
 def test_front_office_seed_reprocesses_all_seed_transactions(monkeypatch):
@@ -1655,6 +1701,22 @@ def test_front_office_seed_verification_counts_projected_transactions(monkeypatc
                 "capabilities": {"return_path": {"latest_available_date": "2026-04-12"}},
             },
         ),
+        (
+            "http://gateway.dev/api/v1/advisor-book/portfolios"
+            "?asOfDate=2026-04-10&sortBy=portfolio_id&sortOrder=asc&offset=0&limit=100"
+        ): (
+            200,
+            {
+                "items": [
+                    {
+                        "portfolio_id": "P1",
+                        "membership_source": "PortfolioManagerBookMembership:v1",
+                        "membership_basis": "governed_role_assignment",
+                    }
+                ],
+                "provenance": {"source_evidence_current": True},
+            },
+        ),
     }
 
     gateway_header_calls: list[dict[str, str]] = []
@@ -1673,6 +1735,7 @@ def test_front_office_seed_verification_counts_projected_transactions(monkeypatc
         gateway_base_url="http://gateway.dev",
         expected=FRONT_OFFICE_EXPECTATION.__class__(
             portfolio_id="P1",
+            portfolio_manager_id="PM_SG_001",
             min_positions=2,
             min_valued_positions=2,
             min_transactions=30,
@@ -1694,13 +1757,18 @@ def test_front_office_seed_verification_counts_projected_transactions(monkeypatc
     assert verification["pending_aggregation_jobs"] == 14
     assert verification["processing_aggregation_jobs"] == 2
     assert verification["failed_aggregation_jobs"] == 0
+    assert verification["advisor_book_governed_membership"] is True
+    assert verification["advisor_book_source_evidence_current"] is True
     assert any("include_projected=true" in url for url in requested_urls)
     assert all("income-summary/query" not in url for url in requested_urls)
     assert all("activity-summary/query" not in url for url in requested_urls)
     assert any("period=EXPLICIT" in url for url in requested_urls)
     assert any("report_start_date=2025-03-31" in url for url in requested_urls)
     assert any("report_end_date=2026-04-10" in url for url in requested_urls)
-    assert gateway_header_calls == [FRONT_OFFICE_GATEWAY_CALLER_HEADERS]
+    assert gateway_header_calls == [
+        FRONT_OFFICE_GATEWAY_CALLER_HEADERS,
+        FRONT_OFFICE_GATEWAY_CALLER_HEADERS,
+    ]
 
 
 def test_front_office_readiness_blockers_surface_runtime_gaps() -> None:
@@ -1730,6 +1798,8 @@ def test_front_office_readiness_blockers_surface_runtime_gaps() -> None:
         "gateway_performance_benchmark_missing",
         "core_analytics_reference_stale=2026-04-09",
         "gateway_return_path_stale=missing",
+        "advisor_book_governed_membership_missing",
+        "advisor_book_source_evidence_not_current",
     ]
 
 
