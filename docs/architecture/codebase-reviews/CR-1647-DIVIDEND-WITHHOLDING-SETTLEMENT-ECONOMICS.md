@@ -28,10 +28,11 @@ publishing; `DIVIDEND_014` is defense in depth for direct domain adapters.
 ## Compatibility and no-claim boundary
 
 Null and zero withholding preserve the previous gross-minus-fee result. No field, event version,
-topic, database schema, or migration changed. A newly accepted command uses current-booking
-economics even when its position processing returns it inside an inline rebuild. Only previously
-accepted suffix rows use the historical-rebuild context and retain legacy arithmetic, so the fix
-does not silently restate existing history.
+topic, database schema, or migration changed. Every transaction output produced by the current
+cost-processing step uses current-booking economics even when position processing returns it inside
+an inline rebuild, including transformed or split identities. Only previously accepted suffix rows
+use the historical-rebuild context and retain legacy arithmetic, so the fix does not silently
+restate existing history.
 
 This slice does not implement a supplied net-dividend identity, withholding-rate derivation or
 tolerance, other receipt deductions, jurisdiction policy, return-of-capital classification, basis
@@ -55,10 +56,11 @@ backfill. Those acceptance areas remain under #448; this evidence does not claim
 - Application-boundary tests prove stable non-retryable rejections, source-safe diagnostics,
   rollback, and absence of cost, position, cashflow, or commit work.
 - Agent 1's cross-review found that inline rebuild originally classified both the current command
-  and prior suffix rows as historical. The application boundary now identifies the current command
-  by portfolio and transaction identity, applies net-of-withholding current economics to it, and
-  keeps legacy gross-minus-fee arithmetic only for a pre-existing suffix row. The regression also
-  proves the current product cashflow equals its generated settlement leg.
+  and prior suffix rows as historical. The application boundary now identifies every current
+  cost-processing output by portfolio and transaction identity, applies net-of-withholding current
+  economics to it, and keeps legacy gross-minus-fee arithmetic only for a pre-existing suffix row.
+  The regression uses a transformed output identity different from the raw command, and also proves
+  the current product cashflow equals its generated settlement leg.
 - Database-backed generated-leg and rejection tests were updated for the new arithmetic. They were
   not executed locally because this lane is prohibited from touching Docker; protected GitHub CI
   remains required before merge.
@@ -68,7 +70,8 @@ backfill. Those acceptance areas remain under #448; this evidence does not claim
 
 ## Validation
 
-- Agent 1 review-fix application/cashflow/settlement cohort: 89 passed warning-strict.
+- Complete transaction-processing application unit package: 148 passed warning-strict after the
+  transformed-current-output hardening.
 - Warning-strict touched-surface pack: 172 passed after oracle hardening.
 - Warning-strict `transaction-dividend-contract`: 302 passed after oracle hardening.
 - Warning-strict `transaction-interest-contract`: 326 passed after oracle hardening.
