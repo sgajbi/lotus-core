@@ -100,7 +100,7 @@ async def test_latest_role_version_fences_stale_acceptance_and_legacy_projection
                     _portfolio(
                         LEGACY_PORTFOLIO,
                         portfolio_type="Discretionary",
-                        status="ACTIVE",
+                        status="Active",
                     ),
                 ]
             )
