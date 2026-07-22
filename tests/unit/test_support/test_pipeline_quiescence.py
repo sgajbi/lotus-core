@@ -133,6 +133,37 @@ def test_wait_for_pipeline_quiescence_requires_quiet_window(monkeypatch) -> None
     assert result == {"outbox_pending": 0, "ingestion_backlog": 0}
 
 
+def test_wait_for_pipeline_quiescence_does_not_bypass_quiet_window_without_active_rows(
+    monkeypatch,
+) -> None:
+    snapshot = {"outbox_pending": 0, "ingestion_backlog": 0}
+    times = iter((0, 0, 0, 1, 1, 4, 4, 8, 8))
+    reads = 0
+
+    def _read_snapshot() -> dict[str, int]:
+        nonlocal reads
+        reads += 1
+        return snapshot
+
+    monkeypatch.setattr("tests.test_support.pipeline_quiescence.time.sleep", lambda _: None)
+    monkeypatch.setattr(
+        "tests.test_support.pipeline_quiescence.time.time",
+        lambda: next(times),
+    )
+
+    result = wait_for_pipeline_quiescence(
+        timeout_seconds=10,
+        poll_seconds=0,
+        stable_cycles=1,
+        quiet_seconds=8,
+        snapshot_reader=_read_snapshot,
+        last_activity_reader=lambda: None,
+    )
+
+    assert result == snapshot
+    assert reads == 3
+
+
 def test_wait_for_pipeline_quiescence_times_out_with_last_snapshot(monkeypatch) -> None:
     snapshots = deque(
         [
