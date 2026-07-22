@@ -1305,6 +1305,13 @@ def test_executable_advisor_book_seed_validator_proves_runtime_ingestion_plan() 
         "observed_at": "2026-04-10T09:00:00Z",
         "quality_status": "accepted",
         "source_product": "PortfolioManagerBookMembership:v1",
+        "source_product_route": (
+            "/integration/portfolio-manager-books/{portfolio_manager_id}/memberships"
+        ),
+        "source_product_consumers": ["lotus-gateway", "lotus-manage"],
+        "source_product_owner": "lotus-core",
+        "source_product_serving_plane": "query_control_plane_service",
+        "source_product_route_family": "Analytics Input",
         "ingestion_endpoint": "/ingest/portfolio-party-role-assignments",
         "assignment_count": 1,
     }
@@ -1330,6 +1337,44 @@ def test_executable_advisor_book_seed_validator_rejects_source_product_registry_
             "PortfolioManagerBookMembership:v2"
         ),
     ):
+        advisor_book_seed_validator.validate_advisor_book_seed()
+
+
+@pytest.mark.parametrize(
+    ("field", "drifted_value", "error"),
+    [
+        (
+            "current_routes",
+            ("/integration/legacy-advisor-book",),
+            "must expose only the governed PM-book route",
+        ),
+        (
+            "consumers",
+            ("lotus-manage",),
+            "must retain the governed consumers",
+        ),
+        ("owner", "lotus-gateway", "must remain Core-owned"),
+        (
+            "serving_plane",
+            "query_service",
+            "must remain on the query control plane",
+        ),
+        ("route_family", "Operational Read", "must remain an analytics input"),
+    ],
+)
+def test_executable_advisor_book_seed_validator_rejects_registry_metadata_drift(
+    monkeypatch, field, drifted_value, error
+) -> None:
+    definition = advisor_book_seed_validator.get_source_data_product(
+        "PortfolioManagerBookMembership"
+    )
+    monkeypatch.setattr(
+        advisor_book_seed_validator,
+        "get_source_data_product",
+        lambda _product_name: replace(definition, **{field: drifted_value}),
+    )
+
+    with pytest.raises(ValueError, match=error):
         advisor_book_seed_validator.validate_advisor_book_seed()
 
 
