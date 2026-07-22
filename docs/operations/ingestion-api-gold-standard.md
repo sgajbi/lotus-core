@@ -86,15 +86,19 @@ Terminal transaction-processing rejections are published to the consumer DLQ and
 the operations APIs above.
 
 When a domain/application error declares a bounded reason code, the DLQ message and persisted
-consumer-DLQ record preserve that code in `error_reason_code`. Fee-dominated settlement uses:
+consumer-DLQ record preserve that code in `error_reason_code`. Invalid settlement economics use:
 
 - `SELL_010_NON_POSITIVE_NET_SETTLEMENT`
 - `DIVIDEND_013_NON_POSITIVE_NET_SETTLEMENT`
+- `DIVIDEND_014_NEGATIVE_WITHHOLDING_TAX`
+- `DIVIDEND_015_WITHHOLDING_EXCEEDS_GROSS_AMOUNT`
 - `INTEREST_017_NON_POSITIVE_NET_SETTLEMENT`
 
-These are non-retryable booking-economics failures. Correct the source fee/proceeds evidence before
-replay. Do not repeatedly replay the unchanged event, infer success from the original ingestion
-HTTP response, or inspect raw database rows when source-safe DLQ API evidence is available.
+These are non-retryable booking-economics failures. Governed ingestion schemas reject negative
+withholding before publishing; `DIVIDEND_014` remains a defense for direct adapters that construct
+the domain model. Correct the source withholding, fee, or proceeds evidence before replay. Do not
+repeatedly replay the unchanged event, infer success from the original ingestion HTTP response, or
+inspect raw database rows when source-safe DLQ API evidence is available.
 
 An explicit INTEREST pre-fee net that does not reconcile to gross interest less withholding and
 other deductions uses `INTEREST_015_NET_RECONCILIATION_MISMATCH`. Correct the source net-interest

@@ -87,7 +87,7 @@ One transaction-domain policy resolves fee precedence, signed cash amount, and l
 | --- | --- |
 | BUY | `-(gross amount + resolved fee)` |
 | SELL | `gross proceeds - resolved fee` |
-| DIVIDEND | `gross dividend - resolved fee` |
+| DIVIDEND | `gross dividend - source-recorded withholding - resolved fee` |
 | INTEREST income | `pre-fee net interest - resolved fee` |
 | INTEREST expense | `-(pre-fee net interest + resolved fee)` |
 
@@ -97,9 +97,14 @@ Zero or negative proceeds are non-retryable hard rejections with stable family c
 normalization must never turn invalid proceeds into an apparent inflow. Generated settlement legs
 and persisted product cashflows consume the same policy result.
 
-The DIVIDEND row documents current runtime gross-amount behavior, not closure of canonical
-net-dividend, withholding-tax, or return-of-capital decomposition; that work remains tracked under
-#448. FX fee currency and two-leg settlement ownership remain a separate decision under #754.
+For current DIVIDEND booking, the existing nullable `withholding_tax_amount` is preserved as
+separate ledger/query evidence and reduces available settlement proceeds before the fee. Negative
+withholding, withholding above gross, or non-positive resulting cash fails closed with stable
+`DIVIDEND_014`, `DIVIDEND_015`, or `DIVIDEND_013` reason codes. Null and zero withholding preserve
+the prior gross-minus-fee result. Historical rebuild does not silently restate accepted rows.
+Withholding-rate derivation, other receipt deductions, a supplied-net identity, return-of-capital,
+basis reduction, and advanced timing remain tracked under #448. FX fee currency and two-leg
+settlement ownership remain a separate decision under #754.
 
 ## INTEREST Settlement Economics
 
@@ -145,11 +150,12 @@ For a new transaction type:
 
 ## Compatibility
 
-The consolidation preserves public APIs, OpenAPI, event fields and versions, topic names, database
-schema, generated product/cash event ordering, and downstream response shapes. It changes internal
-code ownership and removes duplicate extension points. INTEREST fee-bearing settlement arithmetic
-and rejection of fee-equal or fee-dominated SELL, DIVIDEND, and INTEREST income are documented
-intentional behavior corrections.
+The consolidation preserves public field names, event versions, topic names, database schema,
+generated product/cash event ordering, and downstream response shapes. Current-booking DIVIDEND
+cash intentionally changes only when the existing withholding field is non-zero; null/zero
+withholding preserves prior behavior. INTEREST fee-bearing settlement arithmetic and rejection of
+fee-equal or fee-dominated SELL, DIVIDEND, and INTEREST income remain documented intentional
+behavior corrections.
 
 ## Evidence
 

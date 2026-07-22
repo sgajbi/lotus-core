@@ -62,17 +62,20 @@ components, direction, and the linked cashflow amount; do not infer final settle
 `net_interest_amount` alone.
 
 The same settlement boundary governs ordinary BUY, SELL, and DIVIDEND cash. Component fee fields
-override aggregate `trade_fee` when present. BUY and INTEREST expense remain outflows including the
-resolved fee; SELL, DIVIDEND, and INTEREST income must retain strictly positive proceeds after the
-fee. Invalid zero or negative proceeds are rejected before writes with
+override aggregate `trade_fee` when present. Current DIVIDEND booking first subtracts the existing
+source-recorded `withholding_tax_amount`, then the resolved fee. BUY and INTEREST expense remain
+outflows including the resolved fee; SELL, DIVIDEND, and INTEREST income must retain strictly
+positive proceeds. Invalid zero or negative proceeds are rejected before writes with
 `SELL_010_NON_POSITIVE_NET_SETTLEMENT`, `DIVIDEND_013_NON_POSITIVE_NET_SETTLEMENT`, or
 `INTEREST_017_NON_POSITIVE_NET_SETTLEMENT`. Support diagnostics retain transaction, portfolio,
 amount, and stable reason-code evidence without exposing raw payloads or infrastructure details.
 Do not repair or reconcile such a case by applying `abs()` to the amount.
 
-For DIVIDEND, this boundary currently uses booked gross amount as available proceeds. Complete
-withholding-tax, net-dividend, and return-of-capital settlement decomposition remains open under
-Core issue #448; this page does not claim that broader methodology is implemented.
+For DIVIDEND, null/zero withholding preserves the prior gross-minus-fee result. Negative
+withholding, withholding above gross, and withholding that consumes all settlement proceeds fail
+closed. This is recorded-amount support, not withholding-rate derivation or jurisdiction-specific
+tax advice. Other deductions, supplied-net identity, return-of-capital, basis reduction, and
+advanced timing remain open under Core issue #448.
 
 For an eligible booked transaction, the module:
 
