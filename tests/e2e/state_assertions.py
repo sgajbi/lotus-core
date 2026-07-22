@@ -25,6 +25,21 @@ def _position_matches_expected(row: dict[str, Any], expected: dict[str, Decimal]
     )
 
 
+def has_expected_valuation_snapshot(
+    row: dict[str, Any],
+    *,
+    market_price: Decimal,
+    required_fields: tuple[str, ...] = (),
+) -> bool:
+    """Return whether a position exposes the requested materialized valuation snapshot."""
+    valuation = row.get("valuation")
+    if not isinstance(valuation, dict):
+        return False
+    return _matches_decimal(valuation.get("market_price"), market_price) and all(
+        valuation.get(field_name) is not None for field_name in required_fields
+    )
+
+
 def assert_positions_state(
     e2e_api_client: E2EApiClient,
     *,

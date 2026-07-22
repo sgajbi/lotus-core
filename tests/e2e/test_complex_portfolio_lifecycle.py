@@ -1,8 +1,10 @@
 import uuid
+from decimal import Decimal
 
 import pytest
 
 from .api_client import E2EApiClient
+from .state_assertions import has_expected_valuation_snapshot
 
 
 @pytest.fixture(scope="module")
@@ -207,7 +209,11 @@ def setup_complex_lifecycle_data(clean_db_module, e2e_api_client: E2EApiClient, 
             data.get("positions")
             and any(
                 p.get("security_id") == security_id
-                and p.get("valuation", {}).get("unrealized_gain_loss") is not None
+                and has_expected_valuation_snapshot(
+                    p,
+                    market_price=Decimal("112"),
+                    required_fields=("unrealized_gain_loss",),
+                )
                 for p in data["positions"]
             )
         ),

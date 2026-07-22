@@ -6,7 +6,7 @@ import pytest
 
 from .api_client import E2EApiClient
 from .assertions import as_decimal
-from .state_assertions import assert_positions_state
+from .state_assertions import assert_positions_state, has_expected_valuation_snapshot
 
 
 @pytest.fixture(scope="module")
@@ -121,22 +121,18 @@ def setup_dual_currency_data(clean_db_module, e2e_api_client: E2EApiClient):
     pos_url = f"/portfolios/{portfolio_id}/positions"
 
     def pos_validation(data):
-        valuation = (
-            data["positions"][0].get("valuation", {})
-            if data.get("positions") and len(data["positions"]) == 1
-            else {}
-        )
         return (
             data.get("positions")
             and len(data["positions"]) == 1
-            and all(
-                valuation.get(field_name) is not None
-                for field_name in (
+            and has_expected_valuation_snapshot(
+                data["positions"][0],
+                market_price=Decimal("180"),
+                required_fields=(
                     "market_value",
                     "market_value_local",
                     "unrealized_gain_loss",
                     "unrealized_gain_loss_local",
-                )
+                ),
             )
         )
 
@@ -190,6 +186,7 @@ def test_unrealized_pnl_dual_currency(setup_dual_currency_data, e2e_api_client: 
     assert as_decimal(position["cost_basis_local"]) == Decimal("9000")
     # Base: 9000 EUR * 1.10 (buy date FX) = 9900 USD
     assert as_decimal(position["cost_basis"]) == Decimal("9900")
+    assert as_decimal(valuation["market_price"]) == Decimal("180")
 
     # Unrealized P&L arithmetic invariants:
     # local unrealized = local market value - local cost basis
