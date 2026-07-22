@@ -118,7 +118,10 @@ def _calculate_dividend_movement(
             fee_amount=fee,
             net_settlement_amount=net_settlement,
         )
-    if withholding_tax > transaction.gross_transaction_amount:
+    if (
+        transaction.gross_transaction_amount > 0
+        and withholding_tax > transaction.gross_transaction_amount
+    ):
         raise SettlementCashValidationError(
             reason_code=(
                 SettlementCashRejectionReasonCode.DIVIDEND_WITHHOLDING_EXCEEDS_GROSS_AMOUNT

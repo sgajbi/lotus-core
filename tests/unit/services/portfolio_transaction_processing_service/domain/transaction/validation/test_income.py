@@ -221,6 +221,28 @@ def test_dividend_validation_rejects_invalid_withholding(
     assert issues[0].field == "withholding_tax_amount"
 
 
+@pytest.mark.parametrize("withholding_tax", [None, Decimal("0")])
+def test_dividend_validation_preserves_non_positive_gross_precedence(
+    withholding_tax: Decimal | None,
+) -> None:
+    issues = validate_dividend_transaction(
+        replace(
+            _income("DIVIDEND"),
+            gross_transaction_amount=Decimal("-1"),
+            withholding_tax_amount=withholding_tax,
+            trade_fee=Decimal("0"),
+        )
+    )
+
+    assert [issue.code for issue in issues] == [
+        DividendValidationReasonCode.NON_POSITIVE_GROSS_AMOUNT,
+        DividendValidationReasonCode.NON_POSITIVE_NET_SETTLEMENT,
+    ]
+    assert DividendValidationReasonCode.WITHHOLDING_EXCEEDS_GROSS_AMOUNT not in {
+        issue.code for issue in issues
+    }
+
+
 def test_interest_income_validation_rejects_non_positive_net_settlement() -> None:
     transaction = replace(
         _income("INTEREST"),

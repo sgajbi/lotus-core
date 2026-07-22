@@ -141,6 +141,28 @@ def test_dividend_rejects_withholding_that_consumes_all_gross_proceeds() -> None
     assert raised.value.net_settlement_amount == Decimal("0")
 
 
+@pytest.mark.parametrize("withholding_tax", [None, Decimal("0")])
+def test_dividend_non_positive_gross_is_not_misclassified_as_excess_withholding(
+    withholding_tax: Decimal | None,
+) -> None:
+    with pytest.raises(SettlementCashValidationError) as raised:
+        calculate_settlement_cash_movement(
+            _transaction(
+                "DIVIDEND",
+                gross_transaction_amount=Decimal("-1"),
+                withholding_tax_amount=withholding_tax,
+                trade_fee=Decimal("0"),
+            )
+        )
+
+    assert raised.value.reason_code is (
+        SettlementCashRejectionReasonCode.DIVIDEND_NON_POSITIVE_NET_SETTLEMENT
+    )
+    assert raised.value.field == "trade_fee"
+    assert raised.value.available_proceeds == Decimal("-1")
+    assert raised.value.net_settlement_amount == Decimal("-1")
+
+
 @pytest.mark.parametrize(
     ("transaction_type", "fee", "reason_code"),
     [
