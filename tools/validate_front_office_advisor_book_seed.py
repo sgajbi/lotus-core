@@ -29,6 +29,13 @@ from tools.front_office_portfolio_seed import (  # noqa: E402
 
 ADVISOR_BOOK_INGESTION_ENDPOINT = "/ingest/portfolio-party-role-assignments"
 ADVISOR_BOOK_SOURCE_PRODUCT_NAME = "PortfolioManagerBookMembership"
+ADVISOR_BOOK_SOURCE_PRODUCT_ROUTE = (
+    "/integration/portfolio-manager-books/{portfolio_manager_id}/memberships"
+)
+ADVISOR_BOOK_SOURCE_PRODUCT_CONSUMERS = ("lotus-gateway", "lotus-manage")
+ADVISOR_BOOK_SOURCE_PRODUCT_OWNER = "lotus-core"
+ADVISOR_BOOK_SOURCE_PRODUCT_SERVING_PLANE = "query_control_plane_service"
+ADVISOR_BOOK_SOURCE_PRODUCT_ROUTE_FAMILY = "Analytics Input"
 
 
 def _expected_assignment() -> dict[str, Any]:
@@ -80,6 +87,31 @@ def validate_advisor_book_seed() -> dict[str, Any]:
             f"expected {executable_source_product}, observed "
             f"{contract.advisor_book_source_product}"
         )
+    if source_product.current_routes != (ADVISOR_BOOK_SOURCE_PRODUCT_ROUTE,):
+        raise ValueError(
+            "canonical advisor-book source product must expose only the governed PM-book route: "
+            f"observed {source_product.current_routes}"
+        )
+    if tuple(sorted(source_product.consumers)) != ADVISOR_BOOK_SOURCE_PRODUCT_CONSUMERS:
+        raise ValueError(
+            "canonical advisor-book source product must retain the governed consumers: "
+            f"observed {source_product.consumers}"
+        )
+    if source_product.owner != ADVISOR_BOOK_SOURCE_PRODUCT_OWNER:
+        raise ValueError(
+            "canonical advisor-book source product must remain Core-owned: "
+            f"observed {source_product.owner}"
+        )
+    if source_product.serving_plane != ADVISOR_BOOK_SOURCE_PRODUCT_SERVING_PLANE:
+        raise ValueError(
+            "canonical advisor-book source product must remain on the query control plane: "
+            f"observed {source_product.serving_plane}"
+        )
+    if source_product.route_family != ADVISOR_BOOK_SOURCE_PRODUCT_ROUTE_FAMILY:
+        raise ValueError(
+            "canonical advisor-book source product must remain an analytics input: "
+            f"observed {source_product.route_family}"
+        )
 
     return {
         "status": "pass",
@@ -96,6 +128,11 @@ def validate_advisor_book_seed() -> dict[str, Any]:
         "observed_at": expected["observed_at"],
         "quality_status": expected["quality_status"],
         "source_product": executable_source_product,
+        "source_product_route": ADVISOR_BOOK_SOURCE_PRODUCT_ROUTE,
+        "source_product_consumers": list(ADVISOR_BOOK_SOURCE_PRODUCT_CONSUMERS),
+        "source_product_owner": source_product.owner,
+        "source_product_serving_plane": source_product.serving_plane,
+        "source_product_route_family": source_product.route_family,
         "ingestion_endpoint": ADVISOR_BOOK_INGESTION_ENDPOINT,
         "assignment_count": 1,
     }
