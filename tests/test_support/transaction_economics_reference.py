@@ -40,7 +40,11 @@ class DividendSettlementReferenceResult:
     signed_cashflow_amount: Decimal
     quantity_delta: Decimal
     cost_basis_delta: Decimal
+    cost_basis_local_delta: Decimal
+    net_cost_amount: Decimal
+    net_cost_local_amount: Decimal
     realized_total_pnl: Decimal
+    realized_total_pnl_local: Decimal
 
 
 def evaluate_interest_settlement(
@@ -134,5 +138,9 @@ def evaluate_dividend_settlement(
         signed_cashflow_amount=settlement_cash,
         quantity_delta=Decimal(0),
         cost_basis_delta=Decimal(0),
+        cost_basis_local_delta=Decimal(0),
+        net_cost_amount=Decimal(0),
+        net_cost_local_amount=Decimal(0),
         realized_total_pnl=Decimal(0),
+        realized_total_pnl_local=Decimal(0),
     )

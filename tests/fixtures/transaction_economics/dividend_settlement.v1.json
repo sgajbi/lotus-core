@@ -20,9 +20,14 @@
       "expected": {
         "settlement_cash_amount": "602.5",
         "signed_cashflow_amount": "602.5",
+        "cashflow_timing": "EOD",
         "quantity_delta": "0",
         "cost_basis_delta": "0",
-        "realized_total_pnl": "0"
+        "cost_basis_local_delta": "0",
+        "net_cost_amount": "0",
+        "net_cost_local_amount": "0",
+        "realized_total_pnl": "0",
+        "realized_total_pnl_local": "0"
       },
       "tolerance": "0",
       "rationale": "A fee-free dividend is a positive income cashflow and does not change position quantity or basis."
@@ -37,9 +42,14 @@
       "expected": {
         "settlement_cash_amount": "600.0",
         "signed_cashflow_amount": "600.0",
+        "cashflow_timing": "EOD",
         "quantity_delta": "0",
         "cost_basis_delta": "0",
-        "realized_total_pnl": "0"
+        "cost_basis_local_delta": "0",
+        "net_cost_amount": "0",
+        "net_cost_local_amount": "0",
+        "realized_total_pnl": "0",
+        "realized_total_pnl_local": "0"
       },
       "tolerance": "0",
       "rationale": "The resolved transaction fee reduces dividend settlement cash exactly once while position and cost policy remain neutral."
@@ -54,9 +64,14 @@
       "expected": {
         "settlement_cash_amount": "100.000",
         "signed_cashflow_amount": "100.000",
+        "cashflow_timing": "EOD",
         "quantity_delta": "0",
         "cost_basis_delta": "0",
-        "realized_total_pnl": "0"
+        "cost_basis_local_delta": "0",
+        "net_cost_amount": "0",
+        "net_cost_local_amount": "0",
+        "realized_total_pnl": "0",
+        "realized_total_pnl_local": "0"
       },
       "tolerance": "0",
       "rationale": "Decimal arithmetic preserves the exact supported dividend settlement boundary without binary rounding."

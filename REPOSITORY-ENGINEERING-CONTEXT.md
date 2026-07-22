@@ -2510,8 +2510,9 @@ Most relevant current governance:
      The governed transaction-economics oracle now also includes the DIVIDEND settlement pack at
      `tests/fixtures/transaction_economics/dividend_settlement.v1.json`, with an independent
      Decimal-only evaluator and cross-layer warning-strict conformance tests. This bounded evidence
-     covers currently supported gross-minus-fee DIVIDEND settlement, payment-date cashflow, and
-     zero position/cost/P&L impact only; withholding tax, return of capital, basis reduction, and
+     covers currently supported gross-minus-fee DIVIDEND settlement, settlement/payment-date
+     cashflow with canonical `EOD` timing, vector-fee-neutral trade/local cost basis, and zero
+     trade/local P&L impact only; withholding tax, return of capital, basis reduction, and broader
      timing policy remain open under #448 and are not promoted by the pack.
 174. Canonical ordinary signed settlement cash lives in
      `portfolio_transaction_processing_service.app.domain.transaction.settlement.cash_movement`.
