@@ -3010,9 +3010,13 @@ Most relevant current governance:
      at-least-once delivery permits its Kafka offset to advance and is not unfinished work.
      Rejected and failed outcomes remain excluded. Collect the closed successful set from one
      bounded metric scrape, preserve the governed replay volume and timeout, and use heavy PR/main
-     runtime lanes to prove the drain. E2E readiness predicates must wait for every field their
-     scenario asserts; dual-currency position proof requires base/local market value and base/local
-     unrealized P&L before the fixture yields.
+     runtime lanes to prove the drain. Concurrent Kafka consumers must retain the configured idle
+     poll timeout while bounding polls to 100 milliseconds whenever processing tasks are active;
+     otherwise a paused busy partition can add the full idle timeout between ordered messages even
+     after the prior task completed. This scheduling rule does not relax per-partition ordering,
+     in-flight capacity, retry, or offset-commit contracts. E2E readiness predicates must wait for
+     every field their scenario asserts; dual-currency position proof requires base/local market
+     value and base/local unrealized P&L before the fixture yields.
 
 ## Context Maintenance Rule
 

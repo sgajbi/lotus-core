@@ -2,7 +2,7 @@
 
 ## Status
 
-Fixed locally; Docker-backed PR and exact-main proof pending.
+Fix-forward completed locally; second exact-head Docker-backed proof and exact-main proof pending.
 
 ## Scope
 
@@ -25,6 +25,12 @@ integration, Docker smoke, latency, and fast performance jobs passed:
    then asserted local market value and local unrealized P&L in a later test. The incomplete
    predicate allowed the test to read an intermediate response and intermittently convert
    `None` to `Decimal`.
+3. Exact-head run `29899570356` proved the terminal-outcome correction was necessary but not
+   sufficient. Same-portfolio replay requests are correctly ordered onto one partition, but the
+   shared concurrent consumer performed its full one-second idle poll while work was active on the
+   paused busy partition. Although each replay publication completed in milliseconds, the loop
+   added approximately 1.0-1.5 seconds between ordered messages and was still publishing the next
+   30-record burst when the unchanged 180-second drain deadline expired.
 
 The replay-storm failure was persistent in runs `29688109723`, `29719211821`,
 `29802611218`, and `29892371749`. The dual-currency failure reproduced in the latest run as
@@ -40,20 +46,24 @@ one failure among 69 E2E tests.
    volume, timeout, partition count, concurrency, or idempotency behavior.
 4. Require the dual-currency fixture to observe base/local market values and base/local unrealized
    P&L before yielding.
-5. Scan the E2E suite for the same local-valuation readiness pattern. The exact mismatch was limited
+5. Bound Kafka polls to 100 milliseconds while concurrent processing tasks are active, while
+   retaining the configured one-second idle poll. Preserve per-partition ordering, the governed
+   in-flight limit, retry handling, and synchronous offset commits.
+6. Scan the E2E suite for the same local-valuation readiness pattern. The exact mismatch was limited
    to `test_dual_currency_workflow.py`; other polling call sites do not assert the same four-field
    dual-currency contract.
 
 ## Compatibility
 
 No API, OpenAPI, event, database, migration, topic, partition, consumer-group, runtime topology,
-timeout, or financial-calculation contract changes. This slice changes only test and CI evidence
-semantics so successful duplicate handling and complete dual-currency readiness are measured
-truthfully.
+timeout, or financial-calculation contract changes. The internal concurrent-consumer scheduler now
+uses a bounded active-work poll so completed ordered work is drained promptly; idle polling,
+ordering, capacity, retry, and commit contracts remain unchanged. Test and CI evidence semantics
+also now measure successful duplicate handling and complete dual-currency readiness truthfully.
 
 ## Validation
 
-- `13` focused performance-gate unit tests passed.
+- `109` focused shared-consumer, replay-consumer, and performance-gate unit tests passed.
 - Scoped Ruff lint and format passed for all four touched Python files.
 - The complete repository-native `make lint` pack passed, including ingestion, concurrency,
   observability, event-contract, and synthetic-fixture guards.
@@ -63,10 +73,14 @@ truthfully.
 - `git diff --check` passed.
 - A local Docker-backed run was attempted but stopped before resource creation because Docker
   Desktop was unavailable after the host restart. No Compose project or cleanup action resulted.
+- Exact-head Main Releasability run `29899570356` passed 20 jobs, including `E2E Full`; its full
+  performance artifact passed steady (`37.151s`) and burst (`161.666s`) with zero added DLQ events,
+  then exposed the active-poll latency in replay. This red run is diagnostic evidence only and is
+  not merge evidence.
 
 ## Remaining evidence
 
-Run Feature Lane and the full PR Merge Gate on the signed branch. The full performance and E2E jobs
-must pass without changed timeout or capacity settings. After protected merge, run exact-main
-Main Releasability, record the no-wiki-change decision, update #795, and restore one clean Core
-worktree on synchronized `main`.
+Push the signed scheduling fix and rerun Feature Lane, the full PR Merge Gate, and exact-head Main
+Releasability. The full performance job must pass without changed workload, timeout, partition, or
+capacity settings. After protected merge, run exact-main Main Releasability, record the
+no-wiki-change decision, update #795, and restore one clean Core worktree on synchronized `main`.
