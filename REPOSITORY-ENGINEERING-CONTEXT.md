@@ -3016,9 +3016,12 @@ Most relevant current governance:
      poll timeout while bounding polls to 100 milliseconds whenever processing tasks are active;
      otherwise a paused busy partition can add the full idle timeout between ordered messages even
      after the prior task completed. This scheduling rule does not relax per-partition ordering,
-     in-flight capacity, retry, or offset-commit contracts. E2E readiness predicates must wait for
-     every field their scenario asserts; dual-currency position proof requires base/local market
-     value and base/local unrealized P&L before the fixture yields.
+     in-flight capacity, retry, or offset-commit contracts. E2E readiness predicates must prove the
+     materialized state their scenario asserts. Position valuation readiness must require the exact
+     expected `valuation.market_price` in addition to derived market-value/P&L fields, because query
+     continuity may publish cost-basis market values and zero unrealized P&L before a daily
+     valuation snapshot exists. Reuse `has_expected_valuation_snapshot` for this proof and scan
+     adjacent E2E predicates for the same fallback-readiness defect.
 
 ## Context Maintenance Rule
 

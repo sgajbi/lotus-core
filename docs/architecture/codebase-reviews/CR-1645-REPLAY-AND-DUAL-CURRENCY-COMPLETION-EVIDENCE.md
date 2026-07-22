@@ -2,8 +2,8 @@
 
 ## Status
 
-Review correction applied locally; request-safe exact-head Docker proof, protected PR merge, and
-exact-main proof pending.
+Final-head review corrections applied locally; request-safe exact-head Docker proof, protected PR
+merge, and exact-main proof pending.
 
 ## Scope
 
@@ -23,10 +23,11 @@ integration, Docker smoke, latency, and fast performance jobs passed:
    mask one missing repair. Canonical repair requests intentionally re-enter the unified financial
    flow, so this request-count gate must retain its incremental `transaction/processed` threshold
    unless future evidence is correlated to the individual requests.
-2. The dual-currency fixture declared readiness when base-currency unrealized P&L became available,
-   then asserted local market value and local unrealized P&L in a later test. The incomplete
-   predicate allowed the test to read an intermediate response and intermittently convert
-   `None` to `Decimal`.
+2. The dual-currency fixture first declared readiness without every field later asserted. After
+   that gap was fixed, final-head review found that non-null market values and zero unrealized P&L
+   could still come from the query service's cost-basis continuity fallback while
+   `valuation.market_price` remained absent. That predicate could therefore pass without proving
+   the expected sell-date market-price snapshot.
 3. Exact-head run `29899570356` exposed the actual replay-drain defect. Same-portfolio replay
    requests are correctly ordered onto one partition, but the
    shared concurrent consumer performed its full one-second idle poll while work was active on the
@@ -44,14 +45,16 @@ one failure among 69 E2E tests.
    `stage="transaction",outcome="processed"` count. Remove the speculative global
    processed-plus-duplicate helper and its tests so unrelated duplicate traffic cannot satisfy a
    request-count threshold.
-2. Require the dual-currency fixture to observe base/local market values and base/local unrealized
-   P&L before yielding.
+2. Require the dual-currency fixture to observe the exact expected sell-date market price plus
+   base/local market values and base/local unrealized P&L before yielding. Assert the market price
+   in the scenario result as well as using it for readiness.
 3. Bound Kafka polls to 100 milliseconds while concurrent processing tasks are active, while
    retaining the configured one-second idle poll. Preserve per-partition ordering, the governed
    in-flight limit, retry handling, and synchronous offset commits.
-4. Scan the E2E suite for the same local-valuation readiness pattern. The exact mismatch was limited
-   to `test_dual_currency_workflow.py`; other polling call sites do not assert the same four-field
-   dual-currency contract.
+4. Scan the E2E suite for the same fallback-readiness pattern. The complex portfolio lifecycle used
+   non-null unrealized P&L as its readiness signal, so it now requires its exact expected market
+   price through the same reusable assertion helper. No other E2E poll predicate used this
+   valuation-field pattern.
 
 ## Compatibility
 
@@ -65,9 +68,12 @@ retain request-safe processed-repair evidence and now measure complete dual-curr
 
 - `107` focused shared-consumer, replay-consumer, and performance-gate unit tests passed with
   warnings treated as errors after removing the rejected global duplicate-count implementation.
+- `3` warning-strict valuation-readiness regression tests reject cost-basis fallback and wrong-price
+  snapshots and accept the exact materialized snapshot; both affected E2E modules collect all `5`
+  scenarios successfully.
 - Scoped Ruff lint and format passed for all four touched Python files.
-- The complete repository-native `make lint` pack passed, including ingestion, concurrency,
-  observability, event-contract, and synthetic-fixture guards.
+- The complete repository-native `make lint` pack passed again at signed head `2891f3c4d`. The pack
+  includes ingestion, concurrency, observability, event-contract, and synthetic-fixture guards.
 - `make typecheck` passed across `237` source files.
 - `make quality-wiki-docs-gate` passed; no repo-local wiki source changed because this slice does
   not alter operator-facing behavior or contracts.
