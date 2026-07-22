@@ -90,14 +90,18 @@ def evaluate_ordinary_settlement_cash(
 
     transaction_type = str(inputs["transaction_type"]).strip().upper()
     fee = Decimal(str(inputs["transaction_fee_amount"]))
-    if transaction_type in {"SELL", "DIVIDEND"}:
+    if transaction_type == "SELL":
         available_proceeds = Decimal(str(inputs["gross_transaction_amount"]))
         settlement_amount = available_proceeds - fee
         signed_cash = settlement_amount
-        reason_code = {
-            "SELL": "SELL_010_NON_POSITIVE_NET_SETTLEMENT",
-            "DIVIDEND": "DIVIDEND_013_NON_POSITIVE_NET_SETTLEMENT",
-        }[transaction_type]
+        reason_code = "SELL_010_NON_POSITIVE_NET_SETTLEMENT"
+    elif transaction_type == "DIVIDEND":
+        gross_dividend = Decimal(str(inputs["gross_transaction_amount"]))
+        withholding_tax = Decimal(str(inputs.get("withholding_tax_amount", "0")))
+        available_proceeds = gross_dividend - withholding_tax
+        settlement_amount = available_proceeds - fee
+        signed_cash = settlement_amount
+        reason_code = "DIVIDEND_013_NON_POSITIVE_NET_SETTLEMENT"
     elif transaction_type == "INTEREST":
         interest = evaluate_interest_settlement(inputs)
         available_proceeds = interest.net_interest_amount
@@ -127,10 +131,15 @@ def evaluate_dividend_settlement(
 ) -> DividendSettlementReferenceResult:
     """Evaluate supported DIVIDEND cash and zero-position-impact economics."""
     gross_dividend = Decimal(str(inputs["gross_dividend_amount"]))
+    withholding_tax = Decimal(str(inputs["withholding_tax_amount"]))
     transaction_fee = Decimal(str(inputs["transaction_fee_amount"]))
-    settlement_cash = gross_dividend - transaction_fee
+    settlement_cash = gross_dividend - withholding_tax - transaction_fee
     if gross_dividend <= Decimal(0):
         raise ValueError("DIVIDEND gross amount must be greater than zero")
+    if withholding_tax < Decimal(0):
+        raise ValueError("DIVIDEND withholding tax must be greater than or equal to zero")
+    if withholding_tax > gross_dividend:
+        raise ValueError("DIVIDEND withholding tax must not exceed gross dividend")
     if settlement_cash <= Decimal(0):
         raise ValueError("DIVIDEND settlement cash must remain greater than zero")
     return DividendSettlementReferenceResult(

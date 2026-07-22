@@ -41,7 +41,14 @@ pytestmark = [
     ),
     [
         ("SELL", "1200", "10", "120", "1198", {}),
-        ("DIVIDEND", "100", "0", "0", "98", {}),
+        (
+            "DIVIDEND",
+            "100",
+            "0",
+            "0",
+            "88",
+            {"withholding_tax_amount": Decimal("10")},
+        ),
         (
             "INTEREST",
             "100",

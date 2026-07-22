@@ -54,6 +54,12 @@ class DividendValidationReasonCode(StrEnum):
     NON_POSITIVE_NET_SETTLEMENT = (
         SettlementCashRejectionReasonCode.DIVIDEND_NON_POSITIVE_NET_SETTLEMENT.value
     )
+    NEGATIVE_WITHHOLDING_TAX = (
+        SettlementCashRejectionReasonCode.DIVIDEND_NEGATIVE_WITHHOLDING_TAX.value
+    )
+    WITHHOLDING_EXCEEDS_GROSS_AMOUNT = (
+        SettlementCashRejectionReasonCode.DIVIDEND_WITHHOLDING_EXCEEDS_GROSS_AMOUNT.value
+    )
 
 
 class InterestValidationReasonCode(StrEnum):

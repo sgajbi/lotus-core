@@ -4,6 +4,8 @@ from dataclasses import replace
 from datetime import datetime
 from decimal import Decimal
 
+import pytest
+
 from src.services.portfolio_transaction_processing_service.app.domain.transaction import (
     BookedTransaction,
     DividendValidationReasonCode,
@@ -68,6 +70,8 @@ def test_dividend_validation_reports_every_compatible_reason_code() -> None:
         DividendValidationReasonCode.INVALID_DATE_ORDER,
         DividendValidationReasonCode.MISSING_SETTLEMENT_CASH_ACCOUNT,
         DividendValidationReasonCode.NON_POSITIVE_NET_SETTLEMENT,
+        DividendValidationReasonCode.NEGATIVE_WITHHOLDING_TAX,
+        DividendValidationReasonCode.WITHHOLDING_EXCEEDS_GROSS_AMOUNT,
     }
 
 
@@ -176,6 +180,45 @@ def test_dividend_validation_rejects_non_positive_net_settlement() -> None:
     assert DividendValidationReasonCode.NON_POSITIVE_NET_SETTLEMENT in {
         issue.code for issue in issues
     }
+
+
+def test_dividend_validation_accepts_source_recorded_withholding() -> None:
+    transaction = replace(
+        _income("DIVIDEND"),
+        withholding_tax_amount=Decimal("12.30"),
+        trade_fee=Decimal("0.70"),
+    )
+
+    assert validate_dividend_transaction(transaction) == []
+
+
+@pytest.mark.parametrize(
+    ("withholding_tax", "expected_code"),
+    [
+        (
+            Decimal("-0.01"),
+            DividendValidationReasonCode.NEGATIVE_WITHHOLDING_TAX,
+        ),
+        (
+            Decimal("123.46"),
+            DividendValidationReasonCode.WITHHOLDING_EXCEEDS_GROSS_AMOUNT,
+        ),
+    ],
+)
+def test_dividend_validation_rejects_invalid_withholding(
+    withholding_tax: Decimal,
+    expected_code: DividendValidationReasonCode,
+) -> None:
+    issues = validate_dividend_transaction(
+        replace(
+            _income("DIVIDEND"),
+            withholding_tax_amount=withholding_tax,
+            trade_fee=Decimal("0"),
+        )
+    )
+
+    assert [issue.code for issue in issues] == [expected_code]
+    assert issues[0].field == "withholding_tax_amount"
 
 
 def test_interest_income_validation_rejects_non_positive_net_settlement() -> None:

@@ -219,6 +219,19 @@ async def test_openapi_describes_net_interest_as_pre_fee(async_test_client):
     )
 
 
+async def test_openapi_describes_withholding_as_dividend_or_interest_evidence(
+    async_test_client,
+):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+
+    withholding = response.json()["components"]["schemas"]["TransactionRecord"]["properties"][
+        "withholding_tax_amount"
+    ]
+    assert "DIVIDEND or INTEREST" in withholding["description"]
+    assert "rather than jurisdiction-specific tax advice" in withholding["description"]
+
+
 async def test_openapi_excludes_control_plane_analytics_input_contracts(async_test_client):
     response = await async_test_client.get("/openapi.json")
     assert response.status_code == 200

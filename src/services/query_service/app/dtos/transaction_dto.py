@@ -184,7 +184,10 @@ class TransactionRecord(BaseModel):
     )
     withholding_tax_amount: Optional[Decimal] = Field(
         None,
-        description="Withholding tax amount captured for INTEREST transactions.",
+        description=(
+            "Source-recorded withholding tax amount captured for DIVIDEND or INTEREST "
+            "transactions; this is evidence rather than jurisdiction-specific tax advice."
+        ),
         examples=[15.25],
     )
     other_interest_deductions_amount: Optional[Decimal] = Field(

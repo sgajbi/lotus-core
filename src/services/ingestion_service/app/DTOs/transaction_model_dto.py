@@ -249,7 +249,11 @@ class Transaction(BaseModel):
     withholding_tax_amount: Optional[NonNegativeDecimal] = Field(
         default=None,
         json_schema_extra={"example": "15.25"},
-        description="Withholding tax amount applied to the interest transaction.",
+        description=(
+            "Source-recorded withholding tax amount applied to a DIVIDEND or INTEREST "
+            "transaction. Core preserves this evidence without deriving jurisdiction-specific "
+            "tax policy."
+        ),
     )
     other_interest_deductions_amount: Optional[NonNegativeDecimal] = Field(
         default=None,
