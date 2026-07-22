@@ -51,6 +51,11 @@ property/metamorphic, mutation, reporting, or remaining-family criteria.
 - PR #814 review then found that the new oracle was absent from the governed
   `transaction-dividend-contract` manifest. The suite now includes the oracle, and a direct
   manifest-composition regression prevents silent removal from the repository-native lane.
+- Final pre-merge reconciliation found a second PR #814 thread: the cost-calculation error
+  collector was anonymous, so zeroed result fields could pass even if the strategy rejected a
+  supported vector. The oracle now asserts collector acceptance. The same-pattern scan fixed the
+  missing acceptance assertion in DIVIDEND and INTEREST Slice-0 characterizations; FX already
+  asserted it and required no change.
 
 ## Validation
 
@@ -61,6 +66,8 @@ property/metamorphic, mutation, reporting, or remaining-family criteria.
 - `python scripts\quality\test_manifest.py --suite transaction-interest-contract --quiet`
   -> 317 passed.
 - Warning-strict manifest-composition plus DIVIDEND oracle review pack -> 20 passed.
+- Final warning-strict DIVIDEND/INTEREST oracle and Slice-0 pack after collector hardening -> 26
+  passed.
 - `uvx --from ruff==0.15.18 ruff check tests/test_support/transaction_economics_reference.py tests/unit/transaction_specs/test_dividend_settlement_golden_vectors.py tests/unit/transaction_specs/test_interest_settlement_golden_vectors.py`
   -> passed with pinned Ruff 0.15.18.
 - `uvx --from ruff==0.15.18 ruff format --check tests/test_support/transaction_economics_reference.py tests/unit/transaction_specs/test_dividend_settlement_golden_vectors.py tests/unit/transaction_specs/test_interest_settlement_golden_vectors.py`

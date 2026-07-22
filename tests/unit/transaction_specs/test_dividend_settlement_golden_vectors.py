@@ -141,12 +141,14 @@ def test_dividend_settlement_matches_independent_golden_vector(
     )
     after = calculate_next_position_state(before, transaction)
     cost_transaction = _cost_basis_transaction(vector)
+    error_reporter = CostCalculationErrorCollector()
     calculator = CostBasisCalculator(
         disposition_engine=MagicMock(),
-        error_reporter=CostCalculationErrorCollector(),
+        error_reporter=error_reporter,
     )
     calculator.calculate_transaction_costs(cost_transaction)
 
+    assert not error_reporter.has_errors()
     assert reference.settlement_cash_amount == Decimal(expected["settlement_cash_amount"])
     assert reference.signed_cashflow_amount == Decimal(expected["signed_cashflow_amount"])
     assert reference.quantity_delta == Decimal(expected["quantity_delta"])

@@ -98,6 +98,7 @@ def test_interest_cost_calculation_current_behavior_zero_cost_and_no_realized_pn
 
     calculator.calculate_transaction_costs(interest_transaction)
 
+    assert not error_reporter.has_errors()
     assert interest_transaction.net_cost == Decimal("0")
     assert interest_transaction.net_cost_local == Decimal("0")
     assert interest_transaction.gross_cost == Decimal("0")
