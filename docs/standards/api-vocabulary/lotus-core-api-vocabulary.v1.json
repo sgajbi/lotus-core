@@ -13,7 +13,7 @@
       "openApiVersion": "3.1.0"
     }
   ],
-  "generatedAt": "2026-07-19T03:53:18.925615+00:00",
+  "generatedAt": "2026-07-22T23:14:52.223151+00:00",
   "attributeCatalog": [
     {
       "semanticId": "lotus.accepted_count",
@@ -9162,7 +9162,7 @@
       "semanticId": "lotus.withholding_tax_amount",
       "canonicalTerm": "withholding_tax_amount",
       "preferredName": "withholding_tax_amount",
-      "description": "Withholding tax amount captured for INTEREST transactions.",
+      "description": "Source-recorded withholding tax amount captured for DIVIDEND or INTEREST transactions; this is evidence rather than jurisdiction-specific tax advice.",
       "example": 15.25,
       "type": "string",
       "locations": [
