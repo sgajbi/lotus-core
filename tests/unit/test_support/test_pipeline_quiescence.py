@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import deque
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from unittest.mock import MagicMock
 
 import pytest
@@ -94,45 +94,6 @@ def test_wait_for_pipeline_quiescence_requires_stable_zero_snapshots(monkeypatch
     assert result == {"outbox_pending": 0, "ingestion_backlog": 0}
 
 
-def test_wait_for_pipeline_quiescence_requires_quiet_window(monkeypatch) -> None:
-    snapshots = deque(
-        [
-            {"outbox_pending": 0, "ingestion_backlog": 0},
-            {"outbox_pending": 0, "ingestion_backlog": 0},
-            {"outbox_pending": 0, "ingestion_backlog": 0},
-        ]
-    )
-    now = datetime(2026, 3, 10, 10, 0, tzinfo=timezone.utc)
-    activity_times = deque(
-        [
-            now - timedelta(seconds=2),
-            now - timedelta(seconds=4),
-            now - timedelta(seconds=9),
-        ]
-    )
-
-    monkeypatch.setattr("tests.test_support.pipeline_quiescence.time.sleep", lambda _: None)
-
-    class _FixedDateTime(datetime):
-        @classmethod
-        def now(cls, tz=None):
-            return now if tz is None else now.astimezone(tz)
-
-    monkeypatch.setattr("tests.test_support.pipeline_quiescence.datetime", _FixedDateTime)
-    monkeypatch.setattr("tests.test_support.pipeline_quiescence.time.time", lambda: 0)
-
-    result = wait_for_pipeline_quiescence(
-        timeout_seconds=10,
-        poll_seconds=0,
-        stable_cycles=1,
-        quiet_seconds=8,
-        snapshot_reader=lambda: snapshots.popleft(),
-        last_activity_reader=lambda: activity_times.popleft(),
-    )
-
-    assert result == {"outbox_pending": 0, "ingestion_backlog": 0}
-
-
 def test_wait_for_pipeline_quiescence_does_not_bypass_quiet_window_without_active_rows(
     monkeypatch,
 ) -> None:
@@ -169,8 +130,7 @@ def test_wait_for_pipeline_quiescence_restarts_zero_timer_after_observed_activit
 ) -> None:
     snapshot = {"outbox_pending": 0, "ingestion_backlog": 0}
     times = iter((0, 0, 0, 1, 1, 4, 4, 9))
-    now = datetime(2026, 3, 10, 10, 0, tzinfo=timezone.utc)
-    activity_times = iter((now - timedelta(seconds=2), None, None))
+    activity_times = iter((datetime(2020, 1, 1), None, None))
     reads = 0
 
     def _read_snapshot() -> dict[str, int]:
@@ -178,13 +138,7 @@ def test_wait_for_pipeline_quiescence_restarts_zero_timer_after_observed_activit
         reads += 1
         return snapshot
 
-    class _FixedDateTime(datetime):
-        @classmethod
-        def now(cls, tz=None):
-            return now if tz is None else now.astimezone(tz)
-
     monkeypatch.setattr("tests.test_support.pipeline_quiescence.time.sleep", lambda _: None)
-    monkeypatch.setattr("tests.test_support.pipeline_quiescence.datetime", _FixedDateTime)
     monkeypatch.setattr(
         "tests.test_support.pipeline_quiescence.time.time",
         lambda: next(times),
