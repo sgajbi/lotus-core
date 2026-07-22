@@ -47,3 +47,4 @@ historical-row defect.
 - `tests/test_support/pipeline_quiescence.py`
 - `tests/unit/test_support/test_pipeline_quiescence.py`
 - exact-main run `29955740903`, job `89050505680`
+- isolated rerun of `tests/e2e/test_timeseries_contracts.py`: `4 passed in 68.07s`
