@@ -90,6 +90,7 @@ def evaluate_ordinary_settlement_cash(
 
     transaction_type = str(inputs["transaction_type"]).strip().upper()
     fee = Decimal(str(inputs["transaction_fee_amount"]))
+    invalid_withholding = False
     if transaction_type == "SELL":
         available_proceeds = Decimal(str(inputs["gross_transaction_amount"]))
         settlement_amount = available_proceeds - fee
@@ -101,7 +102,13 @@ def evaluate_ordinary_settlement_cash(
         available_proceeds = gross_dividend - withholding_tax
         settlement_amount = available_proceeds - fee
         signed_cash = settlement_amount
-        reason_code = "DIVIDEND_013_NON_POSITIVE_NET_SETTLEMENT"
+        invalid_withholding = withholding_tax < 0 or withholding_tax > gross_dividend
+        if withholding_tax < 0:
+            reason_code = "DIVIDEND_014_NEGATIVE_WITHHOLDING_TAX"
+        elif withholding_tax > gross_dividend:
+            reason_code = "DIVIDEND_015_WITHHOLDING_EXCEEDS_GROSS_AMOUNT"
+        else:
+            reason_code = "DIVIDEND_013_NON_POSITIVE_NET_SETTLEMENT"
     elif transaction_type == "INTEREST":
         interest = evaluate_interest_settlement(inputs)
         available_proceeds = interest.net_interest_amount
@@ -111,7 +118,7 @@ def evaluate_ordinary_settlement_cash(
     else:
         raise ValueError(f"Unsupported ordinary settlement type: {transaction_type}")
 
-    if settlement_amount <= 0:
+    if settlement_amount <= 0 or invalid_withholding:
         return OrdinarySettlementCashReferenceResult(
             available_proceeds_amount=available_proceeds,
             fee_amount=fee,
