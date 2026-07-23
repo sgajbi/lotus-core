@@ -23,6 +23,7 @@ def test_manifest_db_direct_suites_use_isolated_infrastructure_services() -> Non
 
 
 def test_db_direct_integration_scopes_use_db_only_services() -> None:
+    assert _test_services_for_scope("critical-lifecycle-db") == DB_ONLY_SERVICES
     assert _test_services_for_scope("integration-lite") == DB_ONLY_SERVICES
     assert _test_services_for_scope("ops-contract") == DB_ONLY_SERVICES
 

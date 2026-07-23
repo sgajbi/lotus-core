@@ -104,6 +104,7 @@ def setup_stale_aggregation_job_data(db_engine, clean_db):
         session.commit()
 
 
+@pytest.mark.lifecycle
 async def test_recover_expired_job_leases_requeues_retryable_claim(
     db_engine, clean_db, setup_stale_aggregation_job_data, async_db_session: AsyncSession
 ):
@@ -142,6 +143,7 @@ async def test_recover_expired_job_leases_requeues_retryable_claim(
         assert job3.status == "PENDING"
 
 
+@pytest.mark.lifecycle
 async def test_recover_expired_job_leases_fails_retry_exhausted_claim(
     db_engine, clean_db, setup_stale_aggregation_job_data, async_db_session: AsyncSession
 ):
@@ -167,6 +169,7 @@ async def test_recover_expired_job_leases_fails_retry_exhausted_claim(
         assert job1.lease_expires_at is None
 
 
+@pytest.mark.lifecycle
 async def test_recover_expired_job_leases_does_not_overwrite_completed_rows(
     db_engine, clean_db, setup_stale_aggregation_job_data, async_db_session: AsyncSession
 ):
@@ -216,6 +219,7 @@ async def test_recover_expired_job_leases_does_not_overwrite_completed_rows(
         assert job.status == "COMPLETE"
 
 
+@pytest.mark.lifecycle
 async def test_claim_eligible_jobs_does_not_double_claim_under_concurrency(
     clean_db, async_db_session: AsyncSession
 ):

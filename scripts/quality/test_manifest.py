@@ -37,6 +37,7 @@ SUITES: dict[str, list[str]] = {
         "tests/integration/services/calculators/position_valuation_calculator/"
         "test_int_valuation_repo_empty_open_dates.py",
     ],
+    "critical-lifecycle-db": ["tests/integration"],
     "integration-lite": _discover_integration_lite(),
     "integration-all": ["tests/integration"],
     "ops-contract": [
@@ -162,12 +163,14 @@ SUITES: dict[str, list[str]] = {
 SOURCE = "src/services/query_service/app"
 SUITE_PYTEST_ARGS: dict[str, list[str]] = {
     "unit": ["-m", "not integration_db and not db_direct and not live_worker and not e2e"],
+    "critical-lifecycle-db": ["-m", "lifecycle"],
 }
 
 SUITE_ENV_PROFILE: dict[str, str] = {
     "unit": "unit",
     "unit-db": "unit",
     "critical-db-coverage": "integration",
+    "critical-lifecycle-db": "integration",
     "integration-lite": "integration",
     "integration-all": "integration",
     "ops-contract": "integration",
@@ -187,6 +190,7 @@ SUITE_RUNTIME_MODE: dict[str, str] = {
     "unit": "unit",
     "unit-db": "db_direct",
     "critical-db-coverage": "db_direct",
+    "critical-lifecycle-db": "db_direct",
     "integration-lite": "db_direct",
     "integration-all": "db_direct",
     "ops-contract": "db_direct",

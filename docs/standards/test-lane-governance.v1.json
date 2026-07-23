@@ -18,6 +18,7 @@
       "regression",
       "performance",
       "resilience",
+      "lifecycle",
       "certification",
       "flaky_quarantine"
     ],
@@ -98,6 +99,26 @@
       ]
     },
     {
+      "suite": "critical-lifecycle-db",
+      "make_target": "make test-critical-lifecycle-db",
+      "runtime_mode": "db_direct",
+      "environment_profile": "integration",
+      "allowed_markers": [
+        "integration_db",
+        "db_direct",
+        "api",
+        "contract",
+        "regression",
+        "resilience",
+        "lifecycle"
+      ],
+      "forbidden_markers": [
+        "live_worker",
+        "e2e",
+        "flaky_quarantine"
+      ]
+    },
+    {
       "suite": "integration-lite",
       "make_target": "make test-integration-lite",
       "runtime_mode": "db_direct",
@@ -133,6 +154,7 @@
         "regression",
         "performance",
         "resilience",
+        "lifecycle",
         "certification"
       ],
       "forbidden_markers": [

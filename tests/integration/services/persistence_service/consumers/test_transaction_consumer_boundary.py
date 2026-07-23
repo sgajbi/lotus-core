@@ -1,12 +1,14 @@
 import json
 import os
+from collections.abc import AsyncIterator
 from datetime import UTC, date, datetime
 
 import pytest
 from portfolio_common.database_models import OutboxEvent, Portfolio, ProcessedEvent, Transaction
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from src.services.persistence_service.app.consumers import base_consumer as base_consumer_module
 from src.services.persistence_service.app.consumers.transaction_consumer import (
     TransactionPersistenceConsumer,
 )
@@ -76,9 +78,23 @@ async def _seed_portfolio(async_db_session: AsyncSession) -> None:
     await async_db_session.commit()
 
 
+@pytest.mark.lifecycle
 async def test_transaction_consumer_boundary_persists_transaction_outbox_and_idempotency(
-    clean_db, async_db_session: AsyncSession
+    clean_db,
+    async_db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    async_factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
+
+    async def current_test_session() -> AsyncIterator[AsyncSession]:
+        async with async_factory() as session:
+            yield session
+
+    monkeypatch.setattr(
+        base_consumer_module,
+        "get_async_db_session",
+        current_test_session,
+    )
     await _seed_portfolio(async_db_session)
     consumer = TransactionPersistenceConsumer(
         bootstrap_servers=os.environ["KAFKA_BOOTSTRAP_SERVERS"],

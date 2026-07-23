@@ -709,6 +709,7 @@ async def test_price_revaluation_selects_current_epoch_until_snapshot_is_source_
     assert keys == []
 
 
+@pytest.mark.lifecycle
 async def test_find_and_reset_stale_jobs(
     clean_db, setup_stale_job_data, session_factory: async_sessionmaker
 ):
@@ -766,6 +767,7 @@ async def test_find_and_reset_stale_jobs(
         assert job4.status == initial_states["P4"]
 
 
+@pytest.mark.lifecycle
 async def test_find_and_reset_stale_jobs_marks_over_limit_rows_failed(
     clean_db, setup_stale_job_data, session_factory: async_sessionmaker
 ):
@@ -788,6 +790,7 @@ async def test_find_and_reset_stale_jobs_marks_over_limit_rows_failed(
         assert job1.failure_reason == "Stale processing timeout exceeded max attempts"
 
 
+@pytest.mark.lifecycle
 async def test_find_and_reset_stale_jobs_skips_superseded_stale_processing_rows(
     clean_db, async_db_session: AsyncSession
 ):
@@ -846,6 +849,7 @@ async def test_find_and_reset_stale_jobs_skips_superseded_stale_processing_rows(
     ]
 
 
+@pytest.mark.lifecycle
 async def test_find_and_reset_stale_jobs_does_not_overwrite_completed_rows(
     clean_db, setup_stale_job_data, session_factory: async_sessionmaker
 ):

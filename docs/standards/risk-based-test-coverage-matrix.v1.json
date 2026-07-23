@@ -143,7 +143,7 @@
             "tests/e2e/test_portfolio_query_pipeline.py",
             "make test-e2e-smoke"
           ],
-          "follow_up_issue": "sgajbi/lotus-core#603"
+          "follow_up_issue": "sgajbi/lotus-core#457"
         }
       ]
     },
@@ -264,7 +264,7 @@
           "current_coverage": [
             "tests/e2e/test_cashflow_pipeline.py"
           ],
-          "follow_up_issue": "sgajbi/lotus-core#603"
+          "follow_up_issue": "sgajbi/lotus-core#456"
         }
       ]
     },
@@ -323,7 +323,8 @@
           "gap_status": "covered",
           "current_coverage": [
             "tests/integration/services/persistence_service/repositories/test_repositories.py",
-            "tests/integration/services/query_service/test_transactions_router.py"
+            "tests/integration/services/query_service/test_transactions_router.py",
+            "make test-critical-lifecycle-db"
           ]
         },
         {

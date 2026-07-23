@@ -324,6 +324,7 @@ async def test_replay_impact_includes_position_first_opened_after_correction(
     ]
 
 
+@pytest.mark.lifecycle
 async def test_durable_replay_coalesces_pair_to_earliest_date_and_latest_lineage(
     clean_db,
     async_db_session: AsyncSession,
@@ -506,6 +507,7 @@ async def test_stale_fx_replay_coalesces_with_newer_pending_pair_job(
     assert jobs[1].correlation_id == "corr-pending-latest"
 
 
+@pytest.mark.lifecycle
 async def test_malformed_fx_replay_is_claimed_and_failed_supportably(
     clean_db,
     async_db_session: AsyncSession,
@@ -548,6 +550,7 @@ async def test_malformed_fx_replay_is_claimed_and_failed_supportably(
     assert "invalid_fx_revaluation_job_payload" in failed_job.failure_reason
 
 
+@pytest.mark.lifecycle
 @pytest.mark.parametrize(
     "malformed_payload",
     [
@@ -624,6 +627,7 @@ async def test_valid_fx_replay_quarantines_malformed_pending_pair_before_upsert(
     assert jobs[1].correlation_id == "corr-valid-replacement"
 
 
+@pytest.mark.lifecycle
 async def test_claimed_fx_job_resets_exact_affected_watermark_and_completes(
     clean_db,
     async_db_session: AsyncSession,

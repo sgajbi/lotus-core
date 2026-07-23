@@ -44,6 +44,7 @@ def mock_kafka_producer() -> MagicMock:
     return mock
 
 
+@pytest.mark.lifecycle
 async def test_marks_only_success_on_delivery(db_engine, clean_db, mock_kafka_producer):
     """
     GIVEN three pending outbox events
@@ -163,6 +164,7 @@ async def test_increments_retry_count_from_null(db_engine, clean_db):
     assert result.claim_expires_at is None
 
 
+@pytest.mark.lifecycle
 async def test_synchronous_publish_failure_does_not_abort_accounted_batch(db_engine, clean_db):
     """
     GIVEN a batch where one publish_message call raises synchronously mid-loop

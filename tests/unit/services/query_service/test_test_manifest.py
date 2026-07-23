@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from scripts.quality.test_manifest import (
+    SUITE_ENV_PROFILE,
     SUITE_PYTEST_ARGS,
     SUITE_RUNTIME_MODE,
     SUITES,
@@ -42,6 +43,17 @@ def test_critical_db_coverage_includes_changed_outbox_delivery_hot_path() -> Non
     assert "tests/integration/libs/portfolio-common/test_outbox_dispatcher.py" in get_suite(
         "critical-db-coverage"
     )
+
+
+def test_critical_lifecycle_suite_is_marker_selected_and_db_direct() -> None:
+    assert get_suite("critical-lifecycle-db") == ["tests/integration"]
+    assert SUITE_PYTEST_ARGS["critical-lifecycle-db"] == ["-m", "lifecycle"]
+    assert SUITE_ENV_PROFILE["critical-lifecycle-db"] == "integration"
+    assert SUITE_RUNTIME_MODE["critical-lifecycle-db"] == "db_direct"
+
+
+def test_critical_lifecycle_suite_has_repository_native_make_target() -> None:
+    assert "test-critical-lifecycle-db:" in Path("Makefile").read_text(encoding="utf-8")
 
 
 def test_integration_all_suite_tracks_full_integration_tree() -> None:

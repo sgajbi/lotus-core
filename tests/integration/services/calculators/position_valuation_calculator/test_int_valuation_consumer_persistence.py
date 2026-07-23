@@ -32,6 +32,7 @@ from src.services.calculators.position_valuation_calculator.app.repositories imp
 pytestmark = pytest.mark.asyncio
 
 
+@pytest.mark.lifecycle
 async def test_valuation_message_persists_snapshot_outbox_and_idempotency(
     clean_db, async_db_session: AsyncSession
 ):
@@ -186,6 +187,7 @@ async def test_valuation_message_persists_snapshot_outbox_and_idempotency(
     assert job.status == "COMPLETE"
 
 
+@pytest.mark.lifecycle
 async def test_valuation_message_skips_side_effects_after_losing_job_ownership(
     clean_db, async_db_session: AsyncSession
 ):

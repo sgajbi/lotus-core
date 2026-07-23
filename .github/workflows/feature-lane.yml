@@ -98,6 +98,8 @@ jobs:
         include:
           - suite: unit-db
             target: test-unit-db
+          - suite: critical-lifecycle-db
+            target: test-critical-lifecycle-db
           - suite: integration-lite
             target: test-integration-lite
     steps:
