@@ -47,11 +47,15 @@ def _required_text(value: object, *, field_name: str) -> str:
 
 def _decimal_value(value: object, *, field_name: str) -> Decimal:
     if isinstance(value, Decimal):
-        return value
-    try:
-        return Decimal(str(value))
-    except (InvalidOperation, ValueError) as exc:
-        raise ValueError(f"{field_name} must be a valid decimal") from exc
+        amount = value
+    else:
+        try:
+            amount = Decimal(str(value))
+        except (InvalidOperation, ValueError) as exc:
+            raise ValueError(f"{field_name} must be a valid decimal") from exc
+    if not amount.is_finite():
+        raise ValueError(f"{field_name} must be a finite decimal")
+    return amount
 
 
 def _optional_decimal(value: object, *, field_name: str) -> Decimal | None:

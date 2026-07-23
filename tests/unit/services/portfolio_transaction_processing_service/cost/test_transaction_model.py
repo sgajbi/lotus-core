@@ -79,6 +79,23 @@ def test_transaction_rejects_invalid_corporate_action_sequence() -> None:
         _transaction(child_sequence_hint="second")
 
 
+@pytest.mark.parametrize("value", ["NaN", "sNaN", "Infinity", "-Infinity"])
+@pytest.mark.parametrize(
+    "field_name",
+    [
+        "quantity",
+        "net_transaction_amount",
+        "transaction_fx_rate",
+    ],
+)
+def test_transaction_rejects_non_finite_financial_values(
+    field_name: str,
+    value: str,
+) -> None:
+    with pytest.raises(ValueError, match=rf"{field_name} must be a finite decimal"):
+        _transaction(**{field_name: Decimal(value)})
+
+
 def test_transaction_dump_serializes_current_calculated_extra_field_value() -> None:
     transaction = _transaction(realized_total_pnl_base=None)
 

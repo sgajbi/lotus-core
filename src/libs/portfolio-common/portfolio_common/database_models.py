@@ -1725,6 +1725,10 @@ class Transaction(Base):
     )
 
     __table_args__ = (
+        CheckConstraint(
+            "CAST(quantity AS TEXT) NOT IN ('NaN', 'Infinity', '-Infinity')",
+            name="ck_transactions_quantity_finite",
+        ),
         Index("ix_transactions_portfolio_security", "portfolio_id", "security_id"),
         Index(
             "ix_transactions_portfolio_instrument_date",
@@ -1840,6 +1844,10 @@ class TransactionCost(Base):
 
     __table_args__ = (
         CheckConstraint(
+            "CAST(amount AS TEXT) NOT IN ('NaN', 'Infinity', '-Infinity')",
+            name="ck_transaction_costs_amount_finite",
+        ),
+        CheckConstraint(
             "amount > 0",
             name="ck_transaction_costs_amount_positive",
         ),
@@ -1951,6 +1959,15 @@ class PositionLotState(Base):
 
     __table_args__ = (
         CheckConstraint(
+            "CAST(original_quantity AS TEXT) NOT IN ('NaN', 'Infinity', '-Infinity') "
+            "AND CAST(open_quantity AS TEXT) NOT IN ('NaN', 'Infinity', '-Infinity') "
+            "AND CAST(lot_cost_local AS TEXT) NOT IN ('NaN', 'Infinity', '-Infinity') "
+            "AND CAST(lot_cost_base AS TEXT) NOT IN ('NaN', 'Infinity', '-Infinity') "
+            "AND CAST(accrued_interest_paid_local AS TEXT) "
+            "NOT IN ('NaN', 'Infinity', '-Infinity')",
+            name="ck_position_lot_state_numeric_finite",
+        ),
+        CheckConstraint(
             "open_quantity >= 0",
             name="ck_position_lot_open_quantity_nonnegative",
         ),
@@ -2014,6 +2031,10 @@ class CostBasisProcessingState(Base):
     )
 
     __table_args__ = (
+        CheckConstraint(
+            "CAST(latest_quantity AS TEXT) NOT IN ('NaN', 'Infinity', '-Infinity')",
+            name="ck_cost_basis_processing_quantity_finite",
+        ),
         Index(
             "ix_cost_basis_processing_state_updated_key",
             updated_at.desc(),
@@ -2051,6 +2072,12 @@ class AverageCostPoolState(Base):
     )
 
     __table_args__ = (
+        CheckConstraint(
+            "CAST(pool_quantity AS TEXT) NOT IN ('NaN', 'Infinity', '-Infinity') "
+            "AND CAST(pool_cost_local AS TEXT) NOT IN ('NaN', 'Infinity', '-Infinity') "
+            "AND CAST(pool_cost_base AS TEXT) NOT IN ('NaN', 'Infinity', '-Infinity')",
+            name="ck_average_cost_pool_numeric_finite",
+        ),
         CheckConstraint(
             "pool_quantity >= 0",
             name="ck_average_cost_pool_state_quantity_nonnegative",
@@ -2100,6 +2127,13 @@ class AccruedIncomeOffsetState(Base):
     )
 
     __table_args__ = (
+        CheckConstraint(
+            "CAST(accrued_interest_paid_local AS TEXT) "
+            "NOT IN ('NaN', 'Infinity', '-Infinity') "
+            "AND CAST(remaining_offset_local AS TEXT) "
+            "NOT IN ('NaN', 'Infinity', '-Infinity')",
+            name="ck_accrued_income_offset_numeric_finite",
+        ),
         Index(
             "ix_accrued_offset_port_norm_sec_id",
             "portfolio_id",
