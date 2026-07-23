@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import statistics
 import subprocess
@@ -712,6 +713,26 @@ def _enforce_gate(results: list[dict[str, Any]]) -> tuple[bool, list[str]]:
     return (len(violations) == 0, violations)
 
 
+def _at_least_one(value: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be an integer") from exc
+    if parsed < 1:
+        raise argparse.ArgumentTypeError("must be at least 1")
+    return parsed
+
+
+def _non_negative_finite_float(value: str) -> float:
+    try:
+        parsed = float(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be a number") from exc
+    if not math.isfinite(parsed) or parsed < 0:
+        raise argparse.ArgumentTypeError("must be a finite number greater than or equal to 0")
+    return parsed
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run lotus-core endpoint latency profiling.")
     parser.add_argument("--ingestion-base-url")
@@ -753,7 +774,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--source-readiness-stable-sweeps",
-        type=int,
+        type=_at_least_one,
         default=3,
         help=(
             "Consecutive all-2xx source-readiness sweeps required before warmup and measurement."
@@ -761,7 +782,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--source-readiness-poll-interval-seconds",
-        type=float,
+        type=_non_negative_finite_float,
         default=2.0,
         help="Delay between source-readiness stability sweeps.",
     )

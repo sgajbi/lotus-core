@@ -23,6 +23,65 @@ from scripts.operations.latency_profile import (
 )
 
 
+@pytest.mark.parametrize(
+    ("option", "value", "message"),
+    [
+        ("--source-readiness-stable-sweeps", "0", "must be at least 1"),
+        ("--source-readiness-stable-sweeps", "-1", "must be at least 1"),
+        (
+            "--source-readiness-poll-interval-seconds",
+            "-0.1",
+            "must be a finite number greater than or equal to 0",
+        ),
+        (
+            "--source-readiness-poll-interval-seconds",
+            "nan",
+            "must be a finite number greater than or equal to 0",
+        ),
+    ],
+)
+def test_parse_args_rejects_invalid_source_readiness_controls(
+    monkeypatch,
+    capsys,
+    option: str,
+    value: str,
+    message: str,
+) -> None:
+    monkeypatch.setattr("sys.argv", ["latency_profile.py", option, value])
+
+    with pytest.raises(SystemExit) as exc_info:
+        latency_profile.parse_args()
+
+    assert exc_info.value.code == 2
+    diagnostic = capsys.readouterr().err
+    assert f"argument {option}:" in diagnostic
+    assert message in diagnostic
+
+
+def test_parse_args_accepts_default_and_explicit_source_readiness_controls(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr("sys.argv", ["latency_profile.py"])
+    defaults = latency_profile.parse_args()
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "latency_profile.py",
+            "--source-readiness-stable-sweeps",
+            "5",
+            "--source-readiness-poll-interval-seconds",
+            "0",
+        ],
+    )
+
+    explicit = latency_profile.parse_args()
+
+    assert defaults.source_readiness_stable_sweeps == 3
+    assert defaults.source_readiness_poll_interval_seconds == 2.0
+    assert explicit.source_readiness_stable_sweeps == 5
+    assert explicit.source_readiness_poll_interval_seconds == 0.0
+
+
 def test_percentile_single_sample() -> None:
     assert _percentile_ms([12.5], 95) == 12.5
 
