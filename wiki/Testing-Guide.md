@@ -95,6 +95,14 @@ python scripts/quality/test_manifest.py --suite critical-lifecycle-db --collect-
 
 Use the manifest instead of inventing ad hoc pytest selections when you need parity with CI.
 
+Every collected E2E node is registered in
+`docs/standards/e2e-test-value-ledger.v1.json`. Shared capability profiles hold ownership,
+invariant, defect-class, fixture, dependency, source-contract, lower-layer, and non-duplication
+evidence once; node rows retain stable identity, exact nodeid, lane membership, and review
+decision. Run `make e2e-test-value-guard` after E2E additions, renames, removals, or lane changes.
+The guard blocks inventory/lane/evidence drift and reports remaining `needs-review` closure
+blockers without treating test-count reduction as success.
+
 ## Guard rails that matter
 
 `lotus-core` also treats several non-pytest gates as part of testing truth:
@@ -108,6 +116,7 @@ Use the manifest instead of inventing ad hoc pytest selections when you need par
 - `make event-runtime-contract-guard`
 - `make synthetic-fixture-leakage-guard`
 - `make test-lane-governance-guard`
+- `make e2e-test-value-guard`
 - `make concurrency-duplicate-delivery-guard`
 - `make cross-product-golden-regression-guard`
 - `make command-api-behavior-certification-guard`
