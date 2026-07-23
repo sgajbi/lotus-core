@@ -19,10 +19,17 @@ _CANONICAL_PROFILES = {
     "nullable-positive-finite": {"nullable": True, "sign": "positive"},
     "nullable-nonnegative-finite": {"nullable": True, "sign": "nonnegative"},
 }
-_ROLLOUT_STATUSES = {"orm-enforced", "database-enforced", "planned"}
-_ORM_ENFORCED_STATUSES = {"orm-enforced", "database-enforced"}
+_ROLLOUT_STATUSES = {"orm-enforced", "planned"}
 _SPECIAL_NUMERIC_LITERALS = ("NaN", "Infinity", "-Infinity")
 _SQLALCHEMY_NUMERIC_CONSTRUCTORS = {"Numeric", "NUMERIC", "DECIMAL"}
+_V1_CONTRACT_KEYS = {
+    "schema_version",
+    "model_path",
+    "expected_inventory",
+    "profiles",
+    "rollout_statuses",
+    "tables",
+}
 
 
 class DuplicateContractKeyError(ValueError):
@@ -151,6 +158,7 @@ def _numeric_type_aliases(
         if (
             (isinstance(value, ast.Call) and _call_name(value.func) in constructor_names)
             or (isinstance(value, ast.Name) and value.id in constructor_names)
+            or (isinstance(value, ast.Attribute) and _call_name(value) in constructor_names)
         )
     }
     changed = True
@@ -182,7 +190,8 @@ def _is_numeric_type(
 ) -> bool:
     constructor_names = constructors | _SQLALCHEMY_NUMERIC_CONSTRUCTORS
     return (
-        isinstance(expression, ast.Call) and _call_name(expression.func) in constructor_names
+        isinstance(expression, ast.Call)
+        and _call_name(expression.func) in (constructor_names | numeric_aliases)
     ) or (
         isinstance(expression, ast.Name)
         and (expression.id in constructor_names or expression.id in numeric_aliases)
@@ -381,144 +390,6 @@ def _contract_entries(contract: dict[str, Any], findings: list[str]) -> dict[str
     return entries
 
 
-def _evidence_path(
-    *,
-    repo_root: Path,
-    raw_path: object,
-    identity: str,
-    field_name: str,
-    findings: list[str],
-) -> Path | None:
-    if not isinstance(raw_path, str) or not raw_path.strip():
-        findings.append(f"{identity}: {field_name} must be a nonempty repository-relative path")
-        return None
-    relative = Path(raw_path)
-    if relative.is_absolute() or ".." in relative.parts:
-        findings.append(f"{identity}: {field_name} must stay within the repository")
-        return None
-    resolved = (repo_root / relative).resolve()
-    try:
-        resolved.relative_to(repo_root.resolve())
-    except ValueError:
-        findings.append(f"{identity}: {field_name} must stay within the repository")
-        return None
-    if not resolved.is_file():
-        findings.append(f"{identity}: {field_name} does not exist: {raw_path}")
-        return None
-    return resolved
-
-
-def _validate_database_enforcement_evidence(
-    *,
-    contract: dict[str, Any],
-    contract_entries: dict[str, dict[str, str]],
-    repo_root: Path,
-    findings: list[str],
-) -> None:
-    evidence = contract.get("database_enforcement_evidence")
-    if not isinstance(evidence, dict):
-        findings.append("contract.database_enforcement_evidence must be an object")
-        return
-    database_identities = {
-        identity
-        for identity, classification in contract_entries.items()
-        if classification["rollout_status"] == "database-enforced"
-    }
-    for identity in sorted(database_identities - set(evidence)):
-        findings.append(f"{identity}: database-enforced classification lacks database evidence")
-    for identity in sorted(set(evidence) - database_identities):
-        findings.append(
-            f"{identity}: database evidence has no matching database-enforced classification"
-        )
-    for identity in sorted(database_identities & set(evidence)):
-        item = evidence[identity]
-        if not isinstance(item, dict) or set(item) != {
-            "migration_path",
-            "constraint_names",
-            "postgresql_test_paths",
-        }:
-            findings.append(
-                f"{identity}: database evidence must contain migration_path, "
-                "constraint_names, and postgresql_test_paths"
-            )
-            continue
-        migration_path = item["migration_path"]
-        migration = _evidence_path(
-            repo_root=repo_root,
-            raw_path=migration_path,
-            identity=identity,
-            field_name="migration_path",
-            findings=findings,
-        )
-        if isinstance(migration_path, str) and (
-            not Path(migration_path).as_posix().startswith("alembic/versions/")
-            or Path(migration_path).suffix != ".py"
-        ):
-            findings.append(
-                f"{identity}: migration_path must be a Python migration under alembic/versions"
-            )
-        constraint_names = item["constraint_names"]
-        valid_constraint_names = (
-            isinstance(constraint_names, list)
-            and bool(constraint_names)
-            and all(isinstance(name, str) for name in constraint_names)
-            and len(constraint_names) == len(set(constraint_names))
-            and all(re.fullmatch(r"[a-z][a-z0-9_]+", name) is not None for name in constraint_names)
-        )
-        if not valid_constraint_names:
-            findings.append(f"{identity}: constraint_names must be unique nonempty SQL identifiers")
-            declared_constraint_names: list[str] = []
-        elif migration is not None:
-            declared_constraint_names = constraint_names
-            migration_source = migration.read_text(encoding="utf-8")
-            for name in constraint_names:
-                if re.search(rf"['\"]{re.escape(name)}['\"]", migration_source) is None:
-                    findings.append(f"{identity}: migration does not contain constraint {name}")
-        else:
-            declared_constraint_names = constraint_names
-        test_paths = item["postgresql_test_paths"]
-        if (
-            not isinstance(test_paths, list)
-            or not test_paths
-            or not all(isinstance(test_path, str) for test_path in test_paths)
-            or len(test_paths) != len(set(test_paths))
-        ):
-            findings.append(
-                f"{identity}: postgresql_test_paths must be a nonempty unique path list"
-            )
-            continue
-        for index, test_path in enumerate(test_paths):
-            resolved_test = _evidence_path(
-                repo_root=repo_root,
-                raw_path=test_path,
-                identity=identity,
-                field_name=f"postgresql_test_paths[{index}]",
-                findings=findings,
-            )
-            if isinstance(test_path, str) and not Path(test_path).as_posix().startswith(
-                "tests/integration/"
-            ):
-                findings.append(
-                    f"{identity}: PostgreSQL evidence path must be under tests/integration: "
-                    f"{test_path}"
-                )
-            if resolved_test is not None and (
-                resolved_test.suffix != ".py" or not resolved_test.name.startswith("test_")
-            ):
-                findings.append(
-                    f"{identity}: PostgreSQL evidence path must be a Python test: {test_path}"
-                )
-            if resolved_test is not None:
-                test_source = resolved_test.read_text(encoding="utf-8")
-                if identity not in test_source and not any(
-                    name in test_source for name in declared_constraint_names
-                ):
-                    findings.append(
-                        f"{identity}: PostgreSQL test does not reference the identity "
-                        "or a declared constraint"
-                    )
-
-
 def evaluate_guard(repo_root: Path = ROOT, contract_path: Path | None = None) -> GuardReport:
     findings: list[str] = []
     path = contract_path or repo_root / DEFAULT_CONTRACT_PATH
@@ -536,13 +407,17 @@ def evaluate_guard(repo_root: Path = ROOT, contract_path: Path | None = None) ->
 
     if contract.get("schema_version") != "1.0.0":
         findings.append("contract.schema_version must be 1.0.0")
+    if set(contract) != _V1_CONTRACT_KEYS:
+        findings.append(
+            "contract v1 keys must be schema_version, model_path, expected_inventory, "
+            "profiles, rollout_statuses, and tables"
+        )
     if contract.get("profiles") != _CANONICAL_PROFILES:
         findings.append("contract.profiles must match the canonical finite-policy vocabulary")
     statuses = contract.get("rollout_statuses")
     if not isinstance(statuses, list) or set(statuses) != _ROLLOUT_STATUSES:
         findings.append(
-            "contract.rollout_statuses must contain orm-enforced, database-enforced, "
-            "and planned exactly once"
+            "contract.rollout_statuses must contain orm-enforced and planned exactly once"
         )
     elif len(statuses) != len(_ROLLOUT_STATUSES):
         findings.append("contract.rollout_statuses contains duplicate values")
@@ -562,12 +437,6 @@ def evaluate_guard(repo_root: Path = ROOT, contract_path: Path | None = None) ->
     if len(model_entries) != len(inventory):
         findings.append("ORM inventory contains duplicate table.column identities")
     contract_entries = _contract_entries(contract, findings)
-    _validate_database_enforcement_evidence(
-        contract=contract,
-        contract_entries=contract_entries,
-        repo_root=repo_root,
-        findings=findings,
-    )
 
     expected = contract.get("expected_inventory")
     if not isinstance(expected, dict) or set(expected) != {"numeric_columns", "tables"}:
@@ -591,7 +460,6 @@ def evaluate_guard(repo_root: Path = ROOT, contract_path: Path | None = None) ->
         findings.append(f"{identity}: classification has no matching ORM Numeric column")
 
     orm_enforced_count = 0
-    database_enforced_count = 0
     planned_count = 0
     for identity in sorted(set(model_entries) & set(contract_entries)):
         column = model_entries[identity]
@@ -612,11 +480,8 @@ def evaluate_guard(repo_root: Path = ROOT, contract_path: Path | None = None) ->
             )
         finite_enforced = _explicitly_excludes_special_values(column)
         sign_enforced = _has_required_sign_constraint(column, str(profile["sign"]))
-        if rollout_status in _ORM_ENFORCED_STATUSES:
-            if rollout_status == "orm-enforced":
-                orm_enforced_count += 1
-            else:
-                database_enforced_count += 1
+        if rollout_status == "orm-enforced":
+            orm_enforced_count += 1
             if not finite_enforced:
                 findings.append(
                     f"{identity}: {rollout_status} classification lacks an explicit "
@@ -639,7 +504,7 @@ def evaluate_guard(repo_root: Path = ROOT, contract_path: Path | None = None) ->
         numeric_column_count=len(inventory),
         table_count=len({column.table for column in inventory}),
         orm_enforced_count=orm_enforced_count,
-        database_enforced_count=database_enforced_count,
+        database_enforced_count=0,
         planned_count=planned_count,
     )
 
