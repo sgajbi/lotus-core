@@ -15,6 +15,8 @@ from decimal import Decimal
 from typing import Any, Literal
 from urllib import error, parse, request
 
+from tools.front_office_seed_contract import load_front_office_seed_contract
+
 LOGGER = logging.getLogger("demo_data_pack")
 
 DEFAULT_DEMO_BENCHMARK_ID = "BMK_GLOBAL_BALANCED_60_40"
@@ -22,7 +24,12 @@ SECONDARY_DEMO_BENCHMARK_ID = "BMK_GLOBAL_GROWTH_80_20"
 DEFAULT_DEMO_BENCHMARK_PORTFOLIO_ID = "DEMO_ADV_USD_001"
 DEFAULT_BULK_INGEST_BATCH_SIZE = 100
 MIN_DEMO_HISTORY_DAYS = 240
+DEFAULT_DEMO_HISTORY_DAYS = 365 * 3
 IDEMPOTENCY_REPLAY_MESSAGE = "Duplicate ingestion request accepted via idempotency replay."
+
+DEMO_SEED_CONTRACT = load_front_office_seed_contract()
+DEMO_CANONICAL_AS_OF_DATE = date.fromisoformat(DEMO_SEED_CONTRACT.canonical_as_of_date)
+DEMO_BENCHMARK_EFFECTIVE_DATE = date.fromisoformat(DEMO_SEED_CONTRACT.benchmark_start_date)
 
 
 @dataclass(frozen=True)
@@ -132,6 +139,42 @@ def _calendar_dates(start: date, end: date) -> list[str]:
     return dates
 
 
+def _next_business_date(value: date) -> date:
+    while value.weekday() >= 5:
+        value += timedelta(days=1)
+    return value
+
+
+DEMO_ECONOMIC_ANCHOR_DATE = _next_business_date(
+    DEMO_CANONICAL_AS_OF_DATE - timedelta(days=DEFAULT_DEMO_HISTORY_DAYS)
+)
+
+
+def _demo_pack_date_window(history_days: int) -> tuple[date, date]:
+    return DEMO_CANONICAL_AS_OF_DATE - timedelta(days=history_days), DEMO_CANONICAL_AS_OF_DATE
+
+
+def _stable_linear_value(
+    *,
+    observation_date: date,
+    anchor_date: date,
+    end_date: date,
+    start_value: float,
+    end_value: float,
+    precision: int,
+) -> float:
+    span_days = (end_date - anchor_date).days
+    if span_days <= 0:
+        raise ValueError("Stable value end_date must be after anchor_date.")
+    elapsed_days = min(max((observation_date - anchor_date).days, 0), span_days)
+    fraction = Decimal(elapsed_days) / Decimal(span_days)
+    value = Decimal(str(start_value)) + (
+        (Decimal(str(end_value)) - Decimal(str(start_value))) * fraction
+    )
+    quantum = Decimal(1).scaleb(-precision)
+    return float(value.quantize(quantum))
+
+
 def _tx(
     tx_id: str,
     portfolio_id: str,
@@ -180,25 +223,54 @@ def _build_index_series(
     secondary_amplitude: float,
     secondary_cycle: float,
     currency: str,
+    economic_anchor: date | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[Decimal]]:
     index_prices: list[dict[str, Any]] = []
     index_returns: list[dict[str, Any]] = []
     daily_returns: list[Decimal] = []
-    current_level = start_level
+    if not dates:
+        return index_prices, index_returns, daily_returns
+    parsed_dates = [date.fromisoformat(value) for value in dates]
+    if parsed_dates != sorted(parsed_dates):
+        raise ValueError("Index series dates must be ordered.")
+    anchor = economic_anchor or parsed_dates[0]
 
-    for index, current_date in enumerate(dates):
-        if index == 0:
+    def daily_return_for(observation_date: date) -> float:
+        offset = (observation_date - anchor).days
+        if offset == 0:
+            return 0.0
+        return (
+            drift
+            + primary_amplitude * math.sin(offset / primary_cycle)
+            + secondary_amplitude * math.cos(offset / secondary_cycle)
+        )
+
+    def level_at(observation_date: date) -> float:
+        level = start_level
+        current_date = anchor
+        while current_date < observation_date:
+            current_date += timedelta(days=1)
+            level *= 1 + daily_return_for(current_date)
+        while current_date > observation_date:
+            level /= 1 + daily_return_for(current_date)
+            current_date -= timedelta(days=1)
+        return level
+
+    current_level = level_at(parsed_dates[0])
+    previous_date: date | None = None
+    for observation_date in parsed_dates:
+        if previous_date is not None:
+            cursor = previous_date
+            while cursor < observation_date:
+                cursor += timedelta(days=1)
+                current_level *= 1 + daily_return_for(cursor)
+        daily_return = daily_return_for(observation_date)
+        if observation_date == anchor:
             daily_return = 0.0
-        else:
-            daily_return = (
-                drift
-                + primary_amplitude * math.sin(index / primary_cycle)
-                + secondary_amplitude * math.cos(index / secondary_cycle)
-            )
         daily_return_decimal = Decimal(f"{daily_return:.10f}")
-        current_level *= 1 + daily_return
         daily_returns.append(daily_return_decimal)
-        source_timestamp = _iso_utc_timestamp(date.fromisoformat(current_date))
+        current_date = observation_date.isoformat()
+        source_timestamp = _iso_utc_timestamp(observation_date)
         index_prices.append(
             {
                 "series_id": f"{series_id_prefix}_price",
@@ -213,6 +285,7 @@ def _build_index_series(
                 "quality_status": "accepted",
             }
         )
+        previous_date = observation_date
         index_returns.append(
             {
                 "series_id": f"{series_id_prefix}_return",
@@ -232,8 +305,15 @@ def _build_index_series(
     return index_prices, index_returns, daily_returns
 
 
-def _build_benchmark_reference_data(*, dates: list[str], start_date: date) -> dict[str, Any]:
-    effective_from = start_date.isoformat()
+def _build_benchmark_reference_data(
+    *,
+    dates: list[str],
+    start_date: date,
+    effective_date: date | None = None,
+    economic_anchor: date | None = None,
+) -> dict[str, Any]:
+    effective_date = effective_date or start_date
+    effective_from = effective_date.isoformat()
     latest_date = dates[-1]
     series_dates = _calendar_dates(start_date - timedelta(days=1), date.fromisoformat(latest_date))
 
@@ -248,6 +328,7 @@ def _build_benchmark_reference_data(*, dates: list[str], start_date: date) -> di
         secondary_amplitude=-0.00042,
         secondary_cycle=7.5,
         currency="USD",
+        economic_anchor=economic_anchor,
     )
     bond_prices, bond_returns, bond_daily_returns = _build_index_series(
         dates=series_dates,
@@ -260,6 +341,7 @@ def _build_benchmark_reference_data(*, dates: list[str], start_date: date) -> di
         secondary_amplitude=-0.00011,
         secondary_cycle=9.0,
         currency="USD",
+        economic_anchor=economic_anchor,
     )
 
     benchmark_return_series: list[dict[str, Any]] = []
@@ -308,7 +390,7 @@ def _build_benchmark_reference_data(*, dates: list[str], start_date: date) -> di
                 "assignment_status": "active",
                 "policy_pack_id": "demo_balanced_policy_v1",
                 "source_system": "LOTUS_CORE_DEMO_DATA_PACK",
-                "assignment_recorded_at": _iso_utc_timestamp(start_date, hour=8),
+                "assignment_recorded_at": _iso_utc_timestamp(effective_date, hour=8),
                 "assignment_version": 1,
             }
         ],
@@ -330,7 +412,7 @@ def _build_benchmark_reference_data(*, dates: list[str], start_date: date) -> di
                     "region": "global",
                 },
                 "effective_from": effective_from,
-                "source_timestamp": _iso_utc_timestamp(start_date),
+                "source_timestamp": _iso_utc_timestamp(effective_date),
                 "source_vendor": "LOTUS_DEMO",
                 "source_record_id": "bmk_global_balanced_60_40_definition",
             },
@@ -351,7 +433,7 @@ def _build_benchmark_reference_data(*, dates: list[str], start_date: date) -> di
                     "region": "global",
                 },
                 "effective_from": effective_from,
-                "source_timestamp": _iso_utc_timestamp(start_date),
+                "source_timestamp": _iso_utc_timestamp(effective_date),
                 "source_vendor": "LOTUS_DEMO",
                 "source_record_id": "bmk_global_growth_80_20_definition",
             },
@@ -363,7 +445,7 @@ def _build_benchmark_reference_data(*, dates: list[str], start_date: date) -> di
                 "composition_effective_from": effective_from,
                 "composition_weight": "0.6000000000",
                 "rebalance_event_id": "bmk_global_balanced_60_40_initial",
-                "source_timestamp": _iso_utc_timestamp(start_date),
+                "source_timestamp": _iso_utc_timestamp(effective_date),
                 "source_vendor": "LOTUS_DEMO",
                 "source_record_id": "bmk_global_balanced_60_40_equity",
                 "quality_status": "accepted",
@@ -374,7 +456,7 @@ def _build_benchmark_reference_data(*, dates: list[str], start_date: date) -> di
                 "composition_effective_from": effective_from,
                 "composition_weight": "0.4000000000",
                 "rebalance_event_id": "bmk_global_balanced_60_40_initial",
-                "source_timestamp": _iso_utc_timestamp(start_date),
+                "source_timestamp": _iso_utc_timestamp(effective_date),
                 "source_vendor": "LOTUS_DEMO",
                 "source_record_id": "bmk_global_balanced_60_40_bond",
                 "quality_status": "accepted",
@@ -385,7 +467,7 @@ def _build_benchmark_reference_data(*, dates: list[str], start_date: date) -> di
                 "composition_effective_from": effective_from,
                 "composition_weight": "0.8000000000",
                 "rebalance_event_id": "bmk_global_growth_80_20_initial",
-                "source_timestamp": _iso_utc_timestamp(start_date),
+                "source_timestamp": _iso_utc_timestamp(effective_date),
                 "source_vendor": "LOTUS_DEMO",
                 "source_record_id": "bmk_global_growth_80_20_equity",
                 "quality_status": "accepted",
@@ -396,7 +478,7 @@ def _build_benchmark_reference_data(*, dates: list[str], start_date: date) -> di
                 "composition_effective_from": effective_from,
                 "composition_weight": "0.2000000000",
                 "rebalance_event_id": "bmk_global_growth_80_20_initial",
-                "source_timestamp": _iso_utc_timestamp(start_date),
+                "source_timestamp": _iso_utc_timestamp(effective_date),
                 "source_vendor": "LOTUS_DEMO",
                 "source_record_id": "bmk_global_growth_80_20_bond",
                 "quality_status": "accepted",
@@ -418,7 +500,7 @@ def _build_benchmark_reference_data(*, dates: list[str], start_date: date) -> di
                     "region": "global",
                 },
                 "effective_from": effective_from,
-                "source_timestamp": _iso_utc_timestamp(start_date),
+                "source_timestamp": _iso_utc_timestamp(effective_date),
                 "source_vendor": "LOTUS_DEMO",
                 "source_record_id": "idx_global_equity_tr_definition",
             },
@@ -437,7 +519,7 @@ def _build_benchmark_reference_data(*, dates: list[str], start_date: date) -> di
                     "region": "global",
                 },
                 "effective_from": effective_from,
-                "source_timestamp": _iso_utc_timestamp(start_date),
+                "source_timestamp": _iso_utc_timestamp(effective_date),
                 "source_vendor": "LOTUS_DEMO",
                 "source_record_id": "idx_global_bond_tr_definition",
             },
@@ -518,16 +600,17 @@ def _expectations_for_portfolio_ids(
 
 
 def build_demo_bundle(
-    *, history_days: int = 365 * 3, portfolio_ids: tuple[str, ...] | None = None
+    *,
+    history_days: int = DEFAULT_DEMO_HISTORY_DAYS,
+    portfolio_ids: tuple[str, ...] | None = None,
 ) -> dict[str, Any]:
     if history_days < MIN_DEMO_HISTORY_DAYS:
         raise ValueError(f"Demo data history_days must be at least {MIN_DEMO_HISTORY_DAYS}.")
     portfolio_ids = _normalize_portfolio_ids(portfolio_ids)
-    start_date = date.today() - timedelta(days=history_days)
-    end_date = date.today()
+    start_date, end_date = _demo_pack_date_window(history_days)
     dates = _business_dates(start_date, end_date)
     as_of = end_date.isoformat()
-    tx_anchor = date.fromisoformat(dates[0]) if dates else start_date
+    tx_anchor = DEMO_ECONOMIC_ANCHOR_DATE
 
     def tx_ts(day_offset: int, hour: int = 10) -> str:
         stamp = datetime(
@@ -1345,8 +1428,15 @@ def build_demo_bundle(
     for security_id, (start_px, end_px, ccy) in price_paths.items():
         if security_id not in needed_security_ids:
             continue
-        for idx, d in enumerate(reference_dates):
-            px = round(start_px + ((end_px - start_px) * idx / (len(reference_dates) - 1)), 2)
+        for d in reference_dates:
+            px = _stable_linear_value(
+                observation_date=date.fromisoformat(d),
+                anchor_date=DEMO_ECONOMIC_ANCHOR_DATE,
+                end_date=DEMO_CANONICAL_AS_OF_DATE,
+                start_value=start_px,
+                end_value=end_px,
+                precision=2,
+            )
             market_prices.append(
                 {"security_id": security_id, "price_date": d, "price": px, "currency": ccy}
             )
@@ -1371,15 +1461,24 @@ def build_demo_bundle(
             from_ccy not in required_currencies or to_ccy not in required_currencies
         ):
             continue
-        for idx, d in enumerate(reference_dates):
-            rate = round(
-                start_rate + ((end_rate - start_rate) * idx / (len(reference_dates) - 1)),
-                6,
+        for d in reference_dates:
+            rate = _stable_linear_value(
+                observation_date=date.fromisoformat(d),
+                anchor_date=DEMO_ECONOMIC_ANCHOR_DATE,
+                end_date=DEMO_CANONICAL_AS_OF_DATE,
+                start_value=start_rate,
+                end_value=end_rate,
+                precision=6,
             )
             fx_rates.append(
                 {"from_currency": from_ccy, "to_currency": to_ccy, "rate_date": d, "rate": rate}
             )
-    benchmark_reference = _build_benchmark_reference_data(dates=dates, start_date=start_date)
+    benchmark_reference = _build_benchmark_reference_data(
+        dates=dates,
+        start_date=start_date,
+        effective_date=DEMO_BENCHMARK_EFFECTIVE_DATE,
+        economic_anchor=DEMO_ECONOMIC_ANCHOR_DATE,
+    )
     if portfolio_ids is not None and DEFAULT_DEMO_BENCHMARK_PORTFOLIO_ID not in set(portfolio_ids):
         benchmark_reference = {**benchmark_reference, "benchmark_assignments": []}
     risk_free_reference = build_risk_free_reference_data(

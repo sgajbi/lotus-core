@@ -33,6 +33,56 @@ def test_build_demo_bundle_supports_bounded_ci_history_window():
     assert ci_bundle["as_of_date"] == full_bundle["as_of_date"]
 
 
+def test_build_demo_bundle_uses_governed_fixed_as_of_date():
+    bundle = demo_data_pack.build_demo_bundle()
+
+    assert bundle["as_of_date"] == demo_data_pack.DEMO_SEED_CONTRACT.canonical_as_of_date
+
+
+def test_history_window_does_not_move_transaction_economics():
+    ci_bundle = demo_data_pack.build_demo_bundle(history_days=demo_data_pack.MIN_DEMO_HISTORY_DAYS)
+    full_bundle = demo_data_pack.build_demo_bundle(
+        history_days=demo_data_pack.DEFAULT_DEMO_HISTORY_DAYS
+    )
+
+    assert ci_bundle["transactions"] == full_bundle["transactions"]
+    assert all(
+        transaction["transaction_date"][:10] <= ci_bundle["as_of_date"]
+        for transaction in ci_bundle["transactions"]
+    )
+
+
+def test_overlapping_reference_dates_have_identical_economics_across_history_windows():
+    ci_bundle = demo_data_pack.build_demo_bundle(history_days=demo_data_pack.MIN_DEMO_HISTORY_DAYS)
+    full_bundle = demo_data_pack.build_demo_bundle(
+        history_days=demo_data_pack.DEFAULT_DEMO_HISTORY_DAYS
+    )
+    series_specs = (
+        ("market_prices", ("security_id", "price_date"), ("price", "currency")),
+        ("fx_rates", ("from_currency", "to_currency", "rate_date"), ("rate",)),
+        ("index_price_series", ("index_id", "series_date"), ("index_price",)),
+        ("index_return_series", ("index_id", "series_date"), ("index_return",)),
+        (
+            "benchmark_return_series",
+            ("benchmark_id", "series_date"),
+            ("benchmark_return",),
+        ),
+        ("risk_free_series", ("risk_free_curve_id", "series_date"), ("value",)),
+    )
+
+    for collection, key_fields, value_fields in series_specs:
+        full_by_key = {
+            tuple(record[field] for field in key_fields): record
+            for record in full_bundle[collection]
+        }
+        for record in ci_bundle[collection]:
+            key = tuple(record[field] for field in key_fields)
+            assert key in full_by_key
+            assert tuple(record[field] for field in value_fields) == tuple(
+                full_by_key[key][field] for field in value_fields
+            )
+
+
 def test_build_demo_bundle_supports_latency_focused_portfolio_scope():
     full_bundle = demo_data_pack.build_demo_bundle(history_days=365)
     latency_bundle = demo_data_pack.build_demo_bundle(
