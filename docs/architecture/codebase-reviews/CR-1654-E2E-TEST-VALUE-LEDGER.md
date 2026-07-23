@@ -45,6 +45,12 @@ digest. Fault records additionally name the fault identity/injection, expected o
 observed result. Arbitrary HTTPS URLs, shorthand run strings, and ordinary source paths are not
 accepted as execution evidence.
 
+The first PR execution exposed one same-pattern readiness defect: the complex lifecycle smoke node
+waited for valuation output, then sampled control-plane publication readiness only once. It now
+polls the control-plane endpoint through the shared bounded E2E client until publication controls
+converge, retaining the last payload in timeout diagnostics. The scan found no other E2E assertion
+that sampled `publish_allowed=true` without convergence.
+
 ## Validation
 
 - E2E ledger guard: 69 full, seven smoke, ten profiles, zero findings.
@@ -57,7 +63,8 @@ accepted as execution evidence.
 
 ## Compatibility And Documentation Decision
 
-Production code, API/OpenAPI, events, database schema, migrations, calculations, and E2E execution
-are unchanged. Repository context, testing strategy, and wiki source change because the
+Production code, API/OpenAPI, events, database schema, migrations, and calculations are unchanged.
+The complex-lifecycle smoke test now waits for the existing control-plane publication contract
+instead of racing it. Repository context, testing strategy, and wiki source change because the
 repository-native guard and review workflow are new. Publish the wiki source after merge and verify
 strict parity before #729 closure.
