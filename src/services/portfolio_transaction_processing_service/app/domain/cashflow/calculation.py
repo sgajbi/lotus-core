@@ -125,11 +125,21 @@ def calculate_transaction_cashflow(
     transaction: BookedTransaction,
     rule: CashflowRule,
     *,
+    effective_transaction_type: str | None = None,
     epoch: int | None = 0,
     calculation_context: CashflowCalculationContext = (CashflowCalculationContext.CURRENT_BOOKING),
 ) -> CalculatedCashflow:
-    """Apply the governed cashflow rule to one framework-neutral booked transaction."""
-    transaction_type = _normalize_code(transaction.transaction_type)
+    """Apply the governed cashflow rule to one framework-neutral booked transaction.
+
+    ``effective_transaction_type`` carries a validated component-level processing type when the
+    persisted business transaction type is broader, as it is for FX contracts and cash legs.
+    Direct domain callers remain compatible by defaulting to the transaction's own type.
+    """
+    transaction_type = _normalize_code(
+        effective_transaction_type
+        if effective_transaction_type is not None
+        else transaction.transaction_type
+    )
     economics = _resolve_cashflow_economics(
         transaction,
         rule,

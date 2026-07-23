@@ -301,3 +301,55 @@ async def test_non_cashflow_fx_lifecycle_returns_no_effect_after_claim() -> None
     persistence.create.assert_not_awaited()
     events.stage_calculated_cashflow.assert_not_awaited()
     observer.calculated.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("repair_existing", "calculation_context"),
+    [
+        (False, CashflowCalculationContext.CURRENT_BOOKING),
+        (True, CashflowCalculationContext.HISTORICAL_REBUILD),
+    ],
+)
+@pytest.mark.parametrize(
+    ("charge_overrides", "expected_reason"),
+    [
+        ({"trade_fee": Decimal("1")}, "FX_025_NON_ZERO_EMBEDDED_FEE: trade_fee"),
+        (
+            {"trade_fee": Decimal("0"), "withholding_tax_amount": Decimal("1")},
+            "FX_026_NON_ZERO_EMBEDDED_TAX: withholding_tax_amount",
+        ),
+    ],
+)
+async def test_fx_cash_leg_rejects_embedded_charge_using_effective_component_type(
+    repair_existing: bool,
+    calculation_context: CashflowCalculationContext,
+    charge_overrides: dict[str, Decimal],
+    expected_reason: str,
+) -> None:
+    use_case, rules, _state, persistence, events, observer = _use_case()
+    rules.resolve.return_value = CashflowRule(
+        classification="FX_BUY",
+        timing="EOD",
+        is_position_flow=True,
+        is_portfolio_flow=False,
+    )
+
+    with pytest.raises(ValueError, match=expected_reason):
+        await use_case.process(
+            _transaction(
+                transaction_type="FX_FORWARD",
+                component_type="FX_CASH_SETTLEMENT_BUY",
+                **charge_overrides,
+            ),
+            event_id="transactions.persisted-0-42",
+            correlation_id=None,
+            traceparent=None,
+            repair_existing=repair_existing,
+            calculation_context=calculation_context,
+        )
+
+    rules.resolve.assert_awaited_once_with("FX_CASH_SETTLEMENT_BUY")
+    persistence.create.assert_not_awaited()
+    persistence.replace.assert_not_awaited()
+    events.stage_calculated_cashflow.assert_not_awaited()
+    observer.calculated.assert_not_called()

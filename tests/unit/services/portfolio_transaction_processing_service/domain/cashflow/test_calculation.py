@@ -1013,3 +1013,50 @@ def test_calculate_fx_cash_settlement_rejects_embedded_tax_before_sign_normaliza
         match="FX_026_NON_ZERO_EMBEDDED_TAX: withholding_tax_amount",
     ):
         _calculate(event, rule)
+
+
+@pytest.mark.parametrize(
+    ("effective_transaction_type", "classification"),
+    [
+        ("FX_CASH_SETTLEMENT_BUY", CashflowClassification.FX_BUY),
+        ("FX_CASH_SETTLEMENT_SELL", CashflowClassification.FX_SELL),
+    ],
+)
+@pytest.mark.parametrize(
+    ("charge_update", "expected_reason"),
+    [
+        ({"trade_fee": Decimal("1")}, "FX_025_NON_ZERO_EMBEDDED_FEE: trade_fee"),
+        (
+            {"withholding_tax_amount": Decimal("1")},
+            "FX_026_NON_ZERO_EMBEDDED_TAX: withholding_tax_amount",
+        ),
+    ],
+)
+def test_calculate_uses_effective_fx_component_type_for_embedded_charge_validation(
+    base_transaction_event: TransactionEvent,
+    effective_transaction_type: str,
+    classification: CashflowClassification,
+    charge_update: dict[str, Decimal],
+    expected_reason: str,
+) -> None:
+    event = base_transaction_event.model_copy(
+        update={
+            "transaction_type": "FX_FORWARD",
+            "gross_transaction_amount": Decimal("10000"),
+            "trade_fee": Decimal("0"),
+            **charge_update,
+        }
+    )
+    rule = CashflowRule(
+        classification=classification,
+        timing=CashflowTiming.EOD,
+        is_position_flow=True,
+        is_portfolio_flow=False,
+    )
+
+    with pytest.raises(ValueError, match=expected_reason):
+        calculate_transaction_cashflow(
+            to_booked_transaction(event),
+            rule,
+            effective_transaction_type=effective_transaction_type,
+        )

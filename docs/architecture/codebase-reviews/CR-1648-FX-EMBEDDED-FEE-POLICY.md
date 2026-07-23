@@ -14,6 +14,10 @@ flow. RFC 082 recommended separate linked charges, but the canonical FX specific
 embedded netting. Exact-head review also found that a source exposing both an aggregate fee and a
 structured fee object could mask non-zero components behind an inconsistent zero aggregate. Peer
 review then found the same unsupported inline-charge pattern in `withholding_tax_amount`.
+Late PR review found a second representation gap in replay and repair: persisted FX cash legs retain
+the business `transaction_type` (`FX_SPOT`, `FX_FORWARD`, or `FX_SWAP`) and identify the settlement
+leg through `component_type`. Although application rule resolution used that effective component,
+the domain cashflow calculator re-read the broader business type and could bypass the charge fence.
 
 ## Decision
 
@@ -39,6 +43,9 @@ Phase-1 policy is `SEPARATE_LINKED_ONLY`:
   calculation use stable, charge-specific reason codes.
 - Cashflow rejects before classification signing, so `abs()` cannot repair an invalid intermediate
   amount.
+- The application passes its validated effective processing type into the domain calculator. The
+  calculator uses that type consistently for date, economics, signing, and embedded-charge policy,
+  while direct callers that have no component-level type retain the existing default behavior.
 - A dedicated DB-direct manifest test replays a zero-fee FX buy and a distinct linked fee, verifies
   group partitioning and linkage retention, proves independent `+110000` and `-25` cashflows, and
   rejects duplicate delivery without double count.
@@ -60,11 +67,13 @@ Phase-1 policy is `SEPARATE_LINKED_ONLY`:
 - focused direct/booking/cost/cashflow proof: 200 warning-strict tests passed;
 - expanded ordinary-settlement compatibility proof: 295 warning-strict tests passed;
 - repository-native FX manifest before the new DB case: 337 warning-strict tests passed;
-- current governed FX manifest: 350 tests collected, including one dedicated DB-direct linked-fee
-  replay test;
+- current governed FX manifest: 358 tests passed, including one dedicated DB-direct linked-fee
+  replay test and the effective-component replay/repair regressions;
 - complete repository lint, strict MyPy across 237 source files, architecture, OpenAPI, and API
   vocabulary gates passed;
 - touched Ruff, format, and diff hygiene passed.
+- focused effective-component calculation plus application replay/repair proof: 89 warning-strict
+  tests passed.
 
 Protected DB execution, peer review, PR/main/exact-main proof, wiki publication, and verified issue
 closure remain pending.
