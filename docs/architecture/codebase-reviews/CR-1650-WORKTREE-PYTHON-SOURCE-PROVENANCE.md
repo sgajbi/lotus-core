@@ -31,8 +31,14 @@ control which checkout supplies first-party Python packages, so #763 remained va
 Every Python-backed Make recipe now uses `$(REPOSITORY_PYTHON)`. This includes installation,
 architecture, lint, typecheck, unit/integration manifests, OpenAPI/vocabulary, migration, recovery,
 latency/performance, release, and cleanup commands. The quality-tool pinning layer remains intact
-inside the launcher. Bootstrap additionally verifies the installed editable `portfolio-common`
-distribution points to the invoking worktree.
+inside the launcher. Bootstrap additionally starts an isolated child interpreter with inherited
+`PYTHONPATH` removed and Python's unsafe-path behavior disabled, then verifies the actually imported
+`portfolio_common` module resides under the invoking worktree.
+
+Remote Feature Lane `29977029134` proved that PEP 610 `direct_url.json` is not a portable execution
+contract for this bootstrap: pip built and installed the editable package successfully on Linux,
+but the subsequent metadata lookup exposed no direct-URL payload. The isolated import-origin proof
+replaces that metadata assumption while remaining fail-closed for a missing or foreign install.
 
 ## Compatibility and boundaries
 
@@ -51,7 +57,7 @@ dynamic reproduction before a coordinated issue or fix; no speculative duplicate
 
 ## Validation
 
-- 44 warning-strict launcher, bootstrap, pinned-tool, Make/workflow governance tests passed.
+- 43 warning-strict launcher, bootstrap, pinned-tool, Make/workflow governance tests passed.
 - A two-root subprocess regression loaded distinguishable current source despite an inherited
   foreign worktree path and preserved child exit behavior without a shell.
 - Windows local proof resolved
@@ -60,6 +66,8 @@ dynamic reproduction before a coordinated issue or fix; no speculative duplicate
   `make api-vocabulary-gate` passed through the launcher.
 - The complete strict `make architecture-guard` chain passed through the launcher.
 - Strict MyPy passed for all three touched source modules; touched Ruff and diff hygiene passed.
+- A complete local `make install-ci` passed and the isolated post-install interpreter resolved the
+  shared package from this worktree.
 
 GitHub Actions Linux proof, broad lint/type/test lanes, merge, exact-main validation, and
 branch/worktree reconciliation remain delivery gates rather than local claims.

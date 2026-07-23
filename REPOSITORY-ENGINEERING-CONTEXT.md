@@ -649,9 +649,11 @@ All Python-backed Make recipes route through
 `python scripts/development/repository_python.py`. The launcher prepends this invoking checkout's
 repository and shared `portfolio-common` roots, filters inherited paths from other `lotus-core*`
 worktrees, proves first-party source origin before delegation, uses `shell=False`, and preserves the
-child exit code. Do not use an ambient editable install or another worktree's `PYTHONPATH` as
-validation evidence. Use `make install` to repair editable provenance and invoke direct diagnostics
-through the launcher when a Make target is not available.
+child exit code. Bootstrap verifies installed provenance through a fresh interpreter with inherited
+`PYTHONPATH` removed and unsafe-path insertion disabled; do not rely on optional editable-install
+metadata as the execution contract. Do not use an ambient editable install or another worktree's
+`PYTHONPATH` as validation evidence. Use `make install` to repair import provenance and invoke direct
+diagnostics through the launcher when a Make target is not available.
 
 ## Validation And CI Expectations
 
