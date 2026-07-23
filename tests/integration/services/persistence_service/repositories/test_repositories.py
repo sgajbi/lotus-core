@@ -277,6 +277,82 @@ async def test_portfolio_repository_persists_cost_basis_method(
     assert persisted_portfolio.cost_basis_method == "AVCO"
 
 
+async def test_portfolio_repository_legacy_replay_preserves_authoritative_scope(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    repo = PortfolioRepository(async_db_session)
+
+    def portfolio_event(
+        *,
+        tenant_id: str | None,
+        legal_book_id: str | None,
+        risk_exposure: str,
+    ) -> PortfolioEvent:
+        return PortfolioEvent(
+            portfolio_id="PORT_SCOPE_REPLAY_01",
+            tenant_id=tenant_id,
+            legal_book_id=legal_book_id,
+            base_currency="USD",
+            open_date=date(2025, 1, 1),
+            client_id="CIF_SCOPE_REPLAY_1",
+            status="ACTIVE",
+            risk_exposure=risk_exposure,
+            investment_time_horizon="Long",
+            portfolio_type="Discretionary",
+            booking_center_code="SG",
+        )
+
+    await repo.create_or_update_portfolio(
+        portfolio_event(
+            tenant_id="TENANT-SG",
+            legal_book_id="PB-SG-01",
+            risk_exposure="High",
+        )
+    )
+    await async_db_session.commit()
+
+    await repo.create_or_update_portfolio(
+        portfolio_event(
+            tenant_id=None,
+            legal_book_id=None,
+            risk_exposure="Moderate",
+        )
+    )
+    await async_db_session.commit()
+
+    persisted = (
+        await async_db_session.execute(
+            select(DBPortfolio)
+            .where(DBPortfolio.portfolio_id == "PORT_SCOPE_REPLAY_01")
+            .execution_options(populate_existing=True)
+        )
+    ).scalar_one()
+    assert persisted.tenant_id == "TENANT-SG"
+    assert persisted.legal_book_id == "PB-SG-01"
+    assert persisted.risk_exposure == "Moderate"
+
+    await repo.create_or_update_portfolio(
+        portfolio_event(
+            tenant_id="TENANT-SG-CORRECTED",
+            legal_book_id="PB-SG-02",
+            risk_exposure="Low",
+        )
+    )
+    await async_db_session.commit()
+
+    corrected = (
+        await async_db_session.execute(
+            select(DBPortfolio)
+            .where(DBPortfolio.portfolio_id == "PORT_SCOPE_REPLAY_01")
+            .execution_options(populate_existing=True)
+        )
+    ).scalar_one()
+    assert corrected.tenant_id == "TENANT-SG-CORRECTED"
+    assert corrected.legal_book_id == "PB-SG-02"
+    assert corrected.risk_exposure == "Low"
+
+
 async def test_portfolio_event_rejects_legacy_average_cost_alias(
     clean_db, async_db_session: AsyncSession
 ):

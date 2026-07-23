@@ -147,7 +147,9 @@ HTTP/OpenAPI contract, and one internal service-local read port/adapter. Existin
 payloads, topics, deployment topology, downstream fields, and runtime valuation behavior were
 unchanged by those slices. A subsequent staged prerequisite adds nullable `tenant_id` and
 `legal_book_id` together to portfolio ingestion, events, and persistence. Both absent preserves
-legacy compatibility; partial, blank, padded database-direct, or non-string authority fails closed.
+legacy compatibility and cannot erase an established persisted scope during replay; a complete
+incoming pair replaces both dimensions atomically. Partial, blank, padded database-direct, or
+non-string authority fails closed.
 Existing correct unit-price behavior is characterized under an explicit policy. The legacy bond
 heuristic remains in the runtime path until authoritative market-price persistence and both
 valuation consumers are wired; it will be deleted rather than retained as a fallback then.
