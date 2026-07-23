@@ -434,6 +434,93 @@ class InstrumentValuationPolicyAssignmentRecord(Base):
     )
 
 
+class MarketPriceSourceFactRecord(Base):
+    """Append-history source-versioned authority for one scoped market-price fact."""
+
+    __tablename__ = "market_price_source_facts"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    tenant_id = Column(String, nullable=False)
+    legal_book_id = Column(String, nullable=False)
+    security_id = Column(String, ForeignKey("instruments.security_id"), nullable=False)
+    price_date = Column(Date, nullable=False)
+    price = Column(Numeric(18, 10), nullable=False)
+    currency = Column(String(3), nullable=False)
+    quote_basis = Column(String, nullable=False)
+    fact_status = Column(String, nullable=False)
+    fact_version = Column(Integer, nullable=False)
+    source_system = Column(String, nullable=False)
+    source_record_id = Column(String, nullable=False)
+    source_revision = Column(String, nullable=False)
+    source_content_hash = Column(String(64), nullable=False)
+    observed_at = Column(DateTime(timezone=True), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "source_system",
+            "source_record_id",
+            "fact_version",
+            name="uq_market_price_source_fact_version",
+        ),
+        CheckConstraint(
+            "tenant_id = btrim(tenant_id) AND tenant_id <> '' "
+            "AND legal_book_id = btrim(legal_book_id) AND legal_book_id <> '' "
+            "AND security_id = btrim(security_id) AND security_id <> ''",
+            name="ck_market_price_source_fact_scope_normalized",
+        ),
+        CheckConstraint(
+            "price > 0",
+            name="ck_market_price_source_fact_price_positive",
+        ),
+        CheckConstraint(
+            "price <> 'NaN'::numeric AND price <> 'Infinity'::numeric",
+            name="ck_market_price_source_fact_price_finite",
+        ),
+        CheckConstraint(
+            "currency ~ '^[A-Z]{3}$'",
+            name="ck_market_price_source_fact_currency_normalized",
+        ),
+        CheckConstraint(
+            "quote_basis IN "
+            "('UNIT_PRICE', 'PERCENT_OF_PRINCIPAL_CLEAN', "
+            "'PERCENT_OF_PRINCIPAL_DIRTY')",
+            name="ck_market_price_source_fact_quote_basis",
+        ),
+        CheckConstraint(
+            "fact_status IN ('ACTIVE', 'SUSPENDED', 'RETIRED')",
+            name="ck_market_price_source_fact_status",
+        ),
+        CheckConstraint(
+            "fact_version >= 1",
+            name="ck_market_price_source_fact_version_positive",
+        ),
+        CheckConstraint(
+            "source_system = btrim(source_system) AND source_system <> '' "
+            "AND source_record_id = btrim(source_record_id) AND source_record_id <> '' "
+            "AND source_revision = btrim(source_revision) AND source_revision <> ''",
+            name="ck_market_price_source_fact_source_normalized",
+        ),
+        CheckConstraint(
+            "source_content_hash ~ '^[0-9a-f]{64}$'",
+            name="ck_market_price_source_fact_source_hash",
+        ),
+        CheckConstraint(
+            "isfinite(observed_at)",
+            name="ck_market_price_source_fact_observed_at_finite",
+        ),
+        Index(
+            "ix_market_price_fact_scope_history",
+            "tenant_id",
+            "legal_book_id",
+            "security_id",
+            "price_date",
+            "source_system",
+            "source_record_id",
+        ),
+    )
+
+
 class PortfolioBenchmarkAssignment(Base):
     __tablename__ = "portfolio_benchmark_assignments"
 

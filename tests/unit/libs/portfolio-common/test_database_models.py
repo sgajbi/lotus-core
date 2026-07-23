@@ -21,6 +21,7 @@ from portfolio_common.database_models import (
     InstrumentValuationPolicyAssignmentRecord,
     LiquidityReserveRequirement,
     MarketPrice,
+    MarketPriceSourceFactRecord,
     ModelPortfolioDefinition,
     ModelPortfolioTarget,
     PipelineStageState,
@@ -262,6 +263,51 @@ def test_instrument_valuation_policy_assignment_enforces_source_safe_history() -
         "instrument_valuation_policy_assignments.source_system",
         "instrument_valuation_policy_assignments.source_record_id",
         "instrument_valuation_policy_assignments.assignment_version DESC",
+    ]
+
+
+def test_market_price_source_fact_model_preserves_exact_append_history() -> None:
+    table = MarketPriceSourceFactRecord.__table__
+    constraints = {constraint.name: constraint for constraint in table.constraints}
+
+    assert {
+        "uq_market_price_source_fact_version",
+        "ck_market_price_source_fact_scope_normalized",
+        "ck_market_price_source_fact_price_positive",
+        "ck_market_price_source_fact_price_finite",
+        "ck_market_price_source_fact_currency_normalized",
+        "ck_market_price_source_fact_quote_basis",
+        "ck_market_price_source_fact_status",
+        "ck_market_price_source_fact_version_positive",
+        "ck_market_price_source_fact_source_normalized",
+        "ck_market_price_source_fact_source_hash",
+        "ck_market_price_source_fact_observed_at_finite",
+    } <= constraints.keys()
+    unique = constraints["uq_market_price_source_fact_version"]
+    assert [column.name for column in unique.columns] == [
+        "source_system",
+        "source_record_id",
+        "fact_version",
+    ]
+    assert (
+        str(constraints["ck_market_price_source_fact_price_finite"].sqltext)
+        == "price <> 'NaN'::numeric AND price <> 'Infinity'::numeric"
+    )
+    assert (
+        str(constraints["ck_market_price_source_fact_observed_at_finite"].sqltext)
+        == "isfinite(observed_at)"
+    )
+    assert "updated_at" not in table.columns
+    scope_history = {index.name: index for index in table.indexes}[
+        "ix_market_price_fact_scope_history"
+    ]
+    assert [column.name for column in scope_history.columns] == [
+        "tenant_id",
+        "legal_book_id",
+        "security_id",
+        "price_date",
+        "source_system",
+        "source_record_id",
     ]
 
 
