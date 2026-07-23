@@ -105,10 +105,14 @@ def test_ingest_demo_portfolio_data_batches_market_and_fx_rows(monkeypatch):
 
     monkeypatch.setattr(demo_data_pack, "_request_json", fake_request_json)
 
-    demo_data_pack._ingest_demo_portfolio_data(
+    segments = tuple(
+        segment
+        for segment in demo_data_pack._build_demo_pack_segments(bundle, batch_size=200)
+        if segment.category == "portfolio"
+    )
+    demo_data_pack._ingest_demo_segments(
         "http://ingestion",
-        bundle,
-        batch_size=200,
+        segments,
         force_ingest=False,
     )
 
@@ -653,6 +657,97 @@ def test_portfolio_probe_rejects_evolved_transaction_economics(monkeypatch):
     assert result.missing_segments == ("portfolio-bundle",)
 
 
+def test_complete_pack_probe_merges_every_source_family(monkeypatch):
+    portfolio_ids = ("DEMO_DPM_EUR_001",)
+    bundle = demo_data_pack.build_demo_bundle(
+        history_days=demo_data_pack.MIN_DEMO_HISTORY_DAYS,
+        portfolio_ids=portfolio_ids,
+    )
+    segments = demo_data_pack._build_demo_pack_segments(bundle)
+    names = {segment.name for segment in segments}
+    market_fx = tuple(
+        segment.name
+        for segment in segments
+        if segment.endpoint in {"/ingest/market-prices", "/ingest/fx-rates"}
+    )
+    index = tuple(name for name in names if name.startswith("index") or name == "indices")
+    benchmark = tuple(
+        name for name in names if name.startswith("benchmark") or name == "risk-free-series"
+    )
+    monkeypatch.setattr(
+        demo_data_pack,
+        "_probe_portfolio_bundle_segment",
+        lambda *_args, **_kwargs: demo_data_pack.DemoPackCompleteness(("portfolio-bundle",), ()),
+    )
+    monkeypatch.setattr(
+        demo_data_pack,
+        "_probe_market_and_fx_segments",
+        lambda *_args, **_kwargs: demo_data_pack.DemoPackCompleteness(
+            market_fx,
+            (market_fx[0],),
+        ),
+    )
+    monkeypatch.setattr(
+        demo_data_pack,
+        "_probe_index_segments",
+        lambda *_args, **_kwargs: demo_data_pack.DemoPackCompleteness(index, ()),
+    )
+    monkeypatch.setattr(
+        demo_data_pack,
+        "_probe_benchmark_and_risk_free_segments",
+        lambda *_args, **_kwargs: demo_data_pack.DemoPackCompleteness(
+            benchmark,
+            ("risk-free-series",),
+        ),
+    )
+
+    result = demo_data_pack._probe_demo_pack_completeness(
+        query_base_url="http://query",
+        query_control_plane_base_url="http://qcp",
+        bundle=bundle,
+        expectations=demo_data_pack._expectations_for_portfolio_ids(portfolio_ids),
+    )
+
+    assert set(result.evaluated_segments) == names
+    assert result.missing_segments == tuple(sorted((market_fx[0], "risk-free-series")))
+
+
+def test_complete_pack_probe_fails_closed_when_a_segment_has_no_evaluator(monkeypatch):
+    portfolio_ids = ("DEMO_DPM_EUR_001",)
+    bundle = demo_data_pack.build_demo_bundle(
+        history_days=demo_data_pack.MIN_DEMO_HISTORY_DAYS,
+        portfolio_ids=portfolio_ids,
+    )
+    monkeypatch.setattr(
+        demo_data_pack,
+        "_probe_portfolio_bundle_segment",
+        lambda *_args, **_kwargs: demo_data_pack.DemoPackCompleteness((), ()),
+    )
+    monkeypatch.setattr(
+        demo_data_pack,
+        "_probe_market_and_fx_segments",
+        lambda *_args, **_kwargs: demo_data_pack.DemoPackCompleteness((), ()),
+    )
+    monkeypatch.setattr(
+        demo_data_pack,
+        "_probe_index_segments",
+        lambda *_args, **_kwargs: demo_data_pack.DemoPackCompleteness((), ()),
+    )
+    monkeypatch.setattr(
+        demo_data_pack,
+        "_probe_benchmark_and_risk_free_segments",
+        lambda *_args, **_kwargs: demo_data_pack.DemoPackCompleteness((), ()),
+    )
+
+    with pytest.raises(RuntimeError, match="did not evaluate every segment"):
+        demo_data_pack._probe_demo_pack_completeness(
+            query_base_url="http://query",
+            query_control_plane_base_url="http://qcp",
+            bundle=bundle,
+            expectations=demo_data_pack._expectations_for_portfolio_ids(portfolio_ids),
+        )
+
+
 def test_build_demo_bundle_contains_benchmark_seed_data():
     bundle = demo_data_pack.build_demo_bundle()
 
@@ -802,83 +897,76 @@ def test_demo_pack_payload_fails_closed_on_idempotency_acknowledgement_mismatch(
         )
 
 
-def test_all_demo_portfolios_exist_checks_every_expected_portfolio(monkeypatch):
-    seen: list[str] = []
-
-    def fake_exists(_query_base_url: str, portfolio_id: str) -> bool:
-        seen.append(portfolio_id)
-        return True
-
-    monkeypatch.setattr(demo_data_pack, "_portfolio_exists", fake_exists)
-
-    assert demo_data_pack._all_demo_portfolios_exist("http://query") is True
-    assert set(seen) == {item.portfolio_id for item in demo_data_pack.DEMO_EXPECTATIONS}
-
-
-def test_existing_portfolio_guard_prevents_segment_replay(monkeypatch, caplog):
+def test_source_complete_pack_is_zero_write_noop(monkeypatch, caplog):
     caplog.set_level("INFO", logger=demo_data_pack.LOGGER.name)
     bundle = demo_data_pack.build_demo_bundle(
         history_days=demo_data_pack.MIN_DEMO_HISTORY_DAYS,
         portfolio_ids=("DEMO_DPM_EUR_001",),
     )
     expectations = demo_data_pack._expectations_for_portfolio_ids(("DEMO_DPM_EUR_001",))
-    monkeypatch.setattr(demo_data_pack, "_all_demo_portfolios_exist", lambda *_args: True)
-    monkeypatch.setattr(
-        demo_data_pack,
-        "_ingest_demo_portfolio_data",
-        lambda *_args, **_kwargs: pytest.fail("portfolio data must not be replayed"),
+    segment_names = tuple(
+        segment.name for segment in demo_data_pack._build_demo_pack_segments(bundle)
     )
     monkeypatch.setattr(
         demo_data_pack,
-        "_ingest_demo_reference_data",
-        lambda *_args, **_kwargs: pytest.fail("reference data must not be replayed"),
+        "_probe_demo_pack_completeness",
+        lambda **_kwargs: demo_data_pack.DemoPackCompleteness(segment_names, ()),
+    )
+    monkeypatch.setattr(
+        demo_data_pack,
+        "_ingest_demo_segments",
+        lambda *_args, **_kwargs: pytest.fail("source-complete startup must perform zero writes"),
     )
 
     ingested = demo_data_pack._ingest_demo_pack_if_needed(
         ingestion_base_url="http://ingestion",
         query_base_url="http://query",
+        query_control_plane_base_url="http://qcp",
         bundle=bundle,
         expectations=expectations,
         force_ingest=False,
     )
 
     assert ingested is False
-    assert "reason=portfolio_presence_compatibility_guard" in caplog.text
+    assert "reason=unchanged_pack_present" in caplog.text
 
 
-def test_existing_demo_pack_reports_noop_when_every_segment_is_replayed(monkeypatch, caplog):
+def test_selected_incomplete_segment_replay_is_not_reported_as_publish(monkeypatch, caplog):
     caplog.set_level("INFO", logger=demo_data_pack.LOGGER.name)
     bundle = demo_data_pack.build_demo_bundle(
         history_days=demo_data_pack.MIN_DEMO_HISTORY_DAYS,
         portfolio_ids=("DEMO_DPM_EUR_001",),
     )
     replayed = demo_data_pack.DemoPackIngestionOutcome(
-        segment="portfolio-bundle",
+        segment="risk-free-series",
         replayed=True,
         idempotency_key="key-1",
     )
-    monkeypatch.setattr(demo_data_pack, "_all_demo_portfolios_exist", lambda *_args: False)
     monkeypatch.setattr(
         demo_data_pack,
-        "_ingest_demo_portfolio_data",
-        lambda *_args, **_kwargs: [replayed],
+        "_probe_demo_pack_completeness",
+        lambda **_kwargs: demo_data_pack.DemoPackCompleteness(
+            ("risk-free-series",),
+            ("risk-free-series",),
+        ),
     )
     monkeypatch.setattr(
         demo_data_pack,
-        "_ingest_demo_reference_data",
+        "_ingest_demo_segments",
         lambda *_args, **_kwargs: [replayed],
     )
 
     ingested = demo_data_pack._ingest_demo_pack_if_needed(
         ingestion_base_url="http://ingestion",
         query_base_url="http://query",
+        query_control_plane_base_url="http://qcp",
         bundle=bundle,
         expectations=demo_data_pack._expectations_for_portfolio_ids(("DEMO_DPM_EUR_001",)),
         force_ingest=False,
     )
 
     assert ingested is False
-    assert "reason=unchanged_pack_present" in caplog.text
+    assert "reason=selected_segments_already_published" in caplog.text
 
 
 @pytest.mark.parametrize("force_ingest", [False, True])
@@ -887,45 +975,54 @@ def test_first_boot_and_explicit_refresh_publish_complete_demo_pack(monkeypatch,
         history_days=demo_data_pack.MIN_DEMO_HISTORY_DAYS,
         portfolio_ids=("DEMO_DPM_EUR_001",),
     )
-    calls: list[str] = []
-    published = demo_data_pack.DemoPackIngestionOutcome(
-        segment="portfolio-bundle",
-        replayed=False,
-        idempotency_key=None if force_ingest else "key-1",
-    )
-    monkeypatch.setattr(demo_data_pack, "_all_demo_portfolios_exist", lambda *_args: False)
+    expected_segments = demo_data_pack._build_demo_pack_segments(bundle)
+    calls: list[tuple[str, ...]] = []
+    if force_ingest:
+        monkeypatch.setattr(
+            demo_data_pack,
+            "_probe_demo_pack_completeness",
+            lambda **_kwargs: pytest.fail("force refresh must bypass completeness reads"),
+        )
+    else:
+        monkeypatch.setattr(
+            demo_data_pack,
+            "_probe_demo_pack_completeness",
+            lambda **_kwargs: demo_data_pack.DemoPackCompleteness(
+                tuple(segment.name for segment in expected_segments),
+                tuple(segment.name for segment in expected_segments),
+            ),
+        )
 
-    def ingest_portfolio(*_args, **kwargs):
-        assert kwargs["force_ingest"] is force_ingest
-        calls.append("portfolio")
-        return [published]
+    def ingest_segments(_base_url, segments, *, force_ingest):
+        assert force_ingest is force_ingest_expected
+        calls.append(tuple(segment.name for segment in segments))
+        return [
+            demo_data_pack.DemoPackIngestionOutcome(
+                segment=segment.name,
+                replayed=False,
+                idempotency_key=None if force_ingest else f"key-{segment.name}",
+            )
+            for segment in segments
+        ]
 
-    def ingest_reference(*_args, **kwargs):
-        assert kwargs["force_ingest"] is force_ingest
-        calls.append("reference")
-        return [published]
-
+    force_ingest_expected = force_ingest
     monkeypatch.setattr(
         demo_data_pack,
-        "_ingest_demo_portfolio_data",
-        ingest_portfolio,
-    )
-    monkeypatch.setattr(
-        demo_data_pack,
-        "_ingest_demo_reference_data",
-        ingest_reference,
+        "_ingest_demo_segments",
+        ingest_segments,
     )
 
     ingested = demo_data_pack._ingest_demo_pack_if_needed(
         ingestion_base_url="http://ingestion",
         query_base_url="http://query",
+        query_control_plane_base_url="http://qcp",
         bundle=bundle,
         expectations=demo_data_pack._expectations_for_portfolio_ids(("DEMO_DPM_EUR_001",)),
         force_ingest=force_ingest,
     )
 
     assert ingested is True
-    assert calls == ["portfolio", "reference"]
+    assert calls == [tuple(segment.name for segment in expected_segments)]
 
 
 def test_partial_or_evolved_pack_publishes_only_non_replayed_segments(monkeypatch, caplog):
@@ -934,38 +1031,43 @@ def test_partial_or_evolved_pack_publishes_only_non_replayed_segments(monkeypatc
         history_days=demo_data_pack.MIN_DEMO_HISTORY_DAYS,
         portfolio_ids=("DEMO_DPM_EUR_001",),
     )
-    replayed = demo_data_pack.DemoPackIngestionOutcome(
-        segment="portfolio-bundle",
-        replayed=True,
-        idempotency_key="key-1",
-    )
     published = demo_data_pack.DemoPackIngestionOutcome(
         segment="risk-free-series",
         replayed=False,
         idempotency_key="key-2",
     )
-    monkeypatch.setattr(demo_data_pack, "_all_demo_portfolios_exist", lambda *_args: False)
+    selected: list[tuple[str, ...]] = []
     monkeypatch.setattr(
         demo_data_pack,
-        "_ingest_demo_portfolio_data",
-        lambda *_args, **_kwargs: [replayed],
+        "_probe_demo_pack_completeness",
+        lambda **_kwargs: demo_data_pack.DemoPackCompleteness(
+            ("portfolio-bundle", "risk-free-series"),
+            ("risk-free-series",),
+        ),
     )
+
+    def ingest_segments(_base_url, segments, **_kwargs):
+        selected.append(tuple(segment.name for segment in segments))
+        return [published]
+
     monkeypatch.setattr(
         demo_data_pack,
-        "_ingest_demo_reference_data",
-        lambda *_args, **_kwargs: [published],
+        "_ingest_demo_segments",
+        ingest_segments,
     )
 
     ingested = demo_data_pack._ingest_demo_pack_if_needed(
         ingestion_base_url="http://ingestion",
         query_base_url="http://query",
+        query_control_plane_base_url="http://qcp",
         bundle=bundle,
         expectations=demo_data_pack._expectations_for_portfolio_ids(("DEMO_DPM_EUR_001",)),
         force_ingest=False,
     )
 
     assert ingested is True
-    assert "reason=missing_or_evolved_segments_published" in caplog.text
+    assert selected == [("risk-free-series",)]
+    assert "reason=missing_or_evolved_segments_selected" in caplog.text
     assert "published_segments=risk-free-series" in caplog.text
 
 
@@ -1026,3 +1128,35 @@ def test_request_json_treats_remote_disconnect_as_retryable_connection_error(mon
 
     with pytest.raises(RuntimeError, match="GET http://query.dev/health connection error"):
         demo_data_pack._request_json("GET", "http://query.dev/health")
+
+
+def test_source_probe_treats_only_not_found_as_missing(monkeypatch):
+    monkeypatch.setattr(
+        demo_data_pack,
+        "_request_json",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            demo_data_pack.DemoPackHttpError(
+                method="GET",
+                url="http://query/portfolios/P1",
+                status_code=404,
+                detail="not found",
+            )
+        ),
+    )
+
+    assert demo_data_pack._request_source_json("GET", "http://query/portfolios/P1") == (404, {})
+
+    monkeypatch.setattr(
+        demo_data_pack,
+        "_request_json",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            demo_data_pack.DemoPackHttpError(
+                method="GET",
+                url="http://query/portfolios/P1",
+                status_code=500,
+                detail="failed",
+            )
+        ),
+    )
+    with pytest.raises(demo_data_pack.DemoPackHttpError, match=r"failed \(500\)"):
+        demo_data_pack._request_source_json("GET", "http://query/portfolios/P1")

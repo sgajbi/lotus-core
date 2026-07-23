@@ -63,6 +63,12 @@ class DemoPackCompleteness:
         return not self.missing_segments
 
 
+class DemoPackHttpError(RuntimeError):
+    def __init__(self, *, method: str, url: str, status_code: int, detail: str) -> None:
+        self.status_code = status_code
+        super().__init__(f"{method} {url} failed ({status_code}): {detail}")
+
+
 DEMO_EXPECTATIONS: tuple[PortfolioExpectation, ...] = (
     PortfolioExpectation(
         "DEMO_ADV_USD_001",
@@ -1496,7 +1502,7 @@ def _probe_market_and_fx_segments(
                 "end_date": max(str(record["price_date"]) for record in records),
             }
         )
-        _, payload = _request_json("GET", f"{query_base_url}/prices/?{params}")
+        _, payload = _request_source_json("GET", f"{query_base_url}/prices/?{params}")
         actual_market_prices[security_id] = [
             {"security_id": security_id, **record} for record in payload.get("prices") or []
         ]
@@ -1521,7 +1527,7 @@ def _probe_market_and_fx_segments(
                 "end_date": max(str(record["rate_date"]) for record in records),
             }
         )
-        _, payload = _request_json("GET", f"{query_base_url}/fx-rates/?{params}")
+        _, payload = _request_source_json("GET", f"{query_base_url}/fx-rates/?{params}")
         actual_fx_rates[(from_currency, to_currency)] = [
             {
                 "from_currency": from_currency,
@@ -1586,7 +1592,7 @@ def _probe_index_segments(
     index_segment = by_name.get("indices")
     if index_segment is not None:
         expected_indices = index_segment.payload["indices"]
-        _, response = _request_json(
+        _, response = _request_source_json(
             "POST",
             f"{query_control_plane_base_url}/integration/indices/catalog",
             payload={
@@ -1637,7 +1643,7 @@ def _probe_index_segments(
         actual_records: list[dict[str, Any]] = []
         for index_id in sorted({str(record["index_id"]) for record in expected_records}):
             records = [record for record in expected_records if record["index_id"] == index_id]
-            _, response = _request_json(
+            _, response = _request_source_json(
                 "POST",
                 f"{query_control_plane_base_url}/integration/indices/{index_id}/{endpoint_suffix}",
                 payload={
@@ -1697,7 +1703,7 @@ def _probe_benchmark_and_risk_free_segments(
     definitions = by_name.get("benchmark-definitions")
     if definitions is not None:
         expected = definitions.payload["benchmark_definitions"]
-        _, response = _request_json(
+        _, response = _request_source_json(
             "POST",
             f"{query_control_plane_base_url}/integration/benchmarks/catalog",
             payload={"as_of_date": as_of_date},
@@ -1730,7 +1736,7 @@ def _probe_benchmark_and_risk_free_segments(
         actual: list[dict[str, Any]] = []
         for benchmark_id in sorted({str(record["benchmark_id"]) for record in expected}):
             records = [record for record in expected if record["benchmark_id"] == benchmark_id]
-            _, response = _request_json(
+            _, response = _request_source_json(
                 "POST",
                 (
                     f"{query_control_plane_base_url}/integration/benchmarks/"
@@ -1764,7 +1770,7 @@ def _probe_benchmark_and_risk_free_segments(
         actual: list[dict[str, Any]] = []
         for benchmark_id in sorted({str(record["benchmark_id"]) for record in expected}):
             records = [record for record in expected if record["benchmark_id"] == benchmark_id]
-            _, response = _request_json(
+            _, response = _request_source_json(
                 "POST",
                 (
                     f"{query_control_plane_base_url}/integration/benchmarks/"
@@ -1803,7 +1809,7 @@ def _probe_benchmark_and_risk_free_segments(
         actual: list[dict[str, Any]] = []
         for record in expected:
             portfolio_id = str(record["portfolio_id"])
-            _, response = _request_json(
+            _, response = _request_source_json(
                 "POST",
                 (
                     f"{query_control_plane_base_url}/integration/portfolios/"
@@ -1854,7 +1860,7 @@ def _probe_benchmark_and_risk_free_segments(
                     )
                     == series_mode
                 ]
-                _, response = _request_json(
+                _, response = _request_source_json(
                     "POST",
                     f"{query_control_plane_base_url}/integration/reference/risk-free-series",
                     payload={
@@ -1905,7 +1911,7 @@ def _probe_portfolio_bundle_segment(
     actual_portfolios: list[dict[str, Any]] = []
     for portfolio in expected_portfolios:
         portfolio_id = str(portfolio["portfolio_id"])
-        _, response = _request_json("GET", f"{query_base_url}/portfolios/{portfolio_id}")
+        _, response = _request_source_json("GET", f"{query_base_url}/portfolios/{portfolio_id}")
         actual_portfolios.append(response)
     complete = _records_cover_expected(
         expected=expected_portfolios,
@@ -1928,7 +1934,7 @@ def _probe_portfolio_bundle_segment(
     actual_instruments: list[dict[str, Any]] = []
     for instrument in expected_instruments:
         params = parse.urlencode({"security_id": instrument["security_id"], "limit": 2})
-        _, response = _request_json("GET", f"{query_base_url}/instruments/?{params}")
+        _, response = _request_source_json("GET", f"{query_base_url}/instruments/?{params}")
         actual_instruments.extend(response.get("instruments") or [])
     instrument_fields = (
         "name",
@@ -1979,7 +1985,7 @@ def _probe_portfolio_bundle_segment(
             record for record in payload["transactions"] if record["portfolio_id"] == portfolio_id
         ]
         params = parse.urlencode({"limit": 200, "as_of_date": as_of_date})
-        _, response = _request_json(
+        _, response = _request_source_json(
             "GET",
             f"{query_base_url}/portfolios/{portfolio_id}/transactions?{params}",
         )
@@ -2010,7 +2016,7 @@ def _probe_portfolio_bundle_segment(
             complete = False
             continue
         params = parse.urlencode({"as_of_date": as_of_date, "include_projected": "false"})
-        _, response = _request_json(
+        _, response = _request_source_json(
             "GET",
             f"{query_base_url}/portfolios/{portfolio_id}/positions?{params}",
         )
@@ -2153,53 +2159,6 @@ def _post_demo_pack_payload(
     )
 
 
-def _ingest_demo_portfolio_data(
-    ingestion_base_url: str,
-    bundle: dict[str, Any],
-    *,
-    batch_size: int = DEFAULT_BULK_INGEST_BATCH_SIZE,
-    force_ingest: bool,
-) -> list[DemoPackIngestionOutcome]:
-    segments = tuple(
-        segment
-        for segment in _build_demo_pack_segments(bundle, batch_size=batch_size)
-        if segment.category == "portfolio"
-    )
-    LOGGER.info(
-        (
-            "Ingesting demo pack: portfolios=%d instruments=%d transactions=%d "
-            "market_prices=%d fx_rates=%d batch_size=%d"
-        ),
-        len(bundle["portfolios"]),
-        len(bundle["instruments"]),
-        len(bundle["transactions"]),
-        len(bundle["market_prices"]),
-        len(bundle["fx_rates"]),
-        batch_size,
-    )
-    return _ingest_demo_segments(
-        ingestion_base_url,
-        segments,
-        force_ingest=force_ingest,
-    )
-
-
-def _ingest_demo_reference_data(
-    ingestion_base_url: str,
-    bundle: dict[str, Any],
-    *,
-    force_ingest: bool,
-) -> list[DemoPackIngestionOutcome]:
-    segments = tuple(
-        segment for segment in _build_demo_pack_segments(bundle) if segment.category == "reference"
-    )
-    return _ingest_demo_segments(
-        ingestion_base_url,
-        segments,
-        force_ingest=force_ingest,
-    )
-
-
 def _ingest_demo_segments(
     ingestion_base_url: str,
     segments: tuple[DemoPackSegment, ...],
@@ -2246,9 +2205,27 @@ def _request_json(
             return response.status, (json.loads(body) if body else {})
     except error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"{method} {url} failed ({exc.code}): {detail}") from exc
+        raise DemoPackHttpError(
+            method=method,
+            url=url,
+            status_code=exc.code,
+            detail=detail,
+        ) from exc
     except (error.URLError, http.client.RemoteDisconnected, TimeoutError, ConnectionError) as exc:
         raise RuntimeError(f"{method} {url} connection error: {exc}") from exc
+
+
+def _request_source_json(
+    method: str,
+    url: str,
+    payload: dict[str, Any] | None = None,
+) -> tuple[int, Any]:
+    try:
+        return _request_json(method, url, payload=payload)
+    except DemoPackHttpError as exc:
+        if exc.status_code == 404:
+            return exc.status_code, {}
+        raise
 
 
 def _wait_ready(url: str, wait_seconds: int, poll_interval_seconds: int) -> None:
@@ -2264,66 +2241,120 @@ def _wait_ready(url: str, wait_seconds: int, poll_interval_seconds: int) -> None
     raise TimeoutError(f"Timed out waiting for readiness endpoint: {url}")
 
 
-def _portfolio_exists(query_base_url: str, portfolio_id: str) -> bool:
-    params = parse.urlencode({"portfolio_id": portfolio_id})
-    _, payload = _request_json("GET", f"{query_base_url}/portfolios?{params}")
-    return any(item.get("portfolio_id") == portfolio_id for item in payload.get("portfolios") or [])
-
-
-def _all_demo_portfolios_exist(
-    query_base_url: str, expectations: tuple[PortfolioExpectation, ...] = DEMO_EXPECTATIONS
-) -> bool:
-    return all(_portfolio_exists(query_base_url, item.portfolio_id) for item in expectations)
+def _probe_demo_pack_completeness(
+    *,
+    query_base_url: str,
+    query_control_plane_base_url: str,
+    bundle: dict[str, Any],
+    expectations: tuple[PortfolioExpectation, ...],
+) -> DemoPackCompleteness:
+    segments = _build_demo_pack_segments(bundle)
+    portfolio_segment = next(segment for segment in segments if segment.name == "portfolio-bundle")
+    results = (
+        _probe_portfolio_bundle_segment(
+            query_base_url,
+            as_of_date=bundle["as_of_date"],
+            segment=portfolio_segment,
+            expectations=expectations,
+        ),
+        _probe_market_and_fx_segments(query_base_url, segments),
+        _probe_index_segments(
+            query_control_plane_base_url,
+            as_of_date=bundle["as_of_date"],
+            segments=segments,
+        ),
+        _probe_benchmark_and_risk_free_segments(
+            query_control_plane_base_url,
+            as_of_date=bundle["as_of_date"],
+            segments=segments,
+        ),
+    )
+    evaluated = tuple(
+        dict.fromkeys(name for result in results for name in result.evaluated_segments)
+    )
+    expected_names = tuple(segment.name for segment in segments)
+    if set(evaluated) != set(expected_names):
+        unevaluated = sorted(set(expected_names).difference(evaluated))
+        raise RuntimeError(
+            "Demo pack completeness probe did not evaluate every segment: " + ", ".join(unevaluated)
+        )
+    return DemoPackCompleteness(
+        evaluated_segments=evaluated,
+        missing_segments=tuple(
+            sorted({name for result in results for name in result.missing_segments})
+        ),
+    )
 
 
 def _ingest_demo_pack_if_needed(
     *,
     ingestion_base_url: str,
     query_base_url: str,
+    query_control_plane_base_url: str,
     bundle: dict[str, Any],
     expectations: tuple[PortfolioExpectation, ...],
     force_ingest: bool,
 ) -> bool:
-    if not force_ingest and _all_demo_portfolios_exist(query_base_url, expectations):
-        LOGGER.info(
-            "Demo pack already present. Skipping portfolio and reference ingestion "
-            "reason=portfolio_presence_compatibility_guard"
+    segments = _build_demo_pack_segments(bundle)
+    pack_fingerprint = _canonical_payload_fingerprint(bundle)
+    if force_ingest:
+        selected_segments = segments
+        decision_reason = "explicit_force_refresh"
+    else:
+        completeness = _probe_demo_pack_completeness(
+            query_base_url=query_base_url,
+            query_control_plane_base_url=query_control_plane_base_url,
+            bundle=bundle,
+            expectations=expectations,
         )
-        return False
+        if completeness.is_complete:
+            LOGGER.info(
+                (
+                    "Demo pack is complete; startup is a source-verified no-op "
+                    "reason=unchanged_pack_present pack_fingerprint=sha256:%s segments=%d"
+                ),
+                pack_fingerprint,
+                len(completeness.evaluated_segments),
+            )
+            return False
+        missing = set(completeness.missing_segments)
+        selected_segments = tuple(segment for segment in segments if segment.name in missing)
+        decision_reason = "missing_or_evolved_segments_selected"
 
-    outcomes = _ingest_demo_portfolio_data(
-        ingestion_base_url,
-        bundle,
-        force_ingest=force_ingest,
+    if not selected_segments:
+        raise RuntimeError("Demo pack ingestion decision selected no segments")
+    LOGGER.info(
+        "Demo pack ingestion selection reason=%s segments=%s.",
+        decision_reason,
+        ",".join(segment.name for segment in selected_segments),
     )
-    outcomes.extend(
-        _ingest_demo_reference_data(
-            ingestion_base_url,
-            bundle,
-            force_ingest=force_ingest,
-        )
+    outcomes = _ingest_demo_segments(
+        ingestion_base_url,
+        selected_segments,
+        force_ingest=force_ingest,
     )
     replayed_segments = sorted(item.segment for item in outcomes if item.replayed)
     published_segments = sorted(item.segment for item in outcomes if not item.replayed)
-    pack_fingerprint = _canonical_payload_fingerprint(bundle)
 
     if outcomes and not published_segments:
         LOGGER.info(
-            "Demo pack is unchanged; all content-addressed segments were idempotency replays. "
-            "reason=unchanged_pack_present pack_fingerprint=sha256:%s segments=%d",
+            (
+                "Selected demo pack segments were durable idempotency replays; "
+                "reason=selected_segments_already_published pack_fingerprint=sha256:%s "
+                "segments=%s"
+            ),
             pack_fingerprint,
-            len(replayed_segments),
+            ",".join(replayed_segments),
         )
         return False
 
-    reason = "explicit_force_refresh" if force_ingest else "missing_or_evolved_segments_published"
     LOGGER.info(
         (
             "Demo pack ingestion decision reason=%s pack_fingerprint=sha256:%s "
             "published_segments=%s replayed_segment_count=%d benchmark=%s "
             "assigned_portfolio=%s"
         ),
-        reason,
+        decision_reason,
         pack_fingerprint,
         ",".join(published_segments),
         len(replayed_segments),
@@ -2554,6 +2585,7 @@ def main() -> int:
         _ingest_demo_pack_if_needed(
             ingestion_base_url=ingestion_base_url,
             query_base_url=query_base_url,
+            query_control_plane_base_url=query_control_plane_base_url,
             bundle=demo_bundle,
             expectations=expectations,
             force_ingest=args.force_ingest,
