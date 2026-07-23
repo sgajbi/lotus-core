@@ -2,6 +2,7 @@
 
 from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta, timezone
+from decimal import Decimal
 
 import pytest
 from portfolio_common.domain.valuation import (
@@ -223,3 +224,9 @@ def test_assignment_requires_aware_observation_and_valid_window() -> None:
         _assignment(observed_at=datetime(2026, 7, 18, 8))
     with pytest.raises(ValueError, match="on or after"):
         _assignment(valid_from=date(2026, 7, 2), valid_to=date(2026, 7, 1))
+
+
+@pytest.mark.parametrize("assignment_version", [True, Decimal("1"), "1"])
+def test_assignment_rejects_non_integer_source_version(assignment_version: object) -> None:
+    with pytest.raises(TypeError, match="assignment_version must be an integer"):
+        _assignment(assignment_version=assignment_version)
