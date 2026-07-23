@@ -3172,6 +3172,17 @@ Most relevant current governance:
      evidence only. Protect the manifest in Feature Lane, PR Merge Gate, and Main Releasability
      with the `integration` environment and `db_direct` runtime. #602 account and cash integration
      coverage remains partial until those distinct persistence paths receive real DB proof.
+224. E2E test value and execution ownership are governed by
+     `docs/standards/e2e-test-value-ledger.v1.json` and
+     `make e2e-test-value-guard`. Keep repeated invariant, defect-class, fixture, dependency,
+     source-contract, lower-layer, and non-duplication evidence in shared capability profiles;
+     keep each node row limited to stable ownership identity, exact collected nodeid, profile,
+     manifest-derived lane membership, and reviewed decision. Additions, renames, removals, and
+     smoke/full movement must keep exact collection parity. `needs-review` is allowed only as an
+     explicit in-progress classification and blocks #729 closure. Do not move, merge, replace, or
+     retire an E2E node without equivalent or stronger lower-layer proof plus before/after runtime
+     and fault-detection evidence. The ledger governs test value and placement; #728 separately
+     owns private-banking scenario economics and fixture validity.
 
 ## Context Maintenance Rule
 

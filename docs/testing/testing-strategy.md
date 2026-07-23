@@ -114,6 +114,21 @@ Do not use marker count as proof. The risk matrix must cite concrete tests or Ma
 record `partial`, `missing`, or `deliberately_deferred` with a follow-up issue when evidence is not
 complete.
 
+## E2E Value And Ownership Ledger
+
+`docs/standards/e2e-test-value-ledger.v1.json` registers every collected E2E node without repeating
+the same ownership evidence on every row. Capability profiles own the invariant, production defect
+class, fixture boundary, dependencies, source contracts, lower-layer proofs, and non-duplication
+rationale; node records carry only stable ownership identity, exact nodeid, profile, current lanes,
+and review decision.
+
+Run `make e2e-test-value-guard` after adding, renaming, deleting, or moving an E2E test. The guard
+collects `e2e-all` and `e2e-smoke`, blocks missing or extra nodes, duplicate identity, lane drift,
+invalid decisions, and missing evidence paths, and writes a deterministic summary below
+`output/test-governance/`. `needs-review` is a visible closure blocker, not an accepted final
+classification. Test movement or retirement still requires equivalent or stronger lower-layer
+proof and before/after runtime plus fault-detection evidence.
+
 ## CI Execution Guidance
 
 1. Pull request:
