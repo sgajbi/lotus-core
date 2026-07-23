@@ -269,6 +269,40 @@ def test_historical_rebuild_preserves_mismatched_explicit_interest_net() -> None
     assert cashflow.amount == Decimal("50")
 
 
+def test_historical_rebuild_keeps_source_recorded_dividend_withholding_in_cash() -> None:
+    transaction = _booked_transaction(
+        transaction_type="DIVIDEND",
+        gross_transaction_amount=Decimal("50"),
+        withholding_tax_amount=Decimal("10"),
+        trade_fee=Decimal("2"),
+    )
+
+    cashflow = calculate_transaction_cashflow(
+        transaction,
+        _rule(CashflowClassification.INCOME),
+        calculation_context=CashflowCalculationContext.HISTORICAL_REBUILD,
+    )
+
+    assert cashflow.amount == Decimal("38")
+
+
+def test_historical_rebuild_preserves_pre_fence_invalid_dividend_economics() -> None:
+    transaction = _booked_transaction(
+        transaction_type="DIVIDEND",
+        gross_transaction_amount=Decimal("10"),
+        withholding_tax_amount=Decimal("2"),
+        trade_fee=Decimal("9"),
+    )
+
+    cashflow = calculate_transaction_cashflow(
+        transaction,
+        _rule(CashflowClassification.INCOME),
+        calculation_context=CashflowCalculationContext.HISTORICAL_REBUILD,
+    )
+
+    assert cashflow.amount == Decimal("1")
+
+
 @pytest.mark.parametrize(
     ("transaction_type", "classification", "changes"),
     [

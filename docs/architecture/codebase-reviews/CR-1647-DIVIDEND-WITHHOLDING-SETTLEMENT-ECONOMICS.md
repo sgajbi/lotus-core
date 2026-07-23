@@ -32,9 +32,10 @@ publishing; `DIVIDEND_014` is defense in depth for direct domain adapters.
 Null and zero withholding preserve the previous gross-minus-fee result. No field, event version,
 topic, database schema, or migration changed. Every transaction output produced by the current
 cost-processing step uses current-booking economics even when position processing returns it inside
-an inline rebuild, including transformed or split identities. Only previously accepted suffix rows
-use the historical-rebuild context and retain legacy arithmetic, so the fix does not silently
-restate existing history.
+  an inline rebuild, including transformed or split identities. Previously accepted suffix rows use
+  the historical-rebuild context, but explicit positive DIVIDEND withholding remains part of their
+  cash economics so rebuilt product and generated cash legs cannot diverge. Null/zero withholding
+  and rows that predate current settlement fences retain legacy arithmetic.
 
 This slice does not implement a supplied net-dividend identity, withholding-rate derivation or
 tolerance, other receipt deductions, jurisdiction policy, return-of-capital classification, basis
@@ -59,10 +60,12 @@ backfill. Those acceptance areas remain under #448; this evidence does not claim
   rollback, and absence of cost, position, cashflow, or commit work.
 - Agent 1's cross-review found that inline rebuild originally classified both the current command
   and prior suffix rows as historical. The application boundary now identifies every current
-  cost-processing output by portfolio and transaction identity, applies net-of-withholding current
-  economics to it, and keeps legacy gross-minus-fee arithmetic only for a pre-existing suffix row.
-  The regression uses a transformed output identity different from the raw command, and also proves
-  the current product cashflow equals its generated settlement leg.
+    cost-processing output by portfolio and transaction identity and applies net-of-withholding
+    current economics to it. Exact-head review then found that a later backdated booking still
+    dropped withholding from a previously accepted suffix product cashflow while its generated leg
+    remained net. Historical rebuild now retains explicit positive withholding, with a regression
+    proving both current and suffix product cashflows equal their generated settlement legs; legacy
+    fallback remains for null/zero withholding and pre-fence invalid rows.
 - Database-backed generated-leg and rejection tests were updated for the new arithmetic. They were
   not executed locally because this lane is prohibited from touching Docker; protected GitHub CI
   remains required before merge.
