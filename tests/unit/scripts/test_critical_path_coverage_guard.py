@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 import subprocess
 import sys
 import textwrap
@@ -321,6 +322,7 @@ def test_changed_module_target_produces_real_line_and_branch_evidence(tmp_path: 
     completed = subprocess.run(
         [sys.executable, "-c", script],
         cwd=tmp_path,
+        env={**os.environ, "PYTHONPATH": str(tmp_path)},
         check=False,
         capture_output=True,
         text=True,
