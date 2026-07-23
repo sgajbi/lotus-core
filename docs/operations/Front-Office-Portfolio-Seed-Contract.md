@@ -448,7 +448,10 @@ The seed tool must validate at least:
 Validation polling must use `--poll-interval-seconds`; it must not busy-loop against Core, Gateway,
 or downstream analytics while work is converging. Pending or processing aggregation is readiness
 work, not a non-blocking success diagnostic. The stability fence is inside the existing
-`--wait-seconds` budget and does not extend or relax that deadline.
+`--wait-seconds` budget and does not extend or relax that deadline. The governed direct-command
+default and the Compose override are both 900 seconds; the exact-main retained run first reached
+all-zero queues after about 587 seconds and completed the three-observation fence after about 617
+seconds, so the former 300-second direct-command default is not sufficient certification evidence.
 
 ## Current Posture
 

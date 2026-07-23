@@ -2818,7 +2818,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--query-base-url", default="http://127.0.0.1:8201")
     parser.add_argument("--query-control-plane-base-url", default="http://127.0.0.1:8202")
     parser.add_argument("--gateway-base-url", default="http://gateway.dev.lotus")
-    parser.add_argument("--wait-seconds", type=int, default=300)
+    parser.add_argument("--wait-seconds", type=int, default=900)
     parser.add_argument("--poll-interval-seconds", type=_positive_int, default=3)
     parser.add_argument("--postgres-container", default=DEFAULT_POSTGRES_CONTAINER)
     parser.add_argument("--skip-cleanup", action="store_true")

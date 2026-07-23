@@ -1228,6 +1228,7 @@ def test_front_office_seed_verifies_against_canonical_gateway_by_default(monkeyp
 
     assert args.gateway_base_url == "http://gateway.dev.lotus"
     assert args.end_date == "2026-04-10"
+    assert args.wait_seconds == 900
     assert not args.reprocess_after_ingest
 
 

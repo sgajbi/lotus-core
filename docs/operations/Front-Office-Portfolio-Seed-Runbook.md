@@ -86,7 +86,7 @@ python tools/front_office_portfolio_seed.py `
   --start-date 2025-03-31 `
   --end-date 2026-04-10 `
   --benchmark-start-date 2025-01-06 `
-  --wait-seconds 300
+  --wait-seconds 900
 ```
 
 ## Validation Performed By The Tool
