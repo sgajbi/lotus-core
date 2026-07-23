@@ -1733,7 +1733,7 @@ def _probe_benchmark_and_risk_free_segments(
     compositions = by_name.get("benchmark-compositions")
     if compositions is not None:
         expected = compositions.payload["benchmark_compositions"]
-        actual: list[dict[str, Any]] = []
+        actual_compositions: list[dict[str, Any]] = []
         for benchmark_id in sorted({str(record["benchmark_id"]) for record in expected}):
             records = [record for record in expected if record["benchmark_id"] == benchmark_id]
             _, response = _request_source_json(
@@ -1751,13 +1751,13 @@ def _probe_benchmark_and_risk_free_segments(
                     }
                 },
             )
-            actual.extend(
+            actual_compositions.extend(
                 {"benchmark_id": benchmark_id, **record}
                 for record in response.get("segments") or []
             )
         if not _records_cover_expected(
             expected=expected,
-            actual=actual,
+            actual=actual_compositions,
             key_fields=("benchmark_id", "index_id", "composition_effective_from"),
             compare_fields=("composition_weight", "rebalance_event_id"),
             numeric_fields=frozenset({"composition_weight"}),
@@ -1767,7 +1767,7 @@ def _probe_benchmark_and_risk_free_segments(
     returns = by_name.get("benchmark-return-series")
     if returns is not None:
         expected = returns.payload["benchmark_return_series"]
-        actual: list[dict[str, Any]] = []
+        actual_returns: list[dict[str, Any]] = []
         for benchmark_id in sorted({str(record["benchmark_id"]) for record in expected}):
             records = [record for record in expected if record["benchmark_id"] == benchmark_id]
             _, response = _request_source_json(
@@ -1785,12 +1785,12 @@ def _probe_benchmark_and_risk_free_segments(
                     "frequency": "daily",
                 },
             )
-            actual.extend(
+            actual_returns.extend(
                 {"benchmark_id": benchmark_id, **record} for record in response.get("points") or []
             )
         if not _records_cover_expected(
             expected=expected,
-            actual=actual,
+            actual=actual_returns,
             key_fields=("benchmark_id", "series_date"),
             compare_fields=(
                 "benchmark_return",
@@ -1806,7 +1806,7 @@ def _probe_benchmark_and_risk_free_segments(
     assignments = by_name.get("benchmark-assignments")
     if assignments is not None:
         expected = assignments.payload["benchmark_assignments"]
-        actual: list[dict[str, Any]] = []
+        actual_assignments: list[dict[str, Any]] = []
         for record in expected:
             portfolio_id = str(record["portfolio_id"])
             _, response = _request_source_json(
@@ -1817,10 +1817,10 @@ def _probe_benchmark_and_risk_free_segments(
                 ),
                 payload={"as_of_date": as_of_date},
             )
-            actual.append(response)
+            actual_assignments.append(response)
         if not _records_cover_expected(
             expected=expected,
-            actual=actual,
+            actual=actual_assignments,
             key_fields=("portfolio_id",),
             compare_fields=(
                 "benchmark_id",
@@ -1838,7 +1838,7 @@ def _probe_benchmark_and_risk_free_segments(
     risk_free = by_name.get("risk-free-series")
     if risk_free is not None:
         expected = risk_free.payload["risk_free_series"]
-        actual: list[dict[str, Any]] = []
+        actual_risk_free_points: list[dict[str, Any]] = []
         for currency in sorted({str(record["series_currency"]) for record in expected}):
             records = [record for record in expected if record["series_currency"] == currency]
             series_modes = {
@@ -1876,10 +1876,10 @@ def _probe_benchmark_and_risk_free_segments(
                         "series_mode": series_mode,
                     },
                 )
-                actual.extend(response.get("points") or [])
+                actual_risk_free_points.extend(response.get("points") or [])
         if not _records_cover_expected(
             expected=expected,
-            actual=actual,
+            actual=actual_risk_free_points,
             key_fields=("series_currency", "series_date", "value_convention"),
             compare_fields=(
                 "value",
