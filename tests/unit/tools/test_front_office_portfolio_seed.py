@@ -6,6 +6,7 @@ from decimal import Decimal
 
 import pytest
 
+import tools.front_office_portfolio_seed as front_office_seed_module
 import tools.front_office_seed_contract as front_office_seed_contract_module
 import tools.validate_front_office_advisor_book_seed as advisor_book_seed_validator
 from tools.front_office_portfolio_seed import (
@@ -22,6 +23,7 @@ from tools.front_office_portfolio_seed import (
     _extract_support_overview_summary,
     _front_office_analytics_are_fresh,
     _front_office_readiness_blockers,
+    _ingest_cash_account_masters,
     _ingest_front_office_core_data,
     _ingest_reference_data,
     _reprocess_front_office_transactions,
@@ -32,6 +34,7 @@ from tools.front_office_portfolio_seed import (
     _validate_front_office_cash_transactions,
     _validate_front_office_internal_transaction_pairs,
     _verify_front_office_portfolio,
+    _wait_for_cash_account_persistence,
     _wait_for_instrument_persistence,
     _wait_for_portfolio_persistence,
     _wait_for_required_fx_readiness,
@@ -912,6 +915,7 @@ def test_front_office_seed_persists_sources_before_activating_business_horizon(m
     timeline = []
     waits = []
     instrument_waits = []
+    cash_account_waits = []
     fx_waits = []
     price_waits = []
 
@@ -927,6 +931,10 @@ def test_front_office_seed_persists_sources_before_activating_business_horizon(m
     def capture_instrument_wait(**kwargs):
         instrument_waits.append(kwargs)
         timeline.append("instruments_persisted")
+
+    def capture_cash_account_wait(**kwargs):
+        cash_account_waits.append(kwargs)
+        timeline.append("cash_accounts_persisted")
 
     def capture_fx_wait(**kwargs):
         fx_waits.append(kwargs)
@@ -950,6 +958,10 @@ def test_front_office_seed_persists_sources_before_activating_business_horizon(m
         capture_instrument_wait,
     )
     monkeypatch.setattr(
+        "tools.front_office_portfolio_seed._wait_for_cash_account_persistence",
+        capture_cash_account_wait,
+    )
+    monkeypatch.setattr(
         "tools.front_office_portfolio_seed._wait_for_required_market_price_readiness",
         capture_price_wait,
     )
@@ -966,6 +978,7 @@ def test_front_office_seed_persists_sources_before_activating_business_horizon(m
     assert [call[1] for call in calls] == [
         "http://ingestion.dev.lotus/ingest/portfolios",
         "http://ingestion.dev.lotus/ingest/instruments",
+        "http://ingestion.dev.lotus/ingest/reference/cash-accounts",
         "http://ingestion.dev.lotus/ingest/fx-rates",
         "http://ingestion.dev.lotus/ingest/market-prices",
         "http://ingestion.dev.lotus/ingest/business-dates",
@@ -976,6 +989,8 @@ def test_front_office_seed_persists_sources_before_activating_business_horizon(m
         "portfolio_persisted",
         "http://ingestion.dev.lotus/ingest/instruments",
         "instruments_persisted",
+        "http://ingestion.dev.lotus/ingest/reference/cash-accounts",
+        "cash_accounts_persisted",
         "http://ingestion.dev.lotus/ingest/fx-rates",
         "fx_ready",
         "http://ingestion.dev.lotus/ingest/market-prices",
@@ -995,6 +1010,15 @@ def test_front_office_seed_persists_sources_before_activating_business_horizon(m
         {
             "query_base_url": "http://query.dev.lotus",
             "security_ids": [instrument["security_id"] for instrument in bundle["instruments"]],
+            "wait_seconds": 90,
+            "poll_interval_seconds": 3,
+        }
+    ]
+    assert cash_account_waits == [
+        {
+            "query_base_url": "http://query.dev.lotus",
+            "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+            "cash_account_ids": [row["cash_account_id"] for row in bundle["cash_accounts"]],
             "wait_seconds": 90,
             "poll_interval_seconds": 3,
         }
@@ -1030,7 +1054,6 @@ def test_front_office_seed_ingests_reference_data_in_dependency_order(monkeypatc
     _ingest_reference_data("http://ingestion.dev.lotus", bundle)
 
     assert [call[1] for call in calls] == [
-        "http://ingestion.dev.lotus/ingest/reference/cash-accounts",
         "http://ingestion.dev.lotus/ingest/portfolio-party-role-assignments",
         "http://ingestion.dev.lotus/ingest/indices",
         "http://ingestion.dev.lotus/ingest/index-price-series",
@@ -1047,20 +1070,20 @@ def test_front_office_seed_ingests_reference_data_in_dependency_order(monkeypatc
         "http://ingestion.dev.lotus/ingest/instrument-eligibility",
         "http://ingestion.dev.lotus/ingest/risk-free-series",
     ]
-    assert calls[1][2] == {"party_role_assignments": bundle["portfolio_party_role_assignments"]}
-    assert calls[9][2]["model_portfolios"][0]["model_portfolio_id"] == (
+    assert calls[0][2] == {"party_role_assignments": bundle["portfolio_party_role_assignments"]}
+    assert calls[8][2]["model_portfolios"][0]["model_portfolio_id"] == (
         DEFAULT_DPM_MODEL_PORTFOLIO_ID
     )
-    assert calls[10][2]["model_portfolio_targets"]
-    assert calls[11][2]["mandate_bindings"][0]["mandate_id"] == "MANDATE_PB_SG_GLOBAL_BAL_001"
-    assert {row["portfolio_id"] for row in calls[11][2]["mandate_bindings"]} == {
+    assert calls[9][2]["model_portfolio_targets"]
+    assert calls[10][2]["mandate_bindings"][0]["mandate_id"] == "MANDATE_PB_SG_GLOBAL_BAL_001"
+    assert {row["portfolio_id"] for row in calls[10][2]["mandate_bindings"]} == {
         "PB_SG_GLOBAL_BAL_001",
         "PB_SG_GLOBAL_INC_002",
         "PB_SG_GLOBAL_GROWTH_003",
     }
-    assert calls[12][2]["restriction_profiles"]
-    assert calls[13][2]["sustainability_preferences"]
-    assert calls[14][2]["eligibility_profiles"]
+    assert calls[11][2]["restriction_profiles"]
+    assert calls[12][2]["sustainability_preferences"]
+    assert calls[13][2]["eligibility_profiles"]
 
 
 def test_front_office_seed_derives_required_cross_currency_fx_windows():
@@ -1261,6 +1284,99 @@ def test_front_office_seed_accepts_positive_cli_poll_interval(monkeypatch):
     )
 
     assert parse_args().poll_interval_seconds == 1
+
+
+def test_front_office_seed_ingests_and_awaits_cash_account_masters(monkeypatch):
+    observed: list[tuple[str, object]] = []
+    bundle = {
+        "cash_accounts": [
+            {"cash_account_id": "CASH-ACC-USD-001"},
+            {"cash_account_id": "CASH-ACC-EUR-001"},
+        ]
+    }
+
+    monkeypatch.setattr(
+        front_office_seed_module,
+        "_request_json",
+        lambda method, url, *, payload=None: (
+            observed.append(("request", (method, url, payload))) or (202, {"accepted_count": 2})
+        ),
+    )
+    monkeypatch.setattr(
+        front_office_seed_module,
+        "_wait_for_cash_account_persistence",
+        lambda **kwargs: observed.append(("wait", kwargs)),
+    )
+
+    _ingest_cash_account_masters(
+        ingestion_base_url="http://ingestion.dev.lotus",
+        query_base_url="http://query.dev.lotus",
+        bundle=bundle,
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        wait_seconds=90,
+        poll_interval_seconds=3,
+    )
+
+    assert observed == [
+        (
+            "request",
+            (
+                "POST",
+                "http://ingestion.dev.lotus/ingest/reference/cash-accounts",
+                {"cash_accounts": bundle["cash_accounts"]},
+            ),
+        ),
+        (
+            "wait",
+            {
+                "query_base_url": "http://query.dev.lotus",
+                "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+                "cash_account_ids": ["CASH-ACC-USD-001", "CASH-ACC-EUR-001"],
+                "wait_seconds": 90,
+                "poll_interval_seconds": 3,
+            },
+        ),
+    ]
+
+
+def test_front_office_seed_reuse_repairs_cash_accounts_without_replaying_transactions(
+    monkeypatch,
+):
+    timeline: list[str] = []
+    bundle = {"cash_accounts": [{"cash_account_id": "CASH-ACC-USD-001"}]}
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["front_office_portfolio_seed.py", "--skip-cleanup", "--ingest-only"],
+    )
+    monkeypatch.setattr(front_office_seed_module, "_wait_ready", lambda *_args: None)
+    monkeypatch.setattr(
+        front_office_seed_module,
+        "build_front_office_portfolio_bundle",
+        lambda **_kwargs: bundle,
+    )
+    monkeypatch.setattr(front_office_seed_module, "_portfolio_exists", lambda *_args: True)
+    monkeypatch.setattr(
+        front_office_seed_module,
+        "_ingest_front_office_core_data",
+        lambda **_kwargs: pytest.fail("reuse must not replay core transactions"),
+    )
+    monkeypatch.setattr(
+        front_office_seed_module,
+        "_ingest_cash_account_masters",
+        lambda **_kwargs: timeline.append("cash_accounts_ingested_and_visible"),
+    )
+    monkeypatch.setattr(
+        front_office_seed_module,
+        "_ingest_reference_data",
+        lambda *_args: timeline.append("remaining_reference_data_ingested"),
+    )
+
+    assert front_office_seed_module.main() == 0
+    assert timeline == [
+        "cash_accounts_ingested_and_visible",
+        "remaining_reference_data_ingested",
+    ]
 
 
 def test_front_office_seed_contract_loads_platform_governed_defaults() -> None:
@@ -1526,6 +1642,91 @@ def test_front_office_seed_waits_for_every_instrument_before_dependent_data(monk
         ("http://query.dev.lotus", "FO_BOND_UST_2030"),
         ("http://query.dev.lotus", "FO_EQ_AAPL_US"),
     ]
+
+
+def test_front_office_seed_waits_for_every_cash_account_before_transactions(monkeypatch):
+    observed_calls = []
+    visible_accounts = iter(
+        [
+            {"CASH-ACC-USD-001"},
+            {"CASH-ACC-USD-001", "CASH-ACC-EUR-001"},
+        ]
+    )
+
+    def fake_visible_cash_account_ids(query_base_url: str, portfolio_id: str) -> set[str]:
+        observed_calls.append((query_base_url, portfolio_id))
+        return next(visible_accounts)
+
+    monkeypatch.setattr(
+        "tools.front_office_portfolio_seed._visible_cash_account_ids",
+        fake_visible_cash_account_ids,
+    )
+    monkeypatch.setattr(
+        "tools.front_office_portfolio_seed.time.sleep",
+        lambda _: None,
+    )
+
+    _wait_for_cash_account_persistence(
+        query_base_url="http://query.dev.lotus",
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        cash_account_ids=[
+            "CASH-ACC-USD-001",
+            "CASH-ACC-EUR-001",
+            " CASH-ACC-USD-001 ",
+        ],
+        wait_seconds=3,
+        poll_interval_seconds=0,
+    )
+
+    assert observed_calls == [
+        ("http://query.dev.lotus", "PB_SG_GLOBAL_BAL_001"),
+        ("http://query.dev.lotus", "PB_SG_GLOBAL_BAL_001"),
+    ]
+
+
+def test_front_office_seed_fails_closed_when_cash_accounts_remain_missing(monkeypatch):
+    initial_time = datetime(2026, 7, 23, tzinfo=UTC)
+    observed_times = iter(
+        [
+            initial_time,
+            initial_time,
+            initial_time + timedelta(seconds=2),
+        ]
+    )
+
+    class ControlledDateTime:
+        @classmethod
+        def now(cls, *, tz):
+            assert tz is UTC
+            return next(observed_times)
+
+    monkeypatch.setattr(
+        "tools.front_office_portfolio_seed.datetime",
+        ControlledDateTime,
+    )
+    monkeypatch.setattr(
+        "tools.front_office_portfolio_seed._visible_cash_account_ids",
+        lambda _query_base_url, _portfolio_id: set(),
+    )
+    monkeypatch.setattr(
+        "tools.front_office_portfolio_seed.time.sleep",
+        lambda _: None,
+    )
+
+    with pytest.raises(
+        TimeoutError,
+        match=(
+            "Cash-account masters were not visible in query service within 1 seconds: "
+            "CASH-ACC-EUR-001, CASH-ACC-USD-001"
+        ),
+    ):
+        _wait_for_cash_account_persistence(
+            query_base_url="http://query.dev.lotus",
+            portfolio_id="PB_SG_GLOBAL_BAL_001",
+            cash_account_ids=["CASH-ACC-USD-001", "CASH-ACC-EUR-001"],
+            wait_seconds=1,
+            poll_interval_seconds=0,
+        )
 
 
 def test_front_office_seed_fails_closed_when_instruments_remain_missing(monkeypatch):
