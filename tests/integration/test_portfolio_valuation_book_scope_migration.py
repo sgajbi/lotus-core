@@ -34,6 +34,7 @@ PORTFOLIO_INSERT = text(
         portfolio_type,
         booking_center_code,
         client_id,
+        is_leverage_allowed,
         status
     ) VALUES (
         :portfolio_id,
@@ -46,6 +47,7 @@ PORTFOLIO_INSERT = text(
         'discretionary',
         'SG_BOOKING',
         'CLIENT-001',
+        FALSE,
         'active'
     )
     """
@@ -82,8 +84,12 @@ def test_portfolio_valuation_book_scope_applies_rolls_back_and_enforces_authorit
             for constraint in inspect(connection).get_check_constraints("portfolios")
         }
         scope_check = checks["ck_portfolios_valuation_book_scope_complete"]
-        assert "tenant_id = btrim(tenant_id)" in scope_check
-        assert "legal_book_id = btrim(legal_book_id)" in scope_check
+        # PostgreSQL may render implicit VARCHAR-to-TEXT casts explicitly when
+        # reflecting a check constraint. The behavior assertions below remain
+        # authoritative; normalize only that dialect-specific representation.
+        normalized_scope_check = scope_check.replace("::text", "")
+        assert "tenant_id = btrim(tenant_id)" in normalized_scope_check
+        assert "legal_book_id = btrim(legal_book_id)" in normalized_scope_check
 
         for sequence, (tenant_id, legal_book_id) in enumerate(
             [
