@@ -459,6 +459,10 @@ def clean_db(db_engine):
                 connection.execute(terminate_sessions_query)
             truncate_sql = _build_truncate_sql(connection)
             if truncate_sql:
+                require_database_cleanup_authorization(
+                    cleanup_authorization,
+                    engine=db_engine,
+                )
                 connection.execute(text(truncate_sql))
 
     truncate_with_deadlock_retry(
@@ -502,6 +506,10 @@ def clean_db_module(db_engine):
                 connection.execute(terminate_sessions_query)
             truncate_sql = _build_truncate_sql(connection)
             if truncate_sql:
+                require_database_cleanup_authorization(
+                    cleanup_authorization,
+                    engine=db_engine,
+                )
                 connection.execute(text(truncate_sql))
 
     truncate_with_deadlock_retry(

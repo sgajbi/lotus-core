@@ -155,6 +155,11 @@ def recover_reprocessing_activity_for_test_cleanup(
     require_database_cleanup_authorization(authorization, engine=engine)
     with engine.begin() as connection:
         require_database_cleanup_authorization(authorization, engine=engine)
+
+        def _execute_authorized(statement: str) -> None:
+            require_database_cleanup_authorization(authorization, engine=engine)
+            connection.execute(text(statement))
+
         existing_tables = {
             row[0]
             for row in connection.execute(
@@ -162,30 +167,26 @@ def recover_reprocessing_activity_for_test_cleanup(
             ).fetchall()
         }
         if "reprocessing_jobs" in existing_tables:
-            connection.execute(
-                text(
-                    """
+            _execute_authorized(
+                """
                     UPDATE reprocessing_jobs
                     SET status = 'FAILED',
                         failure_reason = 'Reset by pytest cleanup after quiescence timeout',
                         updated_at = now()
                     WHERE status IN ('PENDING', 'PROCESSING')
                     """
-                )
             )
         if "position_state" in existing_tables:
-            connection.execute(
-                text(
-                    """
+            _execute_authorized(
+                """
                     UPDATE position_state
                     SET status = 'CURRENT',
                         updated_at = now()
                     WHERE status = 'REPROCESSING'
                     """
-                )
             )
         if "instrument_reprocessing_state" in existing_tables:
-            connection.execute(text("DELETE FROM instrument_reprocessing_state"))
+            _execute_authorized("DELETE FROM instrument_reprocessing_state")
     return snapshot
 
 
