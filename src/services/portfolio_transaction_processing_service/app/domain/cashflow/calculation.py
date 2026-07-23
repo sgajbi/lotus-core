@@ -14,7 +14,11 @@ from portfolio_common.domain.transaction.fee_components import (
 from portfolio_common.domain.transaction.type_registry import TRANSACTION_TYPE_REGISTRY
 
 from ..transaction.booked import BookedTransaction
-from ..transaction.fx import FxValidationError, validate_fx_embedded_fee
+from ..transaction.fx import (
+    FxValidationError,
+    validate_fx_embedded_fee,
+    validate_fx_embedded_tax,
+)
 from ..transaction.settlement import (
     ORDINARY_SETTLEMENT_TRANSACTION_TYPES,
     SettlementCashValidationError,
@@ -197,9 +201,16 @@ def _base_cashflow_amount(
 ) -> Decimal:
     trade_fee = _resolve_cashflow_trade_fee(transaction)
     if transaction_type in {"FX_CASH_SETTLEMENT_BUY", "FX_CASH_SETTLEMENT_SELL"}:
-        embedded_fee_issue = validate_fx_embedded_fee(trade_fee)
-        if embedded_fee_issue is not None:
-            raise FxValidationError([embedded_fee_issue])
+        embedded_charge_issues = [
+            issue
+            for issue in (
+                validate_fx_embedded_fee(trade_fee),
+                validate_fx_embedded_tax(transaction.withholding_tax_amount or Decimal(0)),
+            )
+            if issue is not None
+        ]
+        if embedded_charge_issues:
+            raise FxValidationError(embedded_charge_issues)
     if transaction_type in {"BUY", "FEE"}:
         return transaction.gross_transaction_amount + trade_fee
     return transaction.gross_transaction_amount - trade_fee

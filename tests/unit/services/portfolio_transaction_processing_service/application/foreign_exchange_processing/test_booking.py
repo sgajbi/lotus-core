@@ -110,19 +110,27 @@ async def test_booking_rejects_invalid_fx_transaction_before_persistence() -> No
 
 
 @pytest.mark.parametrize(
-    "fee_update",
+    ("charge_update", "expected_reason"),
     [
-        {"trade_fee": Decimal("1")},
-        {"trade_fee": Decimal("0"), "brokerage": Decimal("1")},
+        ({"trade_fee": Decimal("1")}, "FX_025_NON_ZERO_EMBEDDED_FEE:trade_fee"),
+        (
+            {"trade_fee": Decimal("0"), "brokerage": Decimal("1")},
+            "FX_025_NON_ZERO_EMBEDDED_FEE:trade_fee",
+        ),
+        (
+            {"withholding_tax_amount": Decimal("1")},
+            "FX_026_NON_ZERO_EMBEDDED_TAX:withholding_tax_amount",
+        ),
     ],
 )
-async def test_booking_rejects_embedded_fx_fee_before_persistence(
-    fee_update: dict[str, Decimal],
+async def test_booking_rejects_embedded_fx_charge_before_persistence(
+    charge_update: dict[str, Decimal],
+    expected_reason: str,
 ) -> None:
-    transaction = _foreign_exchange_transaction(**fee_update)
+    transaction = _foreign_exchange_transaction(**charge_update)
     persistence = AsyncMock(spec=ForeignExchangeTransactionPersistencePort)
 
-    with pytest.raises(ValueError, match="FX_025_NON_ZERO_EMBEDDED_FEE:trade_fee"):
+    with pytest.raises(ValueError, match=expected_reason):
         await book_foreign_exchange_transaction(
             transaction=transaction,
             transaction_persistence=persistence,
