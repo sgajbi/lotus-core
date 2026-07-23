@@ -763,6 +763,12 @@ async def test_openapi_describes_portfolio_market_and_fx_shared_schemas(async_te
         "Canonical portfolio identifier used across all downstream calculators and query surfaces."
     )
     assert portfolio["properties"]["cost_basis_method"]["examples"] == ["FIFO"]
+    assert portfolio["properties"]["tenant_id"]["examples"] == ["tenant-sg"]
+    assert portfolio["properties"]["legal_book_id"]["examples"] == ["LEGAL_BOOK_001"]
+    assert (
+        "must not be inferred from booking centre"
+        in portfolio["properties"]["legal_book_id"]["description"]
+    )
     assert portfolio_request["properties"]["portfolios"]["description"] == (
         "Canonical portfolio master records to ingest or upsert."
     )

@@ -3,7 +3,8 @@ from typing import List, Optional
 
 from portfolio_common.domain.cost_basis_method import CostBasisMethod, normalize_cost_basis_method
 from portfolio_common.domain.currency import normalize_currency_code
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from portfolio_common.domain.valuation import resolve_optional_valuation_book_scope
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class Portfolio(BaseModel):
@@ -14,6 +15,22 @@ class Portfolio(BaseModel):
             "calculators and query surfaces."
         ),
         examples=["DEMO_DPM_EUR_001"],
+    )
+    tenant_id: Optional[str] = Field(
+        None,
+        description=(
+            "Tenant or book-of-record scope for this source-data product. "
+            "Null until runtime tenant enforcement is available for this product."
+        ),
+        examples=["tenant-sg"],
+    )
+    legal_book_id: Optional[str] = Field(
+        None,
+        description=(
+            "Legal booking entity or governed accounting book. This field must not be "
+            "inferred from booking centre or jurisdiction."
+        ),
+        examples=["LEGAL_BOOK_001"],
     )
     base_currency: str = Field(
         ...,
@@ -104,10 +121,22 @@ class Portfolio(BaseModel):
     def _normalize_base_currency(cls, value: object) -> str:
         return normalize_currency_code(value)
 
+    @model_validator(mode="after")
+    def _validate_valuation_book_scope(self) -> "Portfolio":
+        scope = resolve_optional_valuation_book_scope(
+            tenant_id=self.tenant_id,
+            legal_book_id=self.legal_book_id,
+        )
+        if scope is not None:
+            self.tenant_id, self.legal_book_id = scope.key
+        return self
+
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
                 "portfolio_id": "DEMO_DPM_EUR_001",
+                "tenant_id": "tenant-sg",
+                "legal_book_id": "LEGAL_BOOK_001",
                 "base_currency": "EUR",
                 "open_date": "2025-01-01",
                 "risk_exposure": "balanced",

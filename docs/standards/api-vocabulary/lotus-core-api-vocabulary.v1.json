@@ -13,7 +13,7 @@
       "openApiVersion": "3.1.0"
     }
   ],
-  "generatedAt": "2026-07-22T23:14:52.223151+00:00",
+  "generatedAt": "2026-07-23T07:20:27.120560+00:00",
   "attributeCatalog": [
     {
       "semanticId": "lotus.accepted_count",
@@ -3633,6 +3633,7 @@
         "body"
       ],
       "observedTypes": [
+        "object",
         "string"
       ]
     },
@@ -20599,6 +20600,7 @@
           "investment_time_horizon",
           "is_leverage_allowed",
           "job_id",
+          "legal_book_id",
           "message",
           "objective",
           "open_date",
@@ -20608,6 +20610,7 @@
           "request_id",
           "risk_exposure",
           "status",
+          "tenant_id",
           "trace_id"
         ]
       },
@@ -20628,6 +20631,22 @@
             "type": "string",
             "semanticId": "lotus.portfolio_id",
             "attributeRef": "lotus.portfolio_id"
+          },
+          {
+            "name": "portfolios[].tenant_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.tenant_id",
+            "attributeRef": "lotus.tenant_id"
+          },
+          {
+            "name": "portfolios[].legal_book_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.legal_book_id",
+            "attributeRef": "lotus.legal_book_id"
           },
           {
             "name": "portfolios[].base_currency",
@@ -23639,6 +23658,7 @@
           "issuer_id",
           "issuer_name",
           "job_id",
+          "legal_book_id",
           "link_type",
           "linked_cash_transaction_id",
           "linked_component_ids",
@@ -23715,6 +23735,7 @@
           "synthetic_flow_valuation_method",
           "target_instrument_id",
           "target_transaction_reference",
+          "tenant_id",
           "to_currency",
           "trace_id",
           "trade_currency",
@@ -23811,6 +23832,22 @@
             "type": "string",
             "semanticId": "lotus.portfolio_id",
             "attributeRef": "lotus.portfolio_id"
+          },
+          {
+            "name": "portfolios[].tenant_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.tenant_id",
+            "attributeRef": "lotus.tenant_id"
+          },
+          {
+            "name": "portfolios[].legal_book_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.legal_book_id",
+            "attributeRef": "lotus.legal_book_id"
           },
           {
             "name": "portfolios[].base_currency",

@@ -157,6 +157,23 @@ def test_portfolio_declares_portfolio_manager_book_index():
     ]
 
 
+def test_portfolio_declares_complete_valuation_book_scope_contract():
+    table = Portfolio.__table__
+    constraints = {
+        constraint.name: constraint
+        for constraint in table.constraints
+        if constraint.name is not None
+    }
+
+    assert "ck_portfolios_valuation_book_scope_complete" in constraints
+    scope_sql = str(constraints["ck_portfolios_valuation_book_scope_complete"].sqltext)
+    assert "tenant_id = btrim(tenant_id)" in scope_sql
+    assert "legal_book_id = btrim(legal_book_id)" in scope_sql
+    assert "tenant_id <> ''" in scope_sql
+    assert "legal_book_id <> ''" in scope_sql
+    assert "ix_portfolios_valuation_book_scope" not in {index.name for index in table.indexes}
+
+
 def test_portfolio_mandate_binding_declares_dpm_source_index():
     indexes = {index.name: index for index in PortfolioMandateBinding.__table__.indexes}
 
