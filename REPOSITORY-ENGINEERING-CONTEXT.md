@@ -3161,6 +3161,17 @@ Most relevant current governance:
      search-path overrides are connection authority and therefore fail closed. A runtime with an
      intentionally fixed PostgreSQL override remains cleanup-ineligible, but may still reallocate
      its unrelated dynamically reserved service ports.
+223. Critical database lifecycle evidence is owned by the `critical-lifecycle-db` manifest,
+     `lifecycle` marker, and `make test-critical-lifecycle-db`. Keep the shard bounded to named
+     ingestion/idempotency, transaction persistence, outbox claim/delivery, valuation,
+     aggregation, replay, atomic rollback, and operator-projection cases; do not file-mark broad
+     integration modules or duplicate existing tests. The pack must retain one real PostgreSQL
+     path from accepted transaction-ingestion job through durable transaction/processed-event
+     persistence, exactly one pending-to-processed outbox dispatch, queued operator/job lineage,
+     and replay with no duplicate publication or orphan. Router fakes contribute API contract
+     evidence only. Protect the manifest in Feature Lane, PR Merge Gate, and Main Releasability
+     with the `integration` environment and `db_direct` runtime. #602 account and cash integration
+     coverage remains partial until those distinct persistence paths receive real DB proof.
 
 ## Context Maintenance Rule
 

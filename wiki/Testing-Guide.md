@@ -29,6 +29,7 @@ Use these when the change is mostly local logic, repository behavior, or schema-
 
 ### Integration and contract proof
 
+- `make test-critical-lifecycle-db`
 - `make test-integration-lite`
 - `make test-ops-contract`
 - `make test-transaction-buy-contract`
@@ -40,6 +41,13 @@ Use these when the change is mostly local logic, repository behavior, or schema-
 
 Use these when route contracts, source-data handling, supportability, or transaction semantics are
 at risk.
+
+`test-critical-lifecycle-db` is the bounded state-machine shard for ingestion jobs, transaction
+persistence, outbox dispatch, valuation, aggregation, replay, concurrency/recovery, and
+operator-visible terminal truth. It selects individual `lifecycle` cases under the DB-direct
+integration profile and is protected in Feature, PR, and Main lanes. Do not file-mark broad
+integration modules or treat router fakes as a substitute for the real PostgreSQL
+ingestion-to-exactly-one-dispatch proof.
 
 ### Runtime and end-to-end proof
 
@@ -82,6 +90,7 @@ Useful manifest checks:
 ```bash
 python scripts/quality/test_manifest.py --suite integration-lite --validate-only
 python scripts/quality/test_manifest.py --suite integration-lite --print-args
+python scripts/quality/test_manifest.py --suite critical-lifecycle-db --collect-only --quiet
 ```
 
 Use the manifest instead of inventing ad hoc pytest selections when you need parity with CI.
