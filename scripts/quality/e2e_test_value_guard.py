@@ -362,22 +362,54 @@ def _valid_actions_evidence(value: Any, *, require_seconds: bool) -> bool:
     return isinstance(seconds, (int, float)) and not isinstance(seconds, bool) and seconds >= 0
 
 
-def _valid_test_nodeid(nodeid: Any, *, repo_root: Path) -> bool:
+def _valid_test_nodeid(
+    nodeid: Any,
+    *,
+    repo_root: Path,
+    collected_e2e_nodeids: frozenset[str],
+) -> bool:
     if not isinstance(nodeid, str) or "::" not in nodeid or "\\" in nodeid:
         return False
     path = Path(nodeid.split("::", 1)[0])
-    return (
-        not path.is_absolute()
-        and ".." not in path.parts
-        and path.parts[0] == "tests"
-        and (repo_root / path).is_file()
-    )
+    if (
+        not path.parts
+        or path.is_absolute()
+        or ".." in path.parts
+        or path.parts[0] != "tests"
+        or not (repo_root / path).is_file()
+    ):
+        return False
+    if nodeid in collected_e2e_nodeids:
+        return True
+
+    try:
+        result = subprocess.run(
+            [sys.executable, "-m", "pytest", "--collect-only", "--quiet", nodeid],
+            cwd=repo_root,
+            check=False,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=60,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    if result.returncode:
+        return False
+    collected = {
+        line.strip()
+        for line in result.stdout.splitlines()
+        if line.startswith("tests/") and "::" in line
+    }
+    return nodeid in collected or any(item.startswith(f"{nodeid}[") for item in collected)
 
 
 def _validate_review_evidence(
     ledger: dict[str, Any],
     *,
     repo_root: Path,
+    collected_e2e_nodeids: frozenset[str],
 ) -> tuple[dict[str, dict[str, Any]], list[E2ETestValueFinding]]:
     raw_reviews = ledger.get("review_evidence")
     if not isinstance(raw_reviews, dict):
@@ -451,6 +483,7 @@ def _validate_review_evidence(
             if not _valid_test_nodeid(
                 fault.get("expected_owning_node"),
                 repo_root=repo_root,
+                collected_e2e_nodeids=collected_e2e_nodeids,
             ):
                 reject(
                     "invalid-fault-detection-evidence",
@@ -469,7 +502,11 @@ def _validate_review_evidence(
             replacement_proofs = impact.get("replacement_proofs")
             replacement_proofs_valid = isinstance(replacement_proofs, list) and all(
                 isinstance(proof, dict)
-                and _valid_test_nodeid(proof.get("owning_node"), repo_root=repo_root)
+                and _valid_test_nodeid(
+                    proof.get("owning_node"),
+                    repo_root=repo_root,
+                    collected_e2e_nodeids=collected_e2e_nodeids,
+                )
                 and _valid_actions_evidence(proof, require_seconds=False)
                 for proof in replacement_proofs
             )
@@ -751,7 +788,11 @@ def evaluate_e2e_test_value_ledger(
     findings = _validate_header(ledger, repo_root=repo_root)
     profiles, profile_findings = _validate_profiles(ledger, repo_root=repo_root)
     findings.extend(profile_findings)
-    valid_reviews, review_findings = _validate_review_evidence(ledger, repo_root=repo_root)
+    valid_reviews, review_findings = _validate_review_evidence(
+        ledger,
+        repo_root=repo_root,
+        collected_e2e_nodeids=frozenset(collected_full),
+    )
     findings.extend(review_findings)
     node_findings, closure_blocker_count = _validate_nodes(
         ledger,

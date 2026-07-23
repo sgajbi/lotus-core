@@ -56,6 +56,16 @@ def test_critical_lifecycle_suite_has_repository_native_make_target() -> None:
     assert "test-critical-lifecycle-db:" in Path("Makefile").read_text(encoding="utf-8")
 
 
+def test_local_pr_aggregate_runs_critical_lifecycle_suite() -> None:
+    makefile = Path("Makefile").read_text(encoding="utf-8")
+    recipe = makefile.split("test-pr-suites:", 1)[1].split("test-pr-runtime-gates:", 1)[0]
+
+    assert recipe.index("$(MAKE) test-unit-db") < recipe.index("$(MAKE) test-critical-lifecycle-db")
+    assert recipe.index("$(MAKE) test-critical-lifecycle-db") < recipe.index(
+        "$(MAKE) test-integration-lite"
+    )
+
+
 def test_integration_all_suite_tracks_full_integration_tree() -> None:
     assert get_suite("integration-all") == ["tests/integration"]
 
