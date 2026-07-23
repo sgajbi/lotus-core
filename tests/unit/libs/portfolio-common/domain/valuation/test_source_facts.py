@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import UTC, date, datetime
 from decimal import Decimal
 
@@ -6,8 +7,13 @@ from portfolio_common.domain.valuation import (
     FinancialSourceReference,
     MarketPriceQuoteBasis,
     MarketPriceSourceFact,
+    MarketPriceSourceFactError,
+    MarketPriceSourceFactStatus,
+    MissingMarketPriceSourceFactError,
+    OverlappingMarketPriceSourceFactError,
     ValuationAuthorityScope,
     ValuationBookScope,
+    resolve_market_price_source_fact,
     resolve_optional_valuation_book_scope,
 )
 
@@ -34,6 +40,8 @@ def _fact(**overrides: object) -> MarketPriceSourceFact:
         "currency": " usd ",
         "quote_basis": MarketPriceQuoteBasis.PERCENT_OF_PRINCIPAL_CLEAN,
         "source_reference": _source_reference(),
+        "fact_status": MarketPriceSourceFactStatus.ACTIVE,
+        "fact_version": 1,
     }
     values.update(overrides)
     return MarketPriceSourceFact(**values)  # type: ignore[arg-type]
@@ -145,6 +153,11 @@ def test_market_price_source_fact_hash_binds_scope_representation_and_lineage() 
             )
         ).content_hash()
     )
+    assert fact.content_hash() != _fact(fact_version=2).content_hash()
+    assert (
+        fact.content_hash()
+        != _fact(fact_status=MarketPriceSourceFactStatus.SUSPENDED).content_hash()
+    )
 
 
 @pytest.mark.parametrize("price", [Decimal("0"), Decimal("-1"), Decimal("NaN")])
@@ -167,3 +180,147 @@ def test_market_price_source_fact_requires_typed_scope_and_lineage() -> None:
 def test_market_price_source_fact_requires_exact_business_date(price_date: object) -> None:
     with pytest.raises(TypeError, match="price_date must be an exact date"):
         _fact(price_date=price_date)
+
+
+def test_market_price_resolution_is_exact_scope_and_date() -> None:
+    fact = _fact()
+
+    resolved = resolve_market_price_source_fact(
+        [
+            replace(
+                fact,
+                scope=ValuationAuthorityScope("TENANT-HK", "PB-SG-01", "BOND-001"),
+            ),
+            replace(
+                fact,
+                scope=ValuationAuthorityScope("TENANT-SG", "PB-SG-02", "BOND-001"),
+            ),
+            replace(
+                fact,
+                scope=ValuationAuthorityScope("TENANT-SG", "PB-SG-01", "BOND-999"),
+            ),
+            replace(fact, price_date=date(2026, 7, 21)),
+            fact,
+        ],
+        tenant_id=" TENANT-SG ",
+        legal_book_id=" PB-SG-01 ",
+        security_id=" BOND-001 ",
+        price_date=date(2026, 7, 22),
+    )
+
+    assert resolved is fact
+
+
+def test_latest_suspended_price_version_fences_older_active_fact() -> None:
+    active = _fact()
+    suspended = replace(
+        active,
+        fact_status=MarketPriceSourceFactStatus.SUSPENDED,
+        fact_version=2,
+        source_reference=replace(
+            active.source_reference,
+            source_revision="8",
+            observed_at=datetime(2026, 7, 23, 5, tzinfo=UTC),
+        ),
+    )
+
+    with pytest.raises(MissingMarketPriceSourceFactError, match="exact tenant"):
+        resolve_market_price_source_fact(
+            [active, suspended],
+            tenant_id="TENANT-SG",
+            legal_book_id="PB-SG-01",
+            security_id="BOND-001",
+            price_date=date(2026, 7, 22),
+        )
+
+
+def test_latest_active_price_correction_wins_deterministically() -> None:
+    original = _fact()
+    corrected = replace(
+        original,
+        price=Decimal("99.50"),
+        fact_version=2,
+        source_reference=replace(
+            original.source_reference,
+            source_revision="8",
+            observed_at=datetime(2026, 7, 23, 5, tzinfo=UTC),
+        ),
+    )
+
+    resolved = resolve_market_price_source_fact(
+        [corrected, original],
+        tenant_id="TENANT-SG",
+        legal_book_id="PB-SG-01",
+        security_id="BOND-001",
+        price_date=date(2026, 7, 22),
+    )
+
+    assert resolved is corrected
+
+
+def test_conflicting_price_payloads_at_one_source_version_fail_closed() -> None:
+    fact = _fact()
+
+    with pytest.raises(MarketPriceSourceFactError, match="conflicting payloads"):
+        resolve_market_price_source_fact(
+            [fact, replace(fact, price=Decimal("99.50"))],
+            tenant_id="TENANT-SG",
+            legal_book_id="PB-SG-01",
+            security_id="BOND-001",
+            price_date=date(2026, 7, 22),
+        )
+
+
+def test_competing_active_price_sources_fail_closed() -> None:
+    fact = _fact()
+    competing = replace(
+        fact,
+        source_reference=replace(
+            fact.source_reference,
+            source_system="second-approved-market-data",
+            source_record_id="PRICE-991",
+        ),
+    )
+
+    with pytest.raises(OverlappingMarketPriceSourceFactError, match="overlapping active"):
+        resolve_market_price_source_fact(
+            [fact, competing],
+            tenant_id="TENANT-SG",
+            legal_book_id="PB-SG-01",
+            security_id="BOND-001",
+            price_date=date(2026, 7, 22),
+        )
+
+
+@pytest.mark.parametrize(
+    ("field_name", "invalid_value", "error_type", "message"),
+    [
+        ("fact_version", 0, ValueError, "fact_version must be positive"),
+        ("fact_version", True, TypeError, "fact_version must be an integer"),
+        (
+            "fact_status",
+            "ACTIVE",
+            TypeError,
+            "fact_status must be a MarketPriceSourceFactStatus",
+        ),
+    ],
+)
+def test_market_price_source_fact_rejects_invalid_lifecycle(
+    field_name: str,
+    invalid_value: object,
+    error_type: type[Exception],
+    message: str,
+) -> None:
+    with pytest.raises(error_type, match=message):
+        _fact(**{field_name: invalid_value})
+
+
+def test_market_price_resolution_requires_exact_business_date() -> None:
+    with pytest.raises(TypeError, match="price_date must be an exact date"):
+        resolve_market_price_source_fact(
+            [_fact()],
+            tenant_id="TENANT-SG",
+            legal_book_id="PB-SG-01",
+            security_id="BOND-001",
+            price_date=datetime(2026, 7, 22, tzinfo=UTC),  # type: ignore[arg-type]
+        )

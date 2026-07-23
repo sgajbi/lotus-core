@@ -10,6 +10,19 @@ from typing import cast
 
 from ..calculation_lineage import FinancialSourceReference, canonical_content_hash
 from ..currency import normalize_currency_code
+from .source_versions import latest_source_versions
+
+
+class MarketPriceSourceFactError(ValueError):
+    """Base error for ambiguous or unsupported authoritative price facts."""
+
+
+class MissingMarketPriceSourceFactError(MarketPriceSourceFactError):
+    """Raised when no active fact supports the requested exact authority dimensions."""
+
+
+class OverlappingMarketPriceSourceFactError(MarketPriceSourceFactError):
+    """Raised when competing source records claim the same price authority."""
 
 
 class MarketPriceQuoteBasis(StrEnum):
@@ -18,6 +31,14 @@ class MarketPriceQuoteBasis(StrEnum):
     UNIT_PRICE = "UNIT_PRICE"
     PERCENT_OF_PRINCIPAL_CLEAN = "PERCENT_OF_PRINCIPAL_CLEAN"
     PERCENT_OF_PRINCIPAL_DIRTY = "PERCENT_OF_PRINCIPAL_DIRTY"
+
+
+class MarketPriceSourceFactStatus(StrEnum):
+    """Lifecycle state for one versioned market-price source record."""
+
+    ACTIVE = "ACTIVE"
+    SUSPENDED = "SUSPENDED"
+    RETIRED = "RETIRED"
 
 
 @dataclass(frozen=True, slots=True)
@@ -100,6 +121,8 @@ class MarketPriceSourceFact:
     currency: str
     quote_basis: MarketPriceQuoteBasis
     source_reference: FinancialSourceReference
+    fact_status: MarketPriceSourceFactStatus
+    fact_version: int
 
     def __post_init__(self) -> None:
         if not isinstance(self.scope, ValuationAuthorityScope):
@@ -115,6 +138,23 @@ class MarketPriceSourceFact:
             raise TypeError("quote_basis must be a MarketPriceQuoteBasis")
         if not isinstance(self.source_reference, FinancialSourceReference):
             raise TypeError("source_reference must be a FinancialSourceReference")
+        if not isinstance(self.fact_status, MarketPriceSourceFactStatus):
+            raise TypeError("fact_status must be a MarketPriceSourceFactStatus")
+        if not isinstance(self.fact_version, int) or isinstance(self.fact_version, bool):
+            raise TypeError("fact_version must be an integer")
+        if self.fact_version < 1:
+            raise ValueError("fact_version must be positive")
+
+    @property
+    def source_record_key(self) -> tuple[str, str, str, date, str, str]:
+        """Return exact price authority plus stable upstream record identity."""
+
+        return (
+            *self.scope.key,
+            self.price_date,
+            self.source_reference.source_system.strip(),
+            self.source_reference.source_record_id.strip(),
+        )
 
     def content_hash(self) -> str:
         """Bind scope, representation, value, and source evidence deterministically."""
@@ -124,6 +164,8 @@ class MarketPriceSourceFact:
             canonical_content_hash(
                 {
                     "currency": self.currency,
+                    "fact_status": self.fact_status,
+                    "fact_version": self.fact_version,
                     "legal_book_id": self.scope.legal_book_id,
                     "price": self.price,
                     "price_date": self.price_date,
@@ -134,3 +176,51 @@ class MarketPriceSourceFact:
                 }
             ),
         )
+
+
+def resolve_market_price_source_fact(
+    facts: list[MarketPriceSourceFact],
+    *,
+    tenant_id: str,
+    legal_book_id: str,
+    security_id: str,
+    price_date: date,
+) -> MarketPriceSourceFact:
+    """Resolve one active exact-scope price after ranking source corrections first."""
+
+    if type(price_date) is not date:
+        raise TypeError("price_date must be an exact date")
+    requested_scope = ValuationAuthorityScope(
+        tenant_id=tenant_id,
+        legal_book_id=legal_book_id,
+        security_id=security_id,
+    ).key
+    scoped = [
+        fact
+        for fact in facts
+        if fact.scope.key == requested_scope and fact.price_date == price_date
+    ]
+    latest = latest_source_versions(
+        scoped,
+        source_record_key=lambda fact: fact.source_record_key,
+        source_version=lambda fact: fact.fact_version,
+        conflicting_version_error=lambda: MarketPriceSourceFactError(
+            "conflicting payloads share one source record and fact_version"
+        ),
+    )
+    active = [fact for fact in latest if fact.fact_status is MarketPriceSourceFactStatus.ACTIVE]
+    if not active:
+        raise MissingMarketPriceSourceFactError(
+            "no active market-price source fact for exact tenant, legal book, "
+            "instrument, and price date"
+        )
+    if len(active) > 1:
+        sources = sorted(
+            f"{fact.source_reference.source_system.strip()}:"
+            f"{fact.source_reference.source_record_id.strip()}"
+            for fact in active
+        )
+        raise OverlappingMarketPriceSourceFactError(
+            f"overlapping active market-price source facts: {sources}"
+        )
+    return active[0]

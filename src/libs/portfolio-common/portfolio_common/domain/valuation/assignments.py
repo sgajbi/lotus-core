@@ -9,6 +9,7 @@ from typing import cast
 
 from ..calculation_lineage import canonical_content_hash
 from .source_facts import ValuationAuthorityScope
+from .source_versions import latest_source_versions
 
 
 class ValuationPolicyAssignmentError(ValueError):
@@ -65,6 +66,10 @@ class InstrumentValuationPolicyAssignment:
                 raise ValueError(f"{field_name} must be nonblank")
         if self.policy_version < 1:
             raise ValueError("policy_version must be positive")
+        if not isinstance(self.assignment_version, int) or isinstance(
+            self.assignment_version, bool
+        ):
+            raise TypeError("assignment_version must be an integer")
         if self.assignment_version < 1:
             raise ValueError("assignment_version must be positive")
         if self.valid_to is not None and self.valid_to < self.valid_from:
@@ -259,15 +264,11 @@ def revaluation_start_for_assignment_correction(
 def _latest_source_versions(
     assignments: list[InstrumentValuationPolicyAssignment],
 ) -> list[InstrumentValuationPolicyAssignment]:
-    latest: dict[tuple[str, str, str, str, str], InstrumentValuationPolicyAssignment] = {}
-    for assignment in assignments:
-        existing = latest.get(assignment.source_record_key)
-        if existing is None or assignment.assignment_version > existing.assignment_version:
-            latest[assignment.source_record_key] = assignment
-        elif (
-            assignment.assignment_version == existing.assignment_version and assignment != existing
-        ):
-            raise ValuationPolicyAssignmentError(
-                "conflicting payloads share one source record and assignment_version"
-            )
-    return list(latest.values())
+    return latest_source_versions(
+        assignments,
+        source_record_key=lambda assignment: assignment.source_record_key,
+        source_version=lambda assignment: assignment.assignment_version,
+        conflicting_version_error=lambda: ValuationPolicyAssignmentError(
+            "conflicting payloads share one source record and assignment_version"
+        ),
+    )

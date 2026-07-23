@@ -62,8 +62,13 @@ from .position_valuation import (
 from .source_facts import (
     MarketPriceQuoteBasis,
     MarketPriceSourceFact,
+    MarketPriceSourceFactError,
+    MarketPriceSourceFactStatus,
+    MissingMarketPriceSourceFactError,
+    OverlappingMarketPriceSourceFactError,
     ValuationAuthorityScope,
     ValuationBookScope,
+    resolve_market_price_source_fact,
     resolve_optional_valuation_book_scope,
 )
 
@@ -86,6 +91,10 @@ __all__ = [
     "IcmaReferencePeriod",
     "MarketPriceQuoteBasis",
     "MarketPriceSourceFact",
+    "MarketPriceSourceFactError",
+    "MarketPriceSourceFactStatus",
+    "MissingMarketPriceSourceFactError",
+    "OverlappingMarketPriceSourceFactError",
     "MissingValuationPolicyAssignmentError",
     "OverlappingValuationPolicyAssignmentError",
     "PositionScaling",
@@ -114,6 +123,7 @@ __all__ = [
     "calculate_year_fraction",
     "resolve_day_count_convention",
     "resolve_valuation_policy_assignment",
+    "resolve_market_price_source_fact",
     "resolve_position_valuation_policy",
     "resolve_optional_valuation_book_scope",
     "revaluation_start_for_assignment_correction",
