@@ -819,6 +819,15 @@ def test_complete_pack_probe_fails_closed_when_a_segment_has_no_evaluator(monkey
         )
 
 
+def test_build_demo_bundle_uses_deterministic_transaction_creation_times():
+    bundle = demo_data_pack.build_demo_bundle()
+
+    assert all(
+        transaction["created_at"] == transaction["transaction_date"]
+        for transaction in bundle["transactions"]
+    )
+
+
 def test_build_demo_bundle_contains_benchmark_seed_data():
     bundle = demo_data_pack.build_demo_bundle()
 

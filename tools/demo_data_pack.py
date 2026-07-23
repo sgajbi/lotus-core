@@ -150,6 +150,7 @@ def _tx(
         "instrument_id": instrument_id,
         "security_id": security_id,
         "transaction_date": when,
+        "created_at": when,
         "transaction_type": tx_type,
         "quantity": qty,
         "price": px,
