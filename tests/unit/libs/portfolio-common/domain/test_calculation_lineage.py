@@ -151,6 +151,14 @@ def test_financial_source_reference_rejects_non_string_identity(
         _source_reference(**{field_name: invalid_value})
 
 
+@pytest.mark.parametrize("source_content_hash", [None, 42, Decimal("1")])
+def test_financial_source_reference_rejects_non_string_content_hash(
+    source_content_hash: object,
+) -> None:
+    with pytest.raises(TypeError, match="source_content_hash must be a string"):
+        _source_reference(source_content_hash=source_content_hash)
+
+
 @pytest.mark.parametrize("observed_at", [None, "2026-07-23T04:30:00Z", date(2026, 7, 23)])
 def test_financial_source_reference_rejects_non_datetime_observation(
     observed_at: object,
