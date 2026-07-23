@@ -76,7 +76,8 @@ def test_missing_tool_diagnostic_has_deterministic_cross_platform_remediation(
 
     message = str(raised.value)
     assert "active interpreter has not installed" in message
-    assert "python scripts/development/bootstrap_dev.py" in message
+    assert "make install" in message
+    assert "worktree-fenced Make entry point" in message
 
 
 @pytest.mark.parametrize(
