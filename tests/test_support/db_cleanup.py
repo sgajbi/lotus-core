@@ -34,6 +34,14 @@ class DatabaseTargetIdentity:
             raise DatabaseCleanupAuthorizationError(
                 "database cleanup refused: PostgreSQL target URL is invalid"
             ) from exc
+        if url.get_backend_name() != "postgresql":
+            raise DatabaseCleanupAuthorizationError(
+                "database cleanup refused: target backend must be PostgreSQL"
+            )
+        if url.query:
+            raise DatabaseCleanupAuthorizationError(
+                "database cleanup refused: PostgreSQL target query parameters are not allowed"
+            )
         if not url.username or not url.host or url.port is None or not url.database:
             raise DatabaseCleanupAuthorizationError(
                 "database cleanup refused: PostgreSQL target must declare user, host, port, "

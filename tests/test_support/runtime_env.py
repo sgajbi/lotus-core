@@ -121,7 +121,9 @@ class RuntimePortReservation:
         init=False,
         repr=False,
     )
-    generation: int = field(default=0, init=False)
+    _active_reservation_epoch: object | None = field(default=None, init=False, repr=False)
+    _prepared_reservation_epoch: object | None = field(default=None, init=False, repr=False)
+    _generation: int = field(default=0, init=False, repr=False)
 
     def __post_init__(self) -> None:
         self._reserve_new_generation()
@@ -137,6 +139,12 @@ class RuntimePortReservation:
         """Return successful replacement generations after the initial reservation."""
 
         return max(self.generation - 1, 0)
+
+    @property
+    def generation(self) -> int:
+        """Return the internally advanced reservation generation."""
+
+        return self._generation
 
     def add_export_target(self, target: MutableMapping[str, str]) -> None:
         """Keep a process or subprocess environment synchronized after reallocation."""
@@ -177,29 +185,49 @@ class RuntimePortReservation:
     def _capture_initial_prepared_database_target(self) -> None:
         if self._prepared_database_target is not None:
             raise RuntimeError("initial database target evidence is already prepared")
+        postgres_port = (
+            self._owned_reserved_port("LOTUS_POSTGRES_HOST_PORT")
+            if "LOTUS_POSTGRES_HOST_PORT" in self.dynamic_port_keys
+            else int(self.values["LOTUS_POSTGRES_HOST_PORT"])
+        )
         self._prepared_database_target = PreparedDatabaseTarget(
             compose_project_name=self.values["COMPOSE_PROJECT_NAME"],
             username=self.values["POSTGRES_USER"],
             host="localhost",
-            port=int(self.values["LOTUS_POSTGRES_HOST_PORT"]),
+            port=postgres_port,
             database=self.values["POSTGRES_DB"],
             reservation_generation=self.generation,
         )
+        self._prepared_reservation_epoch = self._active_reservation_epoch
 
     def _refresh_prepared_database_target_for_reallocation(self) -> None:
         prepared = self.prepared_database_target
-        if self.generation <= prepared.reservation_generation:
+        if (
+            self.generation <= prepared.reservation_generation
+            or self._active_reservation_epoch is None
+            or self._active_reservation_epoch is self._prepared_reservation_epoch
+        ):
             raise RuntimeError(
                 "database target evidence refresh requires a newer reservation generation"
             )
+        postgres_port = self._owned_reserved_port("LOTUS_POSTGRES_HOST_PORT")
         self._prepared_database_target = PreparedDatabaseTarget(
             compose_project_name=prepared.compose_project_name,
             username=prepared.username,
             host=prepared.host,
-            port=int(self.values["LOTUS_POSTGRES_HOST_PORT"]),
+            port=postgres_port,
             database=prepared.database,
             reservation_generation=self.generation,
         )
+        self._prepared_reservation_epoch = self._active_reservation_epoch
+
+    def _owned_reserved_port(self, key: str) -> int:
+        reserved_socket = self._sockets.get(key)
+        if reserved_socket is None or reserved_socket.fileno() < 0:
+            raise RuntimeError(
+                f"database target evidence requires an active owned reservation for {key}"
+            )
+        return int(reserved_socket.getsockname()[1])
 
     def _reserve_new_generation(self) -> None:
         used_ports = {
@@ -222,7 +250,8 @@ class RuntimePortReservation:
             raise
         self.values.update(assignments)
         self._sockets = new_sockets
-        self.generation += 1
+        self._active_reservation_epoch = object()
+        self._generation += 1
 
 
 @dataclass(frozen=True)

@@ -30,11 +30,14 @@ Authorizing only the truncate statement would therefore leave a destructive bypa
      mutable values exported to Compose and subprocesses.
    A governed port-collision reallocation replaces that immutable evidence with a new generation
    that changes only the process-reserved port; it does not trust mutable project/user/database
-   values.
+   values. The generation is externally read-only, and refresh proves the PostgreSQL port from the
+   active owned reservation socket rather than from exported values.
 2. `DatabaseCleanupAuthorization` compares the actual SQLAlchemy engine with the exact prepared
    user, host, port, and database. It also rejects post-preparation component or derived-endpoint
    mutation even when the engine is changed to match that mutable drift. Diagnostics omit
-   passwords.
+   passwords. Only the PostgreSQL backend is accepted, and URL query parameters fail closed so
+   driver-level `host`, `port`, `options`, or search-path overrides cannot redirect the connection
+   outside the visible authority tuple.
 3. Function- and module-scoped cleanup obtain authorization at fixture entry, before quiescence
    recovery, `pg_terminate_backend`, or truncate SQL.
 4. Replay-only cleanup recovery requires and revalidates the same authorization, so a direct helper
@@ -63,9 +66,9 @@ does not decide whether a target is safe.
 - `python -m pytest tests/unit/test_support/test_runtime_env.py
   tests/unit/test_support/test_db_cleanup.py
   tests/unit/test_support/test_pipeline_quiescence.py -q -W error`
-  - `39 passed`
+  - `45 passed`
 - `python -m pytest tests/unit/test_support -q -W error`
-  - `113 passed`
+  - `119 passed`
 - Pinned Ruff check and format verification passed for all changed Python files.
 - Strict scoped MyPy passed for `runtime_env.py`, `db_cleanup.py`, and
   `pipeline_quiescence.py`.
