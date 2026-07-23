@@ -35,6 +35,16 @@ publishes only the missing segments. Set `DEMO_DATA_PACK_FORCE_INGEST=true` only
 full sample-data refresh that bypasses those reads. Routine restarts must not republish unchanged
 source history or create avoidable valuation work.
 
+The sample pack resolves its fixed as-of date from the RFC-0076 front-office seed contract. It does
+not move stable transaction IDs or overlapping economic observations with the host clock or a
+shorter history request. Market-price and FX writes are date-ordered logical series per security or
+currency pair, fenced by the `lotus-demo-pack:v2` content namespace. A retained complete pack is
+still a zero-write decision regardless of historical v1 ingestion-job audit rows.
+
+The loader verifies terminal quantities from one explicit HoldingsAsOf read per portfolio. Do not
+replace this with exact-date position-history polling: position history records transaction dates,
+not a synthetic row for every later business date.
+
 Kafka topic counts and ordering scopes are source-owned. The topic creator and service startup fail
 when existing metadata conflicts with the governed contract. Use the
 [Kafka Partition Migration Runbook](../docs/operations/kafka-partition-migration-runbook.md) for

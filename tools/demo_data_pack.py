@@ -2537,8 +2537,13 @@ def _verify_portfolio(
     }
     while time.time() < deadline:
         try:
+            position_params = parse.urlencode({"as_of_date": as_of_date})
             _, pos_payload = _request_json(
-                "GET", f"{query_base_url}/portfolios/{expected.portfolio_id}/positions"
+                "GET",
+                (
+                    f"{query_base_url}/portfolios/{expected.portfolio_id}/positions"
+                    f"?{position_params}"
+                ),
             )
             _, tx_payload = _request_json(
                 "GET", f"{query_base_url}/portfolios/{expected.portfolio_id}/transactions?limit=200"
@@ -2561,33 +2566,16 @@ def _verify_portfolio(
         total_transactions = int(tx_payload.get("total", 0))
         all_quantities_match = True
         quantity_checks: list[str] = []
+        positions_by_security = {
+            str(position.get("security_id")): position for position in positions
+        }
         for security_id, expected_quantity in expected.expected_terminal_quantities:
-            try:
-                history_params = parse.urlencode(
-                    {
-                        "security_id": security_id,
-                        "start_date": as_of_date,
-                        "end_date": as_of_date,
-                    }
-                )
-                _, history_payload = _request_json(
-                    "GET",
-                    (
-                        f"{query_base_url}/portfolios/{expected.portfolio_id}"
-                        f"/position-history?{history_params}"
-                    ),
-                )
-            except RuntimeError as exc:
-                quantity_checks.append(f"{security_id}:error={exc}")
+            position = positions_by_security.get(security_id)
+            if position is None:
+                quantity_checks.append(f"{security_id}:missing_position")
                 all_quantities_match = False
                 break
-            history_rows = history_payload.get("positions") or []
-            if not history_rows:
-                quantity_checks.append(f"{security_id}:missing_history")
-                all_quantities_match = False
-                break
-            latest_row = max(history_rows, key=lambda row: row.get("position_date") or "")
-            actual_quantity = float(latest_row.get("quantity", 0.0))
+            actual_quantity = float(position.get("quantity", 0.0))
             if abs(actual_quantity - expected_quantity) > 1e-6:
                 quantity_checks.append(
                     f"{security_id}:actual={actual_quantity:g}:expected={expected_quantity:g}"

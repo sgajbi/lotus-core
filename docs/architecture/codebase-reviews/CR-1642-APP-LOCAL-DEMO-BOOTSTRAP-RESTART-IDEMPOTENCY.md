@@ -21,6 +21,15 @@ This was deterministic implementation behavior rather than a Docker or database 
    an ingestion skip.
 3. The operator guide described the pack as ingested only when not already present.
 
+Retained-runtime repair then exposed a second deterministic defect: the same transaction IDs were
+dated from the moving history-window start, including offsets up to 900 days. The 240-day CI profile
+therefore generated future facts beyond its own as-of date, while market, FX, index, benchmark, and
+reference-definition economics changed for the same natural key when the wall clock or history
+depth changed. Positional market/FX batch numbers amplified that content churn.
+The downstream verifier compounded the problem by issuing one exact-as-of position-history request
+per expected security even though that product records transaction dates. The strategic
+HoldingsAsOf response already carried the required as-of quantities and valuations.
+
 ## Decision
 
 One source-backed decision owns the complete sample pack. Each immutable generated write segment
@@ -32,6 +41,10 @@ are absent or different; an unchanged retained restart ingests nothing and emits
 `reason=unchanged_pack_present`. Explicit force refresh bypasses completeness reads and selects the
 complete pack. This preserves existing APIs, schemas, seeded identities, first boot, and manual
 refresh while removing implicit source replay and the unsafe portfolio-existence shortcut.
+The generator now resolves RFC-0076's fixed canonical as-of date, uses a fixed economic anchor, and
+derives every overlapping observation from its absolute date. Market and FX payloads are partitioned
+by logical security or ordered currency pair instead of positional batch number, with chronological
+rows and a versioned `lotus-demo-pack:v2` content namespace.
 
 ## Same-pattern review
 
@@ -44,7 +57,8 @@ segment gained an evaluator.
 
 ## Validation
 
-- Focused demo-pack contracts: `35 passed` with warnings treated as errors.
+- Focused demo-pack contracts: `39 passed` with warnings treated as errors; the combined demo-pack
+  and front-office seed suite passes `108` tests with warnings treated as errors.
 - Ruff lint and format: passed for all touched Python files.
 - Strict MyPy: passed for `tools/demo_data_pack.py`; distinct reference-family evidence names
   prevent local annotation reuse from weakening the typing gate.
@@ -64,6 +78,17 @@ segment gained an evaluator.
   was absent from the raw content key. The failed attempt left `ingestion_jobs` at 468/max id 468.
   Generated transactions now carry their governed transaction timestamp as deterministic
   `created_at`; two independent DTO normalizations produce the same SHA-256 request fingerprint.
+- Cross-window tests now prove identical transactions, no transactions beyond the fixed as-of, and
+  identical overlapping market, FX, index-price, index-return, benchmark-return, and risk-free
+  economics for 240-day and 1,095-day profiles. The full profile uses 32 logical requests and
+  26,684 records, inside the app-local 500-request/50,000-record rate window.
+- The first targeted image build failed before writes because the persistence Dockerfile copied the
+  demo tool but not its existing RFC-0076 contract-loader dependency. The Dockerfile now copies both
+  files and a stack-contract regression protects that runtime packaging boundary.
+- Terminal validation now makes one explicit as-of HoldingsAsOf request per portfolio and compares
+  every expected security from that response. The focused regression proves two securities with two
+  total reads (holdings plus transaction count), removing the per-security polling N+1 and the false
+  exact-date history requirement.
 
 The second-run zero-write/count/maturity proof remains pending after this runtime fix-forward and
 must not be inferred from either diagnostic attempt.
