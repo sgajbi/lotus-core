@@ -87,31 +87,49 @@ def test_ingest_demo_portfolio_data_batches_market_and_fx_rows(monkeypatch):
         history_days=demo_data_pack.MIN_DEMO_HISTORY_DAYS,
         portfolio_ids=("DEMO_DPM_EUR_001",),
     )
-    calls: list[tuple[str, dict[str, object]]] = []
+    calls: list[tuple[str, dict[str, object], dict[str, str] | None]] = []
 
-    def fake_request_json(method: str, url: str, payload: dict[str, object] | None = None):
+    def fake_request_json(
+        method: str,
+        url: str,
+        payload: dict[str, object] | None = None,
+        headers: dict[str, str] | None = None,
+    ):
         assert method == "POST"
         assert payload is not None
-        calls.append((url, payload))
-        return 202, {"status": "accepted"}
+        calls.append((url, payload, headers))
+        return 202, {
+            "message": "Accepted for asynchronous ingestion processing.",
+            "idempotency_key": headers["X-Idempotency-Key"] if headers else None,
+        }
 
     monkeypatch.setattr(demo_data_pack, "_request_json", fake_request_json)
 
-    demo_data_pack._ingest_demo_portfolio_data("http://ingestion", bundle, batch_size=200)
+    demo_data_pack._ingest_demo_portfolio_data(
+        "http://ingestion",
+        bundle,
+        batch_size=200,
+        force_ingest=False,
+    )
 
     assert calls[0][0] == "http://ingestion/ingest/portfolio-bundle"
     assert "market_prices" not in calls[0][1]
     assert "fx_rates" not in calls[0][1]
     assert calls[0][1]["portfolios"] == bundle["portfolios"]
     assert calls[0][1]["transactions"] == bundle["transactions"]
+    idempotency_keys = [headers["X-Idempotency-Key"] for _, _, headers in calls if headers]
+    assert len(idempotency_keys) == len(calls)
+    assert len(set(idempotency_keys)) == len(idempotency_keys)
 
     market_price_batches = [
         payload["market_prices"]
-        for url, payload in calls
+        for url, payload, _headers in calls
         if url == "http://ingestion/ingest/market-prices"
     ]
     fx_rate_batches = [
-        payload["fx_rates"] for url, payload in calls if url == "http://ingestion/ingest/fx-rates"
+        payload["fx_rates"]
+        for url, payload, _headers in calls
+        if url == "http://ingestion/ingest/fx-rates"
     ]
 
     assert all(len(batch) <= 200 for batch in market_price_batches)
@@ -185,6 +203,90 @@ def test_expectations_cover_five_portfolios_with_terminal_holdings():
         assert all(quantity != 0 for _, quantity in item.expected_terminal_quantities)
 
 
+def test_demo_pack_idempotency_key_is_canonical_and_content_addressed():
+    first = demo_data_pack._demo_pack_idempotency_key(
+        segment="market-prices-batch-1",
+        payload={"market_prices": [{"price": "10", "security_id": "SEC-A"}]},
+    )
+    reordered = demo_data_pack._demo_pack_idempotency_key(
+        segment="market-prices-batch-1",
+        payload={"market_prices": [{"security_id": "SEC-A", "price": "10"}]},
+    )
+    evolved = demo_data_pack._demo_pack_idempotency_key(
+        segment="market-prices-batch-1",
+        payload={"market_prices": [{"security_id": "SEC-A", "price": "11"}]},
+    )
+
+    assert first == reordered
+    assert first != evolved
+    assert first.startswith("lotus-demo-pack:v1:market-prices-batch-1:")
+
+
+def test_demo_pack_payload_classifies_idempotency_replay(monkeypatch):
+    def fake_request_json(method, url, payload=None, headers=None):
+        assert method == "POST"
+        assert url == "http://ingestion/ingest/indices"
+        assert payload == {"indices": [{"index_id": "IDX-A"}]}
+        assert headers is not None
+        return 202, {
+            "message": demo_data_pack.IDEMPOTENCY_REPLAY_MESSAGE,
+            "idempotency_key": headers["X-Idempotency-Key"],
+        }
+
+    monkeypatch.setattr(demo_data_pack, "_request_json", fake_request_json)
+
+    outcome = demo_data_pack._post_demo_pack_payload(
+        "http://ingestion",
+        endpoint="/ingest/indices",
+        segment="indices",
+        payload={"indices": [{"index_id": "IDX-A"}]},
+        force_ingest=False,
+    )
+
+    assert outcome.replayed is True
+    assert outcome.idempotency_key is not None
+
+
+def test_demo_pack_force_refresh_omits_content_idempotency_key(monkeypatch):
+    def fake_request_json(method, url, payload=None, headers=None):
+        assert method == "POST"
+        assert headers is None
+        return 202, {"message": "Accepted", "idempotency_key": None}
+
+    monkeypatch.setattr(demo_data_pack, "_request_json", fake_request_json)
+
+    outcome = demo_data_pack._post_demo_pack_payload(
+        "http://ingestion",
+        endpoint="/ingest/indices",
+        segment="indices",
+        payload={"indices": [{"index_id": "IDX-A"}]},
+        force_ingest=True,
+    )
+
+    assert outcome.replayed is False
+    assert outcome.idempotency_key is None
+
+
+def test_demo_pack_payload_fails_closed_on_idempotency_acknowledgement_mismatch(monkeypatch):
+    monkeypatch.setattr(
+        demo_data_pack,
+        "_request_json",
+        lambda *_args, **_kwargs: (
+            202,
+            {"message": "Accepted", "idempotency_key": "unexpected-key"},
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match="did not preserve its idempotency key"):
+        demo_data_pack._post_demo_pack_payload(
+            "http://ingestion",
+            endpoint="/ingest/indices",
+            segment="indices",
+            payload={"indices": [{"index_id": "IDX-A"}]},
+            force_ingest=False,
+        )
+
+
 def test_all_demo_portfolios_exist_checks_every_expected_portfolio(monkeypatch):
     seen: list[str] = []
 
@@ -198,7 +300,7 @@ def test_all_demo_portfolios_exist_checks_every_expected_portfolio(monkeypatch):
     assert set(seen) == {item.portfolio_id for item in demo_data_pack.DEMO_EXPECTATIONS}
 
 
-def test_existing_demo_pack_skips_all_source_ingestion(monkeypatch, caplog):
+def test_existing_portfolio_guard_prevents_segment_replay(monkeypatch, caplog):
     caplog.set_level("INFO", logger=demo_data_pack.LOGGER.name)
     bundle = demo_data_pack.build_demo_bundle(
         history_days=demo_data_pack.MIN_DEMO_HISTORY_DAYS,
@@ -226,45 +328,130 @@ def test_existing_demo_pack_skips_all_source_ingestion(monkeypatch, caplog):
     )
 
     assert ingested is False
-    assert "reason=unchanged_pack_present" in caplog.text
+    assert "reason=portfolio_presence_compatibility_guard" in caplog.text
 
 
-@pytest.mark.parametrize("force_ingest,portfolios_exist", [(False, False), (True, True)])
-def test_first_boot_and_explicit_refresh_ingest_complete_demo_pack(
-    monkeypatch, force_ingest, portfolios_exist
-):
+def test_existing_demo_pack_reports_noop_when_every_segment_is_replayed(monkeypatch, caplog):
+    caplog.set_level("INFO", logger=demo_data_pack.LOGGER.name)
     bundle = demo_data_pack.build_demo_bundle(
         history_days=demo_data_pack.MIN_DEMO_HISTORY_DAYS,
         portfolio_ids=("DEMO_DPM_EUR_001",),
     )
-    expectations = demo_data_pack._expectations_for_portfolio_ids(("DEMO_DPM_EUR_001",))
-    calls: list[str] = []
-    monkeypatch.setattr(
-        demo_data_pack,
-        "_all_demo_portfolios_exist",
-        lambda *_args: portfolios_exist,
+    replayed = demo_data_pack.DemoPackIngestionOutcome(
+        segment="portfolio-bundle",
+        replayed=True,
+        idempotency_key="key-1",
     )
+    monkeypatch.setattr(demo_data_pack, "_all_demo_portfolios_exist", lambda *_args: False)
     monkeypatch.setattr(
         demo_data_pack,
         "_ingest_demo_portfolio_data",
-        lambda *_args, **_kwargs: calls.append("portfolio"),
+        lambda *_args, **_kwargs: [replayed],
     )
     monkeypatch.setattr(
         demo_data_pack,
         "_ingest_demo_reference_data",
-        lambda *_args, **_kwargs: calls.append("reference"),
+        lambda *_args, **_kwargs: [replayed],
     )
 
     ingested = demo_data_pack._ingest_demo_pack_if_needed(
         ingestion_base_url="http://ingestion",
         query_base_url="http://query",
         bundle=bundle,
-        expectations=expectations,
+        expectations=demo_data_pack._expectations_for_portfolio_ids(("DEMO_DPM_EUR_001",)),
+        force_ingest=False,
+    )
+
+    assert ingested is False
+    assert "reason=unchanged_pack_present" in caplog.text
+
+
+@pytest.mark.parametrize("force_ingest", [False, True])
+def test_first_boot_and_explicit_refresh_publish_complete_demo_pack(monkeypatch, force_ingest):
+    bundle = demo_data_pack.build_demo_bundle(
+        history_days=demo_data_pack.MIN_DEMO_HISTORY_DAYS,
+        portfolio_ids=("DEMO_DPM_EUR_001",),
+    )
+    calls: list[str] = []
+    published = demo_data_pack.DemoPackIngestionOutcome(
+        segment="portfolio-bundle",
+        replayed=False,
+        idempotency_key=None if force_ingest else "key-1",
+    )
+    monkeypatch.setattr(demo_data_pack, "_all_demo_portfolios_exist", lambda *_args: False)
+
+    def ingest_portfolio(*_args, **kwargs):
+        assert kwargs["force_ingest"] is force_ingest
+        calls.append("portfolio")
+        return [published]
+
+    def ingest_reference(*_args, **kwargs):
+        assert kwargs["force_ingest"] is force_ingest
+        calls.append("reference")
+        return [published]
+
+    monkeypatch.setattr(
+        demo_data_pack,
+        "_ingest_demo_portfolio_data",
+        ingest_portfolio,
+    )
+    monkeypatch.setattr(
+        demo_data_pack,
+        "_ingest_demo_reference_data",
+        ingest_reference,
+    )
+
+    ingested = demo_data_pack._ingest_demo_pack_if_needed(
+        ingestion_base_url="http://ingestion",
+        query_base_url="http://query",
+        bundle=bundle,
+        expectations=demo_data_pack._expectations_for_portfolio_ids(("DEMO_DPM_EUR_001",)),
         force_ingest=force_ingest,
     )
 
     assert ingested is True
     assert calls == ["portfolio", "reference"]
+
+
+def test_partial_or_evolved_pack_publishes_only_non_replayed_segments(monkeypatch, caplog):
+    caplog.set_level("INFO", logger=demo_data_pack.LOGGER.name)
+    bundle = demo_data_pack.build_demo_bundle(
+        history_days=demo_data_pack.MIN_DEMO_HISTORY_DAYS,
+        portfolio_ids=("DEMO_DPM_EUR_001",),
+    )
+    replayed = demo_data_pack.DemoPackIngestionOutcome(
+        segment="portfolio-bundle",
+        replayed=True,
+        idempotency_key="key-1",
+    )
+    published = demo_data_pack.DemoPackIngestionOutcome(
+        segment="risk-free-series",
+        replayed=False,
+        idempotency_key="key-2",
+    )
+    monkeypatch.setattr(demo_data_pack, "_all_demo_portfolios_exist", lambda *_args: False)
+    monkeypatch.setattr(
+        demo_data_pack,
+        "_ingest_demo_portfolio_data",
+        lambda *_args, **_kwargs: [replayed],
+    )
+    monkeypatch.setattr(
+        demo_data_pack,
+        "_ingest_demo_reference_data",
+        lambda *_args, **_kwargs: [published],
+    )
+
+    ingested = demo_data_pack._ingest_demo_pack_if_needed(
+        ingestion_base_url="http://ingestion",
+        query_base_url="http://query",
+        bundle=bundle,
+        expectations=demo_data_pack._expectations_for_portfolio_ids(("DEMO_DPM_EUR_001",)),
+        force_ingest=False,
+    )
+
+    assert ingested is True
+    assert "reason=missing_or_evolved_segments_published" in caplog.text
+    assert "published_segments=risk-free-series" in caplog.text
 
 
 def test_verify_portfolio_timeout_reports_last_observed_state(monkeypatch):
