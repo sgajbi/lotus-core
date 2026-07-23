@@ -1438,6 +1438,7 @@ def _records_cover_expected(
     key_fields: tuple[str, ...],
     compare_fields: tuple[str, ...],
     numeric_fields: frozenset[str] = frozenset(),
+    datetime_fields: frozenset[str] = frozenset(),
 ) -> bool:
     actual_by_key = {
         tuple(str(record.get(field)) for field in key_fields): record for record in actual
@@ -1454,6 +1455,15 @@ def _records_cover_expected(
                 if expected_value is None or actual_value is None:
                     return False
                 if _canonical_number(expected_value) != _canonical_number(actual_value):
+                    return False
+            elif field in datetime_fields:
+                if expected_value is None or actual_value is None:
+                    return False
+                expected_datetime = datetime.fromisoformat(
+                    str(expected_value).replace("Z", "+00:00")
+                )
+                actual_datetime = datetime.fromisoformat(str(actual_value).replace("Z", "+00:00"))
+                if expected_datetime != actual_datetime:
                     return False
             elif expected_value != actual_value:
                 return False
@@ -1878,6 +1888,148 @@ def _probe_benchmark_and_risk_free_segments(
     return DemoPackCompleteness(
         evaluated_segments=evaluated,
         missing_segments=tuple(sorted(missing)),
+    )
+
+
+def _probe_portfolio_bundle_segment(
+    query_base_url: str,
+    *,
+    as_of_date: str,
+    segment: DemoPackSegment,
+    expectations: tuple[PortfolioExpectation, ...],
+) -> DemoPackCompleteness:
+    if segment.name != "portfolio-bundle":
+        raise ValueError("Portfolio completeness requires the portfolio-bundle segment")
+    payload = segment.payload
+    expected_portfolios = payload["portfolios"]
+    actual_portfolios: list[dict[str, Any]] = []
+    for portfolio in expected_portfolios:
+        portfolio_id = str(portfolio["portfolio_id"])
+        _, response = _request_json("GET", f"{query_base_url}/portfolios/{portfolio_id}")
+        actual_portfolios.append(response)
+    complete = _records_cover_expected(
+        expected=expected_portfolios,
+        actual=actual_portfolios,
+        key_fields=("portfolio_id",),
+        compare_fields=(
+            "base_currency",
+            "open_date",
+            "risk_exposure",
+            "investment_time_horizon",
+            "portfolio_type",
+            "booking_center_code",
+            "client_id",
+            "status",
+            "cost_basis_method",
+        ),
+    )
+
+    expected_instruments = payload["instruments"]
+    actual_instruments: list[dict[str, Any]] = []
+    for instrument in expected_instruments:
+        params = parse.urlencode({"security_id": instrument["security_id"], "limit": 2})
+        _, response = _request_json("GET", f"{query_base_url}/instruments/?{params}")
+        actual_instruments.extend(response.get("instruments") or [])
+    instrument_fields = (
+        "name",
+        "isin",
+        "currency",
+        "product_type",
+        "asset_class",
+        "sector",
+        "country_of_risk",
+        "rating",
+        "liquidity_tier",
+    )
+    complete = complete and _records_cover_expected(
+        expected=expected_instruments,
+        actual=actual_instruments,
+        key_fields=("security_id",),
+        compare_fields=tuple(
+            field
+            for field in instrument_fields
+            if any(field in row for row in expected_instruments)
+        ),
+    )
+
+    transaction_fields = (
+        "transaction_date",
+        "settlement_date",
+        "transaction_type",
+        "instrument_id",
+        "security_id",
+        "quantity",
+        "price",
+        "gross_transaction_amount",
+        "trade_currency",
+        "currency",
+        "cash_entry_mode",
+        "settlement_cash_account_id",
+        "settlement_cash_instrument_id",
+        "movement_direction",
+        "originating_transaction_id",
+        "originating_transaction_type",
+        "adjustment_reason",
+        "link_type",
+        "reconciliation_key",
+    )
+    for portfolio in expected_portfolios:
+        portfolio_id = str(portfolio["portfolio_id"])
+        expected_transactions = [
+            record for record in payload["transactions"] if record["portfolio_id"] == portfolio_id
+        ]
+        params = parse.urlencode({"limit": 200, "as_of_date": as_of_date})
+        _, response = _request_json(
+            "GET",
+            f"{query_base_url}/portfolios/{portfolio_id}/transactions?{params}",
+        )
+        actual_transactions = response.get("transactions") or []
+        compared_fields = tuple(
+            field
+            for field in transaction_fields
+            if any(field in record for record in expected_transactions)
+        )
+        complete = complete and _records_cover_expected(
+            expected=expected_transactions,
+            actual=actual_transactions,
+            key_fields=("transaction_id",),
+            compare_fields=compared_fields,
+            numeric_fields=frozenset(
+                {"quantity", "price", "gross_transaction_amount"}.intersection(compared_fields)
+            ),
+            datetime_fields=frozenset(
+                {"transaction_date", "settlement_date"}.intersection(compared_fields)
+            ),
+        )
+
+    expectations_by_id = {expectation.portfolio_id: expectation for expectation in expectations}
+    for portfolio in expected_portfolios:
+        portfolio_id = str(portfolio["portfolio_id"])
+        expectation = expectations_by_id.get(portfolio_id)
+        if expectation is None:
+            complete = False
+            continue
+        params = parse.urlencode({"as_of_date": as_of_date, "include_projected": "false"})
+        _, response = _request_json(
+            "GET",
+            f"{query_base_url}/portfolios/{portfolio_id}/positions?{params}",
+        )
+        actual_positions = response.get("positions") or []
+        expected_positions = [
+            {"security_id": security_id, "quantity": quantity}
+            for security_id, quantity in expectation.expected_terminal_quantities
+        ]
+        complete = complete and _records_cover_expected(
+            expected=expected_positions,
+            actual=actual_positions,
+            key_fields=("security_id",),
+            compare_fields=("quantity",),
+            numeric_fields=frozenset({"quantity"}),
+        )
+
+    return DemoPackCompleteness(
+        evaluated_segments=(segment.name,),
+        missing_segments=() if complete else (segment.name,),
     )
 
 

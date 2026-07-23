@@ -563,6 +563,96 @@ def test_benchmark_probe_isolates_evolved_assignment(monkeypatch):
     assert result.missing_segments == ("benchmark-assignments",)
 
 
+def test_portfolio_probe_verifies_master_reference_ledger_and_positions(monkeypatch):
+    portfolio_ids = ("DEMO_DPM_EUR_001",)
+    bundle = demo_data_pack.build_demo_bundle(
+        history_days=demo_data_pack.MIN_DEMO_HISTORY_DAYS,
+        portfolio_ids=portfolio_ids,
+    )
+    segment = demo_data_pack._build_demo_pack_segments(bundle)[0]
+    expectations = demo_data_pack._expectations_for_portfolio_ids(portfolio_ids)
+
+    def fake_request_json(method, url, payload=None, headers=None):
+        assert method == "GET"
+        assert payload is None
+        assert headers is None
+        if "/instruments/" in url:
+            security_id = url.split("security_id=", maxsplit=1)[1].split("&", maxsplit=1)[0]
+            return 200, {
+                "instruments": [
+                    record
+                    for record in bundle["instruments"]
+                    if record["security_id"] == security_id
+                ]
+            }
+        if "/transactions?" in url:
+            return 200, {"transactions": bundle["transactions"]}
+        if "/positions?" in url:
+            return 200, {
+                "positions": [
+                    {"security_id": security_id, "quantity": str(quantity)}
+                    for security_id, quantity in expectations[0].expected_terminal_quantities
+                ]
+            }
+        return 200, bundle["portfolios"][0]
+
+    monkeypatch.setattr(demo_data_pack, "_request_json", fake_request_json)
+
+    result = demo_data_pack._probe_portfolio_bundle_segment(
+        "http://query",
+        as_of_date=bundle["as_of_date"],
+        segment=segment,
+        expectations=expectations,
+    )
+
+    assert result.is_complete is True
+    assert result.evaluated_segments == ("portfolio-bundle",)
+
+
+def test_portfolio_probe_rejects_evolved_transaction_economics(monkeypatch):
+    portfolio_ids = ("DEMO_DPM_EUR_001",)
+    bundle = demo_data_pack.build_demo_bundle(
+        history_days=demo_data_pack.MIN_DEMO_HISTORY_DAYS,
+        portfolio_ids=portfolio_ids,
+    )
+    segment = demo_data_pack._build_demo_pack_segments(bundle)[0]
+    expectations = demo_data_pack._expectations_for_portfolio_ids(portfolio_ids)
+
+    def fake_request_json(method, url, payload=None, headers=None):
+        if "/instruments/" in url:
+            security_id = url.split("security_id=", maxsplit=1)[1].split("&", maxsplit=1)[0]
+            return 200, {
+                "instruments": [
+                    record
+                    for record in bundle["instruments"]
+                    if record["security_id"] == security_id
+                ]
+            }
+        if "/transactions?" in url:
+            transactions = [dict(record) for record in bundle["transactions"]]
+            transactions[0]["gross_transaction_amount"] += 1
+            return 200, {"transactions": transactions}
+        if "/positions?" in url:
+            return 200, {
+                "positions": [
+                    {"security_id": security_id, "quantity": quantity}
+                    for security_id, quantity in expectations[0].expected_terminal_quantities
+                ]
+            }
+        return 200, bundle["portfolios"][0]
+
+    monkeypatch.setattr(demo_data_pack, "_request_json", fake_request_json)
+
+    result = demo_data_pack._probe_portfolio_bundle_segment(
+        "http://query",
+        as_of_date=bundle["as_of_date"],
+        segment=segment,
+        expectations=expectations,
+    )
+
+    assert result.missing_segments == ("portfolio-bundle",)
+
+
 def test_build_demo_bundle_contains_benchmark_seed_data():
     bundle = demo_data_pack.build_demo_bundle()
 
