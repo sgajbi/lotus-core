@@ -105,15 +105,16 @@ def _ledger() -> dict[str, Any]:
 
 
 def _write_repo(tmp_path: Path, ledger: dict[str, Any]) -> Path:
-    for relative_path in (
-        "docs/standards/source.json",
-        "tests/unit/test_example.py",
-        "tests/e2e/test_example.py",
-        "tests/e2e/test_smoke.py",
-    ):
+    files = {
+        "docs/standards/source.json": "{}\n",
+        "tests/unit/test_example.py": "def test_example():\n    pass\n",
+        "tests/e2e/test_example.py": "def test_full():\n    pass\n",
+        "tests/e2e/test_smoke.py": "def test_smoke():\n    pass\n",
+    }
+    for relative_path, content in files.items():
         path = tmp_path / relative_path
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text("{}\n", encoding="utf-8")
+        path.write_text(content, encoding="utf-8")
     (tmp_path / "Makefile").write_text(
         "lint:\n\t$(MAKE) e2e-test-value-guard\n"
         "e2e-test-value-guard:\n\tpython scripts/quality/e2e_test_value_guard.py\n",
@@ -243,6 +244,50 @@ def test_e2e_test_value_guard_rejects_incomplete_runtime_fault_and_impact_eviden
     assert "invalid-fault-detection-evidence" in rules
     assert "missing-replacement-proof" in rules
     assert "missing-valid-review-evidence" in rules
+
+
+def test_e2e_test_value_guard_rejects_uncollectable_replacement_proof_node(
+    tmp_path: Path,
+) -> None:
+    ledger = _ledger()
+    evidence = ledger["review_evidence"]["review-e2e-002-v1"]
+    evidence["decision"] = "replace"
+    evidence["impact_assessment"]["replacement_proofs"] = [
+        {
+            "owning_node": "tests/unit/test_example.py::test_missing_replacement",
+            "run_url": "https://github.com/sgajbi/lotus-core/actions/runs/123456789",
+            "source_commit": "a" * 40,
+            "artifact_sha256": "b" * 64,
+        }
+    ]
+    ledger["nodes"][1]["review_decision"] = "replace"
+
+    findings = _evaluate(tmp_path, ledger)
+
+    assert any(
+        finding.rule == "invalid-impact-assessment"
+        and finding.detail == "review-e2e-002-v1.replacement_proofs"
+        for finding in findings
+    )
+
+
+def test_e2e_test_value_guard_accepts_collectable_replacement_proof_node(
+    tmp_path: Path,
+) -> None:
+    ledger = _ledger()
+    evidence = ledger["review_evidence"]["review-e2e-002-v1"]
+    evidence["decision"] = "replace"
+    evidence["impact_assessment"]["replacement_proofs"] = [
+        {
+            "owning_node": "tests/unit/test_example.py::test_example",
+            "run_url": "https://github.com/sgajbi/lotus-core/actions/runs/123456789",
+            "source_commit": "a" * 40,
+            "artifact_sha256": "b" * 64,
+        }
+    ]
+    ledger["nodes"][1]["review_decision"] = "replace"
+
+    assert _evaluate(tmp_path, ledger) == []
 
 
 @pytest.mark.parametrize(

@@ -488,6 +488,7 @@ test-institutional-signoff-pack:
 
 test-pr-suites:
 	$(MAKE) test-unit-db
+	$(MAKE) test-critical-lifecycle-db
 	$(MAKE) test-integration-lite
 	$(MAKE) test-ops-contract
 	$(MAKE) test-boundary-mapping-conformance
