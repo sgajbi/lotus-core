@@ -998,7 +998,9 @@ Most relevant current governance:
     consecutive ordered all-2xx sweeps at the governed poll interval. Reset the stability fence on
     any non-2xx or transport failure and propagate seed failure immediately. Keep permanent failures
     fail-closed with endpoint-specific and observed/required stability diagnostics; never count
-    convergence requests as latency samples or weaken budgets to hide a readiness race.
+    convergence requests as latency samples or weaken budgets to hide a readiness race. Validate
+    operator-supplied stability controls at argument parsing before service, seed, context, or
+    session work, while retaining helper validation for direct callers.
 49. GitHub Security automation coverage is governed as repository truth. `.github/dependabot.yml`
     covers GitHub Actions, every governed Python dependency manifest, and every runtime service
     Dockerfile. Routine Dependabot version-update PR churn is currently paused with
