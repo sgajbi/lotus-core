@@ -33,11 +33,52 @@ def test_transaction_cost_requires_positive_component_amount() -> None:
 
 def test_position_lot_state_enforces_quantity_and_cost_bounds() -> None:
     assert {
+        "ck_position_lot_original_quantity_nonnegative",
         "ck_position_lot_open_quantity_nonnegative",
         "ck_position_lot_open_not_above_original",
         "ck_position_lot_local_cost_nonnegative",
         "ck_position_lot_base_cost_nonnegative",
+        "ck_position_lot_accrued_interest_nonnegative",
     } <= _constraint_names(PositionLotState)
+
+
+@pytest.mark.parametrize(
+    ("model", "constraint_name", "expected_sql"),
+    [
+        (Transaction, "ck_transactions_quantity_nonnegative", "quantity >= 0"),
+        (
+            PositionLotState,
+            "ck_position_lot_original_quantity_nonnegative",
+            "original_quantity >= 0",
+        ),
+        (
+            PositionLotState,
+            "ck_position_lot_accrued_interest_nonnegative",
+            "accrued_interest_paid_local >= 0",
+        ),
+        (
+            CostBasisProcessingState,
+            "ck_cost_basis_processing_quantity_nonnegative",
+            "latest_quantity >= 0",
+        ),
+        (
+            AccruedIncomeOffsetState,
+            "ck_accrued_income_paid_nonnegative",
+            "accrued_interest_paid_local >= 0",
+        ),
+        (
+            AccruedIncomeOffsetState,
+            "ck_accrued_income_remaining_nonnegative",
+            "remaining_offset_local >= 0",
+        ),
+    ],
+)
+def test_cost_ledger_quantities_and_costs_preserve_nonnegative_semantics(
+    model: type,
+    constraint_name: str,
+    expected_sql: str,
+) -> None:
+    assert _check_sql(model, constraint_name) == expected_sql
 
 
 @pytest.mark.parametrize(
