@@ -60,11 +60,11 @@ def _fee_component_values(source: object) -> dict[str, object]:
 
 def _resolved_source_trade_fee(source: object) -> Decimal:
     trade_fee = _optional_source_value(source, "trade_fee")
-    fees = _optional_source_value(source, "fees")
-    fee_components = (
-        {} if fees is not None and trade_fee is not None else _fee_component_values(source)
-    )
-    return resolve_transaction_trade_fee(trade_fee, fee_components) or Decimal(0)
+    resolved_aggregate = resolve_transaction_trade_fee(trade_fee, {}) or Decimal(0)
+    resolved_components = resolve_transaction_trade_fee(
+        None, _fee_component_values(source)
+    ) or Decimal(0)
+    return resolved_components if resolved_components != Decimal(0) else resolved_aggregate
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
