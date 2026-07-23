@@ -11,6 +11,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 FIRST_PARTY_PACKAGE = "portfolio_common"
+STARTUP_GUARD_ROOT = Path(__file__).resolve().parent / "python_startup"
 
 
 class RepositoryPythonError(RuntimeError):
@@ -30,6 +31,7 @@ def repository_python_roots(repo_root: Path = ROOT) -> tuple[Path, ...]:
 
     resolved_root = repo_root.resolve()
     return (
+        STARTUP_GUARD_ROOT,
         resolved_root / "src" / "libs" / "portfolio-common",
         resolved_root,
     )

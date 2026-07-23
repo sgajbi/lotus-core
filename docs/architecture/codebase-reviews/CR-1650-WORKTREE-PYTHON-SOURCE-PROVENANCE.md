@@ -2,8 +2,8 @@
 
 ## Status
 
-Fixed locally on `fix/ci-evidence-stability`; protected Linux CI, PR merge, exact-main validation,
-and verified issue #763 closure remain pending.
+Fixed locally on consolidated branch `fix/demo-pack-content-idempotency`; protected Linux CI, PR
+merge, exact-main validation, and verified issue #763 closure remain pending.
 
 ## Finding and reproduction
 
@@ -40,6 +40,18 @@ contract for this bootstrap: pip built and installed the editable package succes
 but the subsequent metadata lookup exposed no direct-URL payload. The isolated import-origin proof
 replaces that metadata assumption while remaining fail-closed for a missing or foreign install.
 
+Independent exact-head review then reproduced the same ownership defect for the generic service
+package name `app`: the launcher exited successfully while loading a physical user-site package and
+editable finder mappings from another Core worktree. Proving only `portfolio_common` at launcher
+entry was therefore insufficient for commands that import a service package later.
+
+The launcher now prepends a repository-owned Python startup hook. Before the delegated command
+runs, that hook removes editable finders that can claim `app` or `portfolio_common` from outside the
+invoking checkout and installs an actual-import fence for both protected names. A physical package
+found through normal site-package lookup fails closed with expected and resolved paths. Explicitly
+selecting one service-local root continues to load that checkout's `app`; unrelated third-party
+packages and paths remain available.
+
 ## Compatibility and boundaries
 
 No product runtime, API, OpenAPI, event, database schema, migration, container topology, or test
@@ -57,11 +69,15 @@ dynamic reproduction before a coordinated issue or fix; no speculative duplicate
 
 ## Validation
 
-- 43 warning-strict launcher, bootstrap, pinned-tool, Make/workflow governance tests passed.
+- 23 focused warning-strict launcher, bootstrap, and pinned-tool tests passed after the review fix.
 - A two-root subprocess regression loaded distinguishable current source despite an inherited
   foreign worktree path and preserved child exit behavior without a shell.
+- A real child interpreter with a physical foreign `app` installed in its user site now fails
+  closed, and a synthetic PEP 660 finder mapped to another worktree is removed before delegation.
+- The independent review reproduction now exits non-zero for the ambient foreign `app`; an
+  explicitly selected current ingestion-service root imports successfully.
 - Windows local proof resolved
-  `C:\Users\Sandeep\projects\lotus-core-ci-evidence-wt\src\libs\portfolio-common\portfolio_common\__init__.py`.
+  `C:\Users\Sandeep\projects\lotus-core-demo-pack-wt\src\libs\portfolio-common\portfolio_common\__init__.py`.
 - `make quality-workflow-governance-gate`, `make transaction-capability-catalog-guard`, and
   `make api-vocabulary-gate` passed through the launcher.
 - The complete strict `make architecture-guard` chain passed through the launcher.

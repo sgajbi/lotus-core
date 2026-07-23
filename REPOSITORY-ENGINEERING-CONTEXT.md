@@ -648,12 +648,14 @@ Use these commands as the primary local contract:
 All Python-backed Make recipes route through
 `python scripts/development/repository_python.py`. The launcher prepends this invoking checkout's
 repository and shared `portfolio-common` roots, filters inherited paths from other `lotus-core*`
-worktrees, proves first-party source origin before delegation, uses `shell=False`, and preserves the
-child exit code. Bootstrap verifies installed provenance through a fresh interpreter with inherited
-`PYTHONPATH` removed and unsafe-path insertion disabled; do not rely on optional editable-install
-metadata as the execution contract. Do not use an ambient editable install or another worktree's
-`PYTHONPATH` as validation evidence. Use `make install` to repair import provenance and invoke direct
-diagnostics through the launcher when a Make target is not available.
+worktrees, removes foreign editable finders for the protected `portfolio_common` and service `app`
+names, and fails any actual protected-name import whose normal path origin is outside the invoking
+checkout. It uses `shell=False` and preserves the child exit code. Bootstrap verifies installed
+provenance through a fresh interpreter with inherited `PYTHONPATH` removed and unsafe-path insertion
+disabled; do not rely on optional editable-install metadata as the execution contract. Do not use an
+ambient editable install, physical user-site `app`, or another worktree's `PYTHONPATH` as validation
+evidence. Use `make install` to repair import provenance and invoke direct diagnostics through the
+launcher when a Make target is not available.
 
 ## Validation And CI Expectations
 
