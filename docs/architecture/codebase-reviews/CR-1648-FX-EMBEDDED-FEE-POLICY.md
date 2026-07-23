@@ -11,7 +11,8 @@ charged leg for an embedded transaction fee. Generic cashflow code subtracted th
 then applied absolute-value FX buy/sell signing. A fee below, equal to, or above a cash leg could
 therefore alter or reverse the intermediate amount while still producing an apparently valid signed
 flow. RFC 082 recommended separate linked charges, but the canonical FX specification still allowed
-embedded netting.
+embedded netting. Exact-head review also found that a source exposing both an aggregate fee and a
+structured fee object could mask non-zero components behind an inconsistent zero aggregate.
 
 ## Decision
 
@@ -28,7 +29,9 @@ Phase-1 policy is `SEPARATE_LINKED_ONLY`:
 ## Implementation
 
 - Canonical FX construction resolves optional fee evidence through the shared transaction-fee
-  policy without widening the required `FxTransactionSource` protocol.
+  policy without widening the required `FxTransactionSource` protocol. Aggregate and component
+  representations are inspected independently so an inconsistent zero value cannot mask a
+  non-zero value in the other representation.
 - Direct validation, foreign-exchange booking, cost-basis processing, and generated FX cashflow
   calculation use the same stable reason code.
 - Cashflow rejects before classification signing, so `abs()` cannot repair an invalid intermediate
@@ -48,8 +51,9 @@ Phase-1 policy is `SEPARATE_LINKED_ONLY`:
 ## Evidence
 
 - signed implementation commit `64fa44f85f0baf595d260db21100c688e118a33c`;
+- signed exact-head review fix `33b211a88073ba623d46e0682443c6b7a5ead0f4`;
 - signed lifecycle-test commit `dc7e9cebfb5289dee593452e82bcd9d165e0587e`;
-- focused direct/booking/cost/cashflow proof: 171 warning-strict tests passed;
+- focused direct/booking/cost/cashflow proof: 189 warning-strict tests passed;
 - repository-native FX manifest before the new DB case: 337 warning-strict tests passed;
 - current governed FX manifest: 338 tests collected, including one dedicated DB-direct linked-fee
   replay test;
