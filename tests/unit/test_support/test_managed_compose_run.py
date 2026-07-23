@@ -178,11 +178,49 @@ def test_managed_run_starts_with_exact_runtime_and_captures_before_teardown(
     assert up_call[1]["runtime"] is managed.runtime
     assert up_call[1]["services"] == ["postgres", "ingestion-service"]
     assert up_call[1]["build"] is True
+    assert up_call[1]["timeout_seconds"] == managed.startup_timeout_seconds
     _, capture_call = events[2]
     assert capture_call[1]["runtime"] is managed.runtime
+    assert capture_call[1]["timeout_seconds"] == managed.log_capture_timeout_seconds
     assert capture_call[0][1] == managed.log_path
     _, down_call = events[3]
     assert down_call[1]["runtime"] is managed.runtime
+    assert down_call[1]["timeout_seconds"] == managed.teardown_timeout_seconds
+
+
+def test_managed_run_propagates_explicit_lifecycle_budgets(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    calls: dict[str, float] = {}
+    managed = prepare_managed_compose_run(
+        scope="bounded-lifecycle",
+        compose_file=tmp_path / "docker-compose.yml",
+        services=("postgres",),
+        build=False,
+        log_path=tmp_path / "bounded-compose.log",
+        startup_timeout_seconds=17,
+        teardown_timeout_seconds=19,
+        log_capture_timeout_seconds=23,
+    )
+
+    monkeypatch.setattr(
+        "tests.test_support.managed_compose_run.compose_up",
+        lambda *_args, **kwargs: calls.update(startup=kwargs["timeout_seconds"]),
+    )
+    monkeypatch.setattr(
+        "tests.test_support.managed_compose_run.capture_compose_logs",
+        lambda *_args, **kwargs: calls.update(logs=kwargs["timeout_seconds"]),
+    )
+    monkeypatch.setattr(
+        "tests.test_support.managed_compose_run.compose_down",
+        lambda *_args, **kwargs: calls.update(teardown=kwargs["timeout_seconds"]),
+    )
+
+    with managed:
+        pass
+
+    assert calls == {"startup": 17, "logs": 23, "teardown": 19}
 
 
 def test_managed_run_preserves_primary_error_when_diagnostics_and_teardown_fail(

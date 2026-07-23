@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib
 import json
 import os
 import re
@@ -20,7 +21,7 @@ from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path
-from typing import Any, Iterator, Mapping, Sequence, cast
+from typing import Any, BinaryIO, Iterator, Mapping, Sequence, cast
 from urllib.parse import urlsplit, urlunsplit
 
 import requests
@@ -354,24 +355,67 @@ def _build_lane(config: ProofConfig, source_commit: str) -> Iterator[dict[str, A
         "claimed_at_utc": _utc_now().isoformat(),
     }
     deadline = time.monotonic() + config.build_lock_wait_seconds
+    stream: BinaryIO | None = None
     while True:
-        try:
-            descriptor = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+        candidate = path.open("a+b")
+        if _try_acquire_file_lock(candidate):
+            stream = candidate
             break
-        except FileExistsError:
-            if time.monotonic() >= deadline:
+        candidate.close()
+        if time.monotonic() >= deadline:
+            try:
                 owner = path.read_text(encoding="utf-8", errors="replace")[:1000]
-                raise ProofFailure(f"Timed out waiting for image build lane; owner={owner}")
-            time.sleep(1)
-    with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
-        json.dump(evidence, stream, sort_keys=True)
+            except OSError:
+                owner = "<locked owner metadata is not readable on this platform>"
+            raise ProofFailure(f"Timed out waiting for image build lane; owner={owner}")
+        time.sleep(1)
+    stream.seek(0)
+    stream.truncate()
+    stream.write((json.dumps(evidence, sort_keys=True) + "\n").encode())
+    stream.flush()
     try:
         yield evidence
     finally:
-        current = json.loads(path.read_text(encoding="utf-8"))
-        if current.get("token") != token:
-            raise ProofFailure("Image build-lane ownership changed while held; lock retained.")
-        path.unlink()
+        assert stream is not None
+        try:
+            stream.seek(0)
+            current = json.loads(stream.read().decode())
+            ownership_changed = current.get("token") != token
+        finally:
+            try:
+                _release_file_lock(stream)
+            finally:
+                stream.close()
+        if ownership_changed:
+            raise ProofFailure("Image build-lane ownership changed while held.")
+
+
+def _try_acquire_file_lock(stream: BinaryIO) -> bool:
+    """Acquire one crash-releasing byte-range lock without blocking."""
+
+    stream.seek(0)
+    try:
+        if os.name == "nt":
+            import msvcrt
+
+            msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            fcntl = importlib.import_module("fcntl")
+            fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        return False
+    return True
+
+
+def _release_file_lock(stream: BinaryIO) -> None:
+    stream.seek(0)
+    if os.name == "nt":
+        import msvcrt
+
+        msvcrt.locking(stream.fileno(), msvcrt.LK_UNLCK, 1)
+    else:
+        fcntl = importlib.import_module("fcntl")
+        fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
 
 
 def _prebuild(config: ProofConfig, source: Mapping[str, Any]) -> dict[str, Any]:
@@ -1341,6 +1385,31 @@ def _scan_log(path: Path) -> dict[str, Any]:
     if not path.is_file():
         raise ProofFailure(f"Managed Compose log was not captured: {path}")
     text = path.read_text(encoding="utf-8", errors="replace")
+    exit_code_match = re.search(r"^compose_logs_exit_code=(\d+)$", text, re.MULTILINE)
+    service_bytes_match = re.search(r"^service_log_bytes=(\d+)$", text, re.MULTILINE)
+    if exit_code_match is None or service_bytes_match is None:
+        raise ProofFailure("Managed Compose log lacks capture-integrity metadata.")
+    exit_code = int(exit_code_match.group(1))
+    service_log_bytes = int(service_bytes_match.group(1))
+    service_marker = "--- service logs ---\n"
+    if service_marker not in text:
+        raise ProofFailure("Managed Compose log lacks the service-log section.")
+    service_logs = text.split(service_marker, 1)[1].split(
+        "\n--- docker compose logs stderr ---\n",
+        1,
+    )[0]
+    actual_service_log_bytes = len(service_logs.encode("utf-8"))
+    if (
+        exit_code != 0
+        or service_log_bytes <= 0
+        or not service_logs.strip()
+        or actual_service_log_bytes != service_log_bytes
+    ):
+        raise ProofFailure(
+            "Managed Compose log capture is not trustworthy: "
+            f"exit_code={exit_code}, declared_service_log_bytes={service_log_bytes}, "
+            f"actual_service_log_bytes={actual_service_log_bytes}"
+        )
     matches = {
         name: len(re.findall(pattern, text, re.IGNORECASE))
         for name, pattern in FORBIDDEN_LOG_PATTERNS.items()
@@ -1349,6 +1418,8 @@ def _scan_log(path: Path) -> dict[str, Any]:
         "path": str(path.relative_to(REPO_ROOT)),
         "sha256": _sha256_file(path),
         "size_bytes": path.stat().st_size,
+        "capture_exit_code": exit_code,
+        "service_log_bytes": service_log_bytes,
         "signature_matches": matches,
         "clean": not any(matches.values()),
     }

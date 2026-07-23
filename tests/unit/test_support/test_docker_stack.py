@@ -258,6 +258,31 @@ def test_compose_up_releases_reserved_ports_when_prebuild_fails() -> None:
     assert runtime.port_reservation.reserved_port_keys == ()
 
 
+def test_compose_up_fails_closed_when_lifecycle_command_times_out(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "tests.test_support.docker_stack._load_compose_pull_images",
+        lambda _: [],
+    )
+
+    def runner(args, **kwargs):  # noqa: ANN001
+        if args[0:2] == ["docker", "info"]:
+            return SimpleNamespace(returncode=0, stdout=b"", stderr=b"")
+        raise subprocess.TimeoutExpired(args, timeout=kwargs["timeout"])
+
+    with pytest.raises(
+        DockerStackError,
+        match="timeout during stale container inspection",
+    ):
+        compose_up(
+            "docker-compose.yml",
+            build=False,
+            runner=runner,
+            timeout_seconds=7,
+        )
+
+
 def test_ensure_required_images_available_pulls_missing_image(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -730,7 +755,7 @@ def test_capture_compose_logs_writes_active_project_logs(
     monkeypatch.setenv("COMPOSE_PROJECT_NAME", "lotus-e2e-test")
     monkeypatch.setattr(
         "tests.test_support.docker_stack.ensure_docker_engine_available",
-        lambda: None,
+        lambda *_args, **_kwargs: None,
     )
 
     def runner(args, **kwargs):  # noqa: ANN001
@@ -738,7 +763,12 @@ def test_capture_compose_logs_writes_active_project_logs(
         assert kwargs["check"] is False
         assert kwargs["capture_output"] is True
         assert kwargs["text"] is True
-        return SimpleNamespace(stdout="service log\n", stderr="diagnostic stderr\n")
+        assert 0 < kwargs["timeout"] <= 60
+        return SimpleNamespace(
+            returncode=0,
+            stdout="service log\n",
+            stderr="diagnostic stderr\n",
+        )
 
     monkeypatch.setattr("tests.test_support.docker_stack.subprocess.run", runner)
 
@@ -761,11 +791,74 @@ def test_capture_compose_logs_writes_active_project_logs(
         "--- lotus compose diagnostics ---\n"
         "compose_project=lotus-e2e-test\n"
         "compose_file=docker-compose.yml\n"
+        "compose_logs_exit_code=0\n"
+        "service_log_bytes=12\n"
         "--- service logs ---\n"
         "service log\n"
         "\n--- docker compose logs stderr ---\n"
         "diagnostic stderr\n"
     )
+
+
+@pytest.mark.parametrize(
+    ("returncode", "stdout", "message"),
+    [
+        (17, "", "log capture failed with exit code 17"),
+        (0, " \n", "returned no service logs"),
+    ],
+)
+def test_capture_compose_logs_fails_closed_on_untrustworthy_capture(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+    returncode: int,
+    stdout: str,
+    message: str,
+) -> None:
+    monkeypatch.setattr(
+        "tests.test_support.docker_stack.ensure_docker_engine_available",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        "tests.test_support.docker_stack.subprocess.run",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            returncode=returncode,
+            stdout=stdout,
+            stderr="compose unavailable",
+        ),
+    )
+    output_path = tmp_path / "compose.log"
+
+    with pytest.raises(DockerStackError, match=message):
+        capture_compose_logs("docker-compose.yml", output_path)
+
+    diagnostics = output_path.read_text(encoding="utf-8")
+    assert f"compose_logs_exit_code={returncode}" in diagnostics
+    assert "compose unavailable" in diagnostics
+
+
+def test_capture_compose_logs_bounds_engine_inspection_before_logs(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    calls: list[list[str]] = []
+
+    def runner(args, **kwargs):  # noqa: ANN001
+        calls.append(list(args))
+        raise subprocess.TimeoutExpired(args, timeout=kwargs["timeout"])
+
+    monkeypatch.setattr("tests.test_support.docker_stack.subprocess.run", runner)
+
+    with pytest.raises(
+        DockerStackError,
+        match="timeout during Docker engine inspection",
+    ):
+        capture_compose_logs(
+            "docker-compose.yml",
+            tmp_path / "compose.log",
+            timeout_seconds=13,
+        )
+
+    assert calls == [["docker", "info"]]
 
 
 def test_compose_diagnostics_and_teardown_use_prepared_runtime_identity(
@@ -783,12 +876,12 @@ def test_compose_diagnostics_and_teardown_use_prepared_runtime_identity(
 
     monkeypatch.setattr(
         "tests.test_support.docker_stack.ensure_docker_engine_available",
-        lambda: None,
+        lambda *_args, **_kwargs: None,
     )
 
     def runner(args, **kwargs):  # noqa: ANN001
         calls.append((list(args), kwargs))
-        return SimpleNamespace(stdout="runtime log\n", stderr="")
+        return SimpleNamespace(returncode=0, stdout="runtime log\n", stderr="")
 
     monkeypatch.setattr("tests.test_support.docker_stack.subprocess.run", runner)
 
@@ -807,3 +900,22 @@ def test_compose_diagnostics_and_teardown_use_prepared_runtime_identity(
     assert calls[0][1]["env"] is runtime.values
     assert calls[1][0][2:4] == project_args
     assert calls[1][1]["env"] is runtime.values
+
+
+def test_compose_down_fails_closed_when_teardown_times_out(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "tests.test_support.docker_stack.ensure_docker_engine_available",
+        lambda *_args, **_kwargs: None,
+    )
+
+    def runner(args, **kwargs):  # noqa: ANN001
+        raise subprocess.TimeoutExpired(args, timeout=kwargs["timeout"])
+
+    with pytest.raises(DockerStackError, match="timeout during Compose teardown"):
+        compose_down(
+            "docker-compose.yml",
+            runner=runner,
+            timeout_seconds=11,
+        )

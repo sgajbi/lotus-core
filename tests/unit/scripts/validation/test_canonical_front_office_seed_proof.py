@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import threading
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
@@ -508,9 +510,15 @@ def test_log_scanner_is_case_insensitive_and_does_not_retain_payload(
     monkeypatch.setattr(proof, "REPO_ROOT", tmp_path)
     log_path = tmp_path / "output" / "compose.log"
     log_path.parent.mkdir()
-    log_path.write_text(
+    service_logs = (
         "postgres ERROR: DEADLOCK DETECTED\n"
-        "worker valuation.scheduler.poll_loop_failed portfolio=sensitive-value\n",
+        "worker valuation.scheduler.poll_loop_failed portfolio=sensitive-value\n"
+    )
+    log_path.write_text(
+        "compose_logs_exit_code=0\n"
+        f"service_log_bytes={len(service_logs.encode())}\n"
+        "--- service logs ---\n"
+        f"{service_logs}",
         encoding="utf-8",
     )
 
@@ -520,6 +528,28 @@ def test_log_scanner_is_case_insensitive_and_does_not_retain_payload(
     assert scan["signature_matches"]["deadlock_detected"] == 1
     assert scan["signature_matches"]["valuation_poll_failed"] == 1
     assert "sensitive-value" not in str(scan)
+
+
+@pytest.mark.parametrize(
+    "metadata",
+    [
+        "",
+        "compose_logs_exit_code=9\nservice_log_bytes=15\n--- service logs ---\nservice output\n",
+        "compose_logs_exit_code=0\nservice_log_bytes=0\n--- service logs ---\nservice output\n",
+        "compose_logs_exit_code=0\nservice_log_bytes=99\n--- service logs ---\nservice output\n",
+    ],
+)
+def test_log_scanner_rejects_untrustworthy_capture_metadata(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    metadata: str,
+) -> None:
+    monkeypatch.setattr(proof, "REPO_ROOT", tmp_path)
+    log_path = tmp_path / "compose.log"
+    log_path.write_text(f"{metadata}service output\n", encoding="utf-8")
+
+    with pytest.raises(ProofFailure, match="capture"):
+        proof._scan_log(log_path)
 
 
 def test_source_provenance_requires_clean_signed_exact_commit(
@@ -856,7 +886,71 @@ def test_build_lane_removes_only_its_own_claim(tmp_path: Path) -> None:
         assert config.build_lock_path.is_file()
         assert evidence["source_commit"] == "a" * 40
 
-    assert not config.build_lock_path.exists()
+    assert config.build_lock_path.is_file()
+
+
+def test_build_lane_recovers_orphaned_owner_record(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    config.build_lock_path.parent.mkdir(parents=True)
+    config.build_lock_path.write_text(
+        '{"pid": 999999, "source_commit": "orphaned"}\n',
+        encoding="utf-8",
+    )
+
+    with proof._build_lane(config, "b" * 40) as evidence:
+        assert evidence["source_commit"] == "b" * 40
+    assert (
+        json.loads(config.build_lock_path.read_text(encoding="utf-8"))["token"] == evidence["token"]
+    )
+
+
+def test_build_lane_excludes_live_owner(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+
+    with proof._build_lane(config, "a" * 40):
+        with pytest.raises(ProofFailure, match="Timed out waiting for image build lane"):
+            with proof._build_lane(
+                replace(config, build_lock_wait_seconds=0),
+                "b" * 40,
+            ):
+                pytest.fail("a second live owner acquired the build lane")
+
+
+def test_build_lane_simultaneous_first_acquisition_has_one_owner(tmp_path: Path) -> None:
+    config = replace(_config(tmp_path), build_lock_wait_seconds=0)
+    barrier = threading.Barrier(2)
+    owner_acquired = threading.Event()
+    contender_blocked = threading.Event()
+    release_owner = threading.Event()
+    outcomes: list[str] = []
+
+    def contend(source_commit: str) -> None:
+        barrier.wait(timeout=5)
+        try:
+            with proof._build_lane(config, source_commit):
+                outcomes.append(f"owner:{source_commit}")
+                owner_acquired.set()
+                release_owner.wait(timeout=5)
+        except ProofFailure:
+            outcomes.append(f"blocked:{source_commit}")
+            contender_blocked.set()
+
+    threads = [
+        threading.Thread(target=contend, args=("a" * 40,)),
+        threading.Thread(target=contend, args=("b" * 40,)),
+    ]
+    for thread in threads:
+        thread.start()
+    assert owner_acquired.wait(timeout=5)
+    assert contender_blocked.wait(timeout=5)
+    release_owner.set()
+    for thread in threads:
+        thread.join(timeout=5)
+        assert not thread.is_alive()
+
+    assert len([outcome for outcome in outcomes if outcome.startswith("owner:")]) == 1
+    assert len([outcome for outcome in outcomes if outcome.startswith("blocked:")]) == 1
+    assert json.loads(config.build_lock_path.read_text(encoding="utf-8"))["token"]
 
 
 def test_run_proof_uses_nonbuilding_isolated_runtime_and_proves_teardown(
@@ -900,7 +994,13 @@ def test_run_proof_uses_nonbuilding_isolated_runtime_and_proves_teardown(
 
         def __exit__(self, *_args: object) -> bool:
             log_path = Path(prepared[0]["log_path"])
-            log_path.write_text("all services completed cleanly\n", encoding="utf-8")
+            log_path.write_text(
+                "compose_logs_exit_code=0\n"
+                "service_log_bytes=31\n"
+                "--- service logs ---\n"
+                "all services completed cleanly\n",
+                encoding="utf-8",
+            )
             return False
 
     fake_managed = FakeManaged()

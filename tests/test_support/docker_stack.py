@@ -11,7 +11,7 @@ import time
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 
 import requests
 import yaml
@@ -87,6 +87,8 @@ class DockerImagePullPolicy:
 
 
 LOGGER = logging.getLogger(__name__)
+DEFAULT_COMPOSE_STARTUP_TIMEOUT_SECONDS = 600.0
+DEFAULT_COMPOSE_TEARDOWN_TIMEOUT_SECONDS = 120.0
 
 _RATE_LIMIT_MARKERS = ("toomanyrequests", "too many requests", "rate limit", "status code: 429")
 _RETRYABLE_PULL_MARKERS = (
@@ -128,11 +130,66 @@ def _compose_base_args(
     return args
 
 
+@dataclass(frozen=True)
+class _LifecycleDeadline:
+    """Provide one monotonic budget across a multi-command Docker lifecycle."""
+
+    expires_at: float
+    clock: Callable[[], float] = time.monotonic
+
+    @classmethod
+    def start(
+        cls,
+        timeout_seconds: float,
+        *,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> _LifecycleDeadline:
+        if timeout_seconds <= 0:
+            raise ValueError("timeout_seconds must be positive")
+        return cls(expires_at=clock() + timeout_seconds, clock=clock)
+
+    def remaining(self, operation: str) -> float:
+        remaining = self.expires_at - self.clock()
+        if remaining <= 0:
+            raise DockerStackError(f"Docker lifecycle timeout before {operation}.")
+        return remaining
+
+
+def _run_with_deadline(
+    runner: Callable[..., subprocess.CompletedProcess[Any]],
+    args: list[str],
+    *,
+    deadline: _LifecycleDeadline,
+    operation: str,
+    **kwargs: object,
+) -> subprocess.CompletedProcess[Any]:
+    try:
+        return runner(
+            args,
+            timeout=deadline.remaining(operation),
+            **kwargs,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise DockerStackError(f"Docker lifecycle timeout during {operation}.") from exc
+
+
 def ensure_docker_engine_available(
-    runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
+    runner: Callable[..., subprocess.CompletedProcess[Any]] = subprocess.run,
+    *,
+    deadline: _LifecycleDeadline | None = None,
 ) -> None:
     try:
-        runner(["docker", "info"], check=True, capture_output=True)
+        if deadline is None:
+            runner(["docker", "info"], check=True, capture_output=True)
+        else:
+            _run_with_deadline(
+                runner,
+                ["docker", "info"],
+                deadline=deadline,
+                operation="Docker engine inspection",
+                check=True,
+                capture_output=True,
+            )
     except (FileNotFoundError, subprocess.CalledProcessError) as exc:
         raise DockerStackError(
             "Docker engine is not available. Start Docker Desktop/daemon before running "
@@ -156,12 +213,13 @@ def _load_compose_pull_images(compose_file: str) -> list[str]:
 
 def ensure_required_images_available(
     compose_file: str,
-    runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
+    runner: Callable[..., subprocess.CompletedProcess[Any]] = subprocess.run,
     *,
     pull_policy: DockerImagePullPolicy = DockerImagePullPolicy(),
     sleeper: Callable[[float], None] = time.sleep,
     jitter: Callable[[float, float], float] = random.uniform,
     clock: Callable[[], float] = time.monotonic,
+    deadline: _LifecycleDeadline | None = None,
 ) -> None:
     if os.getenv("LOTUS_TESTS_PULL_BASE_IMAGES", "true").strip().lower() not in {
         "1",
@@ -173,11 +231,21 @@ def ensure_required_images_available(
 
     missing_images: list[str] = []
     for image in _load_compose_pull_images(compose_file):
-        result = runner(
-            ["docker", "image", "inspect", image],
-            check=False,
-            capture_output=True,
-        )
+        if deadline is None:
+            result = runner(
+                ["docker", "image", "inspect", image],
+                check=False,
+                capture_output=True,
+            )
+        else:
+            result = _run_with_deadline(
+                runner,
+                ["docker", "image", "inspect", image],
+                deadline=deadline,
+                operation=f"Docker image inspection for {image}",
+                check=False,
+                capture_output=True,
+            )
         if result.returncode != 0:
             missing_images.append(image)
 
@@ -189,27 +257,35 @@ def ensure_required_images_available(
             sleeper=sleeper,
             jitter=jitter,
             clock=clock,
+            deadline=deadline,
         )
 
 
 def _pull_required_image(
     image: str,
     *,
-    runner: Callable[..., subprocess.CompletedProcess],
+    runner: Callable[..., subprocess.CompletedProcess[Any]],
     policy: DockerImagePullPolicy,
     sleeper: Callable[[float], None],
     jitter: Callable[[float, float], float],
     clock: Callable[[], float],
+    deadline: _LifecycleDeadline | None = None,
 ) -> None:
     started_at = clock()
     last_failure = DockerImagePullFailureClass.PERMANENT
     for attempt in range(1, policy.max_attempts + 1):
         try:
+            timeout_seconds = policy.timeout_seconds
+            if deadline is not None:
+                timeout_seconds = min(
+                    timeout_seconds,
+                    deadline.remaining(f"Docker image pull for {image}"),
+                )
             runner(
                 ["docker", "pull", image],
                 check=True,
                 capture_output=True,
-                timeout=policy.timeout_seconds,
+                timeout=timeout_seconds,
             )
             LOGGER.info(
                 "docker_image_pull_completed",
@@ -251,7 +327,14 @@ def _pull_required_image(
                 f"budget_seconds={policy.maximum_total_duration_seconds})"
             ) from pull_error
 
-        sleeper(policy.retry_delay_seconds(attempt, jitter))
+        retry_delay = policy.retry_delay_seconds(attempt, jitter)
+        if deadline is not None and retry_delay >= deadline.remaining(
+            f"Docker image pull retry for {image}"
+        ):
+            raise DockerStackError(
+                f"Docker lifecycle timeout before Docker image pull retry for {image}."
+            ) from pull_error
+        sleeper(retry_delay)
 
 
 def _process_error_text(error: subprocess.CalledProcessError) -> str:
@@ -321,18 +404,34 @@ def compose_up(
     services: list[str] | None = None,
     retries: int = 2,
     retry_wait_seconds: int = 5,
-    runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
+    runner: Callable[..., subprocess.CompletedProcess[Any]] = subprocess.run,
     runtime: PreparedTestRuntime | None = None,
+    timeout_seconds: float = DEFAULT_COMPOSE_STARTUP_TIMEOUT_SECONDS,
+    clock: Callable[[], float] = time.monotonic,
 ) -> None:
+    deadline = _LifecycleDeadline.start(timeout_seconds, clock=clock)
     project_name = runtime.endpoints.compose_project_name if runtime is not None else None
     compose_environment = runtime.values if runtime is not None else None
     compose_args = _compose_base_args(compose_file, project_name=project_name)
-    ensure_docker_engine_available(runner)
-    ensure_required_images_available(compose_file, runner)
-    _remove_stale_project_containers(compose_file, runner, project_name=project_name)
+    ensure_docker_engine_available(runner, deadline=deadline)
+    ensure_required_images_available(
+        compose_file,
+        runner,
+        clock=clock,
+        deadline=deadline,
+    )
+    _remove_stale_project_containers(
+        compose_file,
+        runner,
+        project_name=project_name,
+        deadline=deadline,
+    )
     try:
-        runner(
+        _run_with_deadline(
+            runner,
             [*compose_args, "down", "--remove-orphans"],
+            deadline=deadline,
+            operation="pre-start Compose teardown",
             check=False,
             capture_output=True,
             env=compose_environment,
@@ -346,8 +445,11 @@ def compose_up(
         if services:
             build_args.extend(services)
         try:
-            runner(
+            _run_with_deadline(
+                runner,
                 build_args,
+                deadline=deadline,
+                operation="Compose image build",
                 check=True,
                 capture_output=True,
                 env=compose_environment,
@@ -372,8 +474,11 @@ def compose_up(
         if runtime is not None:
             runtime.port_reservation.release()
         try:
-            runner(
+            _run_with_deadline(
+                runner,
                 args,
+                deadline=deadline,
+                operation=f"Compose startup attempt {attempt}",
                 check=True,
                 capture_output=True,
                 env=compose_environment,
@@ -383,7 +488,11 @@ def compose_up(
             last_error = exc
             stderr = _process_error_text(exc)
             last_bind_conflict = _is_host_port_bind_error(stderr)
-            removed_conflicts = _remove_conflicting_named_containers(stderr, runner)
+            removed_conflicts = _remove_conflicting_named_containers(
+                stderr,
+                runner,
+                deadline=deadline,
+            )
             can_retry = attempt < attempts and (
                 removed_conflicts
                 or _is_retryable_compose_up_error(stderr)
@@ -391,8 +500,11 @@ def compose_up(
             )
             if can_retry:
                 try:
-                    runner(
+                    _run_with_deadline(
+                        runner,
                         [*compose_args, "down", "--remove-orphans"],
+                        deadline=deadline,
+                        operation=f"Compose retry teardown after attempt {attempt}",
                         check=False,
                         capture_output=True,
                         env=compose_environment,
@@ -418,6 +530,12 @@ def compose_up(
                         },
                     )
                 if retry_wait_seconds > 0:
+                    if retry_wait_seconds >= deadline.remaining(
+                        f"Compose startup retry {attempt + 1}"
+                    ):
+                        raise DockerStackError(
+                            "Docker lifecycle timeout before Compose startup retry."
+                        ) from exc
                     time.sleep(retry_wait_seconds)
                 continue
             break
@@ -443,7 +561,7 @@ def wait_for_migration_runner(
     *,
     timeout_seconds: int = 120,
     poll_seconds: int = 2,
-    runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
+    runner: Callable[..., subprocess.CompletedProcess[Any]] = subprocess.run,
     runtime: PreparedTestRuntime | None = None,
 ) -> None:
     wait_for_compose_service_success(
@@ -462,7 +580,7 @@ def wait_for_compose_service_success(
     *,
     timeout_seconds: int = 120,
     poll_seconds: int = 2,
-    runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
+    runner: Callable[..., subprocess.CompletedProcess[Any]] = subprocess.run,
     runtime: PreparedTestRuntime | None = None,
 ) -> None:
     project_name = runtime.endpoints.compose_project_name if runtime is not None else None
@@ -563,16 +681,24 @@ def compose_down(
     compose_file: str,
     *,
     runtime: PreparedTestRuntime | None = None,
+    timeout_seconds: float = DEFAULT_COMPOSE_TEARDOWN_TIMEOUT_SECONDS,
+    runner: Callable[..., subprocess.CompletedProcess[Any]] | None = None,
+    clock: Callable[[], float] = time.monotonic,
 ) -> None:
-    ensure_docker_engine_available()
+    selected_runner = runner or subprocess.run
+    deadline = _LifecycleDeadline.start(timeout_seconds, clock=clock)
+    ensure_docker_engine_available(selected_runner, deadline=deadline)
     project_name = runtime.endpoints.compose_project_name if runtime is not None else None
-    subprocess.run(
+    _run_with_deadline(
+        selected_runner,
         [
             *_compose_base_args(compose_file, project_name=project_name),
             "down",
             "-v",
             "--remove-orphans",
         ],
+        deadline=deadline,
+        operation="Compose teardown",
         check=False,
         capture_output=True,
         env=runtime.values if runtime is not None else None,
@@ -584,58 +710,86 @@ def capture_compose_logs(
     output_path: str | Path,
     *,
     runtime: PreparedTestRuntime | None = None,
+    timeout_seconds: float = 60,
 ) -> None:
-    """Capture logs for the active compose project before teardown."""
-    ensure_docker_engine_available()
+    """Capture non-empty logs for the active project or fail before teardown."""
+    deadline = _LifecycleDeadline.start(timeout_seconds)
+    ensure_docker_engine_available(subprocess.run, deadline=deadline)
     destination = Path(output_path)
     destination.parent.mkdir(parents=True, exist_ok=True)
     project_name = runtime.endpoints.compose_project_name if runtime is not None else None
-    result = subprocess.run(
+    result = _run_with_deadline(
+        subprocess.run,
         [
             *_compose_base_args(compose_file, project_name=project_name),
             "logs",
             "--no-color",
         ],
+        deadline=deadline,
+        operation="Compose diagnostic capture",
         check=False,
         capture_output=True,
         text=True,
         env=runtime.values if runtime is not None else None,
     )
+    service_log_bytes = len(result.stdout.encode("utf-8"))
     log_text = (
         "--- lotus compose diagnostics ---\n"
         f"compose_project={project_name or os.getenv('COMPOSE_PROJECT_NAME') or 'default'}\n"
         f"compose_file={compose_file}\n"
+        f"compose_logs_exit_code={result.returncode}\n"
+        f"service_log_bytes={service_log_bytes}\n"
         "--- service logs ---\n"
         f"{result.stdout}"
     )
     if result.stderr:
         log_text = f"{log_text}\n--- docker compose logs stderr ---\n{result.stderr}"
     destination.write_text(log_text, encoding="utf-8")
+    if result.returncode:
+        raise DockerStackError(
+            "Docker Compose log capture failed "
+            f"with exit code {result.returncode}; diagnostics={destination}"
+        )
+    if not result.stdout.strip():
+        raise DockerStackError(
+            f"Docker Compose log capture returned no service logs; diagnostics={destination}"
+        )
 
 
 def _remove_conflicting_named_containers(
     stderr: str,
-    runner: Callable[..., subprocess.CompletedProcess],
+    runner: Callable[..., subprocess.CompletedProcess[Any]],
+    *,
+    deadline: _LifecycleDeadline,
 ) -> bool:
     removed_any = False
     matches = re.findall(r'container name "/([^"]+)" is already in use', stderr)
     for container_name in matches:
-        runner(["docker", "rm", "-f", container_name], check=False, capture_output=True)
+        _run_with_deadline(
+            runner,
+            ["docker", "rm", "-f", container_name],
+            deadline=deadline,
+            operation=f"conflicting container removal for {container_name}",
+            check=False,
+            capture_output=True,
+        )
         removed_any = True
     return removed_any
 
 
 def _remove_stale_project_containers(
     compose_file: str,
-    runner: Callable[..., subprocess.CompletedProcess],
+    runner: Callable[..., subprocess.CompletedProcess[Any]],
     *,
     project_name: str | None = None,
+    deadline: _LifecycleDeadline,
 ) -> None:
     selected_project = project_name or os.getenv("COMPOSE_PROJECT_NAME")
     if not selected_project:
         selected_project = Path(compose_file).resolve().parent.name
     try:
-        ps = runner(
+        ps = _run_with_deadline(
+            runner,
             [
                 "docker",
                 "ps",
@@ -643,6 +797,8 @@ def _remove_stale_project_containers(
                 "--filter",
                 f"label=com.docker.compose.project={selected_project}",
             ],
+            deadline=deadline,
+            operation=f"stale container inspection for {selected_project}",
             check=False,
             capture_output=True,
             text=True,
@@ -657,7 +813,14 @@ def _remove_stale_project_containers(
     if not container_ids:
         return
 
-    runner(["docker", "rm", "-f", *container_ids], check=False, capture_output=True)
+    _run_with_deadline(
+        runner,
+        ["docker", "rm", "-f", *container_ids],
+        deadline=deadline,
+        operation=f"stale container removal for {selected_project}",
+        check=False,
+        capture_output=True,
+    )
 
 
 def resolve_compose_file(project_root: str) -> str:
