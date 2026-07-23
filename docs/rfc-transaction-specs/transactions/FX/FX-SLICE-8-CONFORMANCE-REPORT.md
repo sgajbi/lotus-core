@@ -30,7 +30,7 @@ Slice 8 closes RFC 082 by wiring canonical FX coverage into the repository's sta
 | Realized FX P&L baseline | `src/services/portfolio_transaction_processing_service/app/domain/transaction/fx/baseline_processing.py`; `src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_calculator.py`; `tests/unit/services/portfolio_transaction_processing_service/domain/transaction/fx/test_baseline_processing.py`; `tests/unit/services/portfolio_transaction_processing_service/domain/cost_basis/calculation/test_cost_calculator.py`; `tests/unit/services/portfolio_transaction_processing_service/application/cost_basis_processing/test_execution.py` |
 | Query and observability | `src/services/query_service/app/routers/transactions.py`; `src/services/query_service/app/repositories/transaction_repository.py`; `src/services/query_service/app/services/transaction_service.py`; `tests/integration/services/query_service/test_transactions_router.py` |
 | Persistence round-trip | `src/libs/portfolio-common/portfolio_common/database_models.py`; `src/libs/portfolio-common/portfolio_common/events.py`; `tests/integration/services/persistence_service/repositories/test_repositories.py` |
-| Fee/tax policy | `FX_025_NON_ZERO_EMBEDDED_FEE` in the canonical reason-code/validation package; direct booking, cost-basis, and cashflow prevention tests; `tests/integration/services/portfolio_transaction_processing_service/test_int_fx_linked_fee_processing.py` for separate linked replay/idempotency economics |
+| Fee/tax policy | `FX_025_NON_ZERO_EMBEDDED_FEE` and `FX_026_NON_ZERO_EMBEDDED_TAX` in the canonical reason-code/validation package; direct booking, cost-basis, and cashflow prevention tests; `tests/integration/services/portfolio_transaction_processing_service/test_int_fx_linked_fee_processing.py` for separate linked replay/idempotency economics |
 | Full-stack lifecycle | `tests/e2e/test_fx_lifecycle.py` |
 
 ## Shared-Doc Conformance Note
@@ -99,10 +99,11 @@ generic cost engine strategy table still emitted a pending error for `FX_SPOT`, 
 
 ## Post-Conformance Correctness Hardening
 
-Issue #754 closed the ambiguous fee-signing gap after the original slice report. The canonical
+Issue #754 closed the ambiguous charge-signing gap after the original slice report. The canonical
 domain now rejects every non-zero resolved inline FX fee with
-`FX_025_NON_ZERO_EMBEDDED_FEE` before booking, cost mutation, or cashflow sign normalization.
-Absent/zero inline fees remain compatible. The governed FX manifest now collects 340 tests,
+`FX_025_NON_ZERO_EMBEDDED_FEE` and every non-zero inline withholding tax with
+`FX_026_NON_ZERO_EMBEDDED_TAX` before booking, cost mutation, or cashflow sign normalization.
+Absent/zero inline charges remain compatible. The governed FX manifest now collects 350 tests,
 including a DB-direct replay/idempotency scenario proving separate linked fee economics without
 double count; protected DB execution remains required before delivery closure.
 

@@ -122,7 +122,9 @@ basis reduction, and advanced timing remain tracked under #448.
 
 FX fees and taxes use a separate-linked-posting policy. A non-zero aggregate or component fee on an
 FX spot, forward, swap, or generated cash-settlement leg fails before booking, cost mutation, or
-cashflow sign normalization with `FX_025_NON_ZERO_EMBEDDED_FEE`. Absent and zero inline fees retain
+cashflow sign normalization with `FX_025_NON_ZERO_EMBEDDED_FEE`; non-zero inline
+`withholding_tax_amount` fails at the same boundaries with `FX_026_NON_ZERO_EMBEDDED_TAX`. Absent
+and zero inline charges retain
 existing economics. Book supported charges as distinct `FEE`/`TAX` transactions carrying the same
 `economic_event_id` and `linked_transaction_group_id`; do not infer fee currency or charged-leg
 ownership from either FX cash leg.
