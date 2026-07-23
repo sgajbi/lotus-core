@@ -1729,6 +1729,10 @@ class Transaction(Base):
             "CAST(quantity AS TEXT) NOT IN ('NaN', 'Infinity', '-Infinity')",
             name="ck_transactions_quantity_finite",
         ),
+        CheckConstraint(
+            "quantity >= 0",
+            name="ck_transactions_quantity_nonnegative",
+        ),
         Index("ix_transactions_portfolio_security", "portfolio_id", "security_id"),
         Index(
             "ix_transactions_portfolio_instrument_date",
@@ -1968,6 +1972,10 @@ class PositionLotState(Base):
             name="ck_position_lot_state_numeric_finite",
         ),
         CheckConstraint(
+            "original_quantity >= 0",
+            name="ck_position_lot_original_quantity_nonnegative",
+        ),
+        CheckConstraint(
             "open_quantity >= 0",
             name="ck_position_lot_open_quantity_nonnegative",
         ),
@@ -1982,6 +1990,10 @@ class PositionLotState(Base):
         CheckConstraint(
             "lot_cost_base >= 0",
             name="ck_position_lot_base_cost_nonnegative",
+        ),
+        CheckConstraint(
+            "accrued_interest_paid_local >= 0",
+            name="ck_position_lot_accrued_interest_nonnegative",
         ),
         Index(
             "ix_position_lot_norm_port_sec",
@@ -2034,6 +2046,10 @@ class CostBasisProcessingState(Base):
         CheckConstraint(
             "CAST(latest_quantity AS TEXT) NOT IN ('NaN', 'Infinity', '-Infinity')",
             name="ck_cost_basis_processing_quantity_finite",
+        ),
+        CheckConstraint(
+            "latest_quantity >= 0",
+            name="ck_cost_basis_processing_quantity_nonnegative",
         ),
         Index(
             "ix_cost_basis_processing_state_updated_key",
@@ -2133,6 +2149,14 @@ class AccruedIncomeOffsetState(Base):
             "AND CAST(remaining_offset_local AS TEXT) "
             "NOT IN ('NaN', 'Infinity', '-Infinity')",
             name="ck_accrued_income_offset_numeric_finite",
+        ),
+        CheckConstraint(
+            "accrued_interest_paid_local >= 0",
+            name="ck_accrued_income_paid_nonnegative",
+        ),
+        CheckConstraint(
+            "remaining_offset_local >= 0",
+            name="ck_accrued_income_remaining_nonnegative",
         ),
         Index(
             "ix_accrued_offset_port_norm_sec_id",
