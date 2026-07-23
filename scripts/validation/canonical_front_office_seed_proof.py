@@ -1033,7 +1033,7 @@ def _required_int(value: Mapping[str, Any], field: str) -> int:
 def _api_observation(query: str, control: str, portfolio: str, as_of: str) -> dict[str, Any]:
     positions = _request_json("GET", f"{query}/portfolios/{portfolio}/positions?as_of_date={as_of}")
     transactions = _request_json(
-        "GET", f"{query}/portfolios/{portfolio}/transactions?limit=300&include_projected=false"
+        "GET", f"{query}/portfolios/{portfolio}/transactions?limit=300&include_projected=true"
     )
     support = _request_json("GET", f"{control}/support/portfolios/{portfolio}/overview")
     readiness = _request_json(

@@ -510,6 +510,59 @@ def test_api_observation_rejects_missing_readiness_blocking_reasons(
         proof._api_observation("http://query", "http://control", "portfolio", "2026-04-10")
 
 
+def test_api_observation_counts_governed_future_transactions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    requested_urls: list[str] = []
+    queue_fields = (
+        "pending_valuation_jobs",
+        "processing_valuation_jobs",
+        "stale_processing_valuation_jobs",
+        "failed_valuation_jobs",
+        "pending_aggregation_jobs",
+        "processing_aggregation_jobs",
+        "stale_processing_aggregation_jobs",
+        "failed_aggregation_jobs",
+    )
+    responses = iter(
+        [
+            {"positions": [], "data_quality_status": "COMPLETE"},
+            {"total": 31},
+            dict.fromkeys(queue_fields, 0),
+            {
+                "holdings": {"status": "READY"},
+                "pricing": {"status": "READY"},
+                "transactions": {"status": "READY"},
+                "reporting": {"status": "READY"},
+                "blocking_reasons": [],
+                "snapshot_valuation_total_positions": 0,
+                "snapshot_valuation_valued_positions": 0,
+                "snapshot_valuation_unvalued_positions": 0,
+            },
+            {"benchmark_id": "benchmark"},
+            {"performance_end_date": "2026-04-10"},
+        ]
+    )
+
+    def capture_request(method, url, payload=None):
+        requested_urls.append(url)
+        return next(responses)
+
+    monkeypatch.setattr(proof, "_request_json", capture_request)
+
+    observation = proof._api_observation(
+        "http://query",
+        "http://control",
+        "portfolio",
+        "2026-04-10",
+    )
+
+    assert observation["transactions"] == 31
+    assert requested_urls[1] == (
+        "http://query/portfolios/portfolio/transactions?limit=300&include_projected=true"
+    )
+
+
 def test_stable_observations_ignore_transient_contention(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
