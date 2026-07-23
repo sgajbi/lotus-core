@@ -47,6 +47,19 @@ def _fact(**overrides: object) -> MarketPriceSourceFact:
     return MarketPriceSourceFact(**values)  # type: ignore[arg-type]
 
 
+def _with_source_record(
+    fact: MarketPriceSourceFact,
+    source_record_id: str,
+) -> MarketPriceSourceFact:
+    return replace(
+        fact,
+        source_reference=replace(
+            fact.source_reference,
+            source_record_id=source_record_id,
+        ),
+    )
+
+
 def test_valuation_authority_scope_normalizes_without_defaulting() -> None:
     scope = ValuationAuthorityScope(
         tenant_id=" TENANT-SG ",
@@ -187,19 +200,31 @@ def test_market_price_resolution_is_exact_scope_and_date() -> None:
 
     resolved = resolve_market_price_source_fact(
         [
-            replace(
-                fact,
-                scope=ValuationAuthorityScope("TENANT-HK", "PB-SG-01", "BOND-001"),
+            _with_source_record(
+                replace(
+                    fact,
+                    scope=ValuationAuthorityScope("TENANT-HK", "PB-SG-01", "BOND-001"),
+                ),
+                "PRICE-HK",
             ),
-            replace(
-                fact,
-                scope=ValuationAuthorityScope("TENANT-SG", "PB-SG-02", "BOND-001"),
+            _with_source_record(
+                replace(
+                    fact,
+                    scope=ValuationAuthorityScope("TENANT-SG", "PB-SG-02", "BOND-001"),
+                ),
+                "PRICE-BOOK-02",
             ),
-            replace(
-                fact,
-                scope=ValuationAuthorityScope("TENANT-SG", "PB-SG-01", "BOND-999"),
+            _with_source_record(
+                replace(
+                    fact,
+                    scope=ValuationAuthorityScope("TENANT-SG", "PB-SG-01", "BOND-999"),
+                ),
+                "PRICE-BOND-999",
             ),
-            replace(fact, price_date=date(2026, 7, 21)),
+            _with_source_record(
+                replace(fact, price_date=date(2026, 7, 21)),
+                "PRICE-2026-07-21",
+            ),
             fact,
         ],
         tenant_id=" TENANT-SG ",
@@ -209,6 +234,90 @@ def test_market_price_resolution_is_exact_scope_and_date() -> None:
     )
 
     assert resolved is fact
+
+
+@pytest.mark.parametrize("latest_first", [False, True])
+@pytest.mark.parametrize(
+    "fact_status",
+    [
+        MarketPriceSourceFactStatus.ACTIVE,
+        MarketPriceSourceFactStatus.SUSPENDED,
+        MarketPriceSourceFactStatus.RETIRED,
+    ],
+)
+@pytest.mark.parametrize(
+    ("dimension", "new_value"),
+    [
+        ("tenant_id", "TENANT-HK"),
+        ("legal_book_id", "PB-SG-02"),
+        ("security_id", "BOND-999"),
+        ("price_date", date(2026, 7, 23)),
+    ],
+)
+def test_moved_source_correction_fences_stale_authority_before_scope_selection(
+    dimension: str,
+    new_value: object,
+    fact_status: MarketPriceSourceFactStatus,
+    latest_first: bool,
+) -> None:
+    original = _fact()
+    corrected_scope = original.scope
+    corrected_date = original.price_date
+    if dimension == "price_date":
+        assert isinstance(new_value, date)
+        corrected_date = new_value
+    else:
+        assert isinstance(new_value, str)
+        scope_values = {
+            "tenant_id": original.scope.tenant_id,
+            "legal_book_id": original.scope.legal_book_id,
+            "security_id": original.scope.security_id,
+        }
+        scope_values[dimension] = new_value
+        corrected_scope = ValuationAuthorityScope(**scope_values)
+    corrected = replace(
+        original,
+        scope=corrected_scope,
+        price_date=corrected_date,
+        fact_status=fact_status,
+        fact_version=2,
+        source_reference=replace(
+            original.source_reference,
+            source_revision="8",
+            observed_at=datetime(2026, 7, 23, 5, tzinfo=UTC),
+        ),
+    )
+    facts = [corrected, original] if latest_first else [original, corrected]
+
+    with pytest.raises(MissingMarketPriceSourceFactError):
+        resolve_market_price_source_fact(
+            facts,
+            tenant_id=original.scope.tenant_id,
+            legal_book_id=original.scope.legal_book_id,
+            security_id=original.scope.security_id,
+            price_date=original.price_date,
+        )
+
+    if fact_status is MarketPriceSourceFactStatus.ACTIVE:
+        assert (
+            resolve_market_price_source_fact(
+                facts,
+                tenant_id=corrected.scope.tenant_id,
+                legal_book_id=corrected.scope.legal_book_id,
+                security_id=corrected.scope.security_id,
+                price_date=corrected.price_date,
+            )
+            is corrected
+        )
+    else:
+        with pytest.raises(MissingMarketPriceSourceFactError):
+            resolve_market_price_source_fact(
+                facts,
+                tenant_id=corrected.scope.tenant_id,
+                legal_book_id=corrected.scope.legal_book_id,
+                security_id=corrected.scope.security_id,
+                price_date=corrected.price_date,
+            )
 
 
 def test_latest_suspended_price_version_fences_older_active_fact() -> None:

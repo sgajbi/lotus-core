@@ -7,6 +7,7 @@ from enum import StrEnum
 import pytest
 from portfolio_common.domain.calculation_lineage import (
     CalculationLineage,
+    FinancialSourceReference,
     build_calculation_lineage,
     canonical_content_hash,
 )
@@ -118,3 +119,41 @@ def test_lineage_value_rejects_invalid_digest_or_algorithm_metadata() -> None:
         _lineage(algorithm_version=0)
     with pytest.raises(ValueError, match="intermediate_precision"):
         _lineage(intermediate_precision=0)
+
+
+def _source_reference(**overrides: object) -> FinancialSourceReference:
+    values: dict[str, object] = {
+        "source_system": " approved-market-data ",
+        "source_record_id": " PRICE-001 ",
+        "source_revision": " revision-7 ",
+        "source_content_hash": "a" * 64,
+        "observed_at": datetime(2026, 7, 23, 4, 30, tzinfo=UTC),
+    }
+    values.update(overrides)
+    return FinancialSourceReference(**values)  # type: ignore[arg-type]
+
+
+def test_financial_source_reference_normalizes_stable_identity() -> None:
+    reference = _source_reference()
+
+    assert reference.source_system == "approved-market-data"
+    assert reference.source_record_id == "PRICE-001"
+    assert reference.source_revision == "revision-7"
+
+
+@pytest.mark.parametrize("field_name", ["source_system", "source_record_id", "source_revision"])
+@pytest.mark.parametrize("invalid_value", [None, 42, Decimal("1")])
+def test_financial_source_reference_rejects_non_string_identity(
+    field_name: str,
+    invalid_value: object,
+) -> None:
+    with pytest.raises(TypeError, match=rf"{field_name} must be a string"):
+        _source_reference(**{field_name: invalid_value})
+
+
+@pytest.mark.parametrize("observed_at", [None, "2026-07-23T04:30:00Z", date(2026, 7, 23)])
+def test_financial_source_reference_rejects_non_datetime_observation(
+    observed_at: object,
+) -> None:
+    with pytest.raises(TypeError, match="observed_at must be a datetime"):
+        _source_reference(observed_at=observed_at)

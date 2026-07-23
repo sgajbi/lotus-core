@@ -146,14 +146,12 @@ class MarketPriceSourceFact:
             raise ValueError("fact_version must be positive")
 
     @property
-    def source_record_key(self) -> tuple[str, str, str, date, str, str]:
-        """Return exact price authority plus stable upstream record identity."""
+    def source_record_key(self) -> tuple[str, str]:
+        """Return stable upstream correction identity independent of mutable authority."""
 
         return (
-            *self.scope.key,
-            self.price_date,
-            self.source_reference.source_system.strip(),
-            self.source_reference.source_record_id.strip(),
+            self.source_reference.source_system,
+            self.source_reference.source_record_id,
         )
 
     def content_hash(self) -> str:
@@ -195,20 +193,21 @@ def resolve_market_price_source_fact(
         legal_book_id=legal_book_id,
         security_id=security_id,
     ).key
-    scoped = [
-        fact
-        for fact in facts
-        if fact.scope.key == requested_scope and fact.price_date == price_date
-    ]
     latest = latest_source_versions(
-        scoped,
+        facts,
         source_record_key=lambda fact: fact.source_record_key,
         source_version=lambda fact: fact.fact_version,
         conflicting_version_error=lambda: MarketPriceSourceFactError(
             "conflicting payloads share one source record and fact_version"
         ),
     )
-    active = [fact for fact in latest if fact.fact_status is MarketPriceSourceFactStatus.ACTIVE]
+    active = [
+        fact
+        for fact in latest
+        if fact.scope.key == requested_scope
+        and fact.price_date == price_date
+        and fact.fact_status is MarketPriceSourceFactStatus.ACTIVE
+    ]
     if not active:
         raise MissingMarketPriceSourceFactError(
             "no active market-price source fact for exact tenant, legal book, "

@@ -62,9 +62,18 @@ class FinancialSourceReference:
 
     def __post_init__(self) -> None:
         for field_name in ("source_system", "source_record_id", "source_revision"):
-            if not str(getattr(self, field_name)).strip():
+            value = getattr(self, field_name)
+            if not isinstance(value, str):
+                raise TypeError(f"{field_name} must be a string")
+            normalized = value.strip()
+            if not normalized:
                 raise ValueError(f"{field_name} must be nonblank")
+            object.__setattr__(self, field_name, normalized)
+        if not isinstance(self.source_content_hash, str):
+            raise TypeError("source_content_hash must be a string")
         require_sha256_digest(self.source_content_hash, "source_content_hash")
+        if not isinstance(self.observed_at, datetime):
+            raise TypeError("observed_at must be a datetime")
         if self.observed_at.tzinfo is None or self.observed_at.utcoffset() is None:
             raise ValueError("observed_at must be timezone-aware")
 
