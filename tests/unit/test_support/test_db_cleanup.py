@@ -126,6 +126,47 @@ def test_cleanup_rejects_actual_engine_target_drift(drifted_url: str) -> None:
         runtime.port_reservation.release()
 
 
+@pytest.mark.parametrize(
+    "query",
+    [
+        "host=shared-postgres.internal",
+        "port=5432",
+        "options=-csearch_path%3Dshared",
+        "search_path=shared",
+    ],
+)
+def test_cleanup_rejects_connection_affecting_query_parameters(query: str) -> None:
+    runtime = _runtime()
+    engine = _engine(f"{runtime.endpoints.host_database_url}?{query}")
+    try:
+        with pytest.raises(
+            DatabaseCleanupAuthorizationError,
+            match="query parameters are not allowed",
+        ) as raised:
+            authorize_database_cleanup(runtime=runtime, engine=engine)
+        assert query not in str(raised.value)
+        assert "password" not in str(raised.value)
+        assert not engine.begin.called
+    finally:
+        runtime.port_reservation.release()
+
+
+def test_cleanup_rejects_non_postgresql_backend() -> None:
+    runtime = _runtime()
+    target = runtime.prepared_database_target
+    engine = _engine(f"mysql://user:password@{target.host}:{target.port}/{target.database}")
+    try:
+        with pytest.raises(
+            DatabaseCleanupAuthorizationError,
+            match="target backend must be PostgreSQL",
+        ) as raised:
+            authorize_database_cleanup(runtime=runtime, engine=engine)
+        assert "password" not in str(raised.value)
+        assert not engine.begin.called
+    finally:
+        runtime.port_reservation.release()
+
+
 def test_cleanup_rejects_post_preparation_endpoint_mutation_before_destructive_sql() -> None:
     runtime = _runtime()
     drifted_url = "postgresql://user:password@localhost:55432/portfolio_db"
@@ -189,6 +230,9 @@ def test_cleanup_authorizes_target_refreshed_by_governed_port_reallocation() -> 
         assert refreshed_target is not first_target
         assert refreshed_target.port != first_target.port
         assert refreshed_target.reservation_generation == 2
+        assert refreshed_target.port == int(
+            runtime.port_reservation._sockets["LOTUS_POSTGRES_HOST_PORT"].getsockname()[1]
+        )
         assert authorization.target.port == refreshed_target.port
         assert not engine.begin.called
     finally:
@@ -199,15 +243,37 @@ def test_target_evidence_cannot_refresh_without_new_reservation_generation() -> 
     runtime = _runtime()
     prepared = runtime.prepared_database_target
     runtime.values["LOTUS_POSTGRES_HOST_PORT"] = "55432"
+    runtime.values["HOST_DATABASE_URL"] = "postgresql://user:password@localhost:55432/portfolio_db"
     try:
+        with pytest.raises(AttributeError):
+            runtime.port_reservation.generation = runtime.port_reservation.generation + 1
         with pytest.raises(
             RuntimeError,
             match="requires a newer reservation generation",
         ):
             runtime.port_reservation._refresh_prepared_database_target_for_reallocation()
         assert runtime.prepared_database_target is prepared
+        engine = _engine(runtime.values["HOST_DATABASE_URL"])
+        with pytest.raises(
+            DatabaseCleanupAuthorizationError,
+            match="PostgreSQL target components changed after preparation",
+        ):
+            authorize_database_cleanup(runtime=runtime, engine=engine)
+        assert not engine.begin.called
     finally:
         runtime.port_reservation.release()
+
+
+def test_target_evidence_refresh_requires_active_owned_postgresql_socket() -> None:
+    runtime = _runtime()
+    runtime.port_reservation.release()
+    runtime.port_reservation._generation += 1
+    runtime.port_reservation._active_reservation_epoch = object()
+    with pytest.raises(
+        RuntimeError,
+        match="active owned reservation for LOTUS_POSTGRES_HOST_PORT",
+    ):
+        runtime.port_reservation._refresh_prepared_database_target_for_reallocation()
 
 
 def test_cleanup_authorizes_generated_project_owned_port_and_exact_engine() -> None:

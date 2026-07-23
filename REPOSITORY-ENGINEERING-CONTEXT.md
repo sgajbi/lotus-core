@@ -3142,6 +3142,8 @@ Most relevant current governance:
      derived-endpoint drift cannot redefine cleanup ownership. A governed dynamic-port
      reallocation replaces the immutable target with a new reservation generation and carries
      forward the original project, user, and database rather than recapturing mutable values.
+     Reservation generation is externally read-only, and refreshed port evidence comes from the
+     active process-owned socket rather than exported environment values.
      Both function- and module-scoped fixtures must establish that authorization before quiescence
      recovery, session termination, or truncate SQL. Replay-only recovery requires the same
      factory-issued capability explicitly, and delegated helpers validate the exact issued object
@@ -3149,7 +3151,9 @@ Most relevant current governance:
      ports, test-shaped project names, mixed provenance, mutable target drift, forged capabilities,
      and post-preparation engine drift fail closed; prefixes and two values derived from the same
      inherited environment are not ownership proof. Engine construction and its non-destructive
-     readiness query occur before fixture entry and are not cleanup authorization.
+     readiness query occur before fixture entry and are not cleanup authorization. Cleanup URLs
+     must use the PostgreSQL backend with no query parameters: driver-level host, port, options, or
+     search-path overrides are connection authority and therefore fail closed.
 
 ## Context Maintenance Rule
 
