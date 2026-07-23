@@ -28,6 +28,12 @@ class CostBasisProcessingCheckpoint:
     latest_transaction_id: str
     calculation_state_version: str = COST_BASIS_STATE_VERSION
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.latest_quantity, Decimal) or not self.latest_quantity.is_finite():
+            raise ValueError("Latest cost-basis quantity must be a finite Decimal")
+        if self.latest_quantity < Decimal(0):
+            raise ValueError("Latest cost-basis quantity must be nonnegative")
+
     @classmethod
     def from_transaction(
         cls,

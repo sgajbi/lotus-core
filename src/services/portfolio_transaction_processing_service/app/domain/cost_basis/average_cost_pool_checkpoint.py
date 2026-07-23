@@ -16,6 +16,13 @@ from .processing_checkpoint import CostBasisProcessingCheckpoint
 AVERAGE_COST_POOL_STATE_VERSION = "avco-pool-v1"
 
 
+def _require_nonnegative_finite(value: Decimal, *, field_name: str) -> None:
+    if not isinstance(value, Decimal) or not value.is_finite():
+        raise ValueError(f"{field_name} must be a finite Decimal")
+    if value < Decimal(0):
+        raise ValueError(f"{field_name} must be nonnegative")
+
+
 @dataclass(frozen=True, slots=True)
 class AverageCostPoolCheckpoint:
     portfolio_id: str
@@ -28,10 +35,18 @@ class AverageCostPoolCheckpoint:
     state_version: str = AVERAGE_COST_POOL_STATE_VERSION
 
     def __post_init__(self) -> None:
-        if self.quantity < Decimal(0):
-            raise ValueError("Average cost pool quantity must be nonnegative")
-        if self.cost_local < Decimal(0) or self.cost_base < Decimal(0):
-            raise ValueError("Average cost pool basis must be nonnegative")
+        _require_nonnegative_finite(
+            self.quantity,
+            field_name="Average cost pool quantity",
+        )
+        _require_nonnegative_finite(
+            self.cost_local,
+            field_name="Average cost pool local basis",
+        )
+        _require_nonnegative_finite(
+            self.cost_base,
+            field_name="Average cost pool base basis",
+        )
         if self.quantity > Decimal(0) and not self.representative_source_transaction_id:
             raise ValueError("Positive average cost pool requires representative source lineage")
         if self.quantity == Decimal(0) and (
@@ -202,10 +217,18 @@ class AverageCostPoolRebuildPlan:
 
 
 def _validate_open_lot_state(state: OpenLotState, *, field_name: str) -> None:
-    if state.quantity < Decimal(0):
-        raise ValueError(f"{field_name} quantity must be nonnegative")
-    if state.cost_local < Decimal(0) or state.cost_base < Decimal(0):
-        raise ValueError(f"{field_name} basis must be nonnegative")
+    _require_nonnegative_finite(
+        state.quantity,
+        field_name=f"{field_name} quantity",
+    )
+    _require_nonnegative_finite(
+        state.cost_local,
+        field_name=f"{field_name} local basis",
+    )
+    _require_nonnegative_finite(
+        state.cost_base,
+        field_name=f"{field_name} base basis",
+    )
     if state.quantity == Decimal(0) and (
         state.cost_local != Decimal(0) or state.cost_base != Decimal(0)
     ):

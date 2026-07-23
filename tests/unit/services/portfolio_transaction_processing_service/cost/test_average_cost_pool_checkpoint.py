@@ -93,6 +93,48 @@ def test_checkpoint_rejects_inconsistent_pool_state(overrides: dict[str, object]
         AverageCostPoolCheckpoint(**payload)
 
 
+@pytest.mark.parametrize("value", ["NaN", "sNaN", "Infinity", "-Infinity"])
+@pytest.mark.parametrize("field_name", ["quantity", "cost_local", "cost_base"])
+def test_checkpoint_rejects_non_finite_financial_values(
+    field_name: str,
+    value: str,
+) -> None:
+    payload: dict[str, object] = {
+        "portfolio_id": "P1",
+        "instrument_id": "I1",
+        "security_id": "S1",
+        "representative_source_transaction_id": "BUY-1",
+        "quantity": Decimal("1"),
+        "cost_local": Decimal("10"),
+        "cost_base": Decimal("11"),
+    }
+    payload[field_name] = Decimal(value)
+
+    with pytest.raises(ValueError, match="must be a finite Decimal"):
+        AverageCostPoolCheckpoint(**payload)
+
+
+@pytest.mark.parametrize("value", ["NaN", "sNaN", "Infinity", "-Infinity"])
+@pytest.mark.parametrize("field_name", ["quantity", "cost_local", "cost_base"])
+def test_transition_rejects_non_finite_open_lot_state(
+    field_name: str,
+    value: str,
+) -> None:
+    state_values = {
+        "quantity": Decimal("1"),
+        "cost_local": Decimal("10"),
+        "cost_base": Decimal("11"),
+    }
+    state_values[field_name] = Decimal(value)
+
+    with pytest.raises(ValueError, match="must be a finite Decimal"):
+        AverageCostPoolTransition(
+            before=_open_checkpoint(),
+            existing_sources_after=OpenLotState(**state_values),
+            explicit_sources_after={},
+        )
+
+
 def test_checkpoint_compatibility_requires_version_and_book_identity() -> None:
     checkpoint = AverageCostPoolCheckpoint(
         portfolio_id="P1",

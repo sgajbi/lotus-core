@@ -2,6 +2,8 @@ from dataclasses import replace
 from datetime import datetime, timezone
 from decimal import Decimal
 
+import pytest
+
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (  # noqa: E501
     COST_BASIS_STATE_VERSION,
     CostBasisProcessingCheckpoint,
@@ -45,3 +47,20 @@ def test_checkpoint_rejects_unknown_calculation_state_version() -> None:
     )
 
     assert checkpoint.permits_append(later, cost_basis_method="FIFO") is False
+
+
+@pytest.mark.parametrize("value", ["NaN", "sNaN", "Infinity", "-Infinity"])
+def test_checkpoint_rejects_non_finite_latest_quantity(value: str) -> None:
+    current = _transaction("BUY-1", datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc))
+    checkpoint = CostBasisProcessingCheckpoint.from_transaction(current, cost_basis_method="FIFO")
+
+    with pytest.raises(ValueError, match="must be a finite Decimal"):
+        replace(checkpoint, latest_quantity=Decimal(value))
+
+
+def test_checkpoint_rejects_negative_latest_quantity() -> None:
+    current = _transaction("BUY-1", datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc))
+    checkpoint = CostBasisProcessingCheckpoint.from_transaction(current, cost_basis_method="FIFO")
+
+    with pytest.raises(ValueError, match="must be nonnegative"):
+        replace(checkpoint, latest_quantity=Decimal("-0.0000000001"))
