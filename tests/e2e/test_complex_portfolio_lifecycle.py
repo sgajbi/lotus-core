@@ -273,9 +273,18 @@ def test_complex_lifecycle_cross_api_consistency(
         assert review["code"] == "LOTUS_CORE_LEGACY_ENDPOINT_REMOVED"
         assert review["target_service"] == "lotus-report"
 
-    support_response = e2e_api_client.query_control(f"/support/portfolios/{portfolio_id}/overview")
-    support_data = support_response.json()
-    assert support_response.status_code == 200
+    support_data = e2e_api_client.poll_for_data(
+        f"/support/portfolios/{portfolio_id}/overview",
+        lambda data: (
+            data.get("publish_allowed") is True
+            and data.get("controls_blocking") is False
+            and isinstance(data.get("pending_valuation_jobs"), int)
+            and isinstance(data.get("pending_aggregation_jobs"), int)
+        ),
+        timeout=180,
+        fail_message="Portfolio support controls did not converge to publishable state.",
+        control_plane=True,
+    )
     assert support_data["portfolio_id"] == portfolio_id
     assert isinstance(support_data["pending_valuation_jobs"], int)
     assert isinstance(support_data["pending_aggregation_jobs"], int)

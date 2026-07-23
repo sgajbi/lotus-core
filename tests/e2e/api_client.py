@@ -103,14 +103,17 @@ class E2EApiClient:
         timeout: int = 60,
         interval: int = 2,
         fail_message: str = "Polling timed out",
+        *,
+        control_plane: bool = False,
     ):
-        """Polls a query endpoint until the validation function returns True."""
+        """Poll a query or control-plane endpoint until its payload satisfies a condition."""
         start_time = time.time()
         last_response_data = None
         last_error = None
+        request = self.query_control if control_plane else self.query
         while time.time() - start_time < timeout:
             try:
-                response = self.query(endpoint)
+                response = request(endpoint)
                 if response.status_code == 200:
                     last_response_data = response.json()
                     if validation_func(last_response_data):
