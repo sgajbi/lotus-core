@@ -276,6 +276,13 @@ def test_demo_pack_segment_inventory_is_unique_complete_and_logically_partitione
     assert "benchmark-assignments" not in names
 
 
+def test_full_default_demo_pack_stays_within_app_local_ingestion_rate_window():
+    segments = demo_data_pack._build_demo_pack_segments(demo_data_pack.build_demo_bundle())
+
+    assert len(segments) <= 500
+    assert sum(segment.record_count for segment in segments) <= 50_000
+
+
 def test_market_and_fx_probe_accepts_equivalent_source_records(monkeypatch):
     segments = (
         demo_data_pack.DemoPackSegment(
@@ -684,8 +691,17 @@ def test_portfolio_probe_verifies_master_reference_ledger_and_positions(monkeypa
         if "/analytics/portfolio-timeseries" in url:
             assert method == "POST"
             assert payload is not None
+            assert payload["page"] == {"page_size": len(bundle["business_dates"])}
             return 200, {
                 "resolved_window": payload["window"],
+                "observations": [
+                    {"valuation_date": record["business_date"]}
+                    for record in bundle["business_dates"]
+                ],
+                "page": {
+                    "returned_row_count": len(bundle["business_dates"]),
+                    "next_page_token": None,
+                },
                 "diagnostics": {
                     "expected_business_dates_count": len(bundle["business_dates"]),
                     "missing_dates_count": 0,
@@ -740,6 +756,14 @@ def test_portfolio_probe_rejects_evolved_transaction_economics(monkeypatch):
         if "/analytics/portfolio-timeseries" in url:
             return 200, {
                 "resolved_window": payload["window"],
+                "observations": [
+                    {"valuation_date": record["business_date"]}
+                    for record in bundle["business_dates"]
+                ],
+                "page": {
+                    "returned_row_count": len(bundle["business_dates"]),
+                    "next_page_token": None,
+                },
                 "diagnostics": {
                     "expected_business_dates_count": len(bundle["business_dates"]),
                     "missing_dates_count": 0,
@@ -780,7 +804,7 @@ def test_portfolio_probe_rejects_evolved_transaction_economics(monkeypatch):
     assert result.missing_segments == ("portfolio-bundle",)
 
 
-def test_portfolio_probe_rejects_missing_business_calendar_date(monkeypatch):
+def test_portfolio_probe_rejects_same_count_substituted_business_calendar_date(monkeypatch):
     portfolio_ids = ("DEMO_DPM_EUR_001",)
     bundle = demo_data_pack.build_demo_bundle(
         history_days=demo_data_pack.MIN_DEMO_HISTORY_DAYS,
@@ -791,10 +815,19 @@ def test_portfolio_probe_rejects_missing_business_calendar_date(monkeypatch):
 
     def fake_request_json(method, url, payload=None, headers=None):
         if "/analytics/portfolio-timeseries" in url:
+            observed_dates = [record["business_date"] for record in bundle["business_dates"]]
+            observed_dates[-1] = "1900-01-01"
             return 200, {
                 "resolved_window": payload["window"],
+                "observations": [
+                    {"valuation_date": valuation_date} for valuation_date in observed_dates
+                ],
+                "page": {
+                    "returned_row_count": len(bundle["business_dates"]),
+                    "next_page_token": None,
+                },
                 "diagnostics": {
-                    "expected_business_dates_count": len(bundle["business_dates"]) - 1,
+                    "expected_business_dates_count": len(bundle["business_dates"]),
                     "missing_dates_count": 0,
                 },
             }

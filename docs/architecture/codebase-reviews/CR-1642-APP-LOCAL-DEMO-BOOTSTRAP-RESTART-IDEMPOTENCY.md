@@ -84,7 +84,12 @@ segment gained an evaluator.
 - Cross-window tests now prove identical transactions, no transactions beyond the fixed as-of, and
   identical overlapping market, FX, index-price, index-return, benchmark-return, and risk-free
   economics for 240-day and 1,095-day profiles. The full profile uses 32 logical requests and
-  26,684 records, inside the app-local 500-request/50,000-record rate window.
+  26,753 records, inside the app-local 500-request/50,000-record rate window.
+- The full five-portfolio 1,095-day pack now owns a direct 500-request/50,000-record regression; the
+  smaller 240-day single-portfolio partition test is no longer misreported as full-pack evidence.
+- Business-calendar completeness requests the full bounded observation page, requires a terminal
+  page, and compares every returned `valuation_date` with the exact ordered generated dates. A
+  same-count substituted-date regression fails closed.
 - The first targeted image build failed before writes because the persistence Dockerfile copied the
   demo tool but not its existing RFC-0076 contract-loader dependency. The Dockerfile now copies both
   files and a stack-contract regression protects that runtime packaging boundary.
