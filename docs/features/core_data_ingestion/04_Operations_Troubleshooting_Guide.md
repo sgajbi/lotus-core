@@ -53,8 +53,9 @@ that its reference histories are complete. Use an explicit force refresh only wh
 sample pack must be rebuilt without source comparison.
 
 The generator uses RFC-0076's fixed canonical as-of date rather than the host clock. Transaction
-identities remain fixed across history depths, and overlapping market, FX, index, benchmark, and
-risk-free dates retain identical economics. Market and FX posts use date-ordered logical series
+identities retain the deployed v1 `2023-07-20` anchor across history depths, and overlapping market,
+FX, index, benchmark, and risk-free dates retain identical economics. Market and FX posts use
+date-ordered logical series
 segments (`market-prices:<security_id>` and `fx-rates:<from>:<to>`) under the versioned
 `lotus-demo-pack:v2` content namespace. A governed RFC-0076 date-policy change intentionally evolves
 content; an ordinary restart does not.

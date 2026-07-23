@@ -45,6 +45,9 @@ The generator now resolves RFC-0076's fixed canonical as-of date, uses a fixed e
 derives every overlapping observation from its absolute date. Market and FX payloads are partitioned
 by logical security or ordered currency pair instead of positional batch number, with chronological
 rows and a versioned `lotus-demo-pack:v2` content namespace.
+The anchor is the already-deployed v1 date (`2023-07-20`), not a newly derived window start. This
+keeps existing transaction IDs and dates byte-compatible because ordinary source UPSERT correctly
+rejects moving an accepted transaction ID to a different economic date.
 
 ## Same-pattern review
 
