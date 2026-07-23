@@ -3072,11 +3072,11 @@ Most relevant current governance:
      does not implement withholding-rate derivation, other receipt deductions,
      a supplied-net identity, jurisdiction-specific tax policy, return-of-capital, basis reduction,
      or advanced timing; keep those residuals under #448.
-220. Canonical front-office seed success requires stable terminal derived state. Pending and
-     processing valuation or aggregation work, stale-processing aggregation, and failed
-     aggregation are all blockers. Require three consecutive all-zero observations at the
+220. Canonical front-office seed success requires stable terminal derived state. Pending,
+     processing, stale-processing, or failed valuation or aggregation work are all blockers.
+     Require three consecutive all-zero observations at the
      configured poll interval; reset the fence if any work reopens, and keep it inside the existing
-     readiness deadline. Polling must sleep for the configured interval rather than busy-looping
+     900-second readiness deadline. Polling must sleep for the configured interval rather than busy-looping
       against Core, Gateway, or downstream analytics. A populated Workbench response while queues
       still drain is diagnostic progress, not canonical certification.
 
