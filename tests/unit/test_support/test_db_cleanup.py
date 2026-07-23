@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 from collections.abc import Iterator
 from unittest.mock import MagicMock
 
@@ -8,8 +9,10 @@ from sqlalchemy.engine import make_url
 
 from tests import conftest as root_conftest
 from tests.test_support.db_cleanup import (
+    DatabaseCleanupAuthorization,
     DatabaseCleanupAuthorizationError,
     authorize_database_cleanup,
+    require_database_cleanup_authorization,
     truncate_with_deadlock_retry,
 )
 from tests.test_support.runtime_env import PreparedTestRuntime, prepare_test_runtime
@@ -123,6 +126,90 @@ def test_cleanup_rejects_actual_engine_target_drift(drifted_url: str) -> None:
         runtime.port_reservation.release()
 
 
+def test_cleanup_rejects_post_preparation_endpoint_mutation_before_destructive_sql() -> None:
+    runtime = _runtime()
+    drifted_url = "postgresql://user:password@localhost:55432/portfolio_db"
+    runtime.values["HOST_DATABASE_URL"] = drifted_url
+    engine = _engine(drifted_url)
+    try:
+        with pytest.raises(
+            DatabaseCleanupAuthorizationError,
+            match="derived database endpoint changed after preparation",
+        ) as raised:
+            authorize_database_cleanup(runtime=runtime, engine=engine)
+        assert "password" not in str(raised.value)
+        assert not engine.begin.called
+    finally:
+        runtime.port_reservation.release()
+
+
+def test_cleanup_rejects_component_and_endpoint_mutation_before_destructive_sql() -> None:
+    runtime = _runtime()
+    drifted_url = "postgresql://user:password@localhost:55432/other_db"
+    runtime.values["LOTUS_POSTGRES_HOST_PORT"] = "55432"
+    runtime.values["POSTGRES_DB"] = "other_db"
+    runtime.values["HOST_DATABASE_URL"] = drifted_url
+    engine = _engine(drifted_url)
+    try:
+        with pytest.raises(
+            DatabaseCleanupAuthorizationError,
+            match="PostgreSQL target components changed after preparation",
+        ) as raised:
+            authorize_database_cleanup(runtime=runtime, engine=engine)
+        assert "password" not in str(raised.value)
+        assert not engine.begin.called
+    finally:
+        runtime.port_reservation.release()
+
+
+def test_cleanup_endpoint_mutation_never_leaks_malformed_credentials() -> None:
+    runtime = _runtime()
+    prepared_url = runtime.endpoints.host_database_url
+    runtime.values["HOST_DATABASE_URL"] = "postgresql://user:supersecret@[bad-host/portfolio_db"
+    engine = _engine(prepared_url)
+    try:
+        with pytest.raises(DatabaseCleanupAuthorizationError) as raised:
+            authorize_database_cleanup(runtime=runtime, engine=engine)
+        assert "supersecret" not in str(raised.value)
+        assert not engine.begin.called
+    finally:
+        runtime.port_reservation.release()
+
+
+def test_cleanup_authorizes_target_refreshed_by_governed_port_reallocation() -> None:
+    runtime = _runtime()
+    first_target = runtime.prepared_database_target
+    try:
+        runtime.port_reservation.reallocate()
+        refreshed_target = runtime.prepared_database_target
+        engine = _engine(runtime.endpoints.host_database_url)
+
+        authorization = authorize_database_cleanup(runtime=runtime, engine=engine)
+
+        assert refreshed_target is not first_target
+        assert refreshed_target.port != first_target.port
+        assert refreshed_target.reservation_generation == 2
+        assert authorization.target.port == refreshed_target.port
+        assert not engine.begin.called
+    finally:
+        runtime.port_reservation.release()
+
+
+def test_target_evidence_cannot_refresh_without_new_reservation_generation() -> None:
+    runtime = _runtime()
+    prepared = runtime.prepared_database_target
+    runtime.values["LOTUS_POSTGRES_HOST_PORT"] = "55432"
+    try:
+        with pytest.raises(
+            RuntimeError,
+            match="requires a newer reservation generation",
+        ):
+            runtime.port_reservation._refresh_prepared_database_target_for_reallocation()
+        assert runtime.prepared_database_target is prepared
+    finally:
+        runtime.port_reservation.release()
+
+
 def test_cleanup_authorizes_generated_project_owned_port_and_exact_engine() -> None:
     runtime = _runtime()
     engine = _engine(runtime.endpoints.host_database_url)
@@ -134,7 +221,43 @@ def test_cleanup_authorizes_generated_project_owned_port_and_exact_engine() -> N
         runtime.port_reservation.release()
 
 
-def test_function_cleanup_refuses_before_session_termination_or_sql(
+def test_delegated_cleanup_rejects_copied_capability_before_destructive_sql() -> None:
+    runtime = _runtime()
+    engine = _engine(runtime.endpoints.host_database_url)
+    try:
+        authorization = authorize_database_cleanup(runtime=runtime, engine=engine)
+        copied_authorization = copy.copy(authorization)
+        assert copied_authorization is not authorization
+        assert not hasattr(authorization, "_authority")
+        with pytest.raises(
+            DatabaseCleanupAuthorizationError,
+            match="invalid cleanup authorization",
+        ):
+            require_database_cleanup_authorization(
+                copied_authorization,
+                engine=engine,
+            )
+        assert not engine.begin.called
+    finally:
+        runtime.port_reservation.release()
+
+
+def test_cleanup_authorization_cannot_be_constructed_by_a_caller() -> None:
+    runtime = _runtime()
+    engine = _engine(runtime.endpoints.host_database_url)
+    try:
+        issued = authorize_database_cleanup(runtime=runtime, engine=engine)
+        with pytest.raises(TypeError, match="factory-issued"):
+            DatabaseCleanupAuthorization(
+                compose_project_name="lotus-shared",
+                target=issued.target,
+                _issuance_token=object(),
+            )
+    finally:
+        runtime.port_reservation.release()
+
+
+def test_function_cleanup_refuses_before_destructive_cleanup(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     runtime = _runtime(
@@ -152,7 +275,7 @@ def test_function_cleanup_refuses_before_session_termination_or_sql(
         runtime.port_reservation.release()
 
 
-def test_module_cleanup_refuses_before_quiescence_recovery_or_sql(
+def test_module_cleanup_refuses_before_quiescence_or_destructive_cleanup(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     runtime = _runtime(

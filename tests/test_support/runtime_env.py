@@ -91,6 +91,18 @@ class RuntimeEndpoints:
     e2e_financial_reconciliation_url: str
 
 
+@dataclass(frozen=True)
+class PreparedDatabaseTarget:
+    """Credential-free database ownership evidence captured during preparation."""
+
+    compose_project_name: str
+    username: str
+    host: str
+    port: int
+    database: str
+    reservation_generation: int
+
+
 @dataclass
 class RuntimePortReservation:
     """Own bound dynamic host ports until Compose is ready to claim them."""
@@ -104,6 +116,11 @@ class RuntimePortReservation:
         repr=False,
     )
     _retired_ports: set[int] = field(default_factory=set, init=False, repr=False)
+    _prepared_database_target: PreparedDatabaseTarget | None = field(
+        default=None,
+        init=False,
+        repr=False,
+    )
     generation: int = field(default=0, init=False)
 
     def __post_init__(self) -> None:
@@ -145,8 +162,44 @@ class RuntimePortReservation:
         self.release()
         self._reserve_new_generation()
         _set_derived_runtime_values(self.values)
+        self._refresh_prepared_database_target_for_reallocation()
         for target in self._export_targets:
             target.update(self.values)
+
+    @property
+    def prepared_database_target(self) -> PreparedDatabaseTarget:
+        """Return immutable target evidence from preparation or governed reallocation."""
+
+        if self._prepared_database_target is None:
+            raise RuntimeError("database target evidence has not been prepared")
+        return self._prepared_database_target
+
+    def _capture_initial_prepared_database_target(self) -> None:
+        if self._prepared_database_target is not None:
+            raise RuntimeError("initial database target evidence is already prepared")
+        self._prepared_database_target = PreparedDatabaseTarget(
+            compose_project_name=self.values["COMPOSE_PROJECT_NAME"],
+            username=self.values["POSTGRES_USER"],
+            host="localhost",
+            port=int(self.values["LOTUS_POSTGRES_HOST_PORT"]),
+            database=self.values["POSTGRES_DB"],
+            reservation_generation=self.generation,
+        )
+
+    def _refresh_prepared_database_target_for_reallocation(self) -> None:
+        prepared = self.prepared_database_target
+        if self.generation <= prepared.reservation_generation:
+            raise RuntimeError(
+                "database target evidence refresh requires a newer reservation generation"
+            )
+        self._prepared_database_target = PreparedDatabaseTarget(
+            compose_project_name=prepared.compose_project_name,
+            username=prepared.username,
+            host=prepared.host,
+            port=int(self.values["LOTUS_POSTGRES_HOST_PORT"]),
+            database=prepared.database,
+            reservation_generation=self.generation,
+        )
 
     def _reserve_new_generation(self) -> None:
         used_ports = {
@@ -199,6 +252,12 @@ class PreparedTestRuntime:
         """Return whether the runtime came from the governed preparation factory."""
 
         return self._preparation_authority is _PREPARED_RUNTIME_AUTHORITY
+
+    @property
+    def prepared_database_target(self) -> PreparedDatabaseTarget:
+        """Return target evidence refreshed only by governed port reallocation."""
+
+        return self.port_reservation.prepared_database_target
 
 
 def profile_seed_ports(profile: str) -> dict[str, str]:
@@ -350,6 +409,7 @@ def prepare_test_runtime(
         dynamic_port_keys=tuple(dynamic_port_keys),
     )
     _set_derived_runtime_values(runtime_env)
+    port_reservation._capture_initial_prepared_database_target()
     return PreparedTestRuntime(
         values=runtime_env,
         port_reservation=port_reservation,
