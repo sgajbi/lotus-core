@@ -16,7 +16,6 @@ from tools.front_office_portfolio_seed import (
     FRONT_OFFICE_EXPECTATION,
     FRONT_OFFICE_GATEWAY_CALLER_HEADERS,
     FRONT_OFFICE_SEED_CONTRACT,
-    FRONT_OFFICE_TERMINAL_QUEUE_STABLE_OBSERVATIONS,
     _cleanup_existing_front_office_seed,
     _collect_front_office_readiness_diagnostics,
     _extract_readiness_summary,
@@ -1640,8 +1639,12 @@ def test_extract_readiness_summary_surfaces_contract_relevant_state() -> None:
     assert summary["snapshot_valuation_unvalued_positions"] == 1
 
 
-def test_extract_support_overview_summary_surfaces_aggregation_backlog_signal() -> None:
+def test_extract_support_overview_summary_surfaces_queue_health_signals() -> None:
     payload = {
+        "pending_valuation_jobs": 3,
+        "processing_valuation_jobs": 2,
+        "stale_processing_valuation_jobs": 1,
+        "failed_valuation_jobs": 4,
         "pending_aggregation_jobs": 2,
         "processing_aggregation_jobs": 1,
         "stale_processing_aggregation_jobs": 0,
@@ -1653,6 +1656,10 @@ def test_extract_support_overview_summary_surfaces_aggregation_backlog_signal() 
 
     summary = _extract_support_overview_summary(payload)
 
+    assert summary["pending_valuation_jobs"] == 3
+    assert summary["processing_valuation_jobs"] == 2
+    assert summary["stale_processing_valuation_jobs"] == 1
+    assert summary["failed_valuation_jobs"] == 4
     assert summary["pending_aggregation_jobs"] == 2
     assert summary["processing_aggregation_jobs"] == 1
     assert summary["oldest_pending_aggregation_date"] == "2026-04-10"
@@ -1681,6 +1688,10 @@ def test_collect_front_office_readiness_diagnostics_queries_support_endpoints(mo
         "http://cp.dev/support/portfolios/P1/overview": (
             200,
             {
+                "pending_valuation_jobs": 0,
+                "processing_valuation_jobs": 0,
+                "stale_processing_valuation_jobs": 1,
+                "failed_valuation_jobs": 2,
                 "pending_aggregation_jobs": 1,
                 "processing_aggregation_jobs": 0,
                 "stale_processing_aggregation_jobs": 0,
@@ -1714,6 +1725,8 @@ def test_collect_front_office_readiness_diagnostics_queries_support_endpoints(mo
 
     assert diagnostics["readiness"]["pricing_status"] == "PENDING"
     assert diagnostics["readiness"]["blocking_reason_codes"] == ["UNVALUED_POSITIONS_REMAIN"]
+    assert diagnostics["support_overview"]["stale_processing_valuation_jobs"] == 1
+    assert diagnostics["support_overview"]["failed_valuation_jobs"] == 2
     assert diagnostics["support_overview"]["pending_aggregation_jobs"] == 1
     assert diagnostics["aggregation_jobs"]["job_ids"] == [4402]
     assert diagnostics["aggregation_jobs"]["statuses"] == ["PENDING"]
@@ -1826,11 +1839,21 @@ def test_front_office_seed_verification_counts_projected_transactions(monkeypatc
     positions_calls = 0
     support_overview_url = "http://cp.dev/support/portfolios/P1/overview"
     support_overview_sequence = [
-        (0, 0),
-        (1, 0),
-        (0, 0),
-        (0, 0),
-        (0, 0),
+        # Each queue-health regression arrives after two terminal observations. The verifier must
+        # reset the three-observation fence for aggregation backlog, stale valuation work, and
+        # failed valuation work before the final three clean observations may pass.
+        {"pending_aggregation_jobs": 0},
+        {"pending_aggregation_jobs": 0},
+        {"pending_aggregation_jobs": 1},
+        {"pending_aggregation_jobs": 0},
+        {"pending_aggregation_jobs": 0},
+        {"stale_processing_valuation_jobs": 1},
+        {"pending_aggregation_jobs": 0},
+        {"pending_aggregation_jobs": 0},
+        {"failed_valuation_jobs": 1},
+        {"pending_aggregation_jobs": 0},
+        {"pending_aggregation_jobs": 0},
+        {"pending_aggregation_jobs": 0},
     ]
     support_overview_calls = 0
     sleep_calls: list[int] = []
@@ -1845,17 +1868,20 @@ def test_front_office_seed_verification_counts_projected_transactions(monkeypatc
         if url.startswith("http://gateway.dev/"):
             gateway_header_calls.append(headers or {})
         if url == support_overview_url:
-            pending, processing = support_overview_sequence[support_overview_calls]
+            queue_health = support_overview_sequence[support_overview_calls]
             support_overview_calls += 1
             return (
                 200,
                 {
                     "pending_valuation_jobs": 0,
                     "processing_valuation_jobs": 0,
-                    "pending_aggregation_jobs": pending,
-                    "processing_aggregation_jobs": processing,
+                    "stale_processing_valuation_jobs": 0,
+                    "failed_valuation_jobs": 0,
+                    "pending_aggregation_jobs": 0,
+                    "processing_aggregation_jobs": 0,
                     "stale_processing_aggregation_jobs": 0,
                     "failed_aggregation_jobs": 0,
+                    **queue_health,
                 },
             )
         return responses[url]
@@ -1891,13 +1917,15 @@ def test_front_office_seed_verification_counts_projected_transactions(monkeypatc
     assert verification["income_types"] == 2
     assert verification["activity_buckets"] == 3
     assert verification["positions_data_quality_status"] == "COMPLETE"
+    assert verification["stale_processing_valuation_jobs"] == 0
+    assert verification["failed_valuation_jobs"] == 0
     assert verification["pending_aggregation_jobs"] == 0
     assert verification["processing_aggregation_jobs"] == 0
     assert verification["failed_aggregation_jobs"] == 0
     assert verification["advisor_book_governed_membership"] is True
     assert verification["advisor_book_source_evidence_current"] is True
     assert positions_calls == len(support_overview_sequence) + 1
-    assert support_overview_calls == FRONT_OFFICE_TERMINAL_QUEUE_STABLE_OBSERVATIONS + 2
+    assert support_overview_calls == len(support_overview_sequence)
     assert sleep_calls == [1] * len(support_overview_sequence)
     assert any("include_projected=true" in url for url in requested_urls)
     assert all("income-summary/query" not in url for url in requested_urls)
@@ -1917,6 +1945,8 @@ def test_front_office_readiness_blockers_surface_runtime_gaps() -> None:
             "cash_data_quality_status": "STALE",
             "pending_valuation_jobs": 3,
             "processing_valuation_jobs": 0,
+            "stale_processing_valuation_jobs": 2,
+            "failed_valuation_jobs": 5,
             "pending_aggregation_jobs": 2,
             "processing_aggregation_jobs": 1,
             "stale_processing_aggregation_jobs": 1,
@@ -1932,6 +1962,8 @@ def test_front_office_readiness_blockers_surface_runtime_gaps() -> None:
     assert blockers == [
         "cash_data_quality_not_complete",
         "pending_valuation_jobs=3",
+        "stale_processing_valuation_jobs=2",
+        "failed_valuation_jobs=5",
         "pending_aggregation_jobs=2",
         "processing_aggregation_jobs=1",
         "stale_processing_aggregation_jobs=1",
@@ -1951,6 +1983,8 @@ def test_front_office_readiness_blocks_open_aggregation_work() -> None:
             "cash_data_quality_status": "COMPLETE",
             "pending_valuation_jobs": 0,
             "processing_valuation_jobs": 0,
+            "stale_processing_valuation_jobs": 0,
+            "failed_valuation_jobs": 0,
             "pending_aggregation_jobs": 12,
             "processing_aggregation_jobs": 3,
             "stale_processing_aggregation_jobs": 0,

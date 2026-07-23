@@ -2264,6 +2264,8 @@ def _front_office_readiness_blockers(
     for field_name in (
         "pending_valuation_jobs",
         "processing_valuation_jobs",
+        "stale_processing_valuation_jobs",
+        "failed_valuation_jobs",
         "pending_aggregation_jobs",
         "processing_aggregation_jobs",
         "stale_processing_aggregation_jobs",
@@ -2333,6 +2335,10 @@ def _extract_readiness_summary(readiness_payload: dict[str, Any]) -> dict[str, A
 
 def _extract_support_overview_summary(overview_payload: dict[str, Any]) -> dict[str, Any]:
     return {
+        "pending_valuation_jobs": overview_payload.get("pending_valuation_jobs"),
+        "processing_valuation_jobs": overview_payload.get("processing_valuation_jobs"),
+        "stale_processing_valuation_jobs": overview_payload.get("stale_processing_valuation_jobs"),
+        "failed_valuation_jobs": overview_payload.get("failed_valuation_jobs"),
         "pending_aggregation_jobs": overview_payload.get("pending_aggregation_jobs"),
         "processing_aggregation_jobs": overview_payload.get("processing_aggregation_jobs"),
         "stale_processing_aggregation_jobs": overview_payload.get(
@@ -2650,6 +2656,10 @@ def _verify_front_office_portfolio(
             "cash_data_quality_status": cash_payload.get("data_quality_status"),
             "pending_valuation_jobs": support_overview.get("pending_valuation_jobs"),
             "processing_valuation_jobs": support_overview.get("processing_valuation_jobs"),
+            "stale_processing_valuation_jobs": support_overview.get(
+                "stale_processing_valuation_jobs"
+            ),
+            "failed_valuation_jobs": support_overview.get("failed_valuation_jobs"),
             "pending_aggregation_jobs": support_overview.get("pending_aggregation_jobs"),
             "processing_aggregation_jobs": support_overview.get("processing_aggregation_jobs"),
             "stale_processing_aggregation_jobs": support_overview.get(
@@ -2685,6 +2695,8 @@ def _verify_front_office_portfolio(
             and cash_payload.get("data_quality_status") == "COMPLETE"
             and int(support_overview.get("pending_valuation_jobs") or 0) == 0
             and int(support_overview.get("processing_valuation_jobs") or 0) == 0
+            and int(support_overview.get("stale_processing_valuation_jobs") or 0) == 0
+            and int(support_overview.get("failed_valuation_jobs") or 0) == 0
             and int(support_overview.get("pending_aggregation_jobs") or 0) == 0
             and int(support_overview.get("processing_aggregation_jobs") or 0) == 0
             and int(support_overview.get("stale_processing_aggregation_jobs") or 0) == 0
@@ -2716,6 +2728,10 @@ def _verify_front_office_portfolio(
                 "projected_cashflow_points": len(projected_cashflow_points),
                 "pending_valuation_jobs": support_overview.get("pending_valuation_jobs"),
                 "processing_valuation_jobs": support_overview.get("processing_valuation_jobs"),
+                "stale_processing_valuation_jobs": support_overview.get(
+                    "stale_processing_valuation_jobs"
+                ),
+                "failed_valuation_jobs": support_overview.get("failed_valuation_jobs"),
                 "pending_aggregation_jobs": support_overview.get("pending_aggregation_jobs"),
                 "processing_aggregation_jobs": support_overview.get("processing_aggregation_jobs"),
                 "stale_processing_aggregation_jobs": support_overview.get(
