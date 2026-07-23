@@ -82,20 +82,31 @@ def test_valuation_authority_scope_rejects_missing_dimension(field_name: str) ->
         ValuationAuthorityScope(**values)
 
 
-@pytest.mark.parametrize("scope_type", [ValuationBookScope, ValuationAuthorityScope])
+@pytest.mark.parametrize(
+    ("scope_type", "field_name"),
+    [
+        (ValuationBookScope, "tenant_id"),
+        (ValuationBookScope, "legal_book_id"),
+        (ValuationAuthorityScope, "tenant_id"),
+        (ValuationAuthorityScope, "legal_book_id"),
+        (ValuationAuthorityScope, "security_id"),
+    ],
+)
 @pytest.mark.parametrize("invalid_value", [None, 42, Decimal("1")])
 def test_valuation_scope_rejects_manufactured_non_string_authority(
     scope_type: type[ValuationBookScope] | type[ValuationAuthorityScope],
+    field_name: str,
     invalid_value: object,
 ) -> None:
     values: dict[str, object] = {
-        "tenant_id": invalid_value,
+        "tenant_id": "TENANT-SG",
         "legal_book_id": "PB-SG-01",
     }
     if scope_type is ValuationAuthorityScope:
         values["security_id"] = "BOND-001"
+    values[field_name] = invalid_value
 
-    with pytest.raises(TypeError, match="tenant_id must be a string"):
+    with pytest.raises(TypeError, match=rf"{field_name} must be a string"):
         scope_type(**values)  # type: ignore[arg-type]
 
 
