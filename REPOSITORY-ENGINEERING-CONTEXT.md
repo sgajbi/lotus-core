@@ -304,6 +304,14 @@ Current repository posture:
     API/event/persistence edges. `MoneyAmount.quantized()` is an explicit output-boundary operation
     using canonical `ROUND_HALF_EVEN` policy version `1.1.0`; conversion remains unrounded, and a
     caller must supply the governed quantum when `0.01` is not the applicable boundary scale.
+    Persisted SQLAlchemy `Numeric` columns must remain classified in
+    `docs/standards/financial-numeric-persistence.v1.json` and pass
+    `make financial-numeric-persistence-guard`. A positive or nonnegative PostgreSQL check does not
+    prove finiteness because `NaN` can satisfy ordered comparisons. Add explicit rejection of
+    `NaN`, `Infinity`, and `-Infinity` without narrowing legitimate signed values. Existing-table
+    enforcement migrations should add checks as `NOT VALID`, validate all new constraints for one
+    table in one statement, fail atomically on contaminated history, and receive DB-direct
+    rejection, finite boundary, downgrade, and reapply proof.
     Cost-engine domain models now follow
     `docs/standards/cost-basis-domain-standard.md`:
     `portfolio_transaction_processing_service/app/domain/cost_basis` must stay free of
