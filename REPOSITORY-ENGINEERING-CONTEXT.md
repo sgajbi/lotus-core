@@ -3084,8 +3084,9 @@ Most relevant current governance:
      as one immutable content-addressed segment, evaluate every segment against its authoritative
      query surface, publish only missing/evolved segments, and emit `unchanged_pack_present` only
      after complete evaluation. Portfolio-bundle completeness includes the exact generated
-     business-calendar window/cardinality through the existing QCP analytics source product; a
-     terminal position alone cannot prove calendar continuity. Treat non-404 read failures as fatal
+     business-calendar window, cardinality, ordered observation-date identities, and terminal page
+     through the existing QCP analytics source product; a terminal position or count alone cannot
+     prove calendar continuity. Treat non-404 read failures as fatal
      and fail closed when a segment has no evaluator. Explicit `DEMO_DATA_PACK_FORCE_INGEST=true`
      may bypass the reads and publish the complete pack; it is an operator repair control, not the
      restart default. Generate against RFC-0076's fixed canonical as-of date and the deployed v1

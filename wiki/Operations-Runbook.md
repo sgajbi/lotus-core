@@ -34,6 +34,8 @@ source-owned query truth. It treats a retained-volume restart as a complete-pack
 publishes only the missing segments. Set `DEMO_DATA_PACK_FORCE_INGEST=true` only for an intentional
 full sample-data refresh that bypasses those reads. Routine restarts must not republish unchanged
 source history or create avoidable valuation work.
+Calendar completeness compares the exact ordered observation dates and requires no continuation
+page; matching count diagnostics alone do not qualify as a no-op.
 
 The sample pack resolves its fixed as-of date from the RFC-0076 front-office seed contract and
 retains the deployed v1 `2023-07-20` transaction anchor. It does not move stable transaction IDs or

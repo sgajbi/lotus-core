@@ -2063,12 +2063,20 @@ def _probe_portfolio_bundle_segment(
             "window": calendar_window,
             "frequency": "daily",
             "consumer_system": "lotus-core-demo-data-loader",
-            "page": {"page_size": 1},
+            "page": {"page_size": len(expected_business_dates)},
         },
     )
     calendar_diagnostics = calendar_response.get("diagnostics") or {}
+    calendar_page = calendar_response.get("page") or {}
+    observed_business_dates = [
+        str(observation.get("valuation_date"))
+        for observation in calendar_response.get("observations") or []
+    ]
     complete = complete and (
         calendar_response.get("resolved_window") == calendar_window
+        and observed_business_dates == expected_business_dates
+        and calendar_page.get("returned_row_count") == len(expected_business_dates)
+        and calendar_page.get("next_page_token") is None
         and calendar_diagnostics.get("expected_business_dates_count")
         == len(expected_business_dates)
         and calendar_diagnostics.get("missing_dates_count") == 0
