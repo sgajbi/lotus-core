@@ -43,9 +43,9 @@ Phase-1 policy is `SEPARATE_LINKED_ONLY`:
   calculation use stable, charge-specific reason codes.
 - Cashflow rejects before classification signing, so `abs()` cannot repair an invalid intermediate
   amount.
-- The application passes its validated effective processing type into the domain calculator. The
-  calculator uses that type consistently for date, economics, signing, and embedded-charge policy,
-  while direct callers that have no component-level type retain the existing default behavior.
+- The domain calculator resolves the persisted row's effective processing type itself. Every
+  application, replay, repair, and direct caller therefore uses the component type consistently for
+  date, economics, signing, and embedded-charge policy without an optional caller override.
 - A dedicated DB-direct manifest test replays a zero-fee FX buy and a distinct linked fee, verifies
   group partitioning and linkage retention, proves independent `+110000` and `-25` cashflows, and
   rejects duplicate delivery without double count.
@@ -67,12 +67,12 @@ Phase-1 policy is `SEPARATE_LINKED_ONLY`:
 - focused direct/booking/cost/cashflow proof: 200 warning-strict tests passed;
 - expanded ordinary-settlement compatibility proof: 295 warning-strict tests passed;
 - repository-native FX manifest before the new DB case: 337 warning-strict tests passed;
-- current governed FX manifest: 358 tests passed, including one dedicated DB-direct linked-fee
+- current governed FX manifest: 366 tests passed, including one dedicated DB-direct linked-fee
   replay test and the effective-component replay/repair regressions;
 - complete repository lint, strict MyPy across 237 source files, architecture, OpenAPI, and API
   vocabulary gates passed;
 - touched Ruff, format, and diff hygiene passed.
-- focused effective-component calculation plus application replay/repair proof: 89 warning-strict
+- focused effective-component calculation plus application replay/repair proof: 97 warning-strict
   tests passed.
 
 Protected DB execution, peer review, PR/main/exact-main proof, wiki publication, and verified issue

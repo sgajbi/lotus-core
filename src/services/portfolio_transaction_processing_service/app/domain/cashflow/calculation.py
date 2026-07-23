@@ -19,6 +19,7 @@ from ..transaction.fx import (
     validate_fx_embedded_fee,
     validate_fx_embedded_tax,
 )
+from ..transaction.processing_type import resolve_effective_processing_transaction_type
 from ..transaction.settlement import (
     ORDINARY_SETTLEMENT_TRANSACTION_TYPES,
     SettlementCashValidationError,
@@ -125,21 +126,16 @@ def calculate_transaction_cashflow(
     transaction: BookedTransaction,
     rule: CashflowRule,
     *,
-    effective_transaction_type: str | None = None,
     epoch: int | None = 0,
     calculation_context: CashflowCalculationContext = (CashflowCalculationContext.CURRENT_BOOKING),
 ) -> CalculatedCashflow:
     """Apply the governed cashflow rule to one framework-neutral booked transaction.
 
-    ``effective_transaction_type`` carries a validated component-level processing type when the
-    persisted business transaction type is broader, as it is for FX contracts and cash legs.
-    Direct domain callers remain compatible by defaulting to the transaction's own type.
+    Persisted FX rows retain their business transaction type while ``component_type`` identifies
+    the concrete cash leg. Resolve that representation here so every caller receives the same
+    component-level economics and validation policy.
     """
-    transaction_type = _normalize_code(
-        effective_transaction_type
-        if effective_transaction_type is not None
-        else transaction.transaction_type
-    )
+    transaction_type = resolve_effective_processing_transaction_type(transaction)
     economics = _resolve_cashflow_economics(
         transaction,
         rule,
