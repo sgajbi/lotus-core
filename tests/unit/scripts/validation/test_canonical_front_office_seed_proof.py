@@ -330,11 +330,39 @@ def test_seed_command_is_ingest_only_without_cleanup_or_reprocessing(tmp_path: P
         "isolated-postgres",
     )
 
-    assert command[:2] == (proof.sys.executable, "tools/front_office_portfolio_seed.py")
+    assert command[:2] == (
+        proof.sys.executable,
+        "tools/front_office_portfolio_seed.py",
+    )
     assert {"--skip-cleanup", "--force-ingest", "--ingest-only", "--skip-reprocess"} <= set(command)
     assert "--reprocess-after-ingest" not in command
     assert command[command.index("--postgres-container") + 1] == "isolated-postgres"
     assert command[command.index("--ingestion-base-url") + 1] == "http://localhost:18100"
+
+
+def test_seed_environment_fences_first_party_source_to_current_checkout(
+    tmp_path: Path,
+) -> None:
+    foreign_checkout = tmp_path / "lotus-core-foreign"
+    managed = SimpleNamespace(
+        runtime=SimpleNamespace(
+            values={
+                "PYTHONPATH": str(foreign_checkout),
+                "RUNTIME_SENTINEL": "preserved",
+            }
+        )
+    )
+
+    environment = proof._seed_environment(managed)  # type: ignore[arg-type]
+
+    assert environment["RUNTIME_SENTINEL"] == "preserved"
+    assert str(foreign_checkout) not in environment["PYTHONPATH"]
+    assert environment["LOTUS_REPOSITORY_ROOT"] == str(proof.REPO_ROOT.resolve())
+    origin = proof.require_current_first_party_origin(
+        repo_root=proof.REPO_ROOT,
+        pythonpath=environment["PYTHONPATH"],
+    )
+    assert origin.is_relative_to(proof.REPO_ROOT.resolve())
 
 
 def test_seed_expectation_is_derived_from_exact_canonical_workload(tmp_path: Path) -> None:
@@ -913,10 +941,15 @@ def test_run_proof_uses_nonbuilding_isolated_runtime_and_proves_teardown(
         "inspected_table_count": 72,
     }
     monkeypatch.setattr(proof, "_psql_json", lambda *_args, **_kwargs: fresh)
-    seed_commands: list[tuple[str, ...]] = []
+    seed_invocations: list[tuple[tuple[str, ...], dict[str, Any]]] = []
+    seed_environment = {
+        "COMPOSE_PROJECT_NAME": project,
+        "PYTHONPATH": "repository-fenced",
+    }
+    monkeypatch.setattr(proof, "_seed_environment", lambda _managed: seed_environment)
 
-    def fake_run(command: Any, **_kwargs: Any) -> CommandResult:
-        seed_commands.append(tuple(command))
+    def fake_run(command: Any, **kwargs: Any) -> CommandResult:
+        seed_invocations.append((tuple(command), kwargs))
         return CommandResult(tuple(command), 0, "seeded", "")
 
     monkeypatch.setattr(proof, "_run", fake_run)
@@ -935,6 +968,13 @@ def test_run_proof_uses_nonbuilding_isolated_runtime_and_proves_teardown(
         "networks": [],
         "volumes": [],
     }
+    seed_command, seed_kwargs = seed_invocations[0]
+    assert seed_command[:2] == (
+        proof.sys.executable,
+        "tools/front_office_portfolio_seed.py",
+    )
+    assert seed_kwargs["environment"] is seed_environment
+    assert seed_kwargs["timeout_seconds"] == config.wait_seconds + 300
     assert prepared[0] == {
         "profile": "e2e",
         "scope": config.scope,
@@ -947,4 +987,4 @@ def test_run_proof_uses_nonbuilding_isolated_runtime_and_proves_teardown(
         "keep_stack": False,
         "reset_volumes": False,
     }
-    assert "--skip-reprocess" in seed_commands[0]
+    assert "--skip-reprocess" in seed_command

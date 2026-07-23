@@ -20,7 +20,7 @@ from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path
-from typing import Any, Iterator, Mapping, Sequence
+from typing import Any, Iterator, Mapping, Sequence, cast
 from urllib.parse import urlsplit, urlunsplit
 
 import requests
@@ -30,6 +30,10 @@ for source_root in (REPO_ROOT, REPO_ROOT / "src" / "libs" / "portfolio-common"):
     if str(source_root) not in sys.path:
         sys.path.insert(0, str(source_root))
 
+from scripts.development.repository_python import (  # noqa: E402
+    repository_environment,
+    require_current_first_party_origin,
+)
 from scripts.quality.ci_service_sets import E2E_SMOKE_SERVICES  # noqa: E402
 from scripts.release.prebuild_ci_images import (  # noqa: E402
     SERVICE_BUILDS,
@@ -1226,9 +1230,10 @@ def _seed_with_contention_sampling(
     sampler = threading.Thread(target=sample, name="canonical-seed-contention", daemon=True)
     sampler.start()
     try:
+        seed_environment = _seed_environment(managed)
         result = _run(
             _seed_command(config, managed, postgres),
-            environment=managed.runtime.values,
+            environment=seed_environment,
             check=False,
             timeout_seconds=config.wait_seconds + 300,
         )
@@ -1258,6 +1263,22 @@ def _seed_with_contention_sampling(
         "samples": samples,
         "sampling_errors": sampling_errors,
     }
+
+
+def _seed_environment(managed: ManagedComposeRun) -> dict[str, str]:
+    runtime_values = cast(Mapping[str, str], managed.runtime.values)
+    environment = cast(
+        dict[str, str],
+        repository_environment(
+            repo_root=REPO_ROOT,
+            environ=runtime_values,
+        ),
+    )
+    require_current_first_party_origin(
+        repo_root=REPO_ROOT,
+        pythonpath=environment["PYTHONPATH"],
+    )
+    return environment
 
 
 def _seed_command(

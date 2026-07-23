@@ -81,7 +81,7 @@ seed. Governed Workbench and platform QA startup must run `lotus-core` with
 Run from the `lotus-core` repo root:
 
 ```powershell
-python tools/front_office_portfolio_seed.py `
+python scripts/development/repository_python.py tools/front_office_portfolio_seed.py `
   --portfolio-id PB_SG_GLOBAL_BAL_001 `
   --start-date 2025-03-31 `
   --end-date 2026-04-10 `

@@ -163,7 +163,9 @@ runtime state is polluted, reset the Docker-backed core runtime before reseeding
 The app-local `demo_data_loader` demo pack is diagnostic/sample-data tooling and must not be part
 of canonical private-banking proof. Governed Workbench and platform QA startup set
 `DEMO_DATA_PACK_ENABLED=false`; canonical `PB_SG_GLOBAL_BAL_001` data must come from
-`tools/front_office_portfolio_seed.py`.
+`tools/front_office_portfolio_seed.py`, launched from the repository root through
+`python scripts/development/repository_python.py tools/front_office_portfolio_seed.py ...` so
+first-party imports are proven to come from the active checkout.
 
 Canonical clean bootstrap is source first: persist portfolio and instrument parents, then FX and
 market-price history, and fail closed until the required source windows are query visible before
