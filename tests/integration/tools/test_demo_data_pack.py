@@ -50,6 +50,10 @@ def test_history_window_does_not_move_transaction_economics():
         transaction["transaction_date"][:10] <= ci_bundle["as_of_date"]
         for transaction in ci_bundle["transactions"]
     )
+    transactions_by_id = {
+        transaction["transaction_id"]: transaction for transaction in ci_bundle["transactions"]
+    }
+    assert transactions_by_id["DEMO_ADV_DEP_01"]["transaction_date"] == "2023-07-21T09:00:00Z"
 
 
 def test_overlapping_reference_dates_have_identical_economics_across_history_windows():

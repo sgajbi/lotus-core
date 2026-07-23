@@ -138,15 +138,9 @@ def _calendar_dates(start: date, end: date) -> list[str]:
     return dates
 
 
-def _next_business_date(value: date) -> date:
-    while value.weekday() >= 5:
-        value += timedelta(days=1)
-    return value
-
-
-DEMO_ECONOMIC_ANCHOR_DATE = _next_business_date(
-    DEMO_CANONICAL_AS_OF_DATE - timedelta(days=DEFAULT_DEMO_HISTORY_DAYS)
-)
+# Preserve the first deployed v1 transaction identity/date mapping. Moving this date requires an
+# explicit transaction-correction migration; ordinary UPSERT intentionally rejects that mutation.
+DEMO_ECONOMIC_ANCHOR_DATE = date(2023, 7, 20)
 
 
 def _demo_pack_date_window(history_days: int) -> tuple[date, date]:

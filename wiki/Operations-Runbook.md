@@ -35,10 +35,11 @@ publishes only the missing segments. Set `DEMO_DATA_PACK_FORCE_INGEST=true` only
 full sample-data refresh that bypasses those reads. Routine restarts must not republish unchanged
 source history or create avoidable valuation work.
 
-The sample pack resolves its fixed as-of date from the RFC-0076 front-office seed contract. It does
-not move stable transaction IDs or overlapping economic observations with the host clock or a
-shorter history request. Market-price and FX writes are date-ordered logical series per security or
-currency pair, fenced by the `lotus-demo-pack:v2` content namespace. A retained complete pack is
+The sample pack resolves its fixed as-of date from the RFC-0076 front-office seed contract and
+retains the deployed v1 `2023-07-20` transaction anchor. It does not move stable transaction IDs or
+overlapping economic observations with the host clock or a shorter history request. Market-price
+and FX writes are date-ordered logical series per security or currency pair, fenced by the
+`lotus-demo-pack:v2` content namespace. A retained complete pack is
 still a zero-write decision regardless of historical v1 ingestion-job audit rows.
 
 The loader verifies terminal quantities from one explicit HoldingsAsOf read per portfolio. Do not
