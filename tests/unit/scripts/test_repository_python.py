@@ -1,0 +1,117 @@
+from __future__ import annotations
+
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+
+from scripts.development import repository_python
+
+
+def _package_root(repo_root: Path) -> Path:
+    package_root = repo_root / "src" / "libs" / "portfolio-common" / "portfolio_common"
+    package_root.mkdir(parents=True)
+    (package_root / "__init__.py").write_text("SOURCE = 'current'\n", encoding="utf-8")
+    return package_root
+
+
+def test_repository_pythonpath_discards_foreign_core_worktree(tmp_path: Path) -> None:
+    current = tmp_path / "lotus-core-current"
+    foreign = tmp_path / "lotus-core-other" / "src" / "libs" / "portfolio-common"
+    unrelated = tmp_path / "shared-python"
+    _package_root(current)
+    foreign.mkdir(parents=True)
+    unrelated.mkdir()
+
+    pythonpath = repository_python.build_repository_pythonpath(
+        repo_root=current,
+        inherited_pythonpath=os.pathsep.join((str(foreign), str(unrelated))),
+    )
+    entries = pythonpath.split(os.pathsep)
+
+    assert entries[:2] == [
+        str((current / "src" / "libs" / "portfolio-common").resolve()),
+        str(current.resolve()),
+    ]
+    assert str(foreign.resolve()) not in entries
+    assert str(unrelated.resolve()) in entries
+
+
+def test_current_first_party_origin_reports_expected_and_actual_paths(tmp_path: Path) -> None:
+    current = tmp_path / "lotus-core-current"
+    foreign_root = tmp_path / "external-source"
+    foreign_package = foreign_root / "portfolio_common"
+    current.mkdir()
+    foreign_package.mkdir(parents=True)
+    (foreign_package / "__init__.py").write_text("", encoding="utf-8")
+
+    with pytest.raises(repository_python.RepositoryPythonError) as raised:
+        repository_python.require_current_first_party_origin(
+            repo_root=current,
+            pythonpath=str(foreign_root),
+        )
+
+    message = str(raised.value)
+    assert str(current.resolve()) in message
+    assert str((foreign_package / "__init__.py").resolve()) in message
+    assert "make install" in message
+
+
+def test_repository_launcher_loads_distinguishable_current_source(tmp_path: Path) -> None:
+    current = tmp_path / "lotus-core-current"
+    foreign = tmp_path / "lotus-core-other"
+    _package_root(current)
+    foreign_package = _package_root(foreign)
+    (foreign_package / "__init__.py").write_text("SOURCE = 'foreign'\n", encoding="utf-8")
+    output_path = tmp_path / "resolved.txt"
+    command = (
+        "import pathlib, portfolio_common; "
+        f"pathlib.Path({str(output_path)!r}).write_text("
+        "portfolio_common.SOURCE + '\\n' + portfolio_common.__file__, encoding='utf-8')"
+    )
+
+    result = repository_python.run_repository_python(
+        ("-c", command),
+        repo_root=current,
+        environ={"PYTHONPATH": str(foreign_package.parent)},
+    )
+
+    source, resolved_path = output_path.read_text(encoding="utf-8").splitlines()
+    assert result == 0
+    assert source == "current"
+    assert Path(resolved_path).resolve().is_relative_to(current.resolve())
+
+
+def test_repository_launcher_uses_argv_without_shell_and_propagates_exit(
+    monkeypatch,
+) -> None:
+    observed: dict[str, object] = {}
+
+    def _run(command, **kwargs):
+        observed["command"] = command
+        observed.update(kwargs)
+        return subprocess.CompletedProcess(command, 7)
+
+    monkeypatch.setattr(repository_python.subprocess, "run", _run)
+
+    assert repository_python.run_repository_python(("-c", "pass")) == 7
+    assert observed["command"] == [sys.executable, "-c", "pass"]
+    assert observed["cwd"] == repository_python.ROOT
+    assert observed["shell"] is False
+    assert observed["check"] is False
+    assert observed["env"]["LOTUS_REPOSITORY_ROOT"] == str(repository_python.ROOT)
+
+
+def test_repository_launcher_requires_a_command() -> None:
+    with pytest.raises(repository_python.RepositoryPythonError, match="requires a command"):
+        repository_python.run_repository_python(())
+
+
+def test_make_python_recipes_use_repository_launcher() -> None:
+    makefile_lines = Path("Makefile").read_text(encoding="utf-8").splitlines()
+
+    assert "REPOSITORY_PYTHON := python scripts/development/repository_python.py" in makefile_lines
+    assert not [line for line in makefile_lines if line.startswith("\tpython ")]
+    assert [line for line in makefile_lines if line.startswith("\t$(REPOSITORY_PYTHON) ")]

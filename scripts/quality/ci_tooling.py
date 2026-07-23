@@ -118,8 +118,8 @@ def run_pinned_tool(
 def _mismatch_message(*, name: str, expected: str, actual: str, lock_file: Path) -> str:
     return (
         f"governed quality-tool mismatch: {name} expected {expected} from {lock_file}, "
-        f"active interpreter has {actual}. Run `python scripts/development/bootstrap_dev.py` "
-        "from the repository root, then rerun the repository-native target."
+        f"active interpreter has {actual}. Run `make install` from the repository root, then "
+        "rerun the repository-native target through the worktree-fenced Make entry point."
     )
 
 

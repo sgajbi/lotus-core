@@ -203,11 +203,12 @@ def test_lint_scans_the_complete_repository_python_scope() -> None:
 
     assert target_dependencies["lint"] == ["quality-ruff-gate", "quality-ruff-format-gate"]
     assert (
-        "quality-ruff-gate:\n\tpython scripts/quality/ci_tooling.py run ruff check . --statistics"
+        "quality-ruff-gate:\n"
+        "\t$(REPOSITORY_PYTHON) scripts/quality/ci_tooling.py run ruff check . --statistics"
     ) in makefile_text
     assert (
         "quality-ruff-format-gate:\n"
-        "\tpython scripts/quality/ci_tooling.py run ruff format --check ."
+        "\t$(REPOSITORY_PYTHON) scripts/quality/ci_tooling.py run ruff format --check ."
     ) in makefile_text
 
 
