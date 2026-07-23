@@ -75,7 +75,11 @@ Current repository posture:
     `docs/standards/route-contract-family-registry.json`, so route docs can cite method/path,
     service app, route family, owner, request/response schema, error model, pagination/filtering,
     idempotency, downstream-consumer posture, and deprecated-alias metadata without hand-maintained
-    drift,
+    drift. The same `api-vocabulary-gate` runs the non-mutating API vocabulary `--validate-only`
+    command, which validates generated and committed inventory structure and requires complete
+    semantic parity while excluding only the top-level volatile `generatedAt` timestamp. Use the
+    explicit `--output docs/standards/api-vocabulary/lotus-core-api-vocabulary.v1.json` path for an
+    intentional refresh; never treat in-memory validation alone as committed vocabulary proof,
 18. README/wiki front-door synchronization is governed by
     `docs/standards/front-door-sync.v1.json` and `make front-door-sync-guard`. The contract
     distinguishes canonical sources from summary/navigation pages, verifies critical README links,
