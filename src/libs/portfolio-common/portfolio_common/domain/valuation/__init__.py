@@ -63,6 +63,8 @@ from .source_facts import (
     MarketPriceQuoteBasis,
     MarketPriceSourceFact,
     ValuationAuthorityScope,
+    ValuationBookScope,
+    resolve_optional_valuation_book_scope,
 )
 
 __all__ = [
@@ -100,6 +102,7 @@ __all__ = [
     "ValuationInputBasis",
     "ValuationOutputMeasure",
     "ValuationAuthorityScope",
+    "ValuationBookScope",
     "ValuationPolicyAssignmentCacheKey",
     "ValuationPolicyAssignmentError",
     "ValuationPolicyAssignmentStatus",
@@ -112,6 +115,7 @@ __all__ = [
     "resolve_day_count_convention",
     "resolve_valuation_policy_assignment",
     "resolve_position_valuation_policy",
+    "resolve_optional_valuation_book_scope",
     "revaluation_start_for_assignment_correction",
     "supported_position_valuation_policies",
     "supported_day_count_conventions",
