@@ -137,6 +137,7 @@ SUITES: dict[str, list[str]] = {
         "tests/unit/services/query_service/repositories/test_transaction_repository.py",
         "tests/unit/services/query_service/services/test_transaction_service.py",
         "tests/integration/services/portfolio_transaction_processing_service/test_cashflow_rule_contract.py",
+        "tests/integration/services/portfolio_transaction_processing_service/test_int_fx_linked_fee_processing.py",
         "tests/integration/services/query_service/test_transactions_router.py",
         "tests/integration/services/persistence_service/repositories/test_repositories.py",
     ],
