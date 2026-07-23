@@ -291,7 +291,7 @@ def test_market_price_source_fact_model_preserves_exact_append_history() -> None
     ]
     assert (
         str(constraints["ck_market_price_source_fact_price_finite"].sqltext)
-        == "price <> 'NaN'::numeric AND price <> 'Infinity'::numeric"
+        == "price NOT IN ('NaN'::numeric, 'Infinity'::numeric, '-Infinity'::numeric)"
     )
     assert (
         str(constraints["ck_market_price_source_fact_observed_at_finite"].sqltext)
