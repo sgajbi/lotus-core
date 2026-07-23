@@ -53,6 +53,16 @@ class DemoPackSegment:
         return sum(len(value) for value in self.payload.values() if isinstance(value, list))
 
 
+@dataclass(frozen=True, slots=True)
+class DemoPackCompleteness:
+    evaluated_segments: tuple[str, ...]
+    missing_segments: tuple[str, ...]
+
+    @property
+    def is_complete(self) -> bool:
+        return not self.missing_segments
+
+
 DEMO_EXPECTATIONS: tuple[PortfolioExpectation, ...] = (
     PortfolioExpectation(
         "DEMO_ADV_USD_001",
@@ -1414,6 +1424,141 @@ def _canonical_payload_fingerprint(payload: dict[str, Any]) -> str:
 
 def _demo_pack_idempotency_key(*, segment: str, payload: dict[str, Any]) -> str:
     return f"lotus-demo-pack:v1:{segment}:{_canonical_payload_fingerprint(payload)}"
+
+
+def _canonical_number(value: object) -> str:
+    normalized = Decimal(str(value)).normalize()
+    return format(normalized, "f")
+
+
+def _records_cover_expected(
+    *,
+    expected: list[dict[str, Any]],
+    actual: list[dict[str, Any]],
+    key_fields: tuple[str, ...],
+    compare_fields: tuple[str, ...],
+    numeric_fields: frozenset[str] = frozenset(),
+) -> bool:
+    actual_by_key = {
+        tuple(str(record.get(field)) for field in key_fields): record for record in actual
+    }
+    for expected_record in expected:
+        key = tuple(str(expected_record.get(field)) for field in key_fields)
+        actual_record = actual_by_key.get(key)
+        if actual_record is None:
+            return False
+        for field in compare_fields:
+            expected_value = expected_record.get(field)
+            actual_value = actual_record.get(field)
+            if field in numeric_fields:
+                if expected_value is None or actual_value is None:
+                    return False
+                if _canonical_number(expected_value) != _canonical_number(actual_value):
+                    return False
+            elif expected_value != actual_value:
+                return False
+    return True
+
+
+def _probe_market_and_fx_segments(
+    query_base_url: str,
+    segments: tuple[DemoPackSegment, ...],
+) -> DemoPackCompleteness:
+    evaluated = tuple(
+        segment.name
+        for segment in segments
+        if segment.endpoint in {"/ingest/market-prices", "/ingest/fx-rates"}
+    )
+    actual_market_prices: dict[str, list[dict[str, Any]]] = {}
+    actual_fx_rates: dict[tuple[str, str], list[dict[str, Any]]] = {}
+
+    expected_market_prices = [
+        record for segment in segments for record in segment.payload.get("market_prices", [])
+    ]
+    for security_id in sorted({str(record["security_id"]) for record in expected_market_prices}):
+        records = [
+            record for record in expected_market_prices if record["security_id"] == security_id
+        ]
+        params = parse.urlencode(
+            {
+                "security_id": security_id,
+                "start_date": min(str(record["price_date"]) for record in records),
+                "end_date": max(str(record["price_date"]) for record in records),
+            }
+        )
+        _, payload = _request_json("GET", f"{query_base_url}/prices/?{params}")
+        actual_market_prices[security_id] = [
+            {"security_id": security_id, **record} for record in payload.get("prices") or []
+        ]
+
+    expected_fx_rates = [
+        record for segment in segments for record in segment.payload.get("fx_rates", [])
+    ]
+    pairs = sorted(
+        {(str(record["from_currency"]), str(record["to_currency"])) for record in expected_fx_rates}
+    )
+    for from_currency, to_currency in pairs:
+        records = [
+            record
+            for record in expected_fx_rates
+            if record["from_currency"] == from_currency and record["to_currency"] == to_currency
+        ]
+        params = parse.urlencode(
+            {
+                "from_currency": from_currency,
+                "to_currency": to_currency,
+                "start_date": min(str(record["rate_date"]) for record in records),
+                "end_date": max(str(record["rate_date"]) for record in records),
+            }
+        )
+        _, payload = _request_json("GET", f"{query_base_url}/fx-rates/?{params}")
+        actual_fx_rates[(from_currency, to_currency)] = [
+            {
+                "from_currency": from_currency,
+                "to_currency": to_currency,
+                **record,
+            }
+            for record in payload.get("rates") or []
+        ]
+
+    missing: list[str] = []
+    for segment in segments:
+        market_prices = segment.payload.get("market_prices")
+        if market_prices is not None:
+            actual = [
+                record
+                for security_id in {str(item["security_id"]) for item in market_prices}
+                for record in actual_market_prices.get(security_id, [])
+            ]
+            if not _records_cover_expected(
+                expected=market_prices,
+                actual=actual,
+                key_fields=("security_id", "price_date"),
+                compare_fields=("price", "currency"),
+                numeric_fields=frozenset({"price"}),
+            ):
+                missing.append(segment.name)
+        fx_rates = segment.payload.get("fx_rates")
+        if fx_rates is not None:
+            actual = [
+                record
+                for pair in {
+                    (str(item["from_currency"]), str(item["to_currency"])) for item in fx_rates
+                }
+                for record in actual_fx_rates.get(pair, [])
+            ]
+            if not _records_cover_expected(
+                expected=fx_rates,
+                actual=actual,
+                key_fields=("from_currency", "to_currency", "rate_date"),
+                compare_fields=("rate",),
+                numeric_fields=frozenset({"rate"}),
+            ):
+                missing.append(segment.name)
+    return DemoPackCompleteness(
+        evaluated_segments=evaluated,
+        missing_segments=tuple(sorted(missing)),
+    )
 
 
 def _build_demo_pack_segments(

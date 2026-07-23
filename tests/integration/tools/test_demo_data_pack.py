@@ -169,6 +169,104 @@ def test_demo_pack_segment_inventory_is_unique_complete_and_bounded():
     assert "benchmark-assignments" not in names
 
 
+def test_market_and_fx_probe_accepts_equivalent_source_records(monkeypatch):
+    segments = (
+        demo_data_pack.DemoPackSegment(
+            name="market_prices-batch-1",
+            endpoint="/ingest/market-prices",
+            payload={
+                "market_prices": [
+                    {
+                        "security_id": "SEC-A",
+                        "price_date": "2026-01-02",
+                        "price": 10,
+                        "currency": "USD",
+                    }
+                ]
+            },
+            category="portfolio",
+        ),
+        demo_data_pack.DemoPackSegment(
+            name="fx_rates-batch-1",
+            endpoint="/ingest/fx-rates",
+            payload={
+                "fx_rates": [
+                    {
+                        "from_currency": "USD",
+                        "to_currency": "EUR",
+                        "rate_date": "2026-01-02",
+                        "rate": "0.9200",
+                    }
+                ]
+            },
+            category="portfolio",
+        ),
+    )
+
+    def fake_request_json(method, url, payload=None, headers=None):
+        assert method == "GET"
+        assert payload is None
+        assert headers is None
+        if "/prices/" in url:
+            return 200, {
+                "security_id": "SEC-A",
+                "prices": [{"price_date": "2026-01-02", "price": "10.000", "currency": "USD"}],
+            }
+        return 200, {
+            "from_currency": "USD",
+            "to_currency": "EUR",
+            "rates": [{"rate_date": "2026-01-02", "rate": 0.92}],
+        }
+
+    monkeypatch.setattr(demo_data_pack, "_request_json", fake_request_json)
+
+    result = demo_data_pack._probe_market_and_fx_segments("http://query", segments)
+
+    assert result.is_complete is True
+    assert result.evaluated_segments == ("market_prices-batch-1", "fx_rates-batch-1")
+    assert result.missing_segments == ()
+
+
+def test_market_probe_identifies_only_the_evolved_batch(monkeypatch):
+    segments = tuple(
+        demo_data_pack.DemoPackSegment(
+            name=f"market_prices-batch-{index}",
+            endpoint="/ingest/market-prices",
+            payload={
+                "market_prices": [
+                    {
+                        "security_id": "SEC-A",
+                        "price_date": f"2026-01-0{index}",
+                        "price": str(index * 10),
+                        "currency": "USD",
+                    }
+                ]
+            },
+            category="portfolio",
+        )
+        for index in (1, 2)
+    )
+    monkeypatch.setattr(
+        demo_data_pack,
+        "_request_json",
+        lambda *_args, **_kwargs: (
+            200,
+            {
+                "security_id": "SEC-A",
+                "prices": [
+                    {"price_date": "2026-01-01", "price": "10", "currency": "USD"},
+                    {"price_date": "2026-01-02", "price": "20.01", "currency": "USD"},
+                ],
+            },
+        ),
+    )
+
+    result = demo_data_pack._probe_market_and_fx_segments("http://query", segments)
+
+    assert result.is_complete is False
+    assert result.missing_segments == ("market_prices-batch-2",)
+
+
 def test_build_demo_bundle_contains_benchmark_seed_data():
     bundle = demo_data_pack.build_demo_bundle()
 
