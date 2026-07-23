@@ -3076,9 +3076,20 @@ Most relevant current governance:
      processing, stale-processing, or failed valuation or aggregation work are all blockers.
      Require three consecutive all-zero observations at the
      configured poll interval; reset the fence if any work reopens, and keep it inside the existing
-     900-second readiness deadline. Polling must sleep for the configured interval rather than busy-looping
+      900-second readiness deadline. Polling must sleep for the configured interval rather than busy-looping
       against Core, Gateway, or downstream analytics. A populated Workbench response while queues
       still drain is diagnostic progress, not canonical certification.
+221. The app-local demo-data loader decides restart work from source-owned pack completeness, not
+     portfolio existence or prior idempotency acknowledgements alone. Model each generated write
+     as one immutable content-addressed segment, evaluate every segment against its authoritative
+     query surface, publish only missing/evolved segments, and emit `unchanged_pack_present` only
+     after complete evaluation. Portfolio-bundle completeness includes the exact generated
+     business-calendar window/cardinality through the existing QCP analytics source product; a
+     terminal position alone cannot prove calendar continuity. Treat non-404 read failures as fatal
+     and fail closed when a segment has no evaluator. Explicit `DEMO_DATA_PACK_FORCE_INGEST=true`
+     may bypass the reads and publish the complete pack; it is an operator repair control, not the
+     restart default. This is app-local sample-data behavior and does not change production APIs,
+     schemas, or ingestion idempotency contracts.
 
 ## Context Maintenance Rule
 
