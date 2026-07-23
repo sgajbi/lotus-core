@@ -110,8 +110,10 @@ POST /ingest/business-dates
 
 Portfolio ingestion accepts optional `tenant_id` and `legal_book_id` valuation authority. Callers
 must supply both or neither; supplied values are normalized and must be nonblank. The fields are
-additive during migration, so existing unscoped portfolio payloads remain compatible. The service
-does not infer legal-book authority from booking centre or jurisdiction.
+additive during migration, so existing unscoped portfolio payloads remain compatible and their
+replay cannot clear an already-established persisted scope. A complete incoming pair replaces both
+scope dimensions atomically. The service does not infer legal-book authority from booking centre or
+jurisdiction.
 
 ### Portfolio-bundle ingestion
 

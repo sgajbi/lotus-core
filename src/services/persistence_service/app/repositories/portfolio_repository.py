@@ -33,7 +33,14 @@ class PortfolioRepository:
 
             stmt = pg_insert(DBPortfolio).values(**portfolio_data)
 
-            update_dict = {c.name: c for c in stmt.excluded if c.name not in ["id", "portfolio_id"]}
+            protected_update_fields = {"id", "portfolio_id"}
+            if event.tenant_id is None and event.legal_book_id is None:
+                protected_update_fields.update({"tenant_id", "legal_book_id"})
+            update_dict = {
+                column.name: column
+                for column in stmt.excluded
+                if column.name not in protected_update_fields
+            }
 
             final_stmt = stmt.on_conflict_do_update(
                 index_elements=["portfolio_id"], set_=update_dict
