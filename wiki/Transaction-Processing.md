@@ -6,6 +6,16 @@ modular while sharing one transaction boundary, idempotency decision, and compat
 Current scope is the implemented combined transaction worker and its service-owned ordinary
 transaction domain; valuation, timeseries, and downstream analytics remain separate capabilities.
 
+## Reader Map
+
+| Reader need | Start here | Evidence posture |
+| --- | --- | --- |
+| Understand atomic processing ownership and rollback | [Processing Flow](#processing-flow) | One application use case and one SQLAlchemy unit of work own the combined mutation. |
+| Verify settlement and FX fee economics | [Ordinary Settlement Cash](#ordinary-settlement-cash) | Stable reason codes and warning-strict domain, application, and lifecycle tests protect current policy. |
+| Extend transaction behavior without crossing layers | [Extension Rule](#extension-rule) | Domain policy, application ports, and named infrastructure adapters remain separate. |
+| Assess compatibility and current limitations | [Compatibility](#compatibility) | Existing event and persistence contracts remain authoritative unless a versioned change says otherwise. |
+| Locate executable proof | [Evidence](#evidence) | Repository-native manifests and architecture guards are the closure evidence; wiki prose alone is not proof. |
+
 ## Processing Flow
 
 1. The live or replay-request consumer receives the existing governed transaction event.
