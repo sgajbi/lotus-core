@@ -2517,28 +2517,22 @@ def _ingest_demo_pack_if_needed(
     replayed_segments = sorted(item.segment for item in outcomes if item.replayed)
     published_segments = sorted(item.segment for item in outcomes if not item.replayed)
 
-    if outcomes and not published_segments:
-        LOGGER.info(
-            (
-                "Selected demo pack segments were durable idempotency replays; "
-                "reason=selected_segments_already_published pack_fingerprint=sha256:%s "
-                "segments=%s"
-            ),
-            pack_fingerprint,
-            ",".join(replayed_segments),
+    if replayed_segments:
+        raise RuntimeError(
+            "Source verification selected missing or evolved demo segments, but ingestion "
+            "returned idempotency replays for segments="
+            f"{','.join(replayed_segments)}. The earlier ingestion jobs have not produced "
+            "the expected source state; inspect their status or run an explicit force refresh."
         )
-        return False
 
     LOGGER.info(
         (
             "Demo pack ingestion decision reason=%s pack_fingerprint=sha256:%s "
-            "published_segments=%s replayed_segment_count=%d benchmark=%s "
-            "assigned_portfolio=%s"
+            "published_segments=%s benchmark=%s assigned_portfolio=%s"
         ),
         decision_reason,
         pack_fingerprint,
         ",".join(published_segments),
-        len(replayed_segments),
         bundle["benchmark_verification"]["benchmark_id"],
         bundle["benchmark_verification"]["portfolio_id"],
     )

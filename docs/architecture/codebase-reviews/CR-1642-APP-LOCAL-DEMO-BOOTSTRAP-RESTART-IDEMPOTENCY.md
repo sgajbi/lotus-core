@@ -29,6 +29,10 @@ depth changed. Positional market/FX batch numbers amplified that content churn.
 The downstream verifier compounded the problem by issuing one exact-as-of position-history request
 per expected security even though that product records transaction dates. The strategic
 HoldingsAsOf response already carried the required as-of quantities and valuations.
+PR review then found that a source-verified missing segment could receive a same-key idempotency
+replay and be reported as a no-op even though the earlier ingestion job had not materialized the
+expected source state. That made ingest-only execution capable of returning success with a known
+incomplete pack.
 
 ## Decision
 
@@ -53,6 +57,10 @@ rows and a versioned `lotus-demo-pack:v2` content namespace.
 The anchor is the already-deployed v1 date (`2023-07-20`), not a newly derived window start. This
 keeps existing transaction IDs and dates byte-compatible because ordinary source UPSERT correctly
 rejects moving an accepted transaction ID to a different economic date.
+An idempotency replay is not completeness evidence. If any source-verified missing segment returns
+only a replay acknowledgement, the loader fails closed and directs the operator to inspect the
+earlier job or request an explicit force refresh. This applies to both replay-only and mixed
+published/replayed selections.
 
 ## Same-pattern review
 
@@ -124,6 +132,8 @@ segment gained an evaluator.
   every expected security from that response. The focused regression proves two securities with two
   total reads (holdings plus transaction count), removing the per-security polling N+1 and the false
   exact-date history requirement.
+- Review regressions prove replay-only and mixed published/replayed selections fail closed whenever
+  source verification has already classified the replayed segment as missing or evolved.
 
 The second-run zero-write/count/maturity proof remains pending after this runtime fix-forward and
 must not be inferred from either diagnostic attempt.

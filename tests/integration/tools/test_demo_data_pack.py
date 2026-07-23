@@ -1282,8 +1282,7 @@ def test_source_complete_pack_is_zero_write_noop(monkeypatch, caplog):
     assert "reason=unchanged_pack_present" in caplog.text
 
 
-def test_selected_incomplete_segment_replay_is_not_reported_as_publish(monkeypatch, caplog):
-    caplog.set_level("INFO", logger=demo_data_pack.LOGGER.name)
+def test_selected_incomplete_segment_replay_fails_closed(monkeypatch):
     bundle = demo_data_pack.build_demo_bundle(
         history_days=demo_data_pack.MIN_DEMO_HISTORY_DAYS,
         portfolio_ids=("DEMO_DPM_EUR_001",),
@@ -1307,17 +1306,15 @@ def test_selected_incomplete_segment_replay_is_not_reported_as_publish(monkeypat
         lambda *_args, **_kwargs: [replayed],
     )
 
-    ingested = demo_data_pack._ingest_demo_pack_if_needed(
-        ingestion_base_url="http://ingestion",
-        query_base_url="http://query",
-        query_control_plane_base_url="http://qcp",
-        bundle=bundle,
-        expectations=demo_data_pack._expectations_for_portfolio_ids(("DEMO_DPM_EUR_001",)),
-        force_ingest=False,
-    )
-
-    assert ingested is False
-    assert "reason=selected_segments_already_published" in caplog.text
+    with pytest.raises(RuntimeError, match="earlier ingestion jobs have not produced"):
+        demo_data_pack._ingest_demo_pack_if_needed(
+            ingestion_base_url="http://ingestion",
+            query_base_url="http://query",
+            query_control_plane_base_url="http://qcp",
+            bundle=bundle,
+            expectations=demo_data_pack._expectations_for_portfolio_ids(("DEMO_DPM_EUR_001",)),
+            force_ingest=False,
+        )
 
 
 @pytest.mark.parametrize("force_ingest", [False, True])
@@ -1420,6 +1417,39 @@ def test_partial_or_evolved_pack_publishes_only_non_replayed_segments(monkeypatc
     assert selected == [("risk-free-series",)]
     assert "reason=missing_or_evolved_segments_selected" in caplog.text
     assert "published_segments=risk-free-series" in caplog.text
+
+
+def test_partial_pack_fails_when_any_selected_segment_is_only_a_replay(monkeypatch):
+    bundle = demo_data_pack.build_demo_bundle(
+        history_days=demo_data_pack.MIN_DEMO_HISTORY_DAYS,
+        portfolio_ids=("DEMO_DPM_EUR_001",),
+    )
+    monkeypatch.setattr(
+        demo_data_pack,
+        "_probe_demo_pack_completeness",
+        lambda **_kwargs: demo_data_pack.DemoPackCompleteness(
+            ("indices", "risk-free-series"),
+            ("indices", "risk-free-series"),
+        ),
+    )
+    monkeypatch.setattr(
+        demo_data_pack,
+        "_ingest_demo_segments",
+        lambda *_args, **_kwargs: [
+            demo_data_pack.DemoPackIngestionOutcome("indices", True, "key-indices"),
+            demo_data_pack.DemoPackIngestionOutcome("risk-free-series", False, "key-risk-free"),
+        ],
+    )
+
+    with pytest.raises(RuntimeError, match="segments=indices"):
+        demo_data_pack._ingest_demo_pack_if_needed(
+            ingestion_base_url="http://ingestion",
+            query_base_url="http://query",
+            query_control_plane_base_url="http://qcp",
+            bundle=bundle,
+            expectations=demo_data_pack._expectations_for_portfolio_ids(("DEMO_DPM_EUR_001",)),
+            force_ingest=False,
+        )
 
 
 def test_verify_portfolio_timeout_reports_last_observed_state(monkeypatch):
