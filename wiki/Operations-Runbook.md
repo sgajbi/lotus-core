@@ -35,8 +35,11 @@ publishes only the missing segments. Set `DEMO_DATA_PACK_FORCE_INGEST=true` only
 full sample-data refresh that bypasses those reads. Routine restarts must not republish unchanged
 source history or create avoidable valuation work.
 Calendar completeness compares the source-owned digest of exact ordered business dates and requires
-a gap-free observation suffix from the first holding date with no continuation page. Pre-holding
-calendar dates legitimately have no portfolio observation; matching counts alone do not qualify.
+at least one business-date observation and requires that projection to form a gap-free suffix from
+the first holding date. Ordered,
+unique, in-window non-business observations remain valid and do not satisfy a missing business date.
+Pre-holding calendar dates legitimately have no portfolio observation; matching counts alone do
+not qualify, and the response must terminate without a continuation page.
 
 The sample pack resolves its fixed as-of date from the RFC-0076 front-office seed contract and
 retains the deployed v1 `2023-07-20` transaction anchor. It does not move stable transaction IDs or

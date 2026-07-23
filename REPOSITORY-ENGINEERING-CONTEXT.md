@@ -3085,9 +3085,10 @@ Most relevant current governance:
      query surface, publish only missing/evolved segments, and emit `unchanged_pack_present` only
      after complete evaluation. Portfolio-bundle completeness includes the exact generated
      business-calendar window, cardinality, and exact ordered identity digest through the QCP
-     analytics source product. Returned observations must form the complete ordered suffix from
-     the first holding date and terminate without a continuation page; pre-holding business dates
-     are valid calendar facts but do not imply portfolio observations. A terminal position or count
+     analytics source product. At least one returned observation must match a governed business
+     date, and that filtered projection must form the complete ordered suffix from the first holding date and terminate without a continuation
+     page; additional ordered in-window non-business observations are valid, while pre-holding
+     business dates are valid calendar facts but do not imply portfolio observations. A terminal position or count
      alone cannot prove calendar continuity. Treat non-404 read failures as fatal
      and fail closed when a segment has no evaluator. Explicit `DEMO_DATA_PACK_FORCE_INGEST=true`
      may bypass the reads and publish the complete pack; it is an operator repair control, not the

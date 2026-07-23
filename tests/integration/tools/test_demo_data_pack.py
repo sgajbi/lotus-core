@@ -1,6 +1,6 @@
 import http.client
 from collections import defaultdict
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
 import pytest
@@ -725,17 +725,31 @@ def test_portfolio_probe_verifies_master_reference_ledger_and_positions(monkeypa
         assert headers is None
         if "/analytics/portfolio-timeseries" in url:
             observed_business_dates = bundle["business_dates"][2:]
+            expected_business_date_set = {
+                record["business_date"] for record in bundle["business_dates"]
+            }
+            non_business_date = next(
+                observation_date
+                for observation_date in demo_data_pack._calendar_dates(
+                    date.fromisoformat(observed_business_dates[0]["business_date"]),
+                    date.fromisoformat(observed_business_dates[-1]["business_date"]),
+                )
+                if observation_date not in expected_business_date_set
+            )
+            observed_dates = sorted(
+                [record["business_date"] for record in observed_business_dates]
+                + [non_business_date]
+            )
             assert method == "POST"
             assert payload is not None
             assert payload["page"] == {"page_size": len(bundle["business_dates"])}
             return 200, {
                 "resolved_window": payload["window"],
                 "observations": [
-                    {"valuation_date": record["business_date"]}
-                    for record in observed_business_dates
+                    {"valuation_date": observation_date} for observation_date in observed_dates
                 ],
                 "page": {
-                    "returned_row_count": len(observed_business_dates),
+                    "returned_row_count": len(observed_dates),
                     "next_page_token": None,
                 },
                 "diagnostics": {
@@ -747,7 +761,7 @@ def test_portfolio_probe_verifies_master_reference_ledger_and_positions(monkeypa
                             ]
                         }
                     ),
-                    "returned_observation_dates_count": len(observed_business_dates),
+                    "returned_observation_dates_count": len(observed_dates),
                     "missing_dates_count": 2,
                 },
             }
@@ -856,7 +870,13 @@ def test_portfolio_probe_rejects_evolved_transaction_economics(monkeypatch):
     assert result.missing_segments == ("portfolio-bundle",)
 
 
-def test_portfolio_probe_rejects_same_count_substituted_business_calendar_date(monkeypatch):
+@pytest.mark.parametrize(
+    "observation_mode",
+    ["same-count-substitution", "empty", "non-business-only"],
+)
+def test_portfolio_probe_rejects_incomplete_business_calendar_observations(
+    monkeypatch, observation_mode
+):
     portfolio_ids = ("DEMO_DPM_EUR_001",)
     bundle = demo_data_pack.build_demo_bundle(
         history_days=demo_data_pack.MIN_DEMO_HISTORY_DAYS,
@@ -867,15 +887,33 @@ def test_portfolio_probe_rejects_same_count_substituted_business_calendar_date(m
 
     def fake_request_json(method, url, payload=None, headers=None):
         if "/analytics/portfolio-timeseries" in url:
-            observed_dates = [record["business_date"] for record in bundle["business_dates"]]
-            observed_dates[-1] = "1900-01-01"
+            expected_dates = [record["business_date"] for record in bundle["business_dates"]]
+            if observation_mode == "same-count-substitution":
+                observed_dates = [*expected_dates[:-1], "1900-01-01"]
+                missing_dates_count = 0
+            elif observation_mode == "empty":
+                observed_dates = []
+                missing_dates_count = len(expected_dates)
+            else:
+                expected_date_set = set(expected_dates)
+                observed_dates = [
+                    next(
+                        observation_date
+                        for observation_date in demo_data_pack._calendar_dates(
+                            date.fromisoformat(expected_dates[0]),
+                            date.fromisoformat(expected_dates[-1]),
+                        )
+                        if observation_date not in expected_date_set
+                    )
+                ]
+                missing_dates_count = len(expected_dates)
             return 200, {
                 "resolved_window": payload["window"],
                 "observations": [
                     {"valuation_date": valuation_date} for valuation_date in observed_dates
                 ],
                 "page": {
-                    "returned_row_count": len(bundle["business_dates"]),
+                    "returned_row_count": len(observed_dates),
                     "next_page_token": None,
                 },
                 "diagnostics": {
@@ -887,8 +925,8 @@ def test_portfolio_probe_rejects_same_count_substituted_business_calendar_date(m
                             ]
                         }
                     ),
-                    "returned_observation_dates_count": len(bundle["business_dates"]),
-                    "missing_dates_count": 0,
+                    "returned_observation_dates_count": len(observed_dates),
+                    "missing_dates_count": missing_dates_count,
                 },
             }
         if "/instruments/" in url:
