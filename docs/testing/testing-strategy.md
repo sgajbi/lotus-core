@@ -126,8 +126,13 @@ Run `make e2e-test-value-guard` after adding, renaming, deleting, or moving an E
 collects `e2e-all` and `e2e-smoke`, blocks missing or extra nodes, duplicate identity, lane drift,
 invalid decisions, and missing evidence paths, and writes a deterministic summary below
 `output/test-governance/`. `needs-review` is a visible closure blocker, not an accepted final
-classification. Test movement or retirement still requires equivalent or stronger lower-layer
-proof and before/after runtime plus fault-detection evidence.
+classification. A non-blocking decision must reference one normalized review-evidence record with
+reviewer/time/rationale, before-and-after runtime evidence, injected-fault detection evidence, and
+downstream/compatibility impact. Merge, move, replacement, and retirement decisions additionally
+require an existing replacement proof. Runtime and fault evidence must bind an exact Core Actions
+run, 40-character source commit, and artifact SHA-256; fault evidence also names the injected fault,
+expected owning node, and observed result. Changing decision strings or citing an arbitrary URL or
+test source file therefore cannot reduce closure blockers.
 
 ## CI Execution Guidance
 
@@ -207,9 +212,12 @@ diagnostics.
 
 Operational validation drivers must use `ManagedComposeRun` rather than constructing Compose
 lifecycle commands. The managed owner captures logs with explicit project and compose-file identity
-before teardown. Inherited pytest or parent-process host ports are not operator overrides; only
-explicit endpoint/database URLs may pin local ports. Keep `--skip-compose` for external targets and
-an explicit keep-stack option for local diagnosis. The AST ownership test blocks direct `up`,
+before teardown. Startup uses one configurable monotonic deadline across every Docker engine,
+image, cleanup, build, up, and retry subprocess; diagnostic capture and teardown use separate hard
+deadlines. Timeout failures retain exact operation identity, and cleanup failures must not mask the
+primary validation error. Inherited pytest or parent-process host ports are not operator overrides;
+only explicit endpoint/database URLs may pin local ports. Keep `--skip-compose` for external targets
+and an explicit keep-stack option for local diagnosis. The AST ownership test blocks direct `up`,
 `down`, or `logs` command reconstruction in governed drivers.
 
 ## Quality Gates

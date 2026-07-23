@@ -101,7 +101,12 @@ invariant, defect-class, fixture, dependency, source-contract, lower-layer, and 
 evidence once; node rows retain stable identity, exact nodeid, lane membership, and review
 decision. Run `make e2e-test-value-guard` after E2E additions, renames, removals, or lane changes.
 The guard blocks inventory/lane/evidence drift and reports remaining `needs-review` closure
-blockers without treating test-count reduction as success.
+blockers without treating test-count reduction as success. Non-blocking decisions reference
+normalized review evidence containing reviewer/time/rationale, before-and-after runtime, injected
+fault detection, and downstream/compatibility impact. Merge, move, replacement, and retirement
+also require a concrete replacement proof. Runtime/fault evidence is bound to an exact Core Actions
+run, source commit, and artifact digest; the fault record names the injection, owning node, and
+observed result.
 
 ## Guard rails that matter
 

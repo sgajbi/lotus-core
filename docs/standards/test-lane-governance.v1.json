@@ -215,6 +215,16 @@
       "lower_layer_proofs",
       "non_duplication_rationale"
     ],
+    "required_review_evidence": [
+      "ownership_id",
+      "decision",
+      "reviewer",
+      "reviewed_at_utc",
+      "rationale",
+      "runtime_evidence",
+      "fault_detection_evidence",
+      "impact_assessment"
+    ],
     "closure_blocking_decisions": [
       "needs-review"
     ]

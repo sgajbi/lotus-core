@@ -27,8 +27,19 @@
     "blocking_decisions": [
       "needs-review"
     ],
+    "required_non_blocking_evidence": [
+      "ownership_id",
+      "decision",
+      "reviewer",
+      "reviewed_at_utc",
+      "rationale",
+      "runtime_evidence",
+      "fault_detection_evidence",
+      "impact_assessment"
+    ],
     "rule": "#729 cannot close until every node has a reviewed non-blocking decision and before/after runtime plus fault-detection evidence."
   },
+  "review_evidence": {},
   "capability_profiles": {
     "complex-portfolio-lifecycle": {
       "owner": "lotus-core/portfolio-lifecycle",

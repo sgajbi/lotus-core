@@ -9,6 +9,7 @@ import subprocess
 import sys
 from collections import Counter
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -42,7 +43,25 @@ REQUIRED_PROFILE_FIELD_ORDER = (
     "non_duplication_rationale",
 )
 REQUIRED_PROFILE_FIELDS = frozenset(REQUIRED_PROFILE_FIELD_ORDER)
+REQUIRED_REVIEW_EVIDENCE_FIELD_ORDER = (
+    "ownership_id",
+    "decision",
+    "reviewer",
+    "reviewed_at_utc",
+    "rationale",
+    "runtime_evidence",
+    "fault_detection_evidence",
+    "impact_assessment",
+)
+NON_BLOCKING_DECISIONS = ALLOWED_DECISIONS - {"needs-review"}
+REPLACEMENT_DECISIONS = frozenset({"merge", "move-to-lower-layer", "replace", "retire"})
 OWNERSHIP_ID_PATTERN = re.compile(r"^e2e-\d{3}$")
+REVIEW_EVIDENCE_ID_PATTERN = re.compile(r"^review-e2e-\d{3}-v\d+$")
+SHA_PATTERN = re.compile(r"^[0-9a-f]{40}$")
+SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
+ACTIONS_RUN_URL_PATTERN = re.compile(
+    r"^https://github\.com/sgajbi/lotus-core/actions/runs/\d+(?:/job/\d+)?$"
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -175,6 +194,18 @@ def _validate_header(
                     detail="blocking_decisions must be ['needs-review']",
                 )
             )
+        if closure.get("required_non_blocking_evidence") != list(
+            REQUIRED_REVIEW_EVIDENCE_FIELD_ORDER
+        ):
+            findings.append(
+                E2ETestValueFinding(
+                    rule="invalid-required-review-evidence",
+                    detail=(
+                        "required_non_blocking_evidence must be "
+                        f"{list(REQUIRED_REVIEW_EVIDENCE_FIELD_ORDER)!r}"
+                    ),
+                )
+            )
     makefile_path = repo_root / "Makefile"
     makefile = makefile_path.read_text(encoding="utf-8") if makefile_path.is_file() else ""
     if "e2e-test-value-guard:" not in makefile:
@@ -208,6 +239,7 @@ def _validate_header(
             "guard_command": GUARD_COMMAND,
             "lane_membership_source": "scripts/quality/test_manifest.py",
             "required_profile_evidence": list(REQUIRED_PROFILE_FIELD_ORDER),
+            "required_review_evidence": list(REQUIRED_REVIEW_EVIDENCE_FIELD_ORDER),
             "closure_blocking_decisions": ["needs-review"],
         }
         if not isinstance(governance, dict):
@@ -309,6 +341,148 @@ def _validate_profiles(
     return profiles, findings
 
 
+def _valid_actions_evidence(value: Any, *, require_seconds: bool) -> bool:
+    if not isinstance(value, dict):
+        return False
+    run_url = value.get("run_url")
+    source_commit = value.get("source_commit")
+    artifact_sha256 = value.get("artifact_sha256")
+    if (
+        not isinstance(run_url, str)
+        or ACTIONS_RUN_URL_PATTERN.fullmatch(run_url) is None
+        or not isinstance(source_commit, str)
+        or SHA_PATTERN.fullmatch(source_commit) is None
+        or not isinstance(artifact_sha256, str)
+        or SHA256_PATTERN.fullmatch(artifact_sha256) is None
+    ):
+        return False
+    if not require_seconds:
+        return True
+    seconds = value.get("seconds")
+    return isinstance(seconds, (int, float)) and not isinstance(seconds, bool) and seconds >= 0
+
+
+def _valid_test_nodeid(nodeid: Any, *, repo_root: Path) -> bool:
+    if not isinstance(nodeid, str) or "::" not in nodeid or "\\" in nodeid:
+        return False
+    path = Path(nodeid.split("::", 1)[0])
+    return (
+        not path.is_absolute()
+        and ".." not in path.parts
+        and path.parts[0] == "tests"
+        and (repo_root / path).is_file()
+    )
+
+
+def _validate_review_evidence(
+    ledger: dict[str, Any],
+    *,
+    repo_root: Path,
+) -> tuple[dict[str, dict[str, Any]], list[E2ETestValueFinding]]:
+    raw_reviews = ledger.get("review_evidence")
+    if not isinstance(raw_reviews, dict):
+        return {}, [
+            E2ETestValueFinding(
+                rule="missing-review-evidence-registry",
+                detail="review_evidence must be an object",
+            )
+        ]
+    valid_reviews: dict[str, dict[str, Any]] = {}
+    findings: list[E2ETestValueFinding] = []
+    for review_id, raw_review in sorted(raw_reviews.items()):
+        review_findings: list[E2ETestValueFinding] = []
+
+        def reject(rule: str, detail: str) -> None:
+            review_findings.append(E2ETestValueFinding(rule=rule, detail=detail))
+
+        if (
+            not isinstance(review_id, str)
+            or REVIEW_EVIDENCE_ID_PATTERN.fullmatch(review_id) is None
+            or not isinstance(raw_review, dict)
+        ):
+            reject("invalid-review-evidence", str(review_id))
+            findings.extend(review_findings)
+            continue
+        missing = [
+            field for field in REQUIRED_REVIEW_EVIDENCE_FIELD_ORDER if field not in raw_review
+        ]
+        if missing:
+            reject("review-evidence-missing-fields", f"{review_id}: {', '.join(missing)}")
+            findings.extend(review_findings)
+            continue
+        ownership_id = raw_review.get("ownership_id")
+        decision = raw_review.get("decision")
+        if (
+            not isinstance(ownership_id, str)
+            or OWNERSHIP_ID_PATTERN.fullmatch(ownership_id) is None
+        ):
+            reject("invalid-review-evidence-ownership", review_id)
+        if decision not in NON_BLOCKING_DECISIONS:
+            reject("invalid-review-evidence-decision", f"{review_id}: {decision!r}")
+        for field in ("reviewer", "rationale"):
+            if not _non_empty_string(raw_review.get(field)):
+                reject("invalid-review-evidence-field", f"{review_id}.{field}")
+        rationale = raw_review.get("rationale")
+        if isinstance(rationale, str) and len(rationale.strip()) < 40:
+            reject("weak-review-rationale", review_id)
+        reviewed_at = raw_review.get("reviewed_at_utc")
+        try:
+            parsed_reviewed_at = datetime.fromisoformat(str(reviewed_at).replace("Z", "+00:00"))
+        except ValueError:
+            parsed_reviewed_at = None
+        if parsed_reviewed_at is None or parsed_reviewed_at.tzinfo is None:
+            reject("invalid-reviewed-at-utc", review_id)
+
+        runtime = raw_review.get("runtime_evidence")
+        if not isinstance(runtime, dict):
+            reject("invalid-runtime-evidence", review_id)
+        else:
+            for field in ("baseline", "reviewed"):
+                if not _valid_actions_evidence(runtime.get(field), require_seconds=True):
+                    reject("invalid-runtime-evidence", f"{review_id}.{field}")
+
+        fault = raw_review.get("fault_detection_evidence")
+        if not isinstance(fault, dict):
+            reject("invalid-fault-detection-evidence", review_id)
+        else:
+            for field in ("fault_id", "injection", "observed_result"):
+                if not _non_empty_string(fault.get(field)):
+                    reject("invalid-fault-detection-evidence", f"{review_id}.{field}")
+            if not _valid_test_nodeid(
+                fault.get("expected_owning_node"),
+                repo_root=repo_root,
+            ):
+                reject(
+                    "invalid-fault-detection-evidence",
+                    f"{review_id}.expected_owning_node",
+                )
+            if not _valid_actions_evidence(fault, require_seconds=False):
+                reject("invalid-fault-detection-evidence", f"{review_id}.run_identity")
+
+        impact = raw_review.get("impact_assessment")
+        if not isinstance(impact, dict):
+            reject("invalid-impact-assessment", review_id)
+        else:
+            for field in ("downstream_impact", "contract_compatibility"):
+                if not _non_empty_string(impact.get(field)):
+                    reject("invalid-impact-assessment", f"{review_id}.{field}")
+            replacement_proofs = impact.get("replacement_proofs")
+            replacement_proofs_valid = isinstance(replacement_proofs, list) and all(
+                isinstance(proof, dict)
+                and _valid_test_nodeid(proof.get("owning_node"), repo_root=repo_root)
+                and _valid_actions_evidence(proof, require_seconds=False)
+                for proof in replacement_proofs
+            )
+            if not replacement_proofs_valid:
+                reject("invalid-impact-assessment", f"{review_id}.replacement_proofs")
+            if decision in REPLACEMENT_DECISIONS and not replacement_proofs:
+                reject("missing-replacement-proof", review_id)
+        findings.extend(review_findings)
+        if not review_findings:
+            valid_reviews[review_id] = raw_review
+    return valid_reviews, findings
+
+
 def _expected_lanes(nodeid: str, smoke_nodeids: set[str]) -> list[str]:
     if nodeid in smoke_nodeids:
         return [SMOKE_SUITE, FULL_SUITE]
@@ -319,18 +493,23 @@ def _validate_nodes(
     ledger: dict[str, Any],
     *,
     profiles: dict[str, dict[str, Any]],
+    valid_reviews: dict[str, dict[str, Any]],
     full_nodeids: Sequence[str],
     smoke_nodeids: Sequence[str],
-) -> list[E2ETestValueFinding]:
+) -> tuple[list[E2ETestValueFinding], int]:
     findings: list[E2ETestValueFinding] = []
+    closure_blockers = 0
     raw_nodes = ledger.get("nodes")
     if not isinstance(raw_nodes, list) or not raw_nodes:
-        return [
-            E2ETestValueFinding(
-                rule="missing-node-inventory",
-                detail="nodes must be a non-empty list",
-            )
-        ]
+        return (
+            [
+                E2ETestValueFinding(
+                    rule="missing-node-inventory",
+                    detail="nodes must be a non-empty list",
+                )
+            ],
+            1,
+        )
     full_set, smoke_set = set(full_nodeids), set(smoke_nodeids)
     if not smoke_set <= full_set:
         findings.append(
@@ -391,6 +570,45 @@ def _validate_nodes(
                     detail=f"{nodeid}: {decision!r}",
                 )
             )
+            closure_blockers += 1
+        elif decision == "needs-review":
+            closure_blockers += 1
+            if "review_evidence_id" in raw_node:
+                findings.append(
+                    E2ETestValueFinding(
+                        rule="premature-review-evidence-reference",
+                        detail=nodeid,
+                    )
+                )
+        else:
+            review_id = raw_node.get("review_evidence_id")
+            review = valid_reviews.get(review_id) if isinstance(review_id, str) else None
+            if review is None:
+                closure_blockers += 1
+                findings.append(
+                    E2ETestValueFinding(
+                        rule="missing-valid-review-evidence",
+                        detail=f"{nodeid}: {review_id!r}",
+                    )
+                )
+            elif review.get("ownership_id") != ownership_id or review.get("decision") != decision:
+                closure_blockers += 1
+                findings.append(
+                    E2ETestValueFinding(
+                        rule="review-evidence-node-mismatch",
+                        detail=f"{nodeid}: {review_id}",
+                    )
+                )
+            else:
+                fault = review.get("fault_detection_evidence")
+                if not isinstance(fault, dict) or fault.get("expected_owning_node") != nodeid:
+                    closure_blockers += 1
+                    findings.append(
+                        E2ETestValueFinding(
+                            rule="fault-evidence-owner-mismatch",
+                            detail=f"{nodeid}: {review_id}",
+                        )
+                    )
         expected_lanes = _expected_lanes(nodeid, smoke_set)
         if raw_node.get("current_lanes") != expected_lanes:
             findings.append(
@@ -455,7 +673,7 @@ def _validate_nodes(
                         detail=f"{field}: ledger={collection.get(field)!r} collected={expected}",
                     )
                 )
-    return findings
+    return findings, closure_blockers
 
 
 def _write_report(
@@ -465,6 +683,7 @@ def _write_report(
     full_nodeids: Sequence[str],
     smoke_nodeids: Sequence[str],
     findings: Sequence[E2ETestValueFinding],
+    closure_blocker_count: int,
 ) -> None:
     decisions = Counter(
         node.get("review_decision") for node in ledger.get("nodes", []) if isinstance(node, dict)
@@ -477,7 +696,7 @@ def _write_report(
         "smoke_node_count": len(set(smoke_nodeids)),
         "capability_profile_count": len(ledger.get("capability_profiles", {})),
         "decision_counts": dict(sorted(decisions.items(), key=lambda item: str(item[0]))),
-        "closure_blocker_count": decisions.get("needs-review", 0),
+        "closure_blocker_count": closure_blocker_count,
         "finding_count": len(findings),
     }
     path = repo_root / REPORT_PATH
@@ -532,14 +751,16 @@ def evaluate_e2e_test_value_ledger(
     findings = _validate_header(ledger, repo_root=repo_root)
     profiles, profile_findings = _validate_profiles(ledger, repo_root=repo_root)
     findings.extend(profile_findings)
-    findings.extend(
-        _validate_nodes(
-            ledger,
-            profiles=profiles,
-            full_nodeids=collected_full,
-            smoke_nodeids=collected_smoke,
-        )
+    valid_reviews, review_findings = _validate_review_evidence(ledger, repo_root=repo_root)
+    findings.extend(review_findings)
+    node_findings, closure_blocker_count = _validate_nodes(
+        ledger,
+        profiles=profiles,
+        valid_reviews=valid_reviews,
+        full_nodeids=collected_full,
+        smoke_nodeids=collected_smoke,
     )
+    findings.extend(node_findings)
     if write_report:
         _write_report(
             repo_root=repo_root,
@@ -547,6 +768,7 @@ def evaluate_e2e_test_value_ledger(
             full_nodeids=collected_full,
             smoke_nodeids=collected_smoke,
             findings=findings,
+            closure_blocker_count=closure_blocker_count,
         )
     return findings
 

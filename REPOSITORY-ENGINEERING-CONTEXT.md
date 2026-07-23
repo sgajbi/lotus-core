@@ -2185,8 +2185,12 @@ Most relevant current governance:
      startup/retry/teardown helpers.
      Managed runs discard inherited parent-runtime ports, preserve explicit local endpoint URL
      overrides, inspect the exact project, capture project/file identity before teardown, and clean
-     their stack by default. Workflow artifacts must upload the owner-produced diagnostic path and
-     must not run default-project `docker compose logs` after the driver returns. Use
+     their stack by default. Their configurable startup deadline spans engine and image inspection,
+     image acquisition, stale-resource cleanup, build, startup, conflict recovery, and retries;
+     diagnostic capture and teardown have independent hard deadlines. Never add an unbounded Docker
+     subprocess to a managed lifecycle, and preserve the primary error when diagnostics or teardown
+     also fail. Workflow artifacts must upload the owner-produced diagnostic path and must not run
+     default-project `docker compose logs` after the driver returns. Use
      `--skip-compose` only for an already-running target and keep-stack flags only for explicit local
      diagnosis. Failure recovery must pass its prepared runtime to migration polling and capture
      `output/task-runs/diagnostics/failure-recovery-gate-compose.log` before teardown.
@@ -3179,10 +3183,14 @@ Most relevant current governance:
      keep each node row limited to stable ownership identity, exact collected nodeid, profile,
      manifest-derived lane membership, and reviewed decision. Additions, renames, removals, and
      smoke/full movement must keep exact collection parity. `needs-review` is allowed only as an
-     explicit in-progress classification and blocks #729 closure. Do not move, merge, replace, or
-     retire an E2E node without equivalent or stronger lower-layer proof plus before/after runtime
-     and fault-detection evidence. The ledger governs test value and placement; #728 separately
-     owns private-banking scenario economics and fixture validity.
+     explicit in-progress classification and blocks #729 closure. Every non-blocking decision must
+     reference a valid normalized review-evidence record with reviewer/time/rationale,
+     before-and-after runtime, injected-fault detection, and downstream/compatibility impact.
+     Move, merge, replacement, and retirement also require an existing replacement proof; a
+     decision-string change alone remains a closure blocker. Runtime/fault proof must bind an exact
+     Core Actions run, source commit, and artifact digest; fault proof also binds the injection,
+     expected owning node, and observed result. The ledger governs test value and placement; #728
+     separately owns private-banking scenario economics and fixture validity.
 
 ## Context Maintenance Rule
 
