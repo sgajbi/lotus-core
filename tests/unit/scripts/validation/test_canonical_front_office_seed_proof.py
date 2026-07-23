@@ -158,6 +158,11 @@ def test_psql_json_streams_sql_so_psql_expands_bound_variables(
     assert observed["timeout_seconds"] == 30
 
 
+def test_fresh_database_query_keeps_temporary_table_for_streamed_session() -> None:
+    assert "create temporary table proof_counts" in proof.FRESH_DATABASE_SQL
+    assert "on commit drop" not in proof.FRESH_DATABASE_SQL.lower()
+
+
 def test_fresh_database_accepts_only_governed_migration_rows() -> None:
     proof._assert_fresh_database(
         {
