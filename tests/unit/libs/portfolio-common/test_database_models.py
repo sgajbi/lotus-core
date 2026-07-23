@@ -297,6 +297,10 @@ def test_market_price_source_fact_model_preserves_exact_append_history() -> None
         str(constraints["ck_market_price_source_fact_observed_at_finite"].sqltext)
         == "isfinite(observed_at)"
     )
+    assert table.columns.price.type.precision is None
+    assert table.columns.price.type.scale is None
+    assert MarketPrice.__table__.columns.price.type.precision == 18
+    assert MarketPrice.__table__.columns.price.type.scale == 10
     assert "updated_at" not in table.columns
     scope_history = {index.name: index for index in table.indexes}[
         "ix_market_price_fact_scope_history"

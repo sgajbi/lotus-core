@@ -98,7 +98,9 @@ def test_market_price_source_facts_apply_roll_back_and_enforce_authority(
         migration["upgrade"]()
         inspector = inspect(connection)
         assert inspector.has_table("market_price_source_facts")
-        columns = {column["name"] for column in inspector.get_columns("market_price_source_facts")}
+        columns = {
+            column["name"]: column for column in inspector.get_columns("market_price_source_facts")
+        }
         assert {
             "tenant_id",
             "legal_book_id",
@@ -114,7 +116,9 @@ def test_market_price_source_facts_apply_roll_back_and_enforce_authority(
             "source_revision",
             "source_content_hash",
             "observed_at",
-        } <= columns
+        } <= columns.keys()
+        assert columns["price"]["type"].precision is None
+        assert columns["price"]["type"].scale is None
         checks = {
             constraint["name"]
             for constraint in inspector.get_check_constraints("market_price_source_facts")
