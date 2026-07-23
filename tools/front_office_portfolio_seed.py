@@ -1916,12 +1916,82 @@ def _wait_for_instrument_persistence(
     )
 
 
+def _visible_cash_account_ids(query_base_url: str, portfolio_id: str) -> set[str]:
+    _, payload = _request_json(
+        "GET",
+        f"{query_base_url}/portfolios/{portfolio_id}/cash-accounts",
+    )
+    return {
+        cash_account_id
+        for row in payload.get("cash_accounts") or []
+        if isinstance(row, dict) and isinstance(cash_account_id := row.get("cash_account_id"), str)
+    }
+
+
+def _wait_for_cash_account_persistence(
+    *,
+    query_base_url: str,
+    portfolio_id: str,
+    cash_account_ids: list[str],
+    wait_seconds: int,
+    poll_interval_seconds: int,
+) -> None:
+    expected = {
+        cash_account_id.strip() for cash_account_id in cash_account_ids if cash_account_id.strip()
+    }
+    if not expected:
+        return
+
+    deadline = datetime.now(tz=UTC) + timedelta(seconds=wait_seconds)
+    missing = expected
+    while datetime.now(tz=UTC) <= deadline:
+        missing = expected - _visible_cash_account_ids(query_base_url, portfolio_id)
+        if not missing:
+            return
+        LOGGER.info(
+            "Waiting for %s cash-account master(s) to persist before ingesting transactions.",
+            len(missing),
+        )
+        time.sleep(poll_interval_seconds)
+
+    raise TimeoutError(
+        "Cash-account masters were not visible in query service within "
+        f"{wait_seconds} seconds: {', '.join(sorted(missing))}."
+    )
+
+
+def _ingest_cash_account_masters(
+    *,
+    ingestion_base_url: str,
+    query_base_url: str,
+    bundle: dict[str, Any],
+    portfolio_id: str,
+    wait_seconds: int,
+    poll_interval_seconds: int,
+) -> None:
+    _request_json(
+        "POST",
+        f"{ingestion_base_url}/ingest/reference/cash-accounts",
+        payload={"cash_accounts": bundle["cash_accounts"]},
+    )
+    _wait_for_cash_account_persistence(
+        query_base_url=query_base_url,
+        portfolio_id=portfolio_id,
+        cash_account_ids=[
+            row["cash_account_id"]
+            for row in bundle["cash_accounts"]
+            if isinstance(row, dict) and isinstance(row.get("cash_account_id"), str)
+        ],
+        wait_seconds=wait_seconds,
+        poll_interval_seconds=poll_interval_seconds,
+    )
+
+
 def build_reference_ingestion_requests(
     bundle: dict[str, Any],
 ) -> tuple[tuple[str, dict[str, Any]], ...]:
     """Return the dependency-ordered requests used by canonical reference-data ingestion."""
     return (
-        ("/ingest/reference/cash-accounts", {"cash_accounts": bundle["cash_accounts"]}),
         (
             "/ingest/portfolio-party-role-assignments",
             {"party_role_assignments": bundle["portfolio_party_role_assignments"]},
@@ -2185,6 +2255,14 @@ def _ingest_front_office_core_data(
             _wait_for_instrument_persistence(
                 query_base_url=query_base_url,
                 security_ids=[instrument["security_id"] for instrument in bundle["instruments"]],
+                wait_seconds=wait_seconds,
+                poll_interval_seconds=poll_interval_seconds,
+            )
+            _ingest_cash_account_masters(
+                ingestion_base_url=ingestion_base_url,
+                query_base_url=query_base_url,
+                bundle=bundle,
+                portfolio_id=portfolio_id,
                 wait_seconds=wait_seconds,
                 poll_interval_seconds=poll_interval_seconds,
             )
@@ -2888,6 +2966,15 @@ def main() -> int:
             should_ingest = not _portfolio_exists(query_base_url, args.portfolio_id)
         if should_ingest:
             _ingest_front_office_core_data(
+                ingestion_base_url=ingestion_base_url,
+                query_base_url=query_base_url,
+                bundle=bundle,
+                portfolio_id=args.portfolio_id,
+                wait_seconds=args.wait_seconds,
+                poll_interval_seconds=args.poll_interval_seconds,
+            )
+        else:
+            _ingest_cash_account_masters(
                 ingestion_base_url=ingestion_base_url,
                 query_base_url=query_base_url,
                 bundle=bundle,
