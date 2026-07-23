@@ -29,7 +29,8 @@ dependent on operator discipline.
    commit, tree, branch, and cleanliness after teardown.
 
 The driver cannot weaken canonical portfolio/date/project/Compose/prebuild/stability parameters
-through CLI or configuration.
+through CLI or configuration. Its reusable buildx cache also lives below the ignored evidence root;
+prebuilding cannot create untracked source-root state that invalidates the final cleanliness proof.
 
 ## Same-Pattern Scan
 
