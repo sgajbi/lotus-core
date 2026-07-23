@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import http.client
 import json
 import logging
@@ -21,6 +22,7 @@ SECONDARY_DEMO_BENCHMARK_ID = "BMK_GLOBAL_GROWTH_80_20"
 DEFAULT_DEMO_BENCHMARK_PORTFOLIO_ID = "DEMO_ADV_USD_001"
 DEFAULT_BULK_INGEST_BATCH_SIZE = 100
 MIN_DEMO_HISTORY_DAYS = 240
+IDEMPOTENCY_REPLAY_MESSAGE = "Duplicate ingestion request accepted via idempotency replay."
 
 
 @dataclass(frozen=True)
@@ -30,6 +32,13 @@ class PortfolioExpectation:
     min_valued_positions: int
     min_transactions: int
     expected_terminal_quantities: tuple[tuple[str, float], ...]
+
+
+@dataclass(frozen=True, slots=True)
+class DemoPackIngestionOutcome:
+    segment: str
+    replayed: bool
+    idempotency_key: str | None
 
 
 DEMO_EXPECTATIONS: tuple[PortfolioExpectation, ...] = (
@@ -1386,6 +1395,48 @@ def _chunk_records(records: list[dict[str, Any]], batch_size: int) -> list[list[
     return [records[index : index + batch_size] for index in range(0, len(records), batch_size)]
 
 
+def _canonical_payload_fingerprint(payload: dict[str, Any]) -> str:
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _demo_pack_idempotency_key(*, segment: str, payload: dict[str, Any]) -> str:
+    return f"lotus-demo-pack:v1:{segment}:{_canonical_payload_fingerprint(payload)}"
+
+
+def _post_demo_pack_payload(
+    ingestion_base_url: str,
+    *,
+    endpoint: str,
+    segment: str,
+    payload: dict[str, Any],
+    force_ingest: bool,
+) -> DemoPackIngestionOutcome:
+    idempotency_key = None
+    headers = None
+    if not force_ingest:
+        idempotency_key = _demo_pack_idempotency_key(segment=segment, payload=payload)
+        headers = {"X-Idempotency-Key": idempotency_key}
+
+    _, response = _request_json(
+        "POST",
+        f"{ingestion_base_url}{endpoint}",
+        payload=payload,
+        headers=headers,
+    )
+    if not isinstance(response, dict):
+        raise RuntimeError(f"Demo pack ingestion returned a non-object acknowledgement: {endpoint}")
+    if idempotency_key is not None and response.get("idempotency_key") != idempotency_key:
+        raise RuntimeError(
+            f"Demo pack ingestion acknowledgement did not preserve its idempotency key: {endpoint}"
+        )
+    return DemoPackIngestionOutcome(
+        segment=segment,
+        replayed=response.get("message") == IDEMPOTENCY_REPLAY_MESSAGE,
+        idempotency_key=idempotency_key,
+    )
+
+
 def _post_batched_ingest_payload(
     ingestion_base_url: str,
     *,
@@ -1393,8 +1444,10 @@ def _post_batched_ingest_payload(
     payload_key: str,
     records: list[dict[str, Any]],
     batch_size: int = DEFAULT_BULK_INGEST_BATCH_SIZE,
-) -> None:
+    force_ingest: bool,
+) -> list[DemoPackIngestionOutcome]:
     batches = _chunk_records(records, batch_size)
+    outcomes: list[DemoPackIngestionOutcome] = []
     for batch_index, batch in enumerate(batches, start=1):
         LOGGER.info(
             "Ingesting %s batch %d/%d records=%d.",
@@ -1403,7 +1456,16 @@ def _post_batched_ingest_payload(
             len(batches),
             len(batch),
         )
-        _request_json("POST", f"{ingestion_base_url}{endpoint}", payload={payload_key: batch})
+        outcomes.append(
+            _post_demo_pack_payload(
+                ingestion_base_url,
+                endpoint=endpoint,
+                segment=f"{payload_key}-batch-{batch_index}",
+                payload={payload_key: batch},
+                force_ingest=force_ingest,
+            )
+        )
+    return outcomes
 
 
 def _ingest_demo_portfolio_data(
@@ -1411,7 +1473,8 @@ def _ingest_demo_portfolio_data(
     bundle: dict[str, Any],
     *,
     batch_size: int = DEFAULT_BULK_INGEST_BATCH_SIZE,
-) -> None:
+    force_ingest: bool,
+) -> list[DemoPackIngestionOutcome]:
     payload = _build_portfolio_bundle_payload(bundle)
     market_prices = payload.pop("market_prices")
     fx_rates = payload.pop("fx_rates")
@@ -1427,24 +1490,44 @@ def _ingest_demo_portfolio_data(
         len(fx_rates),
         batch_size,
     )
-    _request_json("POST", f"{ingestion_base_url}/ingest/portfolio-bundle", payload=payload)
-    _post_batched_ingest_payload(
-        ingestion_base_url,
-        endpoint="/ingest/market-prices",
-        payload_key="market_prices",
-        records=market_prices,
-        batch_size=batch_size,
+    outcomes = [
+        _post_demo_pack_payload(
+            ingestion_base_url,
+            endpoint="/ingest/portfolio-bundle",
+            segment="portfolio-bundle",
+            payload=payload,
+            force_ingest=force_ingest,
+        )
+    ]
+    outcomes.extend(
+        _post_batched_ingest_payload(
+            ingestion_base_url,
+            endpoint="/ingest/market-prices",
+            payload_key="market_prices",
+            records=market_prices,
+            batch_size=batch_size,
+            force_ingest=force_ingest,
+        )
     )
-    _post_batched_ingest_payload(
-        ingestion_base_url,
-        endpoint="/ingest/fx-rates",
-        payload_key="fx_rates",
-        records=fx_rates,
-        batch_size=batch_size,
+    outcomes.extend(
+        _post_batched_ingest_payload(
+            ingestion_base_url,
+            endpoint="/ingest/fx-rates",
+            payload_key="fx_rates",
+            records=fx_rates,
+            batch_size=batch_size,
+            force_ingest=force_ingest,
+        )
     )
+    return outcomes
 
 
-def _ingest_demo_reference_data(ingestion_base_url: str, bundle: dict[str, Any]) -> None:
+def _ingest_demo_reference_data(
+    ingestion_base_url: str,
+    bundle: dict[str, Any],
+    *,
+    force_ingest: bool,
+) -> list[DemoPackIngestionOutcome]:
     reference_payloads = (
         ("/ingest/indices", {"indices": bundle["indices"]}),
         ("/ingest/index-price-series", {"index_price_series": bundle["index_price_series"]}),
@@ -1467,11 +1550,21 @@ def _ingest_demo_reference_data(ingestion_base_url: str, bundle: dict[str, Any])
         ),
         ("/ingest/risk-free-series", {"risk_free_series": bundle["risk_free_series"]}),
     )
+    outcomes: list[DemoPackIngestionOutcome] = []
     for endpoint, payload in reference_payloads:
         if all(isinstance(value, list) and not value for value in payload.values()):
             LOGGER.info("Skipped empty reference payload for %s.", endpoint)
             continue
-        _request_json("POST", f"{ingestion_base_url}{endpoint}", payload=payload)
+        outcomes.append(
+            _post_demo_pack_payload(
+                ingestion_base_url,
+                endpoint=endpoint,
+                segment=endpoint.removeprefix("/ingest/").replace("/", "-"),
+                payload=payload,
+                force_ingest=force_ingest,
+            )
+        )
+    return outcomes
 
 
 def _request_json(
@@ -1536,14 +1629,46 @@ def _ingest_demo_pack_if_needed(
     if not force_ingest and _all_demo_portfolios_exist(query_base_url, expectations):
         LOGGER.info(
             "Demo pack already present. Skipping portfolio and reference ingestion "
-            "reason=unchanged_pack_present"
+            "reason=portfolio_presence_compatibility_guard"
         )
         return False
 
-    _ingest_demo_portfolio_data(ingestion_base_url, bundle)
-    _ingest_demo_reference_data(ingestion_base_url, bundle)
+    outcomes = _ingest_demo_portfolio_data(
+        ingestion_base_url,
+        bundle,
+        force_ingest=force_ingest,
+    )
+    outcomes.extend(
+        _ingest_demo_reference_data(
+            ingestion_base_url,
+            bundle,
+            force_ingest=force_ingest,
+        )
+    )
+    replayed_segments = sorted(item.segment for item in outcomes if item.replayed)
+    published_segments = sorted(item.segment for item in outcomes if not item.replayed)
+    pack_fingerprint = _canonical_payload_fingerprint(bundle)
+
+    if outcomes and not published_segments:
+        LOGGER.info(
+            "Demo pack is unchanged; all content-addressed segments were idempotency replays. "
+            "reason=unchanged_pack_present pack_fingerprint=sha256:%s segments=%d",
+            pack_fingerprint,
+            len(replayed_segments),
+        )
+        return False
+
+    reason = "explicit_force_refresh" if force_ingest else "missing_or_evolved_segments_published"
     LOGGER.info(
-        "Ingested benchmark reference seed: benchmark=%s assigned_portfolio=%s",
+        (
+            "Demo pack ingestion decision reason=%s pack_fingerprint=sha256:%s "
+            "published_segments=%s replayed_segment_count=%d benchmark=%s "
+            "assigned_portfolio=%s"
+        ),
+        reason,
+        pack_fingerprint,
+        ",".join(published_segments),
+        len(replayed_segments),
         bundle["benchmark_verification"]["benchmark_id"],
         bundle["benchmark_verification"]["portfolio_id"],
     )
