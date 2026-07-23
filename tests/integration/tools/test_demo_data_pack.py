@@ -267,6 +267,177 @@ def test_market_probe_identifies_only_the_evolved_batch(monkeypatch):
     assert result.missing_segments == ("market_prices-batch-2",)
 
 
+def test_index_probe_verifies_catalog_and_both_series(monkeypatch):
+    segments = (
+        demo_data_pack.DemoPackSegment(
+            name="indices",
+            endpoint="/ingest/indices",
+            payload={
+                "indices": [
+                    {
+                        "index_id": "IDX-A",
+                        "index_name": "Index A",
+                        "index_currency": "USD",
+                        "index_type": "equity_index",
+                        "index_status": "active",
+                        "index_provider": "LOTUS",
+                        "index_market": "global",
+                        "classification_set_id": "taxonomy-v1",
+                        "classification_labels": {"asset_class": "equity"},
+                        "effective_from": "2026-01-01",
+                        "source_vendor": "LOTUS",
+                        "source_record_id": "idx-a",
+                    }
+                ]
+            },
+            category="reference",
+        ),
+        demo_data_pack.DemoPackSegment(
+            name="index-price-series",
+            endpoint="/ingest/index-price-series",
+            payload={
+                "index_price_series": [
+                    {
+                        "index_id": "IDX-A",
+                        "series_date": "2026-01-02",
+                        "index_price": "100.0000",
+                        "series_currency": "USD",
+                        "value_convention": "close_price",
+                        "quality_status": "accepted",
+                    }
+                ]
+            },
+            category="reference",
+        ),
+        demo_data_pack.DemoPackSegment(
+            name="index-return-series",
+            endpoint="/ingest/index-return-series",
+            payload={
+                "index_return_series": [
+                    {
+                        "index_id": "IDX-A",
+                        "series_date": "2026-01-02",
+                        "index_return": "0.0100",
+                        "return_period": "1d",
+                        "return_convention": "total_return_index",
+                        "series_currency": "USD",
+                        "quality_status": "accepted",
+                    }
+                ]
+            },
+            category="reference",
+        ),
+    )
+
+    def fake_request_json(method, url, payload=None, headers=None):
+        assert method == "POST"
+        assert headers is None
+        if url.endswith("/indices/catalog"):
+            return 200, {"records": segments[0].payload["indices"]}
+        if url.endswith("/price-series"):
+            return 200, {
+                "points": [
+                    {
+                        "series_date": "2026-01-02",
+                        "index_price": 100,
+                        "series_currency": "USD",
+                        "value_convention": "close_price",
+                        "quality_status": "accepted",
+                    }
+                ]
+            }
+        return 200, {
+            "points": [
+                {
+                    "series_date": "2026-01-02",
+                    "index_return": "0.01",
+                    "return_period": "1d",
+                    "return_convention": "total_return_index",
+                    "series_currency": "USD",
+                    "quality_status": "accepted",
+                }
+            ]
+        }
+
+    monkeypatch.setattr(demo_data_pack, "_request_json", fake_request_json)
+
+    result = demo_data_pack._probe_index_segments(
+        "http://qcp",
+        as_of_date="2026-01-31",
+        segments=segments,
+    )
+
+    assert result.is_complete is True
+    assert result.evaluated_segments == (
+        "indices",
+        "index-price-series",
+        "index-return-series",
+    )
+
+
+def test_index_probe_marks_only_evolved_price_series(monkeypatch):
+    bundle = demo_data_pack.build_demo_bundle(history_days=demo_data_pack.MIN_DEMO_HISTORY_DAYS)
+    segments = tuple(
+        segment
+        for segment in demo_data_pack._build_demo_pack_segments(bundle)
+        if segment.name in {"indices", "index-price-series", "index-return-series"}
+    )
+
+    def fake_request_json(method, url, payload=None, headers=None):
+        assert method == "POST"
+        if url.endswith("/indices/catalog"):
+            return 200, {"records": bundle["indices"]}
+        index_id = url.split("/indices/", maxsplit=1)[1].split("/", maxsplit=1)[0]
+        if url.endswith("/price-series"):
+            points = [
+                {
+                    key: value
+                    for key, value in record.items()
+                    if key
+                    in {
+                        "series_date",
+                        "index_price",
+                        "series_currency",
+                        "value_convention",
+                        "quality_status",
+                    }
+                }
+                for record in bundle["index_price_series"]
+                if record["index_id"] == index_id
+            ]
+            points[0]["index_price"] = "999.0"
+            return 200, {"points": points}
+        return 200, {
+            "points": [
+                {
+                    key: value
+                    for key, value in record.items()
+                    if key
+                    in {
+                        "series_date",
+                        "index_return",
+                        "return_period",
+                        "return_convention",
+                        "series_currency",
+                        "quality_status",
+                    }
+                }
+                for record in bundle["index_return_series"]
+                if record["index_id"] == index_id
+            ]
+        }
+
+    monkeypatch.setattr(demo_data_pack, "_request_json", fake_request_json)
+
+    result = demo_data_pack._probe_index_segments(
+        "http://qcp",
+        as_of_date=bundle["as_of_date"],
+        segments=segments,
+    )
+
+    assert result.missing_segments == ("index-price-series",)
+
+
 def test_build_demo_bundle_contains_benchmark_seed_data():
     bundle = demo_data_pack.build_demo_bundle()
 
