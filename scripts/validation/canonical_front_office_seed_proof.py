@@ -267,6 +267,7 @@ def _run(
     *,
     environment: Mapping[str, str] | None = None,
     check: bool = True,
+    input_text: str | None = None,
     timeout_seconds: float = DEFAULT_COMMAND_TIMEOUT_SECONDS,
 ) -> CommandResult:
     try:
@@ -276,6 +277,7 @@ def _run(
             env=dict(environment) if environment is not None else None,
             check=False,
             capture_output=True,
+            input=input_text,
             text=True,
             encoding="utf-8",
             errors="replace",
@@ -888,6 +890,7 @@ def _psql_json(
     command = [
         "docker",
         "exec",
+        "-i",
         container,
         "psql",
         "-X",
@@ -901,7 +904,11 @@ def _psql_json(
     ]
     for key, value in sorted((variables or {}).items()):
         command.extend(("--set", f"{key}={value}"))
-    output = _run((*command, "-c", sql), timeout_seconds=30).stdout.strip()
+    output = _run(
+        (*command, "--file", "-"),
+        input_text=sql,
+        timeout_seconds=30,
+    ).stdout.strip()
     try:
         value = json.loads(output.splitlines()[-1])
     except (IndexError, json.JSONDecodeError) as exc:
