@@ -81,6 +81,7 @@ COPY alembic.ini /app/alembic.ini
 COPY alembic /app/alembic
 COPY tools/kafka_setup.py /app/tools/kafka_setup.py
 COPY tools/demo_data_pack.py /app/tools/demo_data_pack.py
+COPY tools/front_office_seed_contract.py /app/tools/front_office_seed_contract.py
 RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
     pip install --no-index --find-links=/wheels /wheels/*.whl && \
     rm -rf /wheels && \

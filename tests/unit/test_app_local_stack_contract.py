@@ -147,6 +147,16 @@ def test_demo_data_loader_uses_internal_service_urls() -> None:
     ]
 
 
+def test_demo_data_loader_image_copies_every_runtime_tool_dependency() -> None:
+    dockerfile = (ROOT / "src/services/persistence_service/Dockerfile").read_text(encoding="utf-8")
+
+    assert "COPY tools/demo_data_pack.py /app/tools/demo_data_pack.py" in dockerfile
+    assert (
+        "COPY tools/front_office_seed_contract.py /app/tools/front_office_seed_contract.py"
+        in dockerfile
+    )
+
+
 def test_app_local_stack_runs_one_configurable_derived_state_runtime() -> None:
     compose = _read_yaml(ROOT / "docker-compose.yml")
     services = compose["services"]
