@@ -7,6 +7,7 @@ from datetime import date, datetime
 from enum import StrEnum
 
 from ..calculation_lineage import canonical_content_hash
+from .source_facts import ValuationAuthorityScope
 
 
 class ValuationPolicyAssignmentError(ValueError):
@@ -72,10 +73,16 @@ class InstrumentValuationPolicyAssignment:
 
     @property
     def scope_key(self) -> tuple[str, str, str]:
-        return (
-            self.tenant_id.strip(),
-            self.legal_book_id.strip(),
-            self.security_id.strip(),
+        return self.authority_scope.key
+
+    @property
+    def authority_scope(self) -> ValuationAuthorityScope:
+        """Return the exact normalized scope shared by assignments and source facts."""
+
+        return ValuationAuthorityScope(
+            tenant_id=self.tenant_id,
+            legal_book_id=self.legal_book_id,
+            security_id=self.security_id,
         )
 
     @property
@@ -90,7 +97,7 @@ class InstrumentValuationPolicyAssignment:
     def content_hash(self) -> str:
         """Return a deterministic hash for audit and cache invalidation evidence."""
 
-        return canonical_content_hash(
+        content_hash = canonical_content_hash(
             {
                 "assignment_reason": self.assignment_reason.strip(),
                 "assignment_status": self.assignment_status,
@@ -108,6 +115,9 @@ class InstrumentValuationPolicyAssignment:
                 "valid_to": self.valid_to,
             }
         )
+        if not isinstance(content_hash, str):
+            raise TypeError("canonical content hash must be a string")
+        return content_hash
 
 
 @dataclass(frozen=True, slots=True)
@@ -143,11 +153,11 @@ def resolve_valuation_policy_assignment(
 ) -> ResolvedValuationPolicyAssignment:
     """Resolve one exact-scope assignment after ranking source versions first."""
 
-    requested_scope = (
-        _required_scope(tenant_id, "tenant_id"),
-        _required_scope(legal_book_id, "legal_book_id"),
-        _required_scope(security_id, "security_id"),
-    )
+    requested_scope = ValuationAuthorityScope(
+        tenant_id=tenant_id,
+        legal_book_id=legal_book_id,
+        security_id=security_id,
+    ).key
     scoped = [assignment for assignment in assignments if assignment.scope_key == requested_scope]
     latest = _latest_source_versions(scoped)
     effective = [
@@ -262,10 +272,3 @@ def _latest_source_versions(
                 "conflicting payloads share one source record and assignment_version"
             )
     return list(latest.values())
-
-
-def _required_scope(value: str, field_name: str) -> str:
-    normalized = value.strip()
-    if not normalized:
-        raise ValueError(f"{field_name} must be nonblank")
-    return normalized
