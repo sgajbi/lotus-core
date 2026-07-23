@@ -46,6 +46,7 @@ def _fact(
     fact_version: int,
     security_id: str,
     status: MarketPriceSourceFactStatus,
+    price: Decimal = Decimal("99.25"),
 ) -> MarketPriceSourceFact:
     return MarketPriceSourceFact(
         scope=ValuationAuthorityScope(
@@ -54,7 +55,7 @@ def _fact(
             security_id=security_id,
         ),
         price_date=PRICE_DATE,
-        price=Decimal("99.25"),
+        price=price,
         currency="USD",
         quote_basis=MarketPriceQuoteBasis.PERCENT_OF_PRINCIPAL_CLEAN,
         source_reference=FinancialSourceReference(
@@ -170,6 +171,43 @@ async def test_moved_active_suspended_and_retired_corrections_fence_old_authorit
     await _assert_missing(resolver, NEW_SECURITY_ID)
 
     assert (await async_db_session.scalar(select(func.count(MarketPriceSourceFactRecord.id)))) == 5
+
+
+async def test_high_scale_and_large_prices_round_trip_and_replay_exactly(
+    clean_db: None,
+    async_db_session: AsyncSession,
+) -> None:
+    await _seed_instruments(async_db_session)
+    high_scale = _fact(
+        source_record_id="PRICE-HIGH-SCALE",
+        fact_version=1,
+        security_id=OLD_SECURITY_ID,
+        status=MarketPriceSourceFactStatus.ACTIVE,
+        price=Decimal("99.123456789012345678901234567890123456789"),
+    )
+    large = _fact(
+        source_record_id="PRICE-LARGE",
+        fact_version=1,
+        security_id=NEW_SECURITY_ID,
+        status=MarketPriceSourceFactStatus.ACTIVE,
+        price=Decimal(
+            "100000000000000000000000000000000000000000000000000000000000000000000000000"
+            "00000000000000000000000000.12345678901234567890123456789012345678901234567890"
+        ),
+    )
+    writer = MarketPriceSourceFactWriter(async_db_session)
+    assert len(await writer.append_many([high_scale, large])) == 2
+    await async_db_session.commit()
+
+    resolved = await SqlAlchemyMarketPriceSourceFactResolver(async_db_session).resolve_many(
+        [_request(OLD_SECURITY_ID), _request(NEW_SECURITY_ID)]
+    )
+    assert resolved[_request(OLD_SECURITY_ID).key] == high_scale
+    assert resolved[_request(NEW_SECURITY_ID).key] == large
+
+    assert await writer.append_many([high_scale, large]) == ()
+    await async_db_session.commit()
+    assert (await async_db_session.scalar(select(func.count(MarketPriceSourceFactRecord.id)))) == 2
 
 
 async def test_concurrent_competing_sources_serialize_to_one_active_authority(

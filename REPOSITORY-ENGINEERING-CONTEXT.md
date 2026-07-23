@@ -2940,7 +2940,9 @@ Most relevant current governance:
      identities. Bounded reads first use scope history to find candidate sources, rank each source's
      latest version, and only then apply exact-scope/lifecycle selection. Write and read batches
      fail closed above 500 records and split SQL tuple predicates into deterministic 100-key
-     chunks. Database checks reject non-finite price and observation values. Reject missing,
+     chunks. Persist domain-valid prices as exact unbounded PostgreSQL `NUMERIC`; do not silently
+     narrow them with an undeclared precision/scale because correction replay compares exact
+     source facts. Database checks reject non-finite price and observation values. Reject missing,
      conflicting, and competing exact-scope authority. Do not widen only the legacy write key or
      route scoped authority through unscoped readers. Cut over valuation and financial
      reconciliation together only after replay scheduling, lineage, and mixed-book proof.

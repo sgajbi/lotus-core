@@ -74,6 +74,8 @@ def test_market_price_source_fact_migration_is_reversible(monkeypatch) -> None:
         "created_at",
     }
     assert all(column.nullable is False for column in columns.values())
+    assert columns["price"].type.precision is None
+    assert columns["price"].type.scale is None
 
     constraints = {
         definition.name: definition

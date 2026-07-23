@@ -96,6 +96,9 @@ later correction. Each row carries an explicit unit/clean-percent/dirty-percent 
 governed lifecycle, normalized currency, source revision/content hash, and aware observation
 evidence. A scope-history index finds candidate source identities, while the globally unique
 source-version key supports latest-correction ranking before exact-scope and lifecycle selection.
+Prices use exact unbounded PostgreSQL `NUMERIC`, matching the positive finite domain contract and
+preventing silent scale rounding or magnitude overflow from turning an exact replay into a false
+conflict.
 The dedicated writer is insert-only, serializes source and old/new authority identities, treats an
 exact replay as a no-op, and rejects divergent or competing authority. It does not replace or widen
 the global `(security_id, price_date)` `market_prices` projection. Both internal write and read

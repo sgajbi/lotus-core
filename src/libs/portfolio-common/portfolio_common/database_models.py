@@ -444,7 +444,7 @@ class MarketPriceSourceFactRecord(Base):
     legal_book_id = Column(String, nullable=False)
     security_id = Column(String, ForeignKey("instruments.security_id"), nullable=False)
     price_date = Column(Date, nullable=False)
-    price = Column(Numeric(18, 10), nullable=False)
+    price = Column(Numeric(), nullable=False)
     currency = Column(String(3), nullable=False)
     quote_basis = Column(String, nullable=False)
     fact_status = Column(String, nullable=False)

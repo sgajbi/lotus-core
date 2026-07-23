@@ -65,8 +65,9 @@ narrow framework-free contract therefore belongs in `portfolio_common.domain.val
   suspension/retirement fences older ACTIVE facts; missing, same-version conflicting, and competing
   source authority fail closed. Stable correction identity is source system/record/version, while
   tenant, legal book, instrument, and business date are versioned authority payload; each row keeps
-  explicit unit, clean-percent, or dirty-percent representation, value/currency, lifecycle, source
-  revision/content hash, and aware observation time.
+  explicit unit, clean-percent, or dirty-percent representation, exact unbounded numeric
+  value/currency, lifecycle, source revision/content hash, and aware observation time. The database
+  does not impose an undeclared decimal precision/scale that could corrupt correction replay.
 - Kept the global `(security_id, price_date)` `market_prices` projection unchanged. The new
   authority table has no mutable update timestamp. Its scope-history index finds candidate source
   identities and its globally unique source-version key supports latest correction ranking before
@@ -236,13 +237,11 @@ valuation consumers are wired; it will be deleted rather than retained as a fall
   invalidation identities, bounded correction-ranked SQL, finite database price/observation
   enforcement, write/read ceiling and chunk boundaries, the complete schema constraint set, one
   reversible Alembic edge, and no mutation or index on the legacy projection. Protected PostgreSQL
-  migration plus authority tests passed 4/4 in 52.19 seconds with warnings fatal and rebuilt
-  generated database images. They proved downgrade/reapply, catalog truth, normalized
-  scope/currency/source/hash constraints, positive price/version, governed
-  representation/lifecycle, duplicate source-version rejection, moved
-  ACTIVE/SUSPENDED/RETIRED fencing, and concurrent competing-writer serialization. The exact source
-  fingerprint remained unchanged before/after and generated critical-database projects returned to
-  zero; durable evidence is recorded on issue #451.
+  migration plus authority tests prove downgrade/reapply, catalog truth, exact high-scale and
+  large-value round-trip plus idempotent replay, normalized scope/currency/source/hash constraints,
+  positive price/version, governed representation/lifecycle, duplicate source-version rejection,
+  moved ACTIVE/SUSPENDED/RETIRED fencing, and concurrent competing-writer serialization.
+  Unchanged-source and generated-project teardown evidence is recorded on issue #451.
 
 Primary methodology references for the day-count slice are the
 [FpML day-count scheme publication](https://www.fpml.org/specs_news/publication-of-fpml-set-of-coding-schemes-catalog-version-1-121/),

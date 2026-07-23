@@ -27,7 +27,7 @@ def upgrade() -> None:
         sa.Column("legal_book_id", sa.String(), nullable=False),
         sa.Column("security_id", sa.String(), nullable=False),
         sa.Column("price_date", sa.Date(), nullable=False),
-        sa.Column("price", sa.Numeric(18, 10), nullable=False),
+        sa.Column("price", sa.Numeric(), nullable=False),
         sa.Column("currency", sa.String(length=3), nullable=False),
         sa.Column("quote_basis", sa.String(), nullable=False),
         sa.Column("fact_status", sa.String(), nullable=False),
