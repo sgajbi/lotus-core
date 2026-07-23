@@ -116,6 +116,48 @@ def _config(tmp_path: Path, *, prebuild_images: bool = False) -> ProofConfig:
     )
 
 
+def test_psql_json_streams_sql_so_psql_expands_bound_variables(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    observed: dict[str, object] = {}
+
+    def run(command: tuple[str, ...], **kwargs: object) -> CommandResult:
+        observed["command"] = command
+        observed.update(kwargs)
+        return CommandResult(command, 0, '{"portfolio_id":"P1"}\n', "")
+
+    monkeypatch.setattr(proof, "_run", run)
+
+    result = proof._psql_json(
+        "postgres-container",
+        "select :'portfolio_id';",
+        variables={"portfolio_id": "P1"},
+    )
+
+    assert result == {"portfolio_id": "P1"}
+    assert observed["command"] == (
+        "docker",
+        "exec",
+        "-i",
+        "postgres-container",
+        "psql",
+        "-X",
+        "-v",
+        "ON_ERROR_STOP=1",
+        "-U",
+        "user",
+        "-d",
+        "portfolio_db",
+        "-Atq",
+        "--set",
+        "portfolio_id=P1",
+        "--file",
+        "-",
+    )
+    assert observed["input_text"] == "select :'portfolio_id';"
+    assert observed["timeout_seconds"] == 30
+
+
 def test_fresh_database_accepts_only_governed_migration_rows() -> None:
     proof._assert_fresh_database(
         {
