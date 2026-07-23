@@ -32,6 +32,9 @@ def test_prepare_test_runtime_assigns_dynamic_ports_and_endpoints() -> None:
     try:
         assert runtime_env["LOTUS_TEST_ENV_PROFILE"] == "integration"
         assert runtime_env["COMPOSE_PROJECT_NAME"].startswith("lotus-integration-tx-fx-")
+        assert runtime.prepared_by_current_process is True
+        assert runtime.compose_project_generated is True
+        assert runtime.postgres_host_port_reserved is True
         assert runtime_env["HOST_DATABASE_URL"].startswith("postgresql://user:password@localhost:")
         assert runtime_env["E2E_INGESTION_URL"].startswith("http://localhost:")
         assert runtime_env["KAFKA_BOOTSTRAP_SERVERS"].startswith("localhost:")
@@ -76,6 +79,8 @@ def test_prepare_test_runtime_preserves_explicit_overrides_during_reallocation()
 
     try:
         assert runtime_env["COMPOSE_PROJECT_NAME"] == "lotus-manual-project"
+        assert runtime.compose_project_generated is False
+        assert runtime.postgres_host_port_reserved is True
         assert runtime_env["LOTUS_QUERY_HOST_PORT"] == "18401"
         assert runtime_env["E2E_QUERY_URL"] == "http://localhost:18401"
         assert endpoints.compose_project_name == "lotus-manual-project"
@@ -83,6 +88,26 @@ def test_prepare_test_runtime_preserves_explicit_overrides_during_reallocation()
         runtime.port_reservation.reallocate()
         assert runtime.values["LOTUS_QUERY_HOST_PORT"] == "18401"
         assert runtime.endpoints.e2e_query_url == "http://localhost:18401"
+    finally:
+        runtime.port_reservation.release()
+
+
+def test_prepare_test_runtime_records_inherited_postgres_port_provenance() -> None:
+    runtime = prepare_test_runtime(
+        profile="integration",
+        scope="fixed-postgres",
+        env={
+            "LOTUS_TEST_DYNAMIC_PORTS": "true",
+            "LOTUS_POSTGRES_HOST_PORT": "15432",
+        },
+        preserve_existing=True,
+        inherit_process_environment=False,
+    )
+
+    try:
+        assert runtime.compose_project_generated is True
+        assert runtime.postgres_host_port_reserved is False
+        assert runtime.endpoints.host_database_url.endswith(":15432/portfolio_db")
     finally:
         runtime.port_reservation.release()
 
