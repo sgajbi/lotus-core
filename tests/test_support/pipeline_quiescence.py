@@ -152,7 +152,9 @@ def recover_reprocessing_activity_for_test_cleanup(
     if not has_only_reprocessing_activity(snapshot):
         return snapshot
 
+    require_database_cleanup_authorization(authorization, engine=engine)
     with engine.begin() as connection:
+        require_database_cleanup_authorization(authorization, engine=engine)
         existing_tables = {
             row[0]
             for row in connection.execute(

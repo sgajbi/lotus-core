@@ -3145,15 +3145,21 @@ Most relevant current governance:
      Reservation generation is externally read-only, and refreshed port evidence comes from the
      active process-owned socket rather than exported environment values.
      Both function- and module-scoped fixtures must establish that authorization before quiescence
-     recovery, session termination, or truncate SQL. Replay-only recovery requires the same
-     factory-issued capability explicitly, and delegated helpers validate the exact issued object
-     rather than copyable fields or a reusable token. Inherited app-local/shared projects, fixed
+     recovery, session termination, or truncate SQL, and must revalidate it immediately before
+     each destructive connection and again before issuing SQL. Replay-only recovery requires the
+     same factory-issued capability explicitly. Capabilities remain bound to the originating
+     runtime, immutable target, and reservation generation; delegated helpers validate that live
+     authority as well as the exact issued object rather than copyable fields or a reusable token.
+     Inherited app-local/shared projects, fixed
      ports, test-shaped project names, mixed provenance, mutable target drift, forged capabilities,
-     and post-preparation engine drift fail closed; prefixes and two values derived from the same
+     retired reservation generations, and post-preparation engine drift fail closed; prefixes and
+     two values derived from the same
      inherited environment are not ownership proof. Engine construction and its non-destructive
      readiness query occur before fixture entry and are not cleanup authorization. Cleanup URLs
      must use the PostgreSQL backend with no query parameters: driver-level host, port, options, or
-     search-path overrides are connection authority and therefore fail closed.
+     search-path overrides are connection authority and therefore fail closed. A runtime with an
+     intentionally fixed PostgreSQL override remains cleanup-ineligible, but may still reallocate
+     its unrelated dynamically reserved service ports.
 
 ## Context Maintenance Rule
 

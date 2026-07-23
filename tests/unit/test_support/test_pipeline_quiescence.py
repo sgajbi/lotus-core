@@ -344,3 +344,50 @@ def test_recovery_refuses_different_engine_before_read_or_mutation() -> None:
         assert not drifted_engine.begin.called
     finally:
         runtime.port_reservation.release()
+
+
+def test_recovery_refuses_retired_runtime_generation_before_read_or_mutation() -> None:
+    engine = MagicMock()
+    runtime, authorization = _authorize_cleanup(engine)
+    try:
+        runtime.port_reservation.reallocate()
+        with pytest.raises(
+            DatabaseCleanupAuthorizationError,
+            match="stale for the current runtime generation or target",
+        ):
+            recover_reprocessing_activity_for_test_cleanup(
+                engine,
+                authorization=authorization,
+            )
+        assert not engine.connect.called
+        assert not engine.begin.called
+    finally:
+        runtime.port_reservation.release()
+
+
+def test_recovery_revalidates_authority_after_activity_read_before_mutation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine = MagicMock()
+    runtime, authorization = _authorize_cleanup(engine)
+
+    def _read_then_reallocate(_engine: MagicMock) -> dict[str, int]:
+        runtime.port_reservation.reallocate()
+        return {"reprocessing_jobs_active": 1}
+
+    monkeypatch.setattr(
+        "tests.test_support.pipeline_quiescence.read_pipeline_activity_snapshot",
+        _read_then_reallocate,
+    )
+    try:
+        with pytest.raises(
+            DatabaseCleanupAuthorizationError,
+            match="stale for the current runtime generation or target",
+        ):
+            recover_reprocessing_activity_for_test_cleanup(
+                engine,
+                authorization=authorization,
+            )
+        assert not engine.begin.called
+    finally:
+        runtime.port_reservation.release()

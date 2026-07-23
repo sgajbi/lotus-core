@@ -5,7 +5,7 @@ from collections.abc import Iterator
 from unittest.mock import MagicMock
 
 import pytest
-from sqlalchemy.engine import make_url
+from sqlalchemy.engine import Engine, make_url
 
 from tests import conftest as root_conftest
 from tests.test_support.db_cleanup import (
@@ -234,6 +234,7 @@ def test_cleanup_authorizes_target_refreshed_by_governed_port_reallocation() -> 
             runtime.port_reservation._sockets["LOTUS_POSTGRES_HOST_PORT"].getsockname()[1]
         )
         assert authorization.target.port == refreshed_target.port
+        require_database_cleanup_authorization(authorization, engine=engine)
         assert not engine.begin.called
     finally:
         runtime.port_reservation.release()
@@ -283,6 +284,53 @@ def test_cleanup_authorizes_generated_project_owned_port_and_exact_engine() -> N
         authorization = authorize_database_cleanup(runtime=runtime, engine=engine)
         assert authorization.compose_project_name == runtime.endpoints.compose_project_name
         assert authorization.target.port == int(runtime.values["LOTUS_POSTGRES_HOST_PORT"])
+    finally:
+        runtime.port_reservation.release()
+
+
+def test_delegated_cleanup_rejects_authorization_from_retired_reservation_generation() -> None:
+    runtime = _runtime()
+    retired_engine = _engine(runtime.endpoints.host_database_url)
+    authorization = authorize_database_cleanup(runtime=runtime, engine=retired_engine)
+    try:
+        runtime.port_reservation.reallocate()
+
+        with pytest.raises(
+            DatabaseCleanupAuthorizationError,
+            match="stale for the current runtime generation or target",
+        ):
+            require_database_cleanup_authorization(
+                authorization,
+                engine=retired_engine,
+            )
+        assert not retired_engine.begin.called
+    finally:
+        runtime.port_reservation.release()
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        ({"COMPOSE_PROJECT_NAME": "lotus-shared"}, "Compose project identity changed"),
+        ({"POSTGRES_DB": "shared"}, "PostgreSQL target components changed"),
+        (
+            {"HOST_DATABASE_URL": "postgresql://user:password@localhost:55432/shared"},
+            "derived database endpoint changed",
+        ),
+    ],
+)
+def test_delegated_cleanup_revalidates_runtime_drift_after_issuance(
+    mutation: dict[str, str],
+    message: str,
+) -> None:
+    runtime = _runtime()
+    engine = _engine(runtime.endpoints.host_database_url)
+    authorization = authorize_database_cleanup(runtime=runtime, engine=engine)
+    runtime.values.update(mutation)
+    try:
+        with pytest.raises(DatabaseCleanupAuthorizationError, match=message):
+            require_database_cleanup_authorization(authorization, engine=engine)
+        assert not engine.begin.called
     finally:
         runtime.port_reservation.release()
 
@@ -356,6 +404,65 @@ def test_module_cleanup_refuses_before_quiescence_or_destructive_cleanup(
         with pytest.raises(DatabaseCleanupAuthorizationError):
             next(root_conftest.clean_db_module.__wrapped__(engine))
         waited.assert_not_called()
+        assert not engine.begin.called
+    finally:
+        runtime.port_reservation.release()
+
+
+def test_function_cleanup_revalidates_authority_immediately_before_truncate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runtime = _runtime()
+    engine = _engine(runtime.endpoints.host_database_url)
+    real_authorize = root_conftest.authorize_database_cleanup
+
+    def _authorize_then_drift(
+        *, runtime: PreparedTestRuntime, engine: Engine
+    ) -> DatabaseCleanupAuthorization:
+        authorization = real_authorize(runtime=runtime, engine=engine)
+        runtime.values["COMPOSE_PROJECT_NAME"] = "lotus-shared"
+        return authorization
+
+    monkeypatch.setattr(root_conftest, "_test_runtime", runtime)
+    monkeypatch.setattr(root_conftest, "authorize_database_cleanup", _authorize_then_drift)
+    try:
+        with pytest.raises(
+            DatabaseCleanupAuthorizationError,
+            match="Compose project identity changed",
+        ):
+            next(root_conftest.clean_db.__wrapped__(engine))
+        assert not engine.begin.called
+    finally:
+        runtime.port_reservation.release()
+
+
+def test_module_cleanup_revalidates_authority_after_quiescence_wait(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runtime = _runtime()
+    engine = _engine(runtime.endpoints.host_database_url)
+
+    def _wait_then_drift(
+        db_engine: Engine,
+        *,
+        scope_label: str,
+        cleanup_authorization: DatabaseCleanupAuthorization,
+    ) -> None:
+        del db_engine, scope_label, cleanup_authorization
+        runtime.values["POSTGRES_DB"] = "shared"
+
+    monkeypatch.setattr(root_conftest, "_test_runtime", runtime)
+    monkeypatch.setattr(
+        root_conftest,
+        "_wait_for_pipeline_idle_with_recovery",
+        _wait_then_drift,
+    )
+    try:
+        with pytest.raises(
+            DatabaseCleanupAuthorizationError,
+            match="PostgreSQL target components changed",
+        ):
+            next(root_conftest.clean_db_module.__wrapped__(engine))
         assert not engine.begin.called
     finally:
         runtime.port_reservation.release()
