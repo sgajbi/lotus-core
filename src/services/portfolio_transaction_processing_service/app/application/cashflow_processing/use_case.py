@@ -120,6 +120,7 @@ class ProcessTransactionCashflowUseCase:
             calculated = calculate_transaction_cashflow(
                 transaction,
                 rule,
+                effective_transaction_type=transaction_type,
                 epoch=transaction.epoch,
                 calculation_context=calculation_context,
             )
