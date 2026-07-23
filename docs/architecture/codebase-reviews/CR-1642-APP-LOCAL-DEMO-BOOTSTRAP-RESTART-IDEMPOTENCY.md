@@ -95,6 +95,10 @@ segment gained an evaluator.
   every generated portfolio/security stream through the canonical position reducer and requires
   all declared terminal holdings to match, preventing verifier expectations from masking incomplete
   derived state.
+- Remote Feature Lane correctly rejected binary floating-point annotations in the stable market/FX
+  generator. The generator now calculates entirely with `Decimal` and emits fixed-precision decimal
+  strings (`2` places for market prices, `6` for FX rates), with an executable representation fence.
+  The repository-wide lint and monetary-float guards now pass without an allowlist exception.
 - The first targeted image build failed before writes because the persistence Dockerfile copied the
   demo tool but not its existing RFC-0076 contract-loader dependency. The Dockerfile now copies both
   files and a stack-contract regression protects that runtime packaging boundary.
