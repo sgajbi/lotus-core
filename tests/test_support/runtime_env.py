@@ -72,6 +72,7 @@ _HOST_PORT_KEYS = tuple(
     dict.fromkeys(key for profile_ports in _PROFILE_SEED_PORTS.values() for key in profile_ports)
 )
 _COMPOSE_HOST_BIND_ADDRESS = "0.0.0.0"
+_PREPARED_RUNTIME_AUTHORITY = object()
 
 
 @dataclass(frozen=True)
@@ -177,6 +178,9 @@ class PreparedTestRuntime:
 
     values: dict[str, str]
     port_reservation: RuntimePortReservation
+    compose_project_generated: bool
+    postgres_host_port_reserved: bool
+    _preparation_authority: object = field(repr=False, compare=False)
 
     @property
     def endpoints(self) -> RuntimeEndpoints:
@@ -189,6 +193,12 @@ class PreparedTestRuntime:
 
         target.update(self.values)
         self.port_reservation.add_export_target(target)
+
+    @property
+    def prepared_by_current_process(self) -> bool:
+        """Return whether the runtime came from the governed preparation factory."""
+
+        return self._preparation_authority is _PREPARED_RUNTIME_AUTHORITY
 
 
 def profile_seed_ports(profile: str) -> dict[str, str]:
@@ -312,7 +322,10 @@ def prepare_test_runtime(
     runtime_env.setdefault("LOTUS_TEST_SCOPE", selected_scope)
     runtime_env.setdefault("LOTUS_TEST_DYNAMIC_PORTS", "true" if dynamic_ports else "false")
 
-    if not (preserve_existing and runtime_env.get("COMPOSE_PROJECT_NAME")):
+    compose_project_generated = not (
+        preserve_existing and bool(runtime_env.get("COMPOSE_PROJECT_NAME"))
+    )
+    if compose_project_generated:
         runtime_env["COMPOSE_PROJECT_NAME"] = _build_compose_project_name(
             selected_profile,
             selected_scope,
@@ -340,4 +353,9 @@ def prepare_test_runtime(
     return PreparedTestRuntime(
         values=runtime_env,
         port_reservation=port_reservation,
+        compose_project_generated=compose_project_generated,
+        postgres_host_port_reserved=(
+            "LOTUS_POSTGRES_HOST_PORT" in port_reservation.dynamic_port_keys
+        ),
+        _preparation_authority=_PREPARED_RUNTIME_AUTHORITY,
     )

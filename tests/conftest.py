@@ -11,7 +11,11 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.orm import Session
 
 from tests.e2e.api_client import E2EApiClient
-from tests.test_support.db_cleanup import truncate_with_deadlock_retry
+from tests.test_support.db_cleanup import (
+    DatabaseCleanupAuthorization,
+    authorize_database_cleanup,
+    truncate_with_deadlock_retry,
+)
 from tests.test_support.docker_stack import (
     DockerStackError,
     capture_compose_logs,
@@ -395,7 +399,12 @@ def _wait_for_pipeline_idle(db_engine) -> None:
     )
 
 
-def _wait_for_pipeline_idle_with_recovery(db_engine, *, scope_label: str) -> None:
+def _wait_for_pipeline_idle_with_recovery(
+    db_engine,
+    *,
+    scope_label: str,
+    cleanup_authorization: DatabaseCleanupAuthorization,
+) -> None:
     try:
         _wait_for_pipeline_idle(db_engine)
         return
@@ -408,7 +417,10 @@ def _wait_for_pipeline_idle_with_recovery(db_engine, *, scope_label: str) -> Non
             f"{scope_label} cleanup with recoverable replay-only activity: "
             f"{snapshot} ---"
         )
-        recovered_snapshot = recover_reprocessing_activity_for_test_cleanup(db_engine)
+        recovered_snapshot = recover_reprocessing_activity_for_test_cleanup(
+            db_engine,
+            authorization=cleanup_authorization,
+        )
         emit_test_output(
             f"\n--- Reset replay-only pipeline activity for cleanup: {recovered_snapshot} ---"
         )
@@ -423,6 +435,7 @@ def clean_db(db_engine):
     """
     A function-scoped fixture that cleans all data from tables using TRUNCATE.
     """
+    authorize_database_cleanup(runtime=_test_runtime, engine=db_engine)
     emit_test_output("\n--- Cleaning database tables (function scope) ---", verbose_only=True)
     terminate_sessions_query = text(TERMINATE_ACTIVE_SESSIONS_SQL)
     terminate_sessions = _env_bool("LOTUS_TESTS_TERMINATE_DB_SESSIONS", False)
@@ -453,10 +466,18 @@ def clean_db_module(db_engine):
     A module-scoped fixture that cleans all data from tables using TRUNCATE.
     Used by E2E tests to ensure a clean state before the test module runs.
     """
+    cleanup_authorization = authorize_database_cleanup(
+        runtime=_test_runtime,
+        engine=db_engine,
+    )
     emit_test_output("\n--- Cleaning database tables (module scope) ---", verbose_only=True)
     terminate_sessions_query = text(TERMINATE_ACTIVE_SESSIONS_SQL)
     terminate_sessions = _env_bool("LOTUS_TESTS_TERMINATE_DB_SESSIONS", False)
-    _wait_for_pipeline_idle_with_recovery(db_engine, scope_label="module")
+    _wait_for_pipeline_idle_with_recovery(
+        db_engine,
+        scope_label="module",
+        cleanup_authorization=cleanup_authorization,
+    )
 
     def _terminate_for_deadlock_retry() -> None:
         with db_engine.begin() as connection:

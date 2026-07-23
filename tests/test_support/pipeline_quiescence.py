@@ -2,10 +2,15 @@ from __future__ import annotations
 
 import time
 from datetime import datetime, timezone
-from typing import Callable
+from typing import Callable, cast
 
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
+
+from tests.test_support.db_cleanup import (
+    DatabaseCleanupAuthorization,
+    require_database_cleanup_authorization,
+)
 
 SNAPSHOT_QUERIES: dict[str, tuple[str, str]] = {
     "outbox_pending": ("outbox_events", "status = 'PENDING'"),
@@ -114,7 +119,7 @@ def read_pipeline_last_activity_at(engine: Engine) -> datetime | None:
 
         union_sql = " UNION ALL ".join(timestamp_selects)
         result = connection.execute(text(f"SELECT MAX(ts) FROM ({union_sql}) AS activity_ts"))
-        last_activity_at = result.scalar()
+        last_activity_at = cast(datetime | None, result.scalar())
         if last_activity_at is None:
             return None
         if last_activity_at.tzinfo is None:
@@ -137,7 +142,12 @@ def has_only_reprocessing_activity(snapshot: dict[str, int]) -> bool:
     return bool(active_keys) and active_keys.issubset(REPROCESSING_ACTIVITY_KEYS)
 
 
-def recover_reprocessing_activity_for_test_cleanup(engine: Engine) -> dict[str, int]:
+def recover_reprocessing_activity_for_test_cleanup(
+    engine: Engine,
+    *,
+    authorization: DatabaseCleanupAuthorization,
+) -> dict[str, int]:
+    require_database_cleanup_authorization(authorization, engine=engine)
     snapshot = read_pipeline_activity_snapshot(engine)
     if not has_only_reprocessing_activity(snapshot):
         return snapshot

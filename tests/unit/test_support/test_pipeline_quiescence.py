@@ -5,7 +5,13 @@ from datetime import datetime
 from unittest.mock import MagicMock
 
 import pytest
+from sqlalchemy.engine import make_url
 
+from tests.test_support.db_cleanup import (
+    DatabaseCleanupAuthorization,
+    DatabaseCleanupAuthorizationError,
+    authorize_database_cleanup,
+)
 from tests.test_support.pipeline_quiescence import (
     format_pipeline_activity_snapshot,
     has_only_reprocessing_activity,
@@ -14,6 +20,21 @@ from tests.test_support.pipeline_quiescence import (
     recover_reprocessing_activity_for_test_cleanup,
     wait_for_pipeline_quiescence,
 )
+from tests.test_support.runtime_env import PreparedTestRuntime, prepare_test_runtime
+
+
+def _authorize_cleanup(
+    engine: MagicMock,
+) -> tuple[PreparedTestRuntime, DatabaseCleanupAuthorization]:
+    runtime = prepare_test_runtime(
+        profile="integration",
+        scope="recovery-authorization",
+        env={"LOTUS_TEST_DYNAMIC_PORTS": "true"},
+        preserve_existing=False,
+        inherit_process_environment=False,
+    )
+    engine.url = make_url(runtime.endpoints.host_database_url)
+    return runtime, authorize_database_cleanup(runtime=runtime, engine=engine)
 
 
 def test_is_pipeline_quiescent_requires_all_zero_counts() -> None:
@@ -220,6 +241,7 @@ def test_read_pipeline_last_activity_at_ignores_non_blocking_tables() -> None:
 
 def test_recover_reprocessing_activity_for_test_cleanup_resets_only_replay_tables() -> None:
     engine = MagicMock()
+    runtime, authorization = _authorize_cleanup(engine)
     connection = MagicMock()
     engine.connect.return_value.__enter__.return_value = connection
     engine.begin.return_value.__enter__.return_value = connection
@@ -256,19 +278,26 @@ def test_recover_reprocessing_activity_for_test_cleanup_resets_only_replay_table
         MagicMock(),
     ]
 
-    snapshot = recover_reprocessing_activity_for_test_cleanup(engine)
+    try:
+        snapshot = recover_reprocessing_activity_for_test_cleanup(
+            engine,
+            authorization=authorization,
+        )
 
-    assert snapshot["reprocessing_jobs_active"] == 1
-    executed_sql = [str(call.args[0]) for call in connection.execute.call_args_list]
-    assert any("UPDATE reprocessing_jobs" in sql for sql in executed_sql)
-    assert any("UPDATE position_state" in sql for sql in executed_sql)
-    assert any("DELETE FROM instrument_reprocessing_state" in sql for sql in executed_sql)
+        assert snapshot["reprocessing_jobs_active"] == 1
+        executed_sql = [str(call.args[0]) for call in connection.execute.call_args_list]
+        assert any("UPDATE reprocessing_jobs" in sql for sql in executed_sql)
+        assert any("UPDATE position_state" in sql for sql in executed_sql)
+        assert any("DELETE FROM instrument_reprocessing_state" in sql for sql in executed_sql)
+    finally:
+        runtime.port_reservation.release()
 
 
 def test_recover_reprocessing_activity_for_test_cleanup_is_noop_for_nonrecoverable_snapshot() -> (
     None
 ):
     engine = MagicMock()
+    runtime, authorization = _authorize_cleanup(engine)
     connection = MagicMock()
     engine.connect.return_value.__enter__.return_value = connection
     connection.execute.side_effect = [
@@ -284,8 +313,34 @@ def test_recover_reprocessing_activity_for_test_cleanup_is_noop_for_nonrecoverab
         MagicMock(scalar=MagicMock(return_value=1)),
     ]
 
-    snapshot = recover_reprocessing_activity_for_test_cleanup(engine)
+    try:
+        snapshot = recover_reprocessing_activity_for_test_cleanup(
+            engine,
+            authorization=authorization,
+        )
 
-    assert snapshot["reprocessing_jobs_active"] == 1
-    assert snapshot["outbox_pending"] == 2
-    assert not engine.begin.called
+        assert snapshot["reprocessing_jobs_active"] == 1
+        assert snapshot["outbox_pending"] == 2
+        assert not engine.begin.called
+    finally:
+        runtime.port_reservation.release()
+
+
+def test_recovery_refuses_different_engine_before_read_or_mutation() -> None:
+    authorized_engine = MagicMock()
+    runtime, authorization = _authorize_cleanup(authorized_engine)
+    drifted_engine = MagicMock()
+    drifted_engine.url = make_url("postgresql://user:password@localhost:55432/shared")
+    try:
+        with pytest.raises(
+            DatabaseCleanupAuthorizationError,
+            match="delegated engine target differs",
+        ):
+            recover_reprocessing_activity_for_test_cleanup(
+                drifted_engine,
+                authorization=authorization,
+            )
+        assert not drifted_engine.connect.called
+        assert not drifted_engine.begin.called
+    finally:
+        runtime.port_reservation.release()
