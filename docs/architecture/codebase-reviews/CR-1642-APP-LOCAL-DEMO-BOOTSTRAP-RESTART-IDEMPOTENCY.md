@@ -23,22 +23,31 @@ This was deterministic implementation behavior rather than a Docker or database 
 
 ## Decision
 
-One decision owns the complete sample pack. First boot ingests portfolio and reference data;
-explicit force refresh ingests both; an unchanged retained restart ingests neither and emits
-`reason=unchanged_pack_present`. This preserves existing APIs, schemas, seeded identities, first
-boot, and manual refresh while removing implicit source replay.
+One source-backed decision owns the complete sample pack. Each immutable generated write segment
+has a content-derived idempotency key and a source-owned completeness evaluator. Portfolio-bundle
+completeness also requires the existing QCP analytics source product to prove the exact generated
+business-calendar window and cardinality with no missing observation dates. First boot selects all
+missing segments; a partial or evolved retained pack selects only the segments whose business facts
+are absent or different; an unchanged retained restart ingests nothing and emits
+`reason=unchanged_pack_present`. Explicit force refresh bypasses completeness reads and selects the
+complete pack. This preserves existing APIs, schemas, seeded identities, first boot, and manual
+refresh while removing implicit source replay and the unsafe portfolio-existence shortcut.
 
 ## Same-pattern review
 
-The scoped scan covered the Compose loader command, portfolio-existence check, market/FX batching,
-benchmark/index/risk-free posts, app-local stack contract, operations guide, RFC-048, repository
-context references, and wiki operations guidance. No second default force path was found.
+The scoped scan covered the Compose loader command, portfolio and terminal-position state,
+instrument and transaction facts, market/FX batching, benchmark/index/risk-free posts, app-local
+stack contract, operations guide, RFC-048, repository context references, and wiki operations
+guidance. No second default force path was found. The earlier portfolio-existence compatibility
+path and duplicate portfolio/reference ingestion wrappers were removed after every generated
+segment gained an evaluator.
 
 ## Validation
 
-- Focused demo-pack and Compose contracts: `24 passed`.
+- Focused demo-pack contracts: `35 passed` with warnings treated as errors.
 - Ruff lint and format: passed for all touched Python files.
-- Strict MyPy: passed for `tools/demo_data_pack.py`.
+- Strict MyPy: passed for `tools/demo_data_pack.py`; distinct reference-family evidence names
+  prevent local annotation reuse from weakening the typing gate.
 - Compose configuration rendering, architecture guard, and wiki/docs gates: passed.
 - Retained-volume ingest-only restart exited `0` in 3.3 seconds and logged
   `reason=unchanged_pack_present`.
@@ -46,12 +55,21 @@ context references, and wiki operations guidance. No second default force path w
   aggregation/outbox counts advanced only while the inherited pre-fix backlog was processing.
 - Remote Feature Lane `29680323658` passed workflow lint, lint/typecheck/contracts/security and
   warning gates, integration-lite, and unit-db at exact signed commit `c4f16143d348b3e3d6b0e7a2aa7c4e1cb505d302`.
+- The stronger retained repair selected the exact incomplete/evolved segments and published them,
+  then the bounded 900-second downstream verifier timed out on missing `CASH_USD` daily position
+  history while current positions, valuations, and transaction counts were present. This is
+  convergence evidence, not a no-op pass.
+- The following exact-head ingest-only attempt failed closed with HTTP 409 before accepting a new
+  job because transaction DTO normalization supplied a time-dependent default `created_at` that
+  was absent from the raw content key. The failed attempt left `ingestion_jobs` at 468/max id 468.
+  Generated transactions now carry their governed transaction timestamp as deterministic
+  `created_at`; two independent DTO normalizations produce the same SHA-256 request fingerprint.
 
-Normal-mode verification and canonical maturity proof remain pending until that pre-fix backlog
-converges.
+The second-run zero-write/count/maturity proof remains pending after this runtime fix-forward and
+must not be inferred from either diagnostic attempt.
 
 ## Documentation and compatibility
 
-Existing operations, RFC, and wiki sources were corrected in place; no duplicate playbook was
-added. No API, OpenAPI, event, database, migration, or production runtime contract changes are
+Existing operations, RFC, context, and wiki sources were corrected in place; no duplicate playbook
+was added. No API, OpenAPI, event, database, migration, or production runtime contract changes are
 needed because `demo_data_loader` is an app-local bootstrap utility.

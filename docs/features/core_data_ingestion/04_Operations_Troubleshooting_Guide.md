@@ -44,11 +44,13 @@ lotus-core startup includes a one-shot `demo_data_loader` container that:
 2. ingests a realistic multi-portfolio bundle (if not already present),
 3. verifies downstream positions/transactions/review outputs.
 
-The bootstrap decision covers the complete pack. On a retained-volume restart, existing demo
-portfolios cause portfolio, market-price, FX, benchmark, index, and risk-free ingestion to be
-skipped together with `reason=unchanged_pack_present`; unchanged source events and downstream
-valuation work are not replayed. Use an explicit force refresh only when the complete sample pack
-must be rebuilt.
+The bootstrap decision covers the complete pack. On a retained-volume restart, the loader compares
+the generated portfolio, instrument, transaction, terminal-position, market-price, FX, index,
+benchmark, assignment, and risk-free segments with their source-owned query surfaces. It skips the
+pack with `reason=unchanged_pack_present` only when every generated segment is already complete.
+Missing or evolved segments are published selectively; an existing portfolio alone is not evidence
+that its reference histories are complete. Use an explicit force refresh only when the complete
+sample pack must be rebuilt without source comparison.
 
 The app-local ingestion service defaults `ENTERPRISE_MAX_WRITE_PAYLOAD_BYTES` to 16 MiB so the
 canonical local demo pack can be posted through the same HTTP write boundary used by clients. Keep
@@ -77,5 +79,5 @@ DEMO_DATA_PACK_FORCE_INGEST=true docker compose up -d --force-recreate demo_data
 | :--- | :--- | :--- |
 | Upstream not ready in time | `Timed out waiting for readiness endpoint` | Increase `--wait-seconds` or inspect unhealthy lotus-core services. |
 | Downstream pipeline lag | `Timed out verifying portfolio outputs` | Check calculator/aggregation service health and logs; re-run loader manually. |
-| Retained restart replays unchanged data | missing `reason=unchanged_pack_present` or new jobs for unchanged source data | Confirm `DEMO_DATA_PACK_FORCE_INGEST` is unset/false and inspect the loader command/environment. |
+| Retained restart replays unchanged data | missing `reason=unchanged_pack_present` or new jobs despite every generated segment matching source truth | Confirm `DEMO_DATA_PACK_FORCE_INGEST` is unset/false and inspect the loader's reason-coded segment selection. A partial/evolved retained pack is repaired selectively by design. |
 | Existing dirty data set | unexpected verification failures after many local experiments | Reset local volumes (`docker compose down -v`) and restart to rebuild canonical demo data. |
