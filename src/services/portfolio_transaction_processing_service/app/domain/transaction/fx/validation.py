@@ -90,6 +90,21 @@ def validate_fx_embedded_fee(trade_fee: Decimal) -> FxValidationIssue | None:
     )
 
 
+def validate_fx_embedded_tax(withholding_tax_amount: Decimal) -> FxValidationIssue | None:
+    """Reject inline FX tax until its currency and charged leg are explicit."""
+
+    if withholding_tax_amount == Decimal(0):
+        return None
+    return FxValidationIssue(
+        code=FxValidationReasonCode.NON_ZERO_EMBEDDED_TAX,
+        field="withholding_tax_amount",
+        message=(
+            "Embedded FX taxes are unsupported; book a separate TAX transaction with governed "
+            "economic-event and transaction-group linkage."
+        ),
+    )
+
+
 def validate_fx_transaction(
     txn: FxCanonicalTransaction, *, strict_metadata: bool = False
 ) -> list[FxValidationIssue]:
@@ -105,6 +120,9 @@ def validate_fx_transaction(
     embedded_fee_issue = validate_fx_embedded_fee(txn.trade_fee)
     if embedded_fee_issue is not None:
         issues.append(embedded_fee_issue)
+    embedded_tax_issue = validate_fx_embedded_tax(txn.withholding_tax_amount)
+    if embedded_tax_issue is not None:
+        issues.append(embedded_tax_issue)
     _validate_strict_metadata(issues, txn, strict_metadata=strict_metadata)
     _validate_cash_settlement_component(issues, txn, normalized)
     _validate_contract_identifier(issues, txn, normalized)

@@ -144,12 +144,24 @@ def test_validate_fx_transaction_rejects_every_non_zero_embedded_fee(
 
 
 @pytest.mark.parametrize("transaction_type", ["FX_SPOT", "FX_FORWARD", "FX_SWAP"])
-def test_validate_fx_transaction_applies_embedded_fee_policy_to_every_fx_family(
+@pytest.mark.parametrize(
+    ("charge_update", "expected_code"),
+    [
+        ({"trade_fee": Decimal("1")}, FxValidationReasonCode.NON_ZERO_EMBEDDED_FEE),
+        (
+            {"withholding_tax_amount": Decimal("1")},
+            FxValidationReasonCode.NON_ZERO_EMBEDDED_TAX,
+        ),
+    ],
+)
+def test_validate_fx_transaction_applies_embedded_charge_policy_to_every_fx_family(
     transaction_type: str,
+    charge_update: dict[str, Decimal],
+    expected_code: FxValidationReasonCode,
 ) -> None:
     updates: dict[str, object] = {
         "transaction_type": transaction_type,
-        "trade_fee": Decimal("1"),
+        **charge_update,
     }
     if transaction_type == "FX_SWAP":
         updates.update(
@@ -161,7 +173,7 @@ def test_validate_fx_transaction_applies_embedded_fee_policy_to_every_fx_family(
 
     issues = validate_fx_transaction(txn)
 
-    assert FxValidationReasonCode.NON_ZERO_EMBEDDED_FEE in {issue.code for issue in issues}
+    assert expected_code in {issue.code for issue in issues}
 
 
 def test_validate_fx_transaction_requires_cash_leg_linkage_for_settlement_components() -> None:

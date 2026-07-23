@@ -33,6 +33,7 @@ from .validation import (
     FxValidationError,
     FxValidationIssue,
     validate_fx_embedded_fee,
+    validate_fx_embedded_tax,
     validate_fx_transaction,
 )
 
@@ -62,4 +63,5 @@ __all__ = [
     "FxValidationReasonCode",
     "validate_fx_transaction",
     "validate_fx_embedded_fee",
+    "validate_fx_embedded_tax",
 ]

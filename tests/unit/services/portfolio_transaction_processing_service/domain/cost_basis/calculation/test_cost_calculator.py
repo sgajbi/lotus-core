@@ -697,29 +697,43 @@ def test_fx_strategy_rejects_invalid_swap_linkage(
 
 
 @pytest.mark.parametrize(
-    "fee_update",
+    ("charge_update", "expected_reason"),
     [
-        {"fees": Fees(brokerage=Decimal("1"))},
-        {"trade_fee": Decimal("0"), "fees": Fees(brokerage=Decimal("1"))},
-        {"trade_fee": Decimal("1"), "fees": Fees()},
+        (
+            {"fees": Fees(brokerage=Decimal("1"))},
+            "FX_025_NON_ZERO_EMBEDDED_FEE:trade_fee",
+        ),
+        (
+            {"trade_fee": Decimal("0"), "fees": Fees(brokerage=Decimal("1"))},
+            "FX_025_NON_ZERO_EMBEDDED_FEE:trade_fee",
+        ),
+        (
+            {"trade_fee": Decimal("1"), "fees": Fees()},
+            "FX_025_NON_ZERO_EMBEDDED_FEE:trade_fee",
+        ),
+        (
+            {"withholding_tax_amount": Decimal("1")},
+            "FX_026_NON_ZERO_EMBEDDED_TAX:withholding_tax_amount",
+        ),
     ],
 )
-def test_fx_strategy_rejects_embedded_fee_before_cost_updates(
+def test_fx_strategy_rejects_embedded_charge_before_cost_updates(
     cost_calculator,
     mock_disposition_engine,
     error_reporter,
-    fee_update,
+    charge_update,
+    expected_reason,
 ) -> None:
     fx_transaction = _canonical_fx_transaction(
-        transaction_id="FX-EMBEDDED-FEE-001",
-        **fee_update,
+        transaction_id="FX-EMBEDDED-CHARGE-001",
+        **charge_update,
     )
 
     cost_calculator.calculate_transaction_costs(fx_transaction)
 
     errors = error_reporter.get_errors()
-    assert error_reporter.has_errors_for("FX-EMBEDDED-FEE-001")
-    assert "FX_025_NON_ZERO_EMBEDDED_FEE:trade_fee" in errors[0].error_reason
+    assert error_reporter.has_errors_for("FX-EMBEDDED-CHARGE-001")
+    assert expected_reason in errors[0].error_reason
     assert fx_transaction.net_cost is None
     mock_disposition_engine.add_buy_lot.assert_not_called()
     mock_disposition_engine.consume_sell_quantity.assert_not_called()

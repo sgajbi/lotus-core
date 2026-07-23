@@ -976,3 +976,40 @@ def test_calculate_fx_cash_settlement_rejects_embedded_fee_before_sign_normaliza
 
     with pytest.raises(ValueError, match="FX_025_NON_ZERO_EMBEDDED_FEE: trade_fee"):
         _calculate(event, rule)
+
+
+@pytest.mark.parametrize(
+    ("transaction_type", "classification"),
+    [
+        ("FX_CASH_SETTLEMENT_BUY", CashflowClassification.FX_BUY),
+        ("FX_CASH_SETTLEMENT_SELL", CashflowClassification.FX_SELL),
+    ],
+)
+@pytest.mark.parametrize(
+    "withholding_tax_amount", [Decimal("1"), Decimal("10000"), Decimal("10001")]
+)
+def test_calculate_fx_cash_settlement_rejects_embedded_tax_before_sign_normalization(
+    base_transaction_event: TransactionEvent,
+    transaction_type: str,
+    classification: CashflowClassification,
+    withholding_tax_amount: Decimal,
+) -> None:
+    event = base_transaction_event.model_copy(
+        update={
+            "transaction_type": transaction_type,
+            "gross_transaction_amount": Decimal("10000"),
+            "withholding_tax_amount": withholding_tax_amount,
+        }
+    )
+    rule = CashflowRule(
+        classification=classification,
+        timing=CashflowTiming.EOD,
+        is_position_flow=True,
+        is_portfolio_flow=False,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="FX_026_NON_ZERO_EMBEDDED_TAX: withholding_tax_amount",
+    ):
+        _calculate(event, rule)

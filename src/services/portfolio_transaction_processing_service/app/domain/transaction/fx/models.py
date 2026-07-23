@@ -5,9 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
-from typing import Any, Mapping
+from typing import Any, Mapping, cast
 
 from portfolio_common.domain.currency import normalize_currency_code
+from portfolio_common.domain.decimal_amount import decimal_or_none
 from portfolio_common.domain.transaction.fee_components import (
     TRANSACTION_FEE_COMPONENT_FIELDS,
     resolve_transaction_trade_fee,
@@ -67,6 +68,16 @@ def _resolved_source_trade_fee(source: object) -> Decimal:
     return resolved_components if resolved_components != Decimal(0) else resolved_aggregate
 
 
+def _optional_source_decimal(source: object, field_name: str) -> Decimal:
+    raw_value = _optional_source_value(source, field_name)
+    if raw_value is None:
+        return Decimal(0)
+    value = cast(Decimal | None, decimal_or_none(raw_value))
+    if value is None:
+        raise ValueError(f"{field_name} must be numeric.")
+    return value
+
+
 @dataclass(frozen=True, slots=True, kw_only=True)
 class FxCanonicalTransaction:
     """Immutable canonical economics for one persisted FX component."""
@@ -93,6 +104,7 @@ class FxCanonicalTransaction:
     sell_amount: Decimal
     contract_rate: Decimal
     trade_fee: Decimal = Decimal(0)
+    withholding_tax_amount: Decimal = Decimal(0)
     linked_component_ids: tuple[str, ...] | None = None
     settlement_date: datetime | None = None
     economic_event_id: str | None = None
@@ -187,6 +199,7 @@ class FxCanonicalTransaction:
             sell_amount=source.sell_amount or Decimal(0),
             contract_rate=source.contract_rate or Decimal(0),
             trade_fee=_resolved_source_trade_fee(source),
+            withholding_tax_amount=_optional_source_decimal(source, "withholding_tax_amount"),
             economic_event_id=_optional_source_value(source, "economic_event_id"),
             linked_transaction_group_id=_optional_source_value(
                 source, "linked_transaction_group_id"
