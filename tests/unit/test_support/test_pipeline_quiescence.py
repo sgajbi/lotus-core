@@ -391,3 +391,46 @@ def test_recovery_revalidates_authority_after_activity_read_before_mutation(
         assert not engine.begin.called
     finally:
         runtime.port_reservation.release()
+
+
+def test_recovery_revalidates_authority_after_table_discovery_before_mutation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine = MagicMock()
+    runtime, authorization = _authorize_cleanup(engine)
+    connection = MagicMock()
+    engine.begin.return_value.__enter__.return_value = connection
+
+    def _discover_then_reallocate(_statement: object) -> MagicMock:
+        runtime.port_reservation.reallocate()
+        return MagicMock(
+            fetchall=MagicMock(
+                return_value=[
+                    ("reprocessing_jobs",),
+                    ("position_state",),
+                    ("instrument_reprocessing_state",),
+                ]
+            )
+        )
+
+    connection.execute.side_effect = _discover_then_reallocate
+    monkeypatch.setattr(
+        "tests.test_support.pipeline_quiescence.read_pipeline_activity_snapshot",
+        lambda _engine: {"reprocessing_jobs_active": 1},
+    )
+    try:
+        with pytest.raises(
+            DatabaseCleanupAuthorizationError,
+            match="stale for the current runtime generation or target",
+        ):
+            recover_reprocessing_activity_for_test_cleanup(
+                engine,
+                authorization=authorization,
+            )
+
+        executed_sql = [str(call.args[0]) for call in connection.execute.call_args_list]
+        assert len(executed_sql) == 1
+        assert "FROM pg_tables" in executed_sql[0]
+        assert not any("UPDATE" in sql or "DELETE" in sql for sql in executed_sql)
+    finally:
+        runtime.port_reservation.release()

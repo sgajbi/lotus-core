@@ -503,6 +503,35 @@ def test_function_cleanup_revalidates_authority_after_connection_entry(
         runtime.port_reservation.release()
 
 
+def test_function_cleanup_revalidates_authority_after_table_discovery(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runtime = _runtime()
+    engine = _engine(runtime.endpoints.host_database_url)
+    connection = engine.begin.return_value.__enter__.return_value
+
+    def _execute_then_reallocate(statement: object) -> MagicMock:
+        if "FROM pg_tables" in str(statement):
+            runtime.port_reservation.reallocate()
+            return MagicMock(fetchall=MagicMock(return_value=[("portfolios",)]))
+        return MagicMock()
+
+    connection.execute.side_effect = _execute_then_reallocate
+    monkeypatch.setattr(root_conftest, "_test_runtime", runtime)
+    try:
+        with pytest.raises(
+            DatabaseCleanupAuthorizationError,
+            match="stale for the current runtime generation or target",
+        ):
+            next(root_conftest.clean_db.__wrapped__(engine))
+
+        executed_sql = [str(call.args[0]) for call in connection.execute.call_args_list]
+        assert any("FROM pg_tables" in sql for sql in executed_sql)
+        assert not any("TRUNCATE" in sql for sql in executed_sql)
+    finally:
+        runtime.port_reservation.release()
+
+
 def test_deadlock_termination_callback_revalidates_authority_before_connection(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -43,13 +43,16 @@ Authorizing only the truncate statement would therefore leave a destructive bypa
    outside the visible authority tuple.
 3. Function- and module-scoped cleanup obtain authorization at fixture entry, before quiescence
    recovery, `pg_terminate_backend`, or truncate SQL. They revalidate the capability immediately
-   before each destructive connection and inside that connection before issuing SQL.
+   before each destructive connection, inside that connection, and after table discovery
+   immediately before issuing destructive SQL.
 4. Replay-only cleanup recovery requires and revalidates the same authorization, so a direct helper
    call or different engine cannot bypass the fixture fence. Authorizations are factory-issued,
    bound to the originating runtime, prepared target, and reservation generation, and validated by
    issued-object identity plus live runtime provenance. Copying or reconstructing their fields does
    not create a valid capability; reallocation or post-issuance project, component, or endpoint
-   drift retires the capability before any read or mutation.
+   drift retires the capability before any read or mutation. Every replay `UPDATE` or `DELETE`
+   revalidates separately after the metadata query so authority cannot expire between discovery
+   and execution.
 5. Inherited app-local, shared, test-shaped, fixed-port, mixed-provenance, and drifted-engine
    targets fail before destructive recovery, session-termination, or truncate SQL.
    Generated-project, process-reserved-port, exact-engine function, module, and recovery paths
@@ -73,10 +76,10 @@ does not decide whether a target is safe.
   tests/unit/test_support/test_runtime_env.py
   tests/unit/test_support/test_db_cleanup.py
   tests/unit/test_support/test_pipeline_quiescence.py -q -W error`
-  - `56 passed`
+  - `58 passed`
 - `python scripts/development/repository_python.py -m pytest
   tests/unit/test_support -q -W error`
-  - `130 passed`
+  - `132 passed`
 - Pinned Ruff check and format verification passed for all changed Python files.
 - Strict scoped MyPy passed for `runtime_env.py`, `db_cleanup.py`, and
   `pipeline_quiescence.py`.
