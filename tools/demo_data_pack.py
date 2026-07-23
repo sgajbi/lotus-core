@@ -1561,6 +1561,112 @@ def _probe_market_and_fx_segments(
     )
 
 
+def _probe_index_segments(
+    query_control_plane_base_url: str,
+    *,
+    as_of_date: str,
+    segments: tuple[DemoPackSegment, ...],
+) -> DemoPackCompleteness:
+    by_name = {segment.name: segment for segment in segments}
+    evaluated = tuple(
+        name for name in ("indices", "index-price-series", "index-return-series") if name in by_name
+    )
+    missing: list[str] = []
+
+    index_segment = by_name.get("indices")
+    if index_segment is not None:
+        expected_indices = index_segment.payload["indices"]
+        _, response = _request_json(
+            "POST",
+            f"{query_control_plane_base_url}/integration/indices/catalog",
+            payload={
+                "as_of_date": as_of_date,
+                "index_ids": sorted(str(record["index_id"]) for record in expected_indices),
+            },
+        )
+        if not _records_cover_expected(
+            expected=expected_indices,
+            actual=response.get("records") or [],
+            key_fields=("index_id",),
+            compare_fields=(
+                "index_name",
+                "index_currency",
+                "index_type",
+                "index_status",
+                "index_provider",
+                "index_market",
+                "classification_set_id",
+                "classification_labels",
+                "effective_from",
+                "source_vendor",
+                "source_record_id",
+            ),
+        ):
+            missing.append(index_segment.name)
+
+    for segment_name, payload_key, endpoint_suffix, value_field, numeric_field in (
+        (
+            "index-price-series",
+            "index_price_series",
+            "price-series",
+            "index_price",
+            "index_price",
+        ),
+        (
+            "index-return-series",
+            "index_return_series",
+            "return-series",
+            "index_return",
+            "index_return",
+        ),
+    ):
+        segment = by_name.get(segment_name)
+        if segment is None:
+            continue
+        expected_records = segment.payload[payload_key]
+        actual_records: list[dict[str, Any]] = []
+        for index_id in sorted({str(record["index_id"]) for record in expected_records}):
+            records = [record for record in expected_records if record["index_id"] == index_id]
+            _, response = _request_json(
+                "POST",
+                f"{query_control_plane_base_url}/integration/indices/{index_id}/{endpoint_suffix}",
+                payload={
+                    "as_of_date": as_of_date,
+                    "window": {
+                        "start_date": min(str(record["series_date"]) for record in records),
+                        "end_date": max(str(record["series_date"]) for record in records),
+                    },
+                    "frequency": "daily",
+                },
+            )
+            actual_records.extend(
+                {"index_id": index_id, **record} for record in response.get("points") or []
+            )
+        common_fields = (
+            value_field,
+            "series_currency",
+            "quality_status",
+        )
+        series_fields = (
+            (*common_fields, "value_convention")
+            if segment_name == "index-price-series"
+            else (*common_fields, "return_period", "return_convention")
+        )
+        if not _records_cover_expected(
+            expected=expected_records,
+            actual=actual_records,
+            key_fields=("index_id", "series_date"),
+            compare_fields=series_fields,
+            numeric_fields=frozenset({numeric_field}),
+        ):
+            missing.append(segment.name)
+
+    return DemoPackCompleteness(
+        evaluated_segments=evaluated,
+        missing_segments=tuple(sorted(missing)),
+    )
+
+
 def _build_demo_pack_segments(
     bundle: dict[str, Any],
     *,
