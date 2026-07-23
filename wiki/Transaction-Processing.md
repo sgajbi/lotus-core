@@ -108,8 +108,14 @@ but source-recorded positive DIVIDEND withholding remains in product-cashflow ec
 product and generated cash legs stay reconciled. Null/zero withholding and rows that predate the
 current settlement fences retain legacy arithmetic.
 Withholding-rate derivation, other receipt deductions, a supplied-net identity, return-of-capital,
-basis reduction, and advanced timing remain tracked under #448. FX fee currency and two-leg
-settlement ownership remain a separate decision under #754.
+basis reduction, and advanced timing remain tracked under #448.
+
+FX fees and taxes use a separate-linked-posting policy. A non-zero aggregate or component fee on an
+FX spot, forward, swap, or generated cash-settlement leg fails before booking, cost mutation, or
+cashflow sign normalization with `FX_025_NON_ZERO_EMBEDDED_FEE`. Absent and zero inline fees retain
+existing economics. Book supported charges as distinct `FEE`/`TAX` transactions carrying the same
+`economic_event_id` and `linked_transaction_group_id`; do not infer fee currency or charged-leg
+ownership from either FX cash leg.
 
 ## INTEREST Settlement Economics
 

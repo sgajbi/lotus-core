@@ -39,7 +39,7 @@ unsupported.
 | --- | --- | --- | --- |
 | Listed equity, ETF, bond, fund, or structured-instrument purchase/sale | Generic `BUY` and `SELL` semantics | Core records canonical acquisition/disposal economics; product-specific events require separate confirmation. | Product lifecycle rows below |
 | Cash and deposit funding, withdrawal, and interest | Generic cash and interest semantics | Core records principal cash movements and interest; no dedicated term-deposit maturity event is certified. | None currently claimed |
-| FX spot, forward, and swap | Supported | Core models linked FX contract/cash legs under governed conventions. | [#754](https://github.com/sgajbi/lotus-core/issues/754) for fee currency |
+| FX spot, forward, and swap | Supported | Core models linked FX contract/cash legs; non-zero embedded fees fail closed and supported fees/taxes are separate linked postings. | Future embedded-fee support requires explicit fee currency and charged-leg ownership. |
 | Listed fund subscription/redemption/distribution/reinvestment | Limited | Generic trade and distribution legs work; mixed return-of-capital handling is not complete. | [#448](https://github.com/sgajbi/lotus-core/issues/448) |
 | Bond purchase, sale, coupon, and accrued-interest semantics | Generic support | Core handles generic trade and coupon legs. | Amortized cost and redemption below |
 | Bond maturity, call, or partial redemption | Not implemented | Production booking is disabled. | [#477](https://github.com/sgajbi/lotus-core/issues/477), [#481](https://github.com/sgajbi/lotus-core/issues/481) |

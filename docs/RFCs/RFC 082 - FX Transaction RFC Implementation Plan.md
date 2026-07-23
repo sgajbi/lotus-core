@@ -4,7 +4,7 @@
 | --- | --- |
 | Status | Implemented |
 | Created | 2026-03-09 |
-| Last Updated | 2026-03-09 |
+| Last Updated | 2026-07-23 |
 | Owners | lotus-core engineering |
 | Depends On | `docs/rfc-transaction-specs/transactions/FX/RFC-FX-01 Canonical FX Transaction Specification.md`; shared transaction lifecycle specs |
 | Related Standards | RFC-0067 OpenAPI/vocabulary governance; RFC-065 service/runtime standards; durability/consistency, rounding, and migration-contract standards |
@@ -63,6 +63,7 @@ transaction capability catalog for current evidence.
 | Realized FX P&L semantics and policy traceability | Not implemented | No FX-specific realized P&L contract or policy mode support | Slice 6 |
 | Query/observability supportability | Not implemented | No FX-specific traceability on existing query/support surfaces | Slice 7 |
 | Dedicated FX regression gate and conformance report | Implemented | `transaction-fx-contract` / `transaction-fx-contract` suite wiring, CI matrix entry, conformance report, and FX E2E lifecycle coverage | Slice 8 |
+| FX fee currency and charged-leg policy | Implemented | Non-zero embedded fees fail with `FX_025_NON_ZERO_EMBEDDED_FEE`; separate linked `FEE`/`TAX` postings are the supported phase-1 contract | Post-conformance correctness hardening (#754) |
 
 ## Slice Plan (0..8)
 
@@ -252,19 +253,28 @@ Every slice PR must include a short shared-doc conformance note listing which sh
 4. Risk: API/query drift if FX fields are added ad hoc.
  - Mitigation: slice-7 OpenAPI + vocabulary gate enforcement.
 
-## Open Decisions Requiring Reviewer Direction
+## Resolved And Staged Policy Decisions
 1. Spot exposure policy: should phase 1 implement only `spot_exposure_model = NONE` with explicit hooks for later extension, or should spot contract exposure be enabled immediately behind policy?
  - Recommendation: phase 1 defaults to `NONE`; add policy-ready hooks without enabling broad spot contract lifecycle yet.
 2. Realized FX P&L policy: should phase 1 support only deterministic baseline modes (`NONE` / `UPSTREAM_PROVIDED`) and stage cash-lot derivation later?
  - Recommendation: yes. Deliver baseline auditable semantics first; stage `CASH_LOT_COST_METHOD` only when requirements are proven and test matrix is ready.
 3. FX-related fees/taxes: should phase 1 require separate linked `FEE`/`TAX` postings rather than embedded FX-leg netting?
- - Recommendation: yes. Separate linked postings keep accounting cleaner and align with existing charge-family direction.
+ - Confirmed and implemented: yes. Every non-zero resolved inline fee fails at the canonical FX
+   boundary with `FX_025_NON_ZERO_EMBEDDED_FEE` before booking, cost-basis mutation, or cashflow
+   sign normalization. A separate `FEE` or `TAX` posting must share `economic_event_id` and
+   `linked_transaction_group_id` with the FX deal; contract/deal linkage is retained where
+   applicable. Absent and zero inline fees preserve existing spot, forward, swap, and settlement
+   economics. Future embedded-fee support requires explicit fee currency and charged-leg ownership
+   rather than inference from the transaction `currency` field.
 
 ## Confirmed Direction
 1. FX should be implemented as one coordinated transaction family (`spot`, `forward`, `swap`) because they share contract, linkage, and P&L semantics.
 2. FX settlement legs must remain FX-classified and must not be converted into generic `ADJUSTMENT` cash legs.
 3. Existing FX rate infrastructure is reusable, but canonical FX transaction processing requires new domain modeling and calculator behavior.
 4. Query/support visibility should extend existing surfaces rather than creating unnecessary dedicated endpoints by default.
+5. Phase-1 FX fee/tax economics use separate linked postings. Inline fee netting is not a
+   configurable runtime mode and must not be introduced without a versioned domain and contract
+   change defining fee currency, charged leg, reconciliation, and downstream accounting.
 
 ## Approval Record
 1. Plan drafted on `2026-03-09`.
