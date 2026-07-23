@@ -929,8 +929,10 @@ def main() -> int:
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps(inventory, indent=2), encoding="utf-8")
         print(f"Wrote inventory: {args.output}")
-    else:
+    elif args.validate_only:
         print("Inventory validation and committed semantic parity passed.")
+    else:
+        print("Inventory validation passed.")
     return 0
 
 
