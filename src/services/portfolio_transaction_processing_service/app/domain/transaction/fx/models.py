@@ -5,9 +5,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
-from typing import Any
+from typing import Any, Mapping
 
 from portfolio_common.domain.currency import normalize_currency_code
+from portfolio_common.domain.transaction.fee_components import (
+    TRANSACTION_FEE_COMPONENT_FIELDS,
+    resolve_transaction_trade_fee,
+)
 from portfolio_common.domain.transaction.type_registry import (
     production_transaction_types_for_lifecycle_families,
 )
@@ -37,6 +41,32 @@ def _optional_source_value(source: object, field_name: str) -> Any:
     return getattr(source, field_name, None)
 
 
+def _fee_component_values(source: object) -> dict[str, object]:
+    fees = _optional_source_value(source, "fees")
+    if fees is not None:
+        return {
+            field_name: (
+                fees.get(field_name)
+                if isinstance(fees, Mapping)
+                else getattr(fees, field_name, None)
+            )
+            for field_name in TRANSACTION_FEE_COMPONENT_FIELDS
+        }
+    return {
+        field_name: _optional_source_value(source, field_name)
+        for field_name in TRANSACTION_FEE_COMPONENT_FIELDS
+    }
+
+
+def _resolved_source_trade_fee(source: object) -> Decimal:
+    trade_fee = _optional_source_value(source, "trade_fee")
+    fees = _optional_source_value(source, "fees")
+    fee_components = (
+        {} if fees is not None and trade_fee is not None else _fee_component_values(source)
+    )
+    return resolve_transaction_trade_fee(trade_fee, fee_components) or Decimal(0)
+
+
 @dataclass(frozen=True, slots=True, kw_only=True)
 class FxCanonicalTransaction:
     """Immutable canonical economics for one persisted FX component."""
@@ -62,6 +92,7 @@ class FxCanonicalTransaction:
     buy_amount: Decimal
     sell_amount: Decimal
     contract_rate: Decimal
+    trade_fee: Decimal = Decimal(0)
     linked_component_ids: tuple[str, ...] | None = None
     settlement_date: datetime | None = None
     economic_event_id: str | None = None
@@ -155,6 +186,7 @@ class FxCanonicalTransaction:
             buy_amount=source.buy_amount or Decimal(0),
             sell_amount=source.sell_amount or Decimal(0),
             contract_rate=source.contract_rate or Decimal(0),
+            trade_fee=_resolved_source_trade_fee(source),
             economic_event_id=_optional_source_value(source, "economic_event_id"),
             linked_transaction_group_id=_optional_source_value(
                 source, "linked_transaction_group_id"

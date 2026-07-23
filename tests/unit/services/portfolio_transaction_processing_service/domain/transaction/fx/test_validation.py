@@ -4,6 +4,8 @@ from dataclasses import replace
 from datetime import datetime
 from decimal import Decimal
 
+import pytest
+
 from src.services.portfolio_transaction_processing_service.app.domain.transaction.fx import (
     FxCanonicalTransaction,
     FxValidationReasonCode,
@@ -127,6 +129,39 @@ def test_validate_fx_transaction_requires_positive_amounts_and_rate() -> None:
     assert any(i.code == FxValidationReasonCode.NON_POSITIVE_BUY_AMOUNT for i in issues)
     assert any(i.code == FxValidationReasonCode.NON_POSITIVE_SELL_AMOUNT for i in issues)
     assert any(i.code == FxValidationReasonCode.NON_POSITIVE_CONTRACT_RATE for i in issues)
+
+
+@pytest.mark.parametrize("trade_fee", [Decimal("0.01"), Decimal("1000000"), Decimal("1095001")])
+def test_validate_fx_transaction_rejects_every_non_zero_embedded_fee(
+    trade_fee: Decimal,
+) -> None:
+    txn = replace(_base_txn(), trade_fee=trade_fee)
+
+    issues = validate_fx_transaction(txn)
+
+    assert [issue.code for issue in issues] == [FxValidationReasonCode.NON_ZERO_EMBEDDED_FEE]
+    assert issues[0].field == "trade_fee"
+
+
+@pytest.mark.parametrize("transaction_type", ["FX_SPOT", "FX_FORWARD", "FX_SWAP"])
+def test_validate_fx_transaction_applies_embedded_fee_policy_to_every_fx_family(
+    transaction_type: str,
+) -> None:
+    updates: dict[str, object] = {
+        "transaction_type": transaction_type,
+        "trade_fee": Decimal("1"),
+    }
+    if transaction_type == "FX_SWAP":
+        updates.update(
+            swap_event_id="SWAP-001",
+            near_leg_group_id="SWAP-001-NEAR",
+            far_leg_group_id="SWAP-001-FAR",
+        )
+    txn = replace(_base_txn(), **updates)
+
+    issues = validate_fx_transaction(txn)
+
+    assert FxValidationReasonCode.NON_ZERO_EMBEDDED_FEE in {issue.code for issue in issues}
 
 
 def test_validate_fx_transaction_requires_cash_leg_linkage_for_settlement_components() -> None:

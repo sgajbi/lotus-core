@@ -944,3 +944,35 @@ def test_calculate_fx_cash_settlement_sell_is_negative(base_transaction_event: T
     assert cashflow.classification == "FX_SELL"
     assert cashflow.is_position_flow is True
     assert cashflow.is_portfolio_flow is False
+
+
+@pytest.mark.parametrize(
+    ("transaction_type", "classification"),
+    [
+        ("FX_CASH_SETTLEMENT_BUY", CashflowClassification.FX_BUY),
+        ("FX_CASH_SETTLEMENT_SELL", CashflowClassification.FX_SELL),
+    ],
+)
+@pytest.mark.parametrize("trade_fee", [Decimal("1"), Decimal("10000"), Decimal("10001")])
+def test_calculate_fx_cash_settlement_rejects_embedded_fee_before_sign_normalization(
+    base_transaction_event: TransactionEvent,
+    transaction_type: str,
+    classification: CashflowClassification,
+    trade_fee: Decimal,
+) -> None:
+    event = base_transaction_event.model_copy(
+        update={
+            "transaction_type": transaction_type,
+            "gross_transaction_amount": Decimal("10000"),
+            "trade_fee": trade_fee,
+        }
+    )
+    rule = CashflowRule(
+        classification=classification,
+        timing=CashflowTiming.EOD,
+        is_position_flow=True,
+        is_portfolio_flow=False,
+    )
+
+    with pytest.raises(ValueError, match="FX_025_NON_ZERO_EMBEDDED_FEE: trade_fee"):
+        _calculate(event, rule)

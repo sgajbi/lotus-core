@@ -75,6 +75,21 @@ def _validate_realized_total_identity(
         )
 
 
+def validate_fx_embedded_fee(trade_fee: Decimal) -> FxValidationIssue | None:
+    """Reject cross-currency fee netting until charged-leg currency is explicit."""
+
+    if trade_fee == Decimal(0):
+        return None
+    return FxValidationIssue(
+        code=FxValidationReasonCode.NON_ZERO_EMBEDDED_FEE,
+        field="trade_fee",
+        message=(
+            "Embedded FX fees are unsupported; book a separate FEE or TAX transaction "
+            "with governed economic-event and transaction-group linkage."
+        ),
+    )
+
+
 def validate_fx_transaction(
     txn: FxCanonicalTransaction, *, strict_metadata: bool = False
 ) -> list[FxValidationIssue]:
@@ -87,6 +102,9 @@ def validate_fx_transaction(
     _validate_currency_pair(issues, txn)
     _validate_quote_convention(issues, normalized)
     _validate_positive_amounts_and_rate(issues, txn)
+    embedded_fee_issue = validate_fx_embedded_fee(txn.trade_fee)
+    if embedded_fee_issue is not None:
+        issues.append(embedded_fee_issue)
     _validate_strict_metadata(issues, txn, strict_metadata=strict_metadata)
     _validate_cash_settlement_component(issues, txn, normalized)
     _validate_contract_identifier(issues, txn, normalized)
