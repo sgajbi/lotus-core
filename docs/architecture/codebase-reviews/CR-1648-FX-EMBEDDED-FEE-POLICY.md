@@ -55,7 +55,7 @@ Phase-1 policy is `SEPARATE_LINKED_ONLY`:
 - signed lifecycle-test commit `dc7e9cebfb5289dee593452e82bcd9d165e0587e`;
 - focused direct/booking/cost/cashflow proof: 189 warning-strict tests passed;
 - repository-native FX manifest before the new DB case: 337 warning-strict tests passed;
-- current governed FX manifest: 338 tests collected, including one dedicated DB-direct linked-fee
+- current governed FX manifest: 340 tests collected, including one dedicated DB-direct linked-fee
   replay test;
 - complete repository lint, strict MyPy across 237 source files, architecture, OpenAPI, and API
   vocabulary gates passed;

@@ -102,7 +102,7 @@ generic cost engine strategy table still emitted a pending error for `FX_SPOT`, 
 Issue #754 closed the ambiguous fee-signing gap after the original slice report. The canonical
 domain now rejects every non-zero resolved inline FX fee with
 `FX_025_NON_ZERO_EMBEDDED_FEE` before booking, cost mutation, or cashflow sign normalization.
-Absent/zero inline fees remain compatible. The governed FX manifest now collects 338 tests,
+Absent/zero inline fees remain compatible. The governed FX manifest now collects 340 tests,
 including a DB-direct replay/idempotency scenario proving separate linked fee economics without
 double count; protected DB execution remains required before delivery closure.
 
