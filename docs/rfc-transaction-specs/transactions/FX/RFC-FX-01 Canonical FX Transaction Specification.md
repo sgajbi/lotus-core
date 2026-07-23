@@ -50,7 +50,7 @@ This RFC applies to:
 * FX spot conversions
 * FX forwards from trade date to maturity settlement
 * FX swaps as two linked legs (near + far)
-* fees/taxes related to FX (embedded or separate postings)
+* fees/taxes related to FX as separate governed linked postings; non-zero embedded fees are rejected
 
 ### 3.1 Out of scope
 
@@ -319,7 +319,7 @@ Lotus-core must store enough fields to enable that.
 * `fx_rate_source`
 * `spot_rate_at_trade` (for decomposition/reporting)
 * `forward_points` (if available)
-* fee/tax fields (embedded or separate)
+* zero-valued inline fee fields for compatibility; non-zero fees/taxes use separate linked postings
 
 ---
 
@@ -519,15 +519,20 @@ An FX swap must be represented as:
 
 ## 19. Fees and Taxes for FX (Optional)
 
-Fees/taxes may be:
+The phase-1 canonical policy does not infer a fee currency or charged leg from either FX cash leg.
+Every non-zero resolved inline fee is rejected before persistence, cost calculation, or cashflow
+sign normalization with `FX_025_NON_ZERO_EMBEDDED_FEE`. Absent and zero inline fee values preserve
+existing spot, forward, swap, and settlement behavior.
 
-* embedded in amounts (reducing amt_buy or increasing amt_sell), or
-* posted separately as `FEE`/`TAX` transactions.
-
-If separate:
+Fees/taxes are posted separately as `FEE`/`TAX` transactions and:
 
 * must share `linked_transaction_group_id` and `economic_event_id`
 * must reference `deal_id` / `fx_contract_id` where applicable
+* must not be netted into `amt_buy` or `amt_sell` or counted again as an FX-leg transaction cost
+
+Future embedded-fee support requires a versioned contract that explicitly identifies fee currency,
+charged leg, reconciliation treatment, and linkage. It must not infer those semantics from
+`currency`, `ccy_buy`, or `ccy_sell`.
 
 ---
 
@@ -658,7 +663,10 @@ Far leg group (forward exposure):
 ### 22.6 Fee/tax tests
 
 * separate fee/tax postings link to FX group
-* embedded fee handling does not double count
+* absent and zero inline fees preserve FX leg economics
+* positive inline fees below, equal to, and above either cash leg fail with
+  `FX_025_NON_ZERO_EMBEDDED_FEE` before sign normalization
+* replay preserves separate fee/tax linkage and does not double count the FX or charge cashflow
 
 ---
 
@@ -674,7 +682,8 @@ Must be configurable and versioned:
 * rate convention normalization policy
 * precision/rounding
 * strictness for requiring explicit cash accounts
-* embedded vs separate fee validation
+* phase-1 fee policy is `SEPARATE_LINKED_ONLY`; any future embedded mode requires an explicit
+  versioned fee-currency and charged-leg contract
 
 All processed records must preserve:
 
@@ -691,5 +700,9 @@ This RFC defines the canonical specification for **FX Spot**, **FX Forward**, an
 2. **Contract exposure layer** (FX contract positions for forwards/swaps; optional for spot)
 
 It standardizes linkage, timing semantics, position readiness for MTM/unrealized P&L, explicit realized P&L structure (capital vs FX split), auditability, and replay safety.
+
+For fees and taxes, the authoritative phase-1 contract is separate linked `FEE`/`TAX` posting.
+Non-zero embedded fees are unsupported and fail with `FX_025_NON_ZERO_EMBEDDED_FEE`; zero-valued
+inline fields remain compatible.
 
 If any implementation, test, or downstream behavior conflicts with this RFC, this RFC is the source of truth unless an approved exception is documented.

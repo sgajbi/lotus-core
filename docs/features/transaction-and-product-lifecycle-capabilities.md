@@ -49,7 +49,7 @@ instrument using that transaction type has complete lifecycle coverage.
 | --- | --- | --- | --- |
 | Listed equities, ETFs, bonds, funds, and structured instruments | Purchase and sale through `BUY` and `SELL` | `supported_via_generic_transaction_semantics` | Trade economics do not certify product-specific maturity, exercise, payoff, or distribution behavior. |
 | Cash and deposits | Deposit, withdrawal, and interest through `DEPOSIT`, `WITHDRAWAL`, and `INTEREST` | `supported_via_generic_transaction_semantics` | No separately certified term-deposit maturity event. |
-| Foreign exchange | Spot, forward, and swap | `supported` | Fee-currency policy remains under [#754](https://github.com/sgajbi/lotus-core/issues/754). |
+| Foreign exchange | Spot, forward, and swap | `supported` | Non-zero embedded fees are rejected; supported fees/taxes are separate postings linked to the FX event/group. |
 | Listed funds | Subscription, redemption, distribution, and reinvestment through generic trade/income legs | `limited` | Mixed income and return-of-capital distribution is owned by [#448](https://github.com/sgajbi/lotus-core/issues/448). |
 | Fixed income | Purchase, sale, coupon, and accrued-interest semantics | `supported_via_generic_transaction_semantics` | Amortized cost and redemption are separate unsupported lifecycles. |
 | Fixed income | Maturity, call, and partial redemption | `target_not_implemented` | [#477](https://github.com/sgajbi/lotus-core/issues/477), [#481](https://github.com/sgajbi/lotus-core/issues/481) |

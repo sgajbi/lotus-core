@@ -71,6 +71,13 @@ positive proceeds. Invalid zero or negative proceeds are rejected before writes 
 amount, and stable reason-code evidence without exposing raw payloads or infrastructure details.
 Do not repair or reconcile such a case by applying `abs()` to the amount.
 
+FX cash settlement is stricter because an inline fee has no unambiguous currency or charged leg.
+The calculator rejects every non-zero resolved fee on `FX_CASH_SETTLEMENT_BUY` or
+`FX_CASH_SETTLEMENT_SELL` with `FX_025_NON_ZERO_EMBEDDED_FEE` before classification signing can
+apply `abs()`. Zero inline fees remain compatible. Supported FX charges are distinct linked
+`FEE`/`TAX` postings and therefore produce their own cashflow instead of netting or double counting
+the FX leg.
+
 For DIVIDEND, null/zero withholding preserves the prior gross-minus-fee result. Negative
 withholding, withholding above gross, and withholding that consumes all settlement proceeds fail
 closed. This is recorded-amount support, not withholding-rate derivation or jurisdiction-specific

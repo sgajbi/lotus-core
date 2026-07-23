@@ -2565,8 +2565,9 @@ Most relevant current governance:
      decision.
      Preserve bounded application reason codes through Kafka DLQ and operations-API evidence. The
      current DIVIDEND available-proceeds input remains booked gross amount pending net-dividend,
-     withholding, and return-of-capital work under #448; FX fee currency and two-leg ownership
-     remain separate under #754.
+     withholding, and return-of-capital work under #448. FX does not use this generic arithmetic:
+     its phase-1 policy rejects non-zero embedded fees and represents supported charges as separate
+     linked `FEE`/`TAX` postings under the FX domain rule below.
 175. Corporate-action Bundle A validation and basis reconciliation are owned by
      `portfolio_transaction_processing_service.app.domain.transaction.corporate_action` and
      `.domain.cost_basis.corporate_action_reconciliation` over immutable `BookedTransaction`.
@@ -2612,7 +2613,13 @@ Most relevant current governance:
      position policies in-process. Do not restore `portfolio_common.transaction_domain` or import
      service-owned FX policy through a shared compatibility facade. FX canonical values are
      immutable and framework-independent; do not reintroduce Pydantic, event-envelope, ORM, or
-     transport models into the domain package.
+     transport models into the domain package. Resolve optional FX fee evidence inside canonical
+     construction without widening the required source protocol. Phase-1 FX fee/tax policy is
+     separate linked `FEE`/`TAX` posting: reject every non-zero resolved inline fee with
+     `FX_025_NON_ZERO_EMBEDDED_FEE` before booking, cost-basis mutation, or cashflow sign
+     normalization. Preserve absent/zero inline fees and require separate charges to retain the FX
+     `economic_event_id` and `linked_transaction_group_id`; never infer fee currency or charged leg
+     from the transaction `currency` field.
 181. Framework-independent transaction vocabulary and policies shared by multiple Core boundaries
      belong under `portfolio_common.domain.transaction`, with tests mirroring that package path.
      Do not add new transaction modules to the `portfolio_common` root. Migration re-exports must
