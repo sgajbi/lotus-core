@@ -1,0 +1,193 @@
+{
+  "schema_version": "1.0.0",
+  "model_path": "src/libs/portfolio-common/portfolio_common/database_models.py",
+  "expected_inventory": {
+    "numeric_columns": 95,
+    "tables": 29
+  },
+  "profiles": {
+    "finite": {
+      "nullable": false,
+      "sign": "signed"
+    },
+    "positive-finite": {
+      "nullable": false,
+      "sign": "positive"
+    },
+    "nonnegative-finite": {
+      "nullable": false,
+      "sign": "nonnegative"
+    },
+    "nullable-finite": {
+      "nullable": true,
+      "sign": "signed"
+    },
+    "nullable-positive-finite": {
+      "nullable": true,
+      "sign": "positive"
+    },
+    "nullable-nonnegative-finite": {
+      "nullable": true,
+      "sign": "nonnegative"
+    }
+  },
+  "rollout_statuses": [
+    "enforced",
+    "planned"
+  ],
+  "tables": {
+    "simulation_changes": {
+      "quantity": {"profile": "nullable-finite", "rollout_status": "planned"},
+      "price": {"profile": "nullable-positive-finite", "rollout_status": "planned"},
+      "amount": {"profile": "nullable-finite", "rollout_status": "planned"}
+    },
+    "position_history": {
+      "quantity": {"profile": "finite", "rollout_status": "planned"},
+      "cost_basis": {"profile": "finite", "rollout_status": "planned"},
+      "cost_basis_local": {"profile": "nullable-finite", "rollout_status": "planned"}
+    },
+    "daily_position_snapshots": {
+      "quantity": {"profile": "finite", "rollout_status": "planned"},
+      "cost_basis": {"profile": "finite", "rollout_status": "planned"},
+      "cost_basis_local": {"profile": "nullable-finite", "rollout_status": "planned"},
+      "market_price": {"profile": "nullable-positive-finite", "rollout_status": "planned"},
+      "market_value": {"profile": "nullable-finite", "rollout_status": "planned"},
+      "market_value_local": {"profile": "nullable-finite", "rollout_status": "planned"},
+      "unrealized_gain_loss": {"profile": "nullable-finite", "rollout_status": "planned"},
+      "unrealized_gain_loss_local": {"profile": "nullable-finite", "rollout_status": "planned"},
+      "unrealized_price_gain_loss": {"profile": "nullable-finite", "rollout_status": "planned"},
+      "unrealized_fx_gain_loss": {"profile": "nullable-finite", "rollout_status": "planned"}
+    },
+    "fx_rates": {
+      "rate": {"profile": "positive-finite", "rollout_status": "planned"}
+    },
+    "market_prices": {
+      "price": {"profile": "positive-finite", "rollout_status": "planned"}
+    },
+    "instruments": {
+      "buy_amount": {"profile": "nullable-positive-finite", "rollout_status": "planned"},
+      "sell_amount": {"profile": "nullable-positive-finite", "rollout_status": "planned"},
+      "contract_rate": {"profile": "nullable-positive-finite", "rollout_status": "planned"}
+    },
+    "sustainability_preference_profiles": {
+      "minimum_allocation": {"profile": "nullable-nonnegative-finite", "rollout_status": "planned"},
+      "maximum_allocation": {"profile": "nullable-nonnegative-finite", "rollout_status": "planned"}
+    },
+    "client_tax_profiles": {
+      "withholding_tax_rate": {"profile": "nullable-nonnegative-finite", "rollout_status": "planned"}
+    },
+    "client_tax_rule_sets": {
+      "rate": {"profile": "nullable-nonnegative-finite", "rollout_status": "planned"},
+      "threshold_amount": {"profile": "nullable-nonnegative-finite", "rollout_status": "planned"}
+    },
+    "client_income_needs_schedules": {
+      "amount": {"profile": "positive-finite", "rollout_status": "planned"}
+    },
+    "liquidity_reserve_requirements": {
+      "required_amount": {"profile": "positive-finite", "rollout_status": "planned"}
+    },
+    "planned_withdrawal_schedules": {
+      "amount": {"profile": "positive-finite", "rollout_status": "planned"}
+    },
+    "model_portfolio_targets": {
+      "target_weight": {"profile": "nonnegative-finite", "rollout_status": "planned"},
+      "min_weight": {"profile": "nullable-nonnegative-finite", "rollout_status": "planned"},
+      "max_weight": {"profile": "nullable-nonnegative-finite", "rollout_status": "planned"}
+    },
+    "benchmark_composition_series": {
+      "composition_weight": {"profile": "nonnegative-finite", "rollout_status": "planned"}
+    },
+    "index_price_series": {
+      "index_price": {"profile": "positive-finite", "rollout_status": "planned"}
+    },
+    "index_return_series": {
+      "index_return": {"profile": "finite", "rollout_status": "planned"}
+    },
+    "benchmark_return_series": {
+      "benchmark_return": {"profile": "finite", "rollout_status": "planned"}
+    },
+    "risk_free_series": {
+      "value": {"profile": "finite", "rollout_status": "planned"}
+    },
+    "instrument_lookthrough_components": {
+      "component_weight": {"profile": "nonnegative-finite", "rollout_status": "planned"}
+    },
+    "transactions": {
+      "quantity": {"profile": "nonnegative-finite", "rollout_status": "enforced"},
+      "price": {"profile": "nonnegative-finite", "rollout_status": "planned"},
+      "gross_transaction_amount": {"profile": "nonnegative-finite", "rollout_status": "planned"},
+      "trade_fee": {"profile": "nullable-nonnegative-finite", "rollout_status": "planned"},
+      "gross_cost": {"profile": "nullable-finite", "rollout_status": "planned"},
+      "net_cost": {"profile": "nullable-finite", "rollout_status": "planned"},
+      "realized_gain_loss": {"profile": "nullable-finite", "rollout_status": "planned"},
+      "transaction_fx_rate": {"profile": "nullable-positive-finite", "rollout_status": "planned"},
+      "net_cost_local": {"profile": "nullable-finite", "rollout_status": "planned"},
+      "realized_gain_loss_local": {"profile": "nullable-finite", "rollout_status": "planned"},
+      "withholding_tax_amount": {"profile": "nullable-nonnegative-finite", "rollout_status": "planned"},
+      "other_interest_deductions_amount": {"profile": "nullable-nonnegative-finite", "rollout_status": "planned"},
+      "net_interest_amount": {"profile": "nullable-finite", "rollout_status": "planned"},
+      "buy_amount": {"profile": "nullable-positive-finite", "rollout_status": "planned"},
+      "sell_amount": {"profile": "nullable-positive-finite", "rollout_status": "planned"},
+      "contract_rate": {"profile": "nullable-positive-finite", "rollout_status": "planned"},
+      "allocated_cost_basis_local": {"profile": "nullable-nonnegative-finite", "rollout_status": "planned"},
+      "allocated_cost_basis_base": {"profile": "nullable-nonnegative-finite", "rollout_status": "planned"},
+      "realized_capital_pnl_local": {"profile": "nullable-finite", "rollout_status": "planned"},
+      "realized_fx_pnl_local": {"profile": "nullable-finite", "rollout_status": "planned"},
+      "realized_total_pnl_local": {"profile": "nullable-finite", "rollout_status": "planned"},
+      "realized_capital_pnl_base": {"profile": "nullable-finite", "rollout_status": "planned"},
+      "realized_fx_pnl_base": {"profile": "nullable-finite", "rollout_status": "planned"},
+      "realized_total_pnl_base": {"profile": "nullable-finite", "rollout_status": "planned"},
+      "synthetic_flow_amount_local": {"profile": "nullable-finite", "rollout_status": "planned"},
+      "synthetic_flow_amount_base": {"profile": "nullable-finite", "rollout_status": "planned"},
+      "synthetic_flow_fx_rate_to_base": {"profile": "nullable-positive-finite", "rollout_status": "planned"},
+      "synthetic_flow_price_used": {"profile": "nullable-nonnegative-finite", "rollout_status": "planned"},
+      "synthetic_flow_quantity_used": {"profile": "nullable-nonnegative-finite", "rollout_status": "planned"}
+    },
+    "transaction_costs": {
+      "amount": {"profile": "positive-finite", "rollout_status": "enforced"}
+    },
+    "cashflows": {
+      "amount": {"profile": "finite", "rollout_status": "planned"}
+    },
+    "position_lot_state": {
+      "original_quantity": {"profile": "nonnegative-finite", "rollout_status": "enforced"},
+      "open_quantity": {"profile": "nonnegative-finite", "rollout_status": "enforced"},
+      "lot_cost_local": {"profile": "nonnegative-finite", "rollout_status": "enforced"},
+      "lot_cost_base": {"profile": "nonnegative-finite", "rollout_status": "enforced"},
+      "accrued_interest_paid_local": {"profile": "nonnegative-finite", "rollout_status": "enforced"}
+    },
+    "cost_basis_processing_state": {
+      "latest_quantity": {"profile": "nonnegative-finite", "rollout_status": "enforced"}
+    },
+    "average_cost_pool_state": {
+      "pool_quantity": {"profile": "nonnegative-finite", "rollout_status": "enforced"},
+      "pool_cost_local": {"profile": "nonnegative-finite", "rollout_status": "enforced"},
+      "pool_cost_base": {"profile": "nonnegative-finite", "rollout_status": "enforced"}
+    },
+    "accrued_income_offset_state": {
+      "accrued_interest_paid_local": {"profile": "nonnegative-finite", "rollout_status": "enforced"},
+      "remaining_offset_local": {"profile": "nonnegative-finite", "rollout_status": "enforced"}
+    },
+    "position_timeseries": {
+      "bod_market_value": {"profile": "finite", "rollout_status": "planned"},
+      "bod_cashflow_position": {"profile": "finite", "rollout_status": "planned"},
+      "eod_cashflow_position": {"profile": "finite", "rollout_status": "planned"},
+      "bod_cashflow_portfolio": {"profile": "finite", "rollout_status": "planned"},
+      "eod_cashflow_portfolio": {"profile": "finite", "rollout_status": "planned"},
+      "eod_market_value": {"profile": "finite", "rollout_status": "planned"},
+      "fees": {"profile": "finite", "rollout_status": "planned"},
+      "quantity": {"profile": "finite", "rollout_status": "planned"},
+      "cost": {"profile": "finite", "rollout_status": "planned"}
+    },
+    "portfolio_timeseries": {
+      "bod_market_value": {"profile": "finite", "rollout_status": "planned"},
+      "bod_cashflow": {"profile": "finite", "rollout_status": "planned"},
+      "eod_cashflow": {"profile": "finite", "rollout_status": "planned"},
+      "eod_market_value": {"profile": "finite", "rollout_status": "planned"},
+      "fees": {"profile": "finite", "rollout_status": "planned"}
+    },
+    "financial_reconciliation_runs": {
+      "tolerance": {"profile": "nullable-nonnegative-finite", "rollout_status": "planned"}
+    }
+  }
+}
