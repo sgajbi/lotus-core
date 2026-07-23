@@ -45,6 +45,11 @@ package name `app`: the launcher exited successfully while loading a physical us
 editable finder mappings from another Core worktree. Proving only `portfolio_common` at launcher
 entry was therefore insufficient for commands that import a service package later.
 
+The first consolidated Linux lane also found one coverage regression spawning `python -c` in a
+temporary project while relying on implicit cwd insertion. The safe launcher intentionally made
+that assumption non-portable. The regression now supplies its temporary source root explicitly,
+matching the production launcher contract instead of weakening safe-path behavior.
+
 The launcher now prepends a repository-owned Python startup hook. Before the delegated command
 runs, that hook removes editable finders that can claim `app` or `portfolio_common` from outside the
 invoking checkout and installs an actual-import fence for both protected names. A physical package
@@ -76,6 +81,8 @@ dynamic reproduction before a coordinated issue or fix; no speculative duplicate
   closed, and a synthetic PEP 660 finder mapped to another worktree is removed before delegation.
 - The independent review reproduction now exits non-zero for the ambient foreign `app`; an
   explicitly selected current ingestion-service root imports successfully.
+- The critical-path coverage subprocess passes with Python safe-path mode enabled and an explicit
+  temporary source root, closing the exact Linux warning-gate failure from run `29978007138`.
 - Windows local proof resolved
   `C:\Users\Sandeep\projects\lotus-core-demo-pack-wt\src\libs\portfolio-common\portfolio_common\__init__.py`.
 - `make quality-workflow-governance-gate`, `make transaction-capability-catalog-guard`, and
