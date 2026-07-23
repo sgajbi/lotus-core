@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, datetime
 from enum import StrEnum
+from typing import cast
 
 from ..calculation_lineage import canonical_content_hash
 from .source_facts import ValuationAuthorityScope
@@ -115,9 +116,7 @@ class InstrumentValuationPolicyAssignment:
                 "valid_to": self.valid_to,
             }
         )
-        if not isinstance(content_hash, str):
-            raise TypeError("canonical content hash must be a string")
-        return content_hash
+        return cast(str, content_hash)
 
 
 @dataclass(frozen=True, slots=True)

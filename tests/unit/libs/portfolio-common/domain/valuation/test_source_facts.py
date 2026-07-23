@@ -7,6 +7,8 @@ from portfolio_common.domain.valuation import (
     MarketPriceQuoteBasis,
     MarketPriceSourceFact,
     ValuationAuthorityScope,
+    ValuationBookScope,
+    resolve_optional_valuation_book_scope,
 )
 
 
@@ -45,6 +47,26 @@ def test_valuation_authority_scope_normalizes_without_defaulting() -> None:
     )
 
     assert scope.key == ("TENANT-SG", "PB-SG-01", "BOND-001")
+    assert scope.book_scope == ValuationBookScope("TENANT-SG", "PB-SG-01")
+
+
+def test_optional_valuation_book_scope_preserves_legacy_absence() -> None:
+    assert resolve_optional_valuation_book_scope(tenant_id=None, legal_book_id=None) is None
+
+
+@pytest.mark.parametrize(
+    ("tenant_id", "legal_book_id"),
+    [("TENANT-SG", None), (None, "PB-SG-01")],
+)
+def test_optional_valuation_book_scope_rejects_partial_authority(
+    tenant_id: str | None,
+    legal_book_id: str | None,
+) -> None:
+    with pytest.raises(ValueError, match="must be supplied together"):
+        resolve_optional_valuation_book_scope(
+            tenant_id=tenant_id,
+            legal_book_id=legal_book_id,
+        )
 
 
 @pytest.mark.parametrize("field_name", ["tenant_id", "legal_book_id", "security_id"])
@@ -58,6 +80,23 @@ def test_valuation_authority_scope_rejects_missing_dimension(field_name: str) ->
 
     with pytest.raises(ValueError, match=rf"{field_name} must be nonblank"):
         ValuationAuthorityScope(**values)
+
+
+@pytest.mark.parametrize("scope_type", [ValuationBookScope, ValuationAuthorityScope])
+@pytest.mark.parametrize("invalid_value", [None, 42, Decimal("1")])
+def test_valuation_scope_rejects_manufactured_non_string_authority(
+    scope_type: type[ValuationBookScope] | type[ValuationAuthorityScope],
+    invalid_value: object,
+) -> None:
+    values: dict[str, object] = {
+        "tenant_id": invalid_value,
+        "legal_book_id": "PB-SG-01",
+    }
+    if scope_type is ValuationAuthorityScope:
+        values["security_id"] = "BOND-001"
+
+    with pytest.raises(TypeError, match="tenant_id must be a string"):
+        scope_type(**values)  # type: ignore[arg-type]
 
 
 @pytest.mark.parametrize(
@@ -108,3 +147,12 @@ def test_market_price_source_fact_requires_typed_scope_and_lineage() -> None:
         _fact(scope={"tenant_id": "TENANT-SG"})
     with pytest.raises(TypeError, match="source_reference must be"):
         _fact(source_reference={"source_system": "approved-market-data"})
+
+
+@pytest.mark.parametrize(
+    "price_date",
+    ["2026-07-22", datetime(2026, 7, 22, 12, tzinfo=UTC)],
+)
+def test_market_price_source_fact_requires_exact_business_date(price_date: object) -> None:
+    with pytest.raises(TypeError, match="price_date must be an exact date"):
+        _fact(price_date=price_date)
