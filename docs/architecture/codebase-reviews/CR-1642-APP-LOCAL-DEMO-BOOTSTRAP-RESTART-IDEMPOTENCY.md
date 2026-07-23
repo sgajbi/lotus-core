@@ -35,9 +35,11 @@ HoldingsAsOf response already carried the required as-of quantities and valuatio
 One source-backed decision owns the complete sample pack. Each immutable generated write segment
 has a content-derived idempotency key and a source-owned completeness evaluator. Portfolio-bundle
 completeness also requires the QCP analytics source product to prove the exact generated
-business-calendar window, cardinality, and ordered identity digest. Portfolio observations must be
-the complete ordered suffix from the first holding date; calendar dates before that first holding
-are not falsely treated as missing portfolio observations. First boot selects all
+business-calendar window, cardinality, and ordered identity digest. At least one portfolio
+observation must match a governed business date, and that filtered projection must be the complete
+ordered suffix from the first holding date.
+Additional ordered in-window non-business observations are valid, while dates before that first
+holding are not falsely treated as missing portfolio observations. First boot selects all
 missing segments; a partial or evolved retained pack selects only the segments whose business facts
 are absent or different; an unchanged retained restart ingests nothing and emits
 `reason=unchanged_pack_present`. Explicit force refresh bypasses completeness reads and selects the
@@ -63,8 +65,8 @@ segment gained an evaluator.
 
 ## Validation
 
-- Focused demo-pack contracts: `39 passed` with warnings treated as errors; the combined demo-pack
-  and front-office seed suite passes `108` tests with warnings treated as errors.
+- Focused demo-pack contracts: `45 passed` with warnings treated as errors; the combined demo-pack
+  and QCP calendar-source suite passes `92` tests with warnings treated as errors.
 - Ruff lint and format: passed for all touched Python files.
 - Strict MyPy: passed for `tools/demo_data_pack.py`; distinct reference-family evidence names
   prevent local annotation reuse from weakening the typing gate.
@@ -91,8 +93,9 @@ segment gained an evaluator.
 - The full five-portfolio 1,095-day pack now owns a direct 500-request/50,000-record regression; the
   smaller 240-day single-portfolio partition test is no longer misreported as full-pack evidence.
 - Business-calendar completeness verifies a source-owned SHA-256 digest of every exact ordered
-  calendar identity, then requires returned `valuation_date` observations to be the complete ordered
-  suffix from the first holding date on a terminal page. Same-count calendar substitution and
+  calendar identity, then requires returned business-date `valuation_date` observations to be the
+  complete ordered suffix from the first holding date on a terminal page. Additional ordered,
+  unique, in-window non-business observations are valid. Same-count calendar substitution and
   mid-holding observation gaps fail closed without rejecting valid pre-holding dates.
 - The balanced-SGD terminal Sony holding was corrected from `-200` to `1,000`: its governed source
   stream buys `1,200` and later sells `200`. An executable cross-contract regression now reduces
@@ -108,6 +111,12 @@ segment gained an evaluator.
   (`12,748`/`4,094`), but selected the portfolio bundle as a durable replay because 73 calendar
   dates precede the first holding. That diagnostic drove the source-owned calendar digest and
   first-holding suffix rule rather than weakening completeness to count-only evidence.
+- After the digest deployment, a second zero-write diagnostic again preserved those three counters
+  and left demo valuation/aggregation open work at zero, but exposed 14 legitimate non-business
+  observations interleaved with a complete 711-date business suffix. The verifier now compares the
+  exact business-date projection, independently requires every returned observation to be ordered,
+  unique, and in-window, rejects empty and non-business-only projections, and keeps
+  missing/substituted business-date failures closed.
 - The first targeted image build failed before writes because the persistence Dockerfile copied the
   demo tool but not its existing RFC-0076 contract-loader dependency. The Dockerfile now copies both
   files and a stack-contract regression protects that runtime packaging boundary.

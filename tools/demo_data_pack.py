@@ -2068,9 +2068,15 @@ def _probe_portfolio_bundle_segment(
     )
     calendar_diagnostics = calendar_response.get("diagnostics") or {}
     calendar_page = calendar_response.get("page") or {}
-    observed_business_dates = [
+    observed_dates = [
         str(observation.get("valuation_date"))
         for observation in calendar_response.get("observations") or []
+    ]
+    expected_business_date_set = set(expected_business_dates)
+    observed_business_dates = [
+        observation_date
+        for observation_date in observed_dates
+        if observation_date in expected_business_date_set
     ]
     first_observed_index = (
         expected_business_dates.index(observed_business_dates[0])
@@ -2084,13 +2090,18 @@ def _probe_portfolio_bundle_segment(
         calendar_response.get("resolved_window") == calendar_window
         and calendar_diagnostics.get("expected_business_dates_digest")
         == request_fingerprint({"business_dates": expected_business_dates})
+        and bool(observed_business_dates)
         and observed_business_dates == expected_observation_dates
-        and calendar_page.get("returned_row_count") == len(observed_business_dates)
+        and observed_dates == sorted(set(observed_dates))
+        and all(
+            calendar_window["start_date"] <= observation_date <= calendar_window["end_date"]
+            for observation_date in observed_dates
+        )
+        and calendar_page.get("returned_row_count") == len(observed_dates)
         and calendar_page.get("next_page_token") is None
         and calendar_diagnostics.get("expected_business_dates_count")
         == len(expected_business_dates)
-        and calendar_diagnostics.get("returned_observation_dates_count")
-        == len(observed_business_dates)
+        and calendar_diagnostics.get("returned_observation_dates_count") == len(observed_dates)
         and calendar_diagnostics.get("missing_dates_count")
         == len(expected_business_dates) - len(observed_business_dates)
     )
