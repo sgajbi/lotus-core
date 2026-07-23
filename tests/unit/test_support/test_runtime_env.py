@@ -108,6 +108,16 @@ def test_prepare_test_runtime_records_inherited_postgres_port_provenance() -> No
         assert runtime.compose_project_generated is True
         assert runtime.postgres_host_port_reserved is False
         assert runtime.endpoints.host_database_url.endswith(":15432/portfolio_db")
+        original_dynamic_ports = _reserved_ports(runtime)
+
+        runtime.port_reservation.reallocate()
+
+        assert runtime.values["LOTUS_POSTGRES_HOST_PORT"] == "15432"
+        assert runtime.endpoints.host_database_url.endswith(":15432/portfolio_db")
+        assert _reserved_ports(runtime).isdisjoint(original_dynamic_ports)
+        assert runtime.prepared_database_target.port == 15432
+        assert runtime.prepared_database_target.reservation_generation == 1
+        assert runtime.port_reservation.generation == 2
     finally:
         runtime.port_reservation.release()
 

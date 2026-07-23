@@ -170,7 +170,8 @@ class RuntimePortReservation:
         self.release()
         self._reserve_new_generation()
         _set_derived_runtime_values(self.values)
-        self._refresh_prepared_database_target_for_reallocation()
+        if "LOTUS_POSTGRES_HOST_PORT" in self.dynamic_port_keys:
+            self._refresh_prepared_database_target_for_reallocation()
         for target in self._export_targets:
             target.update(self.values)
 

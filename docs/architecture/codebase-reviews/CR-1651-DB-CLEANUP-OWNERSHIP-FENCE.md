@@ -32,6 +32,9 @@ Authorizing only the truncate statement would therefore leave a destructive bypa
    that changes only the process-reserved port; it does not trust mutable project/user/database
    values. The generation is externally read-only, and refresh proves the PostgreSQL port from the
    active owned reservation socket rather than from exported values.
+   When PostgreSQL itself is an explicit fixed override, unrelated dynamic service ports may still
+   reallocate; the fixed database remains cleanup-ineligible and its prepared evidence is not
+   falsely refreshed from a socket the runtime does not own.
 2. `DatabaseCleanupAuthorization` compares the actual SQLAlchemy engine with the exact prepared
    user, host, port, and database. It also rejects post-preparation component or derived-endpoint
    mutation even when the engine is changed to match that mutable drift. Diagnostics omit
@@ -39,11 +42,14 @@ Authorizing only the truncate statement would therefore leave a destructive bypa
    driver-level `host`, `port`, `options`, or search-path overrides cannot redirect the connection
    outside the visible authority tuple.
 3. Function- and module-scoped cleanup obtain authorization at fixture entry, before quiescence
-   recovery, `pg_terminate_backend`, or truncate SQL.
+   recovery, `pg_terminate_backend`, or truncate SQL. They revalidate the capability immediately
+   before each destructive connection and inside that connection before issuing SQL.
 4. Replay-only cleanup recovery requires and revalidates the same authorization, so a direct helper
-   call or different engine cannot bypass the fixture fence. Authorizations are factory-issued and
-   validated by issued-object identity; copying or reconstructing their fields does not create a
-   valid capability.
+   call or different engine cannot bypass the fixture fence. Authorizations are factory-issued,
+   bound to the originating runtime, prepared target, and reservation generation, and validated by
+   issued-object identity plus live runtime provenance. Copying or reconstructing their fields does
+   not create a valid capability; reallocation or post-issuance project, component, or endpoint
+   drift retires the capability before any read or mutation.
 5. Inherited app-local, shared, test-shaped, fixed-port, mixed-provenance, and drifted-engine
    targets fail before destructive recovery, session-termination, or truncate SQL.
    Generated-project, process-reserved-port, exact-engine function, module, and recovery paths
@@ -63,12 +69,14 @@ does not decide whether a target is safe.
 
 ## Validation
 
-- `python -m pytest tests/unit/test_support/test_runtime_env.py
+- `python scripts/development/repository_python.py -m pytest
+  tests/unit/test_support/test_runtime_env.py
   tests/unit/test_support/test_db_cleanup.py
   tests/unit/test_support/test_pipeline_quiescence.py -q -W error`
-  - `45 passed`
-- `python -m pytest tests/unit/test_support -q -W error`
-  - `119 passed`
+  - `53 passed`
+- `python scripts/development/repository_python.py -m pytest
+  tests/unit/test_support -q -W error`
+  - `127 passed`
 - Pinned Ruff check and format verification passed for all changed Python files.
 - Strict scoped MyPy passed for `runtime_env.py`, `db_cleanup.py`, and
   `pipeline_quiescence.py`.
@@ -80,7 +88,8 @@ does not decide whether a target is safe.
 This is a test-infrastructure safety change. It does not change production schema, migrations,
 API/OpenAPI, events, financial calculations, runtime topology, or Docker resources. Protected
 DB-direct lanes retain their generated project and dynamic port behavior. Generic inherited or
-fixed target overrides can no longer authorize destructive cleanup.
+fixed target overrides can no longer authorize destructive cleanup. A fixed PostgreSQL override
+continues to permit unrelated dynamic service-port reallocation without becoming cleanup-eligible.
 
 Repository context and this review record change because the test-runtime contract changed.
 No README or wiki source changes are required: the supported repository-native commands are

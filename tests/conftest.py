@@ -14,6 +14,7 @@ from tests.e2e.api_client import E2EApiClient
 from tests.test_support.db_cleanup import (
     DatabaseCleanupAuthorization,
     authorize_database_cleanup,
+    require_database_cleanup_authorization,
     truncate_with_deadlock_retry,
 )
 from tests.test_support.docker_stack import (
@@ -435,18 +436,25 @@ def clean_db(db_engine):
     """
     A function-scoped fixture that cleans all data from tables using TRUNCATE.
     """
-    authorize_database_cleanup(runtime=_test_runtime, engine=db_engine)
+    cleanup_authorization = authorize_database_cleanup(
+        runtime=_test_runtime,
+        engine=db_engine,
+    )
     emit_test_output("\n--- Cleaning database tables (function scope) ---", verbose_only=True)
     terminate_sessions_query = text(TERMINATE_ACTIVE_SESSIONS_SQL)
     terminate_sessions = _env_bool("LOTUS_TESTS_TERMINATE_DB_SESSIONS", False)
 
     def _terminate_for_deadlock_retry() -> None:
+        require_database_cleanup_authorization(cleanup_authorization, engine=db_engine)
         with db_engine.begin() as connection:
+            require_database_cleanup_authorization(cleanup_authorization, engine=db_engine)
             connection.execute(terminate_sessions_query)
         db_engine.dispose()
 
     def _run() -> None:
+        require_database_cleanup_authorization(cleanup_authorization, engine=db_engine)
         with db_engine.begin() as connection:
+            require_database_cleanup_authorization(cleanup_authorization, engine=db_engine)
             if terminate_sessions:
                 connection.execute(terminate_sessions_query)
             truncate_sql = _build_truncate_sql(connection)
@@ -480,12 +488,16 @@ def clean_db_module(db_engine):
     )
 
     def _terminate_for_deadlock_retry() -> None:
+        require_database_cleanup_authorization(cleanup_authorization, engine=db_engine)
         with db_engine.begin() as connection:
+            require_database_cleanup_authorization(cleanup_authorization, engine=db_engine)
             connection.execute(terminate_sessions_query)
         db_engine.dispose()
 
     def _run() -> None:
+        require_database_cleanup_authorization(cleanup_authorization, engine=db_engine)
         with db_engine.begin() as connection:
+            require_database_cleanup_authorization(cleanup_authorization, engine=db_engine)
             if terminate_sessions:
                 connection.execute(terminate_sessions_query)
             truncate_sql = _build_truncate_sql(connection)

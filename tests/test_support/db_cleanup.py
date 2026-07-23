@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import time
 import weakref
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Callable
 
 from sqlalchemy.engine import URL, Engine, make_url
@@ -66,6 +66,11 @@ class DatabaseCleanupAuthorization:
 
     compose_project_name: str
     target: DatabaseTargetIdentity
+    reservation_generation: int
+    _runtime_ref: weakref.ReferenceType[PreparedTestRuntime] = field(
+        repr=False,
+        compare=False,
+    )
 
     def __init__(
         self,
@@ -73,11 +78,17 @@ class DatabaseCleanupAuthorization:
         compose_project_name: str,
         target: DatabaseTargetIdentity,
         _issuance_token: object,
+        runtime: PreparedTestRuntime | None = None,
+        reservation_generation: int | None = None,
     ) -> None:
         if _issuance_token is not _DATABASE_CLEANUP_ISSUANCE_TOKEN:
             raise TypeError("database cleanup authorizations are factory-issued")
+        if runtime is None or reservation_generation is None:
+            raise TypeError("database cleanup authorization issuance context is required")
         object.__setattr__(self, "compose_project_name", compose_project_name)
         object.__setattr__(self, "target", target)
+        object.__setattr__(self, "reservation_generation", reservation_generation)
+        object.__setattr__(self, "_runtime_ref", weakref.ref(runtime))
 
 
 _ISSUED_DATABASE_CLEANUP_AUTHORIZATIONS: weakref.WeakValueDictionary[
@@ -87,24 +98,26 @@ _ISSUED_DATABASE_CLEANUP_AUTHORIZATIONS: weakref.WeakValueDictionary[
 
 def _issue_database_cleanup_authorization(
     *,
+    runtime: PreparedTestRuntime,
     compose_project_name: str,
     target: DatabaseTargetIdentity,
+    reservation_generation: int,
 ) -> DatabaseCleanupAuthorization:
     authorization = DatabaseCleanupAuthorization(
         compose_project_name=compose_project_name,
         target=target,
+        runtime=runtime,
+        reservation_generation=reservation_generation,
         _issuance_token=_DATABASE_CLEANUP_ISSUANCE_TOKEN,
     )
     _ISSUED_DATABASE_CLEANUP_AUTHORIZATIONS[id(authorization)] = authorization
     return authorization
 
 
-def authorize_database_cleanup(
-    *,
+def _owned_database_cleanup_target(
     runtime: PreparedTestRuntime,
-    engine: Engine,
-) -> DatabaseCleanupAuthorization:
-    """Fail closed unless the harness generated and owns the exact cleanup target."""
+) -> tuple[DatabaseTargetIdentity, int, str]:
+    """Revalidate current runtime provenance and return its exact cleanup target."""
 
     if not runtime.prepared_by_current_process:
         raise DatabaseCleanupAuthorizationError(
@@ -159,6 +172,17 @@ def authorize_database_cleanup(
             f"(prepared={expected.diagnostic()}, "
             f"current={current_derived_target.diagnostic()})"
         )
+    return expected, prepared.reservation_generation, prepared.compose_project_name
+
+
+def authorize_database_cleanup(
+    *,
+    runtime: PreparedTestRuntime,
+    engine: Engine,
+) -> DatabaseCleanupAuthorization:
+    """Fail closed unless the harness generated and owns the exact cleanup target."""
+
+    expected, reservation_generation, compose_project_name = _owned_database_cleanup_target(runtime)
     actual = DatabaseTargetIdentity.from_url(engine.url)
     if actual != expected:
         raise DatabaseCleanupAuthorizationError(
@@ -166,8 +190,10 @@ def authorize_database_cleanup(
             f"(expected={expected.diagnostic()}, actual={actual.diagnostic()})"
         )
     return _issue_database_cleanup_authorization(
-        compose_project_name=prepared.compose_project_name,
+        runtime=runtime,
+        compose_project_name=compose_project_name,
         target=expected,
+        reservation_generation=reservation_generation,
     )
 
 
@@ -181,6 +207,21 @@ def require_database_cleanup_authorization(
     if _ISSUED_DATABASE_CLEANUP_AUTHORIZATIONS.get(id(authorization)) is not authorization:
         raise DatabaseCleanupAuthorizationError(
             "database cleanup refused: invalid cleanup authorization"
+        )
+    runtime = authorization._runtime_ref()
+    if runtime is None:
+        raise DatabaseCleanupAuthorizationError(
+            "database cleanup refused: originating test runtime is no longer available"
+        )
+    current_target, current_generation, current_project = _owned_database_cleanup_target(runtime)
+    if (
+        authorization.compose_project_name != current_project
+        or authorization.reservation_generation != current_generation
+        or authorization.target != current_target
+    ):
+        raise DatabaseCleanupAuthorizationError(
+            "database cleanup refused: cleanup authorization is stale for the current "
+            "runtime generation or target"
         )
     actual = DatabaseTargetIdentity.from_url(engine.url)
     if actual != authorization.target:
