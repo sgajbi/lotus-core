@@ -77,10 +77,10 @@ policy executes. API/application code must not consume SQLAlchemy models directl
 Primary position and valuation tables include:
 
 - `position_history`
-- `position_lot_states`
-- `accrued_income_offset_states`
+- `position_lot_state`
+- `accrued_income_offset_state`
 - `daily_position_snapshots`
-- `position_states`
+- `position_state`
 - `instrument_valuation_policy_assignments`
 - `market_price_source_facts`
 
@@ -88,6 +88,14 @@ This layer carries the reconstruction and valuation state needed to explain hold
 business date. Valuation-policy assignment rows preserve exact tenant, legal-book, instrument,
 policy/version, effective-window, lifecycle, source revision, observation time, and rationale
 history; runtime valuation migration remains separately governed.
+
+Financial `NUMERIC` persistence has an explicit finite-value policy. The machine-readable inventory
+in `docs/standards/financial-numeric-persistence.v1.json` classifies every ORM numeric column by
+nullability and signed, positive, or nonnegative semantics. Cost-ledger source/state boundaries and
+exact market-price source facts reject PostgreSQL `NaN`, `Infinity`, and `-Infinity`; sign checks
+remain independent so legitimate signed cashflow and P&L fields are not narrowed accidentally.
+Migrations add new checks as `NOT VALID` before validating retained rows, causing deployment to fail
+closed if historical contamination exists rather than coercing financial evidence.
 
 `market_price_source_facts` is an additive append-history authority store. Its source-version
 identity is the stable upstream source system, source record, and positive correction version;
