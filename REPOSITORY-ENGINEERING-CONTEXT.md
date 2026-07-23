@@ -3084,9 +3084,11 @@ Most relevant current governance:
      as one immutable content-addressed segment, evaluate every segment against its authoritative
      query surface, publish only missing/evolved segments, and emit `unchanged_pack_present` only
      after complete evaluation. Portfolio-bundle completeness includes the exact generated
-     business-calendar window, cardinality, ordered observation-date identities, and terminal page
-     through the existing QCP analytics source product; a terminal position or count alone cannot
-     prove calendar continuity. Treat non-404 read failures as fatal
+     business-calendar window, cardinality, and exact ordered identity digest through the QCP
+     analytics source product. Returned observations must form the complete ordered suffix from
+     the first holding date and terminate without a continuation page; pre-holding business dates
+     are valid calendar facts but do not imply portfolio observations. A terminal position or count
+     alone cannot prove calendar continuity. Treat non-404 read failures as fatal
      and fail closed when a segment has no evaluator. Explicit `DEMO_DATA_PACK_FORCE_INGEST=true`
      may bypass the reads and publish the complete pack; it is an operator repair control, not the
      restart default. Generate against RFC-0076's fixed canonical as-of date and the deployed v1
@@ -3097,8 +3099,9 @@ Most relevant current governance:
      the `lotus-demo-pack:v2` content namespace for this intentional generator evolution. Verify
      terminal quantities through one explicit as-of `HoldingsAsOf` read per portfolio; do not require
      a transaction-history row to exist exactly on the as-of date or reintroduce per-security polling
-     reads. This is app-local sample-data behavior and does not change production APIs, schemas, or
-     ingestion idempotency contracts.
+     reads. The additive analytics diagnostics digest is backward compatible; this app-local
+     behavior does not change event/database schemas, production calculations, or ingestion
+     idempotency contracts.
 
 ## Context Maintenance Rule
 

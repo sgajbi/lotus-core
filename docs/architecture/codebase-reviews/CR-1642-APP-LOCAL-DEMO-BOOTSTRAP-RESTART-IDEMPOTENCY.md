@@ -34,13 +34,16 @@ HoldingsAsOf response already carried the required as-of quantities and valuatio
 
 One source-backed decision owns the complete sample pack. Each immutable generated write segment
 has a content-derived idempotency key and a source-owned completeness evaluator. Portfolio-bundle
-completeness also requires the existing QCP analytics source product to prove the exact generated
-business-calendar window and cardinality with no missing observation dates. First boot selects all
+completeness also requires the QCP analytics source product to prove the exact generated
+business-calendar window, cardinality, and ordered identity digest. Portfolio observations must be
+the complete ordered suffix from the first holding date; calendar dates before that first holding
+are not falsely treated as missing portfolio observations. First boot selects all
 missing segments; a partial or evolved retained pack selects only the segments whose business facts
 are absent or different; an unchanged retained restart ingests nothing and emits
 `reason=unchanged_pack_present`. Explicit force refresh bypasses completeness reads and selects the
-complete pack. This preserves existing APIs, schemas, seeded identities, first boot, and manual
-refresh while removing implicit source replay and the unsafe portfolio-existence shortcut.
+complete pack. The additive analytics diagnostics digest is backward compatible. Seeded identities,
+event/database schemas, first boot, and manual refresh are preserved while implicit source replay
+and the unsafe portfolio-existence shortcut are removed.
 The generator now resolves RFC-0076's fixed canonical as-of date, uses a fixed economic anchor, and
 derives every overlapping observation from its absolute date. Market and FX payloads are partitioned
 by logical security or ordered currency pair instead of positional batch number, with chronological
@@ -87,9 +90,10 @@ segment gained an evaluator.
   26,753 records, inside the app-local 500-request/50,000-record rate window.
 - The full five-portfolio 1,095-day pack now owns a direct 500-request/50,000-record regression; the
   smaller 240-day single-portfolio partition test is no longer misreported as full-pack evidence.
-- Business-calendar completeness requests the full bounded observation page, requires a terminal
-  page, and compares every returned `valuation_date` with the exact ordered generated dates. A
-  same-count substituted-date regression fails closed.
+- Business-calendar completeness verifies a source-owned SHA-256 digest of every exact ordered
+  calendar identity, then requires returned `valuation_date` observations to be the complete ordered
+  suffix from the first holding date on a terminal page. Same-count calendar substitution and
+  mid-holding observation gaps fail closed without rejecting valid pre-holding dates.
 - The balanced-SGD terminal Sony holding was corrected from `-200` to `1,000`: its governed source
   stream buys `1,200` and later sells `200`. An executable cross-contract regression now reduces
   every generated portfolio/security stream through the canonical position reducer and requires
@@ -99,6 +103,11 @@ segment gained an evaluator.
   generator. The generator now calculates entirely with `Decimal` and emits fixed-precision decimal
   strings (`2` places for market prices, `6` for FX rates), with an executable representation fence.
   The repository-wide lint and monetary-float guards now pass without an allowlist exception.
+- The first exact-head retained run after repair completed all five portfolio verifications and
+  changed neither ingestion jobs (`523`) nor demo valuation/aggregation job totals
+  (`12,748`/`4,094`), but selected the portfolio bundle as a durable replay because 73 calendar
+  dates precede the first holding. That diagnostic drove the source-owned calendar digest and
+  first-holding suffix rule rather than weakening completeness to count-only evidence.
 - The first targeted image build failed before writes because the persistence Dockerfile copied the
   demo tool but not its existing RFC-0076 contract-loader dependency. The Dockerfile now copies both
   files and a stack-contract regression protects that runtime packaging boundary.
@@ -113,5 +122,5 @@ must not be inferred from either diagnostic attempt.
 ## Documentation and compatibility
 
 Existing operations, RFC, context, and wiki sources were corrected in place; no duplicate playbook
-was added. No API, OpenAPI, event, database, migration, or production runtime contract changes are
-needed because `demo_data_loader` is an app-local bootstrap utility.
+was added. The QCP response adds one backward-compatible calendar-identity digest to existing
+analytics diagnostics. No event, database, migration, or production calculation contract changes.
