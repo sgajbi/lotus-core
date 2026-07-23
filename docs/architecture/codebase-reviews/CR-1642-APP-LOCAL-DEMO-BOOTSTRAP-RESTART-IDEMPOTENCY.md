@@ -74,7 +74,7 @@ segment gained an evaluator.
 ## Validation
 
 - Focused demo-pack contracts: `46 passed` with warnings treated as errors; the combined demo-pack
-  and QCP calendar-source suite passes `92` tests with warnings treated as errors.
+  and QCP calendar-source suite passes `93` tests with warnings treated as errors.
 - Ruff lint and format: passed for all touched Python files.
 - Strict MyPy: passed for `tools/demo_data_pack.py`; distinct reference-family evidence names
   prevent local annotation reuse from weakening the typing gate.
