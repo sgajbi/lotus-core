@@ -696,6 +696,26 @@ def test_fx_strategy_rejects_invalid_swap_linkage(
     mock_disposition_engine.consume_sell_quantity.assert_not_called()
 
 
+def test_fx_strategy_rejects_embedded_fee_before_cost_updates(
+    cost_calculator,
+    mock_disposition_engine,
+    error_reporter,
+) -> None:
+    fx_transaction = _canonical_fx_transaction(
+        transaction_id="FX-EMBEDDED-FEE-001",
+        fees=Fees(brokerage=Decimal("1")),
+    )
+
+    cost_calculator.calculate_transaction_costs(fx_transaction)
+
+    errors = error_reporter.get_errors()
+    assert error_reporter.has_errors_for("FX-EMBEDDED-FEE-001")
+    assert "FX_025_NON_ZERO_EMBEDDED_FEE:trade_fee" in errors[0].error_reason
+    assert fx_transaction.net_cost is None
+    mock_disposition_engine.add_buy_lot.assert_not_called()
+    mock_disposition_engine.consume_sell_quantity.assert_not_called()
+
+
 def test_fx_strategy_rejects_unsupported_cash_lot_realized_pnl_mode(
     cost_calculator,
     mock_disposition_engine,

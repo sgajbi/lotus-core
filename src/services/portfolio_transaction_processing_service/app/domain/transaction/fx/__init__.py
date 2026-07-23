@@ -29,7 +29,12 @@ from .models import (
 )
 from .reason_codes import FxValidationReasonCode
 from .transaction_source import FxTransactionSource
-from .validation import FxValidationError, FxValidationIssue, validate_fx_transaction
+from .validation import (
+    FxValidationError,
+    FxValidationIssue,
+    validate_fx_embedded_fee,
+    validate_fx_transaction,
+)
 
 __all__ = [
     "FX_BUSINESS_TRANSACTION_TYPES",
@@ -56,4 +61,5 @@ __all__ = [
     "FxValidationIssue",
     "FxValidationReasonCode",
     "validate_fx_transaction",
+    "validate_fx_embedded_fee",
 ]
