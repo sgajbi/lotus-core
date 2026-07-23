@@ -90,6 +90,11 @@ segment gained an evaluator.
 - Business-calendar completeness requests the full bounded observation page, requires a terminal
   page, and compares every returned `valuation_date` with the exact ordered generated dates. A
   same-count substituted-date regression fails closed.
+- The balanced-SGD terminal Sony holding was corrected from `-200` to `1,000`: its governed source
+  stream buys `1,200` and later sells `200`. An executable cross-contract regression now reduces
+  every generated portfolio/security stream through the canonical position reducer and requires
+  all declared terminal holdings to match, preventing verifier expectations from masking incomplete
+  derived state.
 - The first targeted image build failed before writes because the persistence Dockerfile copied the
   demo tool but not its existing RFC-0076 contract-loader dependency. The Dockerfile now copies both
   files and a stack-contract regression protects that runtime packaging boundary.
