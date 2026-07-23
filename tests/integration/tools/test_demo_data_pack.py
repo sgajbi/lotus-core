@@ -138,6 +138,37 @@ def test_ingest_demo_portfolio_data_batches_market_and_fx_rows(monkeypatch):
     assert [row for batch in fx_rate_batches for row in batch] == bundle["fx_rates"]
 
 
+def test_demo_pack_segment_inventory_is_unique_complete_and_bounded():
+    bundle = demo_data_pack.build_demo_bundle(
+        history_days=demo_data_pack.MIN_DEMO_HISTORY_DAYS,
+        portfolio_ids=("DEMO_DPM_EUR_001",),
+    )
+
+    segments = demo_data_pack._build_demo_pack_segments(bundle, batch_size=200)
+    names = [segment.name for segment in segments]
+    market_segments = [
+        segment for segment in segments if segment.endpoint.endswith("market-prices")
+    ]
+    fx_segments = [segment for segment in segments if segment.endpoint.endswith("fx-rates")]
+    reference_segments = [segment for segment in segments if segment.category == "reference"]
+
+    assert len(names) == len(set(names))
+    assert names[0] == "portfolio-bundle"
+    assert all(segment.record_count <= 200 for segment in [*market_segments, *fx_segments])
+    assert sum(segment.record_count for segment in market_segments) == len(bundle["market_prices"])
+    assert sum(segment.record_count for segment in fx_segments) == len(bundle["fx_rates"])
+    assert {segment.name for segment in reference_segments} == {
+        "indices",
+        "index-price-series",
+        "index-return-series",
+        "benchmark-definitions",
+        "benchmark-compositions",
+        "benchmark-return-series",
+        "risk-free-series",
+    }
+    assert "benchmark-assignments" not in names
+
+
 def test_build_demo_bundle_contains_benchmark_seed_data():
     bundle = demo_data_pack.build_demo_bundle()
 
