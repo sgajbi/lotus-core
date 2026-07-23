@@ -8,11 +8,16 @@ import re
 import sys
 from argparse import ArgumentParser
 from datetime import UTC, datetime
+from json import JSONDecodeError
 from numbers import Real
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+CANONICAL_INVENTORY_PATH = (
+    REPO_ROOT / "docs" / "standards" / "api-vocabulary" / "lotus-core-api-vocabulary.v1.json"
+)
+VOLATILE_INVENTORY_KEYS = frozenset({"generatedAt"})
 os.environ.setdefault("LOTUS_TOOLING_QUIET", "1")
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
@@ -245,12 +250,12 @@ def _resolve_schema(schema: dict[str, Any], components: dict[str, Any]) -> dict[
         return schema
     ref = schema["$ref"]
     ref_name = ref.rsplit("/", 1)[-1]
-    return components.get("schemas", {}).get(ref_name, {})
+    return cast(dict[str, Any], components.get("schemas", {}).get(ref_name, {}))
 
 
 def _schema_type(schema: dict[str, Any]) -> str:
     if "$ref" in schema:
-        return schema["$ref"].rsplit("/", 1)[-1]
+        return str(schema["$ref"]).rsplit("/", 1)[-1]
     return str(schema.get("type", "object"))
 
 
@@ -805,13 +810,98 @@ def validate_inventory(inventory: dict[str, Any]) -> list[str]:
     return errors
 
 
+def _semantic_inventory(inventory: dict[str, Any]) -> dict[str, Any]:
+    """Return comparable inventory content without volatile generation metadata."""
+    return {key: value for key, value in inventory.items() if key not in VOLATILE_INVENTORY_KEYS}
+
+
+def _tracked_inventory_shape_errors(inventory: dict[str, Any]) -> list[str]:
+    errors: list[str] = []
+    for field in ("attributeCatalog", "controlsCatalog", "endpoints"):
+        entries = inventory.get(field)
+        if not isinstance(entries, list):
+            errors.append(f"committed inventory.{field} must be a list")
+        elif any(not isinstance(entry, dict) for entry in entries):
+            errors.append(f"committed inventory.{field} entries must be objects")
+    return errors
+
+
+def _first_semantic_difference(expected: Any, actual: Any, *, path: str = "$") -> str | None:
+    if type(expected) is not type(actual):
+        return f"{path}: expected type {type(expected).__name__}, found {type(actual).__name__}"
+    if isinstance(expected, dict):
+        expected_keys = set(expected)
+        actual_keys = set(actual)
+        if missing := sorted(expected_keys - actual_keys):
+            return f"{path}: missing keys {missing}"
+        if unexpected := sorted(actual_keys - expected_keys):
+            return f"{path}: unexpected keys {unexpected}"
+        for key in sorted(expected_keys):
+            if difference := _first_semantic_difference(
+                expected[key], actual[key], path=f"{path}.{key}"
+            ):
+                return difference
+        return None
+    if isinstance(expected, list):
+        if len(expected) != len(actual):
+            return f"{path}: expected {len(expected)} items, found {len(actual)}"
+        for index, (expected_item, actual_item) in enumerate(zip(expected, actual, strict=True)):
+            if difference := _first_semantic_difference(
+                expected_item, actual_item, path=f"{path}[{index}]"
+            ):
+                return difference
+        return None
+    if expected != actual:
+        return f"{path}: expected {expected!r}, found {actual!r}"
+    return None
+
+
+def validate_committed_inventory_parity(
+    generated_inventory: dict[str, Any],
+    *,
+    inventory_path: Path = CANONICAL_INVENTORY_PATH,
+) -> list[str]:
+    """Validate tracked inventory truth and compare it without mutating the file."""
+    try:
+        tracked_payload = json.loads(inventory_path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        return [f"cannot read committed inventory '{inventory_path}': {exc}"]
+    except JSONDecodeError as exc:
+        return [f"committed inventory '{inventory_path}' is not valid JSON: {exc}"]
+
+    if not isinstance(tracked_payload, dict):
+        return [f"committed inventory '{inventory_path}' must contain a JSON object"]
+
+    if shape_errors := _tracked_inventory_shape_errors(tracked_payload):
+        return shape_errors
+
+    tracked_errors = validate_inventory(tracked_payload)
+    if tracked_errors:
+        return [f"committed inventory: {error}" for error in tracked_errors]
+
+    difference = _first_semantic_difference(
+        _semantic_inventory(generated_inventory),
+        _semantic_inventory(tracked_payload),
+    )
+    if difference is None:
+        return []
+    return [
+        f"committed inventory is stale at {difference}; regenerate with "
+        "'python scripts/quality/api_vocabulary_inventory.py --output "
+        "docs/standards/api-vocabulary/lotus-core-api-vocabulary.v1.json'"
+    ]
+
+
 def main() -> int:
     parser = ArgumentParser(description="Generate/validate lotus-core API vocabulary inventory.")
     parser.add_argument("--output", type=Path, help="Write generated inventory JSON to this path.")
     parser.add_argument(
         "--validate-only",
         action="store_true",
-        help="Validate generated inventory without writing output.",
+        help=(
+            "Validate generated inventory and semantic parity with the committed inventory "
+            "without writing output."
+        ),
     )
     args = parser.parse_args()
 
@@ -824,12 +914,23 @@ def main() -> int:
             print(f" - {error}")
         return 1
 
+    if args.validate_only:
+        parity_errors = validate_committed_inventory_parity(
+            inventory,
+            inventory_path=args.output or CANONICAL_INVENTORY_PATH,
+        )
+        if parity_errors:
+            print("API vocabulary committed-inventory parity failed:")
+            for error in parity_errors:
+                print(f" - {error}")
+            return 1
+
     if args.output and not args.validate_only:
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps(inventory, indent=2), encoding="utf-8")
         print(f"Wrote inventory: {args.output}")
     else:
-        print("Inventory validation passed.")
+        print("Inventory validation and committed semantic parity passed.")
     return 0
 
 
