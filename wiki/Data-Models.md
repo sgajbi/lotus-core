@@ -82,11 +82,27 @@ Primary position and valuation tables include:
 - `daily_position_snapshots`
 - `position_states`
 - `instrument_valuation_policy_assignments`
+- `market_price_source_facts`
 
 This layer carries the reconstruction and valuation state needed to explain holdings as of a given
 business date. Valuation-policy assignment rows preserve exact tenant, legal-book, instrument,
 policy/version, effective-window, lifecycle, source revision, observation time, and rationale
 history; runtime valuation migration remains separately governed.
+
+`market_price_source_facts` is an additive append-history authority store. Its source-version
+identity is the stable upstream source system, source record, and positive correction version;
+tenant, legal book, instrument, and price date are versioned authority payload and may move in a
+later correction. Each row carries an explicit unit/clean-percent/dirty-percent quote basis,
+governed lifecycle, normalized currency, source revision/content hash, and aware observation
+evidence. A scope-history index finds candidate source identities, while the globally unique
+source-version key supports latest-correction ranking before exact-scope and lifecycle selection.
+The dedicated writer is insert-only, serializes source and old/new authority identities, treats an
+exact replay as a no-op, and rejects divergent or competing authority. It does not replace or widen
+the global `(security_id, price_date)` `market_prices` projection. Both internal write and read
+batches fail closed above 500 records and chunk SQL predicates at 100 keys; database checks reject
+non-finite prices and observation times. Existing valuation,
+reconciliation, query, freshness, demo, and replay consumers remain on that legacy projection until
+both financial consumers complete a governed, tenant-safe cutover.
 
 ### Timeseries and analytics-input foundations
 

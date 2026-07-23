@@ -60,6 +60,28 @@ narrow framework-free contract therefore belongs in `portfolio_common.domain.val
   observation time, and assignment reason as separate facts; database checks enforce governed
   lifecycle and positive versions, while partial effective-scope and descending source-history
   indexes support deterministic resolution without a product-class fallback.
+- Added an exact-scope market-price source-fact contract and separate reversible append-history
+  table. Domain resolution ranks positive source correction versions before lifecycle, so a later
+  suspension/retirement fences older ACTIVE facts; missing, same-version conflicting, and competing
+  source authority fail closed. Stable correction identity is source system/record/version, while
+  tenant, legal book, instrument, and business date are versioned authority payload; each row keeps
+  explicit unit, clean-percent, or dirty-percent representation, value/currency, lifecycle, source
+  revision/content hash, and aware observation time.
+- Kept the global `(security_id, price_date)` `market_prices` projection unchanged. The new
+  authority table has no mutable update timestamp. Its scope-history index finds candidate source
+  identities and its globally unique source-version key supports latest correction ranking before
+  exact-scope/lifecycle selection. Production valuation, reconciliation, query, freshness, demo,
+  and replay readers remain legacy until a later coordinated cutover.
+- Added a dedicated insert-only writer that locks stable source identities before sorted old/new
+  authority identities, no-ops exact durable replay, rejects divergent same-version or stale
+  corrections, validates current ACTIVE claims after ranking complete candidate histories, and
+  returns both previous and accepted authority identities for downstream invalidation/replay.
+  Write batches fail closed above 500 records and history predicates use 100-key chunks.
+- Added a position-valuation-owned bulk read port and SQLAlchemy adapter. Each bounded query uses
+  scope history to find candidate sources, ranks the globally latest source version in SQL, and
+  applies exact current scope/date only after ranking; framework-independent resolution then fails
+  closed on missing or overlapping ACTIVE authority without per-position reads. Read batches also
+  fail closed above 500 requests and execute deterministic 100-key query chunks.
 - Added a dedicated ingestion contract for authoritative valuation-policy assignments instead of
   extending the legacy reference-data DTO module. It trims source identifiers, resolves an exact
   supported policy/version, rejects naive observation timestamps, invalid windows, duplicate
@@ -150,6 +172,10 @@ unchanged by those slices. A subsequent staged prerequisite adds nullable `tenan
 legacy compatibility and cannot erase an established persisted scope during replay; a complete
 incoming pair replaces both dimensions atomically. Partial, blank, padded database-direct, or
 non-string authority fails closed.
+The market-price authority slice adds a second reversible history table, an internal insert-only
+write boundary, and a position-valuation-owned bulk resolver without changing the legacy
+projection, existing ingestion/event/API contracts, or any runtime consumer. It is a migration
+primitive, not permission to reinterpret historical global prices as tenant-safe facts.
 Existing correct unit-price behavior is characterized under an explicit policy. The legacy bond
 heuristic remains in the runtime path until authoritative market-price persistence and both
 valuation consumers are wired; it will be deleted rather than retained as a fallback then.
@@ -203,6 +229,20 @@ valuation consumers are wired; it will be deleted rather than retained as a fall
   reversible-migration tests. Its protected PostgreSQL test downgrades and reapplies the exact
   revision, inspects both column and check-constraint truth, rejects partial/blank/padded authority,
   and accepts both legacy-unscoped and exact-scoped rows.
+- The market-price authority domain/model/migration cohort passes under warnings as errors. Tests
+  prove exact tenant/book/instrument/date isolation, correction ranking, suspension fencing,
+  same-version conflict and competing-source rejection, lifecycle/version hash binding, strict
+  correction-version typing, append idempotency, stale/divergent write rejection, old/new
+  invalidation identities, bounded correction-ranked SQL, finite database price/observation
+  enforcement, write/read ceiling and chunk boundaries, the complete schema constraint set, one
+  reversible Alembic edge, and no mutation or index on the legacy projection. Protected PostgreSQL
+  migration plus authority tests passed 4/4 in 52.19 seconds with warnings fatal and rebuilt
+  generated database images. They proved downgrade/reapply, catalog truth, normalized
+  scope/currency/source/hash constraints, positive price/version, governed
+  representation/lifecycle, duplicate source-version rejection, moved
+  ACTIVE/SUSPENDED/RETIRED fencing, and concurrent competing-writer serialization. The exact source
+  fingerprint remained unchanged before/after and generated critical-database projects returned to
+  zero; durable evidence is recorded on issue #451.
 
 Primary methodology references for the day-count slice are the
 [FpML day-count scheme publication](https://www.fpml.org/specs_news/publication-of-fpml-set-of-coding-schemes-catalog-version-1-121/),
@@ -231,4 +271,7 @@ service-local resolver does not add another wiki change: it is an internal migra
 yet invoked by production valuation or reconciliation. The later portfolio-authority prerequisite
 updates the generated API vocabulary plus `Data-Models` and `Ingestion-Service` wiki sources because
 the additive request/event/schema contract changed. README and supported-feature status do not
-change; broader product/lifecycle wiki updates remain required with the runtime cutover.
+change. The separate market-price authority table, internal append writer, and bulk resolver update
+repository context, this review record, the ledger, and `Data-Models`; no API/OpenAPI/event or
+operator workflow changed. Broader product/lifecycle wiki updates remain required with public
+ingestion and runtime cutover.

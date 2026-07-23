@@ -2927,6 +2927,23 @@ Most relevant current governance:
      service domain. Explicit quote representation, principal basis, accrued treatment, scaling,
      and FX direction must replace the legacy bond price-magnitude/cost-basis heuristic—never sit
      beside it as a hidden fallback.
+     Preserve `market_prices` as the global legacy `(security_id, price_date)` projection during
+     migration. Authoritative market-price history belongs in the separate append-history
+     `market_price_source_facts` model with exact tenant, legal book, instrument, business date,
+     source-record identity, positive correction version, governed lifecycle, explicit quote basis,
+     normalized currency, source-content hash, and aware observation evidence. Rank corrections
+     before lifecycle filtering so suspension or retirement cannot revive an older ACTIVE fact;
+     stable correction identity is `(source_system, source_record_id)`, while tenant, legal book,
+     instrument, and business date are mutable versioned payload. The dedicated insert-only writer
+     must serialize stable source plus old/new authority identities, no-op exact replay, reject
+     divergent same-version and competing ACTIVE claims, and return both old/new invalidation
+     identities. Bounded reads first use scope history to find candidate sources, rank each source's
+     latest version, and only then apply exact-scope/lifecycle selection. Write and read batches
+     fail closed above 500 records and split SQL tuple predicates into deterministic 100-key
+     chunks. Database checks reject non-finite price and observation values. Reject missing,
+     conflicting, and competing exact-scope authority. Do not widen only the legacy write key or
+     route scoped authority through unscoped readers. Cut over valuation and financial
+     reconciliation together only after replay scheduling, lineage, and mixed-book proof.
 205. Valuation day-count policy resolves an exact governed convention code and version; unknown
      conventions and versions fail closed. `ACT/365.FIXED` and `ACT/360` use actual elapsed calendar
      days with their fixed denominators. `BUS/252` requires a source-owned, versioned business-day
