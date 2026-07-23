@@ -172,6 +172,14 @@ class PortfolioQualityDiagnostics(BaseModel):
         description="Number of expected business-calendar dates in the resolved window.",
         examples=[22],
     )
+    expected_business_dates_digest: str = Field(
+        "",
+        description=(
+            "Deterministic SHA-256 fingerprint of the exact ordered business-calendar dates in "
+            "the resolved window."
+        ),
+        examples=["a3f5b8f42b7f09665db60ed99668369c1899fa4cb4fbb18c984e408edd0dc1de"],
+    )
     returned_observation_dates_count: int = Field(
         0,
         description="Number of portfolio valuation dates present in the pinned snapshot epoch.",

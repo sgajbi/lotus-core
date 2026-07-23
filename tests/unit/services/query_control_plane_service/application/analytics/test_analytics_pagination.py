@@ -4,6 +4,7 @@ from datetime import date
 from types import SimpleNamespace
 
 import pytest
+from portfolio_common.request_fingerprints import request_fingerprint
 
 from src.services.query_control_plane_service.app.application.analytics.analytics_pagination import (  # noqa: E501
     AnalyticsPaginationError,
@@ -76,6 +77,9 @@ def test_portfolio_diagnostics_counts_missing_and_stale_dates() -> None:
     assert diagnostics.missing_dates_count == 1
     assert diagnostics.stale_points_count == 1
     assert diagnostics.expected_business_dates_count == 2
+    assert diagnostics.expected_business_dates_digest == request_fingerprint(
+        {"business_dates": ["2025-01-30", "2025-01-31"]}
+    )
     assert diagnostics.returned_observation_dates_count == 1
     assert diagnostics.cash_flows_included is True
 
