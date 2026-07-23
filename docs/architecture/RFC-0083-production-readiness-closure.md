@@ -85,10 +85,13 @@ The downstream PR Merge Gate parity checks completed on 2026-04-15 for:
 work owned by another agent. That gate should be rerun after the in-flight changes are committed or
 parked.
 
-The canonical reference-data issue proof completed on 2026-04-15:
+The canonical reference-data issue proof completed on 2026-04-15 under the former 300-second
+contract. That budget is superseded and is not valid for current terminal-stability certification.
+Branch-qualified local certification completed on 2026-07-23 with the governed command below;
+exact-main certification remains required after merge:
 
 1. `python tools/front_office_portfolio_seed.py --portfolio-id PB_SG_GLOBAL_BAL_001 --start-date
-   2025-03-31 --end-date 2026-04-10 --benchmark-start-date 2025-01-06 --wait-seconds 300`,
+   2025-03-31 --end-date 2026-04-10 --benchmark-start-date 2025-01-06 --wait-seconds 900`,
 2. live `POST /integration/reference/risk-free-series` returned 90 USD points for `2026-01-01`
    through `2026-03-31` with `data_quality_status=COMPLETE`,
 3. live `POST /integration/reference/risk-free-series/coverage?currency=USD` returned
