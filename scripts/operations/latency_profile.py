@@ -524,11 +524,19 @@ def _wait_profile_cases_ready(
     *,
     timeout_seconds: int,
     progress_check: Callable[[], None] | None = None,
+    stable_sweeps_required: int = 3,
+    poll_interval_seconds: float = 2.0,
 ) -> None:
     """Wait until measured source contracts are stable enough to begin timing."""
 
+    if stable_sweeps_required < 1:
+        raise ValueError("stable_sweeps_required must be at least 1")
+    if poll_interval_seconds < 0:
+        raise ValueError("poll_interval_seconds must be non-negative")
+
     deadline = time.time() + timeout_seconds
     last_failures: dict[str, str] = {}
+    stable_sweeps = 0
     while time.time() < deadline:
         if progress_check is not None:
             progress_check()
@@ -538,16 +546,21 @@ def _wait_profile_cases_ready(
             if (failure := _readiness_failure(session, case)) is not None
         }
         if not failures:
-            return
-        last_failures = failures
-        time.sleep(2)
+            stable_sweeps += 1
+            if stable_sweeps >= stable_sweeps_required:
+                return
+        else:
+            stable_sweeps = 0
+            last_failures = failures
+        time.sleep(poll_interval_seconds)
 
     detail = "; ".join(
         f"{case_name}={failure}" for case_name, failure in sorted(last_failures.items())
     )
     raise RuntimeError(
         "Latency profile source endpoints did not become query-ready before measurement "
-        f"(timeout_seconds={timeout_seconds}, last_failures={detail or 'no readiness sweep'})."
+        f"(timeout_seconds={timeout_seconds}, stable_sweeps={stable_sweeps}/"
+        f"{stable_sweeps_required}, last_failures={detail or 'no failed readiness sweep'})."
     )
 
 
@@ -738,6 +751,20 @@ def parse_args() -> argparse.Namespace:
             "the portfolio context resolves and before latency measurement starts."
         ),
     )
+    parser.add_argument(
+        "--source-readiness-stable-sweeps",
+        type=int,
+        default=3,
+        help=(
+            "Consecutive all-2xx source-readiness sweeps required before warmup and measurement."
+        ),
+    )
+    parser.add_argument(
+        "--source-readiness-poll-interval-seconds",
+        type=float,
+        default=2.0,
+        help="Delay between source-readiness stability sweeps.",
+    )
     parser.add_argument("--output-dir", default="output/task-runs")
     parser.add_argument("--compose-file", default="docker-compose.yml")
     parser.add_argument(
@@ -810,6 +837,8 @@ def _run_latency_profile(
         source_readiness_cases,
         timeout_seconds=args.source_readiness_timeout_seconds,
         progress_check=progress_check,
+        stable_sweeps_required=args.source_readiness_stable_sweeps,
+        poll_interval_seconds=args.source_readiness_poll_interval_seconds,
     )
 
     results = run_profile(

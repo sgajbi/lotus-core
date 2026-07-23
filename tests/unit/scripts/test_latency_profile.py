@@ -3,6 +3,7 @@ from subprocess import CompletedProcess
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+import pytest
 import requests
 
 from scripts.operations import latency_profile
@@ -334,16 +335,22 @@ def _position_timeseries_case() -> EndpointCase:
     )
 
 
-def test_wait_profile_cases_ready_allows_transient_source_convergence(monkeypatch) -> None:
+def test_wait_profile_cases_ready_requires_stable_convergence_after_transient_422(
+    monkeypatch,
+) -> None:
     session = MagicMock()
     session.post.side_effect = [
+        _latency_response(200, b'{"items":[]}'),
         _latency_response(422, b'{"error_code":"QCP_ANALYTICS_INSUFFICIENT_DATA"}'),
+        _latency_response(200, b'{"items":[]}'),
+        _latency_response(200, b'{"items":[]}'),
         _latency_response(200, b'{"items":[]}'),
     ]
     progress_checks: list[str] = []
-    timeline = iter([100.0, 101.0, 102.0])
+    sleep_intervals: list[float] = []
+    timeline = iter([100.0, 100.1, 100.2, 100.3, 100.4, 100.5])
     monkeypatch.setattr("scripts.operations.latency_profile.time.time", lambda: next(timeline))
-    monkeypatch.setattr("scripts.operations.latency_profile.time.sleep", lambda _: None)
+    monkeypatch.setattr("scripts.operations.latency_profile.time.sleep", sleep_intervals.append)
 
     _wait_profile_cases_ready(
         session,
@@ -352,8 +359,72 @@ def test_wait_profile_cases_ready_allows_transient_source_convergence(monkeypatc
         progress_check=lambda: progress_checks.append("checked"),
     )
 
-    assert session.post.call_count == 2
-    assert progress_checks == ["checked", "checked"]
+    assert session.post.call_count == 5
+    assert progress_checks == ["checked"] * 5
+    assert sleep_intervals == [2.0] * 4
+
+
+def test_wait_profile_cases_ready_resets_stability_after_transport_failure(monkeypatch) -> None:
+    session = MagicMock()
+    session.post.side_effect = [
+        _latency_response(200, b'{"items":[]}'),
+        requests.ConnectionError("connection reset"),
+        _latency_response(200, b'{"items":[]}'),
+        _latency_response(200, b'{"items":[]}'),
+        _latency_response(200, b'{"items":[]}'),
+    ]
+    timeline = iter([100.0, 100.1, 100.2, 100.3, 100.4, 100.5])
+    monkeypatch.setattr("scripts.operations.latency_profile.time.time", lambda: next(timeline))
+    monkeypatch.setattr("scripts.operations.latency_profile.time.sleep", lambda _: None)
+
+    _wait_profile_cases_ready(
+        session,
+        (_position_timeseries_case(),),
+        timeout_seconds=5,
+    )
+
+    assert session.post.call_count == 5
+
+
+def test_wait_profile_cases_ready_preserves_case_order_across_stability_sweeps(
+    monkeypatch,
+) -> None:
+    session = MagicMock()
+    call_order: list[tuple[str, str, float]] = []
+
+    def _get(url: str, *, timeout: float) -> requests.Response:
+        call_order.append(("GET", url, timeout))
+        return _latency_response(200)
+
+    def _post(url: str, *, json, timeout: float) -> requests.Response:
+        assert json["as_of_date"] == "2026-03-31"
+        call_order.append(("POST", url, timeout))
+        return _latency_response(200)
+
+    session.get.side_effect = _get
+    session.post.side_effect = _post
+    cases = (
+        EndpointCase("portfolio", "GET", "http://localhost/portfolio", None, 100),
+        _position_timeseries_case(),
+    )
+    timeline = iter([100.0, 100.1, 100.2, 100.3])
+    monkeypatch.setattr("scripts.operations.latency_profile.time.time", lambda: next(timeline))
+    monkeypatch.setattr("scripts.operations.latency_profile.time.sleep", lambda _: None)
+
+    _wait_profile_cases_ready(session, cases, timeout_seconds=5)
+
+    assert (
+        call_order
+        == [
+            ("GET", "http://localhost/portfolio", 30.0),
+            (
+                "POST",
+                "http://localhost:8202/integration/portfolios/PB-001/analytics/position-timeseries",
+                30.0,
+            ),
+        ]
+        * 3
+    )
 
 
 def test_wait_profile_cases_ready_reports_permanent_non_success(monkeypatch) -> None:
@@ -377,6 +448,7 @@ def test_wait_profile_cases_ready_reports_permanent_non_success(monkeypatch) -> 
         assert "analytics_position_timeseries" in message
         assert "HTTP 422" in message
         assert "QCP_ANALYTICS_INSUFFICIENT_DATA" in message
+        assert "stable_sweeps=0/3" in message
     else:
         raise AssertionError("Expected source readiness to time out for permanent HTTP 422.")
 
@@ -400,11 +472,22 @@ def test_wait_profile_cases_ready_reports_transport_failure(monkeypatch) -> None
         raise AssertionError("Expected source readiness to report the transport failure.")
 
 
-def test_wait_profile_cases_ready_propagates_seed_failure() -> None:
+def test_wait_profile_cases_ready_propagates_seed_failure_during_stability_fence(
+    monkeypatch,
+) -> None:
     session = MagicMock()
+    session.post.return_value = _latency_response(200)
+    progress_checks = 0
 
     def _seed_failure() -> None:
-        raise RuntimeError("demo_data_loader exited with status 1")
+        nonlocal progress_checks
+        progress_checks += 1
+        if progress_checks == 2:
+            raise RuntimeError("demo_data_loader exited with status 1")
+
+    timeline = iter([100.0, 100.1, 100.2])
+    monkeypatch.setattr("scripts.operations.latency_profile.time.time", lambda: next(timeline))
+    monkeypatch.setattr("scripts.operations.latency_profile.time.sleep", lambda _: None)
 
     try:
         _wait_profile_cases_ready(
@@ -417,6 +500,27 @@ def test_wait_profile_cases_ready_propagates_seed_failure() -> None:
         assert "demo_data_loader exited with status 1" in str(exc)
     else:
         raise AssertionError("Expected source readiness to propagate seed failure.")
+    session.post.assert_called_once()
+
+
+def test_wait_profile_cases_ready_rejects_invalid_stability_configuration() -> None:
+    session = MagicMock()
+
+    with pytest.raises(ValueError, match="stable_sweeps_required"):
+        _wait_profile_cases_ready(
+            session,
+            (_position_timeseries_case(),),
+            timeout_seconds=5,
+            stable_sweeps_required=0,
+        )
+    with pytest.raises(ValueError, match="poll_interval_seconds"):
+        _wait_profile_cases_ready(
+            session,
+            (_position_timeseries_case(),),
+            timeout_seconds=5,
+            poll_interval_seconds=-0.1,
+        )
+
     session.post.assert_not_called()
 
 
@@ -435,6 +539,8 @@ def test_run_latency_profile_waits_for_sources_before_measurement(monkeypatch) -
         ready_timeout_seconds=180,
         context_timeout_seconds=300,
         source_readiness_timeout_seconds=300,
+        source_readiness_stable_sweeps=3,
+        source_readiness_poll_interval_seconds=2.0,
         portfolio_id="PB-001",
         benchmark_id="BMK-001",
         include_protected_ops=False,
