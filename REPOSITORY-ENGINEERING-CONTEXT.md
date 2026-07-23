@@ -3088,8 +3088,15 @@ Most relevant current governance:
      terminal position alone cannot prove calendar continuity. Treat non-404 read failures as fatal
      and fail closed when a segment has no evaluator. Explicit `DEMO_DATA_PACK_FORCE_INGEST=true`
      may bypass the reads and publish the complete pack; it is an operator repair control, not the
-     restart default. This is app-local sample-data behavior and does not change production APIs,
-     schemas, or ingestion idempotency contracts.
+     restart default. Generate against RFC-0076's fixed canonical as-of date and a fixed economic
+     anchor: transaction identities and overlapping market, FX, index, benchmark, and risk-free
+     observations must not move when wall-clock time or requested history depth changes. Partition
+     market and FX writes by logical security/currency-pair identity, keep rows date-ordered, and use
+     the `lotus-demo-pack:v2` content namespace for this intentional generator evolution. Verify
+     terminal quantities through one explicit as-of `HoldingsAsOf` read per portfolio; do not require
+     a transaction-history row to exist exactly on the as-of date or reintroduce per-security polling
+     reads. This is app-local sample-data behavior and does not change production APIs, schemas, or
+     ingestion idempotency contracts.
 
 ## Context Maintenance Rule
 

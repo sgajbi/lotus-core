@@ -1265,16 +1265,18 @@ def test_verify_portfolio_timeout_reports_last_observed_state(monkeypatch):
 
     def fake_request_json(method: str, url: str, **_kwargs):
         assert method == "GET"
-        if url.endswith("/positions"):
+        if url.endswith("/positions?as_of_date=2026-06-12"):
             return 200, {
-                "positions": [{"security_id": "SEC_TEST", "valuation": {"market_value": "100.00"}}]
+                "positions": [
+                    {
+                        "security_id": "SEC_TEST",
+                        "quantity": "9",
+                        "valuation": {"market_value": "100.00"},
+                    }
+                ]
             }
         if url.endswith("/transactions?limit=200"):
             return 200, {"total": 1}
-        if url.endswith(
-            "position-history?security_id=SEC_TEST&start_date=2026-06-12&end_date=2026-06-12"
-        ):
-            return 200, {"positions": [{"position_date": "2026-06-12", "quantity": "9"}]}
         raise AssertionError(f"unexpected url: {url}")
 
     monkeypatch.setattr(demo_data_pack.time, "time", fake_time)
@@ -1297,6 +1299,61 @@ def test_verify_portfolio_timeout_reports_last_observed_state(monkeypatch):
     assert "transactions=1" in message
     assert "min_transactions=3" in message
     assert "SEC_TEST:actual=9:expected=10" in message
+
+
+def test_verify_portfolio_uses_one_as_of_holdings_read_for_all_quantities(monkeypatch):
+    expected = demo_data_pack.PortfolioExpectation(
+        "DEMO_TEST_001",
+        2,
+        2,
+        3,
+        (("SEC_A", 10.0), ("SEC_B", -2.0)),
+    )
+    requested_urls: list[str] = []
+
+    def fake_request_json(method: str, url: str, **_kwargs):
+        assert method == "GET"
+        requested_urls.append(url)
+        if url.endswith("/positions?as_of_date=2026-06-12"):
+            return 200, {
+                "positions": [
+                    {
+                        "security_id": "SEC_A",
+                        "quantity": "10",
+                        "valuation": {"market_value": "100.00"},
+                    },
+                    {
+                        "security_id": "SEC_B",
+                        "quantity": "-2",
+                        "valuation": {"market_value": "-20.00"},
+                    },
+                ]
+            }
+        if url.endswith("/transactions?limit=200"):
+            return 200, {"total": 3}
+        raise AssertionError(f"unexpected url: {url}")
+
+    monkeypatch.setattr(demo_data_pack, "_request_json", fake_request_json)
+
+    result = demo_data_pack._verify_portfolio(
+        "http://query",
+        expected,
+        "2026-06-12",
+        wait_seconds=1,
+        poll_interval_seconds=0,
+    )
+
+    assert result == {
+        "portfolio_id": "DEMO_TEST_001",
+        "positions": 2,
+        "valued_positions": 2,
+        "transactions": 3,
+        "validated_holdings": 2,
+    }
+    assert requested_urls == [
+        "http://query/portfolios/DEMO_TEST_001/positions?as_of_date=2026-06-12",
+        "http://query/portfolios/DEMO_TEST_001/transactions?limit=200",
+    ]
 
 
 def test_request_json_treats_remote_disconnect_as_retryable_connection_error(monkeypatch):

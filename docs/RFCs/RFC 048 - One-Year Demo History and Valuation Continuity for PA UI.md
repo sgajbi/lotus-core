@@ -4,7 +4,7 @@
 | --- | --- |
 | Status | Implemented |
 | Created | 2026-02-24 |
-| Last Updated | 2026-07-19 |
+| Last Updated | 2026-07-23 |
 | Owners | demo bootstrap + query-service valuation continuity |
 | Depends On | RFC 046, RFC 047 |
 | Scope | Extend demo horizon and guarantee non-null holdings valuation continuity in degraded paths |
@@ -12,7 +12,8 @@
 ## Executive Summary
 
 RFC 048 objectives are implemented:
-1. Demo data pack now generates rolling one-year business-date history.
+1. Demo data pack generates a governed one-year-or-longer business-date window ending at the fixed
+   RFC-0076 canonical as-of date.
 2. Compose demo loader seeds the complete pack on first boot, skips unchanged retained data, and
    exposes explicit force refresh for intentionally dirty sample state.
 3. Position query fallback path enriches valuation from latest snapshots when possible.
@@ -35,7 +36,9 @@ retained-volume restart.
 ## Current Implementation Reality
 
 Implemented:
-1. Demo bundle window is derived from `date.today() - 365 days` through current date using business-day generation.
+1. Demo bundle windows end at RFC-0076's fixed canonical as-of date. Requested history depth changes
+   reference coverage only; transaction identities and overlapping economic observations remain
+   absolute-date deterministic.
 2. Demo loader skips the complete unchanged pack on retained-volume restart and exposes explicit
    `DEMO_DATA_PACK_FORCE_INGEST=true` refresh control.
 3. Position service fallback logic:
@@ -53,7 +56,7 @@ Evidence:
 
 | Original Requirement | Current Implementation in lotus-core | Evidence |
 | --- | --- | --- |
-| One-year demo history | Implemented | `demo_data_pack.py` business date window |
+| One-year demo history | Implemented | `demo_data_pack.py` governed fixed-as-of business-date window |
 | Restart-idempotent bootstrap with explicit force refresh | Implemented | compose loader command |
 | Fallback valuation enrichment | Implemented | position service fallback valuation map usage |
 | Non-null continuity when snapshots absent | Implemented | cost-basis fallback valuation path + unit tests |
@@ -64,7 +67,9 @@ Evidence:
 2. One complete-pack decision keeps retained restarts deterministic without publishing unchanged
    source history; operators retain an explicit complete refresh control for intentionally dirty
    sample state.
-3. Cost-basis fallback avoids null-value UI failure while asynchronous snapshot materialization catches up.
+3. Logical security and currency-pair segments avoid positional batch churn when coverage evolves,
+   while content fingerprints preserve exact-write idempotency.
+4. Cost-basis fallback avoids null-value UI failure while asynchronous snapshot materialization catches up.
 
 Trade-off:
 - Cost-basis fallback is continuity-safe but not a substitute for full mark-to-market valuation semantics.
@@ -76,6 +81,8 @@ No high-value implementation gap identified for RFC 048 scope.
 ## Deviations and Evolution Since Original RFC
 
 1. Verification workflow is embedded in demo data automation tooling rather than separate scripts.
+2. The original rolling-host-clock window is superseded by the governed RFC-0076 fixed-as-of policy
+   because moving stable transaction IDs is not deterministic source behavior.
 
 ## Proposed Changes
 
