@@ -103,8 +103,10 @@ withholding, withholding above gross, or non-positive resulting cash fails close
 `DIVIDEND_014`, `DIVIDEND_015`, or `DIVIDEND_013` reason codes. Null and zero withholding preserve
 the prior gross-minus-fee result. Every output produced by current cost processing retains
 current-booking economics when it participates in an inline rebuild, including transformed or
-split identities; only previously accepted suffix rows receive the explicit historical-rebuild
-context and retain legacy arithmetic.
+split identities. Previously accepted suffix rows receive the explicit historical-rebuild context,
+but source-recorded positive DIVIDEND withholding remains in product-cashflow economics so rebuilt
+product and generated cash legs stay reconciled. Null/zero withholding and rows that predate the
+current settlement fences retain legacy arithmetic.
 Withholding-rate derivation, other receipt deductions, a supplied-net identity, return-of-capital,
 basis reduction, and advanced timing remain tracked under #448. FX fee currency and two-leg
 settlement ownership remain a separate decision under #754.

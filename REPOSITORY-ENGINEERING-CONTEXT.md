@@ -3065,8 +3065,10 @@ Most relevant current governance:
      `DIVIDEND_013` reason codes before derived writes. Generated cash legs and product cashflows
      consume the same transaction-domain result. When current acceptance triggers an inline
      rebuild, every output produced by the current cost-processing step retains current-booking
-     economics, including transformed or split identities; only previously accepted suffix rows
-     use the explicit historical-rebuild context and retain legacy arithmetic. This
+     economics, including transformed or split identities. Previously accepted suffix rows use
+     the explicit historical-rebuild context: source-recorded positive DIVIDEND withholding stays
+     in product-cashflow economics so it continues to reconcile with its generated cash leg, while
+     null/zero withholding and rows that predate current settlement fences retain legacy arithmetic. This
      does not implement withholding-rate derivation, other receipt deductions,
      a supplied-net identity, jurisdiction-specific tax policy, return-of-capital, basis reduction,
      or advanced timing; keep those residuals under #448.

@@ -392,10 +392,14 @@ async def test_use_case_stages_cashflows_from_inline_position_rebuild_epoch() ->
         )
         if calculation_context is not None
     ]
-    assert cashflow_amounts == [Decimal("88"), Decimal("48")]
+    assert cashflow_amounts == [Decimal("88"), Decimal("38")]
     assert (
         build_generated_settlement_cash_leg(rebuilt_incoming).gross_transaction_amount
         == (cashflow_amounts[0])
+    )
+    assert (
+        build_generated_settlement_cash_leg(rebuilt_suffix).gross_transaction_amount
+        == (cashflow_amounts[1])
     )
 
 

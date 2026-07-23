@@ -16,6 +16,7 @@ from portfolio_common.domain.transaction.type_registry import TRANSACTION_TYPE_R
 from ..transaction.booked import BookedTransaction
 from ..transaction.settlement import (
     ORDINARY_SETTLEMENT_TRANSACTION_TYPES,
+    SettlementCashValidationError,
     calculate_interest_settlement_economics,
     calculate_settlement_cash_movement,
 )
@@ -233,6 +234,13 @@ def _historical_rebuild_cashflow_amount(
     transaction_type: str,
 ) -> Decimal:
     """Reproduce pre-policy signing for already accepted history during restatement."""
+    if transaction_type == "DIVIDEND" and (transaction.withholding_tax_amount or Decimal(0)) > 0:
+        try:
+            return calculate_settlement_cash_movement(transaction).signed_amount
+        except SettlementCashValidationError:
+            # Rows accepted before settlement fencing may contain economics that current
+            # booking rejects. Preserve those rows rather than making a suffix rebuild fail.
+            pass
     if transaction_type == "INTEREST":
         amount: Decimal = calculate_interest_settlement_economics(
             transaction
