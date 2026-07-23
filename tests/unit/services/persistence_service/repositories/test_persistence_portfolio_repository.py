@@ -44,6 +44,8 @@ def sample_portfolio_event() -> PortfolioEvent:
         investment_time_horizon="Long",
         portfolio_type="Discretionary",
         booking_center_code="SG",
+        tenant_id="TENANT-SG",
+        legal_book_id="PB-SG-01",
     )
 
 
@@ -69,6 +71,8 @@ async def test_create_or_update_portfolio(
     assert isinstance(result, DBPortfolio)
     assert result.portfolio_id == sample_portfolio_event.portfolio_id
     assert result.base_currency == "USD"
+    assert result.tenant_id == "TENANT-SG"
+    assert result.legal_book_id == "PB-SG-01"
 
     # 3. Check the SQL statement that was generated and passed to execute
     executed_statement = mock_db_session.execute.call_args[0][0]

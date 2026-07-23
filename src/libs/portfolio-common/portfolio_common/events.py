@@ -16,6 +16,7 @@ from .domain.transaction_control_codes import (
     normalize_optional_transaction_control_code,
     normalize_transaction_control_code,
 )
+from .domain.valuation.source_facts import resolve_optional_valuation_book_scope
 
 
 def _standardize_event_datetime_value(value: object) -> object:
@@ -82,6 +83,8 @@ class PortfolioEvent(CoreEventModel):
     """
 
     portfolio_id: str = Field(...)
+    tenant_id: Optional[str] = Field(None)
+    legal_book_id: Optional[str] = Field(None)
     base_currency: str = Field(...)
     open_date: date = Field(...)
     close_date: Optional[date] = Field(None)
@@ -105,6 +108,16 @@ class PortfolioEvent(CoreEventModel):
     @classmethod
     def _normalize_base_currency(cls, value: object) -> str:
         return normalize_currency_code(value)
+
+    @model_validator(mode="after")
+    def _validate_valuation_book_scope(self) -> "PortfolioEvent":
+        scope = resolve_optional_valuation_book_scope(
+            tenant_id=self.tenant_id,
+            legal_book_id=self.legal_book_id,
+        )
+        if scope is not None:
+            self.tenant_id, self.legal_book_id = scope.key
+        return self
 
 
 class FxRateEvent(CoreEventModel):

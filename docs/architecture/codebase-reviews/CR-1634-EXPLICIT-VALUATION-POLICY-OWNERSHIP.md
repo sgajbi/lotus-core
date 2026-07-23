@@ -144,11 +144,13 @@ to that service's domain package.
 
 The assignment slices add one reversible table, two evidence-backed indexes, one source-write
 HTTP/OpenAPI contract, and one internal service-local read port/adapter. Existing routes, event
-payloads, topics, deployment topology, downstream fields, and runtime valuation behavior are
-unchanged. Existing correct unit-price behavior is characterized under an explicit policy. The
-legacy bond heuristic remains in the runtime path until authoritative valuation facts and portfolio
-tenant/legal-book ownership are available; it will be deleted rather than retained as a fallback
-when valuation and reconciliation are rewired.
+payloads, topics, deployment topology, downstream fields, and runtime valuation behavior were
+unchanged by those slices. A subsequent staged prerequisite adds nullable `tenant_id` and
+`legal_book_id` together to portfolio ingestion, events, and persistence. Both absent preserves
+legacy compatibility; partial, blank, padded database-direct, or non-string authority fails closed.
+Existing correct unit-price behavior is characterized under an explicit policy. The legacy bond
+heuristic remains in the runtime path until authoritative market-price persistence and both
+valuation consumers are wired; it will be deleted rather than retained as a fallback then.
 
 ## Validation
 
@@ -195,6 +197,10 @@ when valuation and reconciliation are rewired.
   older ACTIVE version, an unrelated tenant/book cannot leak into selection, and pre-effective
   dates remain unsupported.
 - Signed slice commits and validation evidence are recorded on GitHub issue #788.
+- The staged portfolio-authority slice adds warning-strict DTO/event/domain/persistence/ORM and
+  reversible-migration tests. Its protected PostgreSQL test downgrades and reapplies the exact
+  revision, inspects both column and check-constraint truth, rejects partial/blank/padded authority,
+  and accepts both legacy-unscoped and exact-scoped rows.
 
 Primary methodology references for the day-count slice are the
 [FpML day-count scheme publication](https://www.fpml.org/specs_news/publication-of-fpml-set-of-coding-schemes-catalog-version-1-121/),
@@ -220,5 +226,7 @@ this review ledger change because calculation and evidence truth changed. The me
 the new domain as a runtime migration in progress. The new source-write API updates the generated
 route/vocabulary catalogs plus the ingestion, API-surface, and data-model wiki sources. The
 service-local resolver does not add another wiki change: it is an internal migration seam and is not
-yet invoked by production valuation or reconciliation. README and supported-feature status do not
-change; broader product/lifecycle wiki updates remain required with that runtime slice.
+yet invoked by production valuation or reconciliation. The later portfolio-authority prerequisite
+updates the generated API vocabulary plus `Data-Models` and `Ingestion-Service` wiki sources because
+the additive request/event/schema contract changed. README and supported-feature status do not
+change; broader product/lifecycle wiki updates remain required with the runtime cutover.
