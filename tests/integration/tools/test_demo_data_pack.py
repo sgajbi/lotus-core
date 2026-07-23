@@ -4,6 +4,7 @@ from datetime import datetime
 from decimal import Decimal
 
 import pytest
+from portfolio_common.request_fingerprints import request_fingerprint
 
 from src.services.portfolio_transaction_processing_service.app.domain.position.history import (
     order_position_transactions,
@@ -723,6 +724,7 @@ def test_portfolio_probe_verifies_master_reference_ledger_and_positions(monkeypa
     def fake_request_json(method, url, payload=None, headers=None):
         assert headers is None
         if "/analytics/portfolio-timeseries" in url:
+            observed_business_dates = bundle["business_dates"][2:]
             assert method == "POST"
             assert payload is not None
             assert payload["page"] == {"page_size": len(bundle["business_dates"])}
@@ -730,15 +732,23 @@ def test_portfolio_probe_verifies_master_reference_ledger_and_positions(monkeypa
                 "resolved_window": payload["window"],
                 "observations": [
                     {"valuation_date": record["business_date"]}
-                    for record in bundle["business_dates"]
+                    for record in observed_business_dates
                 ],
                 "page": {
-                    "returned_row_count": len(bundle["business_dates"]),
+                    "returned_row_count": len(observed_business_dates),
                     "next_page_token": None,
                 },
                 "diagnostics": {
                     "expected_business_dates_count": len(bundle["business_dates"]),
-                    "missing_dates_count": 0,
+                    "expected_business_dates_digest": request_fingerprint(
+                        {
+                            "business_dates": [
+                                record["business_date"] for record in bundle["business_dates"]
+                            ]
+                        }
+                    ),
+                    "returned_observation_dates_count": len(observed_business_dates),
+                    "missing_dates_count": 2,
                 },
             }
         assert method == "GET"
@@ -800,6 +810,14 @@ def test_portfolio_probe_rejects_evolved_transaction_economics(monkeypatch):
                 },
                 "diagnostics": {
                     "expected_business_dates_count": len(bundle["business_dates"]),
+                    "expected_business_dates_digest": request_fingerprint(
+                        {
+                            "business_dates": [
+                                record["business_date"] for record in bundle["business_dates"]
+                            ]
+                        }
+                    ),
+                    "returned_observation_dates_count": len(bundle["business_dates"]),
                     "missing_dates_count": 0,
                 },
             }
@@ -862,6 +880,14 @@ def test_portfolio_probe_rejects_same_count_substituted_business_calendar_date(m
                 },
                 "diagnostics": {
                     "expected_business_dates_count": len(bundle["business_dates"]),
+                    "expected_business_dates_digest": request_fingerprint(
+                        {
+                            "business_dates": [
+                                record["business_date"] for record in bundle["business_dates"]
+                            ]
+                        }
+                    ),
+                    "returned_observation_dates_count": len(bundle["business_dates"]),
                     "missing_dates_count": 0,
                 },
             }

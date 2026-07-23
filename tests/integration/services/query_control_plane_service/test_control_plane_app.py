@@ -1607,6 +1607,9 @@ async def test_openapi_describes_analytics_input_parameters_and_examples(async_t
     assert portfolio_diagnostics["properties"]["expected_business_dates_count"]["description"] == (
         "Number of expected business-calendar dates in the resolved window."
     )
+    assert portfolio_diagnostics["properties"]["expected_business_dates_digest"][
+        "description"
+    ].startswith("Deterministic SHA-256 fingerprint")
     assert portfolio_diagnostics["properties"]["cash_flows_included"]["default"] is True
     assert diagnostics["properties"]["cash_flows_included"]["default"] is False
     assert export_result_schema["properties"]["data"]["description"] == (

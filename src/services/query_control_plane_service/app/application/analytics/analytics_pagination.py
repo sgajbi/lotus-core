@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
+from typing import Any
 
 from portfolio_common.identifiers import normalize_lookup_identifier as normalize_security_id
 from portfolio_common.request_fingerprints import request_fingerprint
@@ -54,7 +55,7 @@ def portfolio_timeseries_cursor_date(
     *,
     page_token: str | None,
     request_scope_fingerprint: str,
-    decode_page_token: Callable[[str | None], dict],
+    decode_page_token: Callable[[str | None], dict[str, Any]],
 ) -> date | None:
     cursor = decode_page_token(page_token)
     token_scope = cursor.get("scope_fingerprint")
@@ -81,6 +82,9 @@ def portfolio_timeseries_diagnostics(
         missing_dates_count=missing_dates_count,
         stale_points_count=stale_points_count,
         expected_business_dates_count=len(expected_business_dates),
+        expected_business_dates_digest=request_fingerprint(
+            {"business_dates": [item.isoformat() for item in expected_business_dates]}
+        ),
         returned_observation_dates_count=len(observed_dates),
         cash_flows_included=True,
     )
@@ -117,7 +121,7 @@ def position_timeseries_cursor(
     *,
     page_token: str | None,
     request_scope_fingerprint: str,
-    decode_page_token: Callable[[str | None], dict],
+    decode_page_token: Callable[[str | None], dict[str, Any]],
 ) -> PositionTimeseriesCursor:
     cursor = decode_page_token(page_token)
     token_scope = cursor.get("scope_fingerprint")
@@ -138,7 +142,7 @@ def position_timeseries_next_page_token(
     rows_page: list[PositionValuationObservation],
     snapshot_epoch: int,
     request_scope_fingerprint: str,
-    encode_page_token: Callable[[dict], str],
+    encode_page_token: Callable[[dict[str, Any]], str],
 ) -> str | None:
     if not has_more or not rows_page:
         return None

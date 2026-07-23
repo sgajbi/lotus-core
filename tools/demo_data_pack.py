@@ -15,6 +15,8 @@ from decimal import Decimal
 from typing import Any, Literal
 from urllib import error, parse, request
 
+from portfolio_common.request_fingerprints import request_fingerprint
+
 from tools.front_office_seed_contract import load_front_office_seed_contract
 
 LOGGER = logging.getLogger("demo_data_pack")
@@ -2070,14 +2072,27 @@ def _probe_portfolio_bundle_segment(
         str(observation.get("valuation_date"))
         for observation in calendar_response.get("observations") or []
     ]
+    first_observed_index = (
+        expected_business_dates.index(observed_business_dates[0])
+        if observed_business_dates and observed_business_dates[0] in expected_business_dates
+        else None
+    )
+    expected_observation_dates = (
+        expected_business_dates[first_observed_index:] if first_observed_index is not None else []
+    )
     complete = complete and (
         calendar_response.get("resolved_window") == calendar_window
-        and observed_business_dates == expected_business_dates
-        and calendar_page.get("returned_row_count") == len(expected_business_dates)
+        and calendar_diagnostics.get("expected_business_dates_digest")
+        == request_fingerprint({"business_dates": expected_business_dates})
+        and observed_business_dates == expected_observation_dates
+        and calendar_page.get("returned_row_count") == len(observed_business_dates)
         and calendar_page.get("next_page_token") is None
         and calendar_diagnostics.get("expected_business_dates_count")
         == len(expected_business_dates)
-        and calendar_diagnostics.get("missing_dates_count") == 0
+        and calendar_diagnostics.get("returned_observation_dates_count")
+        == len(observed_business_dates)
+        and calendar_diagnostics.get("missing_dates_count")
+        == len(expected_business_dates) - len(observed_business_dates)
     )
 
     transaction_fields = (
