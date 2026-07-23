@@ -73,10 +73,10 @@ does not decide whether a target is safe.
   tests/unit/test_support/test_runtime_env.py
   tests/unit/test_support/test_db_cleanup.py
   tests/unit/test_support/test_pipeline_quiescence.py -q -W error`
-  - `53 passed`
+  - `56 passed`
 - `python scripts/development/repository_python.py -m pytest
   tests/unit/test_support -q -W error`
-  - `127 passed`
+  - `130 passed`
 - Pinned Ruff check and format verification passed for all changed Python files.
 - Strict scoped MyPy passed for `runtime_env.py`, `db_cleanup.py`, and
   `pipeline_quiescence.py`.

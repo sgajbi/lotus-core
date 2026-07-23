@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import copy
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from unittest.mock import MagicMock
 
 import pytest
@@ -288,6 +288,17 @@ def test_cleanup_authorizes_generated_project_owned_port_and_exact_engine() -> N
         runtime.port_reservation.release()
 
 
+def test_cleanup_authorization_remains_valid_after_normal_reservation_release() -> None:
+    runtime = _runtime()
+    engine = _engine(runtime.endpoints.host_database_url)
+    runtime.port_reservation.release()
+
+    authorization = authorize_database_cleanup(runtime=runtime, engine=engine)
+
+    require_database_cleanup_authorization(authorization, engine=engine)
+    assert not engine.begin.called
+
+
 def test_delegated_cleanup_rejects_authorization_from_retired_reservation_generation() -> None:
     runtime = _runtime()
     retired_engine = _engine(runtime.endpoints.host_database_url)
@@ -464,6 +475,65 @@ def test_module_cleanup_revalidates_authority_after_quiescence_wait(
         ):
             next(root_conftest.clean_db_module.__wrapped__(engine))
         assert not engine.begin.called
+    finally:
+        runtime.port_reservation.release()
+
+
+def test_function_cleanup_revalidates_authority_after_connection_entry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runtime = _runtime()
+    engine = _engine(runtime.endpoints.host_database_url)
+    connection = engine.begin.return_value.__enter__.return_value
+
+    def _enter_then_drift() -> MagicMock:
+        runtime.values["POSTGRES_DB"] = "shared"
+        return connection
+
+    engine.begin.return_value.__enter__.side_effect = _enter_then_drift
+    monkeypatch.setattr(root_conftest, "_test_runtime", runtime)
+    try:
+        with pytest.raises(
+            DatabaseCleanupAuthorizationError,
+            match="PostgreSQL target components changed",
+        ):
+            next(root_conftest.clean_db.__wrapped__(engine))
+        connection.execute.assert_not_called()
+    finally:
+        runtime.port_reservation.release()
+
+
+def test_deadlock_termination_callback_revalidates_authority_before_connection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runtime = _runtime()
+    engine = _engine(runtime.endpoints.host_database_url)
+    connection = engine.begin.return_value.__enter__.return_value
+
+    def _invoke_termination_callback(
+        _executor: Callable[[], None],
+        *,
+        on_deadlock_retry: Callable[[], None] | None = None,
+        **_kwargs: object,
+    ) -> None:
+        runtime.values["POSTGRES_DB"] = "shared"
+        assert on_deadlock_retry is not None
+        on_deadlock_retry()
+
+    monkeypatch.setattr(root_conftest, "_test_runtime", runtime)
+    monkeypatch.setattr(
+        root_conftest,
+        "truncate_with_deadlock_retry",
+        _invoke_termination_callback,
+    )
+    try:
+        with pytest.raises(
+            DatabaseCleanupAuthorizationError,
+            match="PostgreSQL target components changed",
+        ):
+            next(root_conftest.clean_db.__wrapped__(engine))
+        assert not engine.begin.called
+        connection.execute.assert_not_called()
     finally:
         runtime.port_reservation.release()
 
