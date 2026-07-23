@@ -26,10 +26,11 @@ The guarded playbook set covers `ingestion-stuck-failed`, `dlq-growth`, `replay-
 
 ```powershell
 make lint
-python -m pytest --collect-only -q
+python scripts/development/repository_python.py -m pytest --collect-only -q
 make quality-complexity-gate
 make quality-maintainability-gate
-python scripts\migration_contract_check.py --mode alembic-sql
+python scripts/development/repository_python.py `
+  scripts/quality/migration_contract_check.py --mode alembic-sql
 ```
 
 Repository quality commands use `scripts/quality/ci_tooling.py` to verify and execute the exact
@@ -39,17 +40,27 @@ ambient interpreter as CI-parity evidence. If a tool is missing or has another v
 cross-platform remediation from the repository root and then rerun the Make target:
 
 ```powershell
-python scripts/development/bootstrap_dev.py
+make install
 ```
 
-The runner invokes `python -m <tool>` with an argument list in the current process environment; it
-does not construct a shell command or open a separate terminal window. Direct diagnostic use is
-available when needed, for example:
+Every Python-backed Make recipe first uses `scripts/development/repository_python.py`. The launcher
+prepends the invoking checkout's repository and shared-library roots, removes inherited paths from
+other `lotus-core*` worktrees, and fails with expected/actual paths if `portfolio_common` still
+resolves outside the current checkout. It invokes Python with an argument list, `shell=False`, and
+the child exit code; it does not construct a shell command or open a separate terminal window.
+Direct diagnostic use is available when needed, for example:
 
 ```powershell
-python scripts/quality/ci_tooling.py verify ruff mypy
-python scripts/quality/ci_tooling.py run ruff check path/to/file.py
+python scripts/development/repository_python.py `
+  scripts/quality/ci_tooling.py verify ruff mypy
+python scripts/development/repository_python.py `
+  scripts/quality/ci_tooling.py run ruff check path/to/file.py
 ```
+
+Do not set a global `PYTHONPATH` to another checkout or treat the most recently installed editable
+package as validation evidence. Use Make targets from the intended worktree. For a focused
+service-local `app` import, set only that service root for the command; the launcher will retain it
+after fencing Core repository roots.
 
 ## CI Posture
 

@@ -645,6 +645,14 @@ Use these commands as the primary local contract:
 17. front-door synchronization guard
    `make front-door-sync-guard`
 
+All Python-backed Make recipes route through
+`python scripts/development/repository_python.py`. The launcher prepends this invoking checkout's
+repository and shared `portfolio-common` roots, filters inherited paths from other `lotus-core*`
+worktrees, proves first-party source origin before delegation, uses `shell=False`, and preserves the
+child exit code. Do not use an ambient editable install or another worktree's `PYTHONPATH` as
+validation evidence. Use `make install` to repair editable provenance and invoke direct diagnostics
+through the launcher when a Make target is not available.
+
 ## Validation And CI Expectations
 
 `lotus-core` uses explicit CI lanes with a much heavier validation contract than most repos.
@@ -659,7 +667,11 @@ Important validation expectations:
    should not re-import ecosystem-wide or commercial narrative that now belongs in `lotus-platform`.
 6. service-runtime packaging/import checks are part of architecture validation: when a slice touches
    service app imports, Dockerfiles, compose mounts, or package metadata, run `make architecture-guard`
-   plus a focused runtime import proof such as `PYTHONPATH=src/services/<service>;src/libs/portfolio-common python -c "import app.main"` for the affected service.
+   plus a focused runtime import proof. For PowerShell, set
+   `$env:PYTHONPATH="$PWD/src/services/<service>"`, then run
+   `python scripts/development/repository_python.py -c "import app.main"`; the launcher adds current
+   repository/shared-library roots while retaining only the explicitly selected service-local
+   `app` root.
 7. PR documentation acceptance is explicit: if a change affects routes, contracts,
    supported features, operational behavior, security posture, validation lanes, service
    boundaries, README, architecture docs, API catalog, RFCs, runbooks, wiki source,
