@@ -53,7 +53,9 @@ Phase-1 policy is `SEPARATE_LINKED_ONLY`:
 - repository-native FX manifest before the new DB case: 337 warning-strict tests passed;
 - current governed FX manifest: 338 tests collected, including one dedicated DB-direct linked-fee
   replay test;
+- complete repository lint, strict MyPy across 237 source files, architecture, OpenAPI, and API
+  vocabulary gates passed;
 - touched Ruff, format, and diff hygiene passed.
 
-Protected DB execution, complete non-Docker governance gates, peer review, PR/main/exact-main proof,
-wiki publication, and verified issue closure remain pending.
+Protected DB execution, peer review, PR/main/exact-main proof, wiki publication, and verified issue
+closure remain pending.
