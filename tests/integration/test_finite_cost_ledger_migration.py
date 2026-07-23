@@ -434,6 +434,14 @@ def test_finite_cost_ledger_migration_lifecycle_and_enforcement(
                 key=key,
                 value="-1",
             )
+            if (table_name, column_name) == ("transaction_costs", "amount"):
+                _assert_update_rejected(
+                    connection,
+                    table=metadata.tables[table_name],
+                    column_name=column_name,
+                    key=key,
+                    value="0",
+                )
 
         for table_name, column_name, key in GOVERNED_COLUMNS:
             if (table_name, column_name) == ("transaction_costs", "amount"):
