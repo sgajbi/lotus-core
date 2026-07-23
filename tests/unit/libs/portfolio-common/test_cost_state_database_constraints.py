@@ -114,7 +114,7 @@ def test_cost_ledger_quantities_and_costs_preserve_nonnegative_semantics(
         ),
     ],
 )
-def test_cost_ledger_numeric_constraints_reject_non_finite_values(
+def test_cost_ledger_orm_declares_non_finite_value_constraints(
     model: type,
     constraint_name: str,
     column_names: list[str],

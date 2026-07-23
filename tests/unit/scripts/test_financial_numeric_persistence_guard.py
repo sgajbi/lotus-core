@@ -50,11 +50,54 @@ def _keyword_type_model() -> str:
     )
 
 
+def _numeric_alias_model(*, keyword: bool, include_unclassified: bool = False) -> str:
+    column_type = "type_=MONEY" if keyword else "MONEY"
+    unclassified = (
+        f"    unclassified = Column({column_type}, nullable=False)\n"
+        if include_unclassified
+        else ""
+    )
+    return (
+        "from sqlalchemy import CheckConstraint, Column, Numeric\n\n"
+        "MONEY_BASE = Numeric(18, 10)\n"
+        "MONEY = MONEY_BASE\n\n"
+        "class FinancialRow:\n"
+        '    __tablename__ = "financial_rows"\n'
+        f"    value = Column({column_type}, nullable=False)\n"
+        f"{unclassified}"
+        "    __table_args__ = (\n"
+        "        CheckConstraint(\n"
+        "            \"CAST(value AS TEXT) NOT IN ('NaN', 'Infinity', '-Infinity')\",\n"
+        '            name="ck_financial_value_finite",\n'
+        "        ),\n"
+        '        CheckConstraint("value > 0", name="ck_financial_value_positive"),\n'
+        "    )\n"
+    )
+
+
+def _numeric_constructor_model(*, import_source: str, type_expression: str) -> str:
+    return (
+        f"{import_source}\n"
+        "from sqlalchemy import CheckConstraint, Column\n\n"
+        "class FinancialRow:\n"
+        '    __tablename__ = "financial_rows"\n'
+        f"    value = Column({type_expression}, nullable=False)\n"
+        "    __table_args__ = (\n"
+        "        CheckConstraint(\n"
+        "            \"CAST(value AS TEXT) NOT IN ('NaN', 'Infinity', '-Infinity')\",\n"
+        '            name="ck_financial_value_finite",\n'
+        "        ),\n"
+        '        CheckConstraint("value > 0", name="ck_financial_value_positive"),\n'
+        "    )\n"
+    )
+
+
 def _contract(
     *,
     profile: str = "positive-finite",
-    rollout_status: str = "enforced",
+    rollout_status: str = "orm-enforced",
     column: str = "value",
+    database_evidence: dict[str, object] | None = None,
 ) -> dict[str, object]:
     return {
         "schema_version": "1.0.0",
@@ -71,7 +114,8 @@ def _contract(
                 "sign": "nonnegative",
             },
         },
-        "rollout_statuses": ["enforced", "planned"],
+        "rollout_statuses": ["orm-enforced", "database-enforced", "planned"],
+        "database_enforcement_evidence": database_evidence or {},
         "tables": {
             "financial_rows": {column: {"profile": profile, "rollout_status": rollout_status}}
         },
@@ -93,6 +137,30 @@ def _write_fixture(
     return contract_path
 
 
+def _database_evidence(root: Path) -> dict[str, object]:
+    migration = root / "alembic/versions/001_add_financial_value_constraint.py"
+    migration.parent.mkdir(parents=True)
+    migration.write_text(
+        'CONSTRAINT_NAME = "ck_financial_value_finite"\n',
+        encoding="utf-8",
+    )
+    postgres_test = root / "tests/integration/test_financial_value_postgresql.py"
+    postgres_test.parent.mkdir(parents=True)
+    postgres_test.write_text(
+        "CONSTRAINT = 'ck_financial_value_finite'\n\n"
+        "def test_postgresql_rejects_non_finite_value():\n"
+        "    assert CONSTRAINT\n",
+        encoding="utf-8",
+    )
+    return {
+        "financial_rows.value": {
+            "migration_path": "alembic/versions/001_add_financial_value_constraint.py",
+            "constraint_names": ["ck_financial_value_finite"],
+            "postgresql_test_paths": ["tests/integration/test_financial_value_postgresql.py"],
+        }
+    }
+
+
 def test_guard_accepts_explicit_finiteness_and_sign_policy(tmp_path: Path) -> None:
     contract_path = _write_fixture(
         tmp_path,
@@ -110,7 +178,8 @@ def test_guard_accepts_explicit_finiteness_and_sign_policy(tmp_path: Path) -> No
     assert report.findings == ()
     assert report.numeric_column_count == 1
     assert report.table_count == 1
-    assert report.enforced_count == 1
+    assert report.orm_enforced_count == 1
+    assert report.database_enforced_count == 0
     assert report.planned_count == 0
 
 
@@ -141,6 +210,66 @@ def test_guard_inventories_keyword_type_numeric_column(tmp_path: Path) -> None:
     assert report.numeric_column_count == 1
 
 
+@pytest.mark.parametrize("keyword", [False, True])
+def test_guard_inventories_direct_reusable_numeric_alias(
+    tmp_path: Path,
+    keyword: bool,
+) -> None:
+    contract_path = _write_fixture(
+        tmp_path,
+        model=_numeric_alias_model(keyword=keyword),
+        contract=_contract(),
+    )
+
+    report = evaluate_guard(tmp_path, contract_path)
+
+    assert report.findings == ()
+    assert report.numeric_column_count == 1
+
+
+@pytest.mark.parametrize(
+    ("import_source", "type_expression"),
+    [
+        ("from sqlalchemy import Numeric as X", "X(18, 10)"),
+        ("from sqlalchemy import DECIMAL", "DECIMAL(18, 10)"),
+        ("from sqlalchemy import NUMERIC", "NUMERIC"),
+        ("from sqlalchemy import Numeric", "Numeric"),
+        ("import sqlalchemy as sa", "sa.Numeric(18, 10)"),
+    ],
+)
+def test_guard_inventories_imported_numeric_constructor_forms(
+    tmp_path: Path,
+    import_source: str,
+    type_expression: str,
+) -> None:
+    contract_path = _write_fixture(
+        tmp_path,
+        model=_numeric_constructor_model(
+            import_source=import_source,
+            type_expression=type_expression,
+        ),
+        contract=_contract(),
+    )
+
+    report = evaluate_guard(tmp_path, contract_path)
+
+    assert report.findings == ()
+    assert report.numeric_column_count == 1
+
+
+def test_guard_rejects_unclassified_column_using_numeric_alias(tmp_path: Path) -> None:
+    contract_path = _write_fixture(
+        tmp_path,
+        model=_numeric_alias_model(keyword=False, include_unclassified=True),
+        contract=_contract(),
+    )
+
+    findings = evaluate_guard(tmp_path, contract_path).findings
+
+    assert "financial_rows.unclassified: Numeric column is missing a classification" in findings
+    assert any("ORM has 2" in finding for finding in findings)
+
+
 def test_guard_accepts_planned_column_and_reports_residual(tmp_path: Path) -> None:
     contract_path = _write_fixture(
         tmp_path,
@@ -154,8 +283,187 @@ def test_guard_accepts_planned_column_and_reports_residual(tmp_path: Path) -> No
     report = evaluate_guard(tmp_path, contract_path)
 
     assert report.findings == ()
-    assert report.enforced_count == 0
+    assert report.orm_enforced_count == 0
+    assert report.database_enforced_count == 0
     assert report.planned_count == 1
+
+
+def test_database_enforced_stage_still_requires_orm_enforcement(tmp_path: Path) -> None:
+    evidence = _database_evidence(tmp_path)
+    contract_path = _write_fixture(
+        tmp_path,
+        model=_model(constraint="value > 0"),
+        contract=_contract(
+            rollout_status="database-enforced",
+            database_evidence=evidence,
+        ),
+    )
+
+    report = evaluate_guard(tmp_path, contract_path)
+
+    assert report.orm_enforced_count == 0
+    assert report.database_enforced_count == 1
+    assert report.findings == (
+        "financial_rows.value: database-enforced classification lacks an explicit "
+        "ORM exclusion of NaN, Infinity, and -Infinity",
+    )
+
+
+def test_database_enforced_stage_accepts_complete_source_evidence(tmp_path: Path) -> None:
+    evidence = _database_evidence(tmp_path)
+    contract_path = _write_fixture(
+        tmp_path,
+        model=_model(
+            constraint=("CAST(value AS TEXT) NOT IN ('NaN', 'Infinity', '-Infinity') AND value > 0")
+        ),
+        contract=_contract(
+            rollout_status="database-enforced",
+            database_evidence=evidence,
+        ),
+    )
+
+    report = evaluate_guard(tmp_path, contract_path)
+
+    assert report.findings == ()
+    assert report.orm_enforced_count == 0
+    assert report.database_enforced_count == 1
+
+
+def test_database_enforced_stage_rejects_missing_evidence(tmp_path: Path) -> None:
+    contract_path = _write_fixture(
+        tmp_path,
+        model=_model(
+            constraint=("CAST(value AS TEXT) NOT IN ('NaN', 'Infinity', '-Infinity') AND value > 0")
+        ),
+        contract=_contract(rollout_status="database-enforced"),
+    )
+
+    assert (
+        "financial_rows.value: database-enforced classification lacks database evidence"
+        in evaluate_guard(tmp_path, contract_path).findings
+    )
+
+
+def test_guard_rejects_database_evidence_for_non_database_stage(tmp_path: Path) -> None:
+    evidence = _database_evidence(tmp_path)
+    contract_path = _write_fixture(
+        tmp_path,
+        model=_model(constraint=None),
+        contract=_contract(rollout_status="planned", database_evidence=evidence),
+    )
+
+    assert (
+        "financial_rows.value: database evidence has no matching database-enforced "
+        "classification" in evaluate_guard(tmp_path, contract_path).findings
+    )
+
+
+def test_guard_rejects_unit_test_as_database_enforcement_evidence(tmp_path: Path) -> None:
+    evidence = _database_evidence(tmp_path)
+    unit_test = tmp_path / "tests/unit/test_financial_value.py"
+    unit_test.parent.mkdir(parents=True, exist_ok=True)
+    unit_test.write_text(
+        "CONSTRAINT = 'ck_financial_value_finite'\n",
+        encoding="utf-8",
+    )
+    evidence_entry = evidence["financial_rows.value"]
+    assert isinstance(evidence_entry, dict)
+    evidence_entry["postgresql_test_paths"] = ["tests/unit/test_financial_value.py"]
+    contract_path = _write_fixture(
+        tmp_path,
+        model=_model(
+            constraint=("CAST(value AS TEXT) NOT IN ('NaN', 'Infinity', '-Infinity') AND value > 0")
+        ),
+        contract=_contract(
+            rollout_status="database-enforced",
+            database_evidence=evidence,
+        ),
+    )
+
+    assert (
+        "financial_rows.value: PostgreSQL evidence path must be under tests/integration: "
+        "tests/unit/test_financial_value.py" in evaluate_guard(tmp_path, contract_path).findings
+    )
+
+
+def test_guard_rejects_postgresql_test_without_constraint_or_identity_reference(
+    tmp_path: Path,
+) -> None:
+    evidence = _database_evidence(tmp_path)
+    postgres_test = tmp_path / "tests/integration/test_financial_value_postgresql.py"
+    postgres_test.write_text(
+        "def test_postgresql_rejects_non_finite_value():\n    pass\n",
+        encoding="utf-8",
+    )
+    contract_path = _write_fixture(
+        tmp_path,
+        model=_model(
+            constraint=("CAST(value AS TEXT) NOT IN ('NaN', 'Infinity', '-Infinity') AND value > 0")
+        ),
+        contract=_contract(
+            rollout_status="database-enforced",
+            database_evidence=evidence,
+        ),
+    )
+
+    assert (
+        "financial_rows.value: PostgreSQL test does not reference the identity "
+        "or a declared constraint" in evaluate_guard(tmp_path, contract_path).findings
+    )
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "expected"),
+    [
+        (
+            "migration_path",
+            "../outside.py",
+            "migration_path must stay within the repository",
+        ),
+        (
+            "constraint_names",
+            [],
+            "constraint_names must be unique nonempty SQL identifiers",
+        ),
+        (
+            "constraint_names",
+            ["ck_missing_constraint"],
+            "migration does not contain constraint ck_missing_constraint",
+        ),
+        (
+            "postgresql_test_paths",
+            [],
+            "postgresql_test_paths must be a nonempty unique path list",
+        ),
+        (
+            "postgresql_test_paths",
+            ["tests/integration/missing_test.py"],
+            "postgresql_test_paths[0] does not exist",
+        ),
+    ],
+)
+def test_guard_rejects_malformed_database_evidence(
+    tmp_path: Path,
+    field: str,
+    value: object,
+    expected: str,
+) -> None:
+    evidence = _database_evidence(tmp_path)
+    evidence_entry = evidence["financial_rows.value"]
+    assert isinstance(evidence_entry, dict)
+    evidence_entry[field] = value
+    contract_path = _write_fixture(
+        tmp_path,
+        model=_model(
+            constraint=("CAST(value AS TEXT) NOT IN ('NaN', 'Infinity', '-Infinity') AND value > 0")
+        ),
+        contract=_contract(
+            rollout_status="database-enforced",
+            database_evidence=evidence,
+        ),
+    )
+
+    assert any(expected in finding for finding in evaluate_guard(tmp_path, contract_path).findings)
 
 
 def test_guard_rejects_sign_only_constraint_as_finiteness(tmp_path: Path) -> None:
@@ -168,8 +476,8 @@ def test_guard_rejects_sign_only_constraint_as_finiteness(tmp_path: Path) -> Non
     report = evaluate_guard(tmp_path, contract_path)
 
     assert report.findings == (
-        "financial_rows.value: enforced classification lacks an explicit exclusion of "
-        "NaN, Infinity, and -Infinity",
+        "financial_rows.value: orm-enforced classification lacks an explicit "
+        "ORM exclusion of NaN, Infinity, and -Infinity",
     )
 
 
@@ -200,7 +508,7 @@ def test_guard_requires_all_special_values_for_the_classified_column(
     )
 
     assert any(
-        "lacks an explicit exclusion" in finding
+        "lacks an explicit ORM exclusion" in finding
         for finding in evaluate_guard(tmp_path, contract_path).findings
     )
 
@@ -286,7 +594,29 @@ def test_guard_rejects_uninventoried_mapped_numeric_shape(tmp_path: Path) -> Non
     )
 
 
-def test_repository_contract_classifies_all_numeric_columns() -> None:
+def test_guard_rejects_indirect_numeric_alias(tmp_path: Path) -> None:
+    contract_path = _write_fixture(
+        tmp_path,
+        model=(
+            "from sqlalchemy import Column, Numeric\n\n"
+            "MONEY = make_type(Numeric(18, 10))\n\n"
+            "class FinancialRow:\n"
+            '    __tablename__ = "financial_rows"\n'
+            "    value = Column(MONEY, nullable=False)\n"
+        ),
+        contract=_contract(),
+    )
+
+    report = evaluate_guard(tmp_path, contract_path)
+
+    assert report.numeric_column_count == 0
+    assert report.findings[0] == (
+        "cannot inventory ORM model database_models.py: MONEY: unsupported indirect "
+        "Numeric alias; assign Numeric(...) directly or extend the guard inventory"
+    )
+
+
+def test_repository_contract_classifies_inventory_and_persistence_semantics() -> None:
     report = evaluate_guard()
     contract = json.loads((ROOT / DEFAULT_CONTRACT_PATH).read_text(encoding="utf-8"))
     transaction_profiles = {
@@ -296,7 +626,8 @@ def test_repository_contract_classifies_all_numeric_columns() -> None:
 
     assert report.numeric_column_count == 95
     assert report.table_count == 29
-    assert report.enforced_count == 13
+    assert report.orm_enforced_count == 13
+    assert report.database_enforced_count == 0
     assert report.planned_count == 82
     assert transaction_profiles["quantity"] == "nonnegative-finite"
     assert transaction_profiles["price"] == "nonnegative-finite"
@@ -304,3 +635,4 @@ def test_repository_contract_classifies_all_numeric_columns() -> None:
     assert transaction_profiles["gross_cost"] == "nullable-finite"
     assert transaction_profiles["net_cost"] == "nullable-finite"
     assert transaction_profiles["net_cost_local"] == "nullable-finite"
+    assert transaction_profiles["net_interest_amount"] == "nullable-nonnegative-finite"

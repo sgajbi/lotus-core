@@ -32,9 +32,11 @@
     }
   },
   "rollout_statuses": [
-    "enforced",
+    "orm-enforced",
+    "database-enforced",
     "planned"
   ],
+  "database_enforcement_evidence": {},
   "tables": {
     "simulation_changes": {
       "quantity": {"profile": "nullable-finite", "rollout_status": "planned"},
@@ -113,7 +115,7 @@
       "component_weight": {"profile": "nonnegative-finite", "rollout_status": "planned"}
     },
     "transactions": {
-      "quantity": {"profile": "nonnegative-finite", "rollout_status": "enforced"},
+      "quantity": {"profile": "nonnegative-finite", "rollout_status": "orm-enforced"},
       "price": {"profile": "nonnegative-finite", "rollout_status": "planned"},
       "gross_transaction_amount": {"profile": "nonnegative-finite", "rollout_status": "planned"},
       "trade_fee": {"profile": "nullable-nonnegative-finite", "rollout_status": "planned"},
@@ -125,7 +127,7 @@
       "realized_gain_loss_local": {"profile": "nullable-finite", "rollout_status": "planned"},
       "withholding_tax_amount": {"profile": "nullable-nonnegative-finite", "rollout_status": "planned"},
       "other_interest_deductions_amount": {"profile": "nullable-nonnegative-finite", "rollout_status": "planned"},
-      "net_interest_amount": {"profile": "nullable-finite", "rollout_status": "planned"},
+      "net_interest_amount": {"profile": "nullable-nonnegative-finite", "rollout_status": "planned"},
       "buy_amount": {"profile": "nullable-positive-finite", "rollout_status": "planned"},
       "sell_amount": {"profile": "nullable-positive-finite", "rollout_status": "planned"},
       "contract_rate": {"profile": "nullable-positive-finite", "rollout_status": "planned"},
@@ -144,29 +146,29 @@
       "synthetic_flow_quantity_used": {"profile": "nullable-nonnegative-finite", "rollout_status": "planned"}
     },
     "transaction_costs": {
-      "amount": {"profile": "positive-finite", "rollout_status": "enforced"}
+      "amount": {"profile": "positive-finite", "rollout_status": "orm-enforced"}
     },
     "cashflows": {
       "amount": {"profile": "finite", "rollout_status": "planned"}
     },
     "position_lot_state": {
-      "original_quantity": {"profile": "nonnegative-finite", "rollout_status": "enforced"},
-      "open_quantity": {"profile": "nonnegative-finite", "rollout_status": "enforced"},
-      "lot_cost_local": {"profile": "nonnegative-finite", "rollout_status": "enforced"},
-      "lot_cost_base": {"profile": "nonnegative-finite", "rollout_status": "enforced"},
-      "accrued_interest_paid_local": {"profile": "nonnegative-finite", "rollout_status": "enforced"}
+      "original_quantity": {"profile": "nonnegative-finite", "rollout_status": "orm-enforced"},
+      "open_quantity": {"profile": "nonnegative-finite", "rollout_status": "orm-enforced"},
+      "lot_cost_local": {"profile": "nonnegative-finite", "rollout_status": "orm-enforced"},
+      "lot_cost_base": {"profile": "nonnegative-finite", "rollout_status": "orm-enforced"},
+      "accrued_interest_paid_local": {"profile": "nonnegative-finite", "rollout_status": "orm-enforced"}
     },
     "cost_basis_processing_state": {
-      "latest_quantity": {"profile": "nonnegative-finite", "rollout_status": "enforced"}
+      "latest_quantity": {"profile": "nonnegative-finite", "rollout_status": "orm-enforced"}
     },
     "average_cost_pool_state": {
-      "pool_quantity": {"profile": "nonnegative-finite", "rollout_status": "enforced"},
-      "pool_cost_local": {"profile": "nonnegative-finite", "rollout_status": "enforced"},
-      "pool_cost_base": {"profile": "nonnegative-finite", "rollout_status": "enforced"}
+      "pool_quantity": {"profile": "nonnegative-finite", "rollout_status": "orm-enforced"},
+      "pool_cost_local": {"profile": "nonnegative-finite", "rollout_status": "orm-enforced"},
+      "pool_cost_base": {"profile": "nonnegative-finite", "rollout_status": "orm-enforced"}
     },
     "accrued_income_offset_state": {
-      "accrued_interest_paid_local": {"profile": "nonnegative-finite", "rollout_status": "enforced"},
-      "remaining_offset_local": {"profile": "nonnegative-finite", "rollout_status": "enforced"}
+      "accrued_interest_paid_local": {"profile": "nonnegative-finite", "rollout_status": "orm-enforced"},
+      "remaining_offset_local": {"profile": "nonnegative-finite", "rollout_status": "orm-enforced"}
     },
     "position_timeseries": {
       "bod_market_value": {"profile": "finite", "rollout_status": "planned"},
