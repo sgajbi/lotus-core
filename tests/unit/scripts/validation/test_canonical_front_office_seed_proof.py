@@ -621,6 +621,206 @@ def test_container_validation_requires_exact_verified_image() -> None:
         )
 
 
+def test_container_validation_classifies_starting_health_as_not_ready() -> None:
+    project, service = "lotus-proof", "portfolio_derived_state_service"
+    raw = {
+        "Id": "container",
+        "Name": f"/{project}-{service}-1",
+        "Image": "sha256:expected",
+        "RestartCount": 0,
+        "Config": {
+            "Image": "lotus-core/portfolio-derived-state-service:local",
+            "Labels": {
+                "com.docker.compose.project": project,
+                "com.docker.compose.service": service,
+                "com.docker.compose.config-hash": "config-hash",
+            },
+        },
+        "State": {
+            "Status": "running",
+            "ExitCode": 0,
+            "OOMKilled": False,
+            "Health": {"Status": "starting"},
+        },
+    }
+
+    with pytest.raises(proof.RuntimeNotReady, match="health.*starting"):
+        proof._validate_container(
+            raw,
+            project=project,
+            images={service: {"image_id": "sha256:expected"}},
+        )
+
+
+def test_container_validation_rejects_unhealthy_runtime() -> None:
+    project, service = "lotus-proof", "portfolio_derived_state_service"
+    raw = {
+        "Id": "container",
+        "Name": f"/{project}-{service}-1",
+        "Image": "sha256:expected",
+        "RestartCount": 0,
+        "Config": {
+            "Image": "lotus-core/portfolio-derived-state-service:local",
+            "Labels": {
+                "com.docker.compose.project": project,
+                "com.docker.compose.service": service,
+                "com.docker.compose.config-hash": "config-hash",
+            },
+        },
+        "State": {
+            "Status": "running",
+            "ExitCode": 0,
+            "OOMKilled": False,
+            "Health": {"Status": "unhealthy"},
+        },
+    }
+
+    with pytest.raises(ProofFailure, match="health.*unhealthy") as failure:
+        proof._validate_container(
+            raw,
+            project=project,
+            images={service: {"image_id": "sha256:expected"}},
+        )
+    assert not isinstance(failure.value, proof.RuntimeNotReady)
+
+
+def test_runtime_inspection_prioritizes_terminal_failure_over_transient_state(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = "lotus-proof"
+
+    def container(service: str, health: str) -> dict[str, Any]:
+        return {
+            "Id": f"{service}-container",
+            "Name": f"/{project}-{service}-1",
+            "Image": f"sha256:{service}",
+            "RestartCount": 0,
+            "Config": {
+                "Image": f"lotus-core/{service}:local",
+                "Labels": {
+                    "com.docker.compose.project": project,
+                    "com.docker.compose.service": service,
+                    "com.docker.compose.config-hash": "config-hash",
+                },
+            },
+            "State": {
+                "Status": "running",
+                "ExitCode": 0,
+                "OOMKilled": False,
+                "Health": {"Status": health},
+            },
+        }
+
+    starting = container("portfolio_derived_state_service", "starting")
+    unhealthy = container("query_service", "unhealthy")
+    resources = {
+        "containers": ["starting-container", "unhealthy-container"],
+        "networks": ["network"],
+        "volumes": ["volume"],
+    }
+    managed = SimpleNamespace(
+        runtime=SimpleNamespace(
+            endpoints=SimpleNamespace(compose_project_name=project),
+            values={},
+        )
+    )
+    monkeypatch.setattr(
+        proof,
+        "_project_resources",
+        lambda *_args, **_kwargs: resources,
+    )
+    monkeypatch.setattr(
+        proof,
+        "_docker_json",
+        lambda *_args, **_kwargs: [starting, unhealthy],
+    )
+
+    with pytest.raises(ProofFailure, match="terminal.*query_service.*unhealthy") as failure:
+        proof._inspect_runtime(managed, {})
+    assert not isinstance(failure.value, proof.RuntimeNotReady)
+
+
+def test_project_resource_commands_are_capped_by_startup_deadline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    timeouts: list[float] = []
+
+    def run(command: Any, *, timeout_seconds: float, **_kwargs: object) -> CommandResult:
+        timeouts.append(timeout_seconds)
+        return CommandResult(tuple(command), 0, "", "")
+
+    monotonic_values = iter((10.0, 10.2, 10.4))
+    monkeypatch.setattr(proof, "_run", run)
+    monkeypatch.setattr(proof.time, "monotonic", lambda: next(monotonic_values))
+
+    assert proof._project_resources("lotus-proof", deadline=11.0) == {
+        "containers": [],
+        "networks": [],
+        "volumes": [],
+    }
+    assert timeouts == pytest.approx([1.0, 0.8, 0.6])
+
+
+def test_wait_for_runtime_retries_only_transient_readiness(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runtime = {"project": "lotus-proof"}
+    inspections: list[int] = []
+
+    def inspect(*_args: object, **_kwargs: object) -> dict[str, Any]:
+        inspections.append(len(inspections) + 1)
+        if len(inspections) == 1:
+            raise proof.RuntimeNotReady("health is starting")
+        return runtime
+
+    monotonic_values = iter((10.0, 10.1, 10.2, 10.3, 10.4))
+    monkeypatch.setattr(proof, "_inspect_runtime", inspect)
+    monkeypatch.setattr(proof.time, "monotonic", lambda: next(monotonic_values))
+    monkeypatch.setattr(proof.time, "sleep", lambda _seconds: None)
+
+    result = proof._wait_for_runtime(
+        SimpleNamespace(),
+        {},
+        timeout_seconds=30,
+        poll_seconds=2,
+    )
+
+    assert result["startup_readiness"] == {
+        "attempts": 2,
+        "elapsed_seconds": 0.4,
+        "timeout_seconds": 30,
+        "poll_seconds": 2,
+    }
+    assert inspections == [1, 2]
+
+
+def test_wait_for_runtime_reports_last_transient_state_at_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    inspections: list[int] = []
+
+    def inspect(*_args: object, **_kwargs: object) -> dict[str, Any]:
+        inspections.append(len(inspections) + 1)
+        raise proof.RuntimeNotReady("portfolio_derived_state_service health is starting")
+
+    monkeypatch.setattr(proof, "_inspect_runtime", inspect)
+    monotonic_values = iter((10.0, 10.1, 10.5, 11.1))
+    monkeypatch.setattr(proof.time, "monotonic", lambda: next(monotonic_values))
+    monkeypatch.setattr(proof.time, "sleep", lambda _seconds: None)
+
+    with pytest.raises(
+        ProofFailure,
+        match=("within 1s after 1 inspections.*portfolio_derived_state_service health is starting"),
+    ):
+        proof._wait_for_runtime(
+            SimpleNamespace(),
+            {},
+            timeout_seconds=1,
+            poll_seconds=1,
+        )
+    assert inspections == [1]
+
+
 def test_build_lane_removes_only_its_own_claim(tmp_path: Path) -> None:
     config = _config(tmp_path)
 
@@ -702,7 +902,11 @@ def test_run_proof_uses_nonbuilding_isolated_runtime_and_proves_teardown(
         lambda selected: generated if selected == project else retained,
     )
     monkeypatch.setattr(proof, "_postgres_container", lambda _managed: "postgres-id")
-    monkeypatch.setattr(proof, "_inspect_runtime", lambda *_args: {"project": project})
+    monkeypatch.setattr(
+        proof,
+        "_inspect_runtime",
+        lambda *_args, **_kwargs: {"project": project},
+    )
     fresh = {
         "migration_seeded_rows": {"alembic_version": 1},
         "unexpected_runtime_rows": {},
