@@ -1,5 +1,6 @@
 import copy
 import json
+import sys
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -9,6 +10,7 @@ import pytest
 from scripts.quality.api_vocabulary_inventory import (
     _build_attribute_catalog,
     _extract_request_fields,
+    main,
     validate_committed_inventory_parity,
     validate_inventory,
 )
@@ -184,6 +186,16 @@ def test_committed_inventory_parity_rejects_malformed_catalog_shape(
 
     assert errors == ["committed inventory.attributeCatalog must be a list"]
     assert inventory_path.read_bytes() == original_bytes
+
+
+def test_generated_only_cli_does_not_claim_committed_parity(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(sys, "argv", ["api_vocabulary_inventory.py"])
+    monkeypatch.setattr(
+        "scripts.quality.api_vocabulary_inventory.generate_inventory", _minimal_inventory
+    )
+
+    assert main() == 0
+    assert capsys.readouterr().out == "Inventory validation passed.\n"
 
 
 def test_build_attribute_catalog_documents_semantic_once_without_alias_list() -> None:
