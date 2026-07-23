@@ -1,0 +1,300 @@
+{
+  "schema_version": "lotus-core.e2e-test-value-ledger.v1",
+  "owning_repository": "lotus-core",
+  "issue": "sgajbi/lotus-core#729",
+  "guard_command": "make e2e-test-value-guard",
+  "collection": {
+    "full_suite": "e2e-all",
+    "smoke_suite": "e2e-smoke",
+    "runtime_mode": "live_worker",
+    "environment_profile": "e2e",
+    "expected_full_node_count": 69,
+    "expected_smoke_node_count": 7,
+    "baseline_run": "github-actions:29185995035",
+    "baseline_full_runtime_seconds": 1082,
+    "runtime_note": "Aggregate baseline only; per-node duration and fault-detection evidence remain closure work for #729."
+  },
+  "closure_policy": {
+    "allowed_decisions": [
+      "retain",
+      "rewrite",
+      "merge",
+      "move-to-lower-layer",
+      "replace",
+      "retire",
+      "needs-review"
+    ],
+    "blocking_decisions": [
+      "needs-review"
+    ],
+    "rule": "#729 cannot close until every node has a reviewed non-blocking decision and before/after runtime plus fault-detection evidence."
+  },
+  "capability_profiles": {
+    "complex-portfolio-lifecycle": {
+      "owner": "lotus-core/portfolio-lifecycle",
+      "invariant": "A heterogeneous private-banking portfolio remains economically and contractually consistent across ingestion, positions, and query APIs.",
+      "production_defect_class": "Cross-service portfolio lifecycle divergence or incomplete contract projection.",
+      "fixture_boundary": "One module-scoped complex-portfolio scenario shared by the two cross-API assertions.",
+      "external_dependencies": [
+        "PostgreSQL",
+        "Kafka",
+        "Core HTTP services"
+      ],
+      "source_contracts": [
+        "docs/standards/risk-based-test-coverage-matrix.v1.json",
+        "tests/e2e/E2E_TEST_PLAN.md"
+      ],
+      "lower_layer_proofs": [
+        "tests/integration/services/query_service/test_transactions_router.py",
+        "tests/unit/services/portfolio_transaction_processing_service/domain/position/test_reducer.py"
+      ],
+      "non_duplication_rationale": "Only a live multi-service workflow can prove one portfolio identity and its economic state remain consistent across independently deployed write and read boundaries."
+    },
+    "cost-basis-and-currency": {
+      "owner": "lotus-core/cost-basis",
+      "invariant": "Realized and unrealized P&L retain governed cost-basis and reporting-currency semantics through booking and valuation.",
+      "production_defect_class": "Incorrect average cost, realized P&L, unrealized P&L, or reporting-currency state.",
+      "fixture_boundary": "Scenario fixtures establish AVCO and dual-currency trade, price, and FX histories.",
+      "external_dependencies": [
+        "PostgreSQL",
+        "Kafka",
+        "Core HTTP services"
+      ],
+      "source_contracts": [
+        "docs/standards/risk-based-test-coverage-matrix.v1.json"
+      ],
+      "lower_layer_proofs": [
+        "tests/unit/services/portfolio_transaction_processing_service/domain/cost_basis/calculation/test_cost_calculator.py",
+        "tests/unit/transaction_specs/test_cross_product_golden_scenarios.py"
+      ],
+      "non_duplication_rationale": "Lower layers own arithmetic; these nodes uniquely prove persisted multi-currency state converges across transaction processing, valuation, and query surfaces."
+    },
+    "data-ingestion-and-query": {
+      "owner": "lotus-core/data-access",
+      "invariant": "Reference, portfolio, transaction, price, and FX inputs remain ingestible and queryable with stable filtering, sorting, pagination, and absence semantics.",
+      "production_defect_class": "Accepted invalid input, lost persisted data, or incorrect query contract behavior.",
+      "fixture_boundary": "Module-scoped API fixtures ingest representative reference and transaction data before query assertions.",
+      "external_dependencies": [
+        "PostgreSQL",
+        "Kafka",
+        "Ingestion HTTP API",
+        "Query HTTP API"
+      ],
+      "source_contracts": [
+        "docs/standards/test-lane-governance.v1.json",
+        "tests/e2e/E2E_TEST_PLAN.md"
+      ],
+      "lower_layer_proofs": [
+        "tests/integration/services/query_service/test_transactions_router.py",
+        "tests/integration/services/ingestion_service/test_ingestion_routers.py"
+      ],
+      "non_duplication_rationale": "Router integration tests own local request contracts; these nodes retain value only where they prove asynchronous ingestion-to-query persistence across live services."
+    },
+    "derived-state-analytics": {
+      "owner": "lotus-core/derived-state-analytics",
+      "invariant": "Cashflow, valuation, concentration, performance, review, and summary projections converge from durable portfolio state.",
+      "production_defect_class": "Stale, incomplete, or economically inconsistent derived analytics returned to front-office consumers.",
+      "fixture_boundary": "Capability-specific scenario fixtures seed positions, prices, FX, and business dates before analytics projection.",
+      "external_dependencies": [
+        "PostgreSQL",
+        "Kafka",
+        "Derived-state workers",
+        "Query HTTP API"
+      ],
+      "source_contracts": [
+        "docs/standards/risk-based-test-coverage-matrix.v1.json"
+      ],
+      "lower_layer_proofs": [
+        "tests/unit/services/query_control_plane_service/application/analytics/test_analytics_timeseries_service.py",
+        "tests/unit/services/portfolio_transaction_processing_service/domain/position/test_reducer.py"
+      ],
+      "non_duplication_rationale": "Component tests prove formulas and mappings; live workflow nodes uniquely prove asynchronous durable state reaches the final analytics and review contracts."
+    },
+    "fx-contract-lifecycle": {
+      "owner": "lotus-core/fx-transactions",
+      "invariant": "Spot, forward, and swap contracts preserve linked legs, settlement cash, and open-to-close position history.",
+      "production_defect_class": "Broken FX leg linkage, settlement direction, contract lifecycle, or cash-position projection.",
+      "fixture_boundary": "One module-scoped FX lifecycle fixture drives three distinct transaction, history, and cash assertions.",
+      "external_dependencies": [
+        "PostgreSQL",
+        "Kafka",
+        "Core HTTP services"
+      ],
+      "source_contracts": [
+        "docs/standards/risk-based-test-coverage-matrix.v1.json"
+      ],
+      "lower_layer_proofs": [
+        "tests/unit/services/portfolio_transaction_processing_service/domain/transaction/fx/test_validation.py",
+        "tests/unit/transaction_specs/test_cross_product_golden_scenarios.py"
+      ],
+      "non_duplication_rationale": "Domain proofs own FX validation; the live lifecycle nodes prove linked persisted legs, settlement cash, and position history agree across service boundaries."
+    },
+    "multi-day-position-history": {
+      "owner": "lotus-core/position-processing",
+      "invariant": "Ordered business-day booking produces deterministic position, cost, and timeseries state across a five-day history.",
+      "production_defect_class": "Order-dependent position drift, missing history, or incorrect multi-day cost-state convergence.",
+      "fixture_boundary": "A six-node dependency chain shares one five-business-day scenario and prerequisite load.",
+      "external_dependencies": [
+        "PostgreSQL",
+        "Kafka",
+        "Position workers",
+        "Query HTTP API"
+      ],
+      "source_contracts": [
+        "docs/standards/risk-based-test-coverage-matrix.v1.json"
+      ],
+      "lower_layer_proofs": [
+        "tests/unit/services/portfolio_transaction_processing_service/domain/position/test_reducer.py",
+        "tests/integration/services/portfolio_transaction_processing_service/test_int_combined_backdated_processing.py"
+      ],
+      "non_duplication_rationale": "Reducer and database tests own individual transitions; the E2E chain uniquely proves ordered transitions remain coherent across several business dates and workers."
+    },
+    "observability-correlation": {
+      "owner": "lotus-core/observability",
+      "invariant": "Query requests preserve caller correlation identity or generate one when absent across the live HTTP middleware stack.",
+      "production_defect_class": "Lost or missing request correlation that prevents deterministic incident tracing.",
+      "fixture_boundary": "Stateless query requests against the shared live Query service.",
+      "external_dependencies": [
+        "Query HTTP API"
+      ],
+      "source_contracts": [
+        "docs/standards/test-lane-governance.v1.json"
+      ],
+      "lower_layer_proofs": [
+        "tests/unit/test_http_middleware_chain_contract.py"
+      ],
+      "non_duplication_rationale": "Middleware tests own header mechanics; these two smoke nodes prove the deployed Query application actually installs and exposes the governed correlation chain."
+    },
+    "recovery-and-reprocessing": {
+      "owner": "lotus-core/replay-recovery",
+      "invariant": "Idempotent ingestion, delayed prerequisites, outage recovery, and backdated corrections converge without duplicate or stale state.",
+      "production_defect_class": "Lost recovery, duplicate delivery effects, stale corrected state, or non-idempotent persistence.",
+      "fixture_boundary": "Capability-specific fixtures introduce outage, replay, delayed-reference, or correction conditions.",
+      "external_dependencies": [
+        "PostgreSQL",
+        "Kafka",
+        "Replay workers",
+        "Core HTTP services"
+      ],
+      "source_contracts": [
+        "docs/standards/test-lane-governance.v1.json",
+        "docs/standards/risk-based-test-coverage-matrix.v1.json"
+      ],
+      "lower_layer_proofs": [
+        "tests/integration/services/portfolio_transaction_processing_service/test_int_combined_backdated_processing.py",
+        "tests/integration/services/ingestion_service/test_ingestion_routers.py"
+      ],
+      "non_duplication_rationale": "Lower-layer tests own retry algorithms; these nodes prove externally observable convergence after real worker ordering, outage, and replay boundaries."
+    },
+    "timeseries-and-returns": {
+      "owner": "lotus-core/timeseries-performance",
+      "invariant": "Cash flows, position history, portfolio timeseries, and money-weighted-return inputs converge by governed date without duplication.",
+      "production_defect_class": "Duplicated flows, stale dates, missing provenance, or incorrect return-input series.",
+      "fixture_boundary": "Shared MWR and timeseries scenarios seed dated trades, cash flows, prices, and position history.",
+      "external_dependencies": [
+        "PostgreSQL",
+        "Kafka",
+        "Derived-state workers",
+        "Query HTTP API"
+      ],
+      "source_contracts": [
+        "docs/standards/risk-based-test-coverage-matrix.v1.json"
+      ],
+      "lower_layer_proofs": [
+        "tests/unit/services/query_control_plane_service/application/analytics/test_analytics_timeseries_service.py",
+        "tests/unit/services/portfolio_transaction_processing_service/domain/position/test_reducer.py"
+      ],
+      "non_duplication_rationale": "Formula tests own local calculations; these nodes prove dated asynchronous inputs converge into persisted series and analytics contracts without flow amplification."
+    },
+    "transaction-capability-coverage": {
+      "owner": "lotus-core/transaction-processing",
+      "invariant": "The supported transaction registry, cashflow rules, linked settlement legs, ingestion, query, and timeseries effects remain aligned.",
+      "production_defect_class": "Supported-type drift, missing cashflow authority, broken dual-leg settlement, or incomplete transaction lifecycle.",
+      "fixture_boundary": "Registry-derived parameter data plus live representative transaction ingestion and dual-leg workflows.",
+      "external_dependencies": [
+        "PostgreSQL",
+        "Kafka",
+        "Core HTTP services"
+      ],
+      "source_contracts": [
+        "docs/standards/risk-based-test-coverage-matrix.v1.json"
+      ],
+      "lower_layer_proofs": [
+        "tests/unit/transaction_specs/test_cross_product_golden_scenarios.py",
+        "tests/unit/services/portfolio_transaction_processing_service/domain/transaction/fx/test_validation.py"
+      ],
+      "non_duplication_rationale": "Static registry and database-only nodes are review candidates; the live nodes remain unique where they prove the registry drives ingestible, queryable, cashflowed, linked settlement behavior."
+    }
+  },
+  "nodes": [
+    {"ownership_id": "e2e-001", "nodeid": "tests/e2e/test_5_day_workflow.py::test_day_1_workflow", "capability_profile": "multi-day-position-history", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-002", "nodeid": "tests/e2e/test_5_day_workflow.py::test_day_2_workflow", "capability_profile": "multi-day-position-history", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-003", "nodeid": "tests/e2e/test_5_day_workflow.py::test_day_3_workflow", "capability_profile": "multi-day-position-history", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-004", "nodeid": "tests/e2e/test_5_day_workflow.py::test_day_4_workflow", "capability_profile": "multi-day-position-history", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-005", "nodeid": "tests/e2e/test_5_day_workflow.py::test_day_5_workflow", "capability_profile": "multi-day-position-history", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-006", "nodeid": "tests/e2e/test_5_day_workflow.py::test_prerequisites_are_loaded", "capability_profile": "multi-day-position-history", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-007", "nodeid": "tests/e2e/test_avco_workflow.py::test_avco_realized_pnl", "capability_profile": "cost-basis-and-currency", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-008", "nodeid": "tests/e2e/test_cashflow_pipeline.py::test_cashflow_pipeline", "capability_profile": "derived-state-analytics", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-009", "nodeid": "tests/e2e/test_complex_portfolio_lifecycle.py::test_complex_lifecycle_cross_api_consistency", "capability_profile": "complex-portfolio-lifecycle", "current_lanes": ["e2e-smoke", "e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-010", "nodeid": "tests/e2e/test_complex_portfolio_lifecycle.py::test_complex_lifecycle_positions_contract", "capability_profile": "complex-portfolio-lifecycle", "current_lanes": ["e2e-smoke", "e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-011", "nodeid": "tests/e2e/test_concentration_pipeline.py::test_bulk_concentration_e2e", "capability_profile": "derived-state-analytics", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-012", "nodeid": "tests/e2e/test_concentration_pipeline.py::test_issuer_concentration_e2e", "capability_profile": "derived-state-analytics", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-013", "nodeid": "tests/e2e/test_dual_currency_workflow.py::test_final_position_state_dual_currency", "capability_profile": "cost-basis-and-currency", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-014", "nodeid": "tests/e2e/test_dual_currency_workflow.py::test_realized_pnl_dual_currency", "capability_profile": "cost-basis-and-currency", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-015", "nodeid": "tests/e2e/test_dual_currency_workflow.py::test_unrealized_pnl_dual_currency", "capability_profile": "cost-basis-and-currency", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-016", "nodeid": "tests/e2e/test_failure_scenarios.py::test_db_outage_recovery", "capability_profile": "recovery-and-reprocessing", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-017", "nodeid": "tests/e2e/test_fx_lifecycle.py::test_fx_lifecycle_cash_positions_reflect_settlement_pairs", "capability_profile": "fx-contract-lifecycle", "current_lanes": ["e2e-smoke", "e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-018", "nodeid": "tests/e2e/test_fx_lifecycle.py::test_fx_lifecycle_position_history_tracks_contract_open_and_close", "capability_profile": "fx-contract-lifecycle", "current_lanes": ["e2e-smoke", "e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-019", "nodeid": "tests/e2e/test_fx_lifecycle.py::test_fx_lifecycle_transactions_cover_spot_forward_and_swap", "capability_profile": "fx-contract-lifecycle", "current_lanes": ["e2e-smoke", "e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-020", "nodeid": "tests/e2e/test_ingestion_service_api.py::test_ingest_empty_transaction_list_succeeds", "capability_profile": "data-ingestion-and-query", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-021", "nodeid": "tests/e2e/test_ingestion_service_api.py::test_ingest_malformed_transaction_payload_fails", "capability_profile": "data-ingestion-and-query", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-022", "nodeid": "tests/e2e/test_mwr_pipeline.py::test_analytics_input_mwr_contract_dataset_is_queryable", "capability_profile": "timeseries-and-returns", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-023", "nodeid": "tests/e2e/test_mwr_pipeline.py::test_cash_portfolio_flows_pipeline_persists_cashflows_and_timeseries", "capability_profile": "timeseries-and-returns", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-024", "nodeid": "tests/e2e/test_mwr_pipeline.py::test_cash_portfolio_flows_pipeline_persists_non_zero_positions_and_analytics[2025-08-01-expected_quantity0-expected_market_value0]", "capability_profile": "timeseries-and-returns", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-025", "nodeid": "tests/e2e/test_mwr_pipeline.py::test_cash_portfolio_flows_pipeline_persists_non_zero_positions_and_analytics[2025-08-15-expected_quantity1-expected_market_value1]", "capability_profile": "timeseries-and-returns", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-026", "nodeid": "tests/e2e/test_mwr_pipeline.py::test_cash_portfolio_flows_pipeline_persists_non_zero_positions_and_analytics[2025-08-16-expected_quantity2-expected_market_value2]", "capability_profile": "timeseries-and-returns", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-027", "nodeid": "tests/e2e/test_mwr_pipeline.py::test_cash_portfolio_flows_pipeline_persists_non_zero_positions_and_analytics[2025-08-17-expected_quantity3-expected_market_value3]", "capability_profile": "timeseries-and-returns", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-028", "nodeid": "tests/e2e/test_mwr_pipeline.py::test_cash_portfolio_flows_pipeline_persists_non_zero_positions_and_analytics[2025-08-18-expected_quantity4-expected_market_value4]", "capability_profile": "timeseries-and-returns", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-029", "nodeid": "tests/e2e/test_performance_pipeline.py::test_advanced_performance_api", "capability_profile": "derived-state-analytics", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-030", "nodeid": "tests/e2e/test_persistence_query_pipeline.py::test_fx_rate_query", "capability_profile": "data-ingestion-and-query", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-031", "nodeid": "tests/e2e/test_persistence_query_pipeline.py::test_instrument_query", "capability_profile": "data-ingestion-and-query", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-032", "nodeid": "tests/e2e/test_persistence_query_pipeline.py::test_market_price_query", "capability_profile": "data-ingestion-and-query", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-033", "nodeid": "tests/e2e/test_persistence_query_pipeline.py::test_portfolio_query", "capability_profile": "data-ingestion-and-query", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-034", "nodeid": "tests/e2e/test_persistence_query_pipeline.py::test_query_prices_for_unpriced_security_returns_empty_list", "capability_profile": "data-ingestion-and-query", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-035", "nodeid": "tests/e2e/test_persistence_query_pipeline.py::test_transaction_query", "capability_profile": "data-ingestion-and-query", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-036", "nodeid": "tests/e2e/test_portfolio_query_pipeline.py::test_query_by_booking_center", "capability_profile": "data-ingestion-and-query", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-037", "nodeid": "tests/e2e/test_portfolio_query_pipeline.py::test_query_by_cif_id", "capability_profile": "data-ingestion-and-query", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-038", "nodeid": "tests/e2e/test_portfolio_query_pipeline.py::test_query_by_non_existent_portfolio_id_returns_404", "capability_profile": "data-ingestion-and-query", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-039", "nodeid": "tests/e2e/test_portfolio_query_pipeline.py::test_query_by_portfolio_id", "capability_profile": "data-ingestion-and-query", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-040", "nodeid": "tests/e2e/test_portfolio_query_pipeline.py::test_query_no_filters", "capability_profile": "data-ingestion-and-query", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-041", "nodeid": "tests/e2e/test_query_service_api.py::test_transaction_query_custom_sort", "capability_profile": "data-ingestion-and-query", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-042", "nodeid": "tests/e2e/test_query_service_api.py::test_transaction_query_default_sort", "capability_profile": "data-ingestion-and-query", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-043", "nodeid": "tests/e2e/test_query_service_api.py::test_transaction_query_filter_and_sort", "capability_profile": "data-ingestion-and-query", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-044", "nodeid": "tests/e2e/test_query_service_api.py::test_transaction_query_filter_by_security_id", "capability_profile": "data-ingestion-and-query", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-045", "nodeid": "tests/e2e/test_query_service_api.py::test_transaction_query_pagination", "capability_profile": "data-ingestion-and-query", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-046", "nodeid": "tests/e2e/test_query_service_observability.py::test_query_service_generates_correlation_id_when_missing", "capability_profile": "observability-correlation", "current_lanes": ["e2e-smoke", "e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-047", "nodeid": "tests/e2e/test_query_service_observability.py::test_query_service_preserves_incoming_correlation_id", "capability_profile": "observability-correlation", "current_lanes": ["e2e-smoke", "e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-048", "nodeid": "tests/e2e/test_rapid_reprocessing.py::test_rapid_back_to_back_reprocessing", "capability_profile": "recovery-and-reprocessing", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-049", "nodeid": "tests/e2e/test_reliability_pipeline.py::test_instrument_ingestion_is_idempotent", "capability_profile": "recovery-and-reprocessing", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-050", "nodeid": "tests/e2e/test_reliability_pipeline.py::test_portfolio_update_persistence", "capability_profile": "recovery-and-reprocessing", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-051", "nodeid": "tests/e2e/test_reliability_pipeline.py::test_transaction_persists_after_portfolio_arrives", "capability_profile": "recovery-and-reprocessing", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-052", "nodeid": "tests/e2e/test_reprocessing_workflow.py::test_back_dated_transaction_triggers_reprocessing_and_corrects_state", "capability_profile": "recovery-and-reprocessing", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-053", "nodeid": "tests/e2e/test_reprocessing_workflow.py::test_reprocess_api_rearms_current_valuation_after_transaction_correction", "capability_profile": "recovery-and-reprocessing", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-054", "nodeid": "tests/e2e/test_review_pipeline.py::test_portfolio_review_endpoint", "capability_profile": "derived-state-analytics", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-055", "nodeid": "tests/e2e/test_review_pipeline.py::test_portfolio_review_for_empty_portfolio", "capability_profile": "derived-state-analytics", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-056", "nodeid": "tests/e2e/test_summary_pipeline.py::test_portfolio_summary_endpoint", "capability_profile": "derived-state-analytics", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-057", "nodeid": "tests/e2e/test_timeseries_contracts.py::test_analytics_input_position_timeseries_contract_day_2_returns_expected_rows", "capability_profile": "timeseries-and-returns", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-058", "nodeid": "tests/e2e/test_timeseries_contracts.py::test_analytics_input_timeseries_contract_day_1_returns_expected_rows", "capability_profile": "timeseries-and-returns", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-059", "nodeid": "tests/e2e/test_timeseries_contracts.py::test_portfolio_timeseries_contract_returns_expected_rows", "capability_profile": "timeseries-and-returns", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-060", "nodeid": "tests/e2e/test_timeseries_contracts.py::test_position_timeseries_contract_exposes_explicit_flow_provenance_for_trade_day", "capability_profile": "timeseries-and-returns", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-061", "nodeid": "tests/e2e/test_timeseries_convergence.py::test_cash_only_staged_external_flows_are_not_doubled", "capability_profile": "timeseries-and-returns", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-062", "nodeid": "tests/e2e/test_timeseries_convergence.py::test_price_before_position_history_still_converges_to_full_day_2_timeseries", "capability_profile": "timeseries-and-returns", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-063", "nodeid": "tests/e2e/test_transaction_type_coverage_matrix.py::test_all_supported_transaction_types_are_ingestable_queryable_and_cashflowed", "capability_profile": "transaction-capability-coverage", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-064", "nodeid": "tests/e2e/test_transaction_type_coverage_matrix.py::test_cashflow_rules_cover_every_supported_transaction_type", "capability_profile": "transaction-capability-coverage", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-065", "nodeid": "tests/e2e/test_transaction_type_coverage_matrix.py::test_transaction_type_coverage_fixture_is_deduplicated_and_comprehensive", "capability_profile": "transaction-capability-coverage", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-066", "nodeid": "tests/e2e/test_transaction_type_coverage_matrix.py::test_transaction_type_coverage_sets_are_registry_derived", "capability_profile": "transaction-capability-coverage", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-067", "nodeid": "tests/e2e/test_transaction_type_dual_leg.py::test_dual_leg_upstream_settlement_cashflow_authority", "capability_profile": "transaction-capability-coverage", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-068", "nodeid": "tests/e2e/test_transaction_type_dual_leg.py::test_dual_leg_upstream_settlement_position_timeseries_flows_net_to_zero", "capability_profile": "transaction-capability-coverage", "current_lanes": ["e2e-all"], "review_decision": "needs-review"},
+    {"ownership_id": "e2e-069", "nodeid": "tests/e2e/test_valuation_pipeline.py::test_full_valuation_pipeline", "capability_profile": "derived-state-analytics", "current_lanes": ["e2e-all"], "review_decision": "needs-review"}
+  ]
+}
