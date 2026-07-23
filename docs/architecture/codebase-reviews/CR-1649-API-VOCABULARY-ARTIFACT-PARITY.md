@@ -42,9 +42,9 @@ No duplicate implementation or new issue is required within this bounded pattern
 
 ## Validation
 
-- Ten warning-strict API-vocabulary tests pass, covering exact semantic parity, timestamp-only
+- Eleven warning-strict API-vocabulary tests pass, covering exact semantic parity, timestamp-only
   variation, description/type/example/route drift, malformed JSON, malformed catalog shape, focused
-  diagnostics, and byte-for-byte non-mutation.
+  diagnostics, byte-for-byte non-mutation, and truthful generated-only CLI output.
 - `make api-vocabulary-gate` passes against the current tracked inventory and existing route catalog.
 - Strict MyPy passes for the touched source; touched Ruff lint and format checks pass.
 - `make quality-wiki-docs-gate` and `git diff --check` pass.
