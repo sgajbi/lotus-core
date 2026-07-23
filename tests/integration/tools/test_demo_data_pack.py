@@ -438,6 +438,131 @@ def test_index_probe_marks_only_evolved_price_series(monkeypatch):
     assert result.missing_segments == ("index-price-series",)
 
 
+def test_benchmark_and_risk_free_probe_verifies_all_source_families(monkeypatch):
+    bundle = demo_data_pack.build_demo_bundle(history_days=demo_data_pack.MIN_DEMO_HISTORY_DAYS)
+    segments = tuple(
+        segment
+        for segment in demo_data_pack._build_demo_pack_segments(bundle)
+        if segment.category == "reference" and not segment.name.startswith("index")
+    )
+
+    def fake_request_json(method, url, payload=None, headers=None):
+        assert method == "POST"
+        assert headers is None
+        if url.endswith("/benchmarks/catalog"):
+            return 200, {"records": bundle["benchmark_definitions"]}
+        if url.endswith("/composition-window"):
+            benchmark_id = url.split("/benchmarks/", maxsplit=1)[1].split("/", maxsplit=1)[0]
+            return 200, {
+                "segments": [
+                    {
+                        key: value
+                        for key, value in record.items()
+                        if key
+                        in {
+                            "index_id",
+                            "composition_weight",
+                            "composition_effective_from",
+                            "composition_effective_to",
+                            "rebalance_event_id",
+                        }
+                    }
+                    for record in bundle["benchmark_compositions"]
+                    if record["benchmark_id"] == benchmark_id
+                ]
+            }
+        if url.endswith("/return-series"):
+            benchmark_id = url.split("/benchmarks/", maxsplit=1)[1].split("/", maxsplit=1)[0]
+            return 200, {
+                "points": [
+                    {
+                        key: value
+                        for key, value in record.items()
+                        if key
+                        in {
+                            "series_date",
+                            "benchmark_return",
+                            "return_period",
+                            "return_convention",
+                            "series_currency",
+                            "quality_status",
+                        }
+                    }
+                    for record in bundle["benchmark_return_series"]
+                    if record["benchmark_id"] == benchmark_id
+                ]
+            }
+        if url.endswith("/benchmark-assignment"):
+            portfolio_id = url.split("/portfolios/", maxsplit=1)[1].split("/", maxsplit=1)[0]
+            return 200, next(
+                record
+                for record in bundle["benchmark_assignments"]
+                if record["portfolio_id"] == portfolio_id
+            )
+        return 200, {
+            "points": [
+                {
+                    key: value
+                    for key, value in record.items()
+                    if key
+                    in {
+                        "series_date",
+                        "value",
+                        "value_convention",
+                        "day_count_convention",
+                        "compounding_convention",
+                        "series_currency",
+                        "quality_status",
+                    }
+                }
+                for record in bundle["risk_free_series"]
+            ]
+        }
+
+    monkeypatch.setattr(demo_data_pack, "_request_json", fake_request_json)
+
+    result = demo_data_pack._probe_benchmark_and_risk_free_segments(
+        "http://qcp",
+        as_of_date=bundle["as_of_date"],
+        segments=segments,
+    )
+
+    assert result.is_complete is True
+    assert result.evaluated_segments == (
+        "benchmark-definitions",
+        "benchmark-compositions",
+        "benchmark-return-series",
+        "benchmark-assignments",
+        "risk-free-series",
+    )
+
+
+def test_benchmark_probe_isolates_evolved_assignment(monkeypatch):
+    bundle = demo_data_pack.build_demo_bundle(history_days=demo_data_pack.MIN_DEMO_HISTORY_DAYS)
+    assignment_segment = next(
+        segment
+        for segment in demo_data_pack._build_demo_pack_segments(bundle)
+        if segment.name == "benchmark-assignments"
+    )
+    evolved = {
+        **bundle["benchmark_assignments"][0],
+        "benchmark_id": demo_data_pack.SECONDARY_DEMO_BENCHMARK_ID,
+    }
+    monkeypatch.setattr(
+        demo_data_pack,
+        "_request_json",
+        lambda *_args, **_kwargs: (200, evolved),
+    )
+
+    result = demo_data_pack._probe_benchmark_and_risk_free_segments(
+        "http://qcp",
+        as_of_date=bundle["as_of_date"],
+        segments=(assignment_segment,),
+    )
+
+    assert result.missing_segments == ("benchmark-assignments",)
+
+
 def test_build_demo_bundle_contains_benchmark_seed_data():
     bundle = demo_data_pack.build_demo_bundle()
 
