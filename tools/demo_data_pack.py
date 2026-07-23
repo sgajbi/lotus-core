@@ -1899,6 +1899,7 @@ def _probe_benchmark_and_risk_free_segments(
 
 def _probe_portfolio_bundle_segment(
     query_base_url: str,
+    query_control_plane_base_url: str,
     *,
     as_of_date: str,
     segment: DemoPackSegment,
@@ -1956,6 +1957,34 @@ def _probe_portfolio_bundle_segment(
             for field in instrument_fields
             if any(field in row for row in expected_instruments)
         ),
+    )
+
+    expected_business_dates = [str(record["business_date"]) for record in payload["business_dates"]]
+    calendar_portfolio_id = str(expected_portfolios[0]["portfolio_id"])
+    calendar_window = {
+        "start_date": min(expected_business_dates),
+        "end_date": max(expected_business_dates),
+    }
+    _, calendar_response = _request_source_json(
+        "POST",
+        (
+            f"{query_control_plane_base_url}/integration/portfolios/"
+            f"{calendar_portfolio_id}/analytics/portfolio-timeseries"
+        ),
+        payload={
+            "as_of_date": as_of_date,
+            "window": calendar_window,
+            "frequency": "daily",
+            "consumer_system": "lotus-core-demo-data-loader",
+            "page": {"page_size": 1},
+        },
+    )
+    calendar_diagnostics = calendar_response.get("diagnostics") or {}
+    complete = complete and (
+        calendar_response.get("resolved_window") == calendar_window
+        and calendar_diagnostics.get("expected_business_dates_count")
+        == len(expected_business_dates)
+        and calendar_diagnostics.get("missing_dates_count") == 0
     )
 
     transaction_fields = (
@@ -2253,6 +2282,7 @@ def _probe_demo_pack_completeness(
     results = (
         _probe_portfolio_bundle_segment(
             query_base_url,
+            query_control_plane_base_url,
             as_of_date=bundle["as_of_date"],
             segment=portfolio_segment,
             expectations=expectations,
