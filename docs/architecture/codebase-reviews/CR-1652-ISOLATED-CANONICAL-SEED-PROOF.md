@@ -41,6 +41,17 @@ launch, the driver builds a repository-fenced environment from the managed runti
 proves that `portfolio_common` resolves inside this exact worktree. The direct child therefore
 cannot resolve first-party code from an ambient editable checkout or fail merely because the
 invoking shell lacks an inherited first-party `PYTHONPATH`.
+Compose diagnostic capture now has a hard timeout, records its exit code and service-log byte
+count, and fails on non-zero or empty capture. The proof scanner independently requires those
+integrity fields before evaluating forbidden signatures, so missing logs cannot look clean.
+Managed Compose startup uses one configurable monotonic deadline across engine inspection, image
+inspection and pull, stale-container cleanup, pre-start teardown, build, startup, conflict cleanup,
+retry teardown, and retry delay. Diagnostic capture and final teardown have separate configurable
+hard deadlines. A stalled Docker CLI therefore fails closed, and diagnostics or teardown failures
+are attached without masking the primary proof failure.
+The shared image-build lane uses an operating-system byte-range lock. Live owners exclude each
+other, while process termination or system restart releases the kernel lock so a later owner can
+atomically replace orphaned metadata without deleting a live claim.
 
 ## Same-Pattern Scan
 
@@ -50,7 +61,8 @@ the Workbench-owned path; this driver is deliberately Core-only closure evidence
 
 ## Validation
 
-- 32 warning-strict driver tests and 9 repository-Python fence tests passed.
+- 39 warning-strict driver tests, 54 Compose-support tests, and 9 repository-Python fence tests
+  passed.
 - Ruff check and format verification passed.
 - Strict no-incremental MyPy passed.
 - Independent review completed with no findings.

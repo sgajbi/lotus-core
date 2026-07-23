@@ -10,6 +10,8 @@ from typing import Literal, Self
 from urllib.parse import urlsplit
 
 from tests.test_support.docker_stack import (
+    DEFAULT_COMPOSE_STARTUP_TIMEOUT_SECONDS,
+    DEFAULT_COMPOSE_TEARDOWN_TIMEOUT_SECONDS,
     capture_compose_logs,
     compose_down,
     compose_up,
@@ -44,6 +46,9 @@ class ManagedComposeRun:
     log_path: Path
     keep_stack: bool = False
     reset_volumes: bool = False
+    startup_timeout_seconds: float = DEFAULT_COMPOSE_STARTUP_TIMEOUT_SECONDS
+    teardown_timeout_seconds: float = DEFAULT_COMPOSE_TEARDOWN_TIMEOUT_SECONDS
+    log_capture_timeout_seconds: float = 60.0
     _startup_attempted: bool = field(default=False, init=False, repr=False)
 
     def compose_command(self, *args: str) -> list[str]:
@@ -65,12 +70,17 @@ class ManagedComposeRun:
         self._startup_attempted = True
         try:
             if self.reset_volumes:
-                compose_down(self.compose_file, runtime=self.runtime)
+                compose_down(
+                    self.compose_file,
+                    runtime=self.runtime,
+                    timeout_seconds=self.teardown_timeout_seconds,
+                )
             compose_up(
                 self.compose_file,
                 services=list(self.services),
                 build=self.build,
                 runtime=self.runtime,
+                timeout_seconds=self.startup_timeout_seconds,
             )
         except BaseException as primary_error:
             self._finish(primary_error)
@@ -98,12 +108,17 @@ class ManagedComposeRun:
                     self.compose_file,
                     self.log_path,
                     runtime=self.runtime,
+                    timeout_seconds=self.log_capture_timeout_seconds,
                 )
             except BaseException as diagnostics_error:
                 cleanup_errors.append(("Compose diagnostic capture", diagnostics_error))
         if not self.keep_stack:
             try:
-                compose_down(self.compose_file, runtime=self.runtime)
+                compose_down(
+                    self.compose_file,
+                    runtime=self.runtime,
+                    timeout_seconds=self.teardown_timeout_seconds,
+                )
             except BaseException as teardown_error:
                 cleanup_errors.append(("Compose teardown", teardown_error))
 
@@ -135,6 +150,9 @@ def prepare_managed_compose_run(
     demo_data_pack_ingest_only: bool = False,
     keep_stack: bool = False,
     reset_volumes: bool = False,
+    startup_timeout_seconds: float = DEFAULT_COMPOSE_STARTUP_TIMEOUT_SECONDS,
+    teardown_timeout_seconds: float = DEFAULT_COMPOSE_TEARDOWN_TIMEOUT_SECONDS,
+    log_capture_timeout_seconds: float = 60.0,
 ) -> ManagedComposeRun:
     """Prepare an isolated runtime while preserving explicit project and endpoint inputs."""
 
@@ -182,4 +200,7 @@ def prepare_managed_compose_run(
         log_path=Path(log_path),
         keep_stack=keep_stack,
         reset_volumes=reset_volumes,
+        startup_timeout_seconds=startup_timeout_seconds,
+        teardown_timeout_seconds=teardown_timeout_seconds,
+        log_capture_timeout_seconds=log_capture_timeout_seconds,
     )
