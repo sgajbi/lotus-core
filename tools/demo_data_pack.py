@@ -107,7 +107,7 @@ DEMO_EXPECTATIONS: tuple[PortfolioExpectation, ...] = (
         1,
         1,
         7,
-        (("CASH_SGD", 542500.0), ("SEC_SONY_JP", -200.0), ("SEC_GOLD_ETC_USD", 500.0)),
+        (("CASH_SGD", 542500.0), ("SEC_SONY_JP", 1000.0), ("SEC_GOLD_ETC_USD", 500.0)),
     ),
     PortfolioExpectation(
         "DEMO_REBAL_USD_001",

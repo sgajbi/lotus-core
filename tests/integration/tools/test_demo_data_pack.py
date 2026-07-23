@@ -1,7 +1,20 @@
 import http.client
+from collections import defaultdict
+from datetime import datetime
+from decimal import Decimal
 
 import pytest
 
+from src.services.portfolio_transaction_processing_service.app.domain.position.history import (
+    order_position_transactions,
+)
+from src.services.portfolio_transaction_processing_service.app.domain.position.reducer import (
+    PositionBalanceState,
+    calculate_next_position_state,
+)
+from src.services.portfolio_transaction_processing_service.app.domain.transaction import (
+    BookedTransaction,
+)
 from tools import demo_data_pack
 
 
@@ -1025,8 +1038,45 @@ def test_expectations_cover_five_portfolios_with_terminal_holdings():
     for item in demo_data_pack.DEMO_EXPECTATIONS:
         assert item.min_transactions >= 7
         assert len(item.expected_terminal_quantities) >= 3
-        # Demo expectations may include short/negative terminal quantities.
         assert all(quantity != 0 for _, quantity in item.expected_terminal_quantities)
+
+
+def test_terminal_holding_expectations_match_canonical_position_reducer():
+    transactions_by_position: dict[tuple[str, str], list[BookedTransaction]] = defaultdict(list)
+    for record in demo_data_pack.build_demo_bundle()["transactions"]:
+        transaction = BookedTransaction(
+            transaction_id=record["transaction_id"],
+            portfolio_id=record["portfolio_id"],
+            instrument_id=record["instrument_id"],
+            security_id=record["security_id"],
+            transaction_date=datetime.fromisoformat(
+                record["transaction_date"].replace("Z", "+00:00")
+            ),
+            created_at=datetime.fromisoformat(record["created_at"].replace("Z", "+00:00")),
+            transaction_type=record["transaction_type"],
+            quantity=Decimal(str(record["quantity"])),
+            price=Decimal(str(record["price"])),
+            gross_transaction_amount=Decimal(str(record["gross_transaction_amount"])),
+            trade_currency=record["trade_currency"],
+            currency=record["currency"],
+        )
+        transactions_by_position[(transaction.portfolio_id, transaction.security_id)].append(
+            transaction
+        )
+
+    derived_quantities: dict[tuple[str, str], Decimal] = {}
+    for position_key, transactions in transactions_by_position.items():
+        state = PositionBalanceState()
+        for transaction in order_position_transactions(transactions):
+            state = calculate_next_position_state(state, transaction)
+        derived_quantities[position_key] = state.quantity
+
+    declared_quantities = {
+        (expectation.portfolio_id, security_id): Decimal(str(quantity))
+        for expectation in demo_data_pack.DEMO_EXPECTATIONS
+        for security_id, quantity in expectation.expected_terminal_quantities
+    }
+    assert declared_quantities == derived_quantities
 
 
 def test_demo_pack_idempotency_key_is_canonical_and_content_addressed():
