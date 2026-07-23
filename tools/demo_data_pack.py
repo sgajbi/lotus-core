@@ -1667,6 +1667,220 @@ def _probe_index_segments(
     )
 
 
+def _probe_benchmark_and_risk_free_segments(
+    query_control_plane_base_url: str,
+    *,
+    as_of_date: str,
+    segments: tuple[DemoPackSegment, ...],
+) -> DemoPackCompleteness:
+    by_name = {segment.name: segment for segment in segments}
+    supported_names = (
+        "benchmark-definitions",
+        "benchmark-compositions",
+        "benchmark-return-series",
+        "benchmark-assignments",
+        "risk-free-series",
+    )
+    evaluated = tuple(name for name in supported_names if name in by_name)
+    missing: list[str] = []
+
+    definitions = by_name.get("benchmark-definitions")
+    if definitions is not None:
+        expected = definitions.payload["benchmark_definitions"]
+        _, response = _request_json(
+            "POST",
+            f"{query_control_plane_base_url}/integration/benchmarks/catalog",
+            payload={"as_of_date": as_of_date},
+        )
+        if not _records_cover_expected(
+            expected=expected,
+            actual=response.get("records") or [],
+            key_fields=("benchmark_id",),
+            compare_fields=(
+                "benchmark_name",
+                "benchmark_type",
+                "benchmark_currency",
+                "return_convention",
+                "benchmark_status",
+                "benchmark_family",
+                "benchmark_provider",
+                "rebalance_frequency",
+                "classification_set_id",
+                "classification_labels",
+                "effective_from",
+                "source_vendor",
+                "source_record_id",
+            ),
+        ):
+            missing.append(definitions.name)
+
+    compositions = by_name.get("benchmark-compositions")
+    if compositions is not None:
+        expected = compositions.payload["benchmark_compositions"]
+        actual: list[dict[str, Any]] = []
+        for benchmark_id in sorted({str(record["benchmark_id"]) for record in expected}):
+            records = [record for record in expected if record["benchmark_id"] == benchmark_id]
+            _, response = _request_json(
+                "POST",
+                (
+                    f"{query_control_plane_base_url}/integration/benchmarks/"
+                    f"{benchmark_id}/composition-window"
+                ),
+                payload={
+                    "window": {
+                        "start_date": min(
+                            str(record["composition_effective_from"]) for record in records
+                        ),
+                        "end_date": as_of_date,
+                    }
+                },
+            )
+            actual.extend(
+                {"benchmark_id": benchmark_id, **record}
+                for record in response.get("segments") or []
+            )
+        if not _records_cover_expected(
+            expected=expected,
+            actual=actual,
+            key_fields=("benchmark_id", "index_id", "composition_effective_from"),
+            compare_fields=("composition_weight", "rebalance_event_id"),
+            numeric_fields=frozenset({"composition_weight"}),
+        ):
+            missing.append(compositions.name)
+
+    returns = by_name.get("benchmark-return-series")
+    if returns is not None:
+        expected = returns.payload["benchmark_return_series"]
+        actual: list[dict[str, Any]] = []
+        for benchmark_id in sorted({str(record["benchmark_id"]) for record in expected}):
+            records = [record for record in expected if record["benchmark_id"] == benchmark_id]
+            _, response = _request_json(
+                "POST",
+                (
+                    f"{query_control_plane_base_url}/integration/benchmarks/"
+                    f"{benchmark_id}/return-series"
+                ),
+                payload={
+                    "as_of_date": as_of_date,
+                    "window": {
+                        "start_date": min(str(record["series_date"]) for record in records),
+                        "end_date": max(str(record["series_date"]) for record in records),
+                    },
+                    "frequency": "daily",
+                },
+            )
+            actual.extend(
+                {"benchmark_id": benchmark_id, **record} for record in response.get("points") or []
+            )
+        if not _records_cover_expected(
+            expected=expected,
+            actual=actual,
+            key_fields=("benchmark_id", "series_date"),
+            compare_fields=(
+                "benchmark_return",
+                "return_period",
+                "return_convention",
+                "series_currency",
+                "quality_status",
+            ),
+            numeric_fields=frozenset({"benchmark_return"}),
+        ):
+            missing.append(returns.name)
+
+    assignments = by_name.get("benchmark-assignments")
+    if assignments is not None:
+        expected = assignments.payload["benchmark_assignments"]
+        actual: list[dict[str, Any]] = []
+        for record in expected:
+            portfolio_id = str(record["portfolio_id"])
+            _, response = _request_json(
+                "POST",
+                (
+                    f"{query_control_plane_base_url}/integration/portfolios/"
+                    f"{portfolio_id}/benchmark-assignment"
+                ),
+                payload={"as_of_date": as_of_date},
+            )
+            actual.append(response)
+        if not _records_cover_expected(
+            expected=expected,
+            actual=actual,
+            key_fields=("portfolio_id",),
+            compare_fields=(
+                "benchmark_id",
+                "effective_from",
+                "assignment_source",
+                "assignment_status",
+                "policy_pack_id",
+                "source_system",
+                "assignment_version",
+            ),
+            numeric_fields=frozenset({"assignment_version"}),
+        ):
+            missing.append(assignments.name)
+
+    risk_free = by_name.get("risk-free-series")
+    if risk_free is not None:
+        expected = risk_free.payload["risk_free_series"]
+        actual: list[dict[str, Any]] = []
+        for currency in sorted({str(record["series_currency"]) for record in expected}):
+            records = [record for record in expected if record["series_currency"] == currency]
+            series_modes = {
+                (
+                    "annualized_rate_series"
+                    if record["value_convention"] == "annualized_rate"
+                    else "return_series"
+                )
+                for record in records
+            }
+            for series_mode in sorted(series_modes):
+                mode_records = [
+                    record
+                    for record in records
+                    if (
+                        "annualized_rate_series"
+                        if record["value_convention"] == "annualized_rate"
+                        else "return_series"
+                    )
+                    == series_mode
+                ]
+                _, response = _request_json(
+                    "POST",
+                    f"{query_control_plane_base_url}/integration/reference/risk-free-series",
+                    payload={
+                        "as_of_date": as_of_date,
+                        "window": {
+                            "start_date": min(
+                                str(record["series_date"]) for record in mode_records
+                            ),
+                            "end_date": max(str(record["series_date"]) for record in mode_records),
+                        },
+                        "frequency": "daily",
+                        "currency": currency,
+                        "series_mode": series_mode,
+                    },
+                )
+                actual.extend(response.get("points") or [])
+        if not _records_cover_expected(
+            expected=expected,
+            actual=actual,
+            key_fields=("series_currency", "series_date", "value_convention"),
+            compare_fields=(
+                "value",
+                "day_count_convention",
+                "compounding_convention",
+                "quality_status",
+            ),
+            numeric_fields=frozenset({"value"}),
+        ):
+            missing.append(risk_free.name)
+
+    return DemoPackCompleteness(
+        evaluated_segments=evaluated,
+        missing_segments=tuple(sorted(missing)),
+    )
+
+
 def _build_demo_pack_segments(
     bundle: dict[str, Any],
     *,
