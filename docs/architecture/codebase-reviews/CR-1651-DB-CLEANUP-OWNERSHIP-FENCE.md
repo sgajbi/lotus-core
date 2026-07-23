@@ -25,16 +25,27 @@ Authorizing only the truncate statement would therefore leave a destructive bypa
 1. `PreparedTestRuntime` now retains immutable provenance for:
    - current-process preparation;
    - generated rather than inherited Compose project identity;
-   - a PostgreSQL host port dynamically reserved by this runtime.
+   - a PostgreSQL host port dynamically reserved by this runtime;
+   - the credential-free PostgreSQL target captured at factory preparation, independently of the
+     mutable values exported to Compose and subprocesses.
+   A governed port-collision reallocation replaces that immutable evidence with a new generation
+   that changes only the process-reserved port; it does not trust mutable project/user/database
+   values.
 2. `DatabaseCleanupAuthorization` compares the actual SQLAlchemy engine with the exact prepared
-   user, host, port, and database. Diagnostics omit passwords.
+   user, host, port, and database. It also rejects post-preparation component or derived-endpoint
+   mutation even when the engine is changed to match that mutable drift. Diagnostics omit
+   passwords.
 3. Function- and module-scoped cleanup obtain authorization at fixture entry, before quiescence
    recovery, `pg_terminate_backend`, or truncate SQL.
 4. Replay-only cleanup recovery requires and revalidates the same authorization, so a direct helper
-   call or different engine cannot bypass the fixture fence.
+   call or different engine cannot bypass the fixture fence. Authorizations are factory-issued and
+   validated by issued-object identity; copying or reconstructing their fields does not create a
+   valid capability.
 5. Inherited app-local, shared, test-shaped, fixed-port, mixed-provenance, and drifted-engine
-   targets fail before any SQL. Generated-project, process-reserved-port, exact-engine function,
-   module, and recovery paths remain supported.
+   targets fail before destructive recovery, session-termination, or truncate SQL.
+   Generated-project, process-reserved-port, exact-engine function, module, and recovery paths
+   remain supported. Engine construction and its non-destructive readiness query precede the
+   fixture-entry fence by design and are not represented as cleanup authorization.
 
 ## Same-Pattern Scan
 
@@ -52,9 +63,9 @@ does not decide whether a target is safe.
 - `python -m pytest tests/unit/test_support/test_runtime_env.py
   tests/unit/test_support/test_db_cleanup.py
   tests/unit/test_support/test_pipeline_quiescence.py -q -W error`
-  - `32 passed`
+  - `39 passed`
 - `python -m pytest tests/unit/test_support -q -W error`
-  - `106 passed`
+  - `113 passed`
 - Pinned Ruff check and format verification passed for all changed Python files.
 - Strict scoped MyPy passed for `runtime_env.py`, `db_cleanup.py`, and
   `pipeline_quiescence.py`.

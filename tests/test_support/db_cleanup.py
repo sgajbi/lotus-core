@@ -1,14 +1,16 @@
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass, field
+import weakref
+from dataclasses import dataclass
 from typing import Callable
 
 from sqlalchemy.engine import URL, Engine, make_url
+from sqlalchemy.exc import ArgumentError
 
 from tests.test_support.runtime_env import PreparedTestRuntime
 
-_DATABASE_CLEANUP_AUTHORITY = object()
+_DATABASE_CLEANUP_ISSUANCE_TOKEN = object()
 
 
 class DatabaseCleanupAuthorizationError(RuntimeError):
@@ -26,7 +28,12 @@ class DatabaseTargetIdentity:
 
     @classmethod
     def from_url(cls, value: URL | str) -> DatabaseTargetIdentity:
-        url = value if isinstance(value, URL) else make_url(str(value))
+        try:
+            url = value if isinstance(value, URL) else make_url(str(value))
+        except ArgumentError as exc:
+            raise DatabaseCleanupAuthorizationError(
+                "database cleanup refused: PostgreSQL target URL is invalid"
+            ) from exc
         if not url.username or not url.host or url.port is None or not url.database:
             raise DatabaseCleanupAuthorizationError(
                 "database cleanup refused: PostgreSQL target must declare user, host, port, "
@@ -45,13 +52,43 @@ class DatabaseTargetIdentity:
         return f"{self.username}@{self.host}:{self.port}/{self.database}"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, init=False)
 class DatabaseCleanupAuthorization:
     """Capability proving one exact engine belongs to a prepared isolated test runtime."""
 
     compose_project_name: str
     target: DatabaseTargetIdentity
-    _authority: object = field(repr=False, compare=False)
+
+    def __init__(
+        self,
+        *,
+        compose_project_name: str,
+        target: DatabaseTargetIdentity,
+        _issuance_token: object,
+    ) -> None:
+        if _issuance_token is not _DATABASE_CLEANUP_ISSUANCE_TOKEN:
+            raise TypeError("database cleanup authorizations are factory-issued")
+        object.__setattr__(self, "compose_project_name", compose_project_name)
+        object.__setattr__(self, "target", target)
+
+
+_ISSUED_DATABASE_CLEANUP_AUTHORIZATIONS: weakref.WeakValueDictionary[
+    int, DatabaseCleanupAuthorization
+] = weakref.WeakValueDictionary()
+
+
+def _issue_database_cleanup_authorization(
+    *,
+    compose_project_name: str,
+    target: DatabaseTargetIdentity,
+) -> DatabaseCleanupAuthorization:
+    authorization = DatabaseCleanupAuthorization(
+        compose_project_name=compose_project_name,
+        target=target,
+        _issuance_token=_DATABASE_CLEANUP_ISSUANCE_TOKEN,
+    )
+    _ISSUED_DATABASE_CLEANUP_AUTHORIZATIONS[id(authorization)] = authorization
+    return authorization
 
 
 def authorize_database_cleanup(
@@ -75,17 +112,54 @@ def authorize_database_cleanup(
             "by this test runtime"
         )
 
-    expected = DatabaseTargetIdentity.from_url(runtime.endpoints.host_database_url)
+    prepared = runtime.prepared_database_target
+    if prepared.reservation_generation != runtime.port_reservation.generation:
+        raise DatabaseCleanupAuthorizationError(
+            "database cleanup refused: prepared target generation is stale"
+        )
+    expected = DatabaseTargetIdentity(
+        username=prepared.username,
+        host=prepared.host,
+        port=prepared.port,
+        database=prepared.database,
+    )
+    current_project = runtime.values.get("COMPOSE_PROJECT_NAME")
+    if current_project != prepared.compose_project_name:
+        raise DatabaseCleanupAuthorizationError(
+            "database cleanup refused: Compose project identity changed after preparation"
+        )
+    current_components = (
+        runtime.values.get("POSTGRES_USER"),
+        runtime.values.get("LOTUS_POSTGRES_HOST_PORT"),
+        runtime.values.get("POSTGRES_DB"),
+    )
+    prepared_components = (
+        prepared.username,
+        str(prepared.port),
+        prepared.database,
+    )
+    if current_components != prepared_components:
+        raise DatabaseCleanupAuthorizationError(
+            "database cleanup refused: PostgreSQL target components changed after preparation"
+        )
+    current_derived_target = DatabaseTargetIdentity.from_url(
+        runtime.values.get("HOST_DATABASE_URL", "")
+    )
+    if current_derived_target != expected:
+        raise DatabaseCleanupAuthorizationError(
+            "database cleanup refused: derived database endpoint changed after preparation "
+            f"(prepared={expected.diagnostic()}, "
+            f"current={current_derived_target.diagnostic()})"
+        )
     actual = DatabaseTargetIdentity.from_url(engine.url)
     if actual != expected:
         raise DatabaseCleanupAuthorizationError(
             "database cleanup refused: engine target does not match prepared test runtime "
             f"(expected={expected.diagnostic()}, actual={actual.diagnostic()})"
         )
-    return DatabaseCleanupAuthorization(
-        compose_project_name=runtime.endpoints.compose_project_name,
+    return _issue_database_cleanup_authorization(
+        compose_project_name=prepared.compose_project_name,
         target=expected,
-        _authority=_DATABASE_CLEANUP_AUTHORITY,
     )
 
 
@@ -96,7 +170,7 @@ def require_database_cleanup_authorization(
 ) -> None:
     """Revalidate a cleanup capability before a delegated destructive helper runs."""
 
-    if authorization._authority is not _DATABASE_CLEANUP_AUTHORITY:
+    if _ISSUED_DATABASE_CLEANUP_AUTHORIZATIONS.get(id(authorization)) is not authorization:
         raise DatabaseCleanupAuthorizationError(
             "database cleanup refused: invalid cleanup authorization"
         )
