@@ -71,10 +71,11 @@ positive proceeds. Invalid zero or negative proceeds are rejected before writes 
 amount, and stable reason-code evidence without exposing raw payloads or infrastructure details.
 Do not repair or reconcile such a case by applying `abs()` to the amount.
 
-FX cash settlement is stricter because an inline fee has no unambiguous currency or charged leg.
-The calculator rejects every non-zero resolved fee on `FX_CASH_SETTLEMENT_BUY` or
-`FX_CASH_SETTLEMENT_SELL` with `FX_025_NON_ZERO_EMBEDDED_FEE` before classification signing can
-apply `abs()`. Zero inline fees remain compatible. Supported FX charges are distinct linked
+FX cash settlement is stricter because an inline charge has no unambiguous currency or charged leg.
+The calculator rejects every non-zero resolved fee with `FX_025_NON_ZERO_EMBEDDED_FEE` and every
+non-zero inline `withholding_tax_amount` with `FX_026_NON_ZERO_EMBEDDED_TAX` on
+`FX_CASH_SETTLEMENT_BUY` or `FX_CASH_SETTLEMENT_SELL` before classification signing can apply
+`abs()`. Zero inline charges remain compatible. Supported FX charges are distinct linked
 `FEE`/`TAX` postings and therefore produce their own cashflow instead of netting or double counting
 the FX leg.
 
