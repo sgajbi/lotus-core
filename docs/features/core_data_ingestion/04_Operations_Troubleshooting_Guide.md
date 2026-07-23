@@ -49,8 +49,9 @@ the generated portfolio, instrument, transaction, terminal-position, market-pric
 benchmark, assignment, and risk-free segments with their source-owned query surfaces. It skips the
 pack with `reason=unchanged_pack_present` only when every generated segment is already complete.
 Missing or evolved segments are published selectively; an existing portfolio alone is not evidence
-that its reference histories are complete. Calendar completeness requires the exact ordered
-observation dates and a terminal page, not only matching window/count diagnostics. Use an explicit
+that its reference histories are complete. Calendar completeness requires the source-owned digest
+of the exact ordered business dates plus a terminal, gap-free observation suffix from the first
+holding date; pre-holding calendar dates legitimately have no portfolio observation. Use an explicit
 force refresh only when the complete sample pack must be rebuilt without source comparison.
 
 The generator uses RFC-0076's fixed canonical as-of date rather than the host clock. Transaction
