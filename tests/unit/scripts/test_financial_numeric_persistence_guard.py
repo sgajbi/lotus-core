@@ -492,9 +492,9 @@ def test_repository_contract_classifies_inventory_and_persistence_semantics() ->
         for column, classification in contract["tables"]["transactions"].items()
     }
 
-    assert report.numeric_column_count == 95
-    assert report.table_count == 29
-    assert report.orm_enforced_count == 13
+    assert report.numeric_column_count == 96
+    assert report.table_count == 30
+    assert report.orm_enforced_count == 14
     assert report.database_enforced_count == 0
     assert report.planned_count == 82
     assert transaction_profiles["quantity"] == "nonnegative-finite"

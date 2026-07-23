@@ -474,7 +474,7 @@ class MarketPriceSourceFactRecord(Base):
             name="ck_market_price_source_fact_price_positive",
         ),
         CheckConstraint(
-            "price <> 'NaN'::numeric AND price <> 'Infinity'::numeric",
+            "price NOT IN ('NaN'::numeric, 'Infinity'::numeric, '-Infinity'::numeric)",
             name="ck_market_price_source_fact_price_finite",
         ),
         CheckConstraint(

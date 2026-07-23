@@ -2,8 +2,8 @@
   "schema_version": "1.0.0",
   "model_path": "src/libs/portfolio-common/portfolio_common/database_models.py",
   "expected_inventory": {
-    "numeric_columns": 95,
-    "tables": 29
+    "numeric_columns": 96,
+    "tables": 30
   },
   "profiles": {
     "finite": {
@@ -63,6 +63,9 @@
     },
     "market_prices": {
       "price": {"profile": "positive-finite", "rollout_status": "planned"}
+    },
+    "market_price_source_facts": {
+      "price": {"profile": "positive-finite", "rollout_status": "orm-enforced"}
     },
     "instruments": {
       "buy_amount": {"profile": "nullable-positive-finite", "rollout_status": "planned"},
