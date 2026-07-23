@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 from enum import StrEnum
-from typing import cast
 
 from ..calculation_lineage import FinancialSourceReference, canonical_content_hash
 from ..currency import normalize_currency_code
@@ -157,22 +156,19 @@ class MarketPriceSourceFact:
     def content_hash(self) -> str:
         """Bind scope, representation, value, and source evidence deterministically."""
 
-        return cast(
-            str,
-            canonical_content_hash(
-                {
-                    "currency": self.currency,
-                    "fact_status": self.fact_status,
-                    "fact_version": self.fact_version,
-                    "legal_book_id": self.scope.legal_book_id,
-                    "price": self.price,
-                    "price_date": self.price_date,
-                    "quote_basis": self.quote_basis,
-                    "security_id": self.scope.security_id,
-                    "source_reference": self.source_reference.lineage_payload(),
-                    "tenant_id": self.scope.tenant_id,
-                }
-            ),
+        return canonical_content_hash(
+            {
+                "currency": self.currency,
+                "fact_status": self.fact_status,
+                "fact_version": self.fact_version,
+                "legal_book_id": self.scope.legal_book_id,
+                "price": self.price,
+                "price_date": self.price_date,
+                "quote_basis": self.quote_basis,
+                "security_id": self.scope.security_id,
+                "source_reference": self.source_reference.lineage_payload(),
+                "tenant_id": self.scope.tenant_id,
+            }
         )
 
 
