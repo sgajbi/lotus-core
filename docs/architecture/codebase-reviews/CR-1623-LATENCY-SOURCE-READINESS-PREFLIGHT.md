@@ -19,13 +19,19 @@ The gate waited for `demo_data_loader` to exit successfully, but that loader run
 valuation and position-timeseries materialization is query-ready. Compose logs confirmed those
 consumers were still processing during measurement.
 
+Protected PR #821 run `29965622157` later reproduced the race after the original fix: one all-2xx
+preflight sweep passed, but `analytics_position_timeseries` then returned seven consecutive 422
+responses during measurement before recovering to 200. All successful timings remained inside the
+420 ms budget. This proved query readiness can reopen immediately after one green observation.
+
 ## Change
 
-Added a bounded source-readiness preflight after portfolio-context resolution and before warmup or
-measurement. It probes every measured non-health contract in one sweep until all return 2xx.
-Transient non-success responses may converge before timing starts; permanent HTTP or transport
-failures time out with endpoint-specific diagnostics. The existing compose seed-failure callback
-continues to propagate immediately.
+The bounded source-readiness preflight after portfolio-context resolution and before warmup or
+measurement now requires three consecutive ordered all-2xx sweeps. Any non-2xx or transport failure
+resets the fence; a compose seed failure still propagates immediately, including after a green
+sweep. The required sweep count and poll interval are additive CLI controls with governed defaults
+of three and two seconds. Permanent failures time out with endpoint-specific diagnostics plus the
+observed/required stability count.
 
 ## Compatibility
 
@@ -35,15 +41,17 @@ analytics inputs are unavailable; only CI measurement orchestration now waits fo
 
 README, wiki, API inventory, supported-feature, migration, and operator-runbook truth are unchanged.
 Repository engineering context records the reusable separation between service health, ingestion
-completion, and data-product readiness.
+completion, point-in-time readiness, and readiness stability. No wiki publication is required.
 
 ## Validation
 
-- `python -m pytest tests/unit/scripts/test_latency_profile.py -q`
+- `python -m pytest -q -W error tests/unit/scripts/test_latency_profile.py` (`28 passed`)
 - focused Ruff lint and format checks
+- strict MyPy on `scripts/operations/latency_profile.py`
 - `git diff --check`
 - exact-main `Main Releasability / Latency Gate` rerun is required after merge
 
-The unit suite proves transient 422-to-200 convergence, permanent non-success diagnostics,
-transport-failure diagnostics, seed-failure propagation, health-case exclusion, and readiness-before-
+The unit suite proves green-to-422 reset and three-sweep recovery, transport reset, permanent
+non-success diagnostics, seed-failure propagation during the stability fence, exact case ordering
+and poll cadence, invalid configuration rejection, health-case exclusion, and readiness-before-
 measurement call order.

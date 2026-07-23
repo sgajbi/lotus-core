@@ -982,10 +982,11 @@ Most relevant current governance:
     Compose-backed latency and load evidence must distinguish service health, source-ingestion
     completion, and downstream data-product readiness. A successful one-shot seed loader does not
     prove valuation, timeseries, aggregation, or other asynchronous projections are query-ready.
-    Before warmup or timing, preflight the actual measured source-backed contracts and require one
-    bounded all-2xx sweep. Keep permanent HTTP/transport failures fail-closed with endpoint-specific
-    diagnostics; never count convergence requests as latency samples or weaken budgets to hide a
-    readiness race.
+    Before warmup or timing, preflight the actual measured source-backed contracts and require three
+    consecutive ordered all-2xx sweeps at the governed poll interval. Reset the stability fence on
+    any non-2xx or transport failure and propagate seed failure immediately. Keep permanent failures
+    fail-closed with endpoint-specific and observed/required stability diagnostics; never count
+    convergence requests as latency samples or weaken budgets to hide a readiness race.
 49. GitHub Security automation coverage is governed as repository truth. `.github/dependabot.yml`
     covers GitHub Actions, every governed Python dependency manifest, and every runtime service
     Dockerfile. Routine Dependabot version-update PR churn is currently paused with
