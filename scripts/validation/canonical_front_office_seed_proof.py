@@ -52,6 +52,8 @@ DEFAULT_RETAINED_PROJECT = "lotus-core-app-local"
 DEFAULT_OUTPUT_DIR = Path("output/task-runs")
 DEFAULT_COMMAND_TIMEOUT_SECONDS = 900
 PREBUILD_TIMEOUT_SECONDS = 5400
+RUNTIME_STARTUP_TIMEOUT_SECONDS = 180
+RUNTIME_STARTUP_POLL_SECONDS = 2
 MIN_STABLE_OBSERVATIONS = 3
 ONE_SHOT_SERVICES = frozenset({"kafka-topic-creator", "migration-runner"})
 MIGRATION_SEEDED_TABLES = (
@@ -171,6 +173,10 @@ class ProofFailure(RuntimeError):
     """Evidence is missing, ambiguous, or violates a proof invariant."""
 
 
+class RuntimeNotReady(ProofFailure):
+    """The isolated runtime is valid so far but has not reached its ready state."""
+
+
 @dataclass(frozen=True, slots=True)
 class ProofConfig:
     compose_file: Path
@@ -256,7 +262,7 @@ def _run(
     *,
     environment: Mapping[str, str] | None = None,
     check: bool = True,
-    timeout_seconds: int = DEFAULT_COMMAND_TIMEOUT_SECONDS,
+    timeout_seconds: float = DEFAULT_COMMAND_TIMEOUT_SECONDS,
 ) -> CommandResult:
     try:
         completed = subprocess.run(
@@ -399,25 +405,46 @@ def _prebuild(config: ProofConfig, source: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def _docker_json(command: Sequence[str]) -> Any:
-    output = _run(command).stdout.strip()
+def _docker_json(
+    command: Sequence[str],
+    *,
+    timeout_seconds: float = DEFAULT_COMMAND_TIMEOUT_SECONDS,
+) -> Any:
+    output = _run(command, timeout_seconds=timeout_seconds).stdout.strip()
     try:
         return json.loads(output)
     except json.JSONDecodeError as exc:
         raise ProofFailure(f"Docker returned malformed JSON: {' '.join(command)}") from exc
 
 
-def _project_resources(project: str) -> dict[str, list[str]]:
+def _remaining_timeout_seconds(deadline: float | None) -> float:
+    if deadline is None:
+        return DEFAULT_COMMAND_TIMEOUT_SECONDS
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise ProofFailure("Runtime startup inspection deadline elapsed.")
+    return remaining
+
+
+def _project_resources(
+    project: str,
+    *,
+    deadline: float | None = None,
+) -> dict[str, list[str]]:
     label = f"label=com.docker.compose.project={project}"
     commands = {
         "containers": ("docker", "ps", "-aq", "--filter", label),
         "networks": ("docker", "network", "ls", "-q", "--filter", label),
         "volumes": ("docker", "volume", "ls", "-q", "--filter", label),
     }
-    return {
-        name: sorted(line for line in _run(command).stdout.splitlines() if line)
-        for name, command in commands.items()
-    }
+    resources: dict[str, list[str]] = {}
+    for name, command in commands.items():
+        result = _run(
+            command,
+            timeout_seconds=_remaining_timeout_seconds(deadline),
+        )
+        resources[name] = sorted(line for line in result.stdout.splitlines() if line)
+    return resources
 
 
 def _compose_labels(value: Mapping[str, Any]) -> dict[str, str]:
@@ -628,6 +655,22 @@ def _container_state_is_valid(
     )
 
 
+def _container_state_is_pending(
+    *,
+    service: str,
+    status: str,
+    exit_code: int,
+    health: Any,
+    oom_killed: bool,
+    restart_count: int,
+) -> bool:
+    if exit_code != 0 or oom_killed or restart_count != 0:
+        return False
+    if service in ONE_SHOT_SERVICES:
+        return status in {"created", "running"} and health in (None, "starting", "healthy")
+    return status == "created" or (status == "running" and health == "starting")
+
+
 def _container_record(raw: Mapping[str, Any]) -> dict[str, Any]:
     config, state = raw.get("Config") or {}, raw.get("State") or {}
     labels = config.get("Labels") or {}
@@ -663,18 +706,24 @@ def _validate_container(
         oom_killed=record["oom_killed"],
         restart_count=record["restart_count"],
     )
-    if (
-        not service
-        or record["compose_project"] != project
-        or not record["compose_config_hash"]
-        or not state_valid
-    ):
+    if not service or record["compose_project"] != project or not record["compose_config_hash"]:
         raise ProofFailure(
-            f"Container state/identity is invalid for service {service or 'missing'}."
+            f"Container identity is invalid for service {service or 'missing'}: {record}."
         )
     expected_image = images.get(service)
     if expected_image is not None and record["image_id"] != expected_image["image_id"]:
         raise ProofFailure(f"Container {service} did not start the provenance-verified image.")
+    if not state_valid:
+        state_pending = _container_state_is_pending(
+            service=service,
+            status=record["status"],
+            exit_code=record["exit_code"],
+            health=record["health"],
+            oom_killed=record["oom_killed"],
+            restart_count=record["restart_count"],
+        )
+        exception = RuntimeNotReady if state_pending else ProofFailure
+        raise exception(f"Container state is not ready for service {service}: {record}.")
     record.pop("compose_project")
     return record
 
@@ -682,19 +731,43 @@ def _validate_container(
 def _inspect_runtime(
     managed: ManagedComposeRun,
     images: Mapping[str, Mapping[str, Any]],
+    *,
+    deadline: float | None = None,
 ) -> dict[str, Any]:
     project = managed.runtime.endpoints.compose_project_name
-    resources = _project_resources(project)
+    resources = _project_resources(project, deadline=deadline)
     if not all(resources.values()):
-        raise ProofFailure(f"Managed project {project} has incomplete resource identity.")
-    raw = _docker_json(("docker", "inspect", *resources["containers"]))
+        raise RuntimeNotReady(
+            f"Managed project {project} has incomplete resource identity: {resources}."
+        )
+    raw = _docker_json(
+        ("docker", "inspect", *resources["containers"]),
+        timeout_seconds=_remaining_timeout_seconds(deadline),
+    )
     if not isinstance(raw, list) or len(raw) != len(resources["containers"]):
         raise ProofFailure(f"Managed project {project} container inspection is ambiguous.")
-    containers = [_validate_container(item, project=project, images=images) for item in raw]
+    containers: list[dict[str, Any]] = []
+    transient_failures: list[str] = []
+    terminal_failures: list[str] = []
+    for item in raw:
+        try:
+            containers.append(_validate_container(item, project=project, images=images))
+        except RuntimeNotReady as exc:
+            transient_failures.append(str(exc))
+        except ProofFailure as exc:
+            terminal_failures.append(str(exc))
+    if terminal_failures:
+        raise ProofFailure(
+            "Managed runtime has terminal container failures: " + " | ".join(terminal_failures)
+        )
+    if transient_failures:
+        raise RuntimeNotReady(
+            "Managed runtime containers are still starting: " + " | ".join(transient_failures)
+        )
     services = {item["service"] for item in containers}
     missing = sorted(set(E2E_SMOKE_SERVICES) - services)
     if missing:
-        raise ProofFailure(f"Managed runtime is missing E2E services: {missing}")
+        raise RuntimeNotReady(f"Managed runtime is missing E2E services: {missing}")
     ports = {
         key: value
         for key, value in sorted(managed.runtime.values.items())
@@ -707,6 +780,44 @@ def _inspect_runtime(
         "containers": sorted(containers, key=lambda item: item["service"]),
         "identity_sha256": _digest({"resources": resources, "containers": containers}),
     }
+
+
+def _wait_for_runtime(
+    managed: ManagedComposeRun,
+    images: Mapping[str, Mapping[str, Any]],
+    *,
+    timeout_seconds: int = RUNTIME_STARTUP_TIMEOUT_SECONDS,
+    poll_seconds: int = RUNTIME_STARTUP_POLL_SECONDS,
+) -> dict[str, Any]:
+    started = time.monotonic()
+    deadline = started + timeout_seconds
+    attempts = 0
+    last_not_ready: RuntimeNotReady | None = None
+    while True:
+        if time.monotonic() >= deadline:
+            raise ProofFailure(
+                "Managed runtime did not become ready within "
+                f"{timeout_seconds}s after {attempts} inspections: {last_not_ready}"
+            ) from last_not_ready
+        attempts += 1
+        try:
+            runtime = _inspect_runtime(managed, images, deadline=deadline)
+            runtime["startup_readiness"] = {
+                "attempts": attempts,
+                "elapsed_seconds": round(time.monotonic() - started, 3),
+                "timeout_seconds": timeout_seconds,
+                "poll_seconds": poll_seconds,
+            }
+            return runtime
+        except RuntimeNotReady as exc:
+            last_not_ready = exc
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise ProofFailure(
+                "Managed runtime did not become ready within "
+                f"{timeout_seconds}s after {attempts} inspections: {last_not_ready}"
+            ) from last_not_ready
+        time.sleep(min(poll_seconds, remaining))
 
 
 def _postgres_container(managed: ManagedComposeRun) -> str:
@@ -1272,7 +1383,7 @@ def _execute_proof(
     try:
         with managed:
             postgres = _postgres_container(managed)
-            runtime = _inspect_runtime(managed, images)
+            runtime = _wait_for_runtime(managed, images)
             fresh = _psql_json(postgres, FRESH_DATABASE_SQL)
             _assert_fresh_database(fresh)
             result, seed_contention = _seed_with_contention_sampling(config, managed, postgres)
