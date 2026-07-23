@@ -12,7 +12,7 @@ import time
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
-from typing import Any
+from typing import Any, Literal
 from urllib import error, parse, request
 
 LOGGER = logging.getLogger("demo_data_pack")
@@ -39,6 +39,18 @@ class DemoPackIngestionOutcome:
     segment: str
     replayed: bool
     idempotency_key: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class DemoPackSegment:
+    name: str
+    endpoint: str
+    payload: dict[str, Any]
+    category: Literal["portfolio", "reference"]
+
+    @property
+    def record_count(self) -> int:
+        return sum(len(value) for value in self.payload.values() if isinstance(value, list))
 
 
 DEMO_EXPECTATIONS: tuple[PortfolioExpectation, ...] = (
@@ -1404,6 +1416,93 @@ def _demo_pack_idempotency_key(*, segment: str, payload: dict[str, Any]) -> str:
     return f"lotus-demo-pack:v1:{segment}:{_canonical_payload_fingerprint(payload)}"
 
 
+def _build_demo_pack_segments(
+    bundle: dict[str, Any],
+    *,
+    batch_size: int = DEFAULT_BULK_INGEST_BATCH_SIZE,
+) -> tuple[DemoPackSegment, ...]:
+    portfolio_payload = _build_portfolio_bundle_payload(bundle)
+    market_prices = portfolio_payload.pop("market_prices")
+    fx_rates = portfolio_payload.pop("fx_rates")
+    segments = [
+        DemoPackSegment(
+            name="portfolio-bundle",
+            endpoint="/ingest/portfolio-bundle",
+            payload=portfolio_payload,
+            category="portfolio",
+        )
+    ]
+    for payload_key, endpoint, records in (
+        ("market_prices", "/ingest/market-prices", market_prices),
+        ("fx_rates", "/ingest/fx-rates", fx_rates),
+    ):
+        segments.extend(
+            DemoPackSegment(
+                name=f"{payload_key}-batch-{batch_index}",
+                endpoint=endpoint,
+                payload={payload_key: batch},
+                category="portfolio",
+            )
+            for batch_index, batch in enumerate(
+                _chunk_records(records, batch_size),
+                start=1,
+            )
+        )
+
+    reference_payloads = (
+        ("indices", "/ingest/indices", {"indices": bundle["indices"]}),
+        (
+            "index-price-series",
+            "/ingest/index-price-series",
+            {"index_price_series": bundle["index_price_series"]},
+        ),
+        (
+            "index-return-series",
+            "/ingest/index-return-series",
+            {"index_return_series": bundle["index_return_series"]},
+        ),
+        (
+            "benchmark-definitions",
+            "/ingest/benchmark-definitions",
+            {"benchmark_definitions": bundle["benchmark_definitions"]},
+        ),
+        (
+            "benchmark-compositions",
+            "/ingest/benchmark-compositions",
+            {"benchmark_compositions": bundle["benchmark_compositions"]},
+        ),
+        (
+            "benchmark-return-series",
+            "/ingest/benchmark-return-series",
+            {"benchmark_return_series": bundle["benchmark_return_series"]},
+        ),
+        (
+            "benchmark-assignments",
+            "/ingest/benchmark-assignments",
+            {"benchmark_assignments": bundle["benchmark_assignments"]},
+        ),
+        (
+            "risk-free-series",
+            "/ingest/risk-free-series",
+            {"risk_free_series": bundle["risk_free_series"]},
+        ),
+    )
+    segments.extend(
+        DemoPackSegment(
+            name=name,
+            endpoint=endpoint,
+            payload=payload,
+            category="reference",
+        )
+        for name, endpoint, payload in reference_payloads
+        if any(not isinstance(value, list) or value for value in payload.values())
+    )
+    names = [segment.name for segment in segments]
+    if len(names) != len(set(names)):
+        raise ValueError("Demo pack segment names must be unique")
+    return tuple(segments)
+
+
 def _post_demo_pack_payload(
     ingestion_base_url: str,
     *,
@@ -1437,37 +1536,6 @@ def _post_demo_pack_payload(
     )
 
 
-def _post_batched_ingest_payload(
-    ingestion_base_url: str,
-    *,
-    endpoint: str,
-    payload_key: str,
-    records: list[dict[str, Any]],
-    batch_size: int = DEFAULT_BULK_INGEST_BATCH_SIZE,
-    force_ingest: bool,
-) -> list[DemoPackIngestionOutcome]:
-    batches = _chunk_records(records, batch_size)
-    outcomes: list[DemoPackIngestionOutcome] = []
-    for batch_index, batch in enumerate(batches, start=1):
-        LOGGER.info(
-            "Ingesting %s batch %d/%d records=%d.",
-            payload_key,
-            batch_index,
-            len(batches),
-            len(batch),
-        )
-        outcomes.append(
-            _post_demo_pack_payload(
-                ingestion_base_url,
-                endpoint=endpoint,
-                segment=f"{payload_key}-batch-{batch_index}",
-                payload={payload_key: batch},
-                force_ingest=force_ingest,
-            )
-        )
-    return outcomes
-
-
 def _ingest_demo_portfolio_data(
     ingestion_base_url: str,
     bundle: dict[str, Any],
@@ -1475,51 +1543,28 @@ def _ingest_demo_portfolio_data(
     batch_size: int = DEFAULT_BULK_INGEST_BATCH_SIZE,
     force_ingest: bool,
 ) -> list[DemoPackIngestionOutcome]:
-    payload = _build_portfolio_bundle_payload(bundle)
-    market_prices = payload.pop("market_prices")
-    fx_rates = payload.pop("fx_rates")
+    segments = tuple(
+        segment
+        for segment in _build_demo_pack_segments(bundle, batch_size=batch_size)
+        if segment.category == "portfolio"
+    )
     LOGGER.info(
         (
             "Ingesting demo pack: portfolios=%d instruments=%d transactions=%d "
             "market_prices=%d fx_rates=%d batch_size=%d"
         ),
-        len(payload["portfolios"]),
-        len(payload["instruments"]),
-        len(payload["transactions"]),
-        len(market_prices),
-        len(fx_rates),
+        len(bundle["portfolios"]),
+        len(bundle["instruments"]),
+        len(bundle["transactions"]),
+        len(bundle["market_prices"]),
+        len(bundle["fx_rates"]),
         batch_size,
     )
-    outcomes = [
-        _post_demo_pack_payload(
-            ingestion_base_url,
-            endpoint="/ingest/portfolio-bundle",
-            segment="portfolio-bundle",
-            payload=payload,
-            force_ingest=force_ingest,
-        )
-    ]
-    outcomes.extend(
-        _post_batched_ingest_payload(
-            ingestion_base_url,
-            endpoint="/ingest/market-prices",
-            payload_key="market_prices",
-            records=market_prices,
-            batch_size=batch_size,
-            force_ingest=force_ingest,
-        )
+    return _ingest_demo_segments(
+        ingestion_base_url,
+        segments,
+        force_ingest=force_ingest,
     )
-    outcomes.extend(
-        _post_batched_ingest_payload(
-            ingestion_base_url,
-            endpoint="/ingest/fx-rates",
-            payload_key="fx_rates",
-            records=fx_rates,
-            batch_size=batch_size,
-            force_ingest=force_ingest,
-        )
-    )
-    return outcomes
 
 
 def _ingest_demo_reference_data(
@@ -1528,39 +1573,35 @@ def _ingest_demo_reference_data(
     *,
     force_ingest: bool,
 ) -> list[DemoPackIngestionOutcome]:
-    reference_payloads = (
-        ("/ingest/indices", {"indices": bundle["indices"]}),
-        ("/ingest/index-price-series", {"index_price_series": bundle["index_price_series"]}),
-        ("/ingest/index-return-series", {"index_return_series": bundle["index_return_series"]}),
-        (
-            "/ingest/benchmark-definitions",
-            {"benchmark_definitions": bundle["benchmark_definitions"]},
-        ),
-        (
-            "/ingest/benchmark-compositions",
-            {"benchmark_compositions": bundle["benchmark_compositions"]},
-        ),
-        (
-            "/ingest/benchmark-return-series",
-            {"benchmark_return_series": bundle["benchmark_return_series"]},
-        ),
-        (
-            "/ingest/benchmark-assignments",
-            {"benchmark_assignments": bundle["benchmark_assignments"]},
-        ),
-        ("/ingest/risk-free-series", {"risk_free_series": bundle["risk_free_series"]}),
+    segments = tuple(
+        segment for segment in _build_demo_pack_segments(bundle) if segment.category == "reference"
     )
+    return _ingest_demo_segments(
+        ingestion_base_url,
+        segments,
+        force_ingest=force_ingest,
+    )
+
+
+def _ingest_demo_segments(
+    ingestion_base_url: str,
+    segments: tuple[DemoPackSegment, ...],
+    *,
+    force_ingest: bool,
+) -> list[DemoPackIngestionOutcome]:
     outcomes: list[DemoPackIngestionOutcome] = []
-    for endpoint, payload in reference_payloads:
-        if all(isinstance(value, list) and not value for value in payload.values()):
-            LOGGER.info("Skipped empty reference payload for %s.", endpoint)
-            continue
+    for segment in segments:
+        LOGGER.info(
+            "Ingesting demo segment name=%s records=%d.",
+            segment.name,
+            segment.record_count,
+        )
         outcomes.append(
             _post_demo_pack_payload(
                 ingestion_base_url,
-                endpoint=endpoint,
-                segment=endpoint.removeprefix("/ingest/").replace("/", "-"),
-                payload=payload,
+                endpoint=segment.endpoint,
+                segment=segment.name,
+                payload=segment.payload,
                 force_ingest=force_ingest,
             )
         )
