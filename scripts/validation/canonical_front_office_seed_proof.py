@@ -367,6 +367,7 @@ def _build_lane(config: ProofConfig, source_commit: str) -> Iterator[dict[str, A
 def _prebuild(config: ProofConfig, source: Mapping[str, Any]) -> dict[str, Any]:
     if not config.prebuild_images:
         return {"requested": False, "group": "e2e-smoke"}
+    cache_dir = config.output_dir / "canonical-seed-buildx-cache"
     environment = dict(os.environ)
     environment.update(
         {
@@ -382,6 +383,8 @@ def _prebuild(config: ProofConfig, source: Mapping[str, Any]) -> dict[str, Any]:
             "scripts/release/prebuild_ci_images.py",
             "--group",
             "e2e-smoke",
+            "--cache-dir",
+            str(cache_dir),
         ),
         environment=environment,
         timeout_seconds=PREBUILD_TIMEOUT_SECONDS,
@@ -389,6 +392,7 @@ def _prebuild(config: ProofConfig, source: Mapping[str, Any]) -> dict[str, Any]:
     return {
         "requested": True,
         "group": "e2e-smoke",
+        "cache_dir": str(cache_dir),
         "exit_code": result.returncode,
         "stdout_sha256": _sha256_bytes(result.stdout.encode()),
         "stderr_sha256": _sha256_bytes(result.stderr.encode()),

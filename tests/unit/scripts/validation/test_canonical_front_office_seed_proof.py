@@ -243,12 +243,14 @@ def test_prebuild_uses_explicit_cold_build_timeout(
     captured: dict[str, Any] = {}
 
     def fake_run(command: Any, **kwargs: Any) -> CommandResult:
+        captured["command"] = tuple(command)
         captured.update(kwargs)
         return CommandResult(tuple(command), 0, "built", "")
 
     monkeypatch.setattr(proof, "_run", fake_run)
+    config = _config(tmp_path, prebuild_images=True)
     proof._prebuild(
-        _config(tmp_path, prebuild_images=True),
+        config,
         {
             "commit_sha": "a" * 40,
             "branch": "feat/proof",
@@ -257,6 +259,10 @@ def test_prebuild_uses_explicit_cold_build_timeout(
     )
 
     assert captured["timeout_seconds"] == proof.PREBUILD_TIMEOUT_SECONDS
+    assert captured["command"][-2:] == (
+        "--cache-dir",
+        str(config.output_dir / "canonical-seed-buildx-cache"),
+    )
 
 
 @pytest.mark.parametrize(
