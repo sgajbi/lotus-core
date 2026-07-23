@@ -69,6 +69,27 @@ def test_history_window_does_not_move_transaction_economics():
     assert transactions_by_id["DEMO_ADV_DEP_01"]["transaction_date"] == "2023-07-21T09:00:00Z"
 
 
+def test_generated_market_and_fx_economics_use_exact_decimal_strings():
+    bundle = demo_data_pack.build_demo_bundle()
+    cash_security_ids = {
+        instrument["security_id"]
+        for instrument in bundle["instruments"]
+        if instrument["product_type"] == "Cash"
+    }
+
+    non_cash_prices = [
+        record["price"]
+        for record in bundle["market_prices"]
+        if record["security_id"] not in cash_security_ids
+    ]
+    rates = [record["rate"] for record in bundle["fx_rates"]]
+
+    assert non_cash_prices and all(isinstance(price, str) for price in non_cash_prices)
+    assert rates and all(isinstance(rate, str) for rate in rates)
+    assert all(Decimal(price).as_tuple().exponent == -2 for price in non_cash_prices)
+    assert all(Decimal(rate).as_tuple().exponent == -6 for rate in rates)
+
+
 def test_overlapping_reference_dates_have_identical_economics_across_history_windows():
     ci_bundle = demo_data_pack.build_demo_bundle(history_days=demo_data_pack.MIN_DEMO_HISTORY_DAYS)
     full_bundle = demo_data_pack.build_demo_bundle(

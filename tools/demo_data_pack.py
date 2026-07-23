@@ -152,20 +152,18 @@ def _stable_linear_value(
     observation_date: date,
     anchor_date: date,
     end_date: date,
-    start_value: float,
-    end_value: float,
+    start_value: Decimal,
+    end_value: Decimal,
     precision: int,
-) -> float:
+) -> str:
     span_days = (end_date - anchor_date).days
     if span_days <= 0:
         raise ValueError("Stable value end_date must be after anchor_date.")
     elapsed_days = min(max((observation_date - anchor_date).days, 0), span_days)
     fraction = Decimal(elapsed_days) / Decimal(span_days)
-    value = Decimal(str(start_value)) + (
-        (Decimal(str(end_value)) - Decimal(str(start_value))) * fraction
-    )
+    value = start_value + ((end_value - start_value) * fraction)
     quantum = Decimal(1).scaleb(-precision)
-    return float(value.quantize(quantum))
+    return format(value.quantize(quantum), "f")
 
 
 def _tx(
@@ -1390,16 +1388,16 @@ def build_demo_bundle(
         if item.get("transaction_date")
     }
     reference_dates = sorted({*dates, *transaction_dates, as_of})
-    price_paths = {
-        "SEC_AAPL_US": (184, 194, "USD"),
-        "SEC_SAP_DE": (118, 129, "EUR"),
-        "SEC_NOVN_CH": (91, 95, "CHF"),
-        "SEC_SONY_JP": (1720, 1835, "JPY"),
-        "SEC_UST_5Y": (978, 986, "USD"),
-        "SEC_CORP_IG_USD": (1008, 1020, "USD"),
-        "SEC_ETF_WORLD_USD": (94, 101, "USD"),
-        "SEC_FUND_EM_EQ": (52, 57, "USD"),
-        "SEC_GOLD_ETC_USD": (208, 217, "USD"),
+    price_paths: dict[str, tuple[Decimal, Decimal, str]] = {
+        "SEC_AAPL_US": (Decimal("184"), Decimal("194"), "USD"),
+        "SEC_SAP_DE": (Decimal("118"), Decimal("129"), "EUR"),
+        "SEC_NOVN_CH": (Decimal("91"), Decimal("95"), "CHF"),
+        "SEC_SONY_JP": (Decimal("1720"), Decimal("1835"), "JPY"),
+        "SEC_UST_5Y": (Decimal("978"), Decimal("986"), "USD"),
+        "SEC_CORP_IG_USD": (Decimal("1008"), Decimal("1020"), "USD"),
+        "SEC_ETF_WORLD_USD": (Decimal("94"), Decimal("101"), "USD"),
+        "SEC_FUND_EM_EQ": (Decimal("52"), Decimal("57"), "USD"),
+        "SEC_GOLD_ETC_USD": (Decimal("208"), Decimal("217"), "USD"),
     }
     market_prices: list[dict[str, Any]] = []
     cash_security_ids = {
@@ -1433,17 +1431,17 @@ def build_demo_bundle(
             market_prices.append(
                 {"security_id": security_id, "price_date": d, "price": px, "currency": ccy}
             )
-    fx_paths = {
-        ("USD", "EUR"): (0.92, 0.90),
-        ("EUR", "USD"): (1.09, 1.11),
-        ("USD", "CHF"): (0.88, 0.86),
-        ("CHF", "USD"): (1.13, 1.16),
-        ("USD", "SGD"): (1.34, 1.32),
-        ("SGD", "USD"): (0.75, 0.76),
-        ("JPY", "USD"): (0.0069, 0.0067),
-        ("JPY", "SGD"): (0.0092, 0.0089),
-        ("EUR", "CHF"): (0.96, 0.95),
-        ("CHF", "EUR"): (1.04, 1.05),
+    fx_paths: dict[tuple[str, str], tuple[Decimal, Decimal]] = {
+        ("USD", "EUR"): (Decimal("0.92"), Decimal("0.90")),
+        ("EUR", "USD"): (Decimal("1.09"), Decimal("1.11")),
+        ("USD", "CHF"): (Decimal("0.88"), Decimal("0.86")),
+        ("CHF", "USD"): (Decimal("1.13"), Decimal("1.16")),
+        ("USD", "SGD"): (Decimal("1.34"), Decimal("1.32")),
+        ("SGD", "USD"): (Decimal("0.75"), Decimal("0.76")),
+        ("JPY", "USD"): (Decimal("0.0069"), Decimal("0.0067")),
+        ("JPY", "SGD"): (Decimal("0.0092"), Decimal("0.0089")),
+        ("EUR", "CHF"): (Decimal("0.96"), Decimal("0.95")),
+        ("CHF", "EUR"): (Decimal("1.04"), Decimal("1.05")),
     }
     required_currencies = {
         item["base_currency"] for item in portfolios if item.get("base_currency")
