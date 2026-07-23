@@ -453,6 +453,27 @@ default and the Compose override are both 900 seconds; the exact-main retained r
 all-zero queues after about 587 seconds and completed the three-observation fence after about 617
 seconds, so the former 300-second direct-command default is not sufficient certification evidence.
 
+### Isolated Core closure evidence
+
+Use the repository-owned proof driver when a change requires fresh-database Core-only canonical
+evidence:
+
+```bash
+python scripts/validation/canonical_front_office_seed_proof.py --prebuild-images
+```
+
+The driver accepts only the governed portfolio, dates, benchmark, Compose file, retained project,
+three observations at three-second intervals, exact public repository, shared build lock, and
+ignored `output/task-runs` evidence root. It prebuilds exact-source images, starts a generated
+dynamic-port project without rebuilding, proves the database was empty, runs ingest-only without
+cleanup or reprocessing, samples contention during ingestion, and requires stable SQL/Core API
+truth plus a clean forbidden-signature scan. Generated resources must tear down to zero; retained
+container, image, configuration, restart, health, network, mount, and volume identity must remain
+unchanged. Source commit/tree/branch cleanliness is revalidated after teardown.
+
+This is branch-qualified local Core evidence. It does not replace protected CI, exact-main
+validation, downstream certification, or production release evidence.
+
 ## Current Posture
 
 `tools/front_office_portfolio_seed.py` implements the governed coherent scenario. The separate

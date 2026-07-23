@@ -82,6 +82,16 @@ Use a focused consume-process-persist test pattern to bridge unit and full E2E:
     `make profile-cost-processing-modes`. Keep ordered lot opening, state-dependent disposal, and
     backdated rebuild measurements separate. These engine profiles are characterization evidence,
     not deployed throughput SLOs; database/Kafka load proof remains required for cutover.
+16. Durable ingestion, outbox, valuation, aggregation, replay, and operator-state transitions are
+    protected by `make test-critical-lifecycle-db`. The `critical-lifecycle-db` manifest selects
+    only tests marked `lifecycle`, runs with the `integration` profile and `db_direct` runtime, and
+    is blocking in Feature Lane, PR Merge Gate, and Main Releasability. Mark individual cases,
+    not whole existing modules: this is a bounded critical-state-machine pack, not an alias for
+    `integration-all`.
+17. The lifecycle pack includes one real PostgreSQL path from accepted transaction-ingestion job
+    through transaction/idempotency persistence, one pending outbox event, exactly one successful
+    dispatch, durable queued operator status, and replay with no duplicate rows or publication.
+    Router-only idempotency cases contribute API contract evidence but do not replace this DB proof.
 
 ## Proof-Family Markers
 
@@ -96,7 +106,8 @@ primary evidence type for a test module or case:
 6. `e2e` for multi-service end-to-end workflows.
 7. `performance`, `resilience`, and `certification` for bounded load/latency, recovery, and
    release or supported-feature evidence.
-8. `flaky_quarantine` only for governed temporary quarantine entries with owner, issue, reason,
+8. `lifecycle` for cases contributing to the governed DB-backed critical lifecycle pack.
+9. `flaky_quarantine` only for governed temporary quarantine entries with owner, issue, reason,
    and expiry in `docs/standards/test-lane-governance.v1.json`.
 
 Do not use marker count as proof. The risk matrix must cite concrete tests or Make targets and must
