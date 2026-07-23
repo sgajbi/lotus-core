@@ -80,7 +80,7 @@ FORBIDDEN_LOG_PATTERNS = {
 }
 
 FRESH_DATABASE_SQL = """
-create temporary table proof_counts(name text primary key, rows bigint not null) on commit drop;
+create temporary table proof_counts(name text primary key, rows bigint not null);
 do $proof$
 declare item record; exact_count bigint;
 begin
