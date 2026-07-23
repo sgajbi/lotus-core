@@ -72,6 +72,7 @@ markers = [
     "regression: mark tests that protect golden scenarios or previously fixed defects",
     "performance: mark tests that prove bounded latency, throughput, budgets, batching, or load behavior",
     "resilience: mark tests that prove retry, timeout, recovery, back-pressure, or degraded-state behavior",
+    "lifecycle: mark tests that contribute to the governed DB-backed lifecycle proof pack",
     "certification: mark tests that contribute to release, institutional, app-validation, or supported-feature certification evidence",
     "flaky_quarantine: mark temporarily quarantined tests; requires a governed issue link and expiry in the test lane governance contract",
     "e2e: mark tests that exercise multi-service end-to-end workflows",

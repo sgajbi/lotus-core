@@ -711,6 +711,7 @@ async def test_reprocessing_keys_return_coherent_snapshot_under_key_churn(
     assert response.items[0].operational_state == "STALE_REPROCESSING"
 
 
+@pytest.mark.lifecycle
 async def test_reprocessing_jobs_return_coherent_snapshot_under_job_churn(
     clean_db, async_db_session: AsyncSession
 ):
@@ -1255,6 +1256,7 @@ async def test_lineage_returns_coherent_snapshot_under_state_churn(
     assert response.operational_state == "HEALTHY"
 
 
+@pytest.mark.lifecycle
 async def test_valuation_jobs_return_coherent_snapshot_under_job_churn(
     clean_db, async_db_session: AsyncSession
 ):
@@ -1319,6 +1321,7 @@ async def test_valuation_jobs_return_coherent_snapshot_under_job_churn(
     assert response.items[0].operational_state == "STALE_PROCESSING"
 
 
+@pytest.mark.lifecycle
 async def test_valuation_jobs_expose_skipped_operational_state(
     clean_db, async_db_session: AsyncSession
 ):
@@ -1593,6 +1596,7 @@ async def test_analytics_export_jobs_return_coherent_snapshot_under_job_churn(
     assert response.items[0].operational_state == "STALE_RUNNING"
 
 
+@pytest.mark.lifecycle
 async def test_failed_outbox_recovery_round_trip_from_dispatcher_to_service_to_dispatcher(
     clean_db, db_engine, async_db_session: AsyncSession
 ):

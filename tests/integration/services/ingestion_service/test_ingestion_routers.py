@@ -2038,6 +2038,7 @@ async def test_ingestion_job_not_found(event_replay_test_client: httpx.AsyncClie
     assert body["detail"]["message"] == "Ingestion job 'job_missing_001' was not found."
 
 
+@pytest.mark.lifecycle
 async def test_ingestion_jobs_idempotency_replays_existing_job(
     async_test_client: httpx.AsyncClient,
     mock_kafka_producer: MagicMock,
@@ -2059,6 +2060,7 @@ async def test_ingestion_jobs_idempotency_replays_existing_job(
     mock_kafka_producer.publish_message.assert_called_once()
 
 
+@pytest.mark.lifecycle
 async def test_ingest_transactions_rejects_same_idempotency_key_with_different_payload(
     async_test_client: httpx.AsyncClient,
     mock_kafka_producer: MagicMock,

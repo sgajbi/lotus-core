@@ -429,6 +429,7 @@ async def test_explicit_repair_claims_immutable_payload_specific_correction_iden
     ]
 
 
+@pytest.mark.lifecycle
 @pytest.mark.parametrize("fail_at", ["cost", "cashflow", "position"])
 async def test_combined_use_case_rolls_back_every_module_and_idempotency_on_failure(
     clean_db,

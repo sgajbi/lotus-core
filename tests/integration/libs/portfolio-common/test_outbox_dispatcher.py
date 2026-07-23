@@ -126,6 +126,7 @@ def test_dispatcher_processes_and_updates_pending_events(
     session.close()
 
 
+@pytest.mark.lifecycle
 def test_dispatcher_commits_claim_before_publish_and_clears_it_on_success(db_engine, clean_db):
     """
     GIVEN a pending outbox event
@@ -243,6 +244,7 @@ def test_dispatcher_reclaims_expired_claim(db_engine, clean_db, smart_mock_kafka
     assert claim_expires_at is None
 
 
+@pytest.mark.lifecycle
 def test_dispatcher_does_not_update_result_after_claim_is_reclaimed(db_engine, clean_db):
     """
     GIVEN a dispatcher loses the claim token before delivery results are persisted
@@ -533,6 +535,7 @@ def test_dispatcher_skips_pending_rows_before_next_attempt_at(
         assert ready_status == "PROCESSED"
 
 
+@pytest.mark.lifecycle
 def test_dispatcher_marks_terminal_failures_as_failed(db_engine, clean_db):
     """
     GIVEN a pending outbox event already at MAX_RETRIES - 1
