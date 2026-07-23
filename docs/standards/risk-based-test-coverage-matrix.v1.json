@@ -141,7 +141,7 @@
           "gap_status": "partial",
           "current_coverage": [
             "tests/e2e/test_portfolio_query_pipeline.py",
-            "make test-e2e-smoke"
+            "make test-e2e-all"
           ],
           "follow_up_issue": "sgajbi/lotus-core#457"
         }

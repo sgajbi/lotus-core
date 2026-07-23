@@ -201,6 +201,24 @@
       ]
     }
   ],
+  "e2e_value_governance": {
+    "ledger": "docs/standards/e2e-test-value-ledger.v1.json",
+    "guard_command": "make e2e-test-value-guard",
+    "lane_membership_source": "scripts/quality/test_manifest.py",
+    "required_profile_evidence": [
+      "owner",
+      "invariant",
+      "production_defect_class",
+      "fixture_boundary",
+      "external_dependencies",
+      "source_contracts",
+      "lower_layer_proofs",
+      "non_duplication_rationale"
+    ],
+    "closure_blocking_decisions": [
+      "needs-review"
+    ]
+  },
   "quarantine_policy": {
     "maximum_days": 14,
     "required_fields": [
