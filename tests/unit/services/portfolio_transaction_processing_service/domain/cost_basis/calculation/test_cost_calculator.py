@@ -696,14 +696,23 @@ def test_fx_strategy_rejects_invalid_swap_linkage(
     mock_disposition_engine.consume_sell_quantity.assert_not_called()
 
 
+@pytest.mark.parametrize(
+    "fee_update",
+    [
+        {"fees": Fees(brokerage=Decimal("1"))},
+        {"trade_fee": Decimal("0"), "fees": Fees(brokerage=Decimal("1"))},
+        {"trade_fee": Decimal("1"), "fees": Fees()},
+    ],
+)
 def test_fx_strategy_rejects_embedded_fee_before_cost_updates(
     cost_calculator,
     mock_disposition_engine,
     error_reporter,
+    fee_update,
 ) -> None:
     fx_transaction = _canonical_fx_transaction(
         transaction_id="FX-EMBEDDED-FEE-001",
-        fees=Fees(brokerage=Decimal("1")),
+        **fee_update,
     )
 
     cost_calculator.calculate_transaction_costs(fx_transaction)
