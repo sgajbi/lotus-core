@@ -59,6 +59,11 @@ from .position_valuation import (
     ValuationOutputMeasure,
     calculate_position_valuation,
 )
+from .source_facts import (
+    MarketPriceQuoteBasis,
+    MarketPriceSourceFact,
+    ValuationAuthorityScope,
+)
 
 __all__ = [
     "AccrualRateType",
@@ -77,6 +82,8 @@ __all__ = [
     "ExCouponEntitlement",
     "InstrumentValuationPolicyAssignment",
     "IcmaReferencePeriod",
+    "MarketPriceQuoteBasis",
+    "MarketPriceSourceFact",
     "MissingValuationPolicyAssignmentError",
     "OverlappingValuationPolicyAssignmentError",
     "PositionScaling",
@@ -92,6 +99,7 @@ __all__ = [
     "UnknownValuationPolicyError",
     "ValuationInputBasis",
     "ValuationOutputMeasure",
+    "ValuationAuthorityScope",
     "ValuationPolicyAssignmentCacheKey",
     "ValuationPolicyAssignmentError",
     "ValuationPolicyAssignmentStatus",
