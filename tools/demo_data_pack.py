@@ -22,7 +22,6 @@ LOGGER = logging.getLogger("demo_data_pack")
 DEFAULT_DEMO_BENCHMARK_ID = "BMK_GLOBAL_BALANCED_60_40"
 SECONDARY_DEMO_BENCHMARK_ID = "BMK_GLOBAL_GROWTH_80_20"
 DEFAULT_DEMO_BENCHMARK_PORTFOLIO_ID = "DEMO_ADV_USD_001"
-DEFAULT_BULK_INGEST_BATCH_SIZE = 100
 MIN_DEMO_HISTORY_DAYS = 240
 DEFAULT_DEMO_HISTORY_DAYS = 365 * 3
 IDEMPOTENCY_REPLAY_MESSAGE = "Duplicate ingestion request accepted via idempotency replay."
@@ -1517,19 +1516,13 @@ def _build_portfolio_bundle_payload(bundle: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _chunk_records(records: list[dict[str, Any]], batch_size: int) -> list[list[dict[str, Any]]]:
-    if batch_size <= 0:
-        raise ValueError("batch_size must be greater than zero")
-    return [records[index : index + batch_size] for index in range(0, len(records), batch_size)]
-
-
 def _canonical_payload_fingerprint(payload: dict[str, Any]) -> str:
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def _demo_pack_idempotency_key(*, segment: str, payload: dict[str, Any]) -> str:
-    return f"lotus-demo-pack:v1:{segment}:{_canonical_payload_fingerprint(payload)}"
+    return f"lotus-demo-pack:v2:{segment}:{_canonical_payload_fingerprint(payload)}"
 
 
 def _canonical_number(value: object) -> str:
@@ -2168,11 +2161,39 @@ def _probe_portfolio_bundle_segment(
     )
 
 
-def _build_demo_pack_segments(
-    bundle: dict[str, Any],
+def _build_logical_series_segments(
     *,
-    batch_size: int = DEFAULT_BULK_INGEST_BATCH_SIZE,
-) -> tuple[DemoPackSegment, ...]:
+    records: list[dict[str, Any]],
+    payload_key: str,
+    endpoint: str,
+    segment_prefix: str,
+    identity_fields: tuple[str, ...],
+    date_field: str,
+) -> list[DemoPackSegment]:
+    records_by_identity: dict[tuple[str, ...], list[dict[str, Any]]] = {}
+    for record in records:
+        identity = tuple(str(record[field]) for field in identity_fields)
+        records_by_identity.setdefault(identity, []).append(record)
+
+    segments: list[DemoPackSegment] = []
+    for identity in sorted(records_by_identity):
+        identity_token = ":".join(identity)
+        ordered_records = sorted(
+            records_by_identity[identity],
+            key=lambda record: str(record[date_field]),
+        )
+        segments.append(
+            DemoPackSegment(
+                name=f"{segment_prefix}:{identity_token}",
+                endpoint=endpoint,
+                payload={payload_key: ordered_records},
+                category="portfolio",
+            )
+        )
+    return segments
+
+
+def _build_demo_pack_segments(bundle: dict[str, Any]) -> tuple[DemoPackSegment, ...]:
     portfolio_payload = _build_portfolio_bundle_payload(bundle)
     market_prices = portfolio_payload.pop("market_prices")
     fx_rates = portfolio_payload.pop("fx_rates")
@@ -2184,22 +2205,26 @@ def _build_demo_pack_segments(
             category="portfolio",
         )
     ]
-    for payload_key, endpoint, records in (
-        ("market_prices", "/ingest/market-prices", market_prices),
-        ("fx_rates", "/ingest/fx-rates", fx_rates),
-    ):
-        segments.extend(
-            DemoPackSegment(
-                name=f"{payload_key}-batch-{batch_index}",
-                endpoint=endpoint,
-                payload={payload_key: batch},
-                category="portfolio",
-            )
-            for batch_index, batch in enumerate(
-                _chunk_records(records, batch_size),
-                start=1,
-            )
+    segments.extend(
+        _build_logical_series_segments(
+            records=market_prices,
+            payload_key="market_prices",
+            endpoint="/ingest/market-prices",
+            segment_prefix="market-prices",
+            identity_fields=("security_id",),
+            date_field="price_date",
         )
+    )
+    segments.extend(
+        _build_logical_series_segments(
+            records=fx_rates,
+            payload_key="fx_rates",
+            endpoint="/ingest/fx-rates",
+            segment_prefix="fx-rates",
+            identity_fields=("from_currency", "to_currency"),
+            date_field="rate_date",
+        )
+    )
 
     reference_payloads = (
         ("indices", "/ingest/indices", {"indices": bundle["indices"]}),

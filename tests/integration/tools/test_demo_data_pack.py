@@ -83,6 +83,18 @@ def test_overlapping_reference_dates_have_identical_economics_across_history_win
             )
 
 
+def test_logical_segment_identities_are_stable_across_history_windows():
+    ci_segments = demo_data_pack._build_demo_pack_segments(
+        demo_data_pack.build_demo_bundle(history_days=demo_data_pack.MIN_DEMO_HISTORY_DAYS)
+    )
+    full_segments = demo_data_pack._build_demo_pack_segments(
+        demo_data_pack.build_demo_bundle(history_days=demo_data_pack.DEFAULT_DEMO_HISTORY_DAYS)
+    )
+
+    assert {segment.name for segment in ci_segments} == {segment.name for segment in full_segments}
+    assert not any("-batch-" in segment.name for segment in ci_segments)
+
+
 def test_build_demo_bundle_supports_latency_focused_portfolio_scope():
     full_bundle = demo_data_pack.build_demo_bundle(history_days=365)
     latency_bundle = demo_data_pack.build_demo_bundle(
@@ -132,7 +144,7 @@ def test_build_demo_bundle_rejects_too_short_history_window():
         demo_data_pack.build_demo_bundle(history_days=demo_data_pack.MIN_DEMO_HISTORY_DAYS - 1)
 
 
-def test_ingest_demo_portfolio_data_batches_market_and_fx_rows(monkeypatch):
+def test_ingest_demo_portfolio_data_uses_logical_market_and_fx_series(monkeypatch):
     bundle = demo_data_pack.build_demo_bundle(
         history_days=demo_data_pack.MIN_DEMO_HISTORY_DAYS,
         portfolio_ids=("DEMO_DPM_EUR_001",),
@@ -157,7 +169,7 @@ def test_ingest_demo_portfolio_data_batches_market_and_fx_rows(monkeypatch):
 
     segments = tuple(
         segment
-        for segment in demo_data_pack._build_demo_pack_segments(bundle, batch_size=200)
+        for segment in demo_data_pack._build_demo_pack_segments(bundle)
         if segment.category == "portfolio"
     )
     demo_data_pack._ingest_demo_segments(
@@ -175,30 +187,45 @@ def test_ingest_demo_portfolio_data_batches_market_and_fx_rows(monkeypatch):
     assert len(idempotency_keys) == len(calls)
     assert len(set(idempotency_keys)) == len(idempotency_keys)
 
-    market_price_batches = [
+    market_price_series = [
         payload["market_prices"]
         for url, payload, _headers in calls
         if url == "http://ingestion/ingest/market-prices"
     ]
-    fx_rate_batches = [
+    fx_rate_series = [
         payload["fx_rates"]
         for url, payload, _headers in calls
         if url == "http://ingestion/ingest/fx-rates"
     ]
 
-    assert all(len(batch) <= 200 for batch in market_price_batches)
-    assert all(len(batch) <= 200 for batch in fx_rate_batches)
-    assert [row for batch in market_price_batches for row in batch] == bundle["market_prices"]
-    assert [row for batch in fx_rate_batches for row in batch] == bundle["fx_rates"]
+    assert all(len({row["security_id"] for row in series}) == 1 for series in market_price_series)
+    assert all(
+        len({(row["from_currency"], row["to_currency"]) for row in series}) == 1
+        for series in fx_rate_series
+    )
+    assert sorted(
+        (row for series in market_price_series for row in series),
+        key=lambda row: (row["security_id"], row["price_date"]),
+    ) == sorted(
+        bundle["market_prices"],
+        key=lambda row: (row["security_id"], row["price_date"]),
+    )
+    assert sorted(
+        (row for series in fx_rate_series for row in series),
+        key=lambda row: (row["from_currency"], row["to_currency"], row["rate_date"]),
+    ) == sorted(
+        bundle["fx_rates"],
+        key=lambda row: (row["from_currency"], row["to_currency"], row["rate_date"]),
+    )
 
 
-def test_demo_pack_segment_inventory_is_unique_complete_and_bounded():
+def test_demo_pack_segment_inventory_is_unique_complete_and_logically_partitioned():
     bundle = demo_data_pack.build_demo_bundle(
         history_days=demo_data_pack.MIN_DEMO_HISTORY_DAYS,
         portfolio_ids=("DEMO_DPM_EUR_001",),
     )
 
-    segments = demo_data_pack._build_demo_pack_segments(bundle, batch_size=200)
+    segments = demo_data_pack._build_demo_pack_segments(bundle)
     names = [segment.name for segment in segments]
     market_segments = [
         segment for segment in segments if segment.endpoint.endswith("market-prices")
@@ -208,7 +235,29 @@ def test_demo_pack_segment_inventory_is_unique_complete_and_bounded():
 
     assert len(names) == len(set(names))
     assert names[0] == "portfolio-bundle"
-    assert all(segment.record_count <= 200 for segment in [*market_segments, *fx_segments])
+    # Keep a full default pack inside the app-local ingestion rate window.
+    assert len(segments) <= 500
+    assert sum(segment.record_count for segment in segments) <= 50_000
+    assert {segment.name for segment in market_segments} == {
+        f"market-prices:{security_id}"
+        for security_id in {row["security_id"] for row in bundle["market_prices"]}
+    }
+    assert {segment.name for segment in fx_segments} == {
+        f"fx-rates:{from_currency}:{to_currency}"
+        for from_currency, to_currency in {
+            (row["from_currency"], row["to_currency"]) for row in bundle["fx_rates"]
+        }
+    }
+    assert all(
+        segment.payload["market_prices"]
+        == sorted(segment.payload["market_prices"], key=lambda row: row["price_date"])
+        for segment in market_segments
+    )
+    assert all(
+        segment.payload["fx_rates"]
+        == sorted(segment.payload["fx_rates"], key=lambda row: row["rate_date"])
+        for segment in fx_segments
+    )
     assert sum(segment.record_count for segment in market_segments) == len(bundle["market_prices"])
     assert sum(segment.record_count for segment in fx_segments) == len(bundle["fx_rates"])
     assert {segment.name for segment in reference_segments} == {
@@ -945,21 +994,21 @@ def test_expectations_cover_five_portfolios_with_terminal_holdings():
 
 def test_demo_pack_idempotency_key_is_canonical_and_content_addressed():
     first = demo_data_pack._demo_pack_idempotency_key(
-        segment="market-prices-batch-1",
+        segment="market-prices:SEC-A",
         payload={"market_prices": [{"price": "10", "security_id": "SEC-A"}]},
     )
     reordered = demo_data_pack._demo_pack_idempotency_key(
-        segment="market-prices-batch-1",
+        segment="market-prices:SEC-A",
         payload={"market_prices": [{"security_id": "SEC-A", "price": "10"}]},
     )
     evolved = demo_data_pack._demo_pack_idempotency_key(
-        segment="market-prices-batch-1",
+        segment="market-prices:SEC-A",
         payload={"market_prices": [{"security_id": "SEC-A", "price": "11"}]},
     )
 
     assert first == reordered
     assert first != evolved
-    assert first.startswith("lotus-demo-pack:v1:market-prices-batch-1:")
+    assert first.startswith("lotus-demo-pack:v2:market-prices:SEC-A:")
 
 
 def test_demo_pack_payload_classifies_idempotency_replay(monkeypatch):
