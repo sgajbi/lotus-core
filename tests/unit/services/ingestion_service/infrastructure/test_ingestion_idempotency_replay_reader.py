@@ -33,6 +33,10 @@ def _job(
         submitted_at=datetime(2026, 7, 17, tzinfo=UTC),
         completed_at=None,
         failure_reason=None,
+        failure_status_code=None,
+        failure_code=None,
+        failure_detail=None,
+        failure_headers=None,
         retry_count=0,
         last_retried_at=None,
         request_payload=request_payload,
@@ -89,6 +93,8 @@ async def test_matching_current_fingerprint_returns_established_job() -> None:
     assert result is not None
     assert result.job_id == "job-existing"
     assert result.accepted_count == 2
+    assert result.status == "queued"
+    assert result.failure_status_code is None
 
 
 async def test_different_current_fingerprint_does_not_replay() -> None:

@@ -1205,6 +1205,12 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
                 return IngestionIdempotencyReplay(
                     job_id=existing.job_id,
                     accepted_count=existing.accepted_count,
+                    status=existing.status,
+                    failure_reason=existing.failure_reason,
+                    failure_status_code=existing.failure_status_code,
+                    failure_code=existing.failure_code,
+                    failure_detail=existing.failure_detail,
+                    failure_headers=existing.failure_headers,
                 )
             return None
 
@@ -7602,21 +7608,38 @@ async def test_reprocess_transactions_returns_429_when_rate_limited(
 async def test_reprocess_transactions_records_remaining_unpublished_keys_on_partial_failure(
     async_test_client: httpx.AsyncClient,
     event_replay_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
     mock_kafka_producer: MagicMock,
 ):
     mock_kafka_producer.publish_message.side_effect = [None, RuntimeError("broker timeout")]
+    payload = {"transaction_ids": ["TXN1", "TXN2", "TXN3"]}
+    headers = {"X-Idempotency-Key": "reprocessing-partial-failure-replay-001"}
 
-    response = await async_test_client.post(
+    first = await async_test_client.post(
         "/reprocess/transactions",
-        json={"transaction_ids": ["TXN1", "TXN2", "TXN3"]},
+        json=payload,
+        headers=headers,
     )
 
     detail = _assert_publish_dependency_failure(
-        response,
+        first,
         failed_record_keys=["TXN2", "TXN3"],
         published_record_count=1,
     )
     failed_job_id = detail["job_id"]
+    first_publish_call_count = mock_kafka_producer.publish_message.call_count
+    ingestion_test_harness["fake_reprocessing_target_resolver"].unavailable = True
+
+    second = await async_test_client.post(
+        "/reprocess/transactions",
+        json=payload,
+        headers=headers,
+    )
+
+    assert second.status_code == first.status_code
+    assert second.json() == first.json()
+    assert second.headers["Retry-After"] == first.headers["Retry-After"] == "30"
+    assert mock_kafka_producer.publish_message.call_count == first_publish_call_count
 
     jobs_response = await event_replay_test_client.get(
         "/ingestion/jobs",

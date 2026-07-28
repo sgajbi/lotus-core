@@ -357,6 +357,12 @@ async def test_reprocessing_replay_does_not_require_source_resolution() -> None:
     handler.idempotency_replay_reader.find_matching_job.return_value = SimpleNamespace(
         job_id="job-replay",
         accepted_count=2,
+        status="queued",
+        failure_reason=None,
+        failure_status_code=None,
+        failure_code=None,
+        failure_detail=None,
+        failure_headers=None,
     )
 
     result = await handler.ingest_reprocessing_requests(
@@ -372,6 +378,46 @@ async def test_reprocessing_replay_does_not_require_source_resolution() -> None:
 
     assert result.replayed is True
     assert result.job_id == "job-replay"
+    handler.resolve_transaction_reprocessing_targets.execute.assert_not_awaited()
+    handler.ingestion_job_service.create_or_get_job.assert_not_awaited()
+    handler.ingestion_service.publish_reprocessing_requests.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_reprocessing_replay_reproduces_original_failure_before_source_resolution() -> None:
+    handler = _handler()
+    handler.ingestion_service.publish_reprocessing_requests = AsyncMock()
+    handler.idempotency_replay_reader.find_matching_job.return_value = SimpleNamespace(
+        job_id="job-failed-replay",
+        accepted_count=2,
+        status="failed",
+        failure_reason="broker timeout",
+        failure_status_code=503,
+        failure_code="INGESTION_PUBLISH_FAILED",
+        failure_detail={
+            "message": "broker timeout",
+            "dependency": "kafka",
+            "failed_record_keys": ["T1", "T2"],
+        },
+        failure_headers={"Retry-After": "30"},
+    )
+
+    with pytest.raises(IngestionPublishCommandError) as exc_info:
+        await handler.ingest_reprocessing_requests(
+            BatchPublishIngestionCommand(
+                endpoint="/reprocess/transactions",
+                entity_type="reprocessing_request",
+                records=["T1", "T2"],
+                idempotency_key="idem-reprocess",
+                request_payload={"transaction_ids": ["T1", "T2"]},
+                accepted_message="Reprocessing accepted.",
+            )
+        )
+
+    assert exc_info.value.status_code == 503
+    assert exc_info.value.detail["code"] == "INGESTION_PUBLISH_FAILED"
+    assert exc_info.value.detail["job_id"] == "job-failed-replay"
+    assert exc_info.value.headers == {"Retry-After": "30"}
     handler.resolve_transaction_reprocessing_targets.execute.assert_not_awaited()
     handler.ingestion_job_service.create_or_get_job.assert_not_awaited()
     handler.ingestion_service.publish_reprocessing_requests.assert_not_awaited()

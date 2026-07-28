@@ -8,10 +8,16 @@ from typing import Any, Protocol
 
 @dataclass(frozen=True, slots=True)
 class IngestionIdempotencyReplay:
-    """Minimal established-job evidence required to acknowledge a replay."""
+    """Established-job lifecycle evidence required to resolve a replay."""
 
     job_id: str
     accepted_count: int
+    status: str
+    failure_reason: str | None
+    failure_status_code: int | None
+    failure_code: str | None
+    failure_detail: dict[str, Any] | None
+    failure_headers: dict[str, str] | None
 
 
 class IngestionIdempotencyReplayReader(Protocol):
