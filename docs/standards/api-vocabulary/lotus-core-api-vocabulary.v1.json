@@ -13,7 +13,7 @@
       "openApiVersion": "3.1.0"
     }
   ],
-  "generatedAt": "2026-07-23T07:20:27.120560+00:00",
+  "generatedAt": "2026-07-28T00:37:11.144499+00:00",
   "attributeCatalog": [
     {
       "semanticId": "lotus.accepted_count",
@@ -2534,6 +2534,34 @@
       ]
     },
     {
+      "semanticId": "lotus.fact_status",
+      "canonicalTerm": "fact_status",
+      "preferredName": "fact_status",
+      "description": "Lifecycle state of this exact source assertion.",
+      "example": "ACTIVE",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "MarketPriceSourceFactStatus"
+      ]
+    },
+    {
+      "semanticId": "lotus.fact_version",
+      "canonicalTerm": "fact_version",
+      "preferredName": "fact_version",
+      "description": "Monotonically increasing correction version for the stable source record.",
+      "example": 1,
+      "type": "integer",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "integer"
+      ]
+    },
+    {
       "semanticId": "lotus.far_leg_group_id",
       "canonicalTerm": "far_leg_group_id",
       "preferredName": "far_leg_group_id",
@@ -4056,6 +4084,37 @@
       ]
     },
     {
+      "semanticId": "lotus.market_price_source_facts",
+      "canonicalTerm": "market_price_source_facts",
+      "preferredName": "market_price_source_facts",
+      "description": "Exact-scope source facts persisted atomically after correction and overlap checks.",
+      "example": [
+        {
+          "tenant_id": "default",
+          "legal_book_id": "LEGAL_BOOK_001",
+          "security_id": "AAPL",
+          "price_date": "2026-02-27",
+          "price": "99.250000000000000000",
+          "currency": "USD",
+          "quote_basis": "UNIT_PRICE",
+          "fact_status": "ACTIVE",
+          "fact_version": 1,
+          "source_system": "OMS_PRIMARY",
+          "source_record_id": "SOURCE_RECORD_001",
+          "source_revision": "example_source_revision",
+          "source_content_hash": "example_source_content_hash",
+          "observed_at": "2026-02-27T10:30:00Z"
+        }
+      ],
+      "type": "array",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "array"
+      ]
+    },
+    {
       "semanticId": "lotus.market_prices",
       "canonicalTerm": "market_prices",
       "preferredName": "market_prices",
@@ -4682,8 +4741,8 @@
       "semanticId": "lotus.observed_at",
       "canonicalTerm": "observed_at",
       "preferredName": "observed_at",
-      "description": "Timestamp when the upstream source observed or published the model definition.",
-      "example": "2026-03-20T09:00:00Z",
+      "description": "Timezone-aware instant at which the source observed this revision.",
+      "example": "2026-02-27T10:30:00Z",
       "type": "string",
       "locations": [
         "body"
@@ -5758,6 +5817,20 @@
       ],
       "observedTypes": [
         "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.quote_basis",
+      "canonicalTerm": "quote_basis",
+      "preferredName": "quote_basis",
+      "description": "Explicit representation used by the assigned valuation policy.",
+      "example": "UNIT_PRICE",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "MarketPriceQuoteBasis"
       ]
     },
     {
@@ -7379,6 +7452,20 @@
       ]
     },
     {
+      "semanticId": "lotus.source_content_hash",
+      "canonicalTerm": "source_content_hash",
+      "preferredName": "source_content_hash",
+      "description": "Lowercase SHA-256 digest of the authoritative source content.",
+      "example": "example_source_content_hash",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
       "semanticId": "lotus.source_digest",
       "canonicalTerm": "source_digest",
       "preferredName": "source_digest",
@@ -7483,8 +7570,8 @@
       "semanticId": "lotus.source_record_id",
       "canonicalTerm": "source_record_id",
       "preferredName": "source_record_id",
-      "description": "Source record identifier for deterministic replay.",
-      "example": "model_sg_balanced_202603",
+      "description": "Stable upstream record identity across corrections.",
+      "example": "SOURCE_RECORD_001",
       "type": "string",
       "locations": [
         "body"
@@ -7556,7 +7643,7 @@
       "semanticId": "lotus.source_revision",
       "canonicalTerm": "source_revision",
       "preferredName": "source_revision",
-      "description": "Source-native revision or change token retained for calculation lineage.",
+      "description": "Source-native revision retained for replay and lineage.",
       "example": "example_source_revision",
       "type": "string",
       "locations": [
@@ -23109,6 +23196,240 @@
             "type": "string",
             "semanticId": "lotus.currency",
             "attributeRef": "lotus.currency"
+          }
+        ]
+      },
+      "response": {
+        "httpStatus": 202,
+        "model": "BatchIngestionAcceptedResponse",
+        "fields": [
+          {
+            "name": "message",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.message",
+            "attributeRef": "lotus.message"
+          },
+          {
+            "name": "entity_type",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.entity_type",
+            "attributeRef": "lotus.entity_type"
+          },
+          {
+            "name": "accepted_count",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.accepted_count",
+            "attributeRef": "lotus.accepted_count"
+          },
+          {
+            "name": "correlation_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.correlation_id",
+            "attributeRef": "lotus.correlation_id"
+          },
+          {
+            "name": "request_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.request_id",
+            "attributeRef": "lotus.request_id"
+          },
+          {
+            "name": "trace_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.trace_id",
+            "attributeRef": "lotus.trace_id"
+          },
+          {
+            "name": "idempotency_key",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.idempotency_key",
+            "attributeRef": "lotus.idempotency_key"
+          },
+          {
+            "name": "job_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.job_id",
+            "attributeRef": "lotus.job_id"
+          }
+        ]
+      }
+    },
+    {
+      "operationId": "ingest_authoritative_market_price_source_facts_ingest_authoritative_market_price_source_facts_post",
+      "method": "POST",
+      "path": "/ingest/authoritative-market-price-source-facts",
+      "domain": "market_prices",
+      "serviceGroup": "ingestion",
+      "tags": [
+        "Market Prices"
+      ],
+      "summary": "Ingest authoritative market-price source facts",
+      "description": "What: Persist exact tenant, legal-book, instrument, business-date market-price authority with explicit quote representation and source lineage.\nHow: Validate finite values and stable source-version identity, then serialize corrections and reject competing active authority before atomic append-only persistence.\nWhen: Use for valuation-policy execution that must distinguish unit price from clean or dirty percent-of-principal quotes. The legacy unscoped market-price projection is not modified or treated as authority by this endpoint. An idempotency key replays the same accepted request and rejects a different payload.",
+      "naming": {
+        "boundedContext": "market_prices",
+        "canonicalTerms": [
+          "accepted_count",
+          "correlation_id",
+          "currency",
+          "entity_type",
+          "fact_status",
+          "fact_version",
+          "idempotency_key",
+          "job_id",
+          "legal_book_id",
+          "market_price_source_facts",
+          "message",
+          "observed_at",
+          "price",
+          "price_date",
+          "quote_basis",
+          "request_id",
+          "security_id",
+          "source_content_hash",
+          "source_record_id",
+          "source_revision",
+          "source_system",
+          "tenant_id",
+          "trace_id"
+        ]
+      },
+      "request": {
+        "fields": [
+          {
+            "name": "market_price_source_facts",
+            "location": "body",
+            "required": true,
+            "type": "array",
+            "semanticId": "lotus.market_price_source_facts",
+            "attributeRef": "lotus.market_price_source_facts"
+          },
+          {
+            "name": "market_price_source_facts[].tenant_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.tenant_id",
+            "attributeRef": "lotus.tenant_id"
+          },
+          {
+            "name": "market_price_source_facts[].legal_book_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.legal_book_id",
+            "attributeRef": "lotus.legal_book_id"
+          },
+          {
+            "name": "market_price_source_facts[].security_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.security_id",
+            "attributeRef": "lotus.security_id"
+          },
+          {
+            "name": "market_price_source_facts[].price_date",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.price_date",
+            "attributeRef": "lotus.price_date"
+          },
+          {
+            "name": "market_price_source_facts[].price",
+            "location": "body",
+            "required": true,
+            "type": "object",
+            "semanticId": "lotus.price",
+            "attributeRef": "lotus.price"
+          },
+          {
+            "name": "market_price_source_facts[].currency",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.currency",
+            "attributeRef": "lotus.currency"
+          },
+          {
+            "name": "market_price_source_facts[].quote_basis",
+            "location": "body",
+            "required": true,
+            "type": "MarketPriceQuoteBasis",
+            "semanticId": "lotus.quote_basis",
+            "attributeRef": "lotus.quote_basis"
+          },
+          {
+            "name": "market_price_source_facts[].fact_status",
+            "location": "body",
+            "required": true,
+            "type": "MarketPriceSourceFactStatus",
+            "semanticId": "lotus.fact_status",
+            "attributeRef": "lotus.fact_status"
+          },
+          {
+            "name": "market_price_source_facts[].fact_version",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.fact_version",
+            "attributeRef": "lotus.fact_version"
+          },
+          {
+            "name": "market_price_source_facts[].source_system",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.source_system",
+            "attributeRef": "lotus.source_system"
+          },
+          {
+            "name": "market_price_source_facts[].source_record_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.source_record_id",
+            "attributeRef": "lotus.source_record_id"
+          },
+          {
+            "name": "market_price_source_facts[].source_revision",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.source_revision",
+            "attributeRef": "lotus.source_revision"
+          },
+          {
+            "name": "market_price_source_facts[].source_content_hash",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.source_content_hash",
+            "attributeRef": "lotus.source_content_hash"
+          },
+          {
+            "name": "market_price_source_facts[].observed_at",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.observed_at",
+            "attributeRef": "lotus.observed_at"
           }
         ]
       },

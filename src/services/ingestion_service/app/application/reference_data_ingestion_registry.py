@@ -87,6 +87,13 @@ REFERENCE_DATA_INGESTION_REGISTRY = ReferenceDataIngestionRegistry(
             persist_method_name="upsert_instrument_valuation_policy_assignments",
         ),
         ReferenceDataIngestionCommand(
+            command_key="authoritative_market_price_source_fact",
+            endpoint="/ingest/authoritative-market-price-source-facts",
+            entity_type="authoritative_market_price_source_fact",
+            records_attribute="market_price_source_facts",
+            persist_method_name="append_authoritative_market_price_source_facts",
+        ),
+        ReferenceDataIngestionCommand(
             command_key="mandate_binding",
             endpoint="/ingest/mandate-bindings",
             entity_type="mandate_binding",

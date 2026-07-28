@@ -1039,6 +1039,7 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
                 "cash_accounts": [],
                 "lookthrough_components": [],
                 "valuation_policy_assignments": [],
+                "market_price_source_facts": [],
             }
 
         async def upsert_portfolio_benchmark_assignments(
@@ -1112,6 +1113,11 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             self, records: list[dict[str, object]]
         ) -> None:
             self.persisted["valuation_policy_assignments"].extend(records)
+
+        async def append_authoritative_market_price_source_facts(
+            self, records: list[dict[str, object]]
+        ) -> None:
+            self.persisted["market_price_source_facts"].extend(records)
 
     class FakeBusinessCalendarRepository:
         def __init__(self):
@@ -8262,5 +8268,132 @@ async def test_ingest_instrument_valuation_policy_assignment_rejects_batch_overl
         ingestion_test_harness["fake_reference_data_service"].persisted[
             "valuation_policy_assignments"
         ]
+        == []
+    )
+
+
+async def test_ingest_authoritative_market_price_source_fact_preserves_representation_and_lineage(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    response = await async_test_client.post(
+        "/ingest/authoritative-market-price-source-facts",
+        json={
+            "market_price_source_facts": [
+                {
+                    "tenant_id": " LOTUS_PB_SG ",
+                    "legal_book_id": " SG_PRIVATE_BANK_BOOK ",
+                    "security_id": " BOND_US_CORP_2031 ",
+                    "price_date": "2026-07-28",
+                    "price": "99.250000000000000000",
+                    "currency": " usd ",
+                    "quote_basis": "PERCENT_OF_PRINCIPAL_CLEAN",
+                    "fact_status": "ACTIVE",
+                    "fact_version": 1,
+                    "source_system": " approved_market_data ",
+                    "source_record_id": " PX-BOND_US_CORP_2031-20260728 ",
+                    "source_revision": " rev-1 ",
+                    "source_content_hash": "a" * 64,
+                    "observed_at": "2026-07-28T09:30:00+08:00",
+                }
+            ]
+        },
+        headers={"X-Idempotency-Key": "market-price-authority-idem-001"},
+    )
+
+    assert response.status_code == 202
+    assert response.json()["entity_type"] == "authoritative_market_price_source_fact"
+    persisted = ingestion_test_harness["fake_reference_data_service"].persisted[
+        "market_price_source_facts"
+    ]
+    assert len(persisted) == 1
+    assert persisted[0]["tenant_id"] == "LOTUS_PB_SG"
+    assert persisted[0]["legal_book_id"] == "SG_PRIVATE_BANK_BOOK"
+    assert persisted[0]["currency"] == "USD"
+    assert persisted[0]["quote_basis"] == "PERCENT_OF_PRINCIPAL_CLEAN"
+    assert persisted[0]["source_revision"] == "rev-1"
+
+
+async def test_ingest_authoritative_market_price_source_fact_replays_idempotently(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    payload = {
+        "market_price_source_facts": [
+            {
+                "tenant_id": "LOTUS_PB_SG",
+                "legal_book_id": "SG_PRIVATE_BANK_BOOK",
+                "security_id": "BOND_US_CORP_2031",
+                "price_date": "2026-07-28",
+                "price": "99.25",
+                "currency": "USD",
+                "quote_basis": "PERCENT_OF_PRINCIPAL_CLEAN",
+                "fact_status": "ACTIVE",
+                "fact_version": 1,
+                "source_system": "approved_market_data",
+                "source_record_id": "PX-BOND_US_CORP_2031-20260728",
+                "source_revision": "rev-1",
+                "source_content_hash": "a" * 64,
+                "observed_at": "2026-07-28T09:30:00+08:00",
+            }
+        ]
+    }
+    headers = {"X-Idempotency-Key": "market-price-authority-replay-001"}
+
+    first = await async_test_client.post(
+        "/ingest/authoritative-market-price-source-facts",
+        json=payload,
+        headers=headers,
+    )
+    replay = await async_test_client.post(
+        "/ingest/authoritative-market-price-source-facts",
+        json=payload,
+        headers=headers,
+    )
+
+    assert first.status_code == 202
+    assert replay.status_code == 202
+    assert replay.json()["job_id"] == first.json()["job_id"]
+    assert "replay" in replay.json()["message"].lower()
+    assert (
+        len(
+            ingestion_test_harness["fake_reference_data_service"].persisted[
+                "market_price_source_facts"
+            ]
+        )
+        == 1
+    )
+
+
+async def test_ingest_authoritative_market_price_source_fact_rejects_duplicate_source_version(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+):
+    record = {
+        "tenant_id": "LOTUS_PB_SG",
+        "legal_book_id": "SG_PRIVATE_BANK_BOOK",
+        "security_id": "BOND_US_CORP_2031",
+        "price_date": "2026-07-28",
+        "price": "99.25",
+        "currency": "USD",
+        "quote_basis": "PERCENT_OF_PRINCIPAL_CLEAN",
+        "fact_status": "ACTIVE",
+        "fact_version": 1,
+        "source_system": "approved_market_data",
+        "source_record_id": "PX-BOND_US_CORP_2031-20260728",
+        "source_revision": "rev-1",
+        "source_content_hash": "a" * 64,
+        "observed_at": "2026-07-28T09:30:00+08:00",
+    }
+
+    response = await async_test_client.post(
+        "/ingest/authoritative-market-price-source-facts",
+        json={"market_price_source_facts": [record, dict(record)]},
+    )
+
+    assert response.status_code == 422
+    assert "duplicate source-version identities" in response.text
+    assert (
+        ingestion_test_harness["fake_reference_data_service"].persisted["market_price_source_facts"]
         == []
     )

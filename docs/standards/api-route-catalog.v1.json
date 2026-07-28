@@ -1906,6 +1906,71 @@
     {
       "service_app": "ingestion_service",
       "method": "POST",
+      "path": "/ingest/authoritative-market-price-source-facts",
+      "route_key": "POST /ingest/authoritative-market-price-source-facts",
+      "operation_id": "ingest_authoritative_market_price_source_facts_ingest_authoritative_market_price_source_facts_post",
+      "summary": "Ingest authoritative market-price source facts",
+      "tags": [
+        "Market Prices"
+      ],
+      "route_family": "Write Ingress",
+      "api_version": "unversioned-current",
+      "api_status": "active",
+      "owner": "ingestion_service",
+      "auth_requirement": "governed-enterprise-readiness",
+      "audit_requirement": "audit-required",
+      "request_schema": "AuthoritativeMarketPriceSourceFactIngestionRequest",
+      "response_schemas": [
+        {
+          "status_code": "202",
+          "schema": "BatchIngestionAcceptedResponse",
+          "description": "Successful Response"
+        }
+      ],
+      "error_models": [
+        {
+          "status_code": "409",
+          "schema": "none",
+          "description": "A source correction, authority overlap, or idempotency conflict blocked the write."
+        },
+        {
+          "status_code": "422",
+          "schema": "HTTPValidationError",
+          "description": "Validation Error"
+        },
+        {
+          "status_code": "429",
+          "schema": "none",
+          "description": "Write-rate protection blocked the authoritative price request."
+        },
+        {
+          "status_code": "500",
+          "schema": "none",
+          "description": "Persistence failed after ingestion job metadata was recorded."
+        },
+        {
+          "status_code": "503",
+          "schema": "none",
+          "description": "Ingestion operating mode blocked writes."
+        }
+      ],
+      "pagination": [],
+      "filtering": [],
+      "sorting": [],
+      "idempotency_behavior": "idempotency-key-aware",
+      "downstream_consumers": [
+        "source-adapters",
+        "operations"
+      ],
+      "deprecated_alias_metadata": {
+        "is_deprecated": false,
+        "sunset": null,
+        "compatibility": "not_applicable"
+      }
+    },
+    {
+      "service_app": "ingestion_service",
+      "method": "POST",
       "path": "/ingest/benchmark-assignments",
       "route_key": "POST /ingest/benchmark-assignments",
       "operation_id": "ingest_benchmark_assignments_ingest_benchmark_assignments_post",

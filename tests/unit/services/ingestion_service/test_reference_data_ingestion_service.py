@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -854,3 +854,71 @@ async def test_upsert_lookthrough_components_uses_effective_key_conflict() -> No
     assert "instrument_lookthrough_components" in compiled
     assert "ON CONFLICT (parent_security_id, component_security_id, effective_from)" in compiled
     db.commit.assert_awaited_once()
+
+
+def _authoritative_market_price_record() -> dict[str, object]:
+    return {
+        "tenant_id": "LOTUS_PB_SG",
+        "legal_book_id": "SG_PRIVATE_BANK_BOOK",
+        "security_id": "BOND_US_CORP_2031",
+        "price_date": "2026-07-28",
+        "price": "99.25",
+        "currency": "USD",
+        "quote_basis": "PERCENT_OF_PRINCIPAL_CLEAN",
+        "fact_status": "ACTIVE",
+        "fact_version": 1,
+        "source_system": "approved_market_data",
+        "source_record_id": "PX-BOND_US_CORP_2031-20260728",
+        "source_revision": "rev-1",
+        "source_content_hash": "a" * 64,
+        "observed_at": "2026-07-28T09:30:00+08:00",
+    }
+
+
+@pytest.mark.asyncio
+async def test_append_authoritative_market_price_source_facts_commits_atomically() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    writer = AsyncMock()
+    service = ReferenceDataIngestionService(db)
+
+    with patch(
+        "src.services.ingestion_service.app.services."
+        "reference_data_ingestion_service.MarketPriceSourceFactWriter",
+        return_value=writer,
+    ):
+        await service.append_authoritative_market_price_source_facts(
+            [_authoritative_market_price_record()]
+        )
+
+    appended_facts = writer.append_many.await_args.args[0]
+    assert len(appended_facts) == 1
+    assert appended_facts[0].scope.key == (
+        "LOTUS_PB_SG",
+        "SG_PRIVATE_BANK_BOOK",
+        "BOND_US_CORP_2031",
+    )
+    db.commit.assert_awaited_once()
+    db.rollback.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_append_authoritative_market_price_source_facts_rolls_back_on_conflict() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    writer = AsyncMock()
+    writer.append_many.side_effect = ValueError("competing authority")
+    service = ReferenceDataIngestionService(db)
+
+    with (
+        patch(
+            "src.services.ingestion_service.app.services."
+            "reference_data_ingestion_service.MarketPriceSourceFactWriter",
+            return_value=writer,
+        ),
+        pytest.raises(ValueError, match="competing authority"),
+    ):
+        await service.append_authoritative_market_price_source_facts(
+            [_authoritative_market_price_record()]
+        )
+
+    db.commit.assert_not_awaited()
+    db.rollback.assert_awaited_once()

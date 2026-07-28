@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 from portfolio_common.domain.valuation.assignments import ValuationPolicyAssignmentError
+from portfolio_common.domain.valuation.source_facts import MarketPriceSourceFactError
 
 from src.services.ingestion_service.app.services.reference_data_ingestion_commands import (
     ReferenceDataBookkeepingFailed,
@@ -146,6 +147,36 @@ async def test_reference_data_command_maps_valuation_authority_conflict_to_409()
     handler.ingestion_job_service.mark_failed.assert_awaited_once_with(
         "ref-job-1",
         "overlapping valuation authority",
+        failure_phase="persist",
+    )
+
+
+@pytest.mark.asyncio
+async def test_reference_data_command_maps_market_price_authority_conflict_to_409() -> None:
+    handler = _handler()
+    registry_command = _registry_command(
+        persist_side_effect=MarketPriceSourceFactError("competing exact price authority")
+    )
+
+    with pytest.raises(ReferenceDataIngestionCommandError) as exc_info:
+        await handler.ingest_reference_data(
+            ReferenceDataIngestionCommand(
+                endpoint="/ingest/authoritative-market-price-source-facts",
+                idempotency_key="market-price-authority-conflict",
+                registry_command=registry_command,
+                request=SimpleNamespace(records=[{"id": "R1"}]),
+            )
+        )
+
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail == {
+        "code": "MARKET_PRICE_SOURCE_FACT_CONFLICT",
+        "message": "competing exact price authority",
+        "job_id": "ref-job-1",
+    }
+    handler.ingestion_job_service.mark_failed.assert_awaited_once_with(
+        "ref-job-1",
+        "competing exact price authority",
         failure_phase="persist",
     )
 

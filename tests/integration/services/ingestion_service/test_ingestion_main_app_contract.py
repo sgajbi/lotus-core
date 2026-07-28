@@ -297,6 +297,7 @@ async def test_openapi_describes_ingestion_idempotency_conflict_response(async_t
         "/ingest/transactions",
         "/ingest/instruments",
         "/ingest/market-prices",
+        "/ingest/authoritative-market-price-source-facts",
         "/ingest/fx-rates",
         "/ingest/business-dates",
         "/ingest/portfolio-bundle",
@@ -995,6 +996,10 @@ async def test_openapi_describes_reference_data_shared_schema(async_test_client)
     mandate_binding_request = components["DiscretionaryMandateBindingIngestionRequest"]
     party_role_request = components["PortfolioPartyRoleAssignmentIngestionRequest"]
     valuation_policy_request = components["InstrumentValuationPolicyAssignmentIngestionRequest"]
+    market_price_source_fact = components["AuthoritativeMarketPriceSourceFact"]
+    market_price_source_fact_request = components[
+        "AuthoritativeMarketPriceSourceFactIngestionRequest"
+    ]
     index_definition_request = components["IndexDefinitionIngestionRequest"]
     classification_request = components["ClassificationTaxonomyIngestionRequest"]
 
@@ -1047,6 +1052,34 @@ async def test_openapi_describes_reference_data_shared_schema(async_test_client)
     )
     assert valuation_policy_conflicts["idempotency_conflict"]["value"]["detail"]["code"] == (
         "INGESTION_IDEMPOTENCY_CONFLICT"
+    )
+    assert market_price_source_fact["properties"]["quote_basis"]["description"] == (
+        "Explicit representation used by the assigned valuation policy."
+    )
+    assert market_price_source_fact["properties"]["source_content_hash"]["pattern"] == (
+        "^[0-9a-f]{64}$"
+    )
+    assert (
+        market_price_source_fact_request["properties"]["market_price_source_facts"]["maxItems"]
+        == 500
+    )
+    market_price_source_fact_operation = response.json()["paths"][
+        "/ingest/authoritative-market-price-source-facts"
+    ]["post"]
+    market_price_source_fact_conflicts = market_price_source_fact_operation["responses"]["409"][
+        "content"
+    ]["application/json"]["examples"]
+    assert market_price_source_fact_conflicts["policy_blocked"]["value"]["detail"]["code"] == (
+        "MARKET_PRICE_SOURCE_FACT_CONFLICT"
+    )
+    assert market_price_source_fact_conflicts["idempotency_conflict"]["value"]["detail"][
+        "code"
+    ] == ("INGESTION_IDEMPOTENCY_CONFLICT")
+    assert (
+        market_price_source_fact_operation["responses"]["500"]["content"]["application/json"][
+            "example"
+        ]["detail"]["code"]
+        == "REFERENCE_DATA_PERSIST_FAILED"
     )
     assert index_definition_request["properties"]["indices"]["examples"] == [
         [
