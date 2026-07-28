@@ -2436,6 +2436,18 @@ class PositionTimeseries(Base):
     )
 
     __table_args__ = (
+        _finite_numeric_check_constraint(
+            "ck_position_timeseries_values_finite",
+            "bod_market_value",
+            "bod_cashflow_position",
+            "eod_cashflow_position",
+            "bod_cashflow_portfolio",
+            "eod_cashflow_portfolio",
+            "eod_market_value",
+            "fees",
+            "quantity",
+            "cost",
+        ),
         Index(
             "ix_pos_ts_norm_port_sec_date_epoch",
             func.trim(portfolio_id),
@@ -2477,6 +2489,14 @@ class PortfolioTimeseries(Base):
     )
 
     __table_args__ = (
+        _finite_numeric_check_constraint(
+            "ck_portfolio_timeseries_values_finite",
+            "bod_market_value",
+            "bod_cashflow",
+            "eod_cashflow",
+            "eod_market_value",
+            "fees",
+        ),
         Index(
             "ix_port_ts_norm_port_date_epoch",
             func.trim(portfolio_id),
@@ -3256,6 +3276,14 @@ class FinancialReconciliationRun(Base):
     )
 
     __table_args__ = (
+        _finite_numeric_check_constraint(
+            "ck_fin_recon_tolerance_finite",
+            "tolerance",
+        ),
+        CheckConstraint(
+            "tolerance >= 0",
+            name="ck_fin_recon_tolerance_nonnegative",
+        ),
         CheckConstraint(
             "aggregation_revision IS NULL OR aggregation_revision >= 0",
             name="ck_fin_recon_aggregation_revision_nonnegative",

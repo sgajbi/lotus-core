@@ -172,25 +172,25 @@
       "remaining_offset_local": {"profile": "nonnegative-finite", "rollout_status": "orm-enforced"}
     },
     "position_timeseries": {
-      "bod_market_value": {"profile": "finite", "rollout_status": "planned"},
-      "bod_cashflow_position": {"profile": "finite", "rollout_status": "planned"},
-      "eod_cashflow_position": {"profile": "finite", "rollout_status": "planned"},
-      "bod_cashflow_portfolio": {"profile": "finite", "rollout_status": "planned"},
-      "eod_cashflow_portfolio": {"profile": "finite", "rollout_status": "planned"},
-      "eod_market_value": {"profile": "finite", "rollout_status": "planned"},
-      "fees": {"profile": "finite", "rollout_status": "planned"},
-      "quantity": {"profile": "finite", "rollout_status": "planned"},
-      "cost": {"profile": "finite", "rollout_status": "planned"}
+      "bod_market_value": {"profile": "finite", "rollout_status": "orm-enforced"},
+      "bod_cashflow_position": {"profile": "finite", "rollout_status": "orm-enforced"},
+      "eod_cashflow_position": {"profile": "finite", "rollout_status": "orm-enforced"},
+      "bod_cashflow_portfolio": {"profile": "finite", "rollout_status": "orm-enforced"},
+      "eod_cashflow_portfolio": {"profile": "finite", "rollout_status": "orm-enforced"},
+      "eod_market_value": {"profile": "finite", "rollout_status": "orm-enforced"},
+      "fees": {"profile": "finite", "rollout_status": "orm-enforced"},
+      "quantity": {"profile": "finite", "rollout_status": "orm-enforced"},
+      "cost": {"profile": "finite", "rollout_status": "orm-enforced"}
     },
     "portfolio_timeseries": {
-      "bod_market_value": {"profile": "finite", "rollout_status": "planned"},
-      "bod_cashflow": {"profile": "finite", "rollout_status": "planned"},
-      "eod_cashflow": {"profile": "finite", "rollout_status": "planned"},
-      "eod_market_value": {"profile": "finite", "rollout_status": "planned"},
-      "fees": {"profile": "finite", "rollout_status": "planned"}
+      "bod_market_value": {"profile": "finite", "rollout_status": "orm-enforced"},
+      "bod_cashflow": {"profile": "finite", "rollout_status": "orm-enforced"},
+      "eod_cashflow": {"profile": "finite", "rollout_status": "orm-enforced"},
+      "eod_market_value": {"profile": "finite", "rollout_status": "orm-enforced"},
+      "fees": {"profile": "finite", "rollout_status": "orm-enforced"}
     },
     "financial_reconciliation_runs": {
-      "tolerance": {"profile": "nullable-nonnegative-finite", "rollout_status": "planned"}
+      "tolerance": {"profile": "nullable-nonnegative-finite", "rollout_status": "orm-enforced"}
     }
   }
 }

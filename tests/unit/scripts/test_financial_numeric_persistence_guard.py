@@ -538,9 +538,9 @@ def test_repository_contract_classifies_inventory_and_persistence_semantics() ->
 
     assert report.numeric_column_count == 96
     assert report.table_count == 30
-    assert report.orm_enforced_count == 81
+    assert report.orm_enforced_count == 96
     assert report.database_enforced_count == 0
-    assert report.planned_count == 15
+    assert report.planned_count == 0
     assert transaction_profiles["quantity"] == "nonnegative-finite"
     assert transaction_profiles["price"] == "nonnegative-finite"
     assert transaction_profiles["gross_transaction_amount"] == "nonnegative-finite"
