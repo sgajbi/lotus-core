@@ -15,9 +15,6 @@ from ..services.business_date_ingestion_commands import (
     BusinessDateIngestionCommandHandler,
     BusinessDateIngestionPublishUnavailable,
 )
-from .job_bookkeeping import (
-    post_publish_bookkeeping_failure_detail,
-)
 from .publish_errors import (
     ingestion_idempotency_conflict_response,
     ingestion_publish_failed_example,
@@ -114,19 +111,17 @@ async def ingest_business_dates(
             )
         )
     except BusinessDateIngestionCommandError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail=exc.detail,
+            headers=exc.headers,
+        ) from exc
     except BusinessDateIngestionPublishUnavailable as exc:
         raise_ingestion_publish_unavailable(exc.publish_error, job_id=exc.job_id)
     except BusinessDateBookkeepingFailed as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=post_publish_bookkeeping_failure_detail(
-                job_id=exc.job_id,
-                failure_phase=exc.failure_phase,
-                publish_state=exc.publish_state,
-                work_state=exc.work_state,
-                published_record_count=exc.published_record_count,
-            ),
+            detail=exc.detail,
         ) from exc
 
     if not result.replayed:

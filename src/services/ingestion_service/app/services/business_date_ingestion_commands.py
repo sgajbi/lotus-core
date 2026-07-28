@@ -4,6 +4,18 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
+from ..application.ingestion_bookkeeping_outcome import (
+    INGESTION_JOB_BOOKKEEPING_FAILED_CODE,
+    build_ingestion_bookkeeping_failure_detail,
+)
+from ..application.ingestion_idempotency_replay import (
+    resolve_ingestion_idempotency_replay,
+)
+from ..application.ingestion_publish_outcome import (
+    INGESTION_PUBLISH_FAILED_CODE,
+    INGESTION_PUBLISH_RETRY_AFTER_SECONDS,
+    build_ingestion_publish_failure_detail,
+)
 from ..DTOs.business_date_dto import BusinessDateIngestionRequest
 from ..ops_controls import enforce_ingestion_write_rate_limit
 from ..request_metadata import create_ingestion_job_id, get_request_lineage
@@ -11,6 +23,7 @@ from .business_date_ingestion_policy import (
     BusinessDateIngestionPolicy,
     BusinessDatePolicyViolation,
 )
+from .ingestion_job_lifecycle import IngestionJobCreateResult
 from .ingestion_job_service import IngestionJobService
 from .ingestion_service import IngestionPublishError, IngestionService
 
@@ -22,10 +35,17 @@ HTTP_SERVICE_UNAVAILABLE = 503
 
 
 class BusinessDateIngestionCommandError(Exception):
-    def __init__(self, status_code: int, detail: dict[str, Any]) -> None:
+    def __init__(
+        self,
+        status_code: int,
+        detail: dict[str, Any],
+        *,
+        headers: dict[str, str] | None = None,
+    ) -> None:
         super().__init__(str(detail.get("message", detail.get("code", "command failed"))))
         self.status_code = status_code
         self.detail = detail
+        self.headers = headers
 
 
 class BusinessDateIngestionPublishUnavailable(Exception):
@@ -36,10 +56,17 @@ class BusinessDateIngestionPublishUnavailable(Exception):
 
 
 class BusinessDateBookkeepingFailed(Exception):
-    def __init__(self, *, job_id: str, published_record_count: int) -> None:
+    def __init__(
+        self,
+        *,
+        job_id: str,
+        published_record_count: int,
+        detail: dict[str, object],
+    ) -> None:
         super().__init__("Business-date ingestion bookkeeping failed after publish.")
         self.job_id = job_id
         self.published_record_count = published_record_count
+        self.detail = detail
         self.failure_phase = "queue_bookkeeping"
         self.publish_state = "published"
         self.work_state = "published"
@@ -81,6 +108,18 @@ class BusinessDateIngestionCommandHandler:
             accepted_count=accepted_count,
         )
         if not job_result.created:
+            replay = resolve_ingestion_idempotency_replay(job_result.job)
+            if not replay.accepted:
+                raise BusinessDateIngestionCommandError(
+                    replay.status_code or 500,
+                    replay.detail
+                    or {
+                        "code": "INGESTION_REPLAY_STATE_INVALID",
+                        "message": "The stored ingestion replay outcome is incomplete.",
+                        "job_id": job_result.job.job_id,
+                    },
+                    headers=replay.headers,
+                )
             return BusinessDateIngestionCommandResult(
                 message="Duplicate ingestion request accepted via idempotency replay.",
                 job_id=job_result.job.job_id,
@@ -141,7 +180,7 @@ class BusinessDateIngestionCommandHandler:
         *,
         command: BusinessDateIngestionCommand,
         accepted_count: int,
-    ):
+    ) -> IngestionJobCreateResult:
         correlation_id, request_id, trace_id = get_request_lineage()
         return await self.ingestion_job_service.create_or_get_job(
             job_id=create_ingestion_job_id(),
@@ -167,10 +206,24 @@ class BusinessDateIngestionCommandHandler:
                 idempotency_key=command.idempotency_key,
             )
         except IngestionPublishError as exc:
+            correlation_id, request_id, trace_id = get_request_lineage()
+            detail = build_ingestion_publish_failure_detail(
+                message=str(exc),
+                failed_record_keys=exc.failed_record_keys,
+                published_record_count=exc.published_record_count,
+                job_id=job_id,
+                correlation_id=correlation_id,
+                request_id=request_id,
+                trace_id=trace_id,
+            )
             await self.ingestion_job_service.mark_failed(
                 job_id,
                 str(exc),
                 failed_record_keys=exc.failed_record_keys,
+                failure_status_code=HTTP_SERVICE_UNAVAILABLE,
+                failure_code=INGESTION_PUBLISH_FAILED_CODE,
+                failure_detail=detail,
+                failure_headers={"Retry-After": str(INGESTION_PUBLISH_RETRY_AFTER_SECONDS)},
             )
             raise BusinessDateIngestionPublishUnavailable(
                 publish_error=exc,
@@ -189,31 +242,59 @@ class BusinessDateIngestionCommandHandler:
         try:
             queued = await self.ingestion_job_service.mark_queued(job_id)
         except Exception as exc:
-            await self._record_bookkeeping_failure(job_id=job_id, failure_reason=str(exc))
+            detail = await self._record_bookkeeping_failure(
+                job_id=job_id,
+                failure_reason=str(exc),
+                published_record_count=published_record_count,
+            )
             raise BusinessDateBookkeepingFailed(
                 job_id=job_id,
                 published_record_count=published_record_count,
+                detail=detail,
             ) from exc
 
         if not queued:
-            await self._record_bookkeeping_failure(
+            detail = await self._record_bookkeeping_failure(
                 job_id=job_id,
                 failure_reason="job queue transition was rejected",
+                published_record_count=published_record_count,
             )
             raise BusinessDateBookkeepingFailed(
                 job_id=job_id,
                 published_record_count=published_record_count,
+                detail=detail,
             )
 
-    async def _record_bookkeeping_failure(self, *, job_id: str, failure_reason: str) -> None:
+    async def _record_bookkeeping_failure(
+        self,
+        *,
+        job_id: str,
+        failure_reason: str,
+        published_record_count: int,
+    ) -> dict[str, object]:
+        correlation_id, request_id, trace_id = get_request_lineage()
+        detail: dict[str, object] = build_ingestion_bookkeeping_failure_detail(
+            job_id=job_id,
+            failure_phase="queue_bookkeeping",
+            publish_state="published",
+            work_state="published",
+            published_record_count=published_record_count,
+            correlation_id=correlation_id,
+            request_id=request_id,
+            trace_id=trace_id,
+        )
         try:
             await self.ingestion_job_service.record_failure_observation(
                 job_id,
                 failure_reason,
                 failure_phase="queue_bookkeeping",
+                failure_status_code=500,
+                failure_code=INGESTION_JOB_BOOKKEEPING_FAILED_CODE,
+                failure_detail=detail,
             )
         except Exception:
             logger.exception(
                 "Failed to persist ingestion bookkeeping failure observation.",
                 extra={"job_id": job_id, "failure_phase": "queue_bookkeeping"},
             )
+        return detail
