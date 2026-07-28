@@ -168,6 +168,13 @@ def _contract(
         },
         "default_storage_shape": "bounded-18-10",
         "storage_shape_overrides": {},
+        "domain_families": {
+            "financial-test": {
+                "owner": "test-owner",
+                "boundary_class": "api-command",
+            }
+        },
+        "table_domain_families": {"financial_rows": "financial-test"},
         "tables": {
             "financial_rows": {column: {"profile": profile, "rollout_status": rollout_status}}
         },
@@ -211,6 +218,7 @@ def test_guard_accepts_explicit_finiteness_and_sign_policy(tmp_path: Path) -> No
     assert report.table_count == 1
     assert report.bounded_numeric_count == 1
     assert report.unbounded_numeric_count == 0
+    assert report.domain_family_count == 1
     assert report.orm_enforced_count == 1
     assert report.database_enforced_count == 0
     assert report.planned_count == 0
@@ -461,7 +469,8 @@ def test_guard_rejects_unsupported_contract_extension_in_v2(tmp_path: Path) -> N
     assert (
         "contract v2 keys must be schema_version, model_path, expected_inventory, "
         "profiles, rollout_statuses, storage_shapes, default_storage_shape, "
-        "storage_shape_overrides, and tables" in evaluate_guard(tmp_path, contract_path).findings
+        "storage_shape_overrides, domain_families, table_domain_families, and tables"
+        in evaluate_guard(tmp_path, contract_path).findings
     )
 
 
@@ -538,6 +547,68 @@ def test_guard_rejects_invalid_storage_shape_definitions(
     storage_shapes = contract["storage_shapes"]
     assert isinstance(storage_shapes, dict)
     storage_shapes["bounded-18-10"] = shape
+    contract_path = _write_fixture(
+        tmp_path,
+        model=_model(
+            constraint=(
+                "value NOT IN ('NaN'::numeric, 'Infinity'::numeric, "
+                "'-Infinity'::numeric) AND value > 0"
+            )
+        ),
+        contract=contract,
+    )
+
+    assert expected_finding in evaluate_guard(tmp_path, contract_path).findings
+
+
+def test_guard_rejects_missing_stale_and_unknown_domain_family_mappings(
+    tmp_path: Path,
+) -> None:
+    contract = _contract()
+    contract["table_domain_families"] = {
+        "financial_rows": "unknown-family",
+        "stale_rows": "financial-test",
+    }
+    contract_path = _write_fixture(
+        tmp_path,
+        model=_model(
+            constraint=(
+                "value NOT IN ('NaN'::numeric, 'Infinity'::numeric, "
+                "'-Infinity'::numeric) AND value > 0"
+            )
+        ),
+        contract=contract,
+    )
+
+    findings = evaluate_guard(tmp_path, contract_path).findings
+
+    assert "financial_rows: domain-family mapping names unknown family 'unknown-family'" in findings
+    assert "stale_rows: domain-family mapping has no classified Numeric table" in findings
+    assert "domain family 'financial-test' is not assigned to a Numeric table" in findings
+
+
+@pytest.mark.parametrize(
+    ("family", "expected_finding"),
+    [
+        (
+            {"owner": "Test Owner", "boundary_class": "api-command"},
+            "domain family 'financial-test' has invalid owner 'Test Owner'",
+        ),
+        (
+            {"owner": "test-owner", "boundary_class": "database"},
+            "domain family 'financial-test' has unsupported boundary_class 'database'",
+        ),
+    ],
+)
+def test_guard_rejects_invalid_domain_family_metadata(
+    tmp_path: Path,
+    family: dict[str, str],
+    expected_finding: str,
+) -> None:
+    contract = _contract()
+    domain_families = contract["domain_families"]
+    assert isinstance(domain_families, dict)
+    domain_families["financial-test"] = family
     contract_path = _write_fixture(
         tmp_path,
         model=_model(
@@ -714,6 +785,7 @@ def test_repository_contract_classifies_inventory_and_persistence_semantics() ->
     assert report.table_count == 30
     assert report.bounded_numeric_count == 95
     assert report.unbounded_numeric_count == 1
+    assert report.domain_family_count == 10
     assert report.orm_enforced_count == 96
     assert report.database_enforced_count == 0
     assert report.planned_count == 0

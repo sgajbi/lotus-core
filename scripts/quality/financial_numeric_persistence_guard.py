@@ -32,10 +32,19 @@ _V2_CONTRACT_KEYS = {
     "storage_shapes",
     "default_storage_shape",
     "storage_shape_overrides",
+    "domain_families",
+    "table_domain_families",
     "tables",
 }
 _STORAGE_SHAPE_KEYS = {"mode", "precision", "scale"}
 _STORAGE_SHAPE_MODES = {"bounded", "exact-unbounded"}
+_DOMAIN_FAMILY_KEYS = {"owner", "boundary_class"}
+_BOUNDARY_CLASSES = {
+    "api-command",
+    "calculation-state",
+    "control-policy",
+    "reference-source",
+}
 
 
 class DuplicateContractKeyError(ValueError):
@@ -71,6 +80,7 @@ class GuardReport:
     table_count: int
     bounded_numeric_count: int
     unbounded_numeric_count: int
+    domain_family_count: int
     orm_enforced_count: int
     database_enforced_count: int
     planned_count: int
@@ -692,6 +702,54 @@ def _resolved_storage_shape_names(
     return resolved
 
 
+def _table_domain_families(
+    contract: dict[str, Any],
+    *,
+    table_names: set[str],
+    findings: list[str],
+) -> dict[str, str]:
+    families = contract.get("domain_families")
+    if not isinstance(families, dict) or not families:
+        findings.append("contract.domain_families must be a non-empty object")
+        families = {}
+    for name, classification in families.items():
+        if not isinstance(name, str) or not re.fullmatch(r"[a-z][a-z0-9-]*", name):
+            findings.append(f"invalid domain-family name: {name!r}")
+            continue
+        if not isinstance(classification, dict) or set(classification) != _DOMAIN_FAMILY_KEYS:
+            findings.append(f"domain family {name!r} must contain owner and boundary_class")
+            continue
+        owner = classification.get("owner")
+        boundary_class = classification.get("boundary_class")
+        if not isinstance(owner, str) or not re.fullmatch(r"[a-z][a-z0-9-]*", owner):
+            findings.append(f"domain family {name!r} has invalid owner {owner!r}")
+        if boundary_class not in _BOUNDARY_CLASSES:
+            findings.append(
+                f"domain family {name!r} has unsupported boundary_class {boundary_class!r}"
+            )
+
+    mappings = contract.get("table_domain_families")
+    if not isinstance(mappings, dict):
+        findings.append("contract.table_domain_families must be an object")
+        mappings = {}
+    mapping_names = {name for name in mappings if isinstance(name, str)}
+    for table in sorted(table_names - mapping_names):
+        findings.append(f"{table}: Numeric table is missing a domain-family owner")
+    for table in sorted(mapping_names - table_names):
+        findings.append(f"{table}: domain-family mapping has no classified Numeric table")
+    resolved: dict[str, str] = {}
+    for table, family in mappings.items():
+        if not isinstance(table, str) or table not in table_names:
+            continue
+        if not isinstance(family, str) or family not in families:
+            findings.append(f"{table}: domain-family mapping names unknown family {family!r}")
+            continue
+        resolved[table] = family
+    for family in sorted(set(families) - set(resolved.values())):
+        findings.append(f"domain family {family!r} is not assigned to a Numeric table")
+    return resolved
+
+
 def evaluate_guard(repo_root: Path = ROOT, contract_path: Path | None = None) -> GuardReport:
     findings: list[str] = []
     path = contract_path or repo_root / DEFAULT_CONTRACT_PATH
@@ -704,6 +762,7 @@ def evaluate_guard(repo_root: Path = ROOT, contract_path: Path | None = None) ->
             table_count=0,
             bounded_numeric_count=0,
             unbounded_numeric_count=0,
+            domain_family_count=0,
             orm_enforced_count=0,
             database_enforced_count=0,
             planned_count=0,
@@ -715,7 +774,7 @@ def evaluate_guard(repo_root: Path = ROOT, contract_path: Path | None = None) ->
         findings.append(
             "contract v2 keys must be schema_version, model_path, expected_inventory, "
             "profiles, rollout_statuses, storage_shapes, default_storage_shape, "
-            "storage_shape_overrides, and tables"
+            "storage_shape_overrides, domain_families, table_domain_families, and tables"
         )
     if contract.get("profiles") != _CANONICAL_PROFILES:
         findings.append("contract.profiles must match the canonical finite-policy vocabulary")
@@ -747,6 +806,11 @@ def evaluate_guard(repo_root: Path = ROOT, contract_path: Path | None = None) ->
         contract,
         identities=set(contract_entries),
         shapes=shapes,
+        findings=findings,
+    )
+    resolved_domain_families = _table_domain_families(
+        contract,
+        table_names={identity.split(".", maxsplit=1)[0] for identity in contract_entries},
         findings=findings,
     )
 
@@ -825,6 +889,7 @@ def evaluate_guard(repo_root: Path = ROOT, contract_path: Path | None = None) ->
         table_count=len({column.table for column in inventory}),
         bounded_numeric_count=sum(not column.is_unbounded for column in inventory),
         unbounded_numeric_count=sum(column.is_unbounded for column in inventory),
+        domain_family_count=len(set(resolved_domain_families.values())),
         orm_enforced_count=orm_enforced_count,
         database_enforced_count=0,
         planned_count=planned_count,
@@ -843,6 +908,7 @@ def main() -> int:
         f"{report.numeric_column_count} Numeric columns across {report.table_count} tables; "
         f"{report.bounded_numeric_count} bounded, "
         f"{report.unbounded_numeric_count} unbounded; "
+        f"{report.domain_family_count} domain families; "
         f"{report.orm_enforced_count} ORM-enforced, "
         f"{report.database_enforced_count} database-enforced, "
         f"{report.planned_count} planned."

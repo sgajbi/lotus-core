@@ -60,6 +60,80 @@
     "liquidity_reserve_requirements.required_amount": "bounded-18-4",
     "planned_withdrawal_schedules.amount": "bounded-18-4"
   },
+  "domain_families": {
+    "advisory-simulation": {
+      "owner": "query-control-plane-service",
+      "boundary_class": "api-command"
+    },
+    "position-materialization-state": {
+      "owner": "portfolio-transaction-processing-service",
+      "boundary_class": "calculation-state"
+    },
+    "position-valuation-state": {
+      "owner": "position-valuation-service",
+      "boundary_class": "calculation-state"
+    },
+    "market-reference-data": {
+      "owner": "ingestion-service",
+      "boundary_class": "reference-source"
+    },
+    "client-policy": {
+      "owner": "query-control-plane-service",
+      "boundary_class": "control-policy"
+    },
+    "benchmark-reference-data": {
+      "owner": "ingestion-service",
+      "boundary_class": "reference-source"
+    },
+    "transaction-economics": {
+      "owner": "portfolio-transaction-processing-service",
+      "boundary_class": "api-command"
+    },
+    "cost-basis-state": {
+      "owner": "portfolio-transaction-processing-service",
+      "boundary_class": "calculation-state"
+    },
+    "derived-timeseries": {
+      "owner": "portfolio-aggregation-service",
+      "boundary_class": "calculation-state"
+    },
+    "reconciliation-controls": {
+      "owner": "financial-reconciliation-service",
+      "boundary_class": "control-policy"
+    }
+  },
+  "table_domain_families": {
+    "simulation_changes": "advisory-simulation",
+    "position_history": "position-materialization-state",
+    "daily_position_snapshots": "position-valuation-state",
+    "fx_rates": "market-reference-data",
+    "market_prices": "market-reference-data",
+    "market_price_source_facts": "market-reference-data",
+    "instruments": "market-reference-data",
+    "sustainability_preference_profiles": "client-policy",
+    "client_tax_profiles": "client-policy",
+    "client_tax_rule_sets": "client-policy",
+    "client_income_needs_schedules": "client-policy",
+    "liquidity_reserve_requirements": "client-policy",
+    "planned_withdrawal_schedules": "client-policy",
+    "model_portfolio_targets": "client-policy",
+    "benchmark_composition_series": "benchmark-reference-data",
+    "index_price_series": "benchmark-reference-data",
+    "index_return_series": "benchmark-reference-data",
+    "benchmark_return_series": "benchmark-reference-data",
+    "risk_free_series": "benchmark-reference-data",
+    "instrument_lookthrough_components": "benchmark-reference-data",
+    "transactions": "transaction-economics",
+    "transaction_costs": "transaction-economics",
+    "cashflows": "transaction-economics",
+    "position_lot_state": "cost-basis-state",
+    "cost_basis_processing_state": "cost-basis-state",
+    "average_cost_pool_state": "cost-basis-state",
+    "accrued_income_offset_state": "cost-basis-state",
+    "position_timeseries": "derived-timeseries",
+    "portfolio_timeseries": "derived-timeseries",
+    "financial_reconciliation_runs": "reconciliation-controls"
+  },
   "tables": {
     "simulation_changes": {
       "quantity": {"profile": "nullable-finite", "rollout_status": "orm-enforced"},
