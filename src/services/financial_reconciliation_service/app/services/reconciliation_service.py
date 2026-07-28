@@ -18,12 +18,12 @@ from portfolio_common.runtime_providers import (
 
 from ..adapters.reconciliation_finding_mapper import reconciliation_finding_to_orm
 from ..domain.reconciliation_policies import (
-    DEFAULT_VALUE_TOLERANCE,
     PositionValuationEvidence,
     ReconciliationFinding,
     build_reconciliation_summary,
     position_valuation_reconciliation_findings,
     requires_authoritative_fx_rate,
+    resolve_value_tolerance,
 )
 from ..domain.reconciliation_run_lifecycle_policy import (
     AutomaticBundleOutcome,
@@ -492,7 +492,7 @@ class ReconciliationService:
         aggregation_revision: int | None = None,
     ):
         started_at = self._monotonic_timer.seconds()
-        tolerance = request.tolerance or DEFAULT_VALUE_TOLERANCE
+        tolerance = resolve_value_tolerance(request.tolerance)
         dedupe_key = self._automatic_dedupe_key(
             reconciliation_type="position_valuation",
             request=request,
@@ -574,7 +574,7 @@ class ReconciliationService:
         aggregation_revision: int | None = None,
     ):
         started_at = self._monotonic_timer.seconds()
-        tolerance = request.tolerance or DEFAULT_VALUE_TOLERANCE
+        tolerance = resolve_value_tolerance(request.tolerance)
         dedupe_key = self._automatic_dedupe_key(
             reconciliation_type="timeseries_integrity",
             request=request,
