@@ -111,7 +111,11 @@ timeseries, and reconciliation reject PostgreSQL `NaN`, `Infinity`, and `-Infini
 remain independent so legitimate signed cashflow, return, cost, market-value, and P&L fields are
 not narrowed accidentally. Migrations add checks as `NOT VALID` before validating retained rows,
 causing deployment to fail closed if historical contamination exists rather than coercing
-financial evidence. Precision and scale remain separately governed under issue #829.
+financial evidence. Precision and scale remain separately governed under issue #829. Every
+governed ORM column now uses a DDL-compatible exact-bind type: bounded values that PostgreSQL would
+round or overflow are rejected before execution, while the authoritative market-price source fact
+remains exact-unbounded. Producer DTOs and calculated-output rounding policies remain
+domain-owned; the persistence safety net does not authorize implicit or blanket rounding.
 
 `market_price_source_facts` is an additive append-history authority store. Its source-version
 identity is the stable upstream source system, source record, and positive correction version;

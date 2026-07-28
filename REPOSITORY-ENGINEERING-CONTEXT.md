@@ -316,8 +316,13 @@ Current repository posture:
     96 ORM-enforced classifications and zero planned entries. Alembic `c120` protects the original
     cost-ledger slice; ordered `c122` through `c126` protect reference inputs, client policy,
     position state, transaction economics, cashflows, derived timeseries, and reconciliation.
-    This finite-value posture does not decide precision or scale; GitHub #829 owns that separate
-    domain-by-domain policy.
+    Precision and scale remain owned by GitHub #829. The persistence boundary now uses
+    `portfolio_common.financial_numeric.ExactNumeric` for all 96 governed columns: existing
+    `NUMERIC(18,10)` and `NUMERIC(18,4)` DDL is preserved, excess scale and magnitude are rejected
+    before execution, and the market-price authority remains exact-unbounded. Keep the
+    `exact_bind_enforcement` guard requirement. This safety net does not replace owner-specific
+    DTO/event validation or authorize blanket rounding of calculated outputs; rounding must be
+    explicit, domain-owned, tested, and reflected in calculation lineage.
     Job-backed ingestion idempotency replay must resolve from durable lifecycle outcome evidence,
     never from job existence alone. A replay-safe queued job may return its existing `202`;
     recorded failures must reproduce the original status, stable code, source-safe detail, job
