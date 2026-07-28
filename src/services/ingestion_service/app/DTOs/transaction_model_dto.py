@@ -1,7 +1,7 @@
 # services/ingestion_service/app/DTOs/transaction_model_dto.py
 from datetime import UTC, date, datetime
 from decimal import Decimal
-from typing import Annotated, Optional, cast
+from typing import Annotated, Any, Optional, cast
 
 from portfolio_common.domain.currency import normalize_optional_currency_code
 from portfolio_common.domain.transaction.fee_components import (
@@ -16,7 +16,15 @@ from portfolio_common.domain.transaction_control_codes import (
     normalize_optional_transaction_control_code,
     normalize_transaction_control_code,
 )
-from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_validator
+from portfolio_common.openapi_enrichment import document_exact_numeric_properties
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationInfo,
+    field_validator,
+    model_validator,
+)
 
 from .ingestion_validation_errors import BLANK_IDENTIFIER, raise_ingestion_validation_error
 
@@ -24,7 +32,18 @@ NonNegativeDecimal = Annotated[Decimal, Field(ge=Decimal(0))]
 PositiveDecimal = Annotated[Decimal, Field(gt=Decimal(0))]
 
 
+def _document_transaction_numeric_contract(schema: dict[str, Any]) -> None:
+    document_exact_numeric_properties(
+        schema,
+        field_names=TRANSACTION_COMMAND_DECIMAL_FIELDS,
+        precision=18,
+        scale=10,
+    )
+
+
 class Transaction(BaseModel):
+    model_config = ConfigDict(json_schema_extra=_document_transaction_numeric_contract)
+
     transaction_id: str = Field(
         description="Canonical transaction identifier for ingestion, replay, and audit workflows.",
         json_schema_extra={"example": "TRN001"},

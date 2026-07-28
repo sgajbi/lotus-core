@@ -17,6 +17,46 @@ from portfolio_common.openapi_examples import (
 _HTTP_METHODS = {"get", "post", "put", "patch", "delete"}
 
 
+def exact_numeric_openapi_description(
+    description: str,
+    *,
+    precision: int,
+    scale: int,
+) -> str:
+    """Describe an exact, reject-not-round numeric API boundary."""
+
+    return (
+        f"{description.rstrip()} The value must fit PostgreSQL "
+        f"NUMERIC({precision},{scale}) exactly; excess scale and magnitude overflow "
+        "are rejected, not rounded."
+    )
+
+
+def document_exact_numeric_properties(
+    schema: dict[str, Any],
+    *,
+    field_names: tuple[str, ...],
+    precision: int,
+    scale: int,
+) -> None:
+    """Append one exact-numeric contract to selected model properties."""
+
+    properties = schema.get("properties")
+    if not isinstance(properties, dict):
+        return
+    for field_name in field_names:
+        property_schema = properties.get(field_name)
+        if not isinstance(property_schema, dict):
+            continue
+        description = property_schema.get("description")
+        if isinstance(description, str):
+            property_schema["description"] = exact_numeric_openapi_description(
+                description,
+                precision=precision,
+                scale=scale,
+            )
+
+
 def _iter_operations(schema: dict[str, Any]):
     paths = schema.get("paths", {})
     for path, methods in paths.items():
