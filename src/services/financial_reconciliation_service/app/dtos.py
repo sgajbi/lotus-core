@@ -4,7 +4,9 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from .domain.reconciliation_policies import RECONCILIATION_TOLERANCE_PRECISION_V1
 
 ReconciliationType = Literal[
     "transaction_cashflow",
@@ -52,6 +54,16 @@ class ReconciliationRunRequest(BaseModel):
         description="Optional numeric tolerance override for value comparisons.",
         examples=["0.01"],
     )
+
+    @field_validator("tolerance")
+    @classmethod
+    def _validate_tolerance_precision(cls, value: Decimal | None) -> Decimal | None:
+        if value is None:
+            return None
+        return RECONCILIATION_TOLERANCE_PRECISION_V1.require_exact(
+            value,
+            field_name="tolerance",
+        )
 
 
 class ReconciliationFindingResponse(BaseModel):

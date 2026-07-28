@@ -2,12 +2,19 @@ from datetime import date
 from decimal import Decimal
 
 from services.financial_reconciliation_service.app.domain.reconciliation_policies import (
+    DEFAULT_VALUE_TOLERANCE,
     PositionValuationEvidence,
     build_reconciliation_summary,
     expected_market_value_local,
     position_valuation_reconciliation_findings,
     requires_authoritative_fx_rate,
+    resolve_value_tolerance,
 )
+
+
+def test_value_tolerance_defaults_only_when_override_is_omitted() -> None:
+    assert resolve_value_tolerance(None) == DEFAULT_VALUE_TOLERANCE
+    assert resolve_value_tolerance(Decimal("0")) == Decimal("0")
 
 
 def test_position_valuation_policy_records_market_and_unrealized_mismatches() -> None:

@@ -7,6 +7,7 @@ from decimal import Decimal
 from typing import Any
 
 from portfolio_common.domain.decimal_amount import required_decimal
+from portfolio_common.domain.financial.precision import DecimalPrecisionPolicy
 from portfolio_common.domain.market_data.market_price import (
     coerce_positive_market_price_or_none,
 )
@@ -15,6 +16,22 @@ from portfolio_common.domain.market_data.valuation_unit_price import (
 )
 
 DEFAULT_VALUE_TOLERANCE = Decimal("0.0001")
+RECONCILIATION_TOLERANCE_PRECISION_V1 = DecimalPrecisionPolicy(
+    name="reconciliation-tolerance-v1",
+    precision=18,
+    scale=10,
+)
+
+
+def resolve_value_tolerance(override: Decimal | None) -> Decimal:
+    """Preserve an explicit zero override and default only an omitted control."""
+
+    if override is None:
+        return DEFAULT_VALUE_TOLERANCE
+    return RECONCILIATION_TOLERANCE_PRECISION_V1.require_exact(
+        override,
+        field_name="tolerance",
+    )
 
 
 @dataclass(frozen=True, slots=True)
