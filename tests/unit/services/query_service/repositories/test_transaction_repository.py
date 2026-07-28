@@ -197,7 +197,7 @@ async def test_get_transactions_with_as_of_date_filter(
     assert "transactions.transaction_date < '2025-01-16 00:00:00'" in compiled_query
 
 
-async def test_get_transactions_applies_instrument_filter_and_eager_loads_related_rows(
+async def test_get_transactions_pages_transactions_before_loading_cost_collection(
     repository: TransactionRepository, mock_db_session: AsyncMock
 ):
     await repository.get_transactions(
@@ -211,7 +211,8 @@ async def test_get_transactions_applies_instrument_filter_and_eager_loads_relate
 
     assert "transactions.instrument_id = 'INST-AAPL-USD'" in compiled_query
     assert "LEFT OUTER JOIN cashflows" in compiled_query
-    assert "LEFT OUTER JOIN transaction_costs" in compiled_query
+    assert "transaction_costs" not in compiled_query
+    assert "LIMIT 25" in compiled_query
 
 
 async def test_get_transactions_count(
