@@ -1,0 +1,102 @@
+{
+  "schema_version": "1.0.0",
+  "expected_inventory": 8,
+  "policies": {
+    "ACCRUED_INCOME_LEDGER_OUTPUT_V1": {
+      "declaration_path": "src/libs/portfolio-common/portfolio_common/domain/valuation/numeric_policy.py",
+      "owner": "position-valuation",
+      "output_family": "accrued-income",
+      "name": "accrued-income-ledger-output",
+      "version": "1.0.0",
+      "precision": 18,
+      "scale": 10,
+      "working_precision": 64,
+      "rounding": "ROUND_HALF_EVEN",
+      "lineage_binding": "required"
+    },
+    "POSITION_VALUATION_LEDGER_OUTPUT_V1": {
+      "declaration_path": "src/libs/portfolio-common/portfolio_common/domain/valuation/numeric_policy.py",
+      "owner": "position-valuation",
+      "output_family": "position-valuation",
+      "name": "position-valuation-ledger-output",
+      "version": "1.0.0",
+      "precision": 18,
+      "scale": 10,
+      "working_precision": 64,
+      "rounding": "ROUND_HALF_EVEN",
+      "lineage_binding": "required"
+    },
+    "TRANSACTION_COST_LEDGER_OUTPUT_V1": {
+      "declaration_path": "src/libs/portfolio-common/portfolio_common/domain/transaction/numeric_policy.py",
+      "owner": "portfolio-transaction-processing-service",
+      "output_family": "transaction-cost",
+      "name": "transaction-cost-ledger-output",
+      "version": "1.0.0",
+      "precision": 18,
+      "scale": 10,
+      "working_precision": 64,
+      "rounding": "ROUND_HALF_EVEN",
+      "lineage_binding": "not-exposed"
+    },
+    "COST_BASIS_STATE_LEDGER_OUTPUT_V1": {
+      "declaration_path": "src/libs/portfolio-common/portfolio_common/domain/transaction/numeric_policy.py",
+      "owner": "portfolio-transaction-processing-service",
+      "output_family": "cost-basis-state",
+      "name": "cost-basis-state-ledger-output",
+      "version": "1.0.0",
+      "precision": 18,
+      "scale": 10,
+      "working_precision": 64,
+      "rounding": "ROUND_HALF_EVEN",
+      "lineage_binding": "not-exposed"
+    },
+    "POSITION_HISTORY_LEDGER_OUTPUT_V1": {
+      "declaration_path": "src/services/portfolio_transaction_processing_service/app/domain/position/numeric_policy.py",
+      "owner": "portfolio-transaction-processing-service",
+      "output_family": "position-history",
+      "name": "position-history-ledger-output",
+      "version": "1.0.0",
+      "precision": 18,
+      "scale": 10,
+      "working_precision": 64,
+      "rounding": "ROUND_HALF_EVEN",
+      "lineage_binding": "not-exposed"
+    },
+    "CASHFLOW_LEDGER_OUTPUT_V1": {
+      "declaration_path": "src/services/portfolio_transaction_processing_service/app/domain/cashflow/numeric_policy.py",
+      "owner": "portfolio-transaction-processing-service",
+      "output_family": "cashflow",
+      "name": "cashflow-ledger-output",
+      "version": "1.0.0",
+      "precision": 18,
+      "scale": 10,
+      "working_precision": 64,
+      "rounding": "ROUND_HALF_EVEN",
+      "lineage_binding": "not-exposed"
+    },
+    "POSITION_TIMESERIES_LEDGER_OUTPUT_V1": {
+      "declaration_path": "src/services/portfolio_derived_state_service/app/domain/position_timeseries/numeric_policy.py",
+      "owner": "portfolio-derived-state-service",
+      "output_family": "position-timeseries",
+      "name": "position-timeseries-ledger-output",
+      "version": "1.0.0",
+      "precision": 18,
+      "scale": 10,
+      "working_precision": 64,
+      "rounding": "ROUND_HALF_EVEN",
+      "lineage_binding": "not-exposed"
+    },
+    "PORTFOLIO_TIMESERIES_LEDGER_OUTPUT_V1": {
+      "declaration_path": "src/services/portfolio_derived_state_service/app/domain/portfolio_timeseries/numeric_policy.py",
+      "owner": "portfolio-derived-state-service",
+      "output_family": "portfolio-timeseries",
+      "name": "portfolio-timeseries-ledger-output",
+      "version": "1.0.0",
+      "precision": 18,
+      "scale": 10,
+      "working_precision": 64,
+      "rounding": "ROUND_HALF_EVEN",
+      "lineage_binding": "not-exposed"
+    }
+  }
+}
