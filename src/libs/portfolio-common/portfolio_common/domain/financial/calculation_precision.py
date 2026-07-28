@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from decimal import ROUND_HALF_EVEN, Decimal, InvalidOperation, localcontext
-from typing import Callable
+from typing import Callable, Iterator
 
 from .precision import (
     DecimalPrecisionError,
@@ -44,6 +45,14 @@ class CalculatedDecimalPolicy:
     @property
     def policy_id(self) -> str:
         return self._persistence_policy.name
+
+    @contextmanager
+    def arithmetic_context(self) -> Iterator[None]:
+        """Run intermediate arithmetic without inheriting ambient Decimal precision."""
+
+        with localcontext() as context:
+            context.prec = self.working_precision
+            yield
 
     def normalize(self, value: Decimal, *, field_name: str) -> Decimal:
         """Round a finite derived value once, then prove exact persistence."""
@@ -110,7 +119,6 @@ class CalculatedDecimalPolicy:
                 violation=DecimalPrecisionViolation.NON_FINITE,
                 policy_name=self.policy_id,
             )
-        with localcontext() as context:
-            context.prec = self.working_precision
+        with self.arithmetic_context():
             result = operation(left, right)
         return self.normalize(result, field_name=field_name)

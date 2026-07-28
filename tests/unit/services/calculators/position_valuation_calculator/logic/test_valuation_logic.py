@@ -2,6 +2,7 @@
 from decimal import Decimal
 
 import pytest
+from portfolio_common.domain.financial.precision import BOUNDED_18_10_EXACT
 
 # Corrected absolute import
 from src.services.calculators.position_valuation_calculator.app.logic.valuation_logic import (
@@ -386,8 +387,8 @@ def test_calculate_valuation_scales_repo_bond_percentage_quotes_to_unit_prices()
 
     assert mv_local == Decimal("74437.50")
     assert pnl_local == Decimal("525.00")
-    assert mv_base == Decimal("80516.562502481250")
-    assert pnl_base == Decimal("437.838277481250")
+    assert mv_base == Decimal("80516.5625024812")
+    assert pnl_base == Decimal("437.8382774812")
 
 
 def test_calculate_valuation_does_not_rescale_bond_price_when_already_in_unit_terms():
@@ -408,3 +409,26 @@ def test_calculate_valuation_does_not_rescale_bond_price_when_already_in_unit_te
     assert mv_base == Decimal("182430.0")
     assert pnl_local == Decimal("3726.0")
     assert pnl_base == Decimal("3726.0")
+
+
+def test_calculated_valuation_outputs_are_persistable_and_preserve_pnl_identity() -> None:
+    components = ValuationLogic.calculate_valuation_components(
+        quantity=Decimal("3"),
+        market_price=Decimal("0.33333333335"),
+        cost_basis_base=Decimal("0.1000000000"),
+        cost_basis_local=Decimal("0.1000000000"),
+        price_currency="EUR",
+        instrument_currency="EUR",
+        portfolio_currency="USD",
+        instrument_to_portfolio_fx_rate=Decimal("1.1234567890"),
+    )
+
+    assert components is not None
+    assert components.market_value_local == Decimal("1.0000000000")
+    assert components.market_value_base == Decimal("1.1234567891")
+    for field_name in components.__dataclass_fields__:
+        value = getattr(components, field_name)
+        assert BOUNDED_18_10_EXACT.require_exact(value, field_name=field_name) == value
+    assert components.unrealized_total_base == (
+        components.unrealized_price_base + components.unrealized_fx_base
+    )

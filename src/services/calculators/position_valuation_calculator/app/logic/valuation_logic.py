@@ -12,6 +12,9 @@ from portfolio_common.domain.market_data.market_price import (
 from portfolio_common.domain.market_data.valuation_unit_price import (
     resolve_valuation_unit_price,
 )
+from portfolio_common.domain.valuation.numeric_policy import (
+    POSITION_VALUATION_LEDGER_OUTPUT_V1,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -142,52 +145,75 @@ class ValuationLogic:
                 unrealized_fx_base=Decimal(0),
             )
 
-        # 1. Determine the price in the instrument's currency
-        valuation_price_local = normalized_market_price
-        if price_currency != instrument_currency:
-            normalized_price_fx_rate = ValuationLogic._positive_fx_rate_or_none(
-                price_to_instrument_fx_rate,
-                from_currency=price_currency,
-                to_currency=instrument_currency,
+        with POSITION_VALUATION_LEDGER_OUTPUT_V1.arithmetic_context():
+            # 1. Determine the price in the instrument's currency.
+            valuation_price_local = normalized_market_price
+            if price_currency != instrument_currency:
+                normalized_price_fx_rate = ValuationLogic._positive_fx_rate_or_none(
+                    price_to_instrument_fx_rate,
+                    from_currency=price_currency,
+                    to_currency=instrument_currency,
+                )
+                if normalized_price_fx_rate is None:
+                    return None
+                valuation_price_local = normalized_market_price * normalized_price_fx_rate
+
+            valuation_price_local = resolve_valuation_unit_price(
+                market_price=valuation_price_local,
+                quantity=quantity,
+                cost_basis_local=cost_basis_local,
+                product_type=product_type,
             )
-            if normalized_price_fx_rate is None:
-                return None
-            valuation_price_local = normalized_market_price * normalized_price_fx_rate
 
-        valuation_price_local = resolve_valuation_unit_price(
-            market_price=valuation_price_local,
-            quantity=quantity,
-            cost_basis_local=cost_basis_local,
-            product_type=product_type,
-        )
+            # 2. Calculate raw local/base values at governed working precision.
+            raw_market_value_local = quantity * valuation_price_local
+            current_instrument_to_portfolio_rate = Decimal(1)
+            raw_market_value_base = raw_market_value_local
+            if instrument_currency != portfolio_currency:
+                normalized_portfolio_fx_rate = ValuationLogic._positive_fx_rate_or_none(
+                    instrument_to_portfolio_fx_rate,
+                    from_currency=instrument_currency,
+                    to_currency=portfolio_currency,
+                )
+                if normalized_portfolio_fx_rate is None:
+                    return None
+                current_instrument_to_portfolio_rate = normalized_portfolio_fx_rate
+                raw_market_value_base = raw_market_value_local * normalized_portfolio_fx_rate
 
-        # 2. Calculate Market Value in local currency
-        market_value_local = quantity * valuation_price_local
-
-        # 3. Calculate Unrealized PnL in local currency
-        unrealized_pnl_local = market_value_local - cost_basis_local
-
-        # 4. Convert Market Value to portfolio's base currency
-        current_instrument_to_portfolio_rate = Decimal(1)
-        market_value_base = market_value_local
-        if instrument_currency != portfolio_currency:
-            normalized_portfolio_fx_rate = ValuationLogic._positive_fx_rate_or_none(
-                instrument_to_portfolio_fx_rate,
-                from_currency=instrument_currency,
-                to_currency=portfolio_currency,
+            raw_unrealized_fx_base = (
+                cost_basis_local * current_instrument_to_portfolio_rate - cost_basis_base
             )
-            if normalized_portfolio_fx_rate is None:
-                return None
-            current_instrument_to_portfolio_rate = normalized_portfolio_fx_rate
-            market_value_base = market_value_local * normalized_portfolio_fx_rate
 
-        # 5. Calculate Unrealized PnL in portfolio's base currency
-        unrealized_pnl_base = market_value_base - cost_basis_base
-        unrealized_price_pnl_base = unrealized_pnl_local * current_instrument_to_portfolio_rate
-        unrealized_fx_pnl_base = (
-            cost_basis_local * current_instrument_to_portfolio_rate - cost_basis_base
+        policy = POSITION_VALUATION_LEDGER_OUTPUT_V1
+        market_value_local = policy.normalize(
+            raw_market_value_local,
+            field_name="market_value_local",
         )
-
+        market_value_base = policy.normalize(
+            raw_market_value_base,
+            field_name="market_value",
+        )
+        unrealized_pnl_local = policy.subtract(
+            market_value_local,
+            cost_basis_local,
+            field_name="unrealized_gain_loss_local",
+        )
+        unrealized_pnl_base = policy.subtract(
+            market_value_base,
+            cost_basis_base,
+            field_name="unrealized_gain_loss",
+        )
+        unrealized_fx_pnl_base = policy.normalize(
+            raw_unrealized_fx_base,
+            field_name="unrealized_fx_gain_loss",
+        )
+        # Allocate the rounding residual to price P&L so the persisted
+        # price-plus-FX decomposition remains exactly equal to total P&L.
+        unrealized_price_pnl_base = policy.subtract(
+            unrealized_pnl_base,
+            unrealized_fx_pnl_base,
+            field_name="unrealized_price_gain_loss",
+        )
         return ValuationComponents(
             market_value_base=market_value_base,
             market_value_local=market_value_local,
