@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from datetime import date
-from decimal import Decimal
 from typing import Literal, cast
 
 from portfolio_common.domain.currency import normalize_currency_code
+from portfolio_common.openapi_enrichment import exact_numeric_openapi_description
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from .financial_numeric_fields import ExactDecimal18_10
 from .reference_data_source_observation_dto import SourceObservationLineage
 
 
@@ -16,7 +17,15 @@ class RiskFreeSeriesRecord(SourceObservationLineage):
         ..., description="Risk-free curve identifier.", examples=["USD_SOFR_3M"]
     )
     series_date: date = Field(..., description="Series date.", examples=["2026-01-02"])
-    value: Decimal = Field(..., description="Risk-free value.", examples=["0.0350000000"])
+    value: ExactDecimal18_10 = Field(
+        ...,
+        description=exact_numeric_openapi_description(
+            "Risk-free value.",
+            precision=18,
+            scale=10,
+        ),
+        examples=["0.0350000000"],
+    )
     value_convention: Literal["annualized_rate", "period_return"] = Field(
         ...,
         description="Risk-free value convention.",

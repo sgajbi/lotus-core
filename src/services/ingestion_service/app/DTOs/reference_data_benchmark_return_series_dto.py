@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from datetime import date
-from decimal import Decimal
 from typing import cast
 
 from portfolio_common.domain.currency import normalize_currency_code
+from portfolio_common.openapi_enrichment import exact_numeric_openapi_description
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from .financial_numeric_fields import ExactDecimal18_10
 from .reference_data_source_observation_dto import SourceObservationLineage
 
 
@@ -16,8 +17,14 @@ class BenchmarkReturnSeriesRecord(SourceObservationLineage):
         ..., description="Benchmark identifier.", examples=["BMK_GLOBAL_BALANCED_60_40"]
     )
     series_date: date = Field(..., description="Series date.", examples=["2026-01-02"])
-    benchmark_return: Decimal = Field(
-        ..., description="Benchmark return value.", examples=["0.0019000000"]
+    benchmark_return: ExactDecimal18_10 = Field(
+        ...,
+        description=exact_numeric_openapi_description(
+            "Benchmark return value.",
+            precision=18,
+            scale=10,
+        ),
+        examples=["0.0019000000"],
     )
     return_period: str = Field(..., description="Return period label.", examples=["1d"])
     return_convention: str = Field(
