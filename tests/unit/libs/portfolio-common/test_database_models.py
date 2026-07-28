@@ -571,6 +571,119 @@ def test_position_state_numeric_models_enforce_finite_domain_policy(
         assert sign_term in str(constraints[sign_constraint_name].sqltext)
 
 
+def test_transaction_numeric_model_preserves_signed_economics_and_fences_special_values() -> None:
+    constraints = {
+        constraint.name: str(constraint.sqltext)
+        for constraint in Transaction.__table__.constraints
+        if constraint.name is not None and hasattr(constraint, "sqltext")
+    }
+    finite_families = {
+        "ck_transactions_trade_values_finite": (
+            "price",
+            "gross_transaction_amount",
+            "trade_fee",
+            "gross_cost",
+            "net_cost",
+            "realized_gain_loss",
+            "transaction_fx_rate",
+            "net_cost_local",
+            "realized_gain_loss_local",
+        ),
+        "ck_transactions_income_values_finite": (
+            "withholding_tax_amount",
+            "other_interest_deductions_amount",
+            "net_interest_amount",
+        ),
+        "ck_transactions_fx_terms_finite": (
+            "buy_amount",
+            "sell_amount",
+            "contract_rate",
+        ),
+        "ck_transactions_realized_values_finite": (
+            "allocated_cost_basis_local",
+            "allocated_cost_basis_base",
+            "realized_capital_pnl_local",
+            "realized_fx_pnl_local",
+            "realized_total_pnl_local",
+            "realized_capital_pnl_base",
+            "realized_fx_pnl_base",
+            "realized_total_pnl_base",
+        ),
+        "ck_transactions_synthetic_flow_values_finite": (
+            "synthetic_flow_amount_local",
+            "synthetic_flow_amount_base",
+            "synthetic_flow_fx_rate_to_base",
+            "synthetic_flow_price_used",
+            "synthetic_flow_quantity_used",
+        ),
+    }
+
+    for constraint_name, column_names in finite_families.items():
+        for column_name in column_names:
+            assert (
+                f"CAST({column_name} AS TEXT) NOT IN ('NaN', 'Infinity', '-Infinity')"
+                in constraints[constraint_name]
+            )
+
+    assert constraints["ck_transactions_trade_values_sign"] == (
+        "price >= 0 AND gross_transaction_amount >= 0 AND trade_fee >= 0 "
+        "AND transaction_fx_rate > 0"
+    )
+    assert constraints["ck_transactions_income_values_nonnegative"] == (
+        "withholding_tax_amount >= 0 AND other_interest_deductions_amount >= 0 "
+        "AND net_interest_amount >= 0"
+    )
+    assert constraints["ck_transactions_fx_terms_positive"] == (
+        "buy_amount > 0 AND sell_amount > 0 AND contract_rate > 0"
+    )
+    assert constraints["ck_transactions_allocated_basis_nonnegative"] == (
+        "allocated_cost_basis_local >= 0 AND allocated_cost_basis_base >= 0"
+    )
+    assert constraints["ck_transactions_synthetic_flow_values_sign"] == (
+        "synthetic_flow_fx_rate_to_base > 0 AND synthetic_flow_price_used >= 0 "
+        "AND synthetic_flow_quantity_used >= 0"
+    )
+    signed_columns = {
+        "gross_cost",
+        "net_cost",
+        "realized_gain_loss",
+        "net_cost_local",
+        "realized_gain_loss_local",
+        "realized_capital_pnl_local",
+        "realized_fx_pnl_local",
+        "realized_total_pnl_local",
+        "realized_capital_pnl_base",
+        "realized_fx_pnl_base",
+        "realized_total_pnl_base",
+        "synthetic_flow_amount_local",
+        "synthetic_flow_amount_base",
+    }
+    sign_sql = " ".join(
+        sql
+        for name, sql in constraints.items()
+        if name.endswith(("_sign", "_positive", "_nonnegative"))
+    )
+    assert all(f"{column_name} >=" not in sign_sql for column_name in signed_columns)
+    assert all(f"{column_name} > " not in sign_sql for column_name in signed_columns)
+
+
+def test_cashflow_numeric_model_preserves_signed_amount_and_fences_special_values() -> None:
+    constraints = {
+        constraint.name: str(constraint.sqltext)
+        for constraint in Cashflow.__table__.constraints
+        if constraint.name is not None and hasattr(constraint, "sqltext")
+    }
+
+    assert constraints["ck_cashflows_amount_finite"] == (
+        "CAST(amount AS TEXT) NOT IN ('NaN', 'Infinity', '-Infinity')"
+    )
+    assert all(
+        "amount >" not in sql
+        for name, sql in constraints.items()
+        if name != "ck_cashflows_amount_finite"
+    )
+
+
 def test_model_portfolio_tables_declare_dpm_source_indexes():
     definition_indexes = {index.name: index for index in ModelPortfolioDefinition.__table__.indexes}
     target_indexes = {index.name: index for index in ModelPortfolioTarget.__table__.indexes}
