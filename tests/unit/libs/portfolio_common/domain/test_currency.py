@@ -122,6 +122,17 @@ def test_fx_rate_event_rejects_nonpositive_rates(rate: str) -> None:
         )
 
 
+@pytest.mark.parametrize("rate", ["1.00000000001", "100000000"])
+def test_fx_rate_events_reject_values_not_exactly_representable_in_storage(rate: str) -> None:
+    with pytest.raises(ValueError, match="bounded-18-10-exact"):
+        FxRateEvent(
+            from_currency="EUR",
+            to_currency="USD",
+            rate_date="2026-05-28",
+            rate=rate,
+        )
+
+
 def test_market_price_events_normalize_currency_codes() -> None:
     raw_event = MarketPriceEvent(
         security_id="SEC_A",
@@ -152,6 +163,24 @@ def test_market_price_events_reject_nonpositive_prices(price: str) -> None:
             price=price,
             currency="USD",
         )
+
+
+@pytest.mark.parametrize("price", ["100.00000000001", "100000000"])
+def test_market_price_events_reject_values_not_exactly_representable_in_storage(
+    price: str,
+) -> None:
+    event_fields = {
+        "security_id": "SEC_A",
+        "price_date": "2026-05-28",
+        "price": price,
+        "currency": "USD",
+    }
+
+    with pytest.raises(ValueError, match="bounded-18-10-exact"):
+        MarketPriceEvent(**event_fields)
+
+    with pytest.raises(ValueError, match="bounded-18-10-exact"):
+        MarketPricePersistedEvent(**event_fields)
 
 
 def test_transaction_event_normalizes_currency_codes() -> None:

@@ -6051,6 +6051,23 @@ async def test_ingest_market_prices_endpoint(
     assert dict(publish_kwargs["headers"])["idempotency_key"] == (b"market-price-batch-idem-001")
 
 
+@pytest.mark.parametrize("price", ["1.00000000001", "100000000"])
+async def test_ingest_market_prices_rejects_lossy_numeric_before_publish(
+    async_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+    price: str,
+):
+    mock_kafka_producer.publish_message.reset_mock()
+    payload = _market_price_batch_payload("SEC_PRICE_PRECISION_001")
+    payload["market_prices"][0]["price"] = price
+
+    response = await async_test_client.post("/ingest/market-prices", json=payload)
+
+    assert response.status_code == 422
+    assert "bounded-18-10-exact" in response.text
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
 async def test_ingest_market_prices_replays_duplicate_idempotency_key(
     async_test_client: httpx.AsyncClient,
     mock_kafka_producer: MagicMock,
@@ -6172,6 +6189,23 @@ async def test_ingest_fx_rates_endpoint(
     assert publish_kwargs["value"]["from_currency"] == "USD"
     assert publish_kwargs["value"]["to_currency"] == "SGD"
     assert dict(publish_kwargs["headers"])["idempotency_key"] == b"fx-rate-batch-idem-001"
+
+
+@pytest.mark.parametrize("rate", ["1.00000000001", "100000000"])
+async def test_ingest_fx_rates_rejects_lossy_numeric_before_publish(
+    async_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+    rate: str,
+):
+    mock_kafka_producer.publish_message.reset_mock()
+    payload = _fx_rate_batch_payload(("USD", "SGD"))
+    payload["fx_rates"][0]["rate"] = rate
+
+    response = await async_test_client.post("/ingest/fx-rates", json=payload)
+
+    assert response.status_code == 422
+    assert "bounded-18-10-exact" in response.text
+    mock_kafka_producer.publish_message.assert_not_called()
 
 
 async def test_ingest_fx_rates_replays_duplicate_idempotency_key(

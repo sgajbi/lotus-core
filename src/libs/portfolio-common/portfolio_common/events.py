@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from .domain.cost_basis_method import CostBasisMethod, normalize_cost_basis_method
 from .domain.currency import normalize_currency_code, normalize_optional_currency_code
 from .domain.decimal_amount import decimal_or_none
+from .domain.financial.precision import BOUNDED_18_10_EXACT
 from .domain.transaction.fee_components import (
     TRANSACTION_FEE_COMPONENT_FIELDS,
     resolve_transaction_trade_fee,
@@ -131,7 +132,7 @@ class FxRateEvent(CoreEventModel):
     def _validate_positive_rate(cls, value: Decimal) -> Decimal:
         if not value.is_finite() or value <= 0:
             raise ValueError("FX rate must be greater than zero.")
-        return value
+        return BOUNDED_18_10_EXACT.require_exact(value, field_name="rate")
 
     @field_validator("from_currency", "to_currency", mode="before")
     @classmethod
@@ -197,7 +198,7 @@ class MarketPriceEvent(CoreEventModel):
     def _validate_positive_price(cls, value: Decimal) -> Decimal:
         if not value.is_finite() or value <= 0:
             raise ValueError("Market price must be greater than zero.")
-        return value
+        return BOUNDED_18_10_EXACT.require_exact(value, field_name="price")
 
     @field_validator("currency", mode="before")
     @classmethod
@@ -220,7 +221,7 @@ class MarketPricePersistedEvent(CoreEventModel):
     def _validate_positive_price(cls, value: Decimal) -> Decimal:
         if not value.is_finite() or value <= 0:
             raise ValueError("Market price must be greater than zero.")
-        return value
+        return BOUNDED_18_10_EXACT.require_exact(value, field_name="price")
 
     @field_validator("currency", mode="before")
     @classmethod

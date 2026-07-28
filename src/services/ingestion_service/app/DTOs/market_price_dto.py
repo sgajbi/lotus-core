@@ -3,6 +3,7 @@ from decimal import Decimal
 from typing import List
 
 from portfolio_common.domain.currency import normalize_currency_code
+from portfolio_common.domain.financial.precision import BOUNDED_18_10_EXACT
 from portfolio_common.domain.valuation import (
     FinancialSourceReference,
     MarketPriceQuoteBasis,
@@ -26,7 +27,10 @@ class MarketPrice(BaseModel):
     )
     price: condecimal(gt=Decimal(0)) = Field(
         ...,
-        description="Canonical closing or approved valuation price for the security.",
+        description=(
+            "Canonical closing or approved valuation price. The value must fit PostgreSQL "
+            "NUMERIC(18,10) exactly; excess scale and magnitude overflow are rejected, not rounded."
+        ),
         examples=["175.5000000000"],
     )
     currency: str = Field(
@@ -39,6 +43,11 @@ class MarketPrice(BaseModel):
     @classmethod
     def _normalize_currency_code(cls, value: object) -> str:
         return normalize_currency_code(value)
+
+    @field_validator("price")
+    @classmethod
+    def _validate_exact_storage_shape(cls, value: Decimal) -> Decimal:
+        return BOUNDED_18_10_EXACT.require_exact(value, field_name="price")
 
     model_config = ConfigDict(
         json_schema_extra={
