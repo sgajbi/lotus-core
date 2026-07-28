@@ -319,7 +319,9 @@ Current repository posture:
     `409 INGESTION_REQUEST_IN_PROGRESS`; unknown or incomplete states fail closed. Apply this
     policy through the shared application resolver across publish-backed, reference-data,
     business-date, bundle, and pre-resolution reprocessing paths. Single-transaction ingestion is
-    intentionally jobless and does not claim this job-backed replay contract.
+    intentionally jobless and does not claim this job-backed replay contract. Resolve an established
+    same-payload job before write-mode, reprocessing-permission, and rate-limit controls: a durable
+    replay performs no new write and must not consume or be denied by a later write budget.
     Cost-engine domain models now follow
     `docs/standards/cost-basis-domain-standard.md`:
     `portfolio_transaction_processing_service/app/domain/cost_basis` must stay free of

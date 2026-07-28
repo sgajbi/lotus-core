@@ -70,15 +70,25 @@ def get_business_date_ingestion_policy(
     return BusinessDateIngestionPolicy(business_calendar_repository)
 
 
+def get_ingestion_idempotency_replay_reader(
+    db: AsyncSession = Depends(get_async_db_session),
+) -> IngestionIdempotencyReplayReader:
+    return SqlAlchemyIngestionIdempotencyReplayReader(db)
+
+
 def get_business_date_ingestion_command_handler(
     ingestion_service: IngestionService = Depends(get_ingestion_service),
     ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
     business_date_policy: BusinessDateIngestionPolicy = Depends(get_business_date_ingestion_policy),
+    idempotency_replay_reader: IngestionIdempotencyReplayReader = Depends(
+        get_ingestion_idempotency_replay_reader
+    ),
 ) -> BusinessDateIngestionCommandHandler:
     return BusinessDateIngestionCommandHandler(
         ingestion_service=ingestion_service,
         ingestion_job_service=ingestion_job_service,
         business_date_policy=business_date_policy,
+        idempotency_replay_reader=idempotency_replay_reader,
     )
 
 
@@ -86,12 +96,6 @@ def get_transaction_reprocessing_target_resolver(
     db: AsyncSession = Depends(get_async_db_session),
 ) -> ResolveTransactionReprocessingTargets:
     return ResolveTransactionReprocessingTargets(SqlAlchemyTransactionReprocessingTargetReader(db))
-
-
-def get_ingestion_idempotency_replay_reader(
-    db: AsyncSession = Depends(get_async_db_session),
-) -> IngestionIdempotencyReplayReader:
-    return SqlAlchemyIngestionIdempotencyReplayReader(db)
 
 
 def get_ingestion_publish_command_handler(
@@ -117,8 +121,12 @@ def get_reference_data_ingestion_command_handler(
         get_reference_data_ingestion_service
     ),
     ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
+    idempotency_replay_reader: IngestionIdempotencyReplayReader = Depends(
+        get_ingestion_idempotency_replay_reader
+    ),
 ) -> ReferenceDataIngestionCommandHandler:
     return ReferenceDataIngestionCommandHandler(
         reference_data_service=reference_data_service,
         ingestion_job_service=ingestion_job_service,
+        idempotency_replay_reader=idempotency_replay_reader,
     )

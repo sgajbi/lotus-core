@@ -167,6 +167,9 @@ cutover.
   acknowledgement, a durable failed outcome reproduces its original status/code/safe detail and
   headers, and an unresolved accepted job returns `409 INGESTION_REQUEST_IN_PROGRESS`; the same
   endpoint/key with a different payload returns `409 INGESTION_IDEMPOTENCY_CONFLICT`
+- established same-payload job replays resolve before write-mode, reprocessing-permission, and
+  rate-limit controls because they perform no new write; they neither consume nor depend on the
+  current write budget
 - post-persist and post-publish bookkeeping failures preserve a durable
   `INGESTION_JOB_BOOKKEEPING_FAILED` outcome with `retry_safe=false`; operators must confirm work
   state and use governed bookkeeping repair instead of blind resubmission

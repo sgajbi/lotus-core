@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Any, NoReturn
+from typing import Any, NoReturn, cast
 
 from portfolio_common.domain.valuation.assignments import ValuationPolicyAssignmentError
 from portfolio_common.domain.valuation.source_facts import MarketPriceSourceFactError
@@ -20,8 +20,14 @@ from ..application.reference_data_ingestion_registry import (
 from ..application.reference_data_ingestion_registry import (
     ReferenceDataPayload,
 )
+from ..DTOs.ingestion_job_dto import IngestionJobResponse
 from ..ops_controls import enforce_ingestion_write_rate_limit
+from ..ports.ingestion_idempotency_replay import (
+    IngestionIdempotencyReplay,
+    IngestionIdempotencyReplayReader,
+)
 from ..request_metadata import create_ingestion_job_id, get_request_lineage
+from .ingestion_job_lifecycle import IngestionJobCreateResult
 from .ingestion_job_service import IngestionJobService
 from .reference_data_ingestion_service import ReferenceDataIngestionService
 
@@ -80,37 +86,28 @@ class ReferenceDataIngestionCommandResult:
 class ReferenceDataIngestionCommandHandler:
     reference_data_service: ReferenceDataIngestionService
     ingestion_job_service: IngestionJobService
+    idempotency_replay_reader: IngestionIdempotencyReplayReader
 
     async def ingest_reference_data(
         self,
         command: ReferenceDataIngestionCommand,
     ) -> ReferenceDataIngestionCommandResult:
-        await self._assert_ingestion_writable()
         accepted_count = command.registry_command.accepted_count(command.request)
+        request_payload = command.registry_command.request_payload(command.request)
+        replay_job = await self.idempotency_replay_reader.find_matching_job(
+            endpoint=command.endpoint,
+            idempotency_key=command.idempotency_key,
+            request_payload=request_payload,
+        )
+        if replay_job is not None:
+            return self._replay_result(command, replay_job)
+
+        await self._assert_ingestion_writable()
         self._enforce_rate_limit(command.registry_command.endpoint, accepted_count)
         job_result = await self._create_job(command=command, accepted_count=accepted_count)
         entity_type = command.registry_command.entity_type
         if not job_result.created:
-            replay = resolve_ingestion_idempotency_replay(job_result.job)
-            if not replay.accepted:
-                raise ReferenceDataIngestionCommandError(
-                    replay.status_code or HTTP_INTERNAL_SERVER_ERROR,
-                    replay.detail
-                    or {
-                        "code": "INGESTION_REPLAY_STATE_INVALID",
-                        "message": "The stored ingestion replay outcome is incomplete.",
-                        "job_id": job_result.job.job_id,
-                    },
-                    headers=replay.headers,
-                )
-            return ReferenceDataIngestionCommandResult(
-                message="Duplicate ingestion request accepted via idempotency replay.",
-                entity_type=entity_type,
-                job_id=job_result.job.job_id,
-                accepted_count=job_result.job.accepted_count,
-                idempotency_key=command.idempotency_key,
-                replayed=True,
-            )
+            return self._replay_result(command, job_result.job)
 
         await self._persist_or_mark_failed(command, job_result.job.job_id)
         await self._mark_queued_or_raise(job_id=job_result.job.job_id)
@@ -120,6 +117,32 @@ class ReferenceDataIngestionCommandHandler:
             job_id=job_result.job.job_id,
             accepted_count=accepted_count,
             idempotency_key=command.idempotency_key,
+        )
+
+    @staticmethod
+    def _replay_result(
+        command: ReferenceDataIngestionCommand,
+        job: IngestionIdempotencyReplay | IngestionJobResponse,
+    ) -> ReferenceDataIngestionCommandResult:
+        replay = resolve_ingestion_idempotency_replay(job)
+        if not replay.accepted:
+            raise ReferenceDataIngestionCommandError(
+                replay.status_code or HTTP_INTERNAL_SERVER_ERROR,
+                replay.detail
+                or {
+                    "code": "INGESTION_REPLAY_STATE_INVALID",
+                    "message": "The stored ingestion replay outcome is incomplete.",
+                    "job_id": job.job_id,
+                },
+                headers=replay.headers,
+            )
+        return ReferenceDataIngestionCommandResult(
+            message="Duplicate ingestion request accepted via idempotency replay.",
+            entity_type=command.registry_command.entity_type,
+            job_id=job.job_id,
+            accepted_count=job.accepted_count,
+            idempotency_key=command.idempotency_key,
+            replayed=True,
         )
 
     async def _assert_ingestion_writable(self) -> None:
@@ -146,7 +169,7 @@ class ReferenceDataIngestionCommandHandler:
         *,
         command: ReferenceDataIngestionCommand,
         accepted_count: int,
-    ):
+    ) -> IngestionJobCreateResult:
         correlation_id, request_id, trace_id = get_request_lineage()
         return await self.ingestion_job_service.create_or_get_job(
             job_id=create_ingestion_job_id(),
@@ -260,4 +283,4 @@ class ReferenceDataIngestionCommandHandler:
                 "Failed to persist reference-data bookkeeping failure observation.",
                 extra={"job_id": job_id, "failure_phase": "persist_bookkeeping"},
             )
-        return detail
+        return cast(dict[str, object], detail)
