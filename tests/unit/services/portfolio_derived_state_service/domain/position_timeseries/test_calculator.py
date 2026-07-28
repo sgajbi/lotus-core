@@ -210,6 +210,54 @@ def test_zero_quantity_produces_zero_average_cost(
     assert record.cost == Decimal("0")
 
 
+def test_repeating_average_cost_is_normalized_for_exact_persistence(
+    previous_snapshot: PositionSnapshotRecord,
+) -> None:
+    current_snapshot = PositionSnapshotRecord(
+        portfolio_id="P1",
+        security_id="S1",
+        date=BUSINESS_DATE,
+        epoch=8,
+        quantity=Decimal("3"),
+        cost_basis_local=Decimal("100"),
+        market_value_local=Decimal("100"),
+    )
+
+    record = calculate_position_timeseries(
+        current_snapshot=current_snapshot,
+        previous_snapshot=previous_snapshot,
+        cashflows=[],
+        epoch=8,
+    )
+
+    assert record.cost == Decimal("33.3333333333")
+
+
+def test_cashflow_bucket_overflow_fails_closed(
+    current_snapshot: PositionSnapshotRecord,
+    previous_snapshot: PositionSnapshotRecord,
+) -> None:
+    cashflows = [
+        _cashflow(
+            amount=Decimal("60000000"),
+            timing="BOD",
+            classification="CASHFLOW_IN",
+            is_position_flow=True,
+            is_portfolio_flow=False,
+            transaction_id=f"T{index}",
+        )
+        for index in range(2)
+    ]
+
+    with pytest.raises(ValueError, match="position-timeseries-ledger-output@1.0.0"):
+        calculate_position_timeseries(
+            current_snapshot=current_snapshot,
+            previous_snapshot=previous_snapshot,
+            cashflows=cashflows,
+            epoch=8,
+        )
+
+
 def test_cashflow_timing_is_canonicalized_before_bucketing(
     current_snapshot: PositionSnapshotRecord,
     previous_snapshot: PositionSnapshotRecord,

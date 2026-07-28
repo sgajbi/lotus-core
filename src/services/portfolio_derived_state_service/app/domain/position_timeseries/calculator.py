@@ -10,6 +10,7 @@ from portfolio_common.domain.analytics.cashflow_semantics import (
 from portfolio_common.domain.decimal_amount import decimal_or_none
 
 from .models import PositionCashflowRecord, PositionSnapshotRecord, PositionTimeseriesRecord
+from .numeric_policy import POSITION_TIMESERIES_LEDGER_OUTPUT_V1
 
 ZERO = Decimal("0")
 
@@ -26,7 +27,13 @@ def _beginning_market_value(previous_snapshot: PositionSnapshotRecord | None) ->
 
 
 def _average_cost(*, cost_basis: Decimal, quantity: Decimal) -> Decimal:
-    return (cost_basis / quantity) if quantity else ZERO
+    if not quantity:
+        return ZERO
+    return POSITION_TIMESERIES_LEDGER_OUTPUT_V1.divide(
+        cost_basis,
+        quantity,
+        field_name="cost",
+    )
 
 
 def _is_expense_cashflow(cashflow: PositionCashflowRecord) -> bool:
@@ -49,7 +56,11 @@ class _CashflowBuckets:
         if cashflow.is_portfolio_flow:
             self._add_portfolio_flow(cashflow_amount, timing)
         if _is_expense_cashflow(cashflow):
-            self.fees += abs(cashflow_amount)
+            self.fees = POSITION_TIMESERIES_LEDGER_OUTPUT_V1.add(
+                self.fees,
+                abs(cashflow_amount),
+                field_name="fees",
+            )
 
     def _add_position_flow(
         self, cashflow: PositionCashflowRecord, amount: Decimal, timing: str
@@ -59,15 +70,31 @@ class _CashflowBuckets:
             classification=str(cashflow.classification),
         )
         if timing == "BOD":
-            self.bod_position += normalized_position_amount
+            self.bod_position = POSITION_TIMESERIES_LEDGER_OUTPUT_V1.add(
+                self.bod_position,
+                normalized_position_amount,
+                field_name="bod_cashflow_position",
+            )
         else:
-            self.eod_position += normalized_position_amount
+            self.eod_position = POSITION_TIMESERIES_LEDGER_OUTPUT_V1.add(
+                self.eod_position,
+                normalized_position_amount,
+                field_name="eod_cashflow_position",
+            )
 
     def _add_portfolio_flow(self, amount: Decimal, timing: str) -> None:
         if timing == "BOD":
-            self.bod_portfolio += amount
+            self.bod_portfolio = POSITION_TIMESERIES_LEDGER_OUTPUT_V1.add(
+                self.bod_portfolio,
+                amount,
+                field_name="bod_cashflow_portfolio",
+            )
         else:
-            self.eod_portfolio += amount
+            self.eod_portfolio = POSITION_TIMESERIES_LEDGER_OUTPUT_V1.add(
+                self.eod_portfolio,
+                amount,
+                field_name="eod_cashflow_portfolio",
+            )
 
 
 def _cashflow_buckets(cashflows: list[PositionCashflowRecord]) -> _CashflowBuckets:
