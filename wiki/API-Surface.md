@@ -175,6 +175,7 @@ Write ingress:
 POST /ingest/transactions
 POST /ingest/portfolio-bundle
 POST /ingest/instrument-valuation-policy-assignments
+POST /ingest/authoritative-market-price-source-facts
 POST /ingest/uploads/preview
 POST /ingest/uploads/commit
 ```
