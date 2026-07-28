@@ -23,14 +23,19 @@ _ROLLOUT_STATUSES = {"orm-enforced", "planned"}
 _SPECIAL_NUMERIC_LITERALS = ("NaN", "Infinity", "-Infinity")
 _SQLALCHEMY_NUMERIC_CONSTRUCTORS = {"Numeric", "NUMERIC", "DECIMAL"}
 _FINITE_CONSTRAINT_HELPER = "_finite_numeric_check_constraint"
-_V1_CONTRACT_KEYS = {
+_V2_CONTRACT_KEYS = {
     "schema_version",
     "model_path",
     "expected_inventory",
     "profiles",
     "rollout_statuses",
+    "storage_shapes",
+    "default_storage_shape",
+    "storage_shape_overrides",
     "tables",
 }
+_STORAGE_SHAPE_KEYS = {"mode", "precision", "scale"}
+_STORAGE_SHAPE_MODES = {"bounded", "exact-unbounded"}
 
 
 class DuplicateContractKeyError(ValueError):
@@ -603,6 +608,90 @@ def _contract_entries(contract: dict[str, Any], findings: list[str]) -> dict[str
     return entries
 
 
+def _storage_shapes(
+    contract: dict[str, Any],
+    findings: list[str],
+) -> dict[str, tuple[int | None, int | None]]:
+    payload = contract.get("storage_shapes")
+    if not isinstance(payload, dict) or not payload:
+        findings.append("contract.storage_shapes must be a non-empty object")
+        return {}
+    shapes: dict[str, tuple[int | None, int | None]] = {}
+    for name, classification in payload.items():
+        if not isinstance(name, str) or not re.fullmatch(r"[a-z][a-z0-9-]*", name):
+            findings.append(f"invalid storage-shape name: {name!r}")
+            continue
+        if not isinstance(classification, dict) or set(classification) != _STORAGE_SHAPE_KEYS:
+            findings.append(f"storage shape {name!r} must contain mode, precision, and scale")
+            continue
+        mode = classification.get("mode")
+        precision = classification.get("precision")
+        scale = classification.get("scale")
+        if mode not in _STORAGE_SHAPE_MODES:
+            findings.append(f"storage shape {name!r} has unsupported mode {mode!r}")
+            continue
+        if mode == "exact-unbounded":
+            if precision is not None or scale is not None:
+                findings.append(
+                    f"storage shape {name!r} exact-unbounded mode requires null precision and scale"
+                )
+                continue
+            shapes[name] = (None, None)
+            continue
+        if (
+            not isinstance(precision, int)
+            or isinstance(precision, bool)
+            or precision <= 0
+            or not isinstance(scale, int)
+            or isinstance(scale, bool)
+            or scale < 0
+            or scale > precision
+        ):
+            findings.append(
+                f"storage shape {name!r} bounded mode requires precision > 0 "
+                "and 0 <= scale <= precision"
+            )
+            continue
+        shapes[name] = (precision, scale)
+    if len(set(shapes.values())) != len(shapes):
+        findings.append("contract.storage_shapes contains duplicate numeric shapes")
+    return shapes
+
+
+def _resolved_storage_shape_names(
+    contract: dict[str, Any],
+    *,
+    identities: set[str],
+    shapes: dict[str, tuple[int | None, int | None]],
+    findings: list[str],
+) -> dict[str, str]:
+    default = contract.get("default_storage_shape")
+    if not isinstance(default, str) or default not in shapes:
+        findings.append("contract.default_storage_shape must name a declared storage shape")
+        default = ""
+    overrides = contract.get("storage_shape_overrides")
+    if not isinstance(overrides, dict):
+        findings.append("contract.storage_shape_overrides must be an object")
+        overrides = {}
+    resolved = {identity: default for identity in identities}
+    for identity, shape_name in overrides.items():
+        if not isinstance(identity, str) or identity not in identities:
+            findings.append(
+                f"storage-shape override has no classified Numeric column: {identity!r}"
+            )
+            continue
+        if not isinstance(shape_name, str) or shape_name not in shapes:
+            findings.append(
+                f"{identity}: storage-shape override names unknown shape {shape_name!r}"
+            )
+            continue
+        if shape_name == default:
+            findings.append(f"{identity}: redundant storage-shape override matches the default")
+            continue
+        resolved[identity] = shape_name
+    return resolved
+
+
 def evaluate_guard(repo_root: Path = ROOT, contract_path: Path | None = None) -> GuardReport:
     findings: list[str] = []
     path = contract_path or repo_root / DEFAULT_CONTRACT_PATH
@@ -620,12 +709,13 @@ def evaluate_guard(repo_root: Path = ROOT, contract_path: Path | None = None) ->
             planned_count=0,
         )
 
-    if contract.get("schema_version") != "1.0.0":
-        findings.append("contract.schema_version must be 1.0.0")
-    if set(contract) != _V1_CONTRACT_KEYS:
+    if contract.get("schema_version") != "2.0.0":
+        findings.append("contract.schema_version must be 2.0.0")
+    if set(contract) != _V2_CONTRACT_KEYS:
         findings.append(
-            "contract v1 keys must be schema_version, model_path, expected_inventory, "
-            "profiles, rollout_statuses, and tables"
+            "contract v2 keys must be schema_version, model_path, expected_inventory, "
+            "profiles, rollout_statuses, storage_shapes, default_storage_shape, "
+            "storage_shape_overrides, and tables"
         )
     if contract.get("profiles") != _CANONICAL_PROFILES:
         findings.append("contract.profiles must match the canonical finite-policy vocabulary")
@@ -652,6 +742,13 @@ def evaluate_guard(repo_root: Path = ROOT, contract_path: Path | None = None) ->
     if len(model_entries) != len(inventory):
         findings.append("ORM inventory contains duplicate table.column identities")
     contract_entries = _contract_entries(contract, findings)
+    shapes = _storage_shapes(contract, findings)
+    resolved_shape_names = _resolved_storage_shape_names(
+        contract,
+        identities=set(contract_entries),
+        shapes=shapes,
+        findings=findings,
+    )
 
     expected = contract.get("expected_inventory")
     if not isinstance(expected, dict) or set(expected) != {"numeric_columns", "tables"}:
@@ -692,6 +789,14 @@ def evaluate_guard(repo_root: Path = ROOT, contract_path: Path | None = None) ->
         if column.nullable != profile["nullable"]:
             findings.append(
                 f"{identity}: ORM nullable={column.nullable} conflicts with {profile_name}"
+            )
+        shape_name = resolved_shape_names.get(identity)
+        expected_shape = shapes.get(shape_name) if shape_name is not None else None
+        actual_shape = (column.precision, column.scale)
+        if expected_shape is not None and actual_shape != expected_shape:
+            findings.append(
+                f"{identity}: ORM Numeric{actual_shape!r} conflicts with "
+                f"storage shape {shape_name!r} Numeric{expected_shape!r}"
             )
         finite_enforced = _explicitly_excludes_special_values(column)
         sign_enforced = _has_required_sign_constraint(column, str(profile["sign"]))

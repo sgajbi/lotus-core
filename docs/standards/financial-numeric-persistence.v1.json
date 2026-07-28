@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.0.0",
+  "schema_version": "2.0.0",
   "model_path": "src/libs/portfolio-common/portfolio_common/database_models.py",
   "expected_inventory": {
     "numeric_columns": 96,
@@ -35,6 +35,31 @@
     "orm-enforced",
     "planned"
   ],
+  "storage_shapes": {
+    "bounded-18-10": {
+      "mode": "bounded",
+      "precision": 18,
+      "scale": 10
+    },
+    "bounded-18-4": {
+      "mode": "bounded",
+      "precision": 18,
+      "scale": 4
+    },
+    "exact-unbounded": {
+      "mode": "exact-unbounded",
+      "precision": null,
+      "scale": null
+    }
+  },
+  "default_storage_shape": "bounded-18-10",
+  "storage_shape_overrides": {
+    "market_price_source_facts.price": "exact-unbounded",
+    "client_tax_rule_sets.threshold_amount": "bounded-18-4",
+    "client_income_needs_schedules.amount": "bounded-18-4",
+    "liquidity_reserve_requirements.required_amount": "bounded-18-4",
+    "planned_withdrawal_schedules.amount": "bounded-18-4"
+  },
   "tables": {
     "simulation_changes": {
       "quantity": {"profile": "nullable-finite", "rollout_status": "orm-enforced"},
