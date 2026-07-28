@@ -478,6 +478,18 @@ def _numeric_column(
     )
     if constructor is None:
         raise UnsupportedNumericDeclarationError(f"{target.id}: cannot resolve Numeric constructor")
+    if constructor == "ExactNumeric" and isinstance(numeric_expression, ast.Call):
+        for keyword in numeric_expression.keywords:
+            if keyword.arg == "decimal_return_scale":
+                raise UnsupportedNumericDeclarationError(
+                    f"{target.id}: ExactNumeric does not support decimal_return_scale"
+                )
+            if keyword.arg == "asdecimal" and not (
+                isinstance(keyword.value, ast.Constant) and keyword.value.value is True
+            ):
+                raise UnsupportedNumericDeclarationError(
+                    f"{target.id}: ExactNumeric requires asdecimal=True"
+                )
     return target.id, nullable, precision, scale, constructor
 
 

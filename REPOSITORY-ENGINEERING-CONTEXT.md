@@ -322,7 +322,9 @@ Current repository posture:
     before execution, and the market-price authority remains exact-unbounded. Keep the
     `exact_bind_enforcement` guard requirement. This safety net does not replace owner-specific
     DTO/event validation or authorize blanket rounding of calculated outputs; rounding must be
-    explicit, domain-owned, tested, and reflected in calculation lineage.
+    explicit, domain-owned, tested, and reflected in calculation lineage. Core persistence is
+    PostgreSQL-only: exact numeric binds fail closed for other dialects, while Alembic
+    autogeneration renders standard portable `sa.Numeric(...)` revision declarations.
     Job-backed ingestion idempotency replay must resolve from durable lifecycle outcome evidence,
     never from job existence alone. A replay-safe queued job may return its existing `202`;
     recorded failures must reproduce the original status, stable code, source-safe detail, job

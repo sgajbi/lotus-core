@@ -248,6 +248,28 @@ def test_guard_requires_exact_numeric_when_contract_enables_bind_enforcement(
     )
 
 
+@pytest.mark.parametrize(
+    "keyword",
+    ["asdecimal=False", "asdecimal=dynamic_setting", "decimal_return_scale=10"],
+)
+def test_inventory_rejects_inexact_exact_numeric_options(
+    tmp_path: Path,
+    keyword: str,
+) -> None:
+    model_path = tmp_path / "database_models.py"
+    model_path.write_text(
+        "from portfolio_common.financial_numeric import ExactNumeric\n"
+        "from sqlalchemy import Column\n\n"
+        "class FinancialRow:\n"
+        '    __tablename__ = "financial_rows"\n'
+        f"    value = Column(ExactNumeric(18, 10, {keyword}), nullable=False)\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="ExactNumeric"):
+        inventory_numeric_columns(model_path)
+
+
 def test_guard_accepts_postgresql_text_cast_finiteness_constraint(
     tmp_path: Path,
 ) -> None:

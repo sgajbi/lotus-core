@@ -22,6 +22,9 @@ ingress validators could still be changed silently during persistence.
 - The authoritative market-price source fact remains finite exact-unbounded.
 - Extended the numeric persistence guard so the versioned contract requires exact bind
   enforcement and rejects restoration of a plain SQLAlchemy `Numeric` declaration.
+- Kept Alembic revisions portable by rendering the runtime decorator as standard `sa.Numeric(...)`.
+- Failed closed on non-PostgreSQL persistence dialects and non-Decimal result configuration;
+  Core's governed persistence runtime is PostgreSQL.
 - Added real PostgreSQL proof for maximum accepted values, exact unbounded round-trip, identical
   replay, excess scale, magnitude overflow, and zero residual rejected rows.
 
@@ -41,11 +44,14 @@ processing failures.
 
 ## Evidence
 
-- Signed commit `c33a9b3b213d05981731665a07fb56bbb938a0b9`.
+- Signed implementation commit `c33a9b3b213d05981731665a07fb56bbb938a0b9` and CI
+  fix-forward commit `070441c9d6e75807447635973a31f0eb8df3db92`.
 - 116 focused model, guard, type, and migration-parity tests passed with warnings as errors.
+- 96 focused model, guard, Alembic-render, type, and migration-parity tests passed after review
+  hardening.
 - Real PostgreSQL exact-bind proof passed.
 - `make test-fast`, `make typecheck`, `make financial-numeric-persistence-guard`, Ruff, formatting,
-  and diff hygiene passed.
+  Bandit, Vulture, and diff hygiene passed.
 - Guard inventory: 96 columns, 30 tables, 95 bounded, one exact-unbounded, ten domain families.
 
 ## Remaining #829 work

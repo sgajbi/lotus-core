@@ -35,6 +35,8 @@ class ExactNumeric(TypeDecorator[Decimal]):
         *,
         asdecimal: bool = True,
     ) -> None:
+        if asdecimal is not True:
+            raise ValueError("ExactNumeric requires Decimal result semantics")
         self.precision = precision
         self.scale = scale
         super().__init__(precision=precision, scale=scale, asdecimal=asdecimal)
@@ -53,6 +55,8 @@ class ExactNumeric(TypeDecorator[Decimal]):
     def process_bind_param(self, value: Any, _dialect: Dialect) -> Decimal | None:
         if value is None:
             return None
+        if _dialect.name != "postgresql":
+            raise RuntimeError("ExactNumeric persistence requires PostgreSQL")
         decimal_value = value if isinstance(value, Decimal) else Decimal(str(value))
         return self._precision_policy().require_exact(
             decimal_value,
