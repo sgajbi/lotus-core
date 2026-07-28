@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from copy import deepcopy
 from datetime import date
 from decimal import Decimal
@@ -74,6 +75,21 @@ def test_authoritative_market_price_source_fact_rejects_non_positive_finite_pric
 ) -> None:
     with pytest.raises(ValidationError):
         AuthoritativeMarketPriceSourceFact.model_validate(_record(price=price))
+
+
+def test_authoritative_market_price_source_fact_rejects_lossy_json_number_price() -> None:
+    payload = json.dumps(_record()).replace(
+        '"99.250000000000000000"',
+        "99.250000000000000001",
+    )
+
+    with pytest.raises(ValidationError, match="exact decimal string"):
+        AuthoritativeMarketPriceSourceFact.model_validate_json(payload)
+
+
+def test_authoritative_market_price_source_fact_rejects_boolean_fact_version() -> None:
+    with pytest.raises(ValidationError):
+        AuthoritativeMarketPriceSourceFact.model_validate(_record(fact_version=True))
 
 
 def test_authoritative_market_price_source_fact_requires_aware_observation() -> None:

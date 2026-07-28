@@ -13,7 +13,7 @@
       "openApiVersion": "3.1.0"
     }
   ],
-  "generatedAt": "2026-07-28T00:37:11.144499+00:00",
+  "generatedAt": "2026-07-28T01:48:11.019924+00:00",
   "attributeCatalog": [
     {
       "semanticId": "lotus.accepted_count",
@@ -4094,7 +4094,7 @@
           "legal_book_id": "LEGAL_BOOK_001",
           "security_id": "AAPL",
           "price_date": "2026-02-27",
-          "price": "99.250000000000000000",
+          "price": 182.35,
           "currency": "USD",
           "quote_basis": "UNIT_PRICE",
           "fact_status": "ACTIVE",
@@ -23355,7 +23355,7 @@
             "name": "market_price_source_facts[].price",
             "location": "body",
             "required": true,
-            "type": "object",
+            "type": "string",
             "semanticId": "lotus.price",
             "attributeRef": "lotus.price"
           },

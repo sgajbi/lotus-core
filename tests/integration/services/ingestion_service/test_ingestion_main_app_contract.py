@@ -1056,6 +1056,11 @@ async def test_openapi_describes_reference_data_shared_schema(async_test_client)
     assert market_price_source_fact["properties"]["quote_basis"]["description"] == (
         "Explicit representation used by the assigned valuation policy."
     )
+    assert market_price_source_fact["properties"]["price"]["type"] == "string"
+    assert market_price_source_fact["properties"]["price"]["description"] == (
+        "Positive finite source value supplied as an exact JSON decimal string and preserved "
+        "without an implicit decimal scale or quote-convention inference."
+    )
     assert market_price_source_fact["properties"]["source_content_hash"]["pattern"] == (
         "^[0-9a-f]{64}$"
     )
