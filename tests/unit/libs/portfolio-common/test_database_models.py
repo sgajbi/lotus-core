@@ -426,6 +426,87 @@ def test_reference_numeric_models_enforce_finite_domain_policy(
         assert all(term in sign_sql for term in sign_terms)
 
 
+@pytest.mark.parametrize(
+    (
+        "table_name",
+        "finite_constraint_name",
+        "finite_columns",
+        "sign_constraint_name",
+        "sign_terms",
+    ),
+    [
+        (
+            "sustainability_preference_profiles",
+            "ck_sustainability_allocations_finite",
+            ("minimum_allocation", "maximum_allocation"),
+            "ck_sustainability_allocations_nonnegative",
+            ("minimum_allocation >= 0", "maximum_allocation >= 0"),
+        ),
+        (
+            "client_tax_profiles",
+            "ck_client_tax_withholding_rate_finite",
+            ("withholding_tax_rate",),
+            "ck_client_tax_withholding_rate_nonnegative",
+            ("withholding_tax_rate >= 0",),
+        ),
+        (
+            "client_tax_rule_sets",
+            "ck_client_tax_rule_values_finite",
+            ("rate", "threshold_amount"),
+            "ck_client_tax_rule_values_nonnegative",
+            ("rate >= 0", "threshold_amount >= 0"),
+        ),
+        (
+            "client_income_needs_schedules",
+            "ck_client_income_need_amount_finite",
+            ("amount",),
+            "ck_client_income_need_amount_positive",
+            ("amount > 0",),
+        ),
+        (
+            "liquidity_reserve_requirements",
+            "ck_liquidity_reserve_amount_finite",
+            ("required_amount",),
+            "ck_liquidity_reserve_amount_positive",
+            ("required_amount > 0",),
+        ),
+        (
+            "planned_withdrawal_schedules",
+            "ck_planned_withdrawal_amount_finite",
+            ("amount",),
+            "ck_planned_withdrawal_amount_positive",
+            ("amount > 0",),
+        ),
+        (
+            "model_portfolio_targets",
+            "ck_model_portfolio_weights_finite",
+            ("target_weight", "min_weight", "max_weight"),
+            "ck_model_portfolio_weights_nonnegative",
+            ("target_weight >= 0", "min_weight >= 0", "max_weight >= 0"),
+        ),
+    ],
+)
+def test_client_policy_numeric_models_enforce_finite_domain_policy(
+    table_name: str,
+    finite_constraint_name: str,
+    finite_columns: tuple[str, ...],
+    sign_constraint_name: str,
+    sign_terms: tuple[str, ...],
+) -> None:
+    table = Base.metadata.tables[table_name]
+    constraints = {
+        constraint.name: constraint
+        for constraint in table.constraints
+        if constraint.name is not None
+    }
+
+    finite_sql = str(constraints[finite_constraint_name].sqltext)
+    for column_name in finite_columns:
+        assert f"CAST({column_name} AS TEXT) NOT IN ('NaN', 'Infinity', '-Infinity')" in finite_sql
+    sign_sql = str(constraints[sign_constraint_name].sqltext)
+    assert all(term in sign_sql for term in sign_terms)
+
+
 def test_model_portfolio_tables_declare_dpm_source_indexes():
     definition_indexes = {index.name: index for index in ModelPortfolioDefinition.__table__.indexes}
     target_indexes = {index.name: index for index in ModelPortfolioTarget.__table__.indexes}

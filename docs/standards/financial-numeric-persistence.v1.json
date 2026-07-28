@@ -73,29 +73,29 @@
       "contract_rate": {"profile": "nullable-positive-finite", "rollout_status": "orm-enforced"}
     },
     "sustainability_preference_profiles": {
-      "minimum_allocation": {"profile": "nullable-nonnegative-finite", "rollout_status": "planned"},
-      "maximum_allocation": {"profile": "nullable-nonnegative-finite", "rollout_status": "planned"}
+      "minimum_allocation": {"profile": "nullable-nonnegative-finite", "rollout_status": "orm-enforced"},
+      "maximum_allocation": {"profile": "nullable-nonnegative-finite", "rollout_status": "orm-enforced"}
     },
     "client_tax_profiles": {
-      "withholding_tax_rate": {"profile": "nullable-nonnegative-finite", "rollout_status": "planned"}
+      "withholding_tax_rate": {"profile": "nullable-nonnegative-finite", "rollout_status": "orm-enforced"}
     },
     "client_tax_rule_sets": {
-      "rate": {"profile": "nullable-nonnegative-finite", "rollout_status": "planned"},
-      "threshold_amount": {"profile": "nullable-nonnegative-finite", "rollout_status": "planned"}
+      "rate": {"profile": "nullable-nonnegative-finite", "rollout_status": "orm-enforced"},
+      "threshold_amount": {"profile": "nullable-nonnegative-finite", "rollout_status": "orm-enforced"}
     },
     "client_income_needs_schedules": {
-      "amount": {"profile": "positive-finite", "rollout_status": "planned"}
+      "amount": {"profile": "positive-finite", "rollout_status": "orm-enforced"}
     },
     "liquidity_reserve_requirements": {
-      "required_amount": {"profile": "positive-finite", "rollout_status": "planned"}
+      "required_amount": {"profile": "positive-finite", "rollout_status": "orm-enforced"}
     },
     "planned_withdrawal_schedules": {
-      "amount": {"profile": "positive-finite", "rollout_status": "planned"}
+      "amount": {"profile": "positive-finite", "rollout_status": "orm-enforced"}
     },
     "model_portfolio_targets": {
-      "target_weight": {"profile": "nonnegative-finite", "rollout_status": "planned"},
-      "min_weight": {"profile": "nullable-nonnegative-finite", "rollout_status": "planned"},
-      "max_weight": {"profile": "nullable-nonnegative-finite", "rollout_status": "planned"}
+      "target_weight": {"profile": "nonnegative-finite", "rollout_status": "orm-enforced"},
+      "min_weight": {"profile": "nullable-nonnegative-finite", "rollout_status": "orm-enforced"},
+      "max_weight": {"profile": "nullable-nonnegative-finite", "rollout_status": "orm-enforced"}
     },
     "benchmark_composition_series": {
       "composition_weight": {"profile": "nonnegative-finite", "rollout_status": "orm-enforced"}
