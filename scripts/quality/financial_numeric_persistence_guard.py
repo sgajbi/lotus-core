@@ -22,6 +22,7 @@ _CANONICAL_PROFILES = {
 _ROLLOUT_STATUSES = {"orm-enforced", "planned"}
 _SPECIAL_NUMERIC_LITERALS = ("NaN", "Infinity", "-Infinity")
 _SQLALCHEMY_NUMERIC_CONSTRUCTORS = {"Numeric", "NUMERIC", "DECIMAL"}
+_FINITE_CONSTRAINT_HELPER = "_finite_numeric_check_constraint"
 _V1_CONTRACT_KEYS = {
     "schema_version",
     "model_path",
@@ -106,13 +107,37 @@ def _extract_table_name(class_node: ast.ClassDef) -> str | None:
 def _extract_check_constraints(class_node: ast.ClassDef) -> tuple[str, ...]:
     checks: list[str] = []
     for node in ast.walk(class_node):
-        if not isinstance(node, ast.Call) or _call_name(node.func) != "CheckConstraint":
+        if not isinstance(node, ast.Call):
             continue
-        if not node.args:
+        call_name = _call_name(node.func)
+        if call_name == "CheckConstraint":
+            if not node.args:
+                continue
+            expression = _constant_string(node.args[0])
+            if expression is not None:
+                checks.append(expression)
             continue
-        expression = _constant_string(node.args[0])
-        if expression is not None:
-            checks.append(expression)
+        if call_name != _FINITE_CONSTRAINT_HELPER:
+            continue
+        if len(node.args) < 2:
+            raise UnsupportedNumericDeclarationError(
+                f"{class_node.name}: {_FINITE_CONSTRAINT_HELPER} requires a name "
+                "and at least one column"
+            )
+        constraint_name = _constant_string(node.args[0])
+        column_names = tuple(_constant_string(argument) for argument in node.args[1:])
+        if constraint_name is None or any(column is None for column in column_names):
+            raise UnsupportedNumericDeclarationError(
+                f"{class_node.name}: {_FINITE_CONSTRAINT_HELPER} arguments must be string literals"
+            )
+        values = ", ".join(f"'{value}'" for value in _SPECIAL_NUMERIC_LITERALS)
+        checks.append(
+            " AND ".join(
+                f"CAST({column} AS TEXT) NOT IN ({values})"
+                for column in column_names
+                if column is not None
+            )
+        )
     return tuple(checks)
 
 

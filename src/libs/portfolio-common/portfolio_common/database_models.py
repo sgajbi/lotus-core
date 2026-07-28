@@ -40,6 +40,25 @@ from .source_lifecycle_predicates import (
     SUSTAINABILITY_PREFERENCE_ACTIVE,
 )
 
+_POSTGRESQL_SPECIAL_NUMERIC_VALUES = ("NaN", "Infinity", "-Infinity")
+
+
+def _finite_numeric_check_constraint(
+    name: str,
+    *column_names: str,
+) -> CheckConstraint:
+    """Build one explicit PostgreSQL finite-value check for numeric columns."""
+
+    if not column_names:
+        raise ValueError("at least one numeric column is required")
+    if any(not column_name.isidentifier() for column_name in column_names):
+        raise ValueError("numeric column names must be identifiers")
+    special_values = ", ".join(f"'{value}'" for value in _POSTGRESQL_SPECIAL_NUMERIC_VALUES)
+    condition = " AND ".join(
+        f"CAST({column_name} AS TEXT) NOT IN ({special_values})" for column_name in column_names
+    )
+    return CheckConstraint(condition, name=name)
+
 
 class BusinessDate(Base):
     __tablename__ = "business_dates"
