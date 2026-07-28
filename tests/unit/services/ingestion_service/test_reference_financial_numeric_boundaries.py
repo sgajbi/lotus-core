@@ -12,17 +12,38 @@ from src.services.ingestion_service.app.DTOs.reference_data_benchmark_compositio
 from src.services.ingestion_service.app.DTOs.reference_data_benchmark_return_series_dto import (
     BenchmarkReturnSeriesRecord,
 )
+from src.services.ingestion_service.app.DTOs.reference_data_income_needs_dto import (
+    ClientIncomeNeedsScheduleRecord,
+)
 from src.services.ingestion_service.app.DTOs.reference_data_index_price_series_dto import (
     IndexPriceSeriesRecord,
 )
 from src.services.ingestion_service.app.DTOs.reference_data_index_return_series_dto import (
     IndexReturnSeriesRecord,
 )
+from src.services.ingestion_service.app.DTOs.reference_data_liquidity_reserve_dto import (
+    LiquidityReserveRequirementRecord,
+)
+from src.services.ingestion_service.app.DTOs.reference_data_model_portfolio_target_dto import (
+    ModelPortfolioTargetRecord,
+)
+from src.services.ingestion_service.app.DTOs.reference_data_planned_withdrawal_dto import (
+    PlannedWithdrawalScheduleRecord,
+)
 from src.services.ingestion_service.app.DTOs.reference_data_risk_free_series_dto import (
     RiskFreeSeriesRecord,
 )
 from src.services.ingestion_service.app.DTOs.reference_data_support_dto import (
     InstrumentLookthroughComponentRecord,
+)
+from src.services.ingestion_service.app.DTOs.reference_data_sustainability_preference_dto import (
+    SustainabilityPreferenceProfileRecord,
+)
+from src.services.ingestion_service.app.DTOs.reference_data_tax_profile_dto import (
+    ClientTaxProfileRecord,
+)
+from src.services.ingestion_service.app.DTOs.reference_data_tax_rule_set_dto import (
+    ClientTaxRuleSetRecord,
 )
 
 
@@ -236,3 +257,62 @@ def test_reference_numeric_fields_publish_exact_openapi_contract(
 
     assert "NUMERIC(18,10)" in description
     assert "excess scale and magnitude overflow are rejected, not rounded" in description
+
+
+def _numeric_json_schema(schema: dict[str, object]) -> dict[str, object]:
+    if schema.get("type") == "number":
+        return schema
+    for alternative in schema.get("anyOf", []):
+        if isinstance(alternative, dict):
+            try:
+                return _numeric_json_schema(alternative)
+            except AssertionError:
+                continue
+    raise AssertionError(f"numeric JSON Schema alternative not found: {schema}")
+
+
+@pytest.mark.parametrize(
+    ("record_type", "field_name", "expected_bounds"),
+    [
+        (
+            SustainabilityPreferenceProfileRecord,
+            "minimum_allocation",
+            {"minimum": 0.0, "maximum": 1.0},
+        ),
+        (
+            SustainabilityPreferenceProfileRecord,
+            "maximum_allocation",
+            {"minimum": 0.0, "maximum": 1.0},
+        ),
+        (ClientTaxProfileRecord, "withholding_tax_rate", {"minimum": 0.0, "maximum": 1.0}),
+        (ClientTaxRuleSetRecord, "rate", {"minimum": 0.0, "maximum": 1.0}),
+        (ClientTaxRuleSetRecord, "threshold_amount", {"minimum": 0.0}),
+        (ClientIncomeNeedsScheduleRecord, "amount", {"exclusiveMinimum": 0.0}),
+        (LiquidityReserveRequirementRecord, "required_amount", {"exclusiveMinimum": 0.0}),
+        (PlannedWithdrawalScheduleRecord, "amount", {"exclusiveMinimum": 0.0}),
+        (ModelPortfolioTargetRecord, "target_weight", {"minimum": 0.0, "maximum": 1.0}),
+        (ModelPortfolioTargetRecord, "min_weight", {"minimum": 0.0, "maximum": 1.0}),
+        (ModelPortfolioTargetRecord, "max_weight", {"minimum": 0.0, "maximum": 1.0}),
+        (BenchmarkCompositionRecord, "composition_weight", {"minimum": 0.0, "maximum": 1.0}),
+        (IndexPriceSeriesRecord, "index_price", {"exclusiveMinimum": 0.0}),
+        (
+            InstrumentLookthroughComponentRecord,
+            "component_weight",
+            {"minimum": 0.0, "maximum": 1.0},
+        ),
+        (Instrument, "buy_amount", {"exclusiveMinimum": 0.0}),
+        (Instrument, "sell_amount", {"exclusiveMinimum": 0.0}),
+        (Instrument, "contract_rate", {"exclusiveMinimum": 0.0}),
+    ],
+)
+def test_exact_numeric_bounds_remain_machine_readable_in_openapi(
+    record_type: type[BaseModel],
+    field_name: str,
+    expected_bounds: dict[str, float],
+) -> None:
+    field_schema = record_type.model_json_schema()["properties"][field_name]
+    numeric_schema = _numeric_json_schema(field_schema)
+
+    for keyword, expected_value in expected_bounds.items():
+        assert numeric_schema[keyword] == expected_value
+    assert not {"ge", "gt", "le", "lt"}.intersection(numeric_schema)

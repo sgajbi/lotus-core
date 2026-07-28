@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from decimal import Decimal
 from typing import Literal, cast
 
 from portfolio_common.domain.currency import normalize_currency_code
 from portfolio_common.openapi_enrichment import exact_numeric_openapi_description
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from .financial_numeric_fields import ExactDecimal18_4
+from .financial_numeric_fields import ExactPositiveDecimal18_4
 
 
 class ClientIncomeNeedsScheduleRecord(BaseModel):
@@ -22,9 +21,8 @@ class ClientIncomeNeedsScheduleRecord(BaseModel):
     need_status: Literal["active", "inactive", "suspended"] = Field(
         "active", description="Income-needs lifecycle status."
     )
-    amount: ExactDecimal18_4 = Field(
+    amount: ExactPositiveDecimal18_4 = Field(
         ...,
-        gt=Decimal(0),
         description=exact_numeric_openapi_description(
             "Source-supplied amount for the income need.",
             precision=18,

@@ -7,7 +7,7 @@ from typing import Literal
 from portfolio_common.openapi_enrichment import exact_numeric_openapi_description
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from .financial_numeric_fields import ExactDecimal18_10
+from .financial_numeric_fields import ExactRatioDecimal18_10
 
 
 class ModelPortfolioTargetRecord(BaseModel):
@@ -26,10 +26,8 @@ class ModelPortfolioTargetRecord(BaseModel):
         description="Canonical instrument identifier.",
         examples=["EQ_US_AAPL"],
     )
-    target_weight: ExactDecimal18_10 = Field(
+    target_weight: ExactRatioDecimal18_10 = Field(
         ...,
-        ge=Decimal(0),
-        le=Decimal(1),
         description=exact_numeric_openapi_description(
             "Target instrument weight as a decimal ratio between 0 and 1.",
             precision=18,
@@ -37,10 +35,8 @@ class ModelPortfolioTargetRecord(BaseModel):
         ),
         examples=["0.1200000000"],
     )
-    min_weight: ExactDecimal18_10 | None = Field(
+    min_weight: ExactRatioDecimal18_10 | None = Field(
         None,
-        ge=Decimal(0),
-        le=Decimal(1),
         description=exact_numeric_openapi_description(
             "Optional minimum policy band for the instrument.",
             precision=18,
@@ -48,10 +44,8 @@ class ModelPortfolioTargetRecord(BaseModel):
         ),
         examples=["0.0800000000"],
     )
-    max_weight: ExactDecimal18_10 | None = Field(
+    max_weight: ExactRatioDecimal18_10 | None = Field(
         None,
-        ge=Decimal(0),
-        le=Decimal(1),
         description=exact_numeric_openapi_description(
             "Optional maximum policy band for the instrument.",
             precision=18,

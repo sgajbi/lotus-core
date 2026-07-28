@@ -10,7 +10,7 @@ from portfolio_common.domain.financial.precision import (
     BOUNDED_18_10_EXACT,
     DecimalPrecisionPolicy,
 )
-from pydantic import AfterValidator, ValidationInfo
+from pydantic import AfterValidator, Field, ValidationInfo
 
 
 def _require_exact(
@@ -35,3 +35,23 @@ def _require_exact_18_4(value: Decimal, info: ValidationInfo) -> Decimal:
 
 ExactDecimal18_10 = Annotated[Decimal, AfterValidator(_require_exact_18_10)]
 ExactDecimal18_4 = Annotated[Decimal, AfterValidator(_require_exact_18_4)]
+ExactRatioDecimal18_10 = Annotated[
+    Decimal,
+    Field(ge=Decimal(0), le=Decimal(1)),
+    AfterValidator(_require_exact_18_10),
+]
+ExactPositiveDecimal18_10 = Annotated[
+    Decimal,
+    Field(gt=Decimal(0)),
+    AfterValidator(_require_exact_18_10),
+]
+ExactPositiveDecimal18_4 = Annotated[
+    Decimal,
+    Field(gt=Decimal(0)),
+    AfterValidator(_require_exact_18_4),
+]
+ExactNonNegativeDecimal18_4 = Annotated[
+    Decimal,
+    Field(ge=Decimal(0)),
+    AfterValidator(_require_exact_18_4),
+]

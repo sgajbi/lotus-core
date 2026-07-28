@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 from datetime import date
-from decimal import Decimal
 from typing import cast
 
 from portfolio_common.domain.currency import normalize_currency_code
 from portfolio_common.openapi_enrichment import exact_numeric_openapi_description
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from .financial_numeric_fields import ExactDecimal18_10
+from .financial_numeric_fields import ExactRatioDecimal18_10
 from .reference_data_source_observation_dto import SourceObservationLineage
 
 
@@ -116,10 +115,8 @@ class InstrumentLookthroughComponentRecord(BaseModel):
         description="Effective end date for the look-through composition row.",
         examples=["2026-12-31"],
     )
-    component_weight: ExactDecimal18_10 = Field(
+    component_weight: ExactRatioDecimal18_10 = Field(
         ...,
-        ge=Decimal(0),
-        le=Decimal(1),
         description=exact_numeric_openapi_description(
             "Weight of the underlying component between 0 and 1.",
             precision=18,
