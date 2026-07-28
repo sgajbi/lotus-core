@@ -163,8 +163,13 @@ cutover.
   stack becomes healthy
 - correlation identity is part of the supported traceability contract
 - duplicate `X-Idempotency-Key` use for the same endpoint and same source-safe canonical payload
-  replays the existing acknowledgement across accepted, queued, and failed lifecycle states; the
-  same endpoint/key with a different payload returns `409 INGESTION_IDEMPOTENCY_CONFLICT`
+  resolves from durable lifecycle evidence: a replay-safe queued job returns its existing `202`
+  acknowledgement, a durable failed outcome reproduces its original status/code/safe detail and
+  headers, and an unresolved accepted job returns `409 INGESTION_REQUEST_IN_PROGRESS`; the same
+  endpoint/key with a different payload returns `409 INGESTION_IDEMPOTENCY_CONFLICT`
+- post-persist and post-publish bookkeeping failures preserve a durable
+  `INGESTION_JOB_BOOKKEEPING_FAILED` outcome with `retry_safe=false`; operators must confirm work
+  state and use governed bookkeeping repair instead of blind resubmission
 - keyed ingestion job creation is serialized with a transaction-scoped database lock before
   lookup/create, and idempotency diagnostics classify cross-endpoint reuse separately from
   same-endpoint payload-fingerprint conflicts

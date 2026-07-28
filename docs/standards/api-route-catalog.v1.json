@@ -1996,7 +1996,7 @@
         {
           "status_code": "409",
           "schema": "none",
-          "description": "Idempotency key was reused for the same endpoint with a different canonical request payload."
+          "description": "The idempotency key conflicts with another payload, or the matching request has not reached a replay-safe state."
         },
         {
           "status_code": "422",
@@ -2061,7 +2061,7 @@
         {
           "status_code": "409",
           "schema": "none",
-          "description": "Idempotency key was reused for the same endpoint with a different canonical request payload."
+          "description": "The idempotency key conflicts with another payload, or the matching request has not reached a replay-safe state."
         },
         {
           "status_code": "422",
@@ -2126,7 +2126,7 @@
         {
           "status_code": "409",
           "schema": "none",
-          "description": "Idempotency key was reused for the same endpoint with a different canonical request payload."
+          "description": "The idempotency key conflicts with another payload, or the matching request has not reached a replay-safe state."
         },
         {
           "status_code": "422",
@@ -2191,7 +2191,7 @@
         {
           "status_code": "409",
           "schema": "none",
-          "description": "Idempotency key was reused for the same endpoint with a different canonical request payload."
+          "description": "The idempotency key conflicts with another payload, or the matching request has not reached a replay-safe state."
         },
         {
           "status_code": "422",
@@ -2256,7 +2256,7 @@
         {
           "status_code": "409",
           "schema": "none",
-          "description": "Idempotency key was reused for the same endpoint with a different canonical request payload."
+          "description": "The idempotency key conflicts with another payload, or the matching request has not reached a replay-safe state."
         },
         {
           "status_code": "422",
@@ -2316,7 +2316,7 @@
         {
           "status_code": "409",
           "schema": "none",
-          "description": "Idempotency key was reused for the same endpoint with a different canonical request payload."
+          "description": "The idempotency key conflicts with another payload, or the matching request has not reached a replay-safe state."
         },
         {
           "status_code": "422",
@@ -2381,7 +2381,7 @@
         {
           "status_code": "409",
           "schema": "none",
-          "description": "Idempotency key was reused for the same endpoint with a different canonical request payload."
+          "description": "The idempotency key conflicts with another payload, or the matching request has not reached a replay-safe state."
         },
         {
           "status_code": "422",
@@ -2446,7 +2446,7 @@
         {
           "status_code": "409",
           "schema": "none",
-          "description": "Idempotency key was reused for the same endpoint with a different canonical request payload."
+          "description": "The idempotency key conflicts with another payload, or the matching request has not reached a replay-safe state."
         },
         {
           "status_code": "422",
@@ -2511,7 +2511,7 @@
         {
           "status_code": "409",
           "schema": "none",
-          "description": "Idempotency key was reused for the same endpoint with a different canonical request payload."
+          "description": "The idempotency key conflicts with another payload, or the matching request has not reached a replay-safe state."
         },
         {
           "status_code": "422",
@@ -2576,7 +2576,7 @@
         {
           "status_code": "409",
           "schema": "none",
-          "description": "Idempotency key was reused for the same endpoint with a different canonical request payload."
+          "description": "The idempotency key conflicts with another payload, or the matching request has not reached a replay-safe state."
         },
         {
           "status_code": "422",
@@ -2636,7 +2636,7 @@
         {
           "status_code": "409",
           "schema": "none",
-          "description": "Idempotency key was reused for the same endpoint with a different canonical request payload."
+          "description": "The idempotency key conflicts with another payload, or the matching request has not reached a replay-safe state."
         },
         {
           "status_code": "422",
@@ -2701,7 +2701,7 @@
         {
           "status_code": "409",
           "schema": "none",
-          "description": "Idempotency key was reused for the same endpoint with a different canonical request payload."
+          "description": "The idempotency key conflicts with another payload, or the matching request has not reached a replay-safe state."
         },
         {
           "status_code": "422",
@@ -2766,7 +2766,7 @@
         {
           "status_code": "409",
           "schema": "none",
-          "description": "Idempotency key was reused for the same endpoint with a different canonical request payload."
+          "description": "The idempotency key conflicts with another payload, or the matching request has not reached a replay-safe state."
         },
         {
           "status_code": "422",
@@ -2831,7 +2831,7 @@
         {
           "status_code": "409",
           "schema": "none",
-          "description": "Idempotency key was reused for the same endpoint with a different canonical request payload."
+          "description": "The idempotency key conflicts with another payload, or the matching request has not reached a replay-safe state."
         },
         {
           "status_code": "422",
@@ -2961,7 +2961,7 @@
         {
           "status_code": "409",
           "schema": "none",
-          "description": "Idempotency key was reused for the same endpoint with a different canonical request payload."
+          "description": "The idempotency key conflicts with another payload, or the matching request has not reached a replay-safe state."
         },
         {
           "status_code": "422",
@@ -3021,7 +3021,7 @@
         {
           "status_code": "409",
           "schema": "none",
-          "description": "Idempotency key was reused for the same endpoint with a different canonical request payload."
+          "description": "The idempotency key conflicts with another payload, or the matching request has not reached a replay-safe state."
         },
         {
           "status_code": "422",
@@ -3086,7 +3086,7 @@
         {
           "status_code": "409",
           "schema": "none",
-          "description": "Idempotency key was reused for the same endpoint with a different canonical request payload."
+          "description": "The idempotency key conflicts with another payload, or the matching request has not reached a replay-safe state."
         },
         {
           "status_code": "422",
@@ -3151,7 +3151,7 @@
         {
           "status_code": "409",
           "schema": "none",
-          "description": "Idempotency key was reused for the same endpoint with a different canonical request payload."
+          "description": "The idempotency key conflicts with another payload, or the matching request has not reached a replay-safe state."
         },
         {
           "status_code": "422",
@@ -3211,7 +3211,7 @@
         {
           "status_code": "409",
           "schema": "none",
-          "description": "Idempotency key was reused for the same endpoint with a different canonical request payload."
+          "description": "The idempotency key conflicts with another payload, or the matching request has not reached a replay-safe state."
         },
         {
           "status_code": "422",
@@ -3276,7 +3276,7 @@
         {
           "status_code": "409",
           "schema": "none",
-          "description": "Idempotency key was reused for the same endpoint with a different canonical request payload."
+          "description": "The idempotency key conflicts with another payload, or the matching request has not reached a replay-safe state."
         },
         {
           "status_code": "422",
@@ -3341,7 +3341,7 @@
         {
           "status_code": "409",
           "schema": "none",
-          "description": "Idempotency key was reused for the same endpoint with a different canonical request payload."
+          "description": "The idempotency key conflicts with another payload, or the matching request has not reached a replay-safe state."
         },
         {
           "status_code": "422",
@@ -3406,7 +3406,7 @@
         {
           "status_code": "409",
           "schema": "none",
-          "description": "Idempotency key was reused for the same endpoint with a different canonical request payload."
+          "description": "The idempotency key conflicts with another payload, or the matching request has not reached a replay-safe state."
         },
         {
           "status_code": "410",
@@ -3471,7 +3471,7 @@
         {
           "status_code": "409",
           "schema": "none",
-          "description": "Idempotency key was reused for the same endpoint with a different canonical request payload."
+          "description": "The idempotency key conflicts with another payload, or the matching request has not reached a replay-safe state."
         },
         {
           "status_code": "422",
@@ -3536,7 +3536,7 @@
         {
           "status_code": "409",
           "schema": "none",
-          "description": "Idempotency key was reused for the same endpoint with a different canonical request payload."
+          "description": "The idempotency key conflicts with another payload, or the matching request has not reached a replay-safe state."
         },
         {
           "status_code": "422",
@@ -3596,7 +3596,7 @@
         {
           "status_code": "409",
           "schema": "none",
-          "description": "Idempotency key was reused for the same endpoint with a different canonical request payload."
+          "description": "The idempotency key conflicts with another payload, or the matching request has not reached a replay-safe state."
         },
         {
           "status_code": "422",
@@ -3661,7 +3661,7 @@
         {
           "status_code": "409",
           "schema": "none",
-          "description": "Idempotency key was reused for the same endpoint with a different canonical request payload."
+          "description": "The idempotency key conflicts with another payload, or the matching request has not reached a replay-safe state."
         },
         {
           "status_code": "422",
@@ -3726,7 +3726,7 @@
         {
           "status_code": "409",
           "schema": "none",
-          "description": "Idempotency key was reused for the same endpoint with a different canonical request payload."
+          "description": "The idempotency key conflicts with another payload, or the matching request has not reached a replay-safe state."
         },
         {
           "status_code": "422",
@@ -3791,7 +3791,7 @@
         {
           "status_code": "409",
           "schema": "none",
-          "description": "Idempotency key was reused for the same endpoint with a different canonical request payload."
+          "description": "The idempotency key conflicts with another payload, or the matching request has not reached a replay-safe state."
         },
         {
           "status_code": "422",
@@ -3856,7 +3856,7 @@
         {
           "status_code": "409",
           "schema": "none",
-          "description": "Idempotency key was reused for the same endpoint with a different canonical request payload."
+          "description": "The idempotency key conflicts with another payload, or the matching request has not reached a replay-safe state."
         },
         {
           "status_code": "422",
@@ -3976,7 +3976,7 @@
         {
           "status_code": "409",
           "schema": "none",
-          "description": "Idempotency key was reused for the same endpoint with a different canonical request payload."
+          "description": "The idempotency key conflicts with another payload, or the matching request has not reached a replay-safe state."
         },
         {
           "status_code": "422",

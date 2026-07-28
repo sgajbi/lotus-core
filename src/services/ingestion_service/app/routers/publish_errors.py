@@ -23,6 +23,14 @@ INGESTION_IDEMPOTENCY_CONFLICT_EXAMPLE = {
         "idempotency_key": "ingestion-transactions-batch-20260301-001",
     }
 }
+INGESTION_REQUEST_IN_PROGRESS_EXAMPLE = {
+    "detail": {
+        "code": "INGESTION_REQUEST_IN_PROGRESS",
+        "message": "The original ingestion request has not reached a replay-safe state.",
+        "job_id": "ing_01HZY3W6K8QF5B3Z7R9M2N1P0A",
+        "status": "accepted",
+    }
+}
 
 
 def ingestion_publish_failed_detail(
@@ -102,10 +110,23 @@ def ingestion_unavailable_response(
 def ingestion_idempotency_conflict_response() -> dict[str, object]:
     return {
         "description": (
-            "Idempotency key was reused for the same endpoint with a different canonical "
-            "request payload."
+            "The idempotency key conflicts with another payload, or the matching request has "
+            "not reached a replay-safe state."
         ),
-        "content": {"application/json": {"example": INGESTION_IDEMPOTENCY_CONFLICT_EXAMPLE}},
+        "content": {
+            "application/json": {
+                "examples": {
+                    "idempotency_conflict": {
+                        "summary": "Idempotency key payload conflict.",
+                        "value": INGESTION_IDEMPOTENCY_CONFLICT_EXAMPLE,
+                    },
+                    "request_in_progress": {
+                        "summary": "Matching request has not reached a replay-safe state.",
+                        "value": INGESTION_REQUEST_IN_PROGRESS_EXAMPLE,
+                    },
+                }
+            }
+        },
     }
 
 
@@ -126,6 +147,10 @@ def ingestion_conflict_response_with_idempotency_example(
                     "idempotency_conflict": {
                         "summary": "Idempotency key payload conflict.",
                         "value": INGESTION_IDEMPOTENCY_CONFLICT_EXAMPLE,
+                    },
+                    "request_in_progress": {
+                        "summary": "Matching request has not reached a replay-safe state.",
+                        "value": INGESTION_REQUEST_IN_PROGRESS_EXAMPLE,
                     },
                 }
             }

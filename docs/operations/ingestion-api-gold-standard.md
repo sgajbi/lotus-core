@@ -78,6 +78,26 @@ This runbook summarizes the ingestion operations controls expected for productio
 These endpoints are designed so operations teams can triage and recover ingestion without direct
 DB access.
 
+## Deterministic idempotent replay
+
+For job-backed ingestion routes, an existing idempotency record is evidence to resolve—not evidence
+of success by itself.
+
+- `queued` with no recorded failure replays the existing `202` acknowledgement without repeating
+  persistence, publication, or source resolution.
+- A durable failed outcome replays its original HTTP status, stable code, safe detail, job
+  identifier, and safe headers such as `Retry-After`.
+- An `accepted` job without a durable outcome returns `409 INGESTION_REQUEST_IN_PROGRESS`. Inspect
+  the job and failure history; do not infer that work was stored or published.
+- Post-persist and post-publish bookkeeping failures return
+  `INGESTION_JOB_BOOKKEEPING_FAILED` with `retry_safe=false`. Use the governed bookkeeping repair
+  operation after confirming work state; do not blindly resubmit.
+- A same-endpoint key reused with a different canonical payload remains
+  `409 INGESTION_IDEMPOTENCY_CONFLICT`.
+
+Failure details are source-safe operational evidence. They must not contain raw request payloads,
+credentials, or unbounded downstream exception data.
+
 ## Asynchronous transaction rejection diagnostics
 
 An HTTP acceptance response from a publish-backed transaction ingestion route confirms durable
