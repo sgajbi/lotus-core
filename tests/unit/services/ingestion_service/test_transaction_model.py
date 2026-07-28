@@ -495,3 +495,62 @@ def test_transaction_model_rejects_negative_allocated_cash_basis(field_name: str
         Transaction(**payload)
 
     assert any(field_name in error["loc"] for error in exc_info.value.errors())
+
+
+@pytest.mark.parametrize(
+    ("field_name", "invalid_value"),
+    [
+        ("price", "1.00000000001"),
+        ("gross_transaction_amount", "100000000"),
+        ("realized_fx_pnl_base", "1.00000000001"),
+        ("synthetic_flow_fx_rate_to_base", "1.00000000001"),
+    ],
+)
+def test_transaction_model_rejects_values_not_exactly_persistable(
+    field_name: str,
+    invalid_value: str,
+) -> None:
+    payload = {
+        "transaction_id": "TXN_PRECISION_REJECT_001",
+        "portfolio_id": "PORT_PRECISION_001",
+        "instrument_id": "SEC_PRECISION_001",
+        "security_id": "SEC_PRECISION_001",
+        "transaction_date": "2026-07-28T10:00:00Z",
+        "transaction_type": "BUY",
+        "quantity": "1",
+        "price": "1",
+        "gross_transaction_amount": "1",
+        "trade_currency": "USD",
+        "currency": "USD",
+        field_name: invalid_value,
+    }
+
+    with pytest.raises(ValidationError) as exc_info:
+        Transaction(**payload)
+
+    matching_errors = [
+        error for error in exc_info.value.errors() if field_name in error.get("loc", ())
+    ]
+    assert len(matching_errors) == 1
+    assert "transaction-persistence-v1" in matching_errors[0]["msg"]
+
+
+def test_transaction_model_rejects_aggregated_fee_overflow() -> None:
+    payload = {
+        "transaction_id": "TXN_FEE_PRECISION_REJECT_001",
+        "portfolio_id": "PORT_PRECISION_001",
+        "instrument_id": "SEC_PRECISION_001",
+        "security_id": "SEC_PRECISION_001",
+        "transaction_date": "2026-07-28T10:00:00Z",
+        "transaction_type": "BUY",
+        "quantity": "1",
+        "price": "1",
+        "gross_transaction_amount": "1",
+        "trade_currency": "USD",
+        "currency": "USD",
+        "brokerage": "60000000",
+        "stamp_duty": "60000000",
+    }
+
+    with pytest.raises(ValidationError, match="transaction-persistence-v1"):
+        Transaction(**payload)

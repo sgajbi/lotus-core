@@ -43,6 +43,10 @@ from portfolio_common.database_models import (
     Transaction,
     TransactionCost,
 )
+from portfolio_common.domain.transaction.numeric_policy import (
+    TRANSACTION_PERSISTED_DECIMAL_FIELDS,
+)
+from portfolio_common.financial_numeric import ExactNumeric
 from portfolio_common.source_lifecycle_predicates import (
     BENCHMARK_DEFINITION_ACTIVE,
     CLIENT_INCOME_NEEDS_ACTIVE,
@@ -67,6 +71,16 @@ def test_database_identifier_names_fit_postgresql_limit():
     too_long = sorted(name for name in names if len(name) > 63)
 
     assert too_long == []
+
+
+def test_transaction_precision_policy_covers_every_numeric_ledger_column() -> None:
+    exact_numeric_columns = {
+        column.name
+        for column in Transaction.__table__.columns
+        if isinstance(column.type, ExactNumeric)
+    }
+
+    assert exact_numeric_columns == set(TRANSACTION_PERSISTED_DECIMAL_FIELDS)
 
 
 def test_ingestion_job_declares_complete_failure_outcome_contract() -> None:

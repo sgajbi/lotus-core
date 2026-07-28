@@ -8,11 +8,15 @@ from portfolio_common.domain.transaction.fee_components import (
     TRANSACTION_FEE_COMPONENT_FIELDS,
     resolve_transaction_trade_fee,
 )
+from portfolio_common.domain.transaction.numeric_policy import (
+    TRANSACTION_COMMAND_DECIMAL_FIELDS,
+    require_transaction_persistence_precision,
+)
 from portfolio_common.domain.transaction_control_codes import (
     normalize_optional_transaction_control_code,
     normalize_transaction_control_code,
 )
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_validator
 
 from .ingestion_validation_errors import BLANK_IDENTIFIER, raise_ingestion_validation_error
 
@@ -696,10 +700,25 @@ class Transaction(BaseModel):
     def _normalize_optional_transaction_control_code(cls, value: str | None) -> str | None:
         return cast(str | None, normalize_optional_transaction_control_code(value))
 
+    @field_validator(*TRANSACTION_COMMAND_DECIMAL_FIELDS)
+    @classmethod
+    def _validate_persistence_precision(
+        cls,
+        value: Decimal | None,
+        info: ValidationInfo,
+    ) -> Decimal | None:
+        return require_transaction_persistence_precision(
+            value,
+            field_name=info.field_name,
+        )
+
     @model_validator(mode="after")
     def _aggregate_fee_components(self) -> "Transaction":
-        self.trade_fee = resolve_transaction_trade_fee(
-            self.trade_fee,
-            {field: getattr(self, field) for field in TRANSACTION_FEE_COMPONENT_FIELDS},
+        self.trade_fee = require_transaction_persistence_precision(
+            resolve_transaction_trade_fee(
+                self.trade_fee,
+                {field: getattr(self, field) for field in TRANSACTION_FEE_COMPONENT_FIELDS},
+            ),
+            field_name="trade_fee",
         )
         return self

@@ -220,3 +220,43 @@ def test_transaction_event_rejects_nonpositive_fx_amounts_and_rates() -> None:
             sell_amount=Decimal("1000000"),
             contract_rate=Decimal("1.095"),
         )
+
+
+@pytest.mark.parametrize("field_name", ["price", "net_cost", "realized_fx_pnl_base"])
+def test_transaction_event_rejects_values_not_exactly_persistable(field_name: str) -> None:
+    payload = {
+        "transaction_id": "EVENT_PRECISION_REJECT_001",
+        "portfolio_id": "PORT_PRECISION_001",
+        "instrument_id": "SEC_PRECISION_001",
+        "security_id": "SEC_PRECISION_001",
+        "transaction_date": datetime(2026, 7, 28, 10, 0),
+        "transaction_type": "BUY",
+        "quantity": Decimal("1"),
+        "price": Decimal("1"),
+        "gross_transaction_amount": Decimal("1"),
+        "trade_currency": "USD",
+        "currency": "USD",
+        field_name: Decimal("1.00000000001"),
+    }
+
+    with pytest.raises(ValidationError, match="transaction-persistence-v1"):
+        TransactionEvent(**payload)
+
+
+def test_transaction_event_rejects_aggregated_fee_overflow() -> None:
+    with pytest.raises(ValidationError, match="transaction-persistence-v1"):
+        TransactionEvent(
+            transaction_id="EVENT_FEE_PRECISION_REJECT_001",
+            portfolio_id="PORT_PRECISION_001",
+            instrument_id="SEC_PRECISION_001",
+            security_id="SEC_PRECISION_001",
+            transaction_date=datetime(2026, 7, 28, 10, 0),
+            transaction_type="BUY",
+            quantity=Decimal("1"),
+            price=Decimal("1"),
+            gross_transaction_amount=Decimal("1"),
+            trade_currency="USD",
+            currency="USD",
+            brokerage=Decimal("60000000"),
+            stamp_duty=Decimal("60000000"),
+        )
