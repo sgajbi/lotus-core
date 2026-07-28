@@ -4,8 +4,10 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Annotated, Literal
 
+from portfolio_common.openapi_enrichment import exact_numeric_openapi_description
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from .financial_numeric_fields import ExactDecimal18_10
 from .ingestion_validation_errors import (
     INVALID_ALLOCATION_BOUNDS,
     MISSING_PROFILE_SUBSTANCE,
@@ -14,7 +16,7 @@ from .ingestion_validation_errors import (
     validate_unique_records,
 )
 
-AllocationBound = Annotated[Decimal, Field(ge=Decimal(0), le=Decimal(1))]
+AllocationBound = Annotated[ExactDecimal18_10, Field(ge=Decimal(0), le=Decimal(1))]
 
 
 class SustainabilityPreferenceProfileRecord(BaseModel):
@@ -33,8 +35,22 @@ class SustainabilityPreferenceProfileRecord(BaseModel):
         "active", description="Preference lifecycle status."
     )
     preference_source: str = Field(..., description="Source channel that captured the preference.")
-    minimum_allocation: AllocationBound | None = Field(None)
-    maximum_allocation: AllocationBound | None = Field(None)
+    minimum_allocation: AllocationBound | None = Field(
+        None,
+        description=exact_numeric_openapi_description(
+            "Minimum portfolio allocation ratio required by the source preference.",
+            precision=18,
+            scale=10,
+        ),
+    )
+    maximum_allocation: AllocationBound | None = Field(
+        None,
+        description=exact_numeric_openapi_description(
+            "Maximum portfolio allocation ratio permitted by the source preference.",
+            precision=18,
+            scale=10,
+        ),
+    )
     applies_to_asset_classes: list[str] = Field(default_factory=list)
     exclusion_codes: list[str] = Field(default_factory=list)
     positive_tilt_codes: list[str] = Field(default_factory=list)

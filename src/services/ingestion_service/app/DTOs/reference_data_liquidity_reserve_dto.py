@@ -5,7 +5,10 @@ from decimal import Decimal
 from typing import Literal, cast
 
 from portfolio_common.domain.currency import normalize_currency_code
+from portfolio_common.openapi_enrichment import exact_numeric_openapi_description
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from .financial_numeric_fields import ExactDecimal18_4
 
 
 class LiquidityReserveRequirementRecord(BaseModel):
@@ -21,8 +24,14 @@ class LiquidityReserveRequirementRecord(BaseModel):
     reserve_status: Literal["active", "inactive", "suspended"] = Field(
         "active", description="Reserve requirement lifecycle status."
     )
-    required_amount: Decimal = Field(
-        ..., gt=Decimal(0), description="Required reserve amount supplied by the source."
+    required_amount: ExactDecimal18_4 = Field(
+        ...,
+        gt=Decimal(0),
+        description=exact_numeric_openapi_description(
+            "Required reserve amount supplied by the source.",
+            precision=18,
+            scale=4,
+        ),
     )
     currency: str = Field(
         ...,

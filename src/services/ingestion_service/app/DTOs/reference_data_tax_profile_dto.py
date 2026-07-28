@@ -4,8 +4,10 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Annotated, Literal
 
+from portfolio_common.openapi_enrichment import exact_numeric_openapi_description
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from .financial_numeric_fields import ExactDecimal18_10
 from .ingestion_validation_errors import (
     INVALID_TAX_STATUS_DETAIL,
     raise_ingestion_validation_error,
@@ -13,7 +15,7 @@ from .ingestion_validation_errors import (
     validate_unique_records,
 )
 
-RatioDecimal = Annotated[Decimal, Field(ge=Decimal(0), le=Decimal(1))]
+RatioDecimal = Annotated[ExactDecimal18_10, Field(ge=Decimal(0), le=Decimal(1))]
 
 
 def _validate_tax_profile_effective_window(
@@ -82,7 +84,12 @@ class ClientTaxProfileRecord(BaseModel):
         "active", description="Tax profile lifecycle status."
     )
     withholding_tax_rate: RatioDecimal | None = Field(
-        None, description="Reference withholding rate ratio when supplied by the source."
+        None,
+        description=exact_numeric_openapi_description(
+            "Reference withholding rate ratio when supplied by the source.",
+            precision=18,
+            scale=10,
+        ),
     )
     capital_gains_tax_applicable: bool = Field(False)
     income_tax_applicable: bool = Field(False)
