@@ -570,6 +570,156 @@ def test_fifo_basis_transfer_preserves_ledger_totals_across_batches() -> None:
     assert sum(state.cost_local for state in states.values()) == Decimal("4.0000000000")
 
 
+def test_fifo_near_full_basis_transfer_never_assigns_negative_residual() -> None:
+    strategy = FIFOBasisStrategy()
+    transactions = []
+    for index, cost in enumerate(("3", "3", "3", "1"), start=1):
+        transaction = CostBasisTransaction(
+            transaction_id=f"FIFO-NEAR-FULL-{index}",
+            portfolio_id="P-BASIS",
+            instrument_id="PARENT-SECURITY",
+            security_id="PARENT-SECURITY",
+            transaction_type="BUY",
+            transaction_date=datetime(2026, 2, index),
+            quantity=Decimal("1"),
+            gross_transaction_amount=Decimal(cost),
+            net_cost_local=Decimal(cost),
+            net_cost=Decimal(cost),
+            trade_currency="USD",
+            portfolio_base_currency="USD",
+        )
+        transactions.append(transaction)
+        strategy.add_buy_lot(transaction)
+
+    assert (
+        strategy.transfer_basis_out(
+            "P-BASIS",
+            "PARENT-SECURITY",
+            Decimal("9.9999999998"),
+            Decimal("9.9999999998"),
+        )
+        is None
+    )
+
+    states = strategy.get_open_lot_states()
+    assert [state.cost_base for state in states.values()] == [
+        Decimal("0.0000000001"),
+        Decimal("0.0000000001"),
+        Decimal("0"),
+        Decimal("0"),
+    ]
+    assert all(state.cost_base >= Decimal(0) for state in states.values())
+    assert all(state.cost_local >= Decimal(0) for state in states.values())
+    assert sum(state.cost_base for state in states.values()) == Decimal("0.0000000002")
+    assert sum(state.cost_local for state in states.values()) == Decimal("0.0000000002")
+
+    replayed = FIFOBasisStrategy()
+    replayed.restore_open_lots(
+        [
+            transaction.model_copy(
+                update={
+                    "net_cost": states[transaction.transaction_id].cost_base,
+                    "net_cost_local": states[transaction.transaction_id].cost_local,
+                }
+            )
+            for transaction in transactions
+        ]
+    )
+    assert replayed.get_open_lot_states() == states
+
+    disposed_base, disposed_local, disposed_quantity, error = replayed.consume_sell_quantity(
+        "P-BASIS",
+        "PARENT-SECURITY",
+        Decimal("4"),
+    )
+    assert (disposed_base, disposed_local, disposed_quantity, error) == (
+        Decimal("0.0000000002"),
+        Decimal("0.0000000002"),
+        Decimal("4"),
+        None,
+    )
+
+
+def test_average_cost_near_full_disposal_couples_quantity_and_basis_residuals() -> None:
+    strategy = AverageCostBasisStrategy()
+    transactions = []
+    for index, cost in enumerate(("3", "3", "3", "1"), start=1):
+        transaction = CostBasisTransaction(
+            transaction_id=f"AVCO-NEAR-FULL-{index}",
+            portfolio_id="P-BASIS",
+            instrument_id="PARENT-SECURITY",
+            security_id="PARENT-SECURITY",
+            transaction_type="BUY",
+            transaction_date=datetime(2026, 3, index),
+            quantity=Decimal("1"),
+            gross_transaction_amount=Decimal(cost),
+            net_cost_local=Decimal(cost),
+            net_cost=Decimal(cost),
+            trade_currency="USD",
+            portfolio_base_currency="USD",
+        )
+        transactions.append(transaction)
+        strategy.add_buy_lot(transaction)
+
+    disposed_base, disposed_local, disposed_quantity, error = strategy.consume_sell_quantity(
+        "P-BASIS",
+        "PARENT-SECURITY",
+        Decimal("3.9999999999"),
+    )
+    assert (disposed_base, disposed_local, disposed_quantity, error) == (
+        Decimal("9.9999999998"),
+        Decimal("9.9999999998"),
+        Decimal("3.9999999999"),
+        None,
+    )
+
+    states = strategy.get_open_lot_states()
+    assert all(state.quantity >= Decimal(0) for state in states.values())
+    assert all(state.cost_base >= Decimal(0) for state in states.values())
+    assert all(state.cost_local >= Decimal(0) for state in states.values())
+    assert all(
+        state.cost_base == Decimal(0) and state.cost_local == Decimal(0)
+        for state in states.values()
+        if state.quantity == Decimal(0)
+    )
+    assert sum(state.quantity for state in states.values()) == Decimal("0.0000000001")
+    assert sum(state.cost_base for state in states.values()) == Decimal("0.0000000002")
+    assert sum(state.cost_local for state in states.values()) == Decimal("0.0000000002")
+
+    remaining_transaction = next(
+        transaction
+        for transaction in transactions
+        if states[transaction.transaction_id].quantity > Decimal(0)
+    )
+    remaining_state = states[remaining_transaction.transaction_id]
+    replayed = AverageCostBasisStrategy()
+    replayed.restore_open_lots(
+        [
+            remaining_transaction.model_copy(
+                update={
+                    "quantity": remaining_state.quantity,
+                    "gross_transaction_amount": remaining_state.cost_local,
+                    "net_cost": remaining_state.cost_base,
+                    "net_cost_local": remaining_state.cost_local,
+                }
+            )
+        ]
+    )
+    assert replayed.get_open_lot_states() == {remaining_transaction.transaction_id: remaining_state}
+
+    close_result = replayed.consume_sell_quantity(
+        "P-BASIS",
+        "PARENT-SECURITY",
+        Decimal("0.0000000001"),
+    )
+    assert close_result == (
+        Decimal("0.0000000002"),
+        Decimal("0.0000000002"),
+        Decimal("0.0000000001"),
+        None,
+    )
+
+
 def test_average_cost_full_basis_transfer_then_new_buy_keeps_old_source_cost_zero() -> None:
     strategy = AverageCostBasisStrategy()
     original = CostBasisTransaction(
