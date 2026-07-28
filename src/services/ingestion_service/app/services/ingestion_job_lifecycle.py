@@ -71,6 +71,10 @@ def to_job_response(job: DBIngestionJob) -> IngestionJobResponse:
         submitted_at=job.submitted_at,
         completed_at=job.completed_at,
         failure_reason=job.failure_reason,
+        failure_status_code=job.failure_status_code,
+        failure_code=job.failure_code,
+        failure_detail=job.failure_detail,
+        failure_headers=job.failure_headers,
         retry_count=job.retry_count,
         last_retried_at=job.last_retried_at,
     )
@@ -186,6 +190,10 @@ async def mark_job_queued(
                     status=IngestionJobStatus.QUEUED.value,
                     completed_at=datetime.now(UTC),
                     failure_reason=None,
+                    failure_status_code=None,
+                    failure_code=None,
+                    failure_detail=None,
+                    failure_headers=None,
                 )
                 .returning(DBIngestionJob.status)
             )
@@ -201,12 +209,22 @@ async def mark_job_failed(
     failed_record_keys: list[str] | None,
     session_factory,
     expected_statuses: Sequence[str] | None = None,
+    failure_status_code: int | None = None,
+    failure_code: str | None = None,
+    failure_detail: dict[str, Any] | None = None,
+    failure_headers: dict[str, str] | None = None,
 ) -> bool:
     expected_statuses = expected_statuses or ingestion_job_transition_expected_statuses(
         IngestionJobTransition.MARK_FAILED
     )
     async for db in session_factory():
         async with db.begin():
+            failure_outcome_values = _failure_outcome_values(
+                failure_status_code=failure_status_code,
+                failure_code=failure_code,
+                failure_detail=failure_detail,
+                failure_headers=failure_headers,
+            )
             updated = await db.execute(
                 update(DBIngestionJob)
                 .where(DBIngestionJob.job_id == job_id)
@@ -215,6 +233,7 @@ async def mark_job_failed(
                     status=IngestionJobStatus.FAILED.value,
                     completed_at=datetime.now(UTC),
                     failure_reason=failure_reason,
+                    **failure_outcome_values,
                 )
                 .returning(DBIngestionJob.endpoint, DBIngestionJob.entity_type)
             )
@@ -245,6 +264,10 @@ async def record_job_failure_observation(
     failure_phase: str,
     failed_record_keys: list[str] | None,
     session_factory,
+    failure_status_code: int | None = None,
+    failure_code: str | None = None,
+    failure_detail: dict[str, Any] | None = None,
+    failure_headers: dict[str, str] | None = None,
 ) -> None:
     async for db in session_factory():
         async with db.begin():
@@ -253,6 +276,13 @@ async def record_job_failure_observation(
             )
             if row is None:
                 return
+            for field_name, value in _failure_outcome_values(
+                failure_status_code=failure_status_code,
+                failure_code=failure_code,
+                failure_detail=failure_detail,
+                failure_headers=failure_headers,
+            ).items():
+                setattr(row, field_name, value)
             db.add(
                 _build_failure_row(
                     job_id=job_id,
@@ -318,6 +348,10 @@ async def mark_job_retried_and_queued(
                     status=IngestionJobStatus.QUEUED.value,
                     completed_at=datetime.now(UTC),
                     failure_reason=None,
+                    failure_status_code=None,
+                    failure_code=None,
+                    failure_detail=None,
+                    failure_headers=None,
                     retry_count=func.coalesce(DBIngestionJob.retry_count, 0) + 1,
                     last_retried_at=datetime.now(UTC),
                 )
@@ -403,6 +437,34 @@ def _build_failure_row(
         failure_reason=failure_reason,
         failed_record_keys=failed_record_keys or [],
     )
+
+
+def _failure_outcome_values(
+    *,
+    failure_status_code: int | None,
+    failure_code: str | None,
+    failure_detail: dict[str, Any] | None,
+    failure_headers: dict[str, str] | None,
+) -> dict[str, Any]:
+    if failure_status_code is None and failure_code is None:
+        if failure_detail is not None or failure_headers is not None:
+            raise ValueError(
+                "Failure detail or headers require both a failure status code and error code."
+            )
+        return {}
+    if failure_status_code is None or failure_code is None:
+        raise ValueError("Failure status code and error code must be recorded together.")
+    if failure_status_code < 400 or failure_status_code > 599:
+        raise ValueError("Failure status code must be between 400 and 599.")
+    normalized_code = failure_code.strip()
+    if not normalized_code:
+        raise ValueError("Failure error code must be non-empty.")
+    return {
+        "failure_status_code": failure_status_code,
+        "failure_code": normalized_code,
+        "failure_detail": dict(failure_detail) if failure_detail is not None else None,
+        "failure_headers": dict(failure_headers) if failure_headers is not None else None,
+    }
 
 
 def _idempotency_payload_conflicts(
