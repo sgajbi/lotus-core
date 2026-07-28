@@ -8,6 +8,10 @@ from ..application import (
     ResolveTransactionReprocessingTargets,
     TransactionReprocessingTargetNotFound,
 )
+from ..application.ingestion_bookkeeping_outcome import (
+    INGESTION_JOB_BOOKKEEPING_FAILED_CODE,
+    build_ingestion_bookkeeping_failure_detail,
+)
 from ..application.ingestion_idempotency_replay import (
     resolve_ingestion_idempotency_replay,
 )
@@ -60,10 +64,17 @@ class IngestionPublishUnavailable(Exception):
 
 
 class IngestionPublishBookkeepingFailed(Exception):
-    def __init__(self, *, job_id: str, published_record_count: int) -> None:
+    def __init__(
+        self,
+        *,
+        job_id: str,
+        published_record_count: int,
+        detail: dict[str, object],
+    ) -> None:
         super().__init__("Ingestion bookkeeping failed after publish.")
         self.job_id = job_id
         self.published_record_count = published_record_count
+        self.detail = detail
         self.failure_phase = "queue_bookkeeping"
         self.publish_state = "published"
         self.work_state = "published"
@@ -496,31 +507,59 @@ class IngestionPublishCommandHandler:
         try:
             queued = await self.ingestion_job_service.mark_queued(job_id)
         except Exception as exc:
-            await self._record_bookkeeping_failure(job_id=job_id, failure_reason=str(exc))
+            detail = await self._record_bookkeeping_failure(
+                job_id=job_id,
+                failure_reason=str(exc),
+                published_record_count=published_record_count,
+            )
             raise IngestionPublishBookkeepingFailed(
                 job_id=job_id,
                 published_record_count=published_record_count,
+                detail=detail,
             ) from exc
 
         if not queued:
-            await self._record_bookkeeping_failure(
+            detail = await self._record_bookkeeping_failure(
                 job_id=job_id,
                 failure_reason="job queue transition was rejected",
+                published_record_count=published_record_count,
             )
             raise IngestionPublishBookkeepingFailed(
                 job_id=job_id,
                 published_record_count=published_record_count,
+                detail=detail,
             )
 
-    async def _record_bookkeeping_failure(self, *, job_id: str, failure_reason: str) -> None:
+    async def _record_bookkeeping_failure(
+        self,
+        *,
+        job_id: str,
+        failure_reason: str,
+        published_record_count: int,
+    ) -> dict[str, object]:
+        correlation_id, request_id, trace_id = get_request_lineage()
+        detail = build_ingestion_bookkeeping_failure_detail(
+            job_id=job_id,
+            failure_phase="queue_bookkeeping",
+            publish_state="published",
+            work_state="published",
+            published_record_count=published_record_count,
+            correlation_id=correlation_id,
+            request_id=request_id,
+            trace_id=trace_id,
+        )
         try:
             await self.ingestion_job_service.record_failure_observation(
                 job_id,
                 failure_reason,
                 failure_phase="queue_bookkeeping",
+                failure_status_code=500,
+                failure_code=INGESTION_JOB_BOOKKEEPING_FAILED_CODE,
+                failure_detail=detail,
             )
         except Exception:
             logger.exception(
                 "Failed to persist ingestion bookkeeping failure observation.",
                 extra={"job_id": job_id, "failure_phase": "queue_bookkeeping"},
             )
+        return detail
