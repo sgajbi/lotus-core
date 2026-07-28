@@ -7,6 +7,10 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from decimal import ROUND_DOWN, Decimal
 
+from portfolio_common.domain.transaction.numeric_policy import (
+    COST_BASIS_STATE_LEDGER_OUTPUT_V1,
+)
+
 from .lot_state import OpenLotState
 
 BookKey = tuple[str, str]
@@ -23,9 +27,21 @@ class AverageCostPool:
     segment_start_cost_base: Decimal = Decimal(0)
 
     def add(self, *, quantity: Decimal, cost_local: Decimal, cost_base: Decimal) -> None:
-        self.quantity += quantity
-        self.cost_local += cost_local
-        self.cost_base += cost_base
+        self.quantity = COST_BASIS_STATE_LEDGER_OUTPUT_V1.add(
+            self.quantity,
+            quantity,
+            field_name="pool_quantity",
+        )
+        self.cost_local = COST_BASIS_STATE_LEDGER_OUTPUT_V1.add(
+            self.cost_local,
+            cost_local,
+            field_name="pool_cost_local",
+        )
+        self.cost_base = COST_BASIS_STATE_LEDGER_OUTPUT_V1.add(
+            self.cost_base,
+            cost_base,
+            field_name="pool_cost_base",
+        )
         self.segment_start_quantity = self.quantity
         self.segment_start_cost_local = self.cost_local
         self.segment_start_cost_base = self.cost_base
@@ -33,23 +49,55 @@ class AverageCostPool:
     def dispose(self, quantity: Decimal) -> tuple[Decimal, Decimal]:
         cost_local_before = self.cost_local
         cost_base_before = self.cost_base
-        quantity_after = self.quantity - quantity
+        quantity_after = COST_BASIS_STATE_LEDGER_OUTPUT_V1.subtract(
+            self.quantity,
+            quantity,
+            field_name="pool_quantity",
+        )
         if quantity_after.is_zero():
             self.cost_local = Decimal(0)
             self.cost_base = Decimal(0)
         else:
-            self.cost_local = (
-                self.segment_start_cost_local * quantity_after / self.segment_start_quantity
+            with COST_BASIS_STATE_LEDGER_OUTPUT_V1.arithmetic_context():
+                remaining_cost_local = (
+                    self.segment_start_cost_local * quantity_after / self.segment_start_quantity
+                )
+                remaining_cost_base = (
+                    self.segment_start_cost_base * quantity_after / self.segment_start_quantity
+                )
+            self.cost_local = COST_BASIS_STATE_LEDGER_OUTPUT_V1.normalize(
+                remaining_cost_local,
+                field_name="pool_cost_local",
             )
-            self.cost_base = (
-                self.segment_start_cost_base * quantity_after / self.segment_start_quantity
+            self.cost_base = COST_BASIS_STATE_LEDGER_OUTPUT_V1.normalize(
+                remaining_cost_base,
+                field_name="pool_cost_base",
             )
         self.quantity = quantity_after
-        return cost_base_before - self.cost_base, cost_local_before - self.cost_local
+        return (
+            COST_BASIS_STATE_LEDGER_OUTPUT_V1.subtract(
+                cost_base_before,
+                self.cost_base,
+                field_name="disposed_cost_base",
+            ),
+            COST_BASIS_STATE_LEDGER_OUTPUT_V1.subtract(
+                cost_local_before,
+                self.cost_local,
+                field_name="disposed_cost_local",
+            ),
+        )
 
     def transfer_basis_out(self, *, cost_local: Decimal, cost_base: Decimal) -> None:
-        self.cost_local -= cost_local
-        self.cost_base -= cost_base
+        self.cost_local = COST_BASIS_STATE_LEDGER_OUTPUT_V1.subtract(
+            self.cost_local,
+            cost_local,
+            field_name="pool_cost_local",
+        )
+        self.cost_base = COST_BASIS_STATE_LEDGER_OUTPUT_V1.subtract(
+            self.cost_base,
+            cost_base,
+            field_name="pool_cost_base",
+        )
         self.segment_start_quantity = self.quantity
         self.segment_start_cost_local = self.cost_local
         self.segment_start_cost_base = self.cost_base
@@ -134,9 +182,10 @@ class AverageCostSourceAllocation:
         segment_start_quantity = self._segment_start_quantity_by_key[book_key]
         if segment_start_quantity <= Decimal(0):
             raise ValueError("AVCO source allocation disposal segment is not initialized")
-        self._disposal_scale_by_key[book_key] = (
-            self._segment_start_scale_by_key[book_key] * quantity_after / segment_start_quantity
-        )
+        with COST_BASIS_STATE_LEDGER_OUTPUT_V1.arithmetic_context():
+            self._disposal_scale_by_key[book_key] = (
+                self._segment_start_scale_by_key[book_key] * quantity_after / segment_start_quantity
+            )
 
     def apply_basis_transfer(
         self,
@@ -215,6 +264,7 @@ class AverageCostSourceAllocation:
                     disposal_factor=disposal_factor,
                     aggregate=pool.cost_local,
                     allocated=allocated.cost_local,
+                    field_name="lot_cost_local",
                 ),
                 cost_base=_materialized_cost(
                     source_cost=contribution.cost_base,
@@ -227,6 +277,7 @@ class AverageCostSourceAllocation:
                     disposal_factor=disposal_factor,
                     aggregate=pool.cost_base,
                     allocated=allocated.cost_base,
+                    field_name="lot_cost_base",
                 ),
             )
             states[source_transaction_id] = state
@@ -241,10 +292,11 @@ class AverageCostSourceAllocation:
     def _disposal_factor(self, contribution: AverageCostSourceContribution) -> Decimal:
         if contribution.generation != self._generation_by_key[contribution.book_key]:
             return Decimal(0)
-        return (
-            self._disposal_scale_by_key[contribution.book_key]
-            / contribution.disposal_scale_at_entry
-        )
+        with COST_BASIS_STATE_LEDGER_OUTPUT_V1.arithmetic_context():
+            return (
+                self._disposal_scale_by_key[contribution.book_key]
+                / contribution.disposal_scale_at_entry
+            )
 
 
 def _materialized_quantity(
@@ -260,10 +312,19 @@ def _materialized_quantity(
     if contribution.generation != current_generation:
         return Decimal(0)
     if source_transaction_id == last_source_id:
-        return aggregate - allocated
-    return (contribution.quantity * disposal_factor).quantize(
-        LOT_QUANTITY_QUANTUM,
-        rounding=ROUND_DOWN,
+        return COST_BASIS_STATE_LEDGER_OUTPUT_V1.subtract(
+            aggregate,
+            allocated,
+            field_name="open_quantity",
+        )
+    with COST_BASIS_STATE_LEDGER_OUTPUT_V1.arithmetic_context():
+        quantity = (contribution.quantity * disposal_factor).quantize(
+            LOT_QUANTITY_QUANTUM,
+            rounding=ROUND_DOWN,
+        )
+    return COST_BASIS_STATE_LEDGER_OUTPUT_V1.normalize(
+        quantity,
+        field_name="open_quantity",
     )
 
 
@@ -279,12 +340,22 @@ def _materialized_cost(
     disposal_factor: Decimal,
     aggregate: Decimal,
     allocated: Decimal,
+    field_name: str,
 ) -> Decimal:
     if source_generation != current_generation:
         return Decimal(0)
     if source_transaction_id == last_source_id:
-        return aggregate - allocated
-    return source_cost * disposal_factor * scale / scale_at_entry
+        return COST_BASIS_STATE_LEDGER_OUTPUT_V1.subtract(
+            aggregate,
+            allocated,
+            field_name=field_name,
+        )
+    with COST_BASIS_STATE_LEDGER_OUTPUT_V1.arithmetic_context():
+        materialized_cost = source_cost * disposal_factor * scale / scale_at_entry
+    return COST_BASIS_STATE_LEDGER_OUTPUT_V1.normalize(
+        materialized_cost,
+        field_name=field_name,
+    )
 
 
 def _scaled_basis_factor(
@@ -298,4 +369,5 @@ def _scaled_basis_factor(
         raise ValueError(f"AVCO {currency_basis} cost basis must be positive before transfer")
     if cost_after < Decimal(0) or cost_after > cost_before:
         raise ValueError(f"AVCO {currency_basis} cost basis after transfer is invalid")
-    return current_scale * cost_after / cost_before
+    with COST_BASIS_STATE_LEDGER_OUTPUT_V1.arithmetic_context():
+        return current_scale * cost_after / cost_before

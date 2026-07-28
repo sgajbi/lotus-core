@@ -274,6 +274,43 @@ def test_average_cost_source_quantities_reconcile_at_database_scale(
     ) == Decimal("20")
 
 
+def test_average_cost_repeating_disposal_preserves_pool_cost_identity(
+    avco_strategy: AverageCostBasisStrategy,
+) -> None:
+    avco_strategy.add_buy_lot(
+        CostBasisTransaction(
+            transaction_id="AVCO_REPEATING_BUY",
+            portfolio_id="P1",
+            instrument_id="AVCO_REPEATING_STOCK",
+            security_id="S1",
+            transaction_type="BUY",
+            transaction_date=datetime(2026, 7, 28),
+            quantity=Decimal("3"),
+            gross_transaction_amount=Decimal("100"),
+            net_cost=Decimal("100"),
+            net_cost_local=Decimal("100"),
+            trade_currency="USD",
+            portfolio_base_currency="USD",
+        )
+    )
+
+    cogs_base, cogs_local, consumed_quantity, error = avco_strategy.consume_sell_quantity(
+        "P1",
+        "AVCO_REPEATING_STOCK",
+        Decimal("1"),
+    )
+    open_state = avco_strategy.get_open_lot_states()["AVCO_REPEATING_BUY"]
+
+    assert error is None
+    assert consumed_quantity == Decimal("1")
+    assert cogs_base == Decimal("33.3333333333")
+    assert cogs_local == Decimal("33.3333333333")
+    assert open_state.cost_base == Decimal("66.6666666667")
+    assert open_state.cost_local == Decimal("66.6666666667")
+    assert cogs_base + open_state.cost_base == Decimal("100")
+    assert cogs_local + open_state.cost_local == Decimal("100")
+
+
 def test_average_cost_source_allocation_is_independent_of_sell_batching() -> None:
     sequential = AverageCostBasisStrategy()
     combined = AverageCostBasisStrategy()
@@ -752,6 +789,36 @@ def test_fifo_consume_sell_partially(
     assert fifo_strategy.get_available_quantity("P1", "FIFO_STOCK") == Decimal("60")
     lot_key = ("P1", "FIFO_STOCK")
     assert fifo_strategy._open_lots[lot_key][0].remaining_quantity == Decimal("60")
+
+
+def test_fifo_repeating_unit_cost_allocates_rounding_residual_to_open_lot(
+    fifo_strategy: FIFOBasisStrategy,
+    sample_buy_transaction: CostBasisTransaction,
+) -> None:
+    repeating_cost_buy = sample_buy_transaction.model_copy(
+        update={
+            "quantity": Decimal("3"),
+            "net_cost": Decimal("100"),
+            "net_cost_local": Decimal("100"),
+        }
+    )
+    fifo_strategy.add_buy_lot(repeating_cost_buy)
+
+    cost_base, cost_local, consumed_quantity, error = fifo_strategy.consume_sell_quantity(
+        "P1",
+        "FIFO_STOCK",
+        Decimal("1"),
+    )
+    open_state = fifo_strategy.get_open_lot_states()["FIFO_BUY_01"]
+
+    assert error is None
+    assert consumed_quantity == Decimal("1")
+    assert cost_base == Decimal("33.3333333333")
+    assert cost_local == Decimal("33.3333333333")
+    assert open_state.cost_base == Decimal("66.6666666667")
+    assert open_state.cost_local == Decimal("66.6666666667")
+    assert cost_base + open_state.cost_base == Decimal("100")
+    assert cost_local + open_state.cost_local == Decimal("100")
 
 
 def test_fifo_consume_sell_insufficient_quantity(
