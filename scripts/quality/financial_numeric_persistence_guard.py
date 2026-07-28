@@ -792,19 +792,15 @@ def evaluate_guard(repo_root: Path = ROOT, contract_path: Path | None = None) ->
 
     if contract.get("schema_version") != "2.0.0":
         findings.append("contract.schema_version must be 2.0.0")
-    required_contract_keys = _V2_CONTRACT_KEYS - {"exact_bind_enforcement"}
-    if set(contract) not in (required_contract_keys, _V2_CONTRACT_KEYS):
+    if set(contract) != _V2_CONTRACT_KEYS:
         findings.append(
             "contract v2 keys must be schema_version, model_path, expected_inventory, "
             "profiles, rollout_statuses, storage_shapes, default_storage_shape, "
             "exact_bind_enforcement, storage_shape_overrides, domain_families, "
             "table_domain_families, and tables"
         )
-    if (
-        "exact_bind_enforcement" in contract
-        and contract.get("exact_bind_enforcement") != "required"
-    ):
-        findings.append("contract.exact_bind_enforcement must be required when declared")
+    if contract.get("exact_bind_enforcement") != "required":
+        findings.append("contract.exact_bind_enforcement must be required")
     if contract.get("profiles") != _CANONICAL_PROFILES:
         findings.append("contract.profiles must match the canonical finite-policy vocabulary")
     statuses = contract.get("rollout_statuses")

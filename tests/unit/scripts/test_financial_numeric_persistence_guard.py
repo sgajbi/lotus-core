@@ -13,34 +13,46 @@ from scripts.quality.financial_numeric_persistence_guard import (
 )
 
 
-def _model(*, constraint: str | None, nullable: bool = False) -> str:
+def _model(
+    *,
+    constraint: str | None,
+    nullable: bool = False,
+    exact_numeric: bool = True,
+) -> str:
     constraint_source = (
         f', CheckConstraint("{constraint}", name="ck_financial_value")'
         if constraint is not None
         else ""
     )
+    numeric_import = (
+        "from portfolio_common.financial_numeric import ExactNumeric\n"
+        if exact_numeric
+        else "from sqlalchemy import Numeric\n"
+    )
+    numeric_type = "ExactNumeric" if exact_numeric else "Numeric"
     return (
-        "from sqlalchemy import CheckConstraint, Column, Numeric\n\n"
+        numeric_import + "from sqlalchemy import CheckConstraint, Column\n\n"
         "class FinancialRow:\n"
         '    __tablename__ = "financial_rows"\n'
-        f"    value = Column(Numeric(18, 10), nullable={nullable!r})\n"
+        f"    value = Column({numeric_type}(18, 10), nullable={nullable!r})\n"
         f"    __table_args__ = ({constraint_source.lstrip(', ')},)\n"
         if constraint is not None
         else (
-            "from sqlalchemy import Column, Numeric\n\n"
+            numeric_import + "from sqlalchemy import Column\n\n"
             "class FinancialRow:\n"
             '    __tablename__ = "financial_rows"\n'
-            f"    value = Column(Numeric(18, 10), nullable={nullable!r})\n"
+            f"    value = Column({numeric_type}(18, 10), nullable={nullable!r})\n"
         )
     )
 
 
 def _keyword_type_model() -> str:
     return (
-        "from sqlalchemy import CheckConstraint, Column, Numeric\n\n"
+        "from portfolio_common.financial_numeric import ExactNumeric\n"
+        "from sqlalchemy import CheckConstraint, Column\n\n"
         "class FinancialRow:\n"
         '    __tablename__ = "financial_rows"\n'
-        "    value: object = Column(type_=Numeric(18, 10), nullable=False)\n"
+        "    value: object = Column(type_=ExactNumeric(18, 10), nullable=False)\n"
         "    __table_args__ = (\n"
         "        CheckConstraint(\n"
         "            \"CAST(value AS TEXT) NOT IN ('NaN', 'Infinity', '-Infinity')\",\n"
@@ -55,11 +67,12 @@ def _finite_helper_model(*, dynamic_column: bool = False) -> str:
     column_argument = "column_name" if dynamic_column else '"value"'
     dynamic_declaration = 'column_name = "value"\n\n' if dynamic_column else ""
     return (
-        "from sqlalchemy import CheckConstraint, Column, Numeric\n\n"
+        "from portfolio_common.financial_numeric import ExactNumeric\n"
+        "from sqlalchemy import CheckConstraint, Column\n\n"
         f"{dynamic_declaration}"
         "class FinancialRow:\n"
         '    __tablename__ = "financial_rows"\n'
-        "    value = Column(Numeric(18, 10), nullable=False)\n"
+        "    value = Column(ExactNumeric(18, 10), nullable=False)\n"
         "    __table_args__ = (\n"
         "        _finite_numeric_check_constraint(\n"
         '            "ck_financial_value_finite",\n'
@@ -167,6 +180,7 @@ def _contract(
             },
         },
         "default_storage_shape": "bounded-18-10",
+        "exact_bind_enforcement": "required",
         "storage_shape_overrides": {},
         "domain_families": {
             "financial-test": {
@@ -199,6 +213,13 @@ def _write_fixture(
     return contract_path
 
 
+def _assert_only_exact_bind_finding(findings: tuple[str, ...]) -> None:
+    assert len(findings) == 1
+    assert findings[0].startswith(
+        "financial_rows.value: precision contract requires ExactNumeric bind enforcement; "
+    )
+
+
 def test_guard_accepts_explicit_finiteness_and_sign_policy(tmp_path: Path) -> None:
     contract_path = _write_fixture(
         tmp_path,
@@ -228,7 +249,26 @@ def test_guard_requires_exact_numeric_when_contract_enables_bind_enforcement(
     tmp_path: Path,
 ) -> None:
     contract = _contract()
-    contract["exact_bind_enforcement"] = "required"
+    contract_path = _write_fixture(
+        tmp_path,
+        model=_model(
+            constraint=(
+                "value NOT IN ('NaN'::numeric, 'Infinity'::numeric, "
+                "'-Infinity'::numeric) AND value > 0"
+            ),
+            exact_numeric=False,
+        ),
+        contract=contract,
+    )
+
+    report = evaluate_guard(tmp_path, contract_path)
+
+    _assert_only_exact_bind_finding(report.findings)
+
+
+def test_guard_requires_exact_bind_enforcement_key(tmp_path: Path) -> None:
+    contract = _contract()
+    del contract["exact_bind_enforcement"]
     contract_path = _write_fixture(
         tmp_path,
         model=_model(
@@ -242,10 +282,13 @@ def test_guard_requires_exact_numeric_when_contract_enables_bind_enforcement(
 
     report = evaluate_guard(tmp_path, contract_path)
 
-    assert report.findings == (
-        "financial_rows.value: precision contract requires ExactNumeric bind enforcement; "
-        "found Numeric",
-    )
+    assert (
+        "contract v2 keys must be schema_version, model_path, expected_inventory, "
+        "profiles, rollout_statuses, storage_shapes, default_storage_shape, "
+        "exact_bind_enforcement, storage_shape_overrides, domain_families, "
+        "table_domain_families, and tables"
+    ) in report.findings
+    assert "contract.exact_bind_enforcement must be required" in report.findings
 
 
 @pytest.mark.parametrize(
@@ -335,7 +378,7 @@ def test_guard_inventories_direct_reusable_numeric_alias(
 
     report = evaluate_guard(tmp_path, contract_path)
 
-    assert report.findings == ()
+    _assert_only_exact_bind_finding(report.findings)
     assert report.numeric_column_count == 1
 
 
@@ -366,7 +409,7 @@ def test_guard_inventories_imported_numeric_constructor_forms(
 
     report = evaluate_guard(tmp_path, contract_path)
 
-    assert report.findings == ()
+    _assert_only_exact_bind_finding(report.findings)
     assert report.numeric_column_count == 1
 
 
@@ -392,7 +435,7 @@ def test_guard_inventories_attribute_constructor_aliases(
 
     report = evaluate_guard(tmp_path, contract_path)
 
-    assert report.findings == ()
+    _assert_only_exact_bind_finding(report.findings)
     assert report.numeric_column_count == 1
 
 
