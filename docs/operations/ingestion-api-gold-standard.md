@@ -55,6 +55,9 @@ This runbook summarizes the ingestion operations controls expected for productio
 - Rate-limit denials emitted by the local process limiter increment
   `ingestion_write_rate_limit_denials_total` with bounded `endpoint`, `reason`, and
   `enforcement_scope` labels and write a source-safe warning log.
+- A same-payload, same-key durable replay is resolved before write-mode and rate-limit controls.
+  Replaying an established outcome neither consumes a new write budget nor changes because later
+  traffic exhausted that budget; new and payload-divergent requests still pass through the controls.
 - Controls:
   - `LOTUS_CORE_INGEST_RATE_LIMIT_ENABLED` (default: `true`)
   - `LOTUS_CORE_INGEST_RATE_LIMIT_WINDOW_SECONDS` (default: `60`)
@@ -84,7 +87,7 @@ For job-backed ingestion routes, an existing idempotency record is evidence to r
 of success by itself.
 
 - `queued` with no recorded failure replays the existing `202` acknowledgement without repeating
-  persistence, publication, or source resolution.
+  persistence, publication, source resolution, or write-rate budget consumption.
 - A durable failed outcome replays its original HTTP status, stable code, safe detail, job
   identifier, and safe headers such as `Retry-After`.
 - An `accepted` job without a durable outcome returns `409 INGESTION_REQUEST_IN_PROGRESS`. Inspect

@@ -21,6 +21,10 @@ outcome. PostgreSQL proof also found that the initial completeness check needed 
 non-null status predicate to avoid SQL three-valued-logic acceptance of code/detail/header-only
 partial evidence.
 
+Late review also found that job-backed duplicates were initially resolved after write-mode and
+rate-limit controls. A lost-response retry could therefore return a new `429` when the original
+request or later traffic exhausted the budget, even though no new work would be performed.
+
 ## Decision
 
 - `resolve_ingestion_idempotency_replay(...)` is the pure application policy. It accepts only a
@@ -33,6 +37,10 @@ partial evidence.
   and do not rebuild competing payloads.
 - The non-reserving reprocessing replay reader returns lifecycle outcome evidence, allowing a
   matching failed request to reproduce its result before source resolution without republishing.
+- The same non-reserving reader is applied across every job-backed command before write-mode,
+  reprocessing-permission, and rate-limit controls. Established same-payload outcomes do not consume
+  new write budget; unmatched or divergent requests retain the normal controls and atomic
+  create/conflict path.
 - The single-transaction endpoint remains intentionally jobless and does not claim job-backed
   deterministic replay.
 
@@ -72,6 +80,8 @@ Audited without change:
 - lost-response endpoint proofs for reference persistence, authority conflict, Kafka failure,
   partial bundle publication, business-date publication, reprocessing partial publication, and
   post-publish/post-persist bookkeeping;
+- handler proofs that durable batch, reference-data, business-date, and reprocessing replays bypass
+  new-write controls while unmatched requests retain their existing policy sequence;
 - PostgreSQL apply/downgrade/reapply proof including completeness, normalization, status range, and
   constraint validation;
 - signed slice commits and exact validation evidence recorded on issue #833 and the delivery PR.

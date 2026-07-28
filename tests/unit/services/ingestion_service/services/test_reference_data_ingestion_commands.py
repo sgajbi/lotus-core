@@ -63,6 +63,7 @@ def _handler() -> ReferenceDataIngestionCommandHandler:
     return ReferenceDataIngestionCommandHandler(
         reference_data_service=reference_data_service,
         ingestion_job_service=job_service,
+        idempotency_replay_reader=SimpleNamespace(find_matching_job=AsyncMock(return_value=None)),
     )
 
 
@@ -111,6 +112,39 @@ async def test_reference_data_command_replay_skips_persist() -> None:
     assert result.accepted_count == 3
     registry_command.persist.assert_not_awaited()
     handler.ingestion_job_service.mark_queued.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_reference_data_replay_bypasses_write_controls() -> None:
+    handler = _handler()
+    handler.idempotency_replay_reader.find_matching_job.return_value = SimpleNamespace(
+        job_id="ref-job-replay",
+        accepted_count=1,
+        status="queued",
+        failure_reason=None,
+        failure_status_code=None,
+        failure_code=None,
+        failure_detail=None,
+        failure_headers=None,
+    )
+    handler.ingestion_job_service.assert_ingestion_writable.side_effect = PermissionError(
+        "writes disabled"
+    )
+    registry_command = _registry_command()
+
+    result = await handler.ingest_reference_data(
+        ReferenceDataIngestionCommand(
+            endpoint="/ingest/reference",
+            idempotency_key="ref-replay",
+            registry_command=registry_command,
+            request=SimpleNamespace(records=[{"id": "R1"}]),
+        )
+    )
+
+    assert result.replayed is True
+    handler.ingestion_job_service.assert_ingestion_writable.assert_not_awaited()
+    handler.ingestion_job_service.create_or_get_job.assert_not_awaited()
+    registry_command.persist.assert_not_awaited()
 
 
 @pytest.mark.asyncio

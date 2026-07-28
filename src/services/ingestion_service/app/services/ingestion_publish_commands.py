@@ -28,6 +28,7 @@ from ..ports.ingestion_idempotency_replay import (
 )
 from ..ports.transaction_reprocessing import TransactionReprocessingTargetReadError
 from ..request_metadata import create_ingestion_job_id, get_request_lineage
+from .ingestion_job_lifecycle import IngestionJobCreateResult
 from .ingestion_job_service import IngestionJobService
 from .ingestion_service import IngestionPublishError, IngestionService
 
@@ -154,16 +155,17 @@ class IngestionPublishCommandHandler:
     async def ingest_reprocessing_requests(
         self, command: BatchPublishIngestionCommand
     ) -> IngestionCommandResult:
-        await self._assert_ingestion_writable()
-        await self._assert_reprocessing_publish_allowed(len(command.records))
-        self._enforce_rate_limit(command.endpoint, len(command.records))
-        replay_job = await self.idempotency_replay_reader.find_matching_job(
+        replay_job = await self._find_matching_replay(
             endpoint=command.endpoint,
             idempotency_key=command.idempotency_key,
             request_payload=command.request_payload,
         )
         if replay_job is not None:
             return self._reprocessing_replay_result(command, replay_job)
+
+        await self._assert_ingestion_writable()
+        await self._assert_reprocessing_publish_allowed(len(command.records))
+        self._enforce_rate_limit(command.endpoint, len(command.records))
 
         resolved_targets = await self._resolve_reprocessing_targets(command.records)
         job_result = await self._create_job(command)
@@ -206,18 +208,26 @@ class IngestionPublishCommandHandler:
     async def ingest_portfolio_bundle(
         self, command: PortfolioBundlePublishIngestionCommand
     ) -> IngestionCommandResult:
+        replay_job = await self._find_matching_replay(
+            endpoint=command.endpoint,
+            idempotency_key=command.idempotency_key,
+            request_payload=command.request_payload,
+        )
+        if replay_job is not None:
+            return self._replay_result(
+                entity_type="portfolio_bundle",
+                idempotency_key=command.idempotency_key,
+                job=replay_job,
+            )
+
         await self._assert_ingestion_writable()
         self._enforce_rate_limit(command.endpoint, command.accepted_count)
         job_result = await self._create_bundle_job(command)
         if not job_result.created:
-            self._assert_replay_safe(job_result.job)
-            return IngestionCommandResult(
-                message="Duplicate ingestion request accepted via idempotency replay.",
+            return self._replay_result(
                 entity_type="portfolio_bundle",
-                job_id=job_result.job.job_id,
-                accepted_count=job_result.job.accepted_count,
                 idempotency_key=command.idempotency_key,
-                replayed=True,
+                job=job_result.job,
             )
 
         published_counts = await self._publish_bundle_or_mark_failed(
@@ -250,18 +260,26 @@ class IngestionPublishCommandHandler:
         command: BatchPublishIngestionCommand,
         publisher: BatchPublisher,
     ) -> IngestionCommandResult:
+        replay_job = await self._find_matching_replay(
+            endpoint=command.endpoint,
+            idempotency_key=command.idempotency_key,
+            request_payload=command.request_payload,
+        )
+        if replay_job is not None:
+            return self._replay_result(
+                entity_type=command.entity_type,
+                idempotency_key=command.idempotency_key,
+                job=replay_job,
+            )
+
         await self._assert_ingestion_writable()
         self._enforce_rate_limit(command.endpoint, len(command.records))
         job_result = await self._create_job(command)
         if not job_result.created:
-            self._assert_replay_safe(job_result.job)
-            return IngestionCommandResult(
-                message="Duplicate ingestion request accepted via idempotency replay.",
+            return self._replay_result(
                 entity_type=command.entity_type,
-                job_id=job_result.job.job_id,
-                accepted_count=job_result.job.accepted_count,
                 idempotency_key=command.idempotency_key,
-                replayed=True,
+                job=job_result.job,
             )
 
         await self._publish_batch_or_mark_failed(command, job_result.job.job_id, publisher)
@@ -337,6 +355,37 @@ class IngestionPublishCommandHandler:
                 {"code": "INGESTION_MODE_BLOCKS_WRITES", "message": str(exc)},
             ) from exc
 
+    async def _find_matching_replay(
+        self,
+        *,
+        endpoint: str,
+        idempotency_key: str | None,
+        request_payload: dict[str, Any],
+    ) -> IngestionIdempotencyReplay | None:
+        return await self.idempotency_replay_reader.find_matching_job(
+            endpoint=endpoint,
+            idempotency_key=idempotency_key,
+            request_payload=request_payload,
+        )
+
+    @classmethod
+    def _replay_result(
+        cls,
+        *,
+        entity_type: str,
+        idempotency_key: str | None,
+        job: IngestionIdempotencyReplay | IngestionJobResponse,
+    ) -> IngestionCommandResult:
+        cls._assert_replay_safe(job)
+        return IngestionCommandResult(
+            message="Duplicate ingestion request accepted via idempotency replay.",
+            entity_type=entity_type,
+            job_id=job.job_id,
+            accepted_count=job.accepted_count,
+            idempotency_key=idempotency_key,
+            replayed=True,
+        )
+
     async def _assert_reprocessing_publish_allowed(self, record_count: int) -> None:
         try:
             await self.ingestion_job_service.assert_reprocessing_publish_allowed(record_count)
@@ -384,7 +433,7 @@ class IngestionPublishCommandHandler:
                 {"code": "INGESTION_RATE_LIMIT_EXCEEDED", "message": str(exc)},
             ) from exc
 
-    async def _create_job(self, command: BatchPublishIngestionCommand):
+    async def _create_job(self, command: BatchPublishIngestionCommand) -> IngestionJobCreateResult:
         correlation_id, request_id, trace_id = get_request_lineage()
         return await self.ingestion_job_service.create_or_get_job(
             job_id=create_ingestion_job_id(),
@@ -398,7 +447,9 @@ class IngestionPublishCommandHandler:
             request_payload=command.request_payload,
         )
 
-    async def _create_bundle_job(self, command: PortfolioBundlePublishIngestionCommand):
+    async def _create_bundle_job(
+        self, command: PortfolioBundlePublishIngestionCommand
+    ) -> IngestionJobCreateResult:
         correlation_id, request_id, trace_id = get_request_lineage()
         return await self.ingestion_job_service.create_or_get_job(
             job_id=create_ingestion_job_id(),
@@ -562,4 +613,4 @@ class IngestionPublishCommandHandler:
                 "Failed to persist ingestion bookkeeping failure observation.",
                 extra={"job_id": job_id, "failure_phase": "queue_bookkeeping"},
             )
-        return detail
+        return cast(dict[str, object], detail)

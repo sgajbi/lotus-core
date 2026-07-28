@@ -105,6 +105,7 @@ def _handler(
         ingestion_service=ingestion_service or _IngestionService(),
         ingestion_job_service=job_service or _JobService(),
         business_date_policy=policy or _Policy(),
+        idempotency_replay_reader=SimpleNamespace(find_matching_job=AsyncMock(return_value=None)),
     )
 
 
@@ -157,6 +158,35 @@ async def test_business_date_command_replays_duplicate_without_publish_or_queue(
     assert result.accepted_count == 3
     ingestion_service.publish_business_dates.assert_not_awaited()
     job_service.mark_queued.assert_not_awaited()
+
+
+async def test_business_date_replay_bypasses_write_controls() -> None:
+    handler = _handler()
+    handler.idempotency_replay_reader.find_matching_job.return_value = SimpleNamespace(
+        job_id="job-existing",
+        accepted_count=1,
+        status="queued",
+        failure_reason=None,
+        failure_status_code=None,
+        failure_code=None,
+        failure_detail=None,
+        failure_headers=None,
+    )
+    handler.ingestion_job_service.assert_ingestion_writable.side_effect = PermissionError(
+        "writes disabled"
+    )
+
+    result = await handler.ingest_business_dates(
+        BusinessDateIngestionCommand(
+            request=_request(),
+            endpoint="/ingest/business-dates",
+            idempotency_key="idem-business-dates",
+        )
+    )
+
+    assert result.replayed is True
+    handler.ingestion_job_service.assert_ingestion_writable.assert_not_awaited()
+    handler.ingestion_job_service.create_or_get_job.assert_not_awaited()
 
 
 async def test_business_date_command_replays_original_failed_outcome() -> None:

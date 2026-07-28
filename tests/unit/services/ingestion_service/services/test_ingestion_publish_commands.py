@@ -132,6 +132,42 @@ async def test_batch_publish_command_returns_replay_without_publish() -> None:
 
 
 @pytest.mark.asyncio
+async def test_durable_batch_replay_bypasses_write_controls() -> None:
+    handler = _handler()
+    handler.idempotency_replay_reader.find_matching_job.return_value = SimpleNamespace(
+        job_id="job-replay",
+        accepted_count=1,
+        status="queued",
+        failure_reason=None,
+        failure_status_code=None,
+        failure_code=None,
+        failure_detail=None,
+        failure_headers=None,
+    )
+    handler.ingestion_job_service.assert_ingestion_writable.side_effect = PermissionError(
+        "writes disabled"
+    )
+    publisher = AsyncMock()
+
+    result = await handler.ingest_batch(
+        BatchPublishIngestionCommand(
+            endpoint="/ingest/transactions",
+            entity_type="transaction",
+            records=[{"transaction_id": "T1"}],
+            idempotency_key="idem-replay",
+            request_payload={"transactions": [{"transaction_id": "T1"}]},
+            accepted_message="Transactions accepted.",
+        ),
+        publisher,
+    )
+
+    assert result.replayed is True
+    handler.ingestion_job_service.assert_ingestion_writable.assert_not_awaited()
+    handler.ingestion_job_service.create_or_get_job.assert_not_awaited()
+    publisher.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_batch_publish_command_replays_original_publish_failure() -> None:
     handler = _handler()
     handler.ingestion_job_service.create_or_get_job.return_value = _job_result(
@@ -390,6 +426,8 @@ async def test_reprocessing_replay_does_not_require_source_resolution() -> None:
     handler.resolve_transaction_reprocessing_targets.execute.assert_not_awaited()
     handler.ingestion_job_service.create_or_get_job.assert_not_awaited()
     handler.ingestion_service.publish_reprocessing_requests.assert_not_awaited()
+    handler.ingestion_job_service.assert_ingestion_writable.assert_not_awaited()
+    handler.ingestion_job_service.assert_reprocessing_publish_allowed.assert_not_awaited()
 
 
 @pytest.mark.asyncio

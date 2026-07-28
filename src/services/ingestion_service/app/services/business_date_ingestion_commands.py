@@ -17,7 +17,12 @@ from ..application.ingestion_publish_outcome import (
     build_ingestion_publish_failure_detail,
 )
 from ..DTOs.business_date_dto import BusinessDateIngestionRequest
+from ..DTOs.ingestion_job_dto import IngestionJobResponse
 from ..ops_controls import enforce_ingestion_write_rate_limit
+from ..ports.ingestion_idempotency_replay import (
+    IngestionIdempotencyReplay,
+    IngestionIdempotencyReplayReader,
+)
 from ..request_metadata import create_ingestion_job_id, get_request_lineage
 from .business_date_ingestion_policy import (
     BusinessDateIngestionPolicy,
@@ -93,40 +98,31 @@ class BusinessDateIngestionCommandHandler:
     ingestion_service: IngestionService
     ingestion_job_service: IngestionJobService
     business_date_policy: BusinessDateIngestionPolicy
+    idempotency_replay_reader: IngestionIdempotencyReplayReader
 
     async def ingest_business_dates(
         self,
         command: BusinessDateIngestionCommand,
     ) -> BusinessDateIngestionCommandResult:
+        accepted_count = len(command.request.business_dates)
+        replay_job = await self.idempotency_replay_reader.find_matching_job(
+            endpoint=command.endpoint,
+            idempotency_key=command.idempotency_key,
+            request_payload=command.request.model_dump(mode="json"),
+        )
+        if replay_job is not None:
+            return self._replay_result(command, replay_job)
+
         await self._assert_ingestion_writable()
         self._enforce_rate_limit(len(command.request.business_dates))
         await self._validate_request(command.request)
 
-        accepted_count = len(command.request.business_dates)
         job_result = await self._create_ingestion_job(
             command=command,
             accepted_count=accepted_count,
         )
         if not job_result.created:
-            replay = resolve_ingestion_idempotency_replay(job_result.job)
-            if not replay.accepted:
-                raise BusinessDateIngestionCommandError(
-                    replay.status_code or 500,
-                    replay.detail
-                    or {
-                        "code": "INGESTION_REPLAY_STATE_INVALID",
-                        "message": "The stored ingestion replay outcome is incomplete.",
-                        "job_id": job_result.job.job_id,
-                    },
-                    headers=replay.headers,
-                )
-            return BusinessDateIngestionCommandResult(
-                message="Duplicate ingestion request accepted via idempotency replay.",
-                job_id=job_result.job.job_id,
-                accepted_count=job_result.job.accepted_count,
-                idempotency_key=command.idempotency_key,
-                replayed=True,
-            )
+            return self._replay_result(command, job_result.job)
 
         await self._publish_or_mark_failed(
             command=command,
@@ -142,6 +138,31 @@ class BusinessDateIngestionCommandHandler:
             accepted_count=accepted_count,
             idempotency_key=command.idempotency_key,
             replayed=False,
+        )
+
+    @staticmethod
+    def _replay_result(
+        command: BusinessDateIngestionCommand,
+        job: IngestionIdempotencyReplay | IngestionJobResponse,
+    ) -> BusinessDateIngestionCommandResult:
+        replay = resolve_ingestion_idempotency_replay(job)
+        if not replay.accepted:
+            raise BusinessDateIngestionCommandError(
+                replay.status_code or 500,
+                replay.detail
+                or {
+                    "code": "INGESTION_REPLAY_STATE_INVALID",
+                    "message": "The stored ingestion replay outcome is incomplete.",
+                    "job_id": job.job_id,
+                },
+                headers=replay.headers,
+            )
+        return BusinessDateIngestionCommandResult(
+            message="Duplicate ingestion request accepted via idempotency replay.",
+            job_id=job.job_id,
+            accepted_count=job.accepted_count,
+            idempotency_key=command.idempotency_key,
+            replayed=True,
         )
 
     async def _assert_ingestion_writable(self) -> None:
