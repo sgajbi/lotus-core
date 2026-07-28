@@ -13,6 +13,7 @@ from portfolio_common.domain.transaction.numeric_policy import (
 )
 
 from .lot_state import OpenLotState
+from .residual_allocation import allocate_nonnegative_storage_share
 
 BookKey = tuple[str, str]
 LOT_QUANTITY_QUANTUM = Decimal("0.0000000001")
@@ -221,40 +222,56 @@ class AverageCostSourceAllocation:
         pools: Mapping[BookKey, AverageCostPool],
     ) -> dict[str, OpenLotState]:
         last_quantity_source_by_key: dict[BookKey, str] = {}
-        last_local_cost_source_by_key: dict[BookKey, str] = {}
-        last_base_cost_source_by_key: dict[BookKey, str] = {}
         for source_transaction_id, contribution in self._contributions.items():
             if contribution.generation == self._generation_by_key[contribution.book_key]:
                 last_quantity_source_by_key[contribution.book_key] = source_transaction_id
-            if (
-                contribution.cost_local_generation
-                == self._cost_local_generation_by_key[contribution.book_key]
-            ):
-                last_local_cost_source_by_key[contribution.book_key] = source_transaction_id
-            if (
-                contribution.cost_base_generation
-                == self._cost_base_generation_by_key[contribution.book_key]
-            ):
-                last_base_cost_source_by_key[contribution.book_key] = source_transaction_id
 
         allocated_by_key: dict[BookKey, AverageCostPool] = defaultdict(AverageCostPool)
+        quantities: dict[str, Decimal] = {}
+        for source_transaction_id, contribution in self._contributions.items():
+            book_key = contribution.book_key
+            allocated = allocated_by_key[book_key]
+            pool = pools[book_key]
+            disposal_factor = self._disposal_factor(contribution)
+            quantity = _materialized_quantity(
+                contribution=contribution,
+                source_transaction_id=source_transaction_id,
+                current_generation=self._generation_by_key[book_key],
+                last_source_id=last_quantity_source_by_key.get(book_key),
+                disposal_factor=disposal_factor,
+                aggregate=pool.quantity,
+                allocated=allocated.quantity,
+            )
+            quantities[source_transaction_id] = quantity
+            allocated.quantity = COST_BASIS_STATE_LEDGER_OUTPUT_V1.add(
+                allocated.quantity,
+                quantity,
+                field_name="allocated_quantity",
+            )
+
+        last_local_cost_source_by_key: dict[BookKey, str] = {}
+        last_base_cost_source_by_key: dict[BookKey, str] = {}
+        for source_transaction_id, contribution in self._contributions.items():
+            if quantities[source_transaction_id] <= Decimal(0):
+                continue
+            book_key = contribution.book_key
+            if contribution.cost_local_generation == self._cost_local_generation_by_key[book_key]:
+                last_local_cost_source_by_key[book_key] = source_transaction_id
+            if contribution.cost_base_generation == self._cost_base_generation_by_key[book_key]:
+                last_base_cost_source_by_key[book_key] = source_transaction_id
+
+        allocated_by_key = defaultdict(AverageCostPool)
         states: dict[str, OpenLotState] = {}
         for source_transaction_id, contribution in self._contributions.items():
             book_key = contribution.book_key
             allocated = allocated_by_key[book_key]
             pool = pools[book_key]
             disposal_factor = self._disposal_factor(contribution)
+            quantity = quantities[source_transaction_id]
             state = OpenLotState(
-                quantity=_materialized_quantity(
-                    contribution=contribution,
-                    source_transaction_id=source_transaction_id,
-                    current_generation=self._generation_by_key[book_key],
-                    last_source_id=last_quantity_source_by_key.get(book_key),
-                    disposal_factor=disposal_factor,
-                    aggregate=pool.quantity,
-                    allocated=allocated.quantity,
-                ),
+                quantity=quantity,
                 cost_local=_materialized_cost(
+                    eligible=quantity > Decimal(0),
                     source_cost=contribution.cost_local,
                     source_generation=contribution.cost_local_generation,
                     current_generation=self._cost_local_generation_by_key[book_key],
@@ -268,6 +285,7 @@ class AverageCostSourceAllocation:
                     field_name="lot_cost_local",
                 ),
                 cost_base=_materialized_cost(
+                    eligible=quantity > Decimal(0),
                     source_cost=contribution.cost_base,
                     source_generation=contribution.cost_base_generation,
                     current_generation=self._cost_base_generation_by_key[book_key],
@@ -326,17 +344,17 @@ def _materialized_quantity(
             LOT_QUANTITY_QUANTUM,
             rounding=ROUND_DOWN,
         )
-    return cast(
-        Decimal,
-        COST_BASIS_STATE_LEDGER_OUTPUT_V1.normalize(
-            quantity,
-            field_name="open_quantity",
-        ),
+    return allocate_nonnegative_storage_share(
+        quantity,
+        aggregate=aggregate,
+        allocated=allocated,
+        field_name="open_quantity",
     )
 
 
 def _materialized_cost(
     *,
+    eligible: bool,
     source_cost: Decimal,
     source_generation: int,
     current_generation: int,
@@ -349,7 +367,7 @@ def _materialized_cost(
     allocated: Decimal,
     field_name: str,
 ) -> Decimal:
-    if source_generation != current_generation:
+    if not eligible or source_generation != current_generation:
         return Decimal(0)
     if source_transaction_id == last_source_id:
         return cast(
@@ -362,12 +380,11 @@ def _materialized_cost(
         )
     with COST_BASIS_STATE_LEDGER_OUTPUT_V1.arithmetic_context():
         materialized_cost = source_cost * disposal_factor * scale / scale_at_entry
-    return cast(
-        Decimal,
-        COST_BASIS_STATE_LEDGER_OUTPUT_V1.normalize(
-            materialized_cost,
-            field_name=field_name,
-        ),
+    return allocate_nonnegative_storage_share(
+        materialized_cost,
+        aggregate=aggregate,
+        allocated=allocated,
+        field_name=field_name,
     )
 
 

@@ -16,6 +16,7 @@ from .average_cost_source_allocation import (
     AverageCostSourceAllocation,
 )
 from .lot_state import CostLot, OpenLotState
+from .residual_allocation import allocate_nonnegative_storage_share
 
 logger = logging.getLogger(__name__)
 
@@ -454,12 +455,16 @@ def _allocate_fifo_basis_transfer(
         with COST_BASIS_STATE_LEDGER_OUTPUT_V1.arithmetic_context():
             raw_next_base = state.cost_base * remaining_base / total_base
             raw_next_local = state.cost_local * remaining_local / total_local
-        next_base = COST_BASIS_STATE_LEDGER_OUTPUT_V1.normalize(
+        next_base = allocate_nonnegative_storage_share(
             raw_next_base,
+            aggregate=remaining_base,
+            allocated=allocated_base,
             field_name="open_cost_base",
         )
-        next_local = COST_BASIS_STATE_LEDGER_OUTPUT_V1.normalize(
+        next_local = allocate_nonnegative_storage_share(
             raw_next_local,
+            aggregate=remaining_local,
+            allocated=allocated_local,
             field_name="open_cost_local",
         )
         _assign_fifo_lot_costs(
