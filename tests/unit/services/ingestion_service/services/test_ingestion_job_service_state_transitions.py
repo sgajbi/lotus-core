@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from types import SimpleNamespace
 
 import pytest
@@ -95,6 +96,28 @@ async def test_mark_queued_returns_false_when_expected_status_is_stale(
     assert len(session.executed_statements) == 1
 
 
+async def test_mark_failed_returns_false_without_recording_when_expected_status_is_stale(
+    service: IngestionJobService,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session = _FakeSession(returned_row=None)
+    monkeypatch.setattr(
+        service_module,
+        "get_async_db_session",
+        make_single_session_getter(session),
+    )
+
+    updated = await service.mark_failed(
+        "job_already_terminal",
+        failure_reason="late failure observation",
+        failure_phase="publish",
+    )
+
+    assert updated is False
+    assert len(session.executed_statements) == 1
+    assert session.added_rows == []
+
+
 async def test_mark_failed_uses_atomic_update_and_records_failure(
     service: IngestionJobService,
     monkeypatch: pytest.MonkeyPatch,
@@ -165,6 +188,23 @@ async def test_mark_retried_uses_atomic_increment_update(
     assert "RETURNING ingestion_jobs.endpoint, ingestion_jobs.entity_type" in compiled_sql
 
 
+async def test_mark_retried_returns_false_when_job_is_not_retryable(
+    service: IngestionJobService,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session = _FakeSession(returned_row=None)
+    monkeypatch.setattr(
+        service_module,
+        "get_async_db_session",
+        make_single_session_getter(session),
+    )
+
+    updated = await service.mark_retried("job_not_retryable")
+
+    assert updated is False
+    assert len(session.executed_statements) == 1
+
+
 async def test_mark_retried_and_queued_is_single_expected_status_update(
     service: IngestionJobService,
     monkeypatch: pytest.MonkeyPatch,
@@ -194,6 +234,23 @@ async def test_mark_retried_and_queued_is_single_expected_status_update(
     assert "failure_detail=NULL" in compiled_sql
     assert "failure_headers=NULL" in compiled_sql
     assert "RETURNING ingestion_jobs.endpoint, ingestion_jobs.entity_type" in compiled_sql
+
+
+async def test_mark_retried_and_queued_returns_false_when_job_is_not_retryable(
+    service: IngestionJobService,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session = _FakeSession(returned_row=None)
+    monkeypatch.setattr(
+        service_module,
+        "get_async_db_session",
+        make_single_session_getter(session),
+    )
+
+    updated = await service.mark_retried_and_queued("job_not_retryable")
+
+    assert updated is False
+    assert len(session.executed_statements) == 1
 
 
 async def test_record_failure_observation_preserves_job_status_and_records_failure(
@@ -241,6 +298,114 @@ async def test_record_failure_observation_preserves_job_status_and_records_failu
         "work_state": "published",
         "retry_safe": False,
     }
+
+
+async def test_record_failure_observation_ignores_unknown_job(
+    service: IngestionJobService,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session = _FakeSession(returned_row=None)
+    monkeypatch.setattr(
+        service_module,
+        "get_async_db_session",
+        make_single_session_getter(session),
+    )
+
+    await service.record_failure_observation(
+        "job_missing",
+        "late observation for an unknown job",
+        failure_phase="queue_bookkeeping",
+    )
+
+    assert len(session.executed_statements) == 1
+    assert session.added_rows == []
+
+
+def _persisted_job(*, request_payload: object) -> SimpleNamespace:
+    return SimpleNamespace(
+        job_id="job_replayable",
+        endpoint="/ingest/transactions",
+        entity_type="transaction",
+        status="failed",
+        accepted_count=1,
+        idempotency_key="idem-001",
+        correlation_id="corr-001",
+        request_id="req-001",
+        trace_id="trace-001",
+        submitted_at=datetime(2026, 7, 28, tzinfo=UTC),
+        completed_at=datetime(2026, 7, 28, tzinfo=UTC),
+        failure_reason="publish failed",
+        failure_status_code=503,
+        failure_code="INGESTION_PUBLISH_FAILED",
+        failure_detail={"retryable": True},
+        failure_headers={"Retry-After": "30"},
+        retry_count=0,
+        last_retried_at=None,
+        request_payload=request_payload,
+    )
+
+
+@pytest.mark.parametrize(
+    ("persisted_row", "expected_job_id"),
+    [
+        (
+            _persisted_job(request_payload={"transactions": [{"transaction_id": "tx-001"}]}),
+            "job_replayable",
+        ),
+        (None, None),
+    ],
+)
+async def test_get_job_maps_persisted_row_or_returns_none(
+    service: IngestionJobService,
+    monkeypatch: pytest.MonkeyPatch,
+    persisted_row: SimpleNamespace | None,
+    expected_job_id: str | None,
+) -> None:
+    session = _FakeSession(returned_row=persisted_row)
+    monkeypatch.setattr(
+        service_module,
+        "get_async_db_session",
+        make_single_session_getter(session),
+    )
+
+    response = await service.get_job("job_replayable")
+
+    assert (response.job_id if response else None) == expected_job_id
+    assert len(session.executed_statements) == 1
+
+
+@pytest.mark.parametrize(
+    ("persisted_row", "expected_payload"),
+    [
+        (
+            _persisted_job(request_payload={"transactions": [{"transaction_id": "tx-001"}]}),
+            {"transactions": [{"transaction_id": "tx-001"}]},
+        ),
+        (_persisted_job(request_payload="invalid-legacy-payload"), None),
+        (None, None),
+    ],
+)
+async def test_get_job_replay_context_maps_only_object_payloads(
+    service: IngestionJobService,
+    monkeypatch: pytest.MonkeyPatch,
+    persisted_row: SimpleNamespace | None,
+    expected_payload: dict | None,
+) -> None:
+    session = _FakeSession(returned_row=persisted_row)
+    monkeypatch.setattr(
+        service_module,
+        "get_async_db_session",
+        make_single_session_getter(session),
+    )
+
+    response = await service.get_job_replay_context("job_replayable")
+
+    if persisted_row is None:
+        assert response is None
+    else:
+        assert response is not None
+        assert response.request_payload == expected_payload
+    assert len(session.executed_statements) == 1
 
 
 @pytest.mark.parametrize(
