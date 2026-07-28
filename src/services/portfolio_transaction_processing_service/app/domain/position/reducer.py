@@ -9,6 +9,7 @@ from typing import Callable
 
 from ..transaction.booked import BookedTransaction
 from ..transaction.processing_type import resolve_effective_processing_transaction_type
+from .numeric_policy import POSITION_HISTORY_LEDGER_OUTPUT_V1
 
 CASH_POSITION_INFLOW_TRANSACTION_TYPES = {"DEPOSIT"}
 CASH_POSITION_OUTFLOW_TRANSACTION_TYPES = {"WITHDRAWAL", "FEE", "TAX"}
@@ -108,9 +109,10 @@ def calculate_next_position_state(
 ) -> PositionBalanceState:
     txn_type = resolve_effective_processing_transaction_type(transaction)
     handler = _position_update_handler(txn_type)
-    next_state = (
-        handler(current_state, transaction, txn_type) if handler is not None else current_state
-    )
+    with POSITION_HISTORY_LEDGER_OUTPUT_V1.arithmetic_context():
+        next_state = (
+            handler(current_state, transaction, txn_type) if handler is not None else current_state
+        )
     return _zeroed_cost_basis_when_flat(next_state)
 
 
@@ -172,10 +174,14 @@ def _position_update_handler(txn_type: str) -> _PositionUpdateHandler | None:
 def _position_state(
     quantity: Decimal, cost_basis: Decimal, cost_basis_local: Decimal
 ) -> PositionBalanceState:
+    policy = POSITION_HISTORY_LEDGER_OUTPUT_V1
     return PositionBalanceState(
-        quantity=quantity,
-        cost_basis=cost_basis,
-        cost_basis_local=cost_basis_local,
+        quantity=policy.normalize(quantity, field_name="position_history.quantity"),
+        cost_basis=policy.normalize(cost_basis, field_name="position_history.cost_basis"),
+        cost_basis_local=policy.normalize(
+            cost_basis_local,
+            field_name="position_history.cost_basis_local",
+        ),
     )
 
 

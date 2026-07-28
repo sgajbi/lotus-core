@@ -1,7 +1,7 @@
 """Test deterministic position state transitions and replay decisions."""
 
 from datetime import date, datetime, timezone
-from decimal import Decimal
+from decimal import Decimal, getcontext
 from pathlib import Path
 
 import pytest
@@ -414,6 +414,54 @@ def test_flat_position_zeroes_residual_cost_basis() -> None:
     )
 
     assert next_state == PositionBalanceState()
+
+
+def test_position_state_rounds_calculated_outputs_once_for_exact_persistence() -> None:
+    next_state = calculate_next_position_state(
+        PositionBalanceState(
+            quantity=Decimal("1.0000000000"),
+            cost_basis=Decimal("1.0000000000"),
+            cost_basis_local=Decimal("1.0000000000"),
+        ),
+        _txn(
+            "BUY",
+            quantity=Decimal("0.00000000005"),
+            net_cost=Decimal("0.00000000005"),
+            net_cost_local=Decimal("0.00000000015"),
+        ),
+    )
+
+    assert next_state.quantity == Decimal("1.0000000000")
+    assert next_state.cost_basis == Decimal("1.0000000000")
+    assert next_state.cost_basis_local == Decimal("1.0000000002")
+
+
+def test_position_state_calculation_is_independent_of_ambient_decimal_precision() -> None:
+    def calculate(ambient_precision: int) -> PositionBalanceState:
+        getcontext().prec = ambient_precision
+        return calculate_next_position_state(
+            PositionBalanceState(
+                quantity=Decimal("9999999.1234567890"),
+                cost_basis=Decimal("9999999.1234567890"),
+                cost_basis_local=Decimal("9999999.1234567890"),
+            ),
+            _txn(
+                "BUY",
+                quantity=Decimal("0.0000000001"),
+                net_cost=Decimal("0.0000000001"),
+                net_cost_local=Decimal("0.0000000001"),
+            ),
+        )
+
+    original_precision = getcontext().prec
+    try:
+        low_precision = calculate(6)
+        high_precision = calculate(50)
+    finally:
+        getcontext().prec = original_precision
+
+    assert low_precision == high_precision
+    assert high_precision.quantity == Decimal("9999999.1234567891")
 
 
 def test_cash_position_deltas_use_canonical_booked_decimal_amounts() -> None:
