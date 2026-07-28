@@ -6,6 +6,9 @@ from decimal import Decimal
 from typing import Protocol
 
 from portfolio_common.domain.decimal_amount import required_decimal
+from portfolio_common.domain.transaction.numeric_policy import (
+    COST_BASIS_STATE_LEDGER_OUTPUT_V1,
+)
 
 from ..models.cost_basis_transaction import CostBasisTransaction
 from .average_cost_source_allocation import (
@@ -91,19 +94,40 @@ def _consume_next_fifo_lot(
     required_quantity: Decimal,
 ) -> tuple[Decimal, Decimal, Decimal, Decimal]:
     current_lot = lots_for_instrument[0]
+    state_before = current_lot.open_state()
     matched_quantity = min(required_quantity, current_lot.remaining_quantity)
-    matched_cost_base = matched_quantity * current_lot.cost_per_share_base
-    matched_cost_local = matched_quantity * current_lot.cost_per_share_local
-
-    current_lot.remaining_quantity -= matched_quantity
+    current_lot.remaining_quantity = COST_BASIS_STATE_LEDGER_OUTPUT_V1.subtract(
+        current_lot.remaining_quantity,
+        matched_quantity,
+        field_name="open_quantity",
+    )
     if current_lot.remaining_quantity == Decimal(0):
+        state_after = OpenLotState(
+            quantity=Decimal(0),
+            cost_local=Decimal(0),
+            cost_base=Decimal(0),
+        )
         lots_for_instrument.popleft()
+    else:
+        state_after = current_lot.open_state()
 
     return (
-        matched_cost_base,
-        matched_cost_local,
+        COST_BASIS_STATE_LEDGER_OUTPUT_V1.subtract(
+            state_before.cost_base,
+            state_after.cost_base,
+            field_name="disposed_cost_base",
+        ),
+        COST_BASIS_STATE_LEDGER_OUTPUT_V1.subtract(
+            state_before.cost_local,
+            state_after.cost_local,
+            field_name="disposed_cost_local",
+        ),
         matched_quantity,
-        required_quantity - matched_quantity,
+        COST_BASIS_STATE_LEDGER_OUTPUT_V1.subtract(
+            required_quantity,
+            matched_quantity,
+            field_name="remaining_disposal_quantity",
+        ),
     )
 
 
@@ -142,8 +166,9 @@ class FIFOBasisStrategy:
             return
         quantity, net_cost, net_cost_local = validated_inputs
 
-        cost_per_share_local = net_cost_local / quantity
-        cost_per_share_base = net_cost / quantity
+        with COST_BASIS_STATE_LEDGER_OUTPUT_V1.arithmetic_context():
+            cost_per_share_local = net_cost_local / quantity
+            cost_per_share_base = net_cost / quantity
 
         new_lot = CostLot(
             transaction_id=transaction.transaction_id,
@@ -154,7 +179,11 @@ class FIFOBasisStrategy:
         key = (transaction.portfolio_id, transaction.instrument_id)
         self._open_lots[key].append(new_lot)
         self._lots_by_transaction_id[transaction.transaction_id] = new_lot
-        self._available_quantities[key] += quantity
+        self._available_quantities[key] = COST_BASIS_STATE_LEDGER_OUTPUT_V1.add(
+            self._available_quantities[key],
+            quantity,
+            field_name="available_quantity",
+        )
 
     def consume_sell_quantity(
         self, portfolio_id: str, instrument_id: str, sell_quantity: Decimal
@@ -187,10 +216,26 @@ class FIFOBasisStrategy:
                     required_quantity,
                 )
             )
-            total_matched_cost_base += matched_cost_base
-            total_matched_cost_local += matched_cost_local
-            consumed_quantity += matched_quantity
-        self._available_quantities[key] = available_qty - consumed_quantity
+            total_matched_cost_base = COST_BASIS_STATE_LEDGER_OUTPUT_V1.add(
+                total_matched_cost_base,
+                matched_cost_base,
+                field_name="disposed_cost_base",
+            )
+            total_matched_cost_local = COST_BASIS_STATE_LEDGER_OUTPUT_V1.add(
+                total_matched_cost_local,
+                matched_cost_local,
+                field_name="disposed_cost_local",
+            )
+            consumed_quantity = COST_BASIS_STATE_LEDGER_OUTPUT_V1.add(
+                consumed_quantity,
+                matched_quantity,
+                field_name="consumed_quantity",
+            )
+        self._available_quantities[key] = COST_BASIS_STATE_LEDGER_OUTPUT_V1.subtract(
+            available_qty,
+            consumed_quantity,
+            field_name="available_quantity",
+        )
         return total_matched_cost_base, total_matched_cost_local, consumed_quantity, None
 
     def get_available_quantity(self, portfolio_id: str, instrument_id: str) -> Decimal:

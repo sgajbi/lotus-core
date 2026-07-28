@@ -3,6 +3,10 @@
 from dataclasses import dataclass
 from decimal import Decimal
 
+from portfolio_common.domain.transaction.numeric_policy import (
+    COST_BASIS_STATE_LEDGER_OUTPUT_V1,
+)
+
 
 @dataclass(frozen=True, slots=True)
 class OpenLotState:
@@ -33,18 +37,34 @@ class CostLot:
     @property
     def total_cost_local(self) -> Decimal:
         """Calculates the total cost of the original lot in the local currency."""
-        return self.original_quantity * self.cost_per_share_local
+        return COST_BASIS_STATE_LEDGER_OUTPUT_V1.multiply(
+            self.original_quantity,
+            self.cost_per_share_local,
+            field_name="lot_cost_local",
+        )
 
     @property
     def total_cost_base(self) -> Decimal:
         """Calculates the total cost of the original lot in the portfolio's base currency."""
-        return self.original_quantity * self.cost_per_share_base
+        return COST_BASIS_STATE_LEDGER_OUTPUT_V1.multiply(
+            self.original_quantity,
+            self.cost_per_share_base,
+            field_name="lot_cost_base",
+        )
 
     def open_state(self) -> OpenLotState:
         return OpenLotState(
             quantity=self.remaining_quantity,
-            cost_local=self.remaining_quantity * self.cost_per_share_local,
-            cost_base=self.remaining_quantity * self.cost_per_share_base,
+            cost_local=COST_BASIS_STATE_LEDGER_OUTPUT_V1.multiply(
+                self.remaining_quantity,
+                self.cost_per_share_local,
+                field_name="lot_cost_local",
+            ),
+            cost_base=COST_BASIS_STATE_LEDGER_OUTPUT_V1.multiply(
+                self.remaining_quantity,
+                self.cost_per_share_base,
+                field_name="lot_cost_base",
+            ),
         )
 
     def __repr__(self) -> str:

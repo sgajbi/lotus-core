@@ -19,6 +19,12 @@ TRANSACTION_COST_LEDGER_OUTPUT_V1 = CalculatedDecimalPolicy(
     precision=18,
     scale=10,
 )
+COST_BASIS_STATE_LEDGER_OUTPUT_V1 = CalculatedDecimalPolicy(
+    name="cost-basis-state-ledger-output",
+    version="1.0.0",
+    precision=18,
+    scale=10,
+)
 
 TRANSACTION_COMMAND_DECIMAL_FIELDS = (
     "quantity",
