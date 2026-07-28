@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from decimal import Decimal
+from typing import cast
 
 from portfolio_common.domain.transaction.numeric_policy import (
     COST_BASIS_STATE_LEDGER_OUTPUT_V1,
@@ -37,19 +38,25 @@ class CostLot:
     @property
     def total_cost_local(self) -> Decimal:
         """Calculates the total cost of the original lot in the local currency."""
-        return COST_BASIS_STATE_LEDGER_OUTPUT_V1.multiply(
-            self.original_quantity,
-            self.cost_per_share_local,
-            field_name="lot_cost_local",
+        return cast(
+            Decimal,
+            COST_BASIS_STATE_LEDGER_OUTPUT_V1.multiply(
+                self.original_quantity,
+                self.cost_per_share_local,
+                field_name="lot_cost_local",
+            ),
         )
 
     @property
     def total_cost_base(self) -> Decimal:
         """Calculates the total cost of the original lot in the portfolio's base currency."""
-        return COST_BASIS_STATE_LEDGER_OUTPUT_V1.multiply(
-            self.original_quantity,
-            self.cost_per_share_base,
-            field_name="lot_cost_base",
+        return cast(
+            Decimal,
+            COST_BASIS_STATE_LEDGER_OUTPUT_V1.multiply(
+                self.original_quantity,
+                self.cost_per_share_base,
+                field_name="lot_cost_base",
+            ),
         )
 
     def open_state(self) -> OpenLotState:
