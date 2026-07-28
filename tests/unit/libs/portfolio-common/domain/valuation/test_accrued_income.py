@@ -2,9 +2,13 @@
 
 from dataclasses import replace
 from datetime import UTC, date, datetime
-from decimal import Decimal, localcontext
+from decimal import ROUND_HALF_EVEN, Decimal, localcontext
 
 import pytest
+from portfolio_common.domain.financial.precision import (
+    DecimalPrecisionError,
+    DecimalPrecisionViolation,
+)
 from portfolio_common.domain.valuation import (
     AccrualRateType,
     AccrualSegment,
@@ -44,6 +48,12 @@ def _sum_accruals(*values: Decimal) -> Decimal:
     with localcontext() as context:
         context.prec = 50
         return sum(values, start=Decimal(0))
+
+
+def _ledger(value: Decimal) -> Decimal:
+    with localcontext() as context:
+        context.prec = 64
+        return value.quantize(Decimal("0.0000000001"), rounding=ROUND_HALF_EVEN)
 
 
 def _segment(**overrides: object) -> AccrualSegment:
@@ -94,12 +104,12 @@ def test_ex_coupon_settlement_subtracts_full_coupon_as_rebate_interest() -> None
     )
 
     expected_gross = _accrual("1000000", "0.06", 175, 362)
-    expected_settlement = _sum_accruals(expected_gross, Decimal("-30000.000"))
-    assert result.gross_accrued_income == expected_gross
+    expected_settlement = _ledger(_ledger(expected_gross) - Decimal("30000.000"))
+    assert result.gross_accrued_income == _ledger(expected_gross)
     assert result.ex_coupon_entitlement_adjustment == Decimal("30000.000")
     assert result.settlement_accrued_income == expected_settlement
     assert result.settlement_accrued_income < 0
-    assert result.lineage.algorithm_version == 2
+    assert result.lineage.algorithm_version == 3
 
 
 def test_ex_coupon_rebate_preserves_short_position_sign() -> None:
@@ -221,7 +231,7 @@ def test_supplied_floating_all_in_rate_is_not_derived_or_divided_by_frequency() 
     result = calculate_segmented_accrued_income((segment,))
 
     assert result.segments[0].year_fraction == _ratio(91, 360)
-    assert result.gross_accrued_income == _accrual("1000000", "0.0525", 91, 360)
+    assert result.gross_accrued_income == _ledger(_accrual("1000000", "0.0525", 91, 360))
 
 
 def test_principal_change_segments_accrue_on_each_authoritative_balance() -> None:
@@ -244,9 +254,11 @@ def test_principal_change_segments_accrue_on_each_authoritative_balance() -> Non
         Decimal("1000000"),
         Decimal("800000"),
     ]
-    assert result.gross_accrued_income == _sum_accruals(
-        _accrual("1000000", "0.06", 90, 365),
-        _accrual("800000", "0.06", 91, 365),
+    assert result.gross_accrued_income == _ledger(
+        _sum_accruals(
+            _accrual("1000000", "0.06", 90, 365),
+            _accrual("800000", "0.06", 91, 365),
+        )
     )
     assert len(result.lineage.input_content_hash) == 64
     assert len(result.lineage.calculation_content_hash) == 64
@@ -271,9 +283,11 @@ def test_rate_reset_segments_use_each_supplied_all_in_rate() -> None:
 
     result = calculate_segmented_accrued_income((first, second))
 
-    assert result.gross_accrued_income == _sum_accruals(
-        _accrual("1000000", "0.041", 90, 360),
-        _accrual("1000000", "0.0475", 91, 360),
+    assert result.gross_accrued_income == _ledger(
+        _sum_accruals(
+            _accrual("1000000", "0.041", 90, 360),
+            _accrual("1000000", "0.0475", 91, 360),
+        )
     )
 
 
@@ -286,6 +300,55 @@ def test_calculation_is_independent_of_ambient_decimal_precision() -> None:
         actual = calculate_segmented_accrued_income((segment,))
 
     assert actual == expected
+    assert actual.lineage.algorithm_version == 3
+    assert actual.lineage.numeric_output_policy is not None
+    assert actual.lineage.numeric_output_policy.policy_id == "accrued-income-ledger-output@1.0.0"
+
+
+@pytest.mark.parametrize(
+    ("rate", "expected"),
+    [
+        ("1.00000000004", "1.0000000000"),
+        ("1.00000000016", "1.0000000002"),
+    ],
+)
+def test_accrued_income_normalizes_once_at_output_boundary(
+    rate: str,
+    expected: str,
+) -> None:
+    result = calculate_segmented_accrued_income(
+        (
+            _segment(
+                accrual_end=date(2026, 1, 2),
+                signed_accrual_principal=Decimal("365"),
+                annual_effective_rate=Decimal(rate),
+                day_count_convention="ACT/365.FIXED",
+                icma_reference_periods=(),
+            ),
+        )
+    )
+
+    assert result.segments[0].accrued_income != result.gross_accrued_income
+    assert result.gross_accrued_income == Decimal(expected)
+    assert result.settlement_accrued_income == Decimal(expected)
+
+
+def test_accrued_income_fails_before_persistence_on_output_magnitude_overflow() -> None:
+    with pytest.raises(DecimalPrecisionError) as exc_info:
+        calculate_segmented_accrued_income(
+            (
+                _segment(
+                    accrual_end=date(2026, 1, 2),
+                    signed_accrual_principal=Decimal("36500000000"),
+                    annual_effective_rate=Decimal("1"),
+                    day_count_convention="ACT/365.FIXED",
+                    icma_reference_periods=(),
+                ),
+            )
+        )
+
+    assert exc_info.value.violation is DecimalPrecisionViolation.MAGNITUDE_OVERFLOW
+    assert exc_info.value.policy_name == "accrued-income-ledger-output@1.0.0"
 
 
 def test_lineage_is_input_order_independent_but_source_revision_sensitive() -> None:

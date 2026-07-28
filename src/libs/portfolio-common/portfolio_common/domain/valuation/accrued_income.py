@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
-from decimal import Decimal, localcontext
+from decimal import Decimal
 from enum import StrEnum
 
 from ..calculation_lineage import (
@@ -18,15 +18,16 @@ from .day_count import (
     IcmaReferencePeriod,
     calculate_year_fraction,
 )
+from .numeric_policy import ACCRUED_INCOME_LEDGER_OUTPUT_V1
 
 
 class UnsupportedAccruedIncomeError(ValueError):
     """Raised when source segments cannot support deterministic accrued income."""
 
 
-ACCRUED_INCOME_INTERMEDIATE_PRECISION = 50
+ACCRUED_INCOME_INTERMEDIATE_PRECISION = ACCRUED_INCOME_LEDGER_OUTPUT_V1.working_precision
 ACCRUED_INCOME_ALGORITHM_ID = "SEGMENTED_GROSS_CONTRACTUAL_ACCRUAL"
-ACCRUED_INCOME_ALGORITHM_VERSION = 2
+ACCRUED_INCOME_ALGORITHM_VERSION = 3
 
 
 class AccrualRateType(StrEnum):
@@ -107,7 +108,7 @@ class AccrualSegmentResult:
 
 @dataclass(frozen=True, slots=True)
 class AccruedIncomeResult:
-    """Gross contractual accrued income before any separately governed rounding."""
+    """Contractual accrued income normalized once at the governed output boundary."""
 
     currency: str
     gross_accrued_income: Decimal
@@ -157,9 +158,19 @@ def calculate_segmented_accrued_income(
             ],
             "next_coupon_payment_date": ex_coupon_entitlement.next_coupon_payment_date,
         }
-    with localcontext() as context:
-        context.prec = ACCRUED_INCOME_INTERMEDIATE_PRECISION
-        settlement_accrued_income = gross_accrued_income - ex_coupon_entitlement_adjustment
+    gross_accrued_income = ACCRUED_INCOME_LEDGER_OUTPUT_V1.normalize(
+        gross_accrued_income,
+        field_name="gross_accrued_income",
+    )
+    ex_coupon_entitlement_adjustment = ACCRUED_INCOME_LEDGER_OUTPUT_V1.normalize(
+        ex_coupon_entitlement_adjustment,
+        field_name="ex_coupon_entitlement_adjustment",
+    )
+    settlement_accrued_income = ACCRUED_INCOME_LEDGER_OUTPUT_V1.subtract(
+        gross_accrued_income,
+        ex_coupon_entitlement_adjustment,
+        field_name="settlement_accrued_income",
+    )
     lineage = build_calculation_lineage(
         algorithm_id=ACCRUED_INCOME_ALGORITHM_ID,
         algorithm_version=ACCRUED_INCOME_ALGORITHM_VERSION,
@@ -175,6 +186,7 @@ def calculate_segmented_accrued_income(
             "segments": [_segment_output_payload(result) for result in result_segments],
             "settlement_accrued_income": settlement_accrued_income,
         },
+        numeric_output_policy=ACCRUED_INCOME_LEDGER_OUTPUT_V1.lineage_identity(),
     )
     return AccruedIncomeResult(
         currency=currency,
@@ -203,8 +215,7 @@ def _calculate_segments(
                 icma_reference_periods=segment.icma_reference_periods,
             ),
         )
-        with localcontext() as context:
-            context.prec = ACCRUED_INCOME_INTERMEDIATE_PRECISION
+        with ACCRUED_INCOME_LEDGER_OUTPUT_V1.arithmetic_context():
             accrued_income = (
                 segment.signed_accrual_principal * segment.annual_effective_rate * year_fraction
             )
