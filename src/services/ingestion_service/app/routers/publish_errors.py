@@ -4,12 +4,15 @@ from typing import NoReturn
 
 from fastapi import HTTPException, status
 
+from ..application.ingestion_publish_outcome import (
+    INGESTION_PUBLISH_DEPENDENCY,
+    INGESTION_PUBLISH_FAILED_CODE,
+    INGESTION_PUBLISH_RETRY_AFTER_SECONDS,
+    build_ingestion_publish_failure_detail,
+)
 from ..request_metadata import get_request_lineage
 from ..services.ingestion_service import IngestionPublishError
 
-INGESTION_PUBLISH_RETRY_AFTER_SECONDS = 30
-INGESTION_PUBLISH_FAILED_CODE = "INGESTION_PUBLISH_FAILED"
-INGESTION_PUBLISH_DEPENDENCY = "kafka"
 INGESTION_IDEMPOTENCY_CONFLICT_EXAMPLE = {
     "detail": {
         "code": "INGESTION_IDEMPOTENCY_CONFLICT",
@@ -28,26 +31,15 @@ def ingestion_publish_failed_detail(
     job_id: str | None = None,
 ) -> dict[str, object]:
     correlation_id, request_id, trace_id = get_request_lineage()
-    published_record_count = exc.published_record_count
-    detail: dict[str, object] = {
-        "code": INGESTION_PUBLISH_FAILED_CODE,
-        "message": str(exc),
-        "dependency": INGESTION_PUBLISH_DEPENDENCY,
-        "retryable": True,
-        "retry_after_seconds": INGESTION_PUBLISH_RETRY_AFTER_SECONDS,
-        "publish_state": "partial" if published_record_count else "unpublished",
-        "published_record_count": published_record_count,
-        "failed_record_keys": exc.failed_record_keys,
-    }
-    if job_id:
-        detail["job_id"] = job_id
-    if correlation_id:
-        detail["correlation_id"] = correlation_id
-    if request_id:
-        detail["request_id"] = request_id
-    if trace_id:
-        detail["trace_id"] = trace_id
-    return detail
+    return build_ingestion_publish_failure_detail(
+        message=str(exc),
+        failed_record_keys=exc.failed_record_keys,
+        published_record_count=exc.published_record_count,
+        job_id=job_id,
+        correlation_id=correlation_id,
+        request_id=request_id,
+        trace_id=trace_id,
+    )
 
 
 def ingestion_publish_failed_example(
@@ -83,7 +75,7 @@ def ingestion_unavailable_response(
         "Ingestion is unavailable because operating mode blocks writes or Kafka publish failed."
     ),
 ) -> dict[str, object]:
-    examples = {
+    examples: dict[str, dict[str, object]] = {
         "mode_blocked": {
             "summary": "Ingestion operating mode blocked writes.",
             "value": mode_blocked_example,
