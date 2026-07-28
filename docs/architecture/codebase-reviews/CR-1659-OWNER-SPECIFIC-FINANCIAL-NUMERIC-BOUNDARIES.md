@@ -67,9 +67,12 @@ inputs and serialized Decimal values remain unchanged.
   including policy-version hash changes, ambient-context independence, half-even normalization,
   component reconciliation, and pre-persistence overflow rejection.
 - Repository-native MyPy passed across 240 source files.
-- Signed commits `5f5ceac94` and `44bc50938` add and enforce the policy inventory.
-- Seven focused guard tests passed, including repository parity and mutation-style drift, stale,
-  unclassified, unused, missing-lineage, and duplicate-key failures.
+- Signed commits `5f5ceac94`, `44bc50938`, and `de6785f5a` add, enforce, and
+  coverage-harden the policy inventory.
+- Nineteen focused guard tests passed with 99% line/branch coverage, including repository parity;
+  mutation-style shape drift; malformed envelopes and policy entries; stale, unclassified, unused,
+  and missing-lineage policies; ambiguous/duplicate source declarations; duplicate JSON keys; and
+  CLI success/failure evidence.
 
 ## Compatibility and remaining work
 
