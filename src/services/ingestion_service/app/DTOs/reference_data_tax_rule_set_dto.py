@@ -6,12 +6,12 @@ from typing import Literal, cast
 
 from portfolio_common.domain.currency import normalize_optional_currency_code
 from portfolio_common.openapi_enrichment import exact_numeric_openapi_description
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-
-from .financial_numeric_fields import (
+from portfolio_common.pydantic_financial_numeric import (
     ExactNonNegativeDecimal18_4,
     ExactRatioDecimal18_10,
 )
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
 from .ingestion_validation_errors import (
     INVALID_THRESHOLD_PAIR,
     MISSING_RULE_EVIDENCE,
