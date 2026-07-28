@@ -1438,6 +1438,7 @@ async def test_openapi_describes_simulation_parameters_and_examples(async_test_c
     session_response = components["SimulationSessionResponse"]
     changes_response = components["SimulationChangesResponse"]
     projected_positions = components["ProjectedPositionsResponse"]
+    simulation_change = components["SimulationChangeInput"]
 
     assert session_response["properties"]["session"]["description"] == (
         "Simulation session metadata."
@@ -1448,6 +1449,11 @@ async def test_openapi_describes_simulation_parameters_and_examples(async_test_c
     assert projected_positions["properties"]["positions"]["description"] == (
         "Projected positions after all simulation changes are applied."
     )
+    for field_name in ("quantity", "price", "amount"):
+        field_schema = simulation_change["properties"][field_name]
+        assert "NUMERIC(18,10)" in field_schema["description"]
+        assert "rejected, not rounded" in field_schema["description"]
+        assert '"type": "number"' not in str(field_schema)
     assert "not for performance analytics" in projected_positions_route["description"]
     assert "not a recommendation" in projected_summary_route["description"]
 

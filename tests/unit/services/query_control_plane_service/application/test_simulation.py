@@ -243,7 +243,7 @@ async def test_add_changes_rejects_invalid_price_before_staging(dependencies, pr
 
     with pytest.raises(
         SimulationMutationInvalidError,
-        match="price must be a finite positive value",
+        match="financial values violate the persistence contract",
     ):
         await _service(dependencies).add_changes(
             "S1",
@@ -254,6 +254,53 @@ async def test_add_changes_rejects_invalid_price_before_staging(dependencies, pr
                     quantity=Decimal("5"),
                     price=price,
                     amount=None,
+                    currency="USD",
+                    effective_date=None,
+                    metadata=None,
+                )
+            ],
+        )
+
+    store.get_session.assert_not_awaited()
+    store.stage_changes.assert_not_awaited()
+    unit_of_work.commit.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    ("field_name", "value"),
+    [
+        ("quantity", Decimal("1.00000000001")),
+        ("quantity", Decimal("100000000.0000000000")),
+        ("amount", Decimal("1.00000000001")),
+        ("amount", Decimal("100000000.0000000000")),
+    ],
+)
+async def test_add_changes_rejects_unpersistable_values_before_session_lookup(
+    dependencies,
+    field_name,
+    value,
+):
+    store, _, unit_of_work = dependencies
+    values = {
+        "quantity": Decimal("5.0000000000"),
+        "price": Decimal("100.0000000000"),
+        "amount": Decimal("500.0000000000"),
+    }
+    values[field_name] = value
+
+    with pytest.raises(
+        SimulationMutationInvalidError,
+        match="financial values violate the persistence contract",
+    ):
+        await _service(dependencies).add_changes(
+            "S1",
+            [
+                SimulationChangeCommand(
+                    security_id="SEC_MSFT_US",
+                    transaction_type="BUY",
+                    quantity=values["quantity"],
+                    price=values["price"],
+                    amount=values["amount"],
                     currency="USD",
                     effective_date=None,
                     metadata=None,
