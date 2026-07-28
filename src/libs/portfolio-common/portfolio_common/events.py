@@ -3,7 +3,7 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Any, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
 
 from .domain.cost_basis_method import CostBasisMethod, normalize_cost_basis_method
 from .domain.currency import normalize_currency_code, normalize_optional_currency_code
@@ -12,6 +12,10 @@ from .domain.financial.precision import BOUNDED_18_10_EXACT
 from .domain.transaction.fee_components import (
     TRANSACTION_FEE_COMPONENT_FIELDS,
     resolve_transaction_trade_fee,
+)
+from .domain.transaction.numeric_policy import (
+    TRANSACTION_EVENT_DECIMAL_FIELDS,
+    require_transaction_persistence_precision,
 )
 from .domain.transaction_control_codes import (
     normalize_optional_transaction_control_code,
@@ -448,11 +452,26 @@ class TransactionEvent(CoreEventModel):
             raise ValueError("Amount must be greater than zero.")
         return value
 
+    @field_validator(*TRANSACTION_EVENT_DECIMAL_FIELDS)
+    @classmethod
+    def _validate_transaction_persistence_precision(
+        cls,
+        value: Decimal | None,
+        info: ValidationInfo,
+    ) -> Decimal | None:
+        return require_transaction_persistence_precision(
+            value,
+            field_name=info.field_name,
+        )
+
     @model_validator(mode="after")
     def _aggregate_fee_components(self) -> "TransactionEvent":
-        self.trade_fee = resolve_transaction_trade_fee(
-            self.trade_fee,
-            {field: getattr(self, field) for field in TRANSACTION_FEE_COMPONENT_FIELDS},
+        self.trade_fee = require_transaction_persistence_precision(
+            resolve_transaction_trade_fee(
+                self.trade_fee,
+                {field: getattr(self, field) for field in TRANSACTION_FEE_COMPONENT_FIELDS},
+            ),
+            field_name="trade_fee",
         )
         return self
 
