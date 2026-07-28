@@ -63,9 +63,7 @@ class IngestionJobResponse(BaseModel):
         default=None,
         ge=400,
         le=599,
-        description=(
-            "Original HTTP failure status preserved for deterministic idempotent replay."
-        ),
+        description=("Original HTTP failure status preserved for deterministic idempotent replay."),
         examples=[409],
     )
     failure_code: str | None = Field(

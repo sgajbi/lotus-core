@@ -10,6 +10,7 @@ from ..services.ingestion_job_service import IngestionJobService
 
 logger = logging.getLogger(__name__)
 
+
 def post_publish_bookkeeping_failure_detail(
     *,
     job_id: str,
