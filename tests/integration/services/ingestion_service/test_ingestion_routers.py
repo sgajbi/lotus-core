@@ -267,7 +267,17 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             *,
             failure_phase: str,
             failed_record_keys: list[str] | None = None,
+            failure_status_code: int | None = None,
+            failure_code: str | None = None,
+            failure_detail: dict | None = None,
+            failure_headers: dict[str, str] | None = None,
         ) -> None:
+            record = self.jobs.get(job_id)
+            if record is not None:
+                record.failure_status_code = failure_status_code
+                record.failure_code = failure_code
+                record.failure_detail = failure_detail
+                record.failure_headers = failure_headers
             self.failures.setdefault(job_id, []).append(
                 {
                     "failure_id": f"fail_{len(self.failures.get(job_id, [])) + 1}",
@@ -305,6 +315,10 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
                 return False
             record.status = "queued"
             record.failure_reason = None
+            record.failure_status_code = None
+            record.failure_code = None
+            record.failure_detail = None
+            record.failure_headers = None
             record.completed_at = datetime.now(UTC)
             record.retry_count += 1
             record.last_retried_at = datetime.now(UTC)
@@ -2247,9 +2261,20 @@ async def test_reference_data_ingest_reports_bookkeeping_failure_after_persist(
         ]
     }
 
-    response = await async_test_client.post("/ingest/benchmark-definitions", json=payload)
+    headers = {"X-Idempotency-Key": "benchmark-bookkeeping-failure-replay-001"}
+    response = await async_test_client.post(
+        "/ingest/benchmark-definitions",
+        json=payload,
+        headers=headers,
+    )
+    replay = await async_test_client.post(
+        "/ingest/benchmark-definitions",
+        json=payload,
+        headers=headers,
+    )
 
-    assert response.status_code == 500
+    assert response.status_code == replay.status_code == 500
+    assert response.json() == replay.json()
     body = response.json()
     detail = body["detail"]
     assert detail["code"] == "INGESTION_JOB_BOOKKEEPING_FAILED"

@@ -49,7 +49,6 @@ from ..services.reference_data_ingestion_commands import (
 from ..services.reference_data_ingestion_commands import (
     ReferenceDataIngestionCommand as ReferenceDataServiceCommand,
 )
-from .job_bookkeeping import post_publish_bookkeeping_failure_detail
 from .publish_errors import (
     ingestion_conflict_response_with_idempotency_example,
     ingestion_idempotency_conflict_response,
@@ -115,13 +114,7 @@ async def _handle_reference_ingestion(
     except ReferenceDataBookkeepingFailed as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=post_publish_bookkeeping_failure_detail(
-                job_id=exc.job_id,
-                failure_phase=exc.failure_phase,
-                publish_state=exc.publish_state,
-                work_state=exc.work_state,
-                published_record_count=exc.published_record_count,
-            ),
+            detail=exc.detail,
         ) from exc
 
     return build_batch_ack(
