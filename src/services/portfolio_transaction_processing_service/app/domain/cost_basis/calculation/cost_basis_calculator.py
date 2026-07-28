@@ -141,10 +141,13 @@ def _cash_outflow_book_cost(transaction: CostBasisTransaction) -> Decimal:
     if _normalize_code(transaction.transaction_type) != "FEE":
         return cash_amount
     total_fees = transaction.fees.total_fees if transaction.fees else Decimal(0)
-    return TRANSACTION_COST_LEDGER_OUTPUT_V1.add(
-        cash_amount,
-        total_fees,
-        field_name="net_cost_local",
+    return cast(
+        Decimal,
+        TRANSACTION_COST_LEDGER_OUTPUT_V1.add(
+            cash_amount,
+            total_fees,
+            field_name="net_cost_local",
+        ),
     )
 
 
@@ -385,10 +388,13 @@ def _record_buy_lot(
 
 
 def _net_sell_proceeds_local(transaction: CostBasisTransaction) -> Decimal:
-    return TRANSACTION_COST_LEDGER_OUTPUT_V1.subtract(
-        transaction.gross_transaction_amount,
-        _transaction_total_fees(transaction),
-        field_name="net_sell_proceeds_local",
+    return cast(
+        Decimal,
+        TRANSACTION_COST_LEDGER_OUTPUT_V1.subtract(
+            transaction.gross_transaction_amount,
+            _transaction_total_fees(transaction),
+            field_name="net_sell_proceeds_local",
+        ),
     )
 
 

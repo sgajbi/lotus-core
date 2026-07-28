@@ -6,6 +6,7 @@ from collections import defaultdict
 from collections.abc import Mapping
 from dataclasses import dataclass
 from decimal import ROUND_DOWN, Decimal
+from typing import cast
 
 from portfolio_common.domain.transaction.numeric_policy import (
     COST_BASIS_STATE_LEDGER_OUTPUT_V1,
@@ -312,19 +313,25 @@ def _materialized_quantity(
     if contribution.generation != current_generation:
         return Decimal(0)
     if source_transaction_id == last_source_id:
-        return COST_BASIS_STATE_LEDGER_OUTPUT_V1.subtract(
-            aggregate,
-            allocated,
-            field_name="open_quantity",
+        return cast(
+            Decimal,
+            COST_BASIS_STATE_LEDGER_OUTPUT_V1.subtract(
+                aggregate,
+                allocated,
+                field_name="open_quantity",
+            ),
         )
     with COST_BASIS_STATE_LEDGER_OUTPUT_V1.arithmetic_context():
         quantity = (contribution.quantity * disposal_factor).quantize(
             LOT_QUANTITY_QUANTUM,
             rounding=ROUND_DOWN,
         )
-    return COST_BASIS_STATE_LEDGER_OUTPUT_V1.normalize(
-        quantity,
-        field_name="open_quantity",
+    return cast(
+        Decimal,
+        COST_BASIS_STATE_LEDGER_OUTPUT_V1.normalize(
+            quantity,
+            field_name="open_quantity",
+        ),
     )
 
 
@@ -345,16 +352,22 @@ def _materialized_cost(
     if source_generation != current_generation:
         return Decimal(0)
     if source_transaction_id == last_source_id:
-        return COST_BASIS_STATE_LEDGER_OUTPUT_V1.subtract(
-            aggregate,
-            allocated,
-            field_name=field_name,
+        return cast(
+            Decimal,
+            COST_BASIS_STATE_LEDGER_OUTPUT_V1.subtract(
+                aggregate,
+                allocated,
+                field_name=field_name,
+            ),
         )
     with COST_BASIS_STATE_LEDGER_OUTPUT_V1.arithmetic_context():
         materialized_cost = source_cost * disposal_factor * scale / scale_at_entry
-    return COST_BASIS_STATE_LEDGER_OUTPUT_V1.normalize(
-        materialized_cost,
-        field_name=field_name,
+    return cast(
+        Decimal,
+        COST_BASIS_STATE_LEDGER_OUTPUT_V1.normalize(
+            materialized_cost,
+            field_name=field_name,
+        ),
     )
 
 
