@@ -13,7 +13,7 @@ from portfolio_common.monitoring import (
     INGESTION_JOBS_FAILED_TOTAL,
     INGESTION_JOBS_RETRIED_TOTAL,
 )
-from sqlalchemy import and_, desc, func, select, text, update
+from sqlalchemy import and_, desc, func, null, select, text, update
 
 from ..domain.ingestion_job_lifecycle_policy import (
     IngestionJobStatus,
@@ -192,8 +192,8 @@ async def mark_job_queued(
                     failure_reason=None,
                     failure_status_code=None,
                     failure_code=None,
-                    failure_detail=None,
-                    failure_headers=None,
+                    failure_detail=null(),
+                    failure_headers=null(),
                 )
                 .returning(DBIngestionJob.status)
             )
@@ -350,8 +350,8 @@ async def mark_job_retried_and_queued(
                     failure_reason=None,
                     failure_status_code=None,
                     failure_code=None,
-                    failure_detail=None,
-                    failure_headers=None,
+                    failure_detail=null(),
+                    failure_headers=null(),
                     retry_count=func.coalesce(DBIngestionJob.retry_count, 0) + 1,
                     last_retried_at=datetime.now(UTC),
                 )
