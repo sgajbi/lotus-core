@@ -6,7 +6,7 @@ from portfolio_common.domain.financial.precision import (
     DecimalPrecisionViolation,
 )
 from portfolio_common.financial_numeric import ExactNumeric
-from sqlalchemy.dialects import postgresql
+from sqlalchemy.dialects import postgresql, sqlite
 
 
 def _process(numeric_type: ExactNumeric, value: object) -> object:
@@ -62,3 +62,16 @@ def test_exact_numeric_rejects_values_postgresql_would_round_or_overflow(
 def test_exact_numeric_rejects_undeclared_bounded_shape() -> None:
     with pytest.raises(ValueError, match="governed precision/scale policy"):
         _process(ExactNumeric(12, 2), Decimal("1.00"))
+
+
+def test_exact_numeric_requires_decimal_result_semantics() -> None:
+    with pytest.raises(ValueError, match="requires Decimal result semantics"):
+        ExactNumeric(18, 10, asdecimal=False)
+
+
+def test_exact_numeric_fails_closed_for_non_postgresql_persistence() -> None:
+    processor = ExactNumeric(18, 10).bind_processor(sqlite.dialect())
+    assert processor is not None
+
+    with pytest.raises(RuntimeError, match="requires PostgreSQL"):
+        processor(Decimal("1.0000000000"))
