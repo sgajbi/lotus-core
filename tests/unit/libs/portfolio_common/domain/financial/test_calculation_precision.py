@@ -33,6 +33,14 @@ def test_calculated_policy_uses_deterministic_half_even_normalization(
     assert POLICY.normalize(Decimal(value), field_name="amount") == Decimal(expected)
 
 
+def test_calculated_policy_preserves_exact_value_representation() -> None:
+    value = Decimal("1200.00")
+
+    result = POLICY.normalize(value, field_name="amount")
+
+    assert result.as_tuple() == value.as_tuple()
+
+
 def test_calculated_policy_uses_explicit_working_precision_for_products() -> None:
     original_precision = getcontext().prec
     try:
