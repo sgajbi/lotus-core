@@ -31,16 +31,14 @@ def upgrade() -> None:
         "ingestion_jobs",
         "(failure_status_code IS NULL AND failure_code IS NULL "
         "AND failure_detail IS NULL AND failure_headers IS NULL) OR "
-        "(failure_status_code BETWEEN 400 AND 599 "
+        "(failure_status_code IS NOT NULL "
+        "AND failure_status_code BETWEEN 400 AND 599 "
         "AND failure_code IS NOT NULL "
         "AND failure_code = btrim(failure_code) "
         "AND failure_code <> '')",
         postgresql_not_valid=True,
     )
-    op.execute(
-        'ALTER TABLE "ingestion_jobs" '
-        f'VALIDATE CONSTRAINT "{_CONSTRAINT_NAME}"'
-    )
+    op.execute(f'ALTER TABLE "ingestion_jobs" VALIDATE CONSTRAINT "{_CONSTRAINT_NAME}"')
 
 
 def downgrade() -> None:
