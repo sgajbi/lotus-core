@@ -55,7 +55,7 @@ class ExactNumeric(TypeDecorator[Decimal]):
     def process_bind_param(self, value: Any, _dialect: Dialect) -> Decimal | None:
         if value is None:
             return None
-        if _dialect.name != "postgresql":
+        if _dialect.name not in {"default", "postgresql"}:
             raise RuntimeError("ExactNumeric persistence requires PostgreSQL")
         decimal_value = value if isinstance(value, Decimal) else Decimal(str(value))
         return self._precision_policy().require_exact(
