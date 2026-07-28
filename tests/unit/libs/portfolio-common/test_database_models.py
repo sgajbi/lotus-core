@@ -1,3 +1,4 @@
+import pytest
 from portfolio_common.database_models import (
     AccruedIncomeOffsetState,
     AnalyticsExportJob,
@@ -327,6 +328,102 @@ def test_market_price_source_fact_model_preserves_exact_append_history() -> None
         "source_system",
         "source_record_id",
     ]
+
+
+@pytest.mark.parametrize(
+    (
+        "table_name",
+        "finite_constraint_name",
+        "finite_columns",
+        "sign_constraint_name",
+        "sign_terms",
+    ),
+    [
+        (
+            "fx_rates",
+            "ck_fx_rates_rate_finite",
+            ("rate",),
+            "ck_fx_rates_rate_positive",
+            ("rate > 0",),
+        ),
+        (
+            "market_prices",
+            "ck_market_prices_price_finite",
+            ("price",),
+            "ck_market_prices_price_positive",
+            ("price > 0",),
+        ),
+        (
+            "instruments",
+            "ck_instruments_fx_terms_finite",
+            ("buy_amount", "sell_amount", "contract_rate"),
+            "ck_instruments_fx_terms_positive",
+            ("buy_amount > 0", "sell_amount > 0", "contract_rate > 0"),
+        ),
+        (
+            "benchmark_composition_series",
+            "ck_benchmark_composition_weight_finite",
+            ("composition_weight",),
+            "ck_benchmark_composition_weight_nonnegative",
+            ("composition_weight >= 0",),
+        ),
+        (
+            "index_price_series",
+            "ck_index_price_series_price_finite",
+            ("index_price",),
+            "ck_index_price_series_price_positive",
+            ("index_price > 0",),
+        ),
+        (
+            "index_return_series",
+            "ck_index_return_series_return_finite",
+            ("index_return",),
+            None,
+            (),
+        ),
+        (
+            "benchmark_return_series",
+            "ck_benchmark_return_series_return_finite",
+            ("benchmark_return",),
+            None,
+            (),
+        ),
+        (
+            "risk_free_series",
+            "ck_risk_free_series_value_finite",
+            ("value",),
+            None,
+            (),
+        ),
+        (
+            "instrument_lookthrough_components",
+            "ck_instrument_lookthrough_weight_finite",
+            ("component_weight",),
+            "ck_instrument_lookthrough_weight_nonnegative",
+            ("component_weight >= 0",),
+        ),
+    ],
+)
+def test_reference_numeric_models_enforce_finite_domain_policy(
+    table_name: str,
+    finite_constraint_name: str,
+    finite_columns: tuple[str, ...],
+    sign_constraint_name: str | None,
+    sign_terms: tuple[str, ...],
+) -> None:
+    table = Base.metadata.tables[table_name]
+    constraints = {
+        constraint.name: constraint
+        for constraint in table.constraints
+        if constraint.name is not None
+    }
+
+    finite_sql = str(constraints[finite_constraint_name].sqltext)
+    for column_name in finite_columns:
+        assert f"CAST({column_name} AS TEXT) NOT IN ('NaN', 'Infinity', '-Infinity')" in finite_sql
+    if sign_constraint_name is not None:
+        sign_sql = str(constraints[sign_constraint_name].sqltext)
+        assert all(term in sign_sql for term in sign_terms)
 
 
 def test_model_portfolio_tables_declare_dpm_source_indexes():

@@ -59,18 +59,18 @@
       "unrealized_fx_gain_loss": {"profile": "nullable-finite", "rollout_status": "planned"}
     },
     "fx_rates": {
-      "rate": {"profile": "positive-finite", "rollout_status": "planned"}
+      "rate": {"profile": "positive-finite", "rollout_status": "orm-enforced"}
     },
     "market_prices": {
-      "price": {"profile": "positive-finite", "rollout_status": "planned"}
+      "price": {"profile": "positive-finite", "rollout_status": "orm-enforced"}
     },
     "market_price_source_facts": {
       "price": {"profile": "positive-finite", "rollout_status": "orm-enforced"}
     },
     "instruments": {
-      "buy_amount": {"profile": "nullable-positive-finite", "rollout_status": "planned"},
-      "sell_amount": {"profile": "nullable-positive-finite", "rollout_status": "planned"},
-      "contract_rate": {"profile": "nullable-positive-finite", "rollout_status": "planned"}
+      "buy_amount": {"profile": "nullable-positive-finite", "rollout_status": "orm-enforced"},
+      "sell_amount": {"profile": "nullable-positive-finite", "rollout_status": "orm-enforced"},
+      "contract_rate": {"profile": "nullable-positive-finite", "rollout_status": "orm-enforced"}
     },
     "sustainability_preference_profiles": {
       "minimum_allocation": {"profile": "nullable-nonnegative-finite", "rollout_status": "planned"},
@@ -98,22 +98,22 @@
       "max_weight": {"profile": "nullable-nonnegative-finite", "rollout_status": "planned"}
     },
     "benchmark_composition_series": {
-      "composition_weight": {"profile": "nonnegative-finite", "rollout_status": "planned"}
+      "composition_weight": {"profile": "nonnegative-finite", "rollout_status": "orm-enforced"}
     },
     "index_price_series": {
-      "index_price": {"profile": "positive-finite", "rollout_status": "planned"}
+      "index_price": {"profile": "positive-finite", "rollout_status": "orm-enforced"}
     },
     "index_return_series": {
-      "index_return": {"profile": "finite", "rollout_status": "planned"}
+      "index_return": {"profile": "finite", "rollout_status": "orm-enforced"}
     },
     "benchmark_return_series": {
-      "benchmark_return": {"profile": "finite", "rollout_status": "planned"}
+      "benchmark_return": {"profile": "finite", "rollout_status": "orm-enforced"}
     },
     "risk_free_series": {
-      "value": {"profile": "finite", "rollout_status": "planned"}
+      "value": {"profile": "finite", "rollout_status": "orm-enforced"}
     },
     "instrument_lookthrough_components": {
-      "component_weight": {"profile": "nonnegative-finite", "rollout_status": "planned"}
+      "component_weight": {"profile": "nonnegative-finite", "rollout_status": "orm-enforced"}
     },
     "transactions": {
       "quantity": {"profile": "nonnegative-finite", "rollout_status": "orm-enforced"},
