@@ -24,6 +24,7 @@
     "record_count_source": "request payload record count where available, otherwise minimum one record per request"
   },
   "required_endpoint_templates": [
+    "/ingest/authoritative-market-price-source-facts",
     "/ingest/benchmark-assignments",
     "/ingest/benchmark-compositions",
     "/ingest/benchmark-definitions",
