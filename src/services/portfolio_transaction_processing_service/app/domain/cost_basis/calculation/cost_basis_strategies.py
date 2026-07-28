@@ -451,14 +451,54 @@ def _allocate_fifo_basis_transfer(
     allocated_local = Decimal(0)
     for lot in open_lots[:-1]:
         state = lot.open_state()
-        next_base = state.cost_base * remaining_base / total_base
-        next_local = state.cost_local * remaining_local / total_local
-        lot.cost_per_share_base = next_base / lot.remaining_quantity
-        lot.cost_per_share_local = next_local / lot.remaining_quantity
-        allocated_base += next_base
-        allocated_local += next_local
+        with COST_BASIS_STATE_LEDGER_OUTPUT_V1.arithmetic_context():
+            raw_next_base = state.cost_base * remaining_base / total_base
+            raw_next_local = state.cost_local * remaining_local / total_local
+        next_base = COST_BASIS_STATE_LEDGER_OUTPUT_V1.normalize(
+            raw_next_base,
+            field_name="open_cost_base",
+        )
+        next_local = COST_BASIS_STATE_LEDGER_OUTPUT_V1.normalize(
+            raw_next_local,
+            field_name="open_cost_local",
+        )
+        _assign_fifo_lot_costs(
+            lot,
+            cost_base=next_base,
+            cost_local=next_local,
+        )
+        allocated_base = COST_BASIS_STATE_LEDGER_OUTPUT_V1.add(
+            allocated_base,
+            next_base,
+            field_name="allocated_cost_base",
+        )
+        allocated_local = COST_BASIS_STATE_LEDGER_OUTPUT_V1.add(
+            allocated_local,
+            next_local,
+            field_name="allocated_cost_local",
+        )
     final_lot = open_lots[-1]
-    final_lot.cost_per_share_base = (remaining_base - allocated_base) / final_lot.remaining_quantity
-    final_lot.cost_per_share_local = (
-        remaining_local - allocated_local
-    ) / final_lot.remaining_quantity
+    _assign_fifo_lot_costs(
+        final_lot,
+        cost_base=COST_BASIS_STATE_LEDGER_OUTPUT_V1.subtract(
+            remaining_base,
+            allocated_base,
+            field_name="open_cost_base",
+        ),
+        cost_local=COST_BASIS_STATE_LEDGER_OUTPUT_V1.subtract(
+            remaining_local,
+            allocated_local,
+            field_name="open_cost_local",
+        ),
+    )
+
+
+def _assign_fifo_lot_costs(
+    lot: CostLot,
+    *,
+    cost_base: Decimal,
+    cost_local: Decimal,
+) -> None:
+    with COST_BASIS_STATE_LEDGER_OUTPUT_V1.arithmetic_context():
+        lot.cost_per_share_base = cost_base / lot.remaining_quantity
+        lot.cost_per_share_local = cost_local / lot.remaining_quantity
