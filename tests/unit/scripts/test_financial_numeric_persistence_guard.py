@@ -9,6 +9,7 @@ from scripts.quality.financial_numeric_persistence_guard import (
     DEFAULT_CONTRACT_PATH,
     ROOT,
     evaluate_guard,
+    inventory_numeric_columns,
 )
 
 
@@ -190,6 +191,8 @@ def test_guard_accepts_explicit_finiteness_and_sign_policy(tmp_path: Path) -> No
     assert report.findings == ()
     assert report.numeric_column_count == 1
     assert report.table_count == 1
+    assert report.bounded_numeric_count == 1
+    assert report.unbounded_numeric_count == 0
     assert report.orm_enforced_count == 1
     assert report.database_enforced_count == 0
     assert report.planned_count == 0
@@ -317,6 +320,69 @@ def test_guard_inventories_attribute_constructor_aliases(
 
     assert report.findings == ()
     assert report.numeric_column_count == 1
+
+
+@pytest.mark.parametrize(
+    ("type_expression", "expected_shape"),
+    [
+        ("Numeric(18, 10)", (18, 10)),
+        ("Numeric(precision=18, scale=4)", (18, 4)),
+        ("Numeric(18, 0)", (18, 0)),
+        ("Numeric()", (None, None)),
+        ("Numeric", (None, None)),
+    ],
+)
+def test_inventory_records_numeric_precision_and_scale(
+    tmp_path: Path,
+    type_expression: str,
+    expected_shape: tuple[int | None, int | None],
+) -> None:
+    model_path = tmp_path / "database_models.py"
+    model_path.write_text(
+        _numeric_constructor_model(
+            import_source="from sqlalchemy import Numeric",
+            type_expression=type_expression,
+        ),
+        encoding="utf-8",
+    )
+
+    column = inventory_numeric_columns(model_path)[0]
+
+    assert (column.precision, column.scale) == expected_shape
+    assert column.is_unbounded is (expected_shape == (None, None))
+
+
+@pytest.mark.parametrize(
+    "model",
+    [
+        _numeric_constructor_model(
+            import_source="from sqlalchemy import Numeric",
+            type_expression="Numeric(PRECISION, 10)",
+        ),
+        _numeric_constructor_model(
+            import_source="from sqlalchemy import Numeric",
+            type_expression="Numeric(10)",
+        ),
+        _numeric_constructor_model(
+            import_source="from sqlalchemy import Numeric",
+            type_expression="Numeric(4, 10)",
+        ),
+    ],
+)
+def test_guard_rejects_ambiguous_or_invalid_numeric_shape(
+    tmp_path: Path,
+    model: str,
+) -> None:
+    contract_path = _write_fixture(
+        tmp_path,
+        model=model,
+        contract=_contract(),
+    )
+
+    findings = evaluate_guard(tmp_path, contract_path).findings
+
+    assert findings
+    assert findings[0].startswith("cannot inventory ORM model database_models.py:")
 
 
 def test_guard_rejects_unclassified_column_using_numeric_alias(tmp_path: Path) -> None:
@@ -538,6 +604,8 @@ def test_repository_contract_classifies_inventory_and_persistence_semantics() ->
 
     assert report.numeric_column_count == 96
     assert report.table_count == 30
+    assert report.bounded_numeric_count == 95
+    assert report.unbounded_numeric_count == 1
     assert report.orm_enforced_count == 96
     assert report.database_enforced_count == 0
     assert report.planned_count == 0

@@ -46,11 +46,17 @@ class NumericColumn:
     table: str
     column: str
     nullable: bool
+    precision: int | None
+    scale: int | None
     check_constraints: tuple[str, ...]
 
     @property
     def identity(self) -> str:
         return f"{self.table}.{self.column}"
+
+    @property
+    def is_unbounded(self) -> bool:
+        return self.precision is None and self.scale is None
 
 
 @dataclass(frozen=True)
@@ -58,6 +64,8 @@ class GuardReport:
     findings: tuple[str, ...]
     numeric_column_count: int
     table_count: int
+    bounded_numeric_count: int
+    unbounded_numeric_count: int
     orm_enforced_count: int
     database_enforced_count: int
     planned_count: int
@@ -223,12 +231,190 @@ def _is_numeric_type(
     )
 
 
+def _integer_literal(
+    node: ast.AST,
+    *,
+    declaration: str,
+    field: str,
+    minimum: int,
+) -> int:
+    if not isinstance(node, ast.Constant) or not isinstance(node.value, int):
+        raise UnsupportedNumericDeclarationError(
+            f"{declaration}: Numeric {field} must be an integer literal"
+        )
+    if node.value < minimum:
+        raise UnsupportedNumericDeclarationError(
+            f"{declaration}: Numeric {field} must be at least {minimum}"
+        )
+    return node.value
+
+
+def _numeric_shape_from_call(
+    expression: ast.Call,
+    *,
+    declaration: str,
+) -> tuple[int | None, int | None]:
+    if len(expression.args) not in {0, 1, 2}:
+        raise UnsupportedNumericDeclarationError(
+            f"{declaration}: Numeric accepts at most precision and scale"
+        )
+    precision_node = expression.args[0] if expression.args else None
+    scale_node = expression.args[1] if len(expression.args) == 2 else None
+    for keyword in expression.keywords:
+        if keyword.arg == "precision":
+            if precision_node is not None:
+                raise UnsupportedNumericDeclarationError(
+                    f"{declaration}: Numeric precision is declared more than once"
+                )
+            precision_node = keyword.value
+        elif keyword.arg == "scale":
+            if scale_node is not None:
+                raise UnsupportedNumericDeclarationError(
+                    f"{declaration}: Numeric scale is declared more than once"
+                )
+            scale_node = keyword.value
+        elif keyword.arg not in {"decimal_return_scale", "asdecimal"}:
+            raise UnsupportedNumericDeclarationError(
+                f"{declaration}: unsupported Numeric keyword {keyword.arg!r}"
+            )
+    if precision_node is None and scale_node is None:
+        return None, None
+    if precision_node is None or scale_node is None:
+        raise UnsupportedNumericDeclarationError(
+            f"{declaration}: bounded Numeric requires both precision and scale"
+        )
+    precision = _integer_literal(
+        precision_node,
+        declaration=declaration,
+        field="precision",
+        minimum=1,
+    )
+    scale = _integer_literal(
+        scale_node,
+        declaration=declaration,
+        field="scale",
+        minimum=0,
+    )
+    if scale > precision:
+        raise UnsupportedNumericDeclarationError(
+            f"{declaration}: Numeric scale must not exceed precision"
+        )
+    return precision, scale
+
+
+def _numeric_alias_shapes(
+    tree: ast.Module,
+    *,
+    constructors: frozenset[str],
+    numeric_aliases: frozenset[str],
+) -> dict[str, tuple[int | None, int | None]]:
+    constructor_names = constructors | _SQLALCHEMY_NUMERIC_CONSTRUCTORS
+    assignments = [
+        assignment
+        for statement in tree.body
+        if (assignment := _module_assignment(statement)) is not None
+    ]
+    shapes: dict[str, tuple[int | None, int | None]] = {}
+    unresolved = {name: value for name, value in assignments if name in numeric_aliases}
+    while unresolved:
+        progressed = False
+        for name, value in tuple(unresolved.items()):
+            if isinstance(value, ast.Call) and _call_name(value.func) in (
+                constructor_names | numeric_aliases
+            ):
+                parent_name = _call_name(value.func)
+                if parent_name in numeric_aliases and parent_name not in shapes and not value.args:
+                    continue
+                shapes[name] = (
+                    _numeric_shape_from_call(value, declaration=name)
+                    if value.args or value.keywords or parent_name in constructor_names
+                    else shapes[parent_name]
+                )
+            elif isinstance(value, (ast.Name, ast.Attribute)):
+                referenced_name = _call_name(value)
+                if referenced_name in constructor_names:
+                    shapes[name] = (None, None)
+                elif referenced_name in shapes:
+                    shapes[name] = shapes[referenced_name]
+                else:
+                    continue
+            else:
+                raise UnsupportedNumericDeclarationError(
+                    f"{name}: unsupported Numeric alias declaration"
+                )
+            del unresolved[name]
+            progressed = True
+        if not progressed:
+            names = ", ".join(sorted(unresolved))
+            raise UnsupportedNumericDeclarationError(
+                f"cannot resolve Numeric alias shape(s): {names}"
+            )
+    return shapes
+
+
+def _numeric_type_expression(
+    declaration: ast.Call,
+    *,
+    constructors: frozenset[str],
+    numeric_aliases: frozenset[str],
+) -> ast.expr | None:
+    positional = [
+        argument
+        for argument in declaration.args
+        if _is_numeric_type(
+            argument,
+            constructors=constructors,
+            numeric_aliases=numeric_aliases,
+        )
+    ]
+    keyword = [
+        item.value
+        for item in declaration.keywords
+        if item.arg == "type_"
+        and _is_numeric_type(
+            item.value,
+            constructors=constructors,
+            numeric_aliases=numeric_aliases,
+        )
+    ]
+    candidates = positional + keyword
+    if not candidates:
+        return None
+    if len(candidates) != 1:
+        raise UnsupportedNumericDeclarationError("Column must declare exactly one Numeric type")
+    return candidates[0]
+
+
+def _numeric_shape(
+    expression: ast.expr,
+    *,
+    constructors: frozenset[str],
+    alias_shapes: dict[str, tuple[int | None, int | None]],
+    declaration: str,
+) -> tuple[int | None, int | None]:
+    constructor_names = constructors | _SQLALCHEMY_NUMERIC_CONSTRUCTORS
+    if isinstance(expression, ast.Call):
+        called_name = _call_name(expression.func)
+        if called_name in alias_shapes and not expression.args and not expression.keywords:
+            return alias_shapes[called_name]
+        return _numeric_shape_from_call(expression, declaration=declaration)
+    referenced_name = _call_name(expression)
+    if referenced_name in alias_shapes:
+        return alias_shapes[referenced_name]
+    if referenced_name in constructor_names:
+        return None, None
+    raise UnsupportedNumericDeclarationError(
+        f"{declaration}: cannot resolve Numeric precision and scale"
+    )
+
+
 def _numeric_column(
     statement: ast.stmt,
     *,
     constructors: frozenset[str],
     numeric_aliases: frozenset[str],
-) -> tuple[str, bool] | None:
+    alias_shapes: dict[str, tuple[int | None, int | None]],
+) -> tuple[str, bool, int | None, int | None] | None:
     target: ast.Name
     value: ast.expr | None
     if (
@@ -245,24 +431,12 @@ def _numeric_column(
         return None
     if not isinstance(value, ast.Call):
         return None
-    positional_numeric = any(
-        _is_numeric_type(
-            argument,
-            constructors=constructors,
-            numeric_aliases=numeric_aliases,
-        )
-        for argument in value.args
+    numeric_expression = _numeric_type_expression(
+        value,
+        constructors=constructors,
+        numeric_aliases=numeric_aliases,
     )
-    keyword_numeric = any(
-        keyword.arg == "type_"
-        and _is_numeric_type(
-            keyword.value,
-            constructors=constructors,
-            numeric_aliases=numeric_aliases,
-        )
-        for keyword in value.keywords
-    )
-    if not positional_numeric and not keyword_numeric:
+    if numeric_expression is None:
         return None
     declaration = _call_name(value.func)
     if declaration != "Column":
@@ -274,13 +448,24 @@ def _numeric_column(
     for keyword in value.keywords:
         if keyword.arg == "nullable" and isinstance(keyword.value, ast.Constant):
             nullable = bool(keyword.value.value)
-    return target.id, nullable
+    precision, scale = _numeric_shape(
+        numeric_expression,
+        constructors=constructors,
+        alias_shapes=alias_shapes,
+        declaration=target.id,
+    )
+    return target.id, nullable, precision, scale
 
 
 def inventory_numeric_columns(model_path: Path) -> tuple[NumericColumn, ...]:
     tree = ast.parse(model_path.read_text(encoding="utf-8"), filename=str(model_path))
     constructors = _numeric_constructor_names(tree)
     numeric_aliases = _numeric_type_aliases(tree, constructors=constructors)
+    alias_shapes = _numeric_alias_shapes(
+        tree,
+        constructors=constructors,
+        numeric_aliases=numeric_aliases,
+    )
     inventory: list[NumericColumn] = []
     for node in tree.body:
         if not isinstance(node, ast.ClassDef):
@@ -294,15 +479,18 @@ def inventory_numeric_columns(model_path: Path) -> tuple[NumericColumn, ...]:
                 statement,
                 constructors=constructors,
                 numeric_aliases=numeric_aliases,
+                alias_shapes=alias_shapes,
             )
             if column is None:
                 continue
-            name, nullable = column
+            name, nullable, precision, scale = column
             inventory.append(
                 NumericColumn(
                     table=table,
                     column=name,
                     nullable=nullable,
+                    precision=precision,
+                    scale=scale,
                     check_constraints=checks,
                 )
             )
@@ -425,6 +613,8 @@ def evaluate_guard(repo_root: Path = ROOT, contract_path: Path | None = None) ->
             findings=(f"cannot load contract {path}: {exc}",),
             numeric_column_count=0,
             table_count=0,
+            bounded_numeric_count=0,
+            unbounded_numeric_count=0,
             orm_enforced_count=0,
             database_enforced_count=0,
             planned_count=0,
@@ -528,6 +718,8 @@ def evaluate_guard(repo_root: Path = ROOT, contract_path: Path | None = None) ->
         findings=tuple(findings),
         numeric_column_count=len(inventory),
         table_count=len({column.table for column in inventory}),
+        bounded_numeric_count=sum(not column.is_unbounded for column in inventory),
+        unbounded_numeric_count=sum(column.is_unbounded for column in inventory),
         orm_enforced_count=orm_enforced_count,
         database_enforced_count=0,
         planned_count=planned_count,
@@ -544,6 +736,8 @@ def main() -> int:
     print(
         "Financial numeric persistence guard passed: "
         f"{report.numeric_column_count} Numeric columns across {report.table_count} tables; "
+        f"{report.bounded_numeric_count} bounded, "
+        f"{report.unbounded_numeric_count} unbounded; "
         f"{report.orm_enforced_count} ORM-enforced, "
         f"{report.database_enforced_count} database-enforced, "
         f"{report.planned_count} planned."
