@@ -4,6 +4,7 @@ from typing import List
 
 from portfolio_common.domain.currency import normalize_currency_code
 from portfolio_common.domain.financial.precision import BOUNDED_18_10_EXACT
+from portfolio_common.openapi_enrichment import exact_numeric_openapi_description
 from pydantic import BaseModel, ConfigDict, Field, condecimal, field_validator
 
 
@@ -25,10 +26,11 @@ class FxRate(BaseModel):
     )
     rate: condecimal(gt=Decimal(0)) = Field(
         ...,
-        description=(
+        description=exact_numeric_openapi_description(
             "FX conversion rate expressed as units of `to_currency` per "
-            "one unit of `from_currency`. The value must fit PostgreSQL NUMERIC(18,10) exactly; "
-            "excess scale and magnitude overflow are rejected, not rounded."
+            "one unit of `from_currency`.",
+            precision=18,
+            scale=10,
         ),
         examples=["1.3500000000"],
     )

@@ -4,6 +4,9 @@ from unittest.mock import MagicMock, patch
 import httpx
 import pytest
 import pytest_asyncio
+from portfolio_common.domain.transaction.numeric_policy import (
+    TRANSACTION_COMMAND_DECIMAL_FIELDS,
+)
 from portfolio_common.enterprise_readiness import (
     _enterprise_auth_context_signature,
     _normalize_headers,
@@ -861,8 +864,15 @@ async def test_openapi_describes_transaction_core_shared_schema(async_test_clien
         "Canonical transaction identifier for ingestion, replay, and audit workflows."
     )
     assert transaction["properties"]["gross_transaction_amount"]["description"] == (
-        "Gross economic amount before fees, taxes, or deductions."
+        "Gross economic amount before fees, taxes, or deductions. "
+        "The value must fit PostgreSQL NUMERIC(18,10) exactly; excess scale and "
+        "magnitude overflow are rejected, not rounded."
     )
+    for field_name in TRANSACTION_COMMAND_DECIMAL_FIELDS:
+        assert (
+            "must fit PostgreSQL NUMERIC(18,10) exactly"
+            in transaction["properties"][field_name]["description"]
+        )
     assert transaction["properties"]["created_at"]["example"] == "2026-03-10T11:32:15Z"
     assert transaction_request["properties"]["transactions"]["description"] == (
         "Canonical transaction records to ingest or upsert asynchronously. "

@@ -271,7 +271,11 @@ async def test_openapi_describes_reconciliation_schema_fields(async_test_client:
     assert finding_response["detail"]["description"].startswith("Additional structured detail")
 
     assert request_schema["portfolio_id"]["description"].startswith("Optional portfolio scope")
-    assert request_schema["tolerance"]["description"].startswith("Optional numeric tolerance")
+    assert request_schema["tolerance"]["description"] == (
+        "Optional numeric tolerance override for value comparisons. "
+        "The value must fit PostgreSQL NUMERIC(18,10) exactly; excess scale and "
+        "magnitude overflow are rejected, not rounded."
+    )
 
     get_run_operation = schema["paths"]["/reconciliation/runs/{run_id}"]["get"]
     assert get_run_operation["responses"]["404"]["content"]["application/json"]["example"] == {

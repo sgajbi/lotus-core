@@ -11,6 +11,7 @@ from portfolio_common.domain.valuation import (
     MarketPriceSourceFactStatus,
     ValuationAuthorityScope,
 )
+from portfolio_common.openapi_enrichment import exact_numeric_openapi_description
 from pydantic import BaseModel, ConfigDict, Field, condecimal, field_validator, model_validator
 
 
@@ -27,9 +28,10 @@ class MarketPrice(BaseModel):
     )
     price: condecimal(gt=Decimal(0)) = Field(
         ...,
-        description=(
-            "Canonical closing or approved valuation price. The value must fit PostgreSQL "
-            "NUMERIC(18,10) exactly; excess scale and magnitude overflow are rejected, not rounded."
+        description=exact_numeric_openapi_description(
+            "Canonical closing or approved valuation price.",
+            precision=18,
+            scale=10,
         ),
         examples=["175.5000000000"],
     )

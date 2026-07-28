@@ -1,4 +1,8 @@
-from portfolio_common.openapi_enrichment import enrich_openapi_schema
+from portfolio_common.openapi_enrichment import (
+    document_exact_numeric_properties,
+    enrich_openapi_schema,
+    exact_numeric_openapi_description,
+)
 from portfolio_common.openapi_examples import build_schema_example, infer_description, infer_example
 
 
@@ -54,6 +58,29 @@ def test_infer_description_preserves_domain_rule_precedence() -> None:
     assert infer_description("PositionRecord", "lifecycleStatus", {"type": "string"}) == (
         "Current status for lifecycle status."
     )
+
+
+def test_exact_numeric_openapi_helpers_document_reject_not_round_contract() -> None:
+    schema = {
+        "properties": {
+            "amount": {"description": "Transaction amount."},
+            "unrelated": {"description": "Unrelated field."},
+        }
+    }
+
+    document_exact_numeric_properties(
+        schema,
+        field_names=("amount", "missing"),
+        precision=18,
+        scale=10,
+    )
+
+    assert schema["properties"]["amount"]["description"] == exact_numeric_openapi_description(
+        "Transaction amount.",
+        precision=18,
+        scale=10,
+    )
+    assert schema["properties"]["unrelated"]["description"] == "Unrelated field."
 
 
 def test_build_schema_example_merges_all_of_object_variants() -> None:

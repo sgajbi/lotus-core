@@ -4,6 +4,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, Literal
 
+from portfolio_common.openapi_enrichment import exact_numeric_openapi_description
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .domain.reconciliation_policies import RECONCILIATION_TOLERANCE_PRECISION_V1
@@ -51,7 +52,11 @@ class ReconciliationRunRequest(BaseModel):
     tolerance: Decimal | None = Field(
         default=None,
         ge=Decimal("0"),
-        description="Optional numeric tolerance override for value comparisons.",
+        description=exact_numeric_openapi_description(
+            "Optional numeric tolerance override for value comparisons.",
+            precision=18,
+            scale=10,
+        ),
         examples=["0.01"],
     )
 
