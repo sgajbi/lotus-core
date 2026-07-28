@@ -99,6 +99,7 @@ class AuthoritativeMarketPriceSourceFact(BaseModel):
     price: Decimal = Field(
         ...,
         gt=Decimal(0),
+        allow_inf_nan=False,
         description=(
             "Positive finite source value preserved without an implicit decimal scale or "
             "quote-convention inference."
@@ -173,13 +174,6 @@ class AuthoritativeMarketPriceSourceFact(BaseModel):
     @classmethod
     def normalize_currency(cls, value: object) -> str:
         return normalize_currency_code(value)
-
-    @field_validator("price")
-    @classmethod
-    def require_finite_price(cls, value: Decimal) -> Decimal:
-        if not value.is_finite():
-            raise ValueError("price must be finite")
-        return value
 
     @field_validator("observed_at")
     @classmethod
