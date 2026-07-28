@@ -3,11 +3,13 @@ import logging
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Any, List, Optional, cast
+from types import MappingProxyType
+from typing import Any, List, Mapping, Optional, cast
 
 from portfolio_common.config import DEFAULT_BUSINESS_CALENDAR_CODE
 from portfolio_common.database_models import (
     BusinessDate,
+    Cashflow,
     FxRate,
     Instrument,
     Portfolio,
@@ -23,7 +25,7 @@ from portfolio_common.logging_utils import operation_log_extra
 from portfolio_common.utils import async_timed
 from sqlalchemy import asc, desc, func, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import aliased, contains_eager
 
 from ..application.transaction_query import TransactionLedgerFilters, TransactionLedgerQuerySpec
 from .currency_query_expressions import currency_code_sql_expr
@@ -34,14 +36,64 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
-class TransactionLedgerRow:
-    """Read-only transaction row with costs captured in the same SQL snapshot."""
+class TransactionCashflowSnapshot:
+    """Latest cashflow epoch attached to one transaction-ledger row."""
 
-    transaction: Transaction
+    amount: Decimal
+    currency: str
+    classification: str
+    timing: str
+    is_position_flow: bool
+    is_portfolio_flow: bool
+    calculation_type: str
+
+
+@dataclass(frozen=True, slots=True)
+class TransactionLedgerRow:
+    """Persistence-independent ledger row captured in one SQL statement snapshot."""
+
+    _values: Mapping[str, Any]
     costs: tuple[TransactionCostSnapshot, ...]
+    cashflow: TransactionCashflowSnapshot | None
 
     def __getattr__(self, name: str) -> Any:
-        return getattr(self.transaction, name)
+        try:
+            return self._values[name]
+        except KeyError as exc:
+            raise AttributeError(name) from exc
+
+
+def _transaction_cashflow_snapshot(
+    cashflow: Cashflow | None,
+) -> TransactionCashflowSnapshot | None:
+    if cashflow is None:
+        return None
+    return TransactionCashflowSnapshot(
+        amount=cashflow.amount,
+        currency=cashflow.currency,
+        classification=cashflow.classification,
+        timing=cashflow.timing,
+        is_position_flow=cashflow.is_position_flow,
+        is_portfolio_flow=cashflow.is_portfolio_flow,
+        calculation_type=cashflow.calculation_type,
+    )
+
+
+def _transaction_ledger_row(
+    *,
+    transaction: Transaction,
+    costs: tuple[TransactionCostSnapshot, ...],
+) -> TransactionLedgerRow:
+    return TransactionLedgerRow(
+        _values=MappingProxyType(
+            {
+                column.name: getattr(transaction, column.name)
+                for column in Transaction.__table__.columns
+            }
+        ),
+        costs=costs,
+        cashflow=_transaction_cashflow_snapshot(transaction.cashflow),
+    )
 
 
 def _identity_filter_kwargs(*, portfolio_id: str, **filters) -> dict[str, str]:
@@ -210,6 +262,15 @@ class TransactionRepository:
             .subquery("transaction_page")
         )
         cost_snapshot = transaction_cost_snapshot_lateral(Transaction.transaction_id)
+        latest_cashflow_row = (
+            select(Cashflow)
+            .where(Cashflow.transaction_id == Transaction.transaction_id)
+            .order_by(Cashflow.epoch.desc(), Cashflow.id.desc())
+            .limit(1)
+            .correlate(Transaction)
+            .lateral("latest_cashflow")
+        )
+        latest_cashflow = aliased(Cashflow, latest_cashflow_row)
         stmt = (
             select(
                 Transaction,
@@ -219,14 +280,15 @@ class TransactionRepository:
                 cost_snapshot.c.cost_updated_ats,
             )
             .join(page, Transaction.id == page.c.transaction_pk)
+            .outerjoin(latest_cashflow, true())
             .join(cost_snapshot, true())
-            .options(joinedload(Transaction.cashflow))
+            .options(contains_eager(Transaction.cashflow, alias=latest_cashflow))
             .order_by(order_clause, tie_breaker_clause)
         )
 
         results = await self.db.execute(stmt)
         transactions = [
-            TransactionLedgerRow(
+            _transaction_ledger_row(
                 transaction=transaction,
                 costs=transaction_cost_snapshots(
                     fee_types=fee_types,

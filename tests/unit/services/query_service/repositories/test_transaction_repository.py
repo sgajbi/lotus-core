@@ -32,7 +32,7 @@ def mock_db_session() -> AsyncMock:
     mock_result_scalar.scalar.return_value = 10
 
     def execute_side_effect(statement):
-        if "count" in str(statement.compile()).lower():
+        if "count(" in str(statement.compile()).lower():
             return mock_result_scalar
         return mock_result_list
 
@@ -204,7 +204,7 @@ async def test_get_transactions_with_as_of_date_filter(
 async def test_get_transactions_pages_transactions_before_loading_cost_collection(
     repository: TransactionRepository, mock_db_session: AsyncMock
 ):
-    await repository.get_transactions(
+    rows = await repository.get_transactions(
         query_spec=_query_spec(instrument_id="INST-AAPL-USD"),
         skip=0,
         limit=25,
@@ -214,12 +214,15 @@ async def test_get_transactions_pages_transactions_before_loading_cost_collectio
     compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
 
     assert "transactions.instrument_id = 'INST-AAPL-USD'" in compiled_query
-    assert "LEFT OUTER JOIN cashflows" in compiled_query
     assert "JOIN LATERAL" in compiled_query
     assert "array_agg(transaction_costs.amount ORDER BY transaction_costs.id ASC)" in compiled_query
     assert "LEFT OUTER JOIN transaction_costs" not in compiled_query
+    assert "LEFT OUTER JOIN LATERAL (SELECT cashflows.id" in compiled_query
+    assert "ORDER BY cashflows.epoch DESC, cashflows.id DESC" in compiled_query
     assert "LIMIT 25" in compiled_query
     assert compiled_query.index("LIMIT 25") < compiled_query.index("JOIN LATERAL")
+    assert len(rows) == 2
+    assert not hasattr(rows[0], "transaction")
 
 
 async def test_get_transactions_count(

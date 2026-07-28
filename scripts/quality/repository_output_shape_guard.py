@@ -157,9 +157,6 @@ TRANSITIONAL_ORM_RETURN_EXCEPTIONS: dict[str, tuple[str, ...]] = {
     "src/services/query_service/app/repositories/simulation_repository.py:get_session": (
         "SimulationSession",
     ),
-    "src/services/query_service/app/repositories/transaction_repository.py:get_transactions": (
-        "Transaction",
-    ),
     "src/services/query_service/app/repositories/transaction_repository.py:list_realized_tax_evidence_transactions": (
         "Transaction",
     ),
