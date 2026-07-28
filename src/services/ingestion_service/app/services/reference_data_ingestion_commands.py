@@ -7,6 +7,10 @@ from typing import Any, NoReturn
 from portfolio_common.domain.valuation.assignments import ValuationPolicyAssignmentError
 from portfolio_common.domain.valuation.source_facts import MarketPriceSourceFactError
 
+from ..application.ingestion_bookkeeping_outcome import (
+    INGESTION_JOB_BOOKKEEPING_FAILED_CODE,
+    build_ingestion_bookkeeping_failure_detail,
+)
 from ..application.ingestion_idempotency_replay import (
     resolve_ingestion_idempotency_replay,
 )
@@ -44,9 +48,10 @@ class ReferenceDataIngestionCommandError(Exception):
 
 
 class ReferenceDataBookkeepingFailed(Exception):
-    def __init__(self, *, job_id: str) -> None:
+    def __init__(self, *, job_id: str, detail: dict[str, object]) -> None:
         super().__init__("Reference-data ingestion bookkeeping failed after persistence.")
         self.job_id = job_id
+        self.detail = detail
         self.failure_phase = "persist_bookkeeping"
         self.publish_state = "not_published"
         self.work_state = "persisted"
@@ -211,25 +216,48 @@ class ReferenceDataIngestionCommandHandler:
         try:
             queued = await self.ingestion_job_service.mark_queued(job_id)
         except Exception as exc:
-            await self._record_bookkeeping_failure(job_id=job_id, failure_reason=str(exc))
-            raise ReferenceDataBookkeepingFailed(job_id=job_id) from exc
+            detail = await self._record_bookkeeping_failure(
+                job_id=job_id,
+                failure_reason=str(exc),
+            )
+            raise ReferenceDataBookkeepingFailed(job_id=job_id, detail=detail) from exc
 
         if not queued:
-            await self._record_bookkeeping_failure(
+            detail = await self._record_bookkeeping_failure(
                 job_id=job_id,
                 failure_reason="job queue transition was rejected",
             )
-            raise ReferenceDataBookkeepingFailed(job_id=job_id)
+            raise ReferenceDataBookkeepingFailed(job_id=job_id, detail=detail)
 
-    async def _record_bookkeeping_failure(self, *, job_id: str, failure_reason: str) -> None:
+    async def _record_bookkeeping_failure(
+        self,
+        *,
+        job_id: str,
+        failure_reason: str,
+    ) -> dict[str, object]:
+        correlation_id, request_id, trace_id = get_request_lineage()
+        detail = build_ingestion_bookkeeping_failure_detail(
+            job_id=job_id,
+            failure_phase="persist_bookkeeping",
+            publish_state="not_published",
+            work_state="persisted",
+            published_record_count=0,
+            correlation_id=correlation_id,
+            request_id=request_id,
+            trace_id=trace_id,
+        )
         try:
             await self.ingestion_job_service.record_failure_observation(
                 job_id,
                 failure_reason,
                 failure_phase="persist_bookkeeping",
+                failure_status_code=HTTP_INTERNAL_SERVER_ERROR,
+                failure_code=INGESTION_JOB_BOOKKEEPING_FAILED_CODE,
+                failure_detail=detail,
             )
         except Exception:
             logger.exception(
                 "Failed to persist reference-data bookkeeping failure observation.",
                 extra={"job_id": job_id, "failure_phase": "persist_bookkeeping"},
             )
+        return detail
