@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from decimal import Decimal
+
 import pytest
 from pydantic import BaseModel, ValidationError, model_validator
 
@@ -479,6 +481,174 @@ def test_private_banking_amount_currency_records_normalize_currency(
     record = record_type.model_validate(payload)
 
     assert getattr(record, field_name) == expected_currency
+
+
+@pytest.mark.parametrize(
+    ("record_type", "payload", "field_name"),
+    [
+        (
+            SustainabilityPreferenceProfileRecord,
+            _sustainability_profile(minimum_allocation="0.12345678901"),
+            "minimum_allocation",
+        ),
+        (
+            ClientTaxProfileRecord,
+            _tax_profile(withholding_tax_rate="0.12345678901"),
+            "withholding_tax_rate",
+        ),
+        (
+            ClientTaxRuleSetRecord,
+            _tax_rule_set(rate="0.12345678901"),
+            "rate",
+        ),
+        (
+            ModelPortfolioTargetRecord,
+            _target_record(target_weight="0.12345678901"),
+            "target_weight",
+        ),
+    ],
+)
+def test_client_policy_ratio_fields_reject_excess_persistence_scale(
+    record_type: type[BaseModel],
+    payload: dict[str, object],
+    field_name: str,
+) -> None:
+    with pytest.raises(ValidationError) as exc_info:
+        record_type.model_validate(payload)
+
+    error = exc_info.value.errors()[0]
+    assert error["loc"] == (field_name,)
+    assert "bounded-18-10-exact: excess_scale" in error["msg"]
+
+
+@pytest.mark.parametrize(
+    ("record_type", "payload", "field_name"),
+    [
+        (
+            ClientTaxRuleSetRecord,
+            _tax_rule_set(
+                threshold_amount="1.00001",
+                threshold_currency="SGD",
+            ),
+            "threshold_amount",
+        ),
+        (
+            ClientIncomeNeedsScheduleRecord,
+            _income_needs_schedule(amount="1.00001"),
+            "amount",
+        ),
+        (
+            LiquidityReserveRequirementRecord,
+            _liquidity_reserve_requirement(required_amount="1.00001"),
+            "required_amount",
+        ),
+        (
+            PlannedWithdrawalScheduleRecord,
+            _planned_withdrawal_schedule(amount="1.00001"),
+            "amount",
+        ),
+    ],
+)
+def test_client_policy_amount_fields_reject_excess_persistence_scale(
+    record_type: type[BaseModel],
+    payload: dict[str, object],
+    field_name: str,
+) -> None:
+    with pytest.raises(ValidationError) as exc_info:
+        record_type.model_validate(payload)
+
+    error = exc_info.value.errors()[0]
+    assert error["loc"] == (field_name,)
+    assert "bounded-18-4-exact: excess_scale" in error["msg"]
+
+
+@pytest.mark.parametrize(
+    ("record_type", "payload", "field_name"),
+    [
+        (
+            ClientTaxRuleSetRecord,
+            _tax_rule_set(
+                threshold_amount="100000000000000.0000",
+                threshold_currency="SGD",
+            ),
+            "threshold_amount",
+        ),
+        (
+            ClientIncomeNeedsScheduleRecord,
+            _income_needs_schedule(amount="100000000000000.0000"),
+            "amount",
+        ),
+        (
+            LiquidityReserveRequirementRecord,
+            _liquidity_reserve_requirement(required_amount="100000000000000.0000"),
+            "required_amount",
+        ),
+        (
+            PlannedWithdrawalScheduleRecord,
+            _planned_withdrawal_schedule(amount="100000000000000.0000"),
+            "amount",
+        ),
+    ],
+)
+def test_client_policy_amount_fields_reject_persistence_magnitude_overflow(
+    record_type: type[BaseModel],
+    payload: dict[str, object],
+    field_name: str,
+) -> None:
+    with pytest.raises(ValidationError) as exc_info:
+        record_type.model_validate(payload)
+
+    error = exc_info.value.errors()[0]
+    assert error["loc"] == (field_name,)
+    assert "bounded-18-4-exact: magnitude_overflow" in error["msg"]
+
+
+def test_client_policy_numeric_fields_accept_exact_storage_boundaries() -> None:
+    tax_rule = ClientTaxRuleSetRecord.model_validate(
+        _tax_rule_set(
+            rate="0.1234567890",
+            threshold_amount="99999999999999.9999",
+            threshold_currency="SGD",
+        )
+    )
+    target = ModelPortfolioTargetRecord.model_validate(
+        _target_record(
+            target_weight="0.1234567890",
+            min_weight="0.0234567890",
+            max_weight="0.2234567890",
+        )
+    )
+
+    assert tax_rule.rate == Decimal("0.1234567890")
+    assert tax_rule.threshold_amount == Decimal("99999999999999.9999")
+    assert target.target_weight == Decimal("0.1234567890")
+
+
+@pytest.mark.parametrize(
+    ("record_type", "field_name", "storage_shape"),
+    [
+        (SustainabilityPreferenceProfileRecord, "minimum_allocation", "NUMERIC(18,10)"),
+        (SustainabilityPreferenceProfileRecord, "maximum_allocation", "NUMERIC(18,10)"),
+        (ClientTaxProfileRecord, "withholding_tax_rate", "NUMERIC(18,10)"),
+        (ClientTaxRuleSetRecord, "rate", "NUMERIC(18,10)"),
+        (ClientTaxRuleSetRecord, "threshold_amount", "NUMERIC(18,4)"),
+        (ClientIncomeNeedsScheduleRecord, "amount", "NUMERIC(18,4)"),
+        (LiquidityReserveRequirementRecord, "required_amount", "NUMERIC(18,4)"),
+        (PlannedWithdrawalScheduleRecord, "amount", "NUMERIC(18,4)"),
+        (ModelPortfolioTargetRecord, "target_weight", "NUMERIC(18,10)"),
+        (ModelPortfolioTargetRecord, "min_weight", "NUMERIC(18,10)"),
+        (ModelPortfolioTargetRecord, "max_weight", "NUMERIC(18,10)"),
+    ],
+)
+def test_client_policy_numeric_fields_publish_exact_openapi_contracts(
+    record_type: type[BaseModel],
+    field_name: str,
+    storage_shape: str,
+) -> None:
+    description = record_type.model_json_schema()["properties"][field_name]["description"]
+
+    assert storage_shape in description
+    assert "excess scale and magnitude overflow are rejected, not rounded" in description
 
 
 def test_model_portfolio_target_record_validates_target_band_order() -> None:
