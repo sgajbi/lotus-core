@@ -1991,16 +1991,29 @@ async def test_ingestion_job_failures_endpoint_returns_full_failure_rows(
 ):
     mock_kafka_producer.publish_message.side_effect = RuntimeError("broker timeout")
 
+    payload = _transaction_batch_payload("TX_FAILURE_ROW_001", "TX_FAILURE_ROW_002")
+    headers = {"X-Idempotency-Key": "job-failure-row-001"}
     failed_response = await async_test_client.post(
         "/ingest/transactions",
-        json=_transaction_batch_payload("TX_FAILURE_ROW_001", "TX_FAILURE_ROW_002"),
-        headers={"X-Idempotency-Key": "job-failure-row-001"},
+        json=payload,
+        headers=headers,
+    )
+    replay = await async_test_client.post(
+        "/ingest/transactions",
+        json=payload,
+        headers=headers,
     )
 
     detail = _assert_publish_dependency_failure(
         failed_response,
         failed_record_keys=["TX_FAILURE_ROW_001", "TX_FAILURE_ROW_002"],
     )
+    replay_detail = _assert_publish_dependency_failure(
+        replay,
+        failed_record_keys=["TX_FAILURE_ROW_001", "TX_FAILURE_ROW_002"],
+    )
+    assert replay_detail == detail
+    assert mock_kafka_producer.publish_message.call_count == 1
     job_id = detail["job_id"]
     mock_kafka_producer.publish_message.side_effect = None
 
@@ -6662,9 +6675,17 @@ async def test_ingest_portfolio_bundle_returns_failed_record_keys_when_publish_f
 ):
     mock_kafka_producer.publish_message.side_effect = [None, RuntimeError("broker timeout")]
 
+    payload = _portfolio_bundle_payload()
+    headers = {"X-Idempotency-Key": "portfolio-bundle-failed-replay-001"}
     response = await async_test_client.post(
         "/ingest/portfolio-bundle",
-        json=_portfolio_bundle_payload(),
+        json=payload,
+        headers=headers,
+    )
+    replay = await async_test_client.post(
+        "/ingest/portfolio-bundle",
+        json=payload,
+        headers=headers,
     )
 
     body = response.json()
@@ -6673,6 +6694,13 @@ async def test_ingest_portfolio_bundle_returns_failed_record_keys_when_publish_f
         failed_record_keys=["P1"],
         published_record_count=1,
     )
+    replay_detail = _assert_publish_dependency_failure(
+        replay,
+        failed_record_keys=["P1"],
+        published_record_count=1,
+    )
+    assert replay_detail == detail
+    assert mock_kafka_producer.publish_message.call_count == 2
     assert "'business_dates': 1" in body["detail"]["message"]
     assert "'portfolios': 0" in body["detail"]["message"]
     job_id = detail["job_id"]

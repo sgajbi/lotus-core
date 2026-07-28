@@ -22,10 +22,30 @@ from src.services.ingestion_service.app.services.ingestion_publish_commands impo
 from src.services.ingestion_service.app.services.ingestion_service import IngestionPublishError
 
 
-def _job_result(*, created: bool = True, job_id: str = "job-1", accepted_count: int = 2):
+def _job_result(
+    *,
+    created: bool = True,
+    job_id: str = "job-1",
+    accepted_count: int = 2,
+    status: str | None = None,
+    failure_reason: str | None = None,
+    failure_status_code: int | None = None,
+    failure_code: str | None = None,
+    failure_detail: dict | None = None,
+    failure_headers: dict[str, str] | None = None,
+):
     return SimpleNamespace(
         created=created,
-        job=SimpleNamespace(job_id=job_id, accepted_count=accepted_count),
+        job=SimpleNamespace(
+            job_id=job_id,
+            accepted_count=accepted_count,
+            status=status or ("accepted" if created else "queued"),
+            failure_reason=failure_reason,
+            failure_status_code=failure_status_code,
+            failure_code=failure_code,
+            failure_detail=failure_detail,
+            failure_headers=failure_headers,
+        ),
     )
 
 
@@ -112,6 +132,46 @@ async def test_batch_publish_command_returns_replay_without_publish() -> None:
 
 
 @pytest.mark.asyncio
+async def test_batch_publish_command_replays_original_publish_failure() -> None:
+    handler = _handler()
+    handler.ingestion_job_service.create_or_get_job.return_value = _job_result(
+        created=False,
+        job_id="job-failed-replay",
+        status="failed",
+        failure_reason="broker timeout",
+        failure_status_code=503,
+        failure_code="INGESTION_PUBLISH_FAILED",
+        failure_detail={
+            "message": "broker timeout",
+            "dependency": "kafka",
+            "retryable": True,
+            "failed_record_keys": ["T1"],
+        },
+        failure_headers={"Retry-After": "30"},
+    )
+    publisher = AsyncMock()
+
+    with pytest.raises(IngestionPublishCommandError) as exc_info:
+        await handler.ingest_batch(
+            BatchPublishIngestionCommand(
+                endpoint="/ingest/transactions",
+                entity_type="transaction",
+                records=[{"transaction_id": "T1"}],
+                idempotency_key="idem-failed-replay",
+                request_payload={"transactions": [{"transaction_id": "T1"}]},
+                accepted_message="Transactions accepted.",
+            ),
+            publisher,
+        )
+
+    assert exc_info.value.status_code == 503
+    assert exc_info.value.detail["code"] == "INGESTION_PUBLISH_FAILED"
+    assert exc_info.value.detail["job_id"] == "job-failed-replay"
+    assert exc_info.value.headers == {"Retry-After": "30"}
+    publisher.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_batch_publish_command_marks_failed_on_publish_error() -> None:
     handler = _handler()
     publish_error = IngestionPublishError("broker timeout", ["T1"], published_record_count=0)
@@ -136,6 +196,20 @@ async def test_batch_publish_command_marks_failed_on_publish_error() -> None:
         "job-1",
         "broker timeout",
         failed_record_keys=["T1"],
+        failure_status_code=503,
+        failure_code="INGESTION_PUBLISH_FAILED",
+        failure_detail={
+            "code": "INGESTION_PUBLISH_FAILED",
+            "message": "broker timeout",
+            "dependency": "kafka",
+            "retryable": True,
+            "retry_after_seconds": 30,
+            "publish_state": "unpublished",
+            "published_record_count": 0,
+            "failed_record_keys": ["T1"],
+            "job_id": "job-1",
+        },
+        failure_headers={"Retry-After": "30"},
     )
 
 

@@ -8,6 +8,14 @@ from ..application import (
     ResolveTransactionReprocessingTargets,
     TransactionReprocessingTargetNotFound,
 )
+from ..application.ingestion_idempotency_replay import (
+    resolve_ingestion_idempotency_replay,
+)
+from ..application.ingestion_publish_outcome import (
+    INGESTION_PUBLISH_FAILED_CODE,
+    INGESTION_PUBLISH_RETRY_AFTER_SECONDS,
+    build_ingestion_publish_failure_detail,
+)
 from ..DTOs.ingestion_job_dto import IngestionJobResponse
 from ..ops_controls import enforce_ingestion_write_rate_limit
 from ..ports.ingestion_idempotency_replay import (
@@ -31,10 +39,17 @@ SinglePublisher = Callable[[Any, str | None], Awaitable[None]]
 
 
 class IngestionPublishCommandError(Exception):
-    def __init__(self, status_code: int, detail: dict[str, Any]) -> None:
+    def __init__(
+        self,
+        status_code: int,
+        detail: dict[str, Any],
+        *,
+        headers: dict[str, str] | None = None,
+    ) -> None:
         super().__init__(str(detail.get("message", detail.get("code", "command failed"))))
         self.status_code = status_code
         self.detail = detail
+        self.headers = headers
 
 
 class IngestionPublishUnavailable(Exception):
@@ -182,6 +197,7 @@ class IngestionPublishCommandHandler:
         self._enforce_rate_limit(command.endpoint, command.accepted_count)
         job_result = await self._create_bundle_job(command)
         if not job_result.created:
+            self._assert_replay_safe(job_result.job)
             return IngestionCommandResult(
                 message="Duplicate ingestion request accepted via idempotency replay.",
                 entity_type="portfolio_bundle",
@@ -225,6 +241,7 @@ class IngestionPublishCommandHandler:
         self._enforce_rate_limit(command.endpoint, len(command.records))
         job_result = await self._create_job(command)
         if not job_result.created:
+            self._assert_replay_safe(job_result.job)
             return IngestionCommandResult(
                 message="Duplicate ingestion request accepted via idempotency replay.",
                 entity_type=command.entity_type,
@@ -321,8 +338,11 @@ class IngestionPublishCommandHandler:
         transaction_ids: Sequence[Any],
     ) -> Sequence[Any]:
         try:
-            return await self.resolve_transaction_reprocessing_targets.execute(
-                [str(transaction_id) for transaction_id in transaction_ids]
+            return cast(
+                Sequence[Any],
+                await self.resolve_transaction_reprocessing_targets.execute(
+                    [str(transaction_id) for transaction_id in transaction_ids]
+                ),
             )
         except TransactionReprocessingTargetNotFound as exc:
             raise IngestionPublishCommandError(
@@ -388,10 +408,17 @@ class IngestionPublishCommandHandler:
         try:
             await publisher(command.records, command.idempotency_key)
         except IngestionPublishError as exc:
+            detail = self._publish_failure_detail(exc=exc, job_id=job_id)
             await self.ingestion_job_service.mark_failed(
                 job_id,
                 str(exc),
                 failed_record_keys=exc.failed_record_keys,
+                failure_status_code=HTTP_SERVICE_UNAVAILABLE,
+                failure_code=INGESTION_PUBLISH_FAILED_CODE,
+                failure_detail=detail,
+                failure_headers={
+                    "Retry-After": str(INGESTION_PUBLISH_RETRY_AFTER_SECONDS)
+                },
             )
             raise IngestionPublishUnavailable(publish_error=exc, job_id=job_id) from exc
         except Exception as exc:
@@ -412,15 +439,58 @@ class IngestionPublishCommandHandler:
                 ),
             )
         except IngestionPublishError as exc:
+            detail = self._publish_failure_detail(exc=exc, job_id=job_id)
             await self.ingestion_job_service.mark_failed(
                 job_id,
                 str(exc),
                 failed_record_keys=exc.failed_record_keys,
+                failure_status_code=HTTP_SERVICE_UNAVAILABLE,
+                failure_code=INGESTION_PUBLISH_FAILED_CODE,
+                failure_detail=detail,
+                failure_headers={
+                    "Retry-After": str(INGESTION_PUBLISH_RETRY_AFTER_SECONDS)
+                },
             )
             raise IngestionPublishUnavailable(publish_error=exc, job_id=job_id) from exc
         except Exception as exc:
             await self.ingestion_job_service.mark_failed(job_id, str(exc))
             raise
+
+    @staticmethod
+    def _assert_replay_safe(job: IngestionJobResponse) -> None:
+        replay = resolve_ingestion_idempotency_replay(job)
+        if replay.accepted:
+            return
+        raise IngestionPublishCommandError(
+            replay.status_code or 500,
+            replay.detail
+            or {
+                "code": "INGESTION_REPLAY_STATE_INVALID",
+                "message": "The stored ingestion replay outcome is incomplete.",
+                "job_id": job.job_id,
+            },
+            headers=replay.headers,
+        )
+
+    @staticmethod
+    def _publish_failure_detail(
+        *,
+        exc: IngestionPublishError,
+        job_id: str,
+    ) -> dict[str, object]:
+        correlation_id, request_id, trace_id = get_request_lineage()
+        return cast(
+            dict[str, object],
+            build_ingestion_publish_failure_detail(
+                message=str(exc),
+                failed_record_keys=exc.failed_record_keys,
+                published_record_count=exc.published_record_count,
+                job_id=job_id,
+                correlation_id=correlation_id,
+                request_id=request_id,
+                trace_id=trace_id,
+            ),
+        )
 
     async def _mark_queued_or_raise(self, *, job_id: str, published_record_count: int) -> None:
         try:
