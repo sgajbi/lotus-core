@@ -3,6 +3,10 @@
 from dataclasses import dataclass
 from decimal import Decimal
 
+from portfolio_common.domain.transaction.numeric_policy import (
+    TRANSACTION_COST_LEDGER_OUTPUT_V1,
+)
+
 
 class CorporateActionCashEconomicsError(ValueError):
     """Raised when source-provided corporate-action cash economics do not reconcile."""
@@ -50,16 +54,37 @@ def calculate_corporate_action_cash_economics(
     basis_base = _required_non_negative_basis(
         allocated_cost_basis_base, "allocated_cost_basis_base"
     )
-    net_proceeds_local = gross_proceeds_local - fees_local
+    policy = TRANSACTION_COST_LEDGER_OUTPUT_V1
+    net_proceeds_local = policy.subtract(
+        gross_proceeds_local,
+        fees_local,
+        field_name="net_proceeds_local",
+    )
     if net_proceeds_local < 0:
         raise CorporateActionCashEconomicsError("fees_local must not exceed gross_proceeds_local")
-    net_proceeds_base = net_proceeds_local * transaction_fx_rate
-    expected_total_local = net_proceeds_local - basis_local
-    expected_total_base = net_proceeds_base - basis_base
+    net_proceeds_base = policy.multiply(
+        net_proceeds_local,
+        transaction_fx_rate,
+        field_name="net_proceeds_base",
+    )
+    expected_total_local = policy.subtract(
+        net_proceeds_local,
+        basis_local,
+        field_name="realized_total_pnl_local",
+    )
+    expected_total_base = policy.subtract(
+        net_proceeds_base,
+        basis_base,
+        field_name="realized_total_pnl_base",
+    )
 
     same_currency = _currency(local_currency) == _currency(base_currency)
     if same_currency:
-        expected_basis_base = basis_local * transaction_fx_rate
+        expected_basis_base = policy.multiply(
+            basis_local,
+            transaction_fx_rate,
+            field_name="allocated_cost_basis_base",
+        )
         if basis_base != expected_basis_base:
             raise CorporateActionCashEconomicsError(
                 "allocated_cost_basis_base must equal allocated_cost_basis_local converted "
@@ -162,7 +187,12 @@ def _required_cross_currency_components(
         raise CorporateActionCashEconomicsError(
             f"cross-currency realized capital and FX P&L {currency_basis} components are required"
         )
-    if provided_capital + provided_fx != expected_total:
+    component_total = TRANSACTION_COST_LEDGER_OUTPUT_V1.add(
+        provided_capital,
+        provided_fx,
+        field_name=f"realized_total_pnl_{currency_basis}",
+    )
+    if component_total != expected_total:
         raise CorporateActionCashEconomicsError(
             f"cross-currency realized capital and FX P&L {currency_basis} components must "
             "reconcile to proceeds less allocated basis"

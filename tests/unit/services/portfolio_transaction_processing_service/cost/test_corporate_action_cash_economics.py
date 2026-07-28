@@ -67,6 +67,29 @@ def test_cross_currency_cash_consideration_requires_and_preserves_explicit_pnl_s
     assert economics.realized_total_pnl_base == Decimal("290.0")
 
 
+def test_cross_currency_cash_economics_normalizes_scale_and_preserves_components() -> None:
+    economics = _calculate(
+        gross_proceeds_local=Decimal("1.0000000001"),
+        allocated_cost_basis_local=Decimal("0.1000000000"),
+        allocated_cost_basis_base=Decimal("0.1000000000"),
+        base_currency="SGD",
+        transaction_fx_rate=Decimal("1.0000000001"),
+        realized_capital_pnl_local=Decimal("0.8000000000"),
+        realized_fx_pnl_local=Decimal("0.1000000001"),
+        realized_capital_pnl_base=Decimal("0.8000000000"),
+        realized_fx_pnl_base=Decimal("0.1000000002"),
+        realized_total_pnl_local=Decimal("0.9000000001"),
+        realized_total_pnl_base=Decimal("0.9000000002"),
+    )
+
+    assert economics.net_proceeds_base == Decimal("1.0000000002")
+    assert economics.realized_total_pnl_local == Decimal("0.9000000001")
+    assert economics.realized_total_pnl_base == Decimal("0.9000000002")
+    assert economics.realized_total_pnl_base == (
+        economics.realized_capital_pnl_base + economics.realized_fx_pnl_base
+    )
+
+
 @pytest.mark.parametrize(
     ("field_name", "overrides", "message"),
     [
