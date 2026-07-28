@@ -136,9 +136,10 @@ def _contract(
     profile: str = "positive-finite",
     rollout_status: str = "orm-enforced",
     column: str = "value",
+    storage_shape: str = "bounded-18-10",
 ) -> dict[str, object]:
-    return {
-        "schema_version": "1.0.0",
+    contract: dict[str, object] = {
+        "schema_version": "2.0.0",
         "model_path": "database_models.py",
         "expected_inventory": {"numeric_columns": 1, "tables": 1},
         "profiles": {
@@ -153,10 +154,27 @@ def _contract(
             },
         },
         "rollout_statuses": ["orm-enforced", "planned"],
+        "storage_shapes": {
+            "bounded-18-10": {
+                "mode": "bounded",
+                "precision": 18,
+                "scale": 10,
+            },
+            "exact-unbounded": {
+                "mode": "exact-unbounded",
+                "precision": None,
+                "scale": None,
+            },
+        },
+        "default_storage_shape": "bounded-18-10",
+        "storage_shape_overrides": {},
         "tables": {
             "financial_rows": {column: {"profile": profile, "rollout_status": rollout_status}}
         },
     }
+    if storage_shape != "bounded-18-10":
+        contract["storage_shape_overrides"] = {f"financial_rows.{column}": storage_shape}
+    return contract
 
 
 def _write_fixture(
@@ -268,19 +286,20 @@ def test_guard_inventories_direct_reusable_numeric_alias(
 
 
 @pytest.mark.parametrize(
-    ("import_source", "type_expression"),
+    ("import_source", "type_expression", "storage_shape"),
     [
-        ("from sqlalchemy import Numeric as X", "X(18, 10)"),
-        ("from sqlalchemy import DECIMAL", "DECIMAL(18, 10)"),
-        ("from sqlalchemy import NUMERIC", "NUMERIC"),
-        ("from sqlalchemy import Numeric", "Numeric"),
-        ("import sqlalchemy as sa", "sa.Numeric(18, 10)"),
+        ("from sqlalchemy import Numeric as X", "X(18, 10)", "bounded-18-10"),
+        ("from sqlalchemy import DECIMAL", "DECIMAL(18, 10)", "bounded-18-10"),
+        ("from sqlalchemy import NUMERIC", "NUMERIC", "exact-unbounded"),
+        ("from sqlalchemy import Numeric", "Numeric", "exact-unbounded"),
+        ("import sqlalchemy as sa", "sa.Numeric(18, 10)", "bounded-18-10"),
     ],
 )
 def test_guard_inventories_imported_numeric_constructor_forms(
     tmp_path: Path,
     import_source: str,
     type_expression: str,
+    storage_shape: str,
 ) -> None:
     contract_path = _write_fixture(
         tmp_path,
@@ -288,7 +307,7 @@ def test_guard_inventories_imported_numeric_constructor_forms(
             import_source=import_source,
             type_expression=type_expression,
         ),
-        contract=_contract(),
+        contract=_contract(storage_shape=storage_shape),
     )
 
     report = evaluate_guard(tmp_path, contract_path)
@@ -298,22 +317,23 @@ def test_guard_inventories_imported_numeric_constructor_forms(
 
 
 @pytest.mark.parametrize(
-    "column_type",
+    ("column_type", "storage_shape"),
     [
-        "MONEY_TYPE(18, 10)",
-        "type_=MONEY_TYPE(18, 10)",
-        "MONEY_ALIAS(18, 10)",
-        "type_=MONEY_ALIAS",
+        ("MONEY_TYPE(18, 10)", "bounded-18-10"),
+        ("type_=MONEY_TYPE(18, 10)", "bounded-18-10"),
+        ("MONEY_ALIAS(18, 10)", "bounded-18-10"),
+        ("type_=MONEY_ALIAS", "exact-unbounded"),
     ],
 )
 def test_guard_inventories_attribute_constructor_aliases(
     tmp_path: Path,
     column_type: str,
+    storage_shape: str,
 ) -> None:
     contract_path = _write_fixture(
         tmp_path,
         model=_attribute_constructor_alias_model(column_type=column_type),
-        contract=_contract(),
+        contract=_contract(storage_shape=storage_shape),
     )
 
     report = evaluate_guard(tmp_path, contract_path)
@@ -429,7 +449,7 @@ def test_guard_rejects_database_enforced_in_v1(tmp_path: Path) -> None:
     assert "financial_rows.value: unknown rollout_status 'database-enforced'" in report.findings
 
 
-def test_guard_rejects_database_evidence_extension_in_v1(tmp_path: Path) -> None:
+def test_guard_rejects_unsupported_contract_extension_in_v2(tmp_path: Path) -> None:
     contract = _contract(rollout_status="planned")
     contract["database_enforcement_evidence"] = {"financial_rows.value": {"unsupported": True}}
     contract_path = _write_fixture(
@@ -439,9 +459,97 @@ def test_guard_rejects_database_evidence_extension_in_v1(tmp_path: Path) -> None
     )
 
     assert (
-        "contract v1 keys must be schema_version, model_path, expected_inventory, "
-        "profiles, rollout_statuses, and tables" in evaluate_guard(tmp_path, contract_path).findings
+        "contract v2 keys must be schema_version, model_path, expected_inventory, "
+        "profiles, rollout_statuses, storage_shapes, default_storage_shape, "
+        "storage_shape_overrides, and tables" in evaluate_guard(tmp_path, contract_path).findings
     )
+
+
+def test_guard_rejects_storage_shape_drift(tmp_path: Path) -> None:
+    contract_path = _write_fixture(
+        tmp_path,
+        model=_model(
+            constraint=(
+                "value NOT IN ('NaN'::numeric, 'Infinity'::numeric, "
+                "'-Infinity'::numeric) AND value > 0"
+            )
+        ),
+        contract=_contract(storage_shape="exact-unbounded"),
+    )
+
+    assert evaluate_guard(tmp_path, contract_path).findings == (
+        "financial_rows.value: ORM Numeric(18, 10) conflicts with "
+        "storage shape 'exact-unbounded' Numeric(None, None)",
+    )
+
+
+def test_guard_rejects_unknown_stale_and_redundant_storage_shape_overrides(
+    tmp_path: Path,
+) -> None:
+    contract = _contract()
+    contract["storage_shape_overrides"] = {
+        "financial_rows.value": "bounded-18-10",
+        "financial_rows.missing": "exact-unbounded",
+    }
+    contract_path = _write_fixture(
+        tmp_path,
+        model=_model(
+            constraint=(
+                "value NOT IN ('NaN'::numeric, 'Infinity'::numeric, "
+                "'-Infinity'::numeric) AND value > 0"
+            )
+        ),
+        contract=contract,
+    )
+
+    findings = evaluate_guard(tmp_path, contract_path).findings
+
+    assert "financial_rows.value: redundant storage-shape override matches the default" in findings
+    assert (
+        "storage-shape override has no classified Numeric column: 'financial_rows.missing'"
+        in findings
+    )
+
+
+@pytest.mark.parametrize(
+    ("shape", "expected_finding"),
+    [
+        (
+            {"mode": "exact-unbounded", "precision": 18, "scale": 10},
+            "storage shape 'bounded-18-10' exact-unbounded mode requires null precision and scale",
+        ),
+        (
+            {"mode": "bounded", "precision": 4, "scale": 10},
+            "storage shape 'bounded-18-10' bounded mode requires precision > 0 "
+            "and 0 <= scale <= precision",
+        ),
+        (
+            {"mode": "rounded", "precision": 18, "scale": 10},
+            "storage shape 'bounded-18-10' has unsupported mode 'rounded'",
+        ),
+    ],
+)
+def test_guard_rejects_invalid_storage_shape_definitions(
+    tmp_path: Path,
+    shape: dict[str, object],
+    expected_finding: str,
+) -> None:
+    contract = _contract()
+    storage_shapes = contract["storage_shapes"]
+    assert isinstance(storage_shapes, dict)
+    storage_shapes["bounded-18-10"] = shape
+    contract_path = _write_fixture(
+        tmp_path,
+        model=_model(
+            constraint=(
+                "value NOT IN ('NaN'::numeric, 'Infinity'::numeric, "
+                "'-Infinity'::numeric) AND value > 0"
+            )
+        ),
+        contract=contract,
+    )
+
+    assert expected_finding in evaluate_guard(tmp_path, contract_path).findings
 
 
 def test_guard_rejects_sign_only_constraint_as_finiteness(tmp_path: Path) -> None:
