@@ -233,7 +233,16 @@ async def test_batch_publish_command_raises_bookkeeping_failure_when_queue_rejec
 
     assert exc_info.value.job_id == "job-1"
     assert exc_info.value.published_record_count == 1
-    handler.ingestion_job_service.record_failure_observation.assert_awaited_once()
+    assert exc_info.value.detail["code"] == "INGESTION_JOB_BOOKKEEPING_FAILED"
+    assert exc_info.value.detail["publish_state"] == "published"
+    handler.ingestion_job_service.record_failure_observation.assert_awaited_once_with(
+        "job-1",
+        "job queue transition was rejected",
+        failure_phase="queue_bookkeeping",
+        failure_status_code=500,
+        failure_code="INGESTION_JOB_BOOKKEEPING_FAILED",
+        failure_detail=exc_info.value.detail,
+    )
 
 
 @pytest.mark.asyncio

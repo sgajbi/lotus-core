@@ -19,7 +19,6 @@ from ..services.ingestion_publish_commands import (
     IngestionPublishCommandHandler,
     IngestionPublishUnavailable,
 )
-from .job_bookkeeping import post_publish_bookkeeping_failure_detail
 from .publish_errors import (
     ingestion_conflict_response_with_idempotency_example,
     ingestion_publish_failed_example,
@@ -153,13 +152,7 @@ async def reprocess_transactions(
     except IngestionPublishBookkeepingFailed as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=post_publish_bookkeeping_failure_detail(
-                job_id=exc.job_id,
-                failure_phase=exc.failure_phase,
-                publish_state=exc.publish_state,
-                work_state=exc.work_state,
-                published_record_count=exc.published_record_count,
-            ),
+            detail=exc.detail,
         ) from exc
 
     if not result.replayed:

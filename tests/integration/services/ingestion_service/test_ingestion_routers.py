@@ -2205,6 +2205,7 @@ async def test_ingest_transactions_reports_bookkeeping_failure_after_publish(
     async_test_client: httpx.AsyncClient,
     event_replay_test_client: httpx.AsyncClient,
     ingestion_test_harness,
+    mock_kafka_producer: MagicMock,
 ):
     ingestion_test_harness["fake_job_service"].fail_next_mark_queued = True
     payload = {
@@ -2224,8 +2225,13 @@ async def test_ingest_transactions_reports_bookkeeping_failure_after_publish(
             }
         ]
     }
+    headers = {"X-Idempotency-Key": "transaction-bookkeeping-failure-replay-001"}
 
-    response = await async_test_client.post("/ingest/transactions", json=payload)
+    response = await async_test_client.post(
+        "/ingest/transactions",
+        json=payload,
+        headers=headers,
+    )
 
     assert response.status_code == 500
     body = response.json()
@@ -2242,6 +2248,17 @@ async def test_ingest_transactions_reports_bookkeeping_failure_after_publish(
 
     job = ingestion_test_harness["fake_job_service"].jobs[job_id]
     assert job.status == "accepted"
+    first_publish_call_count = mock_kafka_producer.publish_message.call_count
+
+    replay_response = await async_test_client.post(
+        "/ingest/transactions",
+        json=payload,
+        headers=headers,
+    )
+
+    assert replay_response.status_code == response.status_code
+    assert replay_response.json() == body
+    assert mock_kafka_producer.publish_message.call_count == first_publish_call_count
 
     failure_history = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/failures")
     assert failure_history.status_code == 200
