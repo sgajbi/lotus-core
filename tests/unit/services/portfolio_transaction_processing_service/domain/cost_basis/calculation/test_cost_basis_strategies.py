@@ -485,6 +485,91 @@ def test_basis_only_transfer_reduces_source_lot_cost_without_changing_quantity(
     assert sum(state.cost_base for state in states.values()) == Decimal("1050")
 
 
+def _three_equal_fifo_lots() -> tuple[FIFOBasisStrategy, list[CostBasisTransaction]]:
+    strategy = FIFOBasisStrategy()
+    transactions = [
+        CostBasisTransaction(
+            transaction_id=f"FIFO-RESIDUAL-{index}",
+            portfolio_id="P-BASIS",
+            instrument_id="PARENT-SECURITY",
+            security_id="PARENT-SECURITY",
+            transaction_type="BUY",
+            transaction_date=datetime(2026, 1, index),
+            quantity=Decimal("1"),
+            gross_transaction_amount=Decimal("2"),
+            net_cost_local=Decimal("2"),
+            net_cost=Decimal("1"),
+            trade_currency="EUR",
+            portfolio_base_currency="USD",
+        )
+        for index in range(1, 4)
+    ]
+    for transaction in transactions:
+        strategy.add_buy_lot(transaction)
+    return strategy, transactions
+
+
+def test_fifo_basis_transfer_assigns_storage_residual_and_replays_exactly() -> None:
+    strategy, transactions = _three_equal_fifo_lots()
+
+    assert (
+        strategy.transfer_basis_out(
+            "P-BASIS",
+            "PARENT-SECURITY",
+            Decimal("1"),
+            Decimal("2"),
+        )
+        is None
+    )
+
+    states = strategy.get_open_lot_states()
+    assert [state.cost_base for state in states.values()] == [
+        Decimal("0.6666666667"),
+        Decimal("0.6666666667"),
+        Decimal("0.6666666666"),
+    ]
+    assert [state.cost_local for state in states.values()] == [
+        Decimal("1.3333333333"),
+        Decimal("1.3333333333"),
+        Decimal("1.3333333334"),
+    ]
+    assert sum(state.cost_base for state in states.values()) == Decimal("2.0000000000")
+    assert sum(state.cost_local for state in states.values()) == Decimal("4.0000000000")
+
+    replayed = FIFOBasisStrategy()
+    replayed.restore_open_lots(
+        [
+            transaction.model_copy(
+                update={
+                    "net_cost": states[transaction.transaction_id].cost_base,
+                    "net_cost_local": states[transaction.transaction_id].cost_local,
+                }
+            )
+            for transaction in transactions
+        ]
+    )
+    assert replayed.get_open_lot_states() == states
+
+
+def test_fifo_basis_transfer_preserves_ledger_totals_across_batches() -> None:
+    strategy, _ = _three_equal_fifo_lots()
+
+    for _ in range(2):
+        assert (
+            strategy.transfer_basis_out(
+                "P-BASIS",
+                "PARENT-SECURITY",
+                Decimal("0.5"),
+                Decimal("1"),
+            )
+            is None
+        )
+
+    states = strategy.get_open_lot_states()
+    assert sum(state.cost_base for state in states.values()) == Decimal("2.0000000000")
+    assert sum(state.cost_local for state in states.values()) == Decimal("4.0000000000")
+
+
 def test_average_cost_full_basis_transfer_then_new_buy_keeps_old_source_cost_zero() -> None:
     strategy = AverageCostBasisStrategy()
     original = CostBasisTransaction(
