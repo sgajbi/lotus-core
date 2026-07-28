@@ -78,6 +78,12 @@ narrow framework-free contract therefore belongs in `portfolio_common.domain.val
   corrections, validates current ACTIVE claims after ranking complete candidate histories, and
   returns both previous and accepted authority identities for downstream invalidation/replay.
   Write batches fail closed above 500 records and history predicates use 100-key chunks.
+- Exposed that writer through
+  `POST /ingest/authoritative-market-price-source-facts` using the existing ingestion
+  job/idempotency command lifecycle. The typed contract rejects malformed scope, non-finite values,
+  naive observation time, invalid source hashes, and duplicate source versions before persistence;
+  the application boundary commits or rolls back the complete batch and maps correction or
+  authority conflicts to stable `MARKET_PRICE_SOURCE_FACT_CONFLICT` evidence.
 - Added a position-valuation-owned bulk read port and SQLAlchemy adapter. Each bounded query uses
   scope history to find candidate sources, ranks the globally latest source version in SQL, and
   applies exact current scope/date only after ranking; framework-independent resolution then fails
@@ -165,7 +171,7 @@ to that service's domain package.
 
 ## Compatibility
 
-The assignment slices add one reversible table, two evidence-backed indexes, one source-write
+The assignment slices add one reversible table, two evidence-backed indexes, one policy source-write
 HTTP/OpenAPI contract, and one internal service-local read port/adapter. Existing routes, event
 payloads, topics, deployment topology, downstream fields, and runtime valuation behavior were
 unchanged by those slices. A subsequent staged prerequisite adds nullable `tenant_id` and
@@ -173,10 +179,10 @@ unchanged by those slices. A subsequent staged prerequisite adds nullable `tenan
 legacy compatibility and cannot erase an established persisted scope during replay; a complete
 incoming pair replaces both dimensions atomically. Partial, blank, padded database-direct, or
 non-string authority fails closed.
-The market-price authority slice adds a second reversible history table, an internal insert-only
-write boundary, and a position-valuation-owned bulk resolver without changing the legacy
-projection, existing ingestion/event/API contracts, or any runtime consumer. It is a migration
-primitive, not permission to reinterpret historical global prices as tenant-safe facts.
+The market-price authority slice adds a second reversible history table, a public typed source-write
+contract backed by the insert-only boundary, and a position-valuation-owned bulk resolver without
+changing the legacy projection, existing event contracts, or any runtime consumer. It is a
+migration primitive, not permission to reinterpret historical global prices as tenant-safe facts.
 Existing correct unit-price behavior is characterized under an explicit policy. The legacy bond
 heuristic remains in the runtime path until authoritative market-price persistence and both
 valuation consumers are wired; it will be deleted rather than retained as a fallback then.
@@ -270,7 +276,8 @@ service-local resolver does not add another wiki change: it is an internal migra
 yet invoked by production valuation or reconciliation. The later portfolio-authority prerequisite
 updates the generated API vocabulary plus `Data-Models` and `Ingestion-Service` wiki sources because
 the additive request/event/schema contract changed. README and supported-feature status do not
-change. The separate market-price authority table, internal append writer, and bulk resolver update
-repository context, this review record, the ledger, and `Data-Models`; no API/OpenAPI/event or
-operator workflow changed. Broader product/lifecycle wiki updates remain required with public
-ingestion and runtime cutover.
+change. The separate market-price authority table, append writer, and bulk resolver update
+repository context, this review record, the ledger, and `Data-Models`. The public source-write slice
+also updates OpenAPI/vocabulary/route artifacts plus `Ingestion-Service`, `API-Surface`, and the
+database schema catalog. Event contracts remain unchanged. Broader product/lifecycle wiki updates
+remain required with runtime consumer cutover.

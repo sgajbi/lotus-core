@@ -147,6 +147,15 @@ writes are transactionally serialized before the incoming batch is checked again
 history. The route does not infer legal book from booking centre or activate the new policy in the
 production valuation worker by itself.
 
+`POST /ingest/authoritative-market-price-source-facts` accepts the corresponding exact-scope price
+authority. Each record declares unit-price, clean-percent-of-principal, or
+dirty-percent-of-principal representation plus stable source identity, correction version,
+source-content hash, and an aware observation instant. Writes are append-only and atomic: exact
+idempotent replay is a no-op, while stale/divergent correction versions and competing active
+authority return `409 MARKET_PRICE_SOURCE_FACT_CONFLICT`. The route does not alter the legacy
+unscoped `market_prices` projection and does not by itself activate the staged valuation runtime
+cutover.
+
 ## Operational notes
 
 - the service starts with a Kafka producer and will fail startup if producer initialization fails

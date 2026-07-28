@@ -2945,7 +2945,11 @@ Most relevant current governance:
      instrument, and business date are mutable versioned payload. The dedicated insert-only writer
      must serialize stable source plus old/new authority identities, no-op exact replay, reject
      divergent same-version and competing ACTIVE claims, and return both old/new invalidation
-     identities. Bounded reads first use scope history to find candidate sources, rank each source's
+     identities. Public writes use
+     `POST /ingest/authoritative-market-price-source-facts`; the route carries the standard
+     ingestion job/idempotency lifecycle, rejects malformed lineage before persistence, and maps
+     source-version or authority conflicts to `MARKET_PRICE_SOURCE_FACT_CONFLICT`. Bounded reads
+     first use scope history to find candidate sources, rank each source's
      latest version, and only then apply exact-scope/lifecycle selection. Write and read batches
      fail closed above 500 records and split SQL tuple predicates into deterministic 100-key
      chunks. Persist domain-valid prices as exact unbounded PostgreSQL `NUMERIC`; do not silently

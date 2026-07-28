@@ -14,6 +14,20 @@ This page is an orientation map, not a schema dump. For exact fields and indexes
 - [RFC-0083 Source Data Product Catalog](../docs/architecture/RFC-0083-source-data-product-catalog.md)
 - [RFC-0083 Market Reference Data Target Model](../docs/architecture/RFC-0083-market-reference-data-target-model.md)
 
+## Current scope and reader map
+
+This page describes the current `lotus-core` model ownership and supportability posture. It does
+not certify that every additive target-model table is already active in every runtime consumer.
+Where a staged migration is incomplete, the relevant model group states that boundary explicitly.
+
+| Reader need | Start here |
+| --- | --- |
+| Portfolio, instrument, benchmark, and reference identity | Portfolio and reference masters |
+| Booked activity, charges, and cash movement | Transactions and cashflows |
+| Holdings, lots, pricing authority, and valuation state | Position and valuation state |
+| Source lineage, replay, reconciliation, and operating evidence | Operational and control models |
+| Exact columns, types, constraints, and indexes | `database_models.py` and the database schema catalog |
+
 ## Core model groups
 
 ### Portfolio and reference masters
@@ -109,9 +123,11 @@ preventing silent scale rounding or magnitude overflow from turning an exact rep
 conflict.
 The dedicated writer is insert-only, serializes source and old/new authority identities, treats an
 exact replay as a no-op, and rejects divergent or competing authority. It does not replace or widen
-the global `(security_id, price_date)` `market_prices` projection. Both internal write and read
-batches fail closed above 500 records and chunk SQL predicates at 100 keys; database checks reject
-non-finite prices and observation times. Existing valuation,
+the global `(security_id, price_date)` `market_prices` projection. The governed public write path is
+`POST /ingest/authoritative-market-price-source-facts`; it uses the standard ingestion job and
+idempotency lifecycle and maps correction/authority conflicts to a stable product-safe code. Both
+write and read batches fail closed above 500 records and chunk SQL predicates at 100 keys; database
+checks reject non-finite prices and observation times. Existing valuation,
 reconciliation, query, freshness, demo, and replay consumers remain on that legacy projection until
 both financial consumers complete a governed, tenant-safe cutover.
 

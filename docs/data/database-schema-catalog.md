@@ -186,6 +186,39 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
   - `created_at` (DateTime): Server timestamp when row was created.
   - `updated_at` (DateTime): Server timestamp when row was last updated.
 
+## `market_price_source_facts`
+
+- **Purpose**: Append-only, exact-scope authority for valuation source values.
+- **Description**: Source-versioned market-price facts with explicit quote representation,
+  tenant/legal-book ownership, correction lineage, and lifecycle fencing. This table does not
+  replace the legacy global `market_prices` projection.
+- **Relationships**: `security_id` references `instruments.security_id`.
+- **Usage (modules/features)**:
+  `src/services/ingestion_service/app/services/market_price_source_fact_writer.py`,
+  `src/services/calculators/position_valuation_calculator/app/infrastructure/market_price_source_fact_repository.py`,
+  and `POST /ingest/authoritative-market-price-source-facts`.
+- **Typical access patterns**: Append under stable source and old/new authority locks; rank the
+  latest correction per `(source_system, source_record_id)` before exact-scope/date/lifecycle
+  resolution; bounded 500-record batches with 100-key query chunks.
+- **Column definitions**:
+  - `id` (Integer): Surrogate append-history row identity.
+  - `tenant_id` (String): Exact tenant authority.
+  - `legal_book_id` (String): Exact legal-book authority.
+  - `security_id` (String): Canonical instrument identifier.
+  - `price_date` (Date): Business date governed by the fact.
+  - `price` (Numeric): Positive finite source value stored without an undeclared precision/scale.
+  - `currency` (String): Normalized ISO currency.
+  - `quote_basis` (String): `UNIT_PRICE`, `PERCENT_OF_PRINCIPAL_CLEAN`, or
+    `PERCENT_OF_PRINCIPAL_DIRTY`.
+  - `fact_status` (String): `ACTIVE`, `SUSPENDED`, or `RETIRED`.
+  - `fact_version` (Integer): Positive correction version for the stable source record.
+  - `source_system` (String): Authoritative source system.
+  - `source_record_id` (String): Stable source identity across corrections.
+  - `source_revision` (String): Source-native revision.
+  - `source_content_hash` (String): Lowercase SHA-256 source-content digest.
+  - `observed_at` (DateTime): Timezone-aware source observation instant.
+  - `created_at` (DateTime): Server timestamp when the append-history row was created.
+
 ## `instruments`
 
 - **Purpose**: Security master reference.
