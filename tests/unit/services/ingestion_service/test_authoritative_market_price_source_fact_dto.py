@@ -53,6 +53,21 @@ def test_authoritative_market_price_source_fact_normalizes_exact_authority() -> 
     )
 
 
+def test_authoritative_market_price_batch_accepts_distinct_source_versions() -> None:
+    first = _record()
+    second = _record(
+        fact_version=2,
+        source_revision="rev-2",
+        source_content_hash="b" * 64,
+    )
+
+    request = AuthoritativeMarketPriceSourceFactIngestionRequest.model_validate(
+        {"market_price_source_facts": [first, second]}
+    )
+
+    assert [fact.fact_version for fact in request.market_price_source_facts] == [1, 2]
+
+
 @pytest.mark.parametrize("price", ["NaN", "Infinity", "-Infinity", "0", "-0.01"])
 def test_authoritative_market_price_source_fact_rejects_non_positive_finite_price(
     price: str,
@@ -66,6 +81,24 @@ def test_authoritative_market_price_source_fact_requires_aware_observation() -> 
         AuthoritativeMarketPriceSourceFact.model_validate(
             _record(observed_at="2026-07-28T09:30:00")
         )
+
+
+@pytest.mark.parametrize(
+    "field_name",
+    [
+        "tenant_id",
+        "legal_book_id",
+        "security_id",
+        "source_system",
+        "source_record_id",
+        "source_revision",
+    ],
+)
+def test_authoritative_market_price_source_fact_rejects_blank_authority_and_source_identity(
+    field_name: str,
+) -> None:
+    with pytest.raises(ValidationError, match="must be nonblank"):
+        AuthoritativeMarketPriceSourceFact.model_validate(_record(**{field_name: "   "}))
 
 
 def test_authoritative_market_price_source_fact_rejects_malformed_source_hash() -> None:

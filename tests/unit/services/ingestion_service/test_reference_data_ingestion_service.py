@@ -876,6 +876,22 @@ def _authoritative_market_price_record() -> dict[str, object]:
 
 
 @pytest.mark.asyncio
+async def test_append_authoritative_market_price_source_facts_ignores_empty_batch() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    service = ReferenceDataIngestionService(db)
+
+    with patch(
+        "src.services.ingestion_service.app.services."
+        "reference_data_ingestion_service.MarketPriceSourceFactWriter"
+    ) as writer_factory:
+        await service.append_authoritative_market_price_source_facts([])
+
+    writer_factory.assert_not_called()
+    db.commit.assert_not_awaited()
+    db.rollback.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_append_authoritative_market_price_source_facts_commits_atomically() -> None:
     db = AsyncMock(spec=AsyncSession)
     writer = AsyncMock()
