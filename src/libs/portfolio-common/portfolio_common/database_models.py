@@ -1910,6 +1910,72 @@ class Transaction(Base):
             "quantity >= 0",
             name="ck_transactions_quantity_nonnegative",
         ),
+        _finite_numeric_check_constraint(
+            "ck_transactions_trade_values_finite",
+            "price",
+            "gross_transaction_amount",
+            "trade_fee",
+            "gross_cost",
+            "net_cost",
+            "realized_gain_loss",
+            "transaction_fx_rate",
+            "net_cost_local",
+            "realized_gain_loss_local",
+        ),
+        CheckConstraint(
+            "price >= 0 AND gross_transaction_amount >= 0 AND trade_fee >= 0 "
+            "AND transaction_fx_rate > 0",
+            name="ck_transactions_trade_values_sign",
+        ),
+        _finite_numeric_check_constraint(
+            "ck_transactions_income_values_finite",
+            "withholding_tax_amount",
+            "other_interest_deductions_amount",
+            "net_interest_amount",
+        ),
+        CheckConstraint(
+            "withholding_tax_amount >= 0 AND other_interest_deductions_amount >= 0 "
+            "AND net_interest_amount >= 0",
+            name="ck_transactions_income_values_nonnegative",
+        ),
+        _finite_numeric_check_constraint(
+            "ck_transactions_fx_terms_finite",
+            "buy_amount",
+            "sell_amount",
+            "contract_rate",
+        ),
+        CheckConstraint(
+            "buy_amount > 0 AND sell_amount > 0 AND contract_rate > 0",
+            name="ck_transactions_fx_terms_positive",
+        ),
+        _finite_numeric_check_constraint(
+            "ck_transactions_realized_values_finite",
+            "allocated_cost_basis_local",
+            "allocated_cost_basis_base",
+            "realized_capital_pnl_local",
+            "realized_fx_pnl_local",
+            "realized_total_pnl_local",
+            "realized_capital_pnl_base",
+            "realized_fx_pnl_base",
+            "realized_total_pnl_base",
+        ),
+        CheckConstraint(
+            "allocated_cost_basis_local >= 0 AND allocated_cost_basis_base >= 0",
+            name="ck_transactions_allocated_basis_nonnegative",
+        ),
+        _finite_numeric_check_constraint(
+            "ck_transactions_synthetic_flow_values_finite",
+            "synthetic_flow_amount_local",
+            "synthetic_flow_amount_base",
+            "synthetic_flow_fx_rate_to_base",
+            "synthetic_flow_price_used",
+            "synthetic_flow_quantity_used",
+        ),
+        CheckConstraint(
+            "synthetic_flow_fx_rate_to_base > 0 AND synthetic_flow_price_used >= 0 "
+            "AND synthetic_flow_quantity_used >= 0",
+            name="ck_transactions_synthetic_flow_values_sign",
+        ),
         Index("ix_transactions_portfolio_security", "portfolio_id", "security_id"),
         Index(
             "ix_transactions_portfolio_instrument_date",
@@ -2074,6 +2140,10 @@ class Cashflow(Base):
     transaction = relationship("Transaction", back_populates="cashflow")
 
     __table_args__ = (
+        _finite_numeric_check_constraint(
+            "ck_cashflows_amount_finite",
+            "amount",
+        ),
         UniqueConstraint("transaction_id", "epoch", name="_transaction_epoch_uc"),
         Index(
             "ix_cashflows_portfolio_classification_date",
