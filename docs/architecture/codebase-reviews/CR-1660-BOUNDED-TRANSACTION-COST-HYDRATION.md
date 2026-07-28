@@ -20,10 +20,16 @@ unchanged.
 
 ## Resolution
 
-- Replaced joined cost loading with SQLAlchemy `selectinload` in all three transaction-economics
-  reads.
-- The transaction/page statement now selects transaction identities first. Cost hydration executes
-  as one bounded follow-up query constrained by the selected transaction primary keys.
+- Replaced joined collection loading with a correlated `LATERAL` cost aggregate in all three
+  transaction-economics reads.
+- Each selected transaction now carries deterministically ordered, aligned cost columns in the same
+  PostgreSQL statement snapshot. The query retains one row per transaction, so offset/limit and
+  cursor limits apply before any collection-row multiplication.
+- A late review correctly identified that the initial two-statement `selectinload` implementation
+  could combine parent and cost versions across `READ COMMITTED` snapshots. The single-statement
+  aggregate closes that race without widening transaction isolation or changing session ownership.
+- Aggregate reconstruction fails closed if fee, amount, currency, or timestamp columns are not
+  aligned.
 - Preserved the existing stable sort fields, filters, page size, cashflow selection, result mapping,
   and serialized contracts.
 
@@ -32,13 +38,14 @@ introduce a new service boundary.
 
 ## Evidence
 
-- Signed commits `dad0e6c67`, `3384aebc8`, and `266a07995`.
+- GitHub and local Git both verify the branch commits as signed.
 - 23 warning-strict Query Service repository tests passed.
-- 10 warning-strict Query Control Plane transaction-economics source tests passed.
+- 10 warning-strict Query Control Plane transaction-economics source tests passed, plus focused
+  aggregate reconstruction proof.
 - Real PostgreSQL proof seeded three transactions with one, two, and three cost rows. A two-row
-  page returned exactly the newest two transactions with all five applicable costs, executed
-  exactly two `SELECT` statements, omitted `transaction_costs` from the paginated statement, and
-  bounded the hydration query to the two selected transaction primary keys.
+  page returned exactly the newest two transactions with all five applicable costs in exactly one
+  `SELECT`, retained one SQL row per transaction through `LATERAL` aggregation, and bounded the
+  result to the selected two-row page.
 - Strict MyPy passed across 240 source files; scoped Ruff, format, and diff-hygiene checks passed.
 
 ## Compatibility and remaining batch work

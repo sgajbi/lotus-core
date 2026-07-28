@@ -1,8 +1,9 @@
 # services/query-service/app/repositories/transaction_repository.py
 import logging
+from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
-from typing import List, Optional, cast
+from typing import Any, List, Optional, cast
 
 from portfolio_common.config import DEFAULT_BUSINESS_CALENDAR_CODE
 from portfolio_common.database_models import (
@@ -13,11 +14,16 @@ from portfolio_common.database_models import (
     Transaction,
 )
 from portfolio_common.domain.currency import normalize_currency_code
+from portfolio_common.infrastructure.transaction_cost_snapshot import (
+    TransactionCostSnapshot,
+    transaction_cost_snapshot_lateral,
+    transaction_cost_snapshots,
+)
 from portfolio_common.logging_utils import operation_log_extra
 from portfolio_common.utils import async_timed
-from sqlalchemy import asc, desc, func, select
+from sqlalchemy import asc, desc, func, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload, selectinload
+from sqlalchemy.orm import joinedload
 
 from ..application.transaction_query import TransactionLedgerFilters, TransactionLedgerQuerySpec
 from .currency_query_expressions import currency_code_sql_expr
@@ -25,6 +31,17 @@ from .date_filters import start_of_day, start_of_next_day
 from .identifier_normalization import normalize_security_id
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True, slots=True)
+class TransactionLedgerRow:
+    """Read-only transaction row with costs captured in the same SQL snapshot."""
+
+    transaction: Transaction
+    costs: tuple[TransactionCostSnapshot, ...]
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self.transaction, name)
 
 
 def _identity_filter_kwargs(*, portfolio_id: str, **filters) -> dict[str, str]:
@@ -156,29 +173,14 @@ class TransactionRepository:
         *,
         filters: TransactionLedgerFilters,
     ):
-        stmt = stmt.filter_by(**_ledger_identity_filters(filters))
+        for field_name, value in _ledger_identity_filters(filters).items():
+            stmt = stmt.where(getattr(Transaction, field_name) == value)
         stmt = _apply_security_filter(stmt, filters.security_id)
         return _apply_transaction_date_filters(
             stmt,
             start_date=filters.start_date,
             end_date=filters.end_date,
             as_of_date=filters.as_of_date,
-        )
-
-    def _get_base_query(
-        self,
-        filters: TransactionLedgerFilters,
-    ):
-        """
-        Constructs a base query with all the common filters.
-        """
-        stmt = select(Transaction).options(
-            joinedload(Transaction.cashflow),
-            selectinload(Transaction.costs),
-        )
-        return self._apply_filters(
-            stmt,
-            filters=filters,
         )
 
     @async_timed(repository="TransactionRepository", method="get_transactions")
@@ -188,21 +190,53 @@ class TransactionRepository:
         query_spec: TransactionLedgerQuerySpec,
         skip: int,
         limit: int,
-    ) -> List[Transaction]:
+    ) -> list[TransactionLedgerRow]:
         """
         Retrieves a paginated list of transactions with optional filters.
         """
         filters = query_spec.filters
-        stmt = self._get_base_query(filters=filters)
-
         sort_direction = asc if query_spec.sort.order == "asc" else desc
         order_clause = sort_direction(getattr(Transaction, query_spec.sort.field))
         tie_breaker_clause = sort_direction(Transaction.id)
 
-        stmt = stmt.order_by(order_clause, tie_breaker_clause)
+        page = (
+            self._apply_filters(
+                select(Transaction.id.label("transaction_pk")),
+                filters=filters,
+            )
+            .order_by(order_clause, tie_breaker_clause)
+            .offset(skip)
+            .limit(limit)
+            .subquery("transaction_page")
+        )
+        cost_snapshot = transaction_cost_snapshot_lateral(Transaction.transaction_id)
+        stmt = (
+            select(
+                Transaction,
+                cost_snapshot.c.cost_fee_types,
+                cost_snapshot.c.cost_amounts,
+                cost_snapshot.c.cost_currencies,
+                cost_snapshot.c.cost_updated_ats,
+            )
+            .join(page, Transaction.id == page.c.transaction_pk)
+            .join(cost_snapshot, true())
+            .options(joinedload(Transaction.cashflow))
+            .order_by(order_clause, tie_breaker_clause)
+        )
 
-        results = await self.db.execute(stmt.offset(skip).limit(limit))
-        transactions = results.scalars().unique().all()
+        results = await self.db.execute(stmt)
+        transactions = [
+            TransactionLedgerRow(
+                transaction=transaction,
+                costs=transaction_cost_snapshots(
+                    fee_types=fee_types,
+                    amounts=amounts,
+                    currencies=currencies,
+                    updated_ats=updated_ats,
+                ),
+            )
+            for transaction, fee_types, amounts, currencies, updated_ats in results.all()
+        ]
         logger.info(
             "Transaction repository query completed.",
             extra=operation_log_extra(
@@ -220,7 +254,7 @@ class TransactionRepository:
                 has_as_of_date_filter=filters.as_of_date is not None,
             ),
         )
-        return cast(List[Transaction], transactions)
+        return transactions
 
     @async_timed(repository="TransactionRepository", method="get_transactions_count")
     async def get_transactions_count(

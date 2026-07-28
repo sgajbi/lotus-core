@@ -5,9 +5,14 @@ from typing import cast
 
 from portfolio_common.database_models import Cashflow, Portfolio, Transaction, TransactionCost
 from portfolio_common.identifiers import normalize_lookup_identifier
-from sqlalchemy import and_, exists, func, or_, select
+from portfolio_common.infrastructure.transaction_cost_snapshot import (
+    TransactionCostSnapshot,
+    transaction_cost_snapshot_lateral,
+    transaction_cost_snapshots,
+)
+from sqlalchemy import and_, exists, func, or_, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import aliased, contains_eager, selectinload
+from sqlalchemy.orm import aliased, contains_eager
 
 from ..domain.transaction_economics import (
     BookedTransactionEconomics,
@@ -98,7 +103,7 @@ def _cashflow_evidence(
 
 
 def _cost_component_evidence(
-    cost: TransactionCost,
+    cost: TransactionCost | TransactionCostSnapshot,
 ) -> TransactionCostComponentEvidence:
     return TransactionCostComponentEvidence(
         fee_type=cost.fee_type,
@@ -110,6 +115,8 @@ def _cost_component_evidence(
 
 def _booked_transaction_economics(
     transaction: Transaction,
+    *,
+    costs: tuple[TransactionCostSnapshot, ...],
 ) -> BookedTransactionEconomics:
     return BookedTransactionEconomics(
         transaction_id=transaction.transaction_id,
@@ -135,7 +142,7 @@ def _booked_transaction_economics(
         transaction_fx_rate=transaction.transaction_fx_rate,
         fx_contract_id=transaction.fx_contract_id,
         cashflow=_cashflow_evidence(transaction.cashflow),
-        costs=tuple(_cost_component_evidence(cost) for cost in transaction.costs),
+        costs=tuple(_cost_component_evidence(cost) for cost in costs),
         updated_at=transaction.updated_at,
     )
 
@@ -167,9 +174,16 @@ class SqlAlchemyTransactionEconomicsReader:
         transaction_types: list[str] | None = None,
         curve_keys: list[tuple[str, str, str]] | None = None,
     ) -> list[BookedTransactionEconomics]:
+        cost_snapshot = transaction_cost_snapshot_lateral(Transaction.transaction_id)
         stmt = (
-            select(Transaction)
-            .options(selectinload(Transaction.costs))
+            select(
+                Transaction,
+                cost_snapshot.c.cost_fee_types,
+                cost_snapshot.c.cost_amounts,
+                cost_snapshot.c.cost_currencies,
+                cost_snapshot.c.cost_updated_ats,
+            )
+            .join(cost_snapshot, true())
             .where(
                 Transaction.portfolio_id == portfolio_id,
                 Transaction.transaction_date >= _start_of_day(start_date),
@@ -210,7 +224,18 @@ class SqlAlchemyTransactionEconomicsReader:
             Transaction.transaction_id.asc(),
         )
         results = await self._session.execute(stmt)
-        return [_booked_transaction_economics(row) for row in results.scalars().unique().all()]
+        return [
+            _booked_transaction_economics(
+                transaction,
+                costs=transaction_cost_snapshots(
+                    fee_types=fee_types,
+                    amounts=amounts,
+                    currencies=currencies,
+                    updated_ats=updated_ats,
+                ),
+            )
+            for transaction, fee_types, amounts, currencies, updated_ats in results.all()
+        ]
 
     async def list_transaction_cost_curve_keys(
         self,
@@ -346,6 +371,38 @@ class SqlAlchemyTransactionEconomicsReader:
         after_key: tuple[str, str, str] | tuple[()] = (),
         limit: int | None = None,
     ) -> list[BookedTransactionEconomics]:
+        security_order = func.trim(Transaction.security_id).asc()
+        transaction_date_order = func.date(Transaction.transaction_date).asc()
+        transaction_id_order = Transaction.transaction_id.asc()
+        page = select(Transaction.id.label("transaction_pk")).where(
+            Transaction.portfolio_id == portfolio_id,
+            Transaction.transaction_date >= _start_of_day(start_date),
+            Transaction.transaction_date < _start_of_next_day(end_date),
+            Transaction.transaction_date < _start_of_next_day(as_of_date),
+        )
+        if security_ids:
+            normalized_security_ids = [
+                normalized
+                for security_id in security_ids
+                if (normalized := normalize_lookup_identifier(security_id))
+            ]
+            if not normalized_security_ids:
+                return []
+            page = page.where(func.trim(Transaction.security_id).in_(normalized_security_ids))
+        if transaction_types:
+            page = page.where(Transaction.transaction_type.in_(transaction_types))
+        after_predicate = _performance_component_economics_after_key_predicate(after_key)
+        if after_predicate is not None:
+            page = page.where(after_predicate)
+        page = page.order_by(
+            security_order,
+            transaction_date_order,
+            transaction_id_order,
+        )
+        if limit is not None:
+            page = page.limit(limit)
+        page = page.subquery("performance_economics_page")
+
         ranked_cashflows = (
             select(
                 Cashflow.id.label("id"),
@@ -361,8 +418,16 @@ class SqlAlchemyTransactionEconomicsReader:
             .subquery()
         )
         latest_cashflow = aliased(Cashflow)
+        cost_snapshot = transaction_cost_snapshot_lateral(Transaction.transaction_id)
         stmt = (
-            select(Transaction)
+            select(
+                Transaction,
+                cost_snapshot.c.cost_fee_types,
+                cost_snapshot.c.cost_amounts,
+                cost_snapshot.c.cost_currencies,
+                cost_snapshot.c.cost_updated_ats,
+            )
+            .join(page, Transaction.id == page.c.transaction_pk)
             .outerjoin(
                 ranked_cashflows,
                 and_(
@@ -371,41 +436,25 @@ class SqlAlchemyTransactionEconomicsReader:
                 ),
             )
             .outerjoin(latest_cashflow, latest_cashflow.id == ranked_cashflows.c.id)
-            .options(
-                selectinload(Transaction.costs),
-                contains_eager(Transaction.cashflow, alias=latest_cashflow),
-            )
-            .where(
-                Transaction.portfolio_id == portfolio_id,
-                Transaction.transaction_date >= _start_of_day(start_date),
-                Transaction.transaction_date < _start_of_next_day(end_date),
-                Transaction.transaction_date < _start_of_next_day(as_of_date),
-            )
+            .join(cost_snapshot, true())
+            .options(contains_eager(Transaction.cashflow, alias=latest_cashflow))
             .order_by(
-                func.trim(Transaction.security_id).asc(),
-                func.date(Transaction.transaction_date).asc(),
-                Transaction.transaction_id.asc(),
+                security_order,
+                transaction_date_order,
+                transaction_id_order,
             )
         )
-        if security_ids:
-            normalized_security_ids = [
-                normalized
-                for security_id in security_ids
-                if (normalized := normalize_lookup_identifier(security_id))
-            ]
-            if not normalized_security_ids:
-                return []
-            stmt = stmt.where(func.trim(Transaction.security_id).in_(normalized_security_ids))
-        if transaction_types:
-            stmt = stmt.where(Transaction.transaction_type.in_(transaction_types))
-        after_predicate = _performance_component_economics_after_key_predicate(after_key)
-        if after_predicate is not None:
-            stmt = stmt.where(after_predicate)
-        if limit is not None:
-            stmt = stmt.limit(limit)
 
         results = await self._session.execute(stmt)
         return [
-            _booked_transaction_economics(transaction)
-            for transaction in results.scalars().unique().all()
+            _booked_transaction_economics(
+                transaction,
+                costs=transaction_cost_snapshots(
+                    fee_types=fee_types,
+                    amounts=amounts,
+                    currencies=currencies,
+                    updated_ats=updated_ats,
+                ),
+            )
+            for transaction, fee_types, amounts, currencies, updated_ats in results.all()
         ]
