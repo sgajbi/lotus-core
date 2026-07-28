@@ -5,9 +5,8 @@ from typing import Literal, cast
 
 from portfolio_common.domain.currency import normalize_currency_code
 from portfolio_common.openapi_enrichment import exact_numeric_openapi_description
+from portfolio_common.pydantic_financial_numeric import ExactPositiveDecimal18_4
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-
-from .financial_numeric_fields import ExactPositiveDecimal18_4
 
 
 class ClientIncomeNeedsScheduleRecord(BaseModel):

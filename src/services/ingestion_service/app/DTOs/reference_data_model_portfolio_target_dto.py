@@ -5,9 +5,8 @@ from decimal import Decimal
 from typing import Literal
 
 from portfolio_common.openapi_enrichment import exact_numeric_openapi_description
+from portfolio_common.pydantic_financial_numeric import ExactRatioDecimal18_10
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-
-from .financial_numeric_fields import ExactRatioDecimal18_10
 
 
 class ModelPortfolioTargetRecord(BaseModel):

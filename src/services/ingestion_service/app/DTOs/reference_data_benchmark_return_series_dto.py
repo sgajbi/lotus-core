@@ -5,9 +5,9 @@ from typing import cast
 
 from portfolio_common.domain.currency import normalize_currency_code
 from portfolio_common.openapi_enrichment import exact_numeric_openapi_description
+from portfolio_common.pydantic_financial_numeric import ExactDecimal18_10
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from .financial_numeric_fields import ExactDecimal18_10
 from .reference_data_source_observation_dto import SourceObservationLineage
 
 

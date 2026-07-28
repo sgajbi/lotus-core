@@ -3,9 +3,9 @@ from __future__ import annotations
 from datetime import date
 
 from portfolio_common.openapi_enrichment import exact_numeric_openapi_description
+from portfolio_common.pydantic_financial_numeric import ExactRatioDecimal18_10
 from pydantic import BaseModel, ConfigDict, Field
 
-from .financial_numeric_fields import ExactRatioDecimal18_10
 from .reference_data_source_observation_dto import SourceObservationLineage
 
 

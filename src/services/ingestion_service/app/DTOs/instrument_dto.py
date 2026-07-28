@@ -4,9 +4,8 @@ from typing import List, Optional
 
 from portfolio_common.domain.currency import normalize_optional_currency_code
 from portfolio_common.openapi_enrichment import exact_numeric_openapi_description
+from portfolio_common.pydantic_financial_numeric import ExactPositiveDecimal18_10
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-
-from .financial_numeric_fields import ExactPositiveDecimal18_10
 
 
 class Instrument(BaseModel):

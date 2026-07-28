@@ -5,15 +5,16 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Annotated
 
-from portfolio_common.domain.financial.precision import (
+from pydantic import AfterValidator, BeforeValidator, Field, ValidationInfo
+
+from .domain.financial.precision import (
     BOUNDED_18_4_EXACT,
     BOUNDED_18_10_EXACT,
     DecimalPrecisionPolicy,
 )
-from pydantic import AfterValidator, BeforeValidator, Field, ValidationInfo
 
 
-def _reject_floating_point_input(value: object) -> object:
+def reject_floating_point_input(value: object) -> object:
     """Reject source values whose decimal representation may already be lossy."""
     if isinstance(value, float):
         raise ValueError(
@@ -44,19 +45,19 @@ def _require_exact_18_4(value: Decimal, info: ValidationInfo) -> Decimal:
 
 
 _EXACT_DECIMAL_INPUT = BeforeValidator(
-    _reject_floating_point_input,
+    reject_floating_point_input,
     json_schema_input_type=str | int,
 )
 _EXACT_RATIO_DECIMAL_INPUT = BeforeValidator(
-    _reject_floating_point_input,
+    reject_floating_point_input,
     json_schema_input_type=str | Annotated[int, Field(ge=0, le=1)],
 )
 _EXACT_POSITIVE_DECIMAL_INPUT = BeforeValidator(
-    _reject_floating_point_input,
+    reject_floating_point_input,
     json_schema_input_type=str | Annotated[int, Field(gt=0)],
 )
 _EXACT_NON_NEGATIVE_DECIMAL_INPUT = BeforeValidator(
-    _reject_floating_point_input,
+    reject_floating_point_input,
     json_schema_input_type=str | Annotated[int, Field(ge=0)],
 )
 
@@ -87,6 +88,12 @@ ExactPositiveDecimal18_4 = Annotated[
     Field(gt=Decimal(0)),
     _EXACT_POSITIVE_DECIMAL_INPUT,
     AfterValidator(_require_exact_18_4),
+]
+ExactNonNegativeDecimal18_10 = Annotated[
+    Decimal,
+    Field(ge=Decimal(0)),
+    _EXACT_NON_NEGATIVE_DECIMAL_INPUT,
+    AfterValidator(_require_exact_18_10),
 ]
 ExactNonNegativeDecimal18_4 = Annotated[
     Decimal,
