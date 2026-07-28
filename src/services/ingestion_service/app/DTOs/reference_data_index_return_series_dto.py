@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from datetime import date
-from decimal import Decimal
 from typing import cast
 
 from portfolio_common.domain.currency import normalize_currency_code
+from portfolio_common.openapi_enrichment import exact_numeric_openapi_description
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from .financial_numeric_fields import ExactDecimal18_10
 from .reference_data_source_observation_dto import SourceObservationLineage
 
 
@@ -14,7 +15,15 @@ class IndexReturnSeriesRecord(SourceObservationLineage):
     series_id: str = Field(..., description="Series identifier.", examples=["series_idx_world_ret"])
     index_id: str = Field(..., description="Index identifier.", examples=["IDX_MSCI_WORLD_TR"])
     series_date: date = Field(..., description="Series date.", examples=["2026-01-02"])
-    index_return: Decimal = Field(..., description="Index return value.", examples=["0.0023000000"])
+    index_return: ExactDecimal18_10 = Field(
+        ...,
+        description=exact_numeric_openapi_description(
+            "Index return value.",
+            precision=18,
+            scale=10,
+        ),
+        examples=["0.0023000000"],
+    )
     return_period: str = Field(..., description="Return period label.", examples=["1d"])
     return_convention: str = Field(
         ..., description="Return convention label.", examples=["total_return_index"]

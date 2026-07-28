@@ -5,8 +5,10 @@ from decimal import Decimal
 from typing import cast
 
 from portfolio_common.domain.currency import normalize_currency_code
+from portfolio_common.openapi_enrichment import exact_numeric_openapi_description
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from .financial_numeric_fields import ExactDecimal18_10
 from .reference_data_source_observation_dto import SourceObservationLineage
 
 
@@ -16,10 +18,14 @@ class IndexPriceSeriesRecord(SourceObservationLineage):
     )
     index_id: str = Field(..., description="Index identifier.", examples=["IDX_MSCI_WORLD_TR"])
     series_date: date = Field(..., description="Series date.", examples=["2026-01-02"])
-    index_price: Decimal = Field(
+    index_price: ExactDecimal18_10 = Field(
         ...,
         gt=Decimal(0),
-        description="Index price value.",
+        description=exact_numeric_openapi_description(
+            "Index price value.",
+            precision=18,
+            scale=10,
+        ),
         examples=["4567.1234000000"],
     )
     series_currency: str = Field(
