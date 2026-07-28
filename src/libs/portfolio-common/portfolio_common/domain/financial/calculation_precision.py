@@ -55,6 +55,14 @@ class CalculatedDecimalPolicy:
                 policy_name=self.policy_id,
             )
         try:
+            return self._persistence_policy.require_exact(
+                value,
+                field_name=field_name,
+            )
+        except DecimalPrecisionError as exc:
+            if exc.violation is not DecimalPrecisionViolation.EXCESS_SCALE:
+                raise
+        try:
             with localcontext() as context:
                 context.prec = self.working_precision
                 normalized = value.quantize(self._quantum, rounding=self.rounding)
