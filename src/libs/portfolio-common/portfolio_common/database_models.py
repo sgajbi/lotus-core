@@ -303,6 +303,14 @@ class FxRate(Base):
     )
 
     __table_args__ = (
+        _finite_numeric_check_constraint(
+            "ck_fx_rates_rate_finite",
+            "rate",
+        ),
+        CheckConstraint(
+            "rate > 0",
+            name="ck_fx_rates_rate_positive",
+        ),
         UniqueConstraint(
             "from_currency", "to_currency", "rate_date", name="_currency_pair_date_uc"
         ),
@@ -329,6 +337,14 @@ class MarketPrice(Base):
     )
 
     __table_args__ = (
+        _finite_numeric_check_constraint(
+            "ck_market_prices_price_finite",
+            "price",
+        ),
+        CheckConstraint(
+            "price > 0",
+            name="ck_market_prices_price_positive",
+        ),
         UniqueConstraint("security_id", "price_date", name="_security_price_date_uc"),
         Index(
             "ix_market_prices_norm_sec_price_date",
@@ -372,6 +388,16 @@ class Instrument(Base):
     )
 
     __table_args__ = (
+        _finite_numeric_check_constraint(
+            "ck_instruments_fx_terms_finite",
+            "buy_amount",
+            "sell_amount",
+            "contract_rate",
+        ),
+        CheckConstraint(
+            "buy_amount > 0 AND sell_amount > 0 AND contract_rate > 0",
+            name="ck_instruments_fx_terms_positive",
+        ),
         Index("ix_instruments_norm_security_id", func.trim(security_id)),
         Index(
             "ix_instruments_norm_asset_cls_sec",
@@ -1374,6 +1400,14 @@ class BenchmarkCompositionSeries(Base):
     )
 
     __table_args__ = (
+        _finite_numeric_check_constraint(
+            "ck_benchmark_composition_weight_finite",
+            "composition_weight",
+        ),
+        CheckConstraint(
+            "composition_weight >= 0",
+            name="ck_benchmark_composition_weight_nonnegative",
+        ),
         UniqueConstraint(
             "benchmark_id",
             "index_id",
@@ -1416,6 +1450,14 @@ class IndexPriceSeries(Base):
     )
 
     __table_args__ = (
+        _finite_numeric_check_constraint(
+            "ck_index_price_series_price_finite",
+            "index_price",
+        ),
+        CheckConstraint(
+            "index_price > 0",
+            name="ck_index_price_series_price_positive",
+        ),
         UniqueConstraint("series_id", "index_id", "series_date", name="_index_price_series_uc"),
         Index(
             "ix_index_price_series_index_id_series_date",
@@ -1446,6 +1488,10 @@ class IndexReturnSeries(Base):
     )
 
     __table_args__ = (
+        _finite_numeric_check_constraint(
+            "ck_index_return_series_return_finite",
+            "index_return",
+        ),
         UniqueConstraint("series_id", "index_id", "series_date", name="_index_return_series_uc"),
         Index(
             "ix_index_return_series_index_id_series_date",
@@ -1476,6 +1522,10 @@ class BenchmarkReturnSeries(Base):
     )
 
     __table_args__ = (
+        _finite_numeric_check_constraint(
+            "ck_benchmark_return_series_return_finite",
+            "benchmark_return",
+        ),
         UniqueConstraint(
             "series_id",
             "benchmark_id",
@@ -1512,6 +1562,10 @@ class RiskFreeSeries(Base):
     )
 
     __table_args__ = (
+        _finite_numeric_check_constraint(
+            "ck_risk_free_series_value_finite",
+            "value",
+        ),
         UniqueConstraint(
             "series_id",
             "risk_free_curve_id",
@@ -1612,6 +1666,14 @@ class InstrumentLookthroughComponent(Base):
     )
 
     __table_args__ = (
+        _finite_numeric_check_constraint(
+            "ck_instrument_lookthrough_weight_finite",
+            "component_weight",
+        ),
+        CheckConstraint(
+            "component_weight >= 0",
+            name="ck_instrument_lookthrough_weight_nonnegative",
+        ),
         UniqueConstraint(
             "parent_security_id",
             "component_security_id",
