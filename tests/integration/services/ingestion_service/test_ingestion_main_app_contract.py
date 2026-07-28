@@ -776,7 +776,8 @@ async def test_openapi_describes_portfolio_market_and_fx_shared_schemas(async_te
     )
 
     assert market_price["properties"]["price"]["description"] == (
-        "Canonical closing or approved valuation price for the security."
+        "Canonical closing or approved valuation price. The value must fit PostgreSQL "
+        "NUMERIC(18,10) exactly; excess scale and magnitude overflow are rejected, not rounded."
     )
     assert market_price_request["properties"]["market_prices"]["examples"] == [
         [
@@ -790,7 +791,9 @@ async def test_openapi_describes_portfolio_market_and_fx_shared_schemas(async_te
     ]
 
     assert fx_rate["properties"]["rate"]["description"] == (
-        "FX conversion rate expressed as units of `to_currency` per one unit of `from_currency`."
+        "FX conversion rate expressed as units of `to_currency` per one unit of `from_currency`. "
+        "The value must fit PostgreSQL NUMERIC(18,10) exactly; excess scale and magnitude overflow "
+        "are rejected, not rounded."
     )
     assert fx_rate_request["properties"]["fx_rates"]["examples"] == [
         [

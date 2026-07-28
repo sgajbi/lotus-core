@@ -3,6 +3,7 @@ from decimal import Decimal
 from typing import List
 
 from portfolio_common.domain.currency import normalize_currency_code
+from portfolio_common.domain.financial.precision import BOUNDED_18_10_EXACT
 from pydantic import BaseModel, ConfigDict, Field, condecimal, field_validator
 
 
@@ -26,7 +27,8 @@ class FxRate(BaseModel):
         ...,
         description=(
             "FX conversion rate expressed as units of `to_currency` per "
-            "one unit of `from_currency`."
+            "one unit of `from_currency`. The value must fit PostgreSQL NUMERIC(18,10) exactly; "
+            "excess scale and magnitude overflow are rejected, not rounded."
         ),
         examples=["1.3500000000"],
     )
@@ -35,6 +37,11 @@ class FxRate(BaseModel):
     @classmethod
     def _normalize_currency_code(cls, value: object) -> str:
         return normalize_currency_code(value)
+
+    @field_validator("rate")
+    @classmethod
+    def _validate_exact_storage_shape(cls, value: Decimal) -> Decimal:
+        return BOUNDED_18_10_EXACT.require_exact(value, field_name="rate")
 
     model_config = ConfigDict(
         json_schema_extra={
