@@ -65,24 +65,31 @@ class DecimalPrecisionPolicy:
         if self.is_unbounded or value.is_zero():
             return value
 
-        assert self.precision is not None
-        assert self.scale is not None
+        precision = self.precision
+        scale = self.scale
+        if precision is None or scale is None:
+            raise RuntimeError("bounded Decimal policy is missing precision or scale")
         digits = list(value.as_tuple().digits)
         exponent = value.as_tuple().exponent
-        assert isinstance(exponent, int)
+        if not isinstance(exponent, int):
+            raise DecimalPrecisionError(
+                field_name=field_name,
+                violation=DecimalPrecisionViolation.NON_FINITE,
+                policy_name=self.name,
+            )
         while digits and digits[-1] == 0 and exponent < 0:
             digits.pop()
             exponent += 1
         significant_digit_count = len(digits)
         fractional_digit_count = max(-exponent, 0)
-        if fractional_digit_count > self.scale:
+        if fractional_digit_count > scale:
             raise DecimalPrecisionError(
                 field_name=field_name,
                 violation=DecimalPrecisionViolation.EXCESS_SCALE,
                 policy_name=self.name,
             )
         integer_digit_count = max(significant_digit_count + exponent, 0)
-        if integer_digit_count > self.precision - self.scale:
+        if integer_digit_count > precision - scale:
             raise DecimalPrecisionError(
                 field_name=field_name,
                 violation=DecimalPrecisionViolation.MAGNITUDE_OVERFLOW,

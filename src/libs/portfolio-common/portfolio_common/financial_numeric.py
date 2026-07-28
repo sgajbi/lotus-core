@@ -50,7 +50,7 @@ class ExactNumeric(TypeDecorator[Decimal]):
                 f"received ({self.precision}, {self.scale})"
             ) from exc
 
-    def process_bind_param(self, value: Any, dialect: Dialect) -> Decimal | None:  # noqa: ARG002
+    def process_bind_param(self, value: Any, _dialect: Dialect) -> Decimal | None:
         if value is None:
             return None
         decimal_value = value if isinstance(value, Decimal) else Decimal(str(value))
