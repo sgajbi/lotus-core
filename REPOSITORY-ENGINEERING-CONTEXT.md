@@ -320,11 +320,18 @@ Current repository posture:
     `portfolio_common.financial_numeric.ExactNumeric` for all 96 governed columns: existing
     `NUMERIC(18,10)` and `NUMERIC(18,4)` DDL is preserved, excess scale and magnitude are rejected
     before execution, and the market-price authority remains exact-unbounded. Keep the
-    `exact_bind_enforcement` guard requirement. This safety net does not replace owner-specific
-    DTO/event validation or authorize blanket rounding of calculated outputs; rounding must be
-    explicit, domain-owned, tested, and reflected in calculation lineage. Core persistence is
-    PostgreSQL-only: exact numeric binds fail closed for other dialects, while Alembic
-    autogeneration renders standard portable `sa.Numeric(...)` revision declarations.
+     `exact_bind_enforcement` guard requirement. This safety net does not replace owner-specific
+     DTO/event validation or authorize blanket rounding of calculated outputs; rounding must be
+     explicit, domain-owned, tested, and reflected in calculation lineage. Core persistence is
+     PostgreSQL-only: exact numeric binds fail closed for other dialects, while Alembic
+     autogeneration renders standard portable `sa.Numeric(...)` revision declarations.
+     Calculated-output policies are separately classified in
+     `docs/standards/financial-calculated-output-policies.v1.json` and enforced by
+     `make calculated-output-policy-guard`, which runs under `make lint`. Every
+     `CalculatedDecimalPolicy` declaration requires exact source-shape parity, a nonblank owner and
+     output family, at least one execution consumer, and an explicit lineage posture. Policies
+     marked `required` must call `lineage_identity()`; `not-exposed` is a visible gap owned by
+     GitHub #829, not an exemption from future lineage work.
     Job-backed ingestion idempotency replay must resolve from durable lifecycle outcome evidence,
     never from job existence alone. A replay-safe queued job may return its existing `202`;
     recorded failures must reproduce the original status, stable code, source-safe detail, job

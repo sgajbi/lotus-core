@@ -41,8 +41,14 @@ closure of persisted lineage exposure or the complete producer-policy inventory.
 - Accrued-income and position-valuation calculations now use deterministic 64-digit working
   precision, normalize once to `NUMERIC(18,10)`, fail before persistence on magnitude overflow,
   and bind policy name/version/shape/rounding into calculation lineage.
-- Position valuation normalizes clean value and accrued income before deriving the durable total,
+- Position valuation normalizes clean value and accrued income before deriving the ledger-bound total,
   so the visible component sum remains exactly equal to total market value after rounding.
+- Added a compact versioned inventory for all eight calculated-output policies and a deterministic
+  AST guard. It rejects unclassified or stale declarations, literal source/contract drift, blank
+  ownership, unused policies, invalid lineage posture, and missing required lineage binding.
+- Wired the guard into `make lint`. Six policies are truthfully marked `not-exposed`; that status
+  keeps their remaining lineage work visible under #829 instead of treating absence as
+  non-applicability.
 
 No database schema, migration, topic identity, or runtime topology changed. Exactly representable
 inputs and serialized Decimal values remain unchanged.
@@ -61,6 +67,9 @@ inputs and serialized Decimal values remain unchanged.
   including policy-version hash changes, ambient-context independence, half-even normalization,
   component reconciliation, and pre-persistence overflow rejection.
 - Repository-native MyPy passed across 240 source files.
+- Signed commits `5f5ceac94` and `44bc50938` add and enforce the policy inventory.
+- Seven focused guard tests passed, including repository parity and mutation-style drift, stale,
+  unclassified, unused, missing-lineage, and duplicate-key failures.
 
 ## Compatibility and remaining work
 
@@ -69,6 +78,10 @@ only after acceptance. Gateway #511 is exact-main complete. Accrued-income and p
 lineage hashes intentionally change because numeric policy is now calculation identity. Issue #829
 remains open for complete producer-policy inventory reconciliation and persisted/exposed
 calculation-policy lineage compatibility.
+
+The declaration inventory is now complete and enforced. The residual is narrower: six executing
+policies remain explicitly `not-exposed`, and calculation-policy lineage still needs compatible
+durable persistence/query/replay proof before #829 can close.
 
 ## Documentation decision
 
