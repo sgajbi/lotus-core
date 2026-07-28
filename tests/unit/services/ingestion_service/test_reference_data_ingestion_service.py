@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from decimal import Decimal
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -862,7 +863,7 @@ def _authoritative_market_price_record() -> dict[str, object]:
         "legal_book_id": "SG_PRIVATE_BANK_BOOK",
         "security_id": "BOND_US_CORP_2031",
         "price_date": "2026-07-28",
-        "price": "99.25",
+        "price": Decimal("99.250000000000000001"),
         "currency": "USD",
         "quote_basis": "PERCENT_OF_PRINCIPAL_CLEAN",
         "fact_status": "ACTIVE",
@@ -913,6 +914,7 @@ async def test_append_authoritative_market_price_source_facts_commits_atomically
         "SG_PRIVATE_BANK_BOOK",
         "BOND_US_CORP_2031",
     )
+    assert appended_facts[0].price == Decimal("99.250000000000000001")
     db.commit.assert_awaited_once()
     db.rollback.assert_not_awaited()
 
