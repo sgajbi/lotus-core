@@ -176,11 +176,13 @@ class IngestionPublishCommandHandler:
             idempotency_key=command.idempotency_key,
         )
 
-    @staticmethod
+    @classmethod
     def _reprocessing_replay_result(
+        cls,
         command: BatchPublishIngestionCommand,
         job: IngestionIdempotencyReplay | IngestionJobResponse,
     ) -> IngestionCommandResult:
+        cls._assert_replay_safe(job)
         return IngestionCommandResult(
             message="Duplicate reprocessing request accepted via idempotency replay.",
             entity_type=command.entity_type,
@@ -416,9 +418,7 @@ class IngestionPublishCommandHandler:
                 failure_status_code=HTTP_SERVICE_UNAVAILABLE,
                 failure_code=INGESTION_PUBLISH_FAILED_CODE,
                 failure_detail=detail,
-                failure_headers={
-                    "Retry-After": str(INGESTION_PUBLISH_RETRY_AFTER_SECONDS)
-                },
+                failure_headers={"Retry-After": str(INGESTION_PUBLISH_RETRY_AFTER_SECONDS)},
             )
             raise IngestionPublishUnavailable(publish_error=exc, job_id=job_id) from exc
         except Exception as exc:
@@ -447,9 +447,7 @@ class IngestionPublishCommandHandler:
                 failure_status_code=HTTP_SERVICE_UNAVAILABLE,
                 failure_code=INGESTION_PUBLISH_FAILED_CODE,
                 failure_detail=detail,
-                failure_headers={
-                    "Retry-After": str(INGESTION_PUBLISH_RETRY_AFTER_SECONDS)
-                },
+                failure_headers={"Retry-After": str(INGESTION_PUBLISH_RETRY_AFTER_SECONDS)},
             )
             raise IngestionPublishUnavailable(publish_error=exc, job_id=job_id) from exc
         except Exception as exc:
@@ -457,7 +455,9 @@ class IngestionPublishCommandHandler:
             raise
 
     @staticmethod
-    def _assert_replay_safe(job: IngestionJobResponse) -> None:
+    def _assert_replay_safe(
+        job: IngestionIdempotencyReplay | IngestionJobResponse,
+    ) -> None:
         replay = resolve_ingestion_idempotency_replay(job)
         if replay.accepted:
             return

@@ -47,6 +47,12 @@ class SqlAlchemyIngestionIdempotencyReplayReader:
         return IngestionIdempotencyReplay(
             job_id=str(existing.job_id),
             accepted_count=int(existing.accepted_count),
+            status=str(existing.status),
+            failure_reason=existing.failure_reason,
+            failure_status_code=existing.failure_status_code,
+            failure_code=existing.failure_code,
+            failure_detail=existing.failure_detail,
+            failure_headers=existing.failure_headers,
         )
 
 
