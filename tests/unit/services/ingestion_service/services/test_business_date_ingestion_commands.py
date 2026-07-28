@@ -38,9 +38,24 @@ class _IngestionService:
 
 
 class _JobService:
-    def __init__(self, *, created: bool = True, mark_queued_result: bool = True) -> None:
+    def __init__(
+        self,
+        *,
+        created: bool = True,
+        mark_queued_result: bool = True,
+        existing_status: str = "queued",
+        failure_status_code: int | None = None,
+        failure_code: str | None = None,
+        failure_detail: dict[str, object] | None = None,
+        failure_headers: dict[str, str] | None = None,
+    ) -> None:
         self.created = created
         self.mark_queued_result = mark_queued_result
+        self.existing_status = existing_status
+        self.failure_status_code = failure_status_code
+        self.failure_code = failure_code
+        self.failure_detail = failure_detail
+        self.failure_headers = failure_headers
         self.assert_ingestion_writable = AsyncMock()
         self.create_or_get_job = AsyncMock(side_effect=self._create_or_get_job)
         self.mark_failed = AsyncMock()
@@ -52,10 +67,22 @@ class _JobService:
             job_id="job-business-date",
             accepted_count=kwargs["accepted_count"],
             submitted_at=datetime(2026, 1, 1, tzinfo=UTC),
+            status="accepted",
+            failure_reason=None,
+            failure_status_code=None,
+            failure_code=None,
+            failure_detail=None,
+            failure_headers=None,
         )
         if not self.created:
             job.job_id = "job-existing"
             job.accepted_count = 3
+            job.status = self.existing_status
+            job.failure_reason = "original failure"
+            job.failure_status_code = self.failure_status_code
+            job.failure_code = self.failure_code
+            job.failure_detail = self.failure_detail
+            job.failure_headers = self.failure_headers
         return IngestionJobCreateResult(job=job, created=self.created)
 
     async def _mark_queued(self, _job_id: str) -> bool:
@@ -132,6 +159,59 @@ async def test_business_date_command_replays_duplicate_without_publish_or_queue(
     job_service.mark_queued.assert_not_awaited()
 
 
+async def test_business_date_command_replays_original_failed_outcome() -> None:
+    ingestion_service = _IngestionService()
+    job_service = _JobService(
+        created=False,
+        existing_status="failed",
+        failure_status_code=503,
+        failure_code="INGESTION_PUBLISH_FAILED",
+        failure_detail={
+            "code": "INGESTION_PUBLISH_FAILED",
+            "message": "Kafka unavailable.",
+            "job_id": "job-existing",
+        },
+        failure_headers={"Retry-After": "30"},
+    )
+    handler = _handler(ingestion_service=ingestion_service, job_service=job_service)
+
+    with pytest.raises(BusinessDateIngestionCommandError) as exc_info:
+        await handler.ingest_business_dates(
+            BusinessDateIngestionCommand(
+                request=_request(),
+                endpoint="/ingest/business-dates",
+                idempotency_key="idem-business-dates",
+            )
+        )
+
+    assert exc_info.value.status_code == 503
+    assert exc_info.value.detail == {
+        "code": "INGESTION_PUBLISH_FAILED",
+        "message": "Kafka unavailable.",
+        "job_id": "job-existing",
+    }
+    assert exc_info.value.headers == {"Retry-After": "30"}
+    ingestion_service.publish_business_dates.assert_not_awaited()
+    job_service.mark_queued.assert_not_awaited()
+
+
+async def test_business_date_command_rejects_unresolved_duplicate() -> None:
+    job_service = _JobService(created=False, existing_status="accepted")
+    handler = _handler(job_service=job_service)
+
+    with pytest.raises(BusinessDateIngestionCommandError) as exc_info:
+        await handler.ingest_business_dates(
+            BusinessDateIngestionCommand(
+                request=_request(),
+                endpoint="/ingest/business-dates",
+                idempotency_key="idem-business-dates",
+            )
+        )
+
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail["code"] == "INGESTION_REQUEST_IN_PROGRESS"
+
+
 async def test_business_date_command_marks_failed_for_publish_error() -> None:
     ingestion_service = _IngestionService()
     publish_error = IngestionPublishError(
@@ -157,6 +237,20 @@ async def test_business_date_command_marks_failed_for_publish_error() -> None:
         "job-business-date",
         "failed to publish business date",
         failed_record_keys=["GLOBAL|2026-03-10"],
+        failure_status_code=503,
+        failure_code="INGESTION_PUBLISH_FAILED",
+        failure_detail={
+            "code": "INGESTION_PUBLISH_FAILED",
+            "message": "failed to publish business date",
+            "dependency": "kafka",
+            "retryable": True,
+            "retry_after_seconds": 30,
+            "publish_state": "unpublished",
+            "published_record_count": 0,
+            "failed_record_keys": ["GLOBAL|2026-03-10"],
+            "job_id": "job-business-date",
+        },
+        failure_headers={"Retry-After": "30"},
     )
     job_service.mark_queued.assert_not_awaited()
 
@@ -180,6 +274,24 @@ async def test_business_date_command_records_bookkeeping_failure_when_queue_reje
         "job-business-date",
         "job queue transition was rejected",
         failure_phase="queue_bookkeeping",
+        failure_status_code=500,
+        failure_code="INGESTION_JOB_BOOKKEEPING_FAILED",
+        failure_detail={
+            "code": "INGESTION_JOB_BOOKKEEPING_FAILED",
+            "message": "Ingestion work completed, but job bookkeeping did not complete afterward.",
+            "job_id": "job-business-date",
+            "publish_state": "published",
+            "work_state": "published",
+            "published_record_count": 1,
+            "retry_safe": False,
+            "recovery_action": "repair_ingestion_job_bookkeeping",
+            "recovery_path": "ingestion_job_bookkeeping_repair",
+            "supportability_reason_code": "POST_PUBLISH_BOOKKEEPING_FAILED",
+            "remediation": (
+                "Inspect the job failure history, confirm published or persisted work, "
+                "then run the governed bookkeeping repair action before client retry."
+            ),
+        },
     )
 
 

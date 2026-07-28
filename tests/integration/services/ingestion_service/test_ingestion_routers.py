@@ -7897,15 +7897,18 @@ async def test_ingest_business_dates_returns_failed_record_keys_when_publish_fai
     mock_kafka_producer: MagicMock,
 ):
     mock_kafka_producer.publish_message.side_effect = RuntimeError("broker timeout")
+    headers = {"X-Idempotency-Key": "business-date-publish-failure-replay-001"}
+    payload = _business_date_batch_payload("2025-01-07", "2025-01-08")
 
-    response = await async_test_client.post(
+    first = await async_test_client.post(
         "/ingest/business-dates",
-        json=_business_date_batch_payload("2025-01-07", "2025-01-08"),
+        json=payload,
+        headers=headers,
     )
 
-    body = response.json()
+    body = first.json()
     _assert_publish_dependency_failure(
-        response,
+        first,
         failed_record_keys=[
             "GLOBAL|2025-01-07",
             "GLOBAL|2025-01-08",
@@ -7916,6 +7919,18 @@ async def test_ingest_business_dates_returns_failed_record_keys_when_publish_fai
         "GLOBAL|2025-01-08",
     ]
     job_id = body["detail"]["job_id"]
+    first_publish_call_count = mock_kafka_producer.publish_message.call_count
+
+    second = await async_test_client.post(
+        "/ingest/business-dates",
+        json=payload,
+        headers=headers,
+    )
+
+    assert second.status_code == first.status_code
+    assert second.json() == body
+    assert second.headers["Retry-After"] == first.headers["Retry-After"] == "30"
+    assert mock_kafka_producer.publish_message.call_count == first_publish_call_count
 
     failure_history = await event_replay_test_client.get(f"/ingestion/jobs/{job_id}/failures")
     assert failure_history.status_code == 200
