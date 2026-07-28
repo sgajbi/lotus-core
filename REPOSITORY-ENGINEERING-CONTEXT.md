@@ -312,6 +312,14 @@ Current repository posture:
     enforcement migrations should add checks as `NOT VALID`, validate all new constraints for one
     table in one statement, fail atomically on contaminated history, and receive DB-direct
     rejection, finite boundary, downgrade, and reapply proof.
+    Job-backed ingestion idempotency replay must resolve from durable lifecycle outcome evidence,
+    never from job existence alone. A replay-safe queued job may return its existing `202`;
+    recorded failures must reproduce the original status, stable code, source-safe detail, job
+    identity, and safe headers; unresolved accepted jobs return
+    `409 INGESTION_REQUEST_IN_PROGRESS`; unknown or incomplete states fail closed. Apply this
+    policy through the shared application resolver across publish-backed, reference-data,
+    business-date, bundle, and pre-resolution reprocessing paths. Single-transaction ingestion is
+    intentionally jobless and does not claim this job-backed replay contract.
     Cost-engine domain models now follow
     `docs/standards/cost-basis-domain-standard.md`:
     `portfolio_transaction_processing_service/app/domain/cost_basis` must stay free of

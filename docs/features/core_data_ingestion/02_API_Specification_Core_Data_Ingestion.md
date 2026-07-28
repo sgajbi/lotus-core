@@ -5,9 +5,30 @@ This document provides the detailed technical specification for the `ingestion_s
 * **Base URL:** `http://core-ingestion.dev.lotus`
 * **Success Response:** All endpoints return a `202 Accepted` status code upon successfully queueing the data for processing.
 * **Error Responses:**
+    * `409 Conflict`: The idempotency key conflicts with another payload, or the matching request
+      remains in a non-replay-safe `accepted` state.
     * `422 Unprocessable Entity`: The request body is malformed or fails validation.
     * `500 Internal Server Error`: An unexpected server-side error occurred.
+    * `503 Service Unavailable`: A dependency such as Kafka prevented asynchronous acceptance.
 * **Headers:** Every response includes an `X-Correlation-ID` header for end-to-end request tracing.
+
+---
+
+## Idempotent replay outcomes
+
+Job-backed ingestion commands resolve retries from durable lifecycle evidence:
+
+| Existing job evidence | Retry outcome |
+| :--- | :--- |
+| `queued` with no recorded failure outcome | `202 Accepted`, same job identifier, no repeated work |
+| durable failure outcome | original HTTP status, stable code, safe detail, job identifier, and safe response headers |
+| `accepted` with no durable outcome | `409 INGESTION_REQUEST_IN_PROGRESS` |
+| unknown or incomplete legacy state | fail-closed `500`, never a successful acknowledgement |
+| same endpoint and key with a different canonical payload | `409 INGESTION_IDEMPOTENCY_CONFLICT` |
+
+The single-transaction endpoint does not create an ingestion job and therefore does not offer this
+job-backed replay contract. A `202` response certifies queue acceptance only; downstream
+calculation and persistence remain asynchronous.
 
 ---
 

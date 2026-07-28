@@ -314,13 +314,14 @@ async def test_openapi_describes_ingestion_idempotency_conflict_response(async_t
 
     for route in job_backed_routes:
         response_409 = paths[route]["post"]["responses"]["409"]["content"]["application/json"]
-        if "example" in response_409:
-            detail = response_409["example"]["detail"]
-        else:
-            detail = response_409["examples"]["idempotency_conflict"]["value"]["detail"]
+        detail = response_409["examples"]["idempotency_conflict"]["value"]["detail"]
         assert detail["code"] == "INGESTION_IDEMPOTENCY_CONFLICT"
         assert detail["endpoint"] == "/ingest/transactions"
         assert detail["idempotency_key"]
+        in_progress = response_409["examples"]["request_in_progress"]["value"]["detail"]
+        assert in_progress["code"] == "INGESTION_REQUEST_IN_PROGRESS"
+        assert in_progress["status"] == "accepted"
+        assert in_progress["job_id"]
 
 
 async def test_openapi_describes_remaining_ingestion_operational_responses(async_test_client):
