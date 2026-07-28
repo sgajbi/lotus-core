@@ -12,6 +12,7 @@ import pytest
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from portfolio_common.database_models import Base
+from portfolio_common.financial_numeric import ExactNumeric
 from sqlalchemy import Numeric, text
 from sqlalchemy.exc import DatabaseError
 
@@ -55,7 +56,7 @@ def _governed_columns(
         numeric_columns = (
             column
             for column in Base.metadata.tables[table_name].columns
-            if isinstance(column.type, Numeric)
+            if isinstance(column.type, (Numeric, ExactNumeric))
         )
         for column in numeric_columns:
             finite_term = f"CAST({column.name} AS TEXT) NOT IN ('NaN', 'Infinity', '-Infinity')"

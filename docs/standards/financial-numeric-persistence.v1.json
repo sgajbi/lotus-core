@@ -53,6 +53,7 @@
     }
   },
   "default_storage_shape": "bounded-18-10",
+  "exact_bind_enforcement": "required",
   "storage_shape_overrides": {
     "market_price_source_facts.price": "exact-unbounded",
     "client_tax_rule_sets.threshold_amount": "bounded-18-4",

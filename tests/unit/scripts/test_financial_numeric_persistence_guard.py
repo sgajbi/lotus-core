@@ -224,6 +224,30 @@ def test_guard_accepts_explicit_finiteness_and_sign_policy(tmp_path: Path) -> No
     assert report.planned_count == 0
 
 
+def test_guard_requires_exact_numeric_when_contract_enables_bind_enforcement(
+    tmp_path: Path,
+) -> None:
+    contract = _contract()
+    contract["exact_bind_enforcement"] = "required"
+    contract_path = _write_fixture(
+        tmp_path,
+        model=_model(
+            constraint=(
+                "value NOT IN ('NaN'::numeric, 'Infinity'::numeric, "
+                "'-Infinity'::numeric) AND value > 0"
+            )
+        ),
+        contract=contract,
+    )
+
+    report = evaluate_guard(tmp_path, contract_path)
+
+    assert report.findings == (
+        "financial_rows.value: precision contract requires ExactNumeric bind enforcement; "
+        "found Numeric",
+    )
+
+
 def test_guard_accepts_postgresql_text_cast_finiteness_constraint(
     tmp_path: Path,
 ) -> None:
@@ -469,8 +493,8 @@ def test_guard_rejects_unsupported_contract_extension_in_v2(tmp_path: Path) -> N
     assert (
         "contract v2 keys must be schema_version, model_path, expected_inventory, "
         "profiles, rollout_statuses, storage_shapes, default_storage_shape, "
-        "storage_shape_overrides, domain_families, table_domain_families, and tables"
-        in evaluate_guard(tmp_path, contract_path).findings
+        "exact_bind_enforcement, storage_shape_overrides, domain_families, "
+        "table_domain_families, and tables" in evaluate_guard(tmp_path, contract_path).findings
     )
 
 

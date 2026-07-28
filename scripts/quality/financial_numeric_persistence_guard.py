@@ -21,7 +21,7 @@ _CANONICAL_PROFILES = {
 }
 _ROLLOUT_STATUSES = {"orm-enforced", "planned"}
 _SPECIAL_NUMERIC_LITERALS = ("NaN", "Infinity", "-Infinity")
-_SQLALCHEMY_NUMERIC_CONSTRUCTORS = {"Numeric", "NUMERIC", "DECIMAL"}
+_SQLALCHEMY_NUMERIC_CONSTRUCTORS = {"Numeric", "NUMERIC", "DECIMAL", "ExactNumeric"}
 _FINITE_CONSTRAINT_HELPER = "_finite_numeric_check_constraint"
 _V2_CONTRACT_KEYS = {
     "schema_version",
@@ -31,6 +31,7 @@ _V2_CONTRACT_KEYS = {
     "rollout_statuses",
     "storage_shapes",
     "default_storage_shape",
+    "exact_bind_enforcement",
     "storage_shape_overrides",
     "domain_families",
     "table_domain_families",
@@ -62,6 +63,7 @@ class NumericColumn:
     nullable: bool
     precision: int | None
     scale: int | None
+    constructor: str
     check_constraints: tuple[str, ...]
 
     @property
@@ -429,7 +431,7 @@ def _numeric_column(
     constructors: frozenset[str],
     numeric_aliases: frozenset[str],
     alias_shapes: dict[str, tuple[int | None, int | None]],
-) -> tuple[str, bool, int | None, int | None] | None:
+) -> tuple[str, bool, int | None, int | None, str] | None:
     target: ast.Name
     value: ast.expr | None
     if (
@@ -469,7 +471,14 @@ def _numeric_column(
         alias_shapes=alias_shapes,
         declaration=target.id,
     )
-    return target.id, nullable, precision, scale
+    constructor = (
+        _call_name(numeric_expression.func)
+        if isinstance(numeric_expression, ast.Call)
+        else _call_name(numeric_expression)
+    )
+    if constructor is None:
+        raise UnsupportedNumericDeclarationError(f"{target.id}: cannot resolve Numeric constructor")
+    return target.id, nullable, precision, scale, constructor
 
 
 def inventory_numeric_columns(model_path: Path) -> tuple[NumericColumn, ...]:
@@ -498,7 +507,7 @@ def inventory_numeric_columns(model_path: Path) -> tuple[NumericColumn, ...]:
             )
             if column is None:
                 continue
-            name, nullable, precision, scale = column
+            name, nullable, precision, scale, constructor = column
             inventory.append(
                 NumericColumn(
                     table=table,
@@ -506,6 +515,7 @@ def inventory_numeric_columns(model_path: Path) -> tuple[NumericColumn, ...]:
                     nullable=nullable,
                     precision=precision,
                     scale=scale,
+                    constructor=constructor,
                     check_constraints=checks,
                 )
             )
@@ -770,12 +780,19 @@ def evaluate_guard(repo_root: Path = ROOT, contract_path: Path | None = None) ->
 
     if contract.get("schema_version") != "2.0.0":
         findings.append("contract.schema_version must be 2.0.0")
-    if set(contract) != _V2_CONTRACT_KEYS:
+    required_contract_keys = _V2_CONTRACT_KEYS - {"exact_bind_enforcement"}
+    if set(contract) not in (required_contract_keys, _V2_CONTRACT_KEYS):
         findings.append(
             "contract v2 keys must be schema_version, model_path, expected_inventory, "
             "profiles, rollout_statuses, storage_shapes, default_storage_shape, "
-            "storage_shape_overrides, domain_families, table_domain_families, and tables"
+            "exact_bind_enforcement, storage_shape_overrides, domain_families, "
+            "table_domain_families, and tables"
         )
+    if (
+        "exact_bind_enforcement" in contract
+        and contract.get("exact_bind_enforcement") != "required"
+    ):
+        findings.append("contract.exact_bind_enforcement must be required when declared")
     if contract.get("profiles") != _CANONICAL_PROFILES:
         findings.append("contract.profiles must match the canonical finite-policy vocabulary")
     statuses = contract.get("rollout_statuses")
@@ -861,6 +878,14 @@ def evaluate_guard(repo_root: Path = ROOT, contract_path: Path | None = None) ->
             findings.append(
                 f"{identity}: ORM Numeric{actual_shape!r} conflicts with "
                 f"storage shape {shape_name!r} Numeric{expected_shape!r}"
+            )
+        if (
+            contract.get("exact_bind_enforcement") == "required"
+            and column.constructor != "ExactNumeric"
+        ):
+            findings.append(
+                f"{identity}: precision contract requires ExactNumeric bind enforcement; "
+                f"found {column.constructor}"
             )
         finite_enforced = _explicitly_excludes_special_values(column)
         sign_enforced = _has_required_sign_constraint(column, str(profile["sign"]))
