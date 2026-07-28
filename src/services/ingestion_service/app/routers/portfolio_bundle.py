@@ -117,7 +117,11 @@ async def ingest_portfolio_bundle(
             )
         )
     except IngestionPublishCommandError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail=exc.detail,
+            headers=exc.headers,
+        ) from exc
     except IngestionPublishUnavailable as exc:
         raise_ingestion_publish_unavailable(exc.publish_error, job_id=exc.job_id)
     except IngestionPublishBookkeepingFailed as exc:
