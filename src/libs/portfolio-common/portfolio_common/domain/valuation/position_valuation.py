@@ -7,7 +7,7 @@ not price securities, infer quote conventions, forecast rates, or derive derivat
 from __future__ import annotations
 
 from dataclasses import dataclass
-from decimal import Decimal, localcontext
+from decimal import Decimal
 from enum import StrEnum
 
 from ..calculation_lineage import (
@@ -15,6 +15,7 @@ from ..calculation_lineage import (
     FinancialSourceReference,
     build_calculation_lineage,
 )
+from .numeric_policy import POSITION_VALUATION_LEDGER_OUTPUT_V1
 
 
 class UnsupportedValuationError(ValueError):
@@ -22,8 +23,8 @@ class UnsupportedValuationError(ValueError):
 
 
 POSITION_VALUATION_ALGORITHM_ID = "POSITION_VALUATION_SCALING"
-POSITION_VALUATION_ALGORITHM_VERSION = 1
-POSITION_VALUATION_INTERMEDIATE_PRECISION = 50
+POSITION_VALUATION_ALGORITHM_VERSION = 2
+POSITION_VALUATION_INTERMEDIATE_PRECISION = POSITION_VALUATION_LEDGER_OUTPUT_V1.working_precision
 
 
 class ValuationInputBasis(StrEnum):
@@ -218,7 +219,7 @@ class PositionValuationInputs:
 
 @dataclass(frozen=True, slots=True)
 class PositionValuationResult:
-    """Distinct supported measures produced without implicit rounding."""
+    """Distinct supported measures normalized once by the owning output policy."""
 
     source_currency: str
     reporting_currency: str
@@ -237,6 +238,38 @@ class PositionValuationResult:
     lineage: CalculationLineage
 
 
+@dataclass(frozen=True, slots=True)
+class _NormalizedPositionOutputs:
+    """Ledger-representable outputs kept typed until lineage serialization."""
+
+    current_principal: Decimal | None
+    clean_value_local: Decimal | None
+    clean_value_reporting: Decimal | None
+    accrued_income_local: Decimal | None
+    accrued_income_reporting: Decimal | None
+    total_market_value_local: Decimal | None
+    total_market_value_reporting: Decimal | None
+    notional_exposure_local: Decimal | None
+    notional_exposure_reporting: Decimal | None
+    settlement_variation_local: Decimal | None
+    settlement_variation_reporting: Decimal | None
+
+    def lineage_payload(self) -> dict[str, Decimal | None]:
+        return {
+            "accrued_income_local": self.accrued_income_local,
+            "accrued_income_reporting": self.accrued_income_reporting,
+            "clean_value_local": self.clean_value_local,
+            "clean_value_reporting": self.clean_value_reporting,
+            "current_principal": self.current_principal,
+            "notional_exposure_local": self.notional_exposure_local,
+            "notional_exposure_reporting": self.notional_exposure_reporting,
+            "settlement_variation_local": self.settlement_variation_local,
+            "settlement_variation_reporting": self.settlement_variation_reporting,
+            "total_market_value_local": self.total_market_value_local,
+            "total_market_value_reporting": self.total_market_value_reporting,
+        }
+
+
 def calculate_position_valuation(
     *,
     policy: PositionValuationPolicy,
@@ -246,8 +279,7 @@ def calculate_position_valuation(
 
     evidence = inputs.evidence
     _validate_source_value(policy, inputs.source_value)
-    with localcontext() as context:
-        context.prec = POSITION_VALUATION_INTERMEDIATE_PRECISION
+    with POSITION_VALUATION_LEDGER_OUTPUT_V1.arithmetic_context():
         current_principal = _resolve_current_principal(policy, inputs)
         scaled_value = _scale_source_value(policy, inputs, current_principal)
         accrued_income = _resolve_accrued_income(policy, inputs)
@@ -271,52 +303,150 @@ def calculate_position_valuation(
         else:
             settlement_variation = scaled_value
 
-        source_currency = _normalize_currency(inputs.source_currency)
-        reporting_currency = _normalize_currency(inputs.reporting_currency)
-        accrued_income_reporting = _convert(accrued_income, fx_rate)
-        clean_value_reporting = _convert(clean_value, fx_rate)
-        notional_exposure_reporting = _convert(notional_exposure, fx_rate)
-        settlement_variation_reporting = _convert(settlement_variation, fx_rate)
-        total_market_value_reporting = _convert(total_market_value, fx_rate)
-        output_payload = {
-            "accrued_income_local": accrued_income,
-            "accrued_income_reporting": accrued_income_reporting,
-            "clean_value_local": clean_value,
-            "clean_value_reporting": clean_value_reporting,
-            "current_principal": current_principal,
-            "notional_exposure_local": notional_exposure,
-            "notional_exposure_reporting": notional_exposure_reporting,
-            "reporting_currency": reporting_currency,
-            "settlement_variation_local": settlement_variation,
-            "settlement_variation_reporting": settlement_variation_reporting,
-            "source_currency": source_currency,
-            "source_to_reporting_fx_rate": fx_rate,
-            "total_market_value_local": total_market_value,
-            "total_market_value_reporting": total_market_value_reporting,
-        }
+    normalized = _normalize_outputs(
+        current_principal=current_principal,
+        clean_value=clean_value,
+        accrued_income=accrued_income,
+        total_market_value=total_market_value,
+        notional_exposure=notional_exposure,
+        settlement_variation=settlement_variation,
+        fx_rate=fx_rate,
+    )
+    source_currency = _normalize_currency(inputs.source_currency)
+    reporting_currency = _normalize_currency(inputs.reporting_currency)
+    output_payload = {
+        **normalized.lineage_payload(),
+        "reporting_currency": reporting_currency,
+        "source_currency": source_currency,
+        "source_to_reporting_fx_rate": fx_rate,
+    }
     lineage = build_calculation_lineage(
         algorithm_id=POSITION_VALUATION_ALGORITHM_ID,
         algorithm_version=POSITION_VALUATION_ALGORITHM_VERSION,
         intermediate_precision=POSITION_VALUATION_INTERMEDIATE_PRECISION,
         input_payload=_position_input_payload(policy=policy, inputs=inputs, evidence=evidence),
         output_payload=output_payload,
+        numeric_output_policy=POSITION_VALUATION_LEDGER_OUTPUT_V1.lineage_identity(),
     )
     return PositionValuationResult(
         source_currency=source_currency,
         reporting_currency=reporting_currency,
         source_to_reporting_fx_rate=fx_rate,
-        current_principal=current_principal,
-        clean_value_local=clean_value,
-        clean_value_reporting=clean_value_reporting,
+        current_principal=normalized.current_principal,
+        clean_value_local=normalized.clean_value_local,
+        clean_value_reporting=normalized.clean_value_reporting,
+        accrued_income_local=normalized.accrued_income_local,
+        accrued_income_reporting=normalized.accrued_income_reporting,
+        total_market_value_local=normalized.total_market_value_local,
+        total_market_value_reporting=normalized.total_market_value_reporting,
+        notional_exposure_local=normalized.notional_exposure_local,
+        notional_exposure_reporting=normalized.notional_exposure_reporting,
+        settlement_variation_local=normalized.settlement_variation_local,
+        settlement_variation_reporting=normalized.settlement_variation_reporting,
+        lineage=lineage,
+    )
+
+
+def _normalize_outputs(
+    *,
+    current_principal: Decimal | None,
+    clean_value: Decimal | None,
+    accrued_income: Decimal | None,
+    total_market_value: Decimal | None,
+    notional_exposure: Decimal | None,
+    settlement_variation: Decimal | None,
+    fx_rate: Decimal,
+) -> _NormalizedPositionOutputs:
+    policy = POSITION_VALUATION_LEDGER_OUTPUT_V1
+    current_principal = _normalize_optional(
+        current_principal,
+        field_name="current_principal",
+    )
+    clean_value = _normalize_optional(clean_value, field_name="clean_value_local")
+    accrued_income = _normalize_optional(accrued_income, field_name="accrued_income_local")
+    notional_exposure = _normalize_optional(
+        notional_exposure,
+        field_name="notional_exposure_local",
+    )
+    settlement_variation = _normalize_optional(
+        settlement_variation,
+        field_name="settlement_variation_local",
+    )
+    if clean_value is not None:
+        total_market_value = policy.add(
+            clean_value,
+            accrued_income or Decimal(0),
+            field_name="total_market_value_local",
+        )
+    else:
+        total_market_value = _normalize_optional(
+            total_market_value,
+            field_name="total_market_value_local",
+        )
+
+    clean_value_reporting = _convert_and_normalize(
+        clean_value,
+        fx_rate,
+        field_name="clean_value_reporting",
+    )
+    accrued_income_reporting = _convert_and_normalize(
+        accrued_income,
+        fx_rate,
+        field_name="accrued_income_reporting",
+    )
+    if clean_value_reporting is not None:
+        total_market_value_reporting = policy.add(
+            clean_value_reporting,
+            accrued_income_reporting or Decimal(0),
+            field_name="total_market_value_reporting",
+        )
+    else:
+        total_market_value_reporting = _convert_and_normalize(
+            total_market_value,
+            fx_rate,
+            field_name="total_market_value_reporting",
+        )
+    return _NormalizedPositionOutputs(
         accrued_income_local=accrued_income,
         accrued_income_reporting=accrued_income_reporting,
+        clean_value_local=clean_value,
+        clean_value_reporting=clean_value_reporting,
+        current_principal=current_principal,
+        notional_exposure_local=notional_exposure,
+        notional_exposure_reporting=_convert_and_normalize(
+            notional_exposure,
+            fx_rate,
+            field_name="notional_exposure_reporting",
+        ),
+        settlement_variation_local=settlement_variation,
+        settlement_variation_reporting=_convert_and_normalize(
+            settlement_variation,
+            fx_rate,
+            field_name="settlement_variation_reporting",
+        ),
         total_market_value_local=total_market_value,
         total_market_value_reporting=total_market_value_reporting,
-        notional_exposure_local=notional_exposure,
-        notional_exposure_reporting=notional_exposure_reporting,
-        settlement_variation_local=settlement_variation,
-        settlement_variation_reporting=settlement_variation_reporting,
-        lineage=lineage,
+    )
+
+
+def _normalize_optional(value: Decimal | None, *, field_name: str) -> Decimal | None:
+    if value is None:
+        return None
+    return POSITION_VALUATION_LEDGER_OUTPUT_V1.normalize(value, field_name=field_name)
+
+
+def _convert_and_normalize(
+    value: Decimal | None,
+    fx_rate: Decimal,
+    *,
+    field_name: str,
+) -> Decimal | None:
+    if value is None:
+        return None
+    return POSITION_VALUATION_LEDGER_OUTPUT_V1.multiply(
+        value,
+        fx_rate,
+        field_name=field_name,
     )
 
 
@@ -542,7 +672,3 @@ def _required(value: Decimal | None, field_name: str) -> Decimal:
 
 def _normalize_currency(value: str) -> str:
     return value.strip().upper()
-
-
-def _convert(value: Decimal | None, fx_rate: Decimal) -> Decimal | None:
-    return value * fx_rate if value is not None else None
