@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from decimal import Decimal, getcontext
 
 import pytest
@@ -93,3 +94,13 @@ def test_calculated_policy_rejects_insufficient_working_precision() -> None:
             scale=10,
             working_precision=35,
         )
+
+
+def test_arithmetic_context_preserves_frozen_domain_exception_identity() -> None:
+    @dataclass(frozen=True)
+    class FrozenDomainError(Exception):
+        reason: str
+
+    with pytest.raises(FrozenDomainError, match="rejected"):
+        with POLICY.arithmetic_context():
+            raise FrozenDomainError("rejected")
