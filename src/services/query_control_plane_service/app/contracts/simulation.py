@@ -97,7 +97,10 @@ class SimulationChangeInput(BaseModel):
     )
     price: Decimal | None = Field(
         default=None,
-        description="Unit price associated with the simulated transaction, when relevant.",
+        gt=0,
+        description=(
+            "Strictly positive unit price associated with the simulated transaction, when relevant."
+        ),
         examples=[127.45],
     )
     amount: Decimal | None = Field(

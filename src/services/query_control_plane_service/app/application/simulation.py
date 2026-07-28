@@ -169,6 +169,7 @@ class SimulationService:
         session_id: str,
         changes: list[SimulationChangeCommand],
     ) -> SimulationChangesResult:
+        self._validate_change_prices(changes)
         session = await self._require_active_session(session_id)
         await self._store.stage_changes(
             session,
@@ -236,6 +237,17 @@ class SimulationService:
         if session.expires_at < self._clock.utc_now():
             raise SimulationMutationInvalidError(f"Simulation session {session_id} is expired")
         return session
+
+    @staticmethod
+    def _validate_change_prices(changes: list[SimulationChangeCommand]) -> None:
+        if any(
+            change.price is not None
+            and (not change.price.is_finite() or change.price <= Decimal("0"))
+            for change in changes
+        ):
+            raise SimulationMutationInvalidError(
+                "Simulation change price must be a finite positive value"
+            )
 
     async def _commit(self) -> None:
         try:

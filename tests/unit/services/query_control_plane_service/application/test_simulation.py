@@ -237,6 +237,35 @@ async def test_add_changes_returns_versioned_records(dependencies):
     assert staged["changes"][0]["change_id"] == "C2"
 
 
+@pytest.mark.parametrize("price", [Decimal("0"), Decimal("-0.01"), Decimal("NaN")])
+async def test_add_changes_rejects_invalid_price_before_staging(dependencies, price):
+    store, _, unit_of_work = dependencies
+
+    with pytest.raises(
+        SimulationMutationInvalidError,
+        match="price must be a finite positive value",
+    ):
+        await _service(dependencies).add_changes(
+            "S1",
+            [
+                SimulationChangeCommand(
+                    security_id="SEC_MSFT_US",
+                    transaction_type="BUY",
+                    quantity=Decimal("5"),
+                    price=price,
+                    amount=None,
+                    currency="USD",
+                    effective_date=None,
+                    metadata=None,
+                )
+            ],
+        )
+
+    store.get_session.assert_not_awaited()
+    store.stage_changes.assert_not_awaited()
+    unit_of_work.commit.assert_not_awaited()
+
+
 @pytest.mark.parametrize(
     ("session", "message"),
     [
