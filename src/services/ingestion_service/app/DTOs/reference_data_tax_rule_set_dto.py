@@ -2,13 +2,16 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Annotated, Literal, cast
+from typing import Literal, cast
 
 from portfolio_common.domain.currency import normalize_optional_currency_code
 from portfolio_common.openapi_enrichment import exact_numeric_openapi_description
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from .financial_numeric_fields import ExactDecimal18_4, ExactDecimal18_10
+from .financial_numeric_fields import (
+    ExactNonNegativeDecimal18_4,
+    ExactRatioDecimal18_10,
+)
 from .ingestion_validation_errors import (
     INVALID_THRESHOLD_PAIR,
     MISSING_RULE_EVIDENCE,
@@ -16,9 +19,6 @@ from .ingestion_validation_errors import (
     validate_effective_window,
     validate_unique_records,
 )
-
-NonNegativeDecimal = Annotated[ExactDecimal18_4, Field(ge=Decimal(0))]
-RatioDecimal = Annotated[ExactDecimal18_10, Field(ge=Decimal(0), le=Decimal(1))]
 
 
 def _validate_tax_rule_effective_window(
@@ -110,7 +110,7 @@ class ClientTaxRuleSetRecord(BaseModel):
     applies_to_asset_classes: list[str] = Field(default_factory=list)
     applies_to_security_ids: list[str] = Field(default_factory=list)
     applies_to_income_types: list[str] = Field(default_factory=list)
-    rate: RatioDecimal | None = Field(
+    rate: ExactRatioDecimal18_10 | None = Field(
         None,
         description=exact_numeric_openapi_description(
             "Reference tax rate ratio supplied by the source rule set.",
@@ -118,7 +118,7 @@ class ClientTaxRuleSetRecord(BaseModel):
             scale=10,
         ),
     )
-    threshold_amount: NonNegativeDecimal | None = Field(
+    threshold_amount: ExactNonNegativeDecimal18_4 | None = Field(
         None,
         description=exact_numeric_openapi_description(
             "Nonnegative monetary threshold supplied by the source rule set.",

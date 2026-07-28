@@ -20,6 +20,8 @@ after synchronous validation had succeeded and asynchronous processing had begun
   liquidity reserves, withdrawals, model-portfolio weights, benchmark composition and returns,
   index prices and returns, risk-free values, look-through weights, and FX-contract economics.
 - Preserved existing allocation and rate ranges.
+- Ordered range metadata before exact-value validation so generated OpenAPI retains standard
+  `minimum`, `maximum`, and `exclusiveMinimum` keywords for SDK and form generators.
 - Enforced positive instrument buy amount, sell amount, and contract rate at ingress, matching the
   existing persistence profile.
 - Published each exact storage shape and reject-not-round behavior in generated OpenAPI.
@@ -38,9 +40,10 @@ correctness hardening. No blanket rounding was introduced.
 - Signed client-policy commit `6657bef0f001dac024189f2579449588d9bee7cc`.
 - Signed benchmark/reference/instrument commit
   `afed3e010643ea55e0cc20e5aa113bb7aa970000`.
-- 85 focused tests passed with warnings treated as errors.
+- 102 focused tests passed with warnings treated as errors, including machine-readable JSON Schema
+  range assertions for all 17 bounded fields.
 - Type checking passed across 238 source files.
-- OpenAPI quality, Ruff, formatting, and diff-hygiene gates passed.
+- OpenAPI quality, vocabulary parity, Spectral, Ruff, formatting, and diff-hygiene gates passed.
 
 ## Remaining #829 work
 

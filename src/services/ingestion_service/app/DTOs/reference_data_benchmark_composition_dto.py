@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 from datetime import date
-from decimal import Decimal
 
 from portfolio_common.openapi_enrichment import exact_numeric_openapi_description
 from pydantic import BaseModel, ConfigDict, Field
 
-from .financial_numeric_fields import ExactDecimal18_10
+from .financial_numeric_fields import ExactRatioDecimal18_10
 from .reference_data_source_observation_dto import SourceObservationLineage
 
 
@@ -27,10 +26,8 @@ class BenchmarkCompositionRecord(SourceObservationLineage):
         description="Composition effective end date.",
         examples=["2026-03-31"],
     )
-    composition_weight: ExactDecimal18_10 = Field(
+    composition_weight: ExactRatioDecimal18_10 = Field(
         ...,
-        ge=Decimal(0),
-        le=Decimal(1),
         description=exact_numeric_openapi_description(
             "Component weight between 0 and 1.",
             precision=18,

@@ -1,13 +1,12 @@
 # services/ingestion_service/app/DTOs/instrument_dto.py
 from datetime import date
-from decimal import Decimal
 from typing import List, Optional
 
 from portfolio_common.domain.currency import normalize_optional_currency_code
 from portfolio_common.openapi_enrichment import exact_numeric_openapi_description
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from .financial_numeric_fields import ExactDecimal18_10
+from .financial_numeric_fields import ExactPositiveDecimal18_10
 
 
 class Instrument(BaseModel):
@@ -73,9 +72,8 @@ class Instrument(BaseModel):
         description="Sold currency for FX contract instruments.",
         examples=["USD"],
     )
-    buy_amount: Optional[ExactDecimal18_10] = Field(
+    buy_amount: Optional[ExactPositiveDecimal18_10] = Field(
         None,
-        gt=Decimal(0),
         description=exact_numeric_openapi_description(
             "Bought notional amount for FX contract instruments.",
             precision=18,
@@ -83,9 +81,8 @@ class Instrument(BaseModel):
         ),
         examples=["1000000.00"],
     )
-    sell_amount: Optional[ExactDecimal18_10] = Field(
+    sell_amount: Optional[ExactPositiveDecimal18_10] = Field(
         None,
-        gt=Decimal(0),
         description=exact_numeric_openapi_description(
             "Sold notional amount for FX contract instruments.",
             precision=18,
@@ -93,9 +90,8 @@ class Instrument(BaseModel):
         ),
         examples=["1085000.00"],
     )
-    contract_rate: Optional[ExactDecimal18_10] = Field(
+    contract_rate: Optional[ExactPositiveDecimal18_10] = Field(
         None,
-        gt=Decimal(0),
         description=exact_numeric_openapi_description(
             "Contract FX rate for synthetic FX contract instruments.",
             precision=18,

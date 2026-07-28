@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Annotated, Literal
+from typing import Literal
 
 from portfolio_common.openapi_enrichment import exact_numeric_openapi_description
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from .financial_numeric_fields import ExactDecimal18_10
+from .financial_numeric_fields import ExactRatioDecimal18_10
 from .ingestion_validation_errors import (
     INVALID_ALLOCATION_BOUNDS,
     MISSING_PROFILE_SUBSTANCE,
@@ -15,8 +15,6 @@ from .ingestion_validation_errors import (
     validate_effective_window,
     validate_unique_records,
 )
-
-AllocationBound = Annotated[ExactDecimal18_10, Field(ge=Decimal(0), le=Decimal(1))]
 
 
 class SustainabilityPreferenceProfileRecord(BaseModel):
@@ -35,7 +33,7 @@ class SustainabilityPreferenceProfileRecord(BaseModel):
         "active", description="Preference lifecycle status."
     )
     preference_source: str = Field(..., description="Source channel that captured the preference.")
-    minimum_allocation: AllocationBound | None = Field(
+    minimum_allocation: ExactRatioDecimal18_10 | None = Field(
         None,
         description=exact_numeric_openapi_description(
             "Minimum portfolio allocation ratio required by the source preference.",
@@ -43,7 +41,7 @@ class SustainabilityPreferenceProfileRecord(BaseModel):
             scale=10,
         ),
     )
-    maximum_allocation: AllocationBound | None = Field(
+    maximum_allocation: ExactRatioDecimal18_10 | None = Field(
         None,
         description=exact_numeric_openapi_description(
             "Maximum portfolio allocation ratio permitted by the source preference.",
