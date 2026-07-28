@@ -73,6 +73,8 @@ async def test_mark_queued_uses_single_atomic_update(
     assert "status=:status" in compiled_sql
     assert "completed_at=:completed_at" in compiled_sql
     assert "failure_reason=:failure_reason" in compiled_sql
+    assert "failure_detail=NULL" in compiled_sql
+    assert "failure_headers=NULL" in compiled_sql
     assert "RETURNING ingestion_jobs.status" in compiled_sql
 
 
@@ -189,6 +191,8 @@ async def test_mark_retried_and_queued_is_single_expected_status_update(
         in compiled_sql
     )
     assert "last_retried_at=:last_retried_at" in compiled_sql
+    assert "failure_detail=NULL" in compiled_sql
+    assert "failure_headers=NULL" in compiled_sql
     assert "RETURNING ingestion_jobs.endpoint, ingestion_jobs.entity_type" in compiled_sql
 
 
