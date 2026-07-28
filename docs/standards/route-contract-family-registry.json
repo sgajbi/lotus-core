@@ -47,6 +47,7 @@
     },
     "ingestion_service": {
       "Write Ingress": [
+        "POST /ingest/authoritative-market-price-source-facts",
         "POST /ingest/benchmark-assignments",
         "POST /ingest/benchmark-compositions",
         "POST /ingest/benchmark-definitions",

@@ -42,6 +42,12 @@ EXPECTED_COMMANDS = {
         "valuation_policy_assignments",
         "upsert_instrument_valuation_policy_assignments",
     ),
+    "authoritative_market_price_source_fact": (
+        "/ingest/authoritative-market-price-source-facts",
+        "authoritative_market_price_source_fact",
+        "market_price_source_facts",
+        "append_authoritative_market_price_source_facts",
+    ),
     "mandate_binding": (
         "/ingest/mandate-bindings",
         "mandate_binding",

@@ -35,6 +35,8 @@ from portfolio_common.domain.currency import normalize_currency_code
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..DTOs.market_price_dto import AuthoritativeMarketPriceSourceFact
+from .market_price_source_fact_writer import MarketPriceSourceFactWriter
 from .valuation_policy_assignment_write_guard import ValuationPolicyAssignmentWriteGuard
 
 
@@ -255,6 +257,23 @@ class ReferenceDataIngestionService:
                     "assignment_reason",
                 ],
             )
+            await self._db.commit()
+        except Exception:
+            await self._db.rollback()
+            raise
+
+    async def append_authoritative_market_price_source_facts(
+        self,
+        records: list[dict[str, Any]],
+    ) -> None:
+        if not records:
+            return
+        facts = [
+            AuthoritativeMarketPriceSourceFact.model_validate(record).to_domain()
+            for record in records
+        ]
+        try:
+            await MarketPriceSourceFactWriter(self._db).append_many(facts)
             await self._db.commit()
         except Exception:
             await self._db.rollback()

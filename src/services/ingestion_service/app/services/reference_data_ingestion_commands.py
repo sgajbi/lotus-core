@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from portfolio_common.domain.valuation.assignments import ValuationPolicyAssignmentError
+from portfolio_common.domain.valuation.source_facts import MarketPriceSourceFactError
 
 from ..application.reference_data_ingestion_registry import (
     ReferenceDataIngestionCommand as ReferenceDataRegistryCommand,
@@ -139,6 +140,16 @@ class ReferenceDataIngestionCommandHandler:
     ) -> None:
         try:
             await command.registry_command.persist(self.reference_data_service, command.request)
+        except MarketPriceSourceFactError as exc:
+            await self.ingestion_job_service.mark_failed(job_id, str(exc), failure_phase="persist")
+            raise ReferenceDataIngestionCommandError(
+                HTTP_CONFLICT,
+                {
+                    "code": "MARKET_PRICE_SOURCE_FACT_CONFLICT",
+                    "message": str(exc),
+                    "job_id": job_id,
+                },
+            ) from exc
         except ValuationPolicyAssignmentError as exc:
             await self.ingestion_job_service.mark_failed(job_id, str(exc), failure_phase="persist")
             raise ReferenceDataIngestionCommandError(
