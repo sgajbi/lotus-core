@@ -26,6 +26,7 @@ from ..transaction.settlement import (
     calculate_interest_settlement_economics,
     calculate_settlement_cash_movement,
 )
+from .numeric_policy import CASHFLOW_LEDGER_OUTPUT_V1
 from .types import (
     CashflowCalculationContext,
     CashflowCalculationType,
@@ -136,19 +137,23 @@ def calculate_transaction_cashflow(
     component-level economics and validation policy.
     """
     transaction_type = resolve_effective_processing_transaction_type(transaction)
-    economics = _resolve_cashflow_economics(
-        transaction,
-        rule,
-        transaction_type,
-        calculation_context,
-    )
+    with CASHFLOW_LEDGER_OUTPUT_V1.arithmetic_context():
+        economics = _resolve_cashflow_economics(
+            transaction,
+            rule,
+            transaction_type,
+            calculation_context,
+        )
     level = _resolve_cashflow_level(transaction, rule)
     return CalculatedCashflow(
         transaction_id=transaction.transaction_id,
         portfolio_id=transaction.portfolio_id,
         security_id=transaction.security_id,
         cashflow_date=_resolve_cashflow_date(transaction, rule, transaction_type),
-        amount=economics.amount,
+        amount=CASHFLOW_LEDGER_OUTPUT_V1.normalize(
+            economics.amount,
+            field_name="cashflows.amount",
+        ),
         currency=economics.currency,
         classification=_normalize_classification(rule.classification),
         timing=_normalize_code(rule.timing),

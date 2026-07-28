@@ -1,7 +1,7 @@
 """Characterize cashflow policy through canonical event mapping."""
 
 from datetime import date, datetime
-from decimal import Decimal
+from decimal import Decimal, getcontext
 
 import pytest
 from portfolio_common.events import TransactionEvent
@@ -63,6 +63,54 @@ def test_calculate_buy_transaction(base_transaction_event: TransactionEvent):
     assert cashflow.linked_transaction_group_id is None
     assert cashflow.is_position_flow is True
     assert cashflow.is_portfolio_flow is False
+
+
+def test_calculated_cashflow_fails_before_persistence_on_magnitude_overflow(
+    base_transaction_event: TransactionEvent,
+) -> None:
+    event = base_transaction_event.model_copy(
+        update={
+            "gross_transaction_amount": Decimal("99999999.9999999999"),
+            "trade_fee": Decimal("0.0000000001"),
+        }
+    )
+    rule = CashflowRule(
+        classification=CashflowClassification.INVESTMENT_OUTFLOW,
+        timing=CashflowTiming.BOD,
+        is_position_flow=True,
+        is_portfolio_flow=False,
+    )
+
+    with pytest.raises(ValueError, match="magnitude_overflow"):
+        _calculate(event, rule)
+
+
+def test_calculated_cashflow_is_independent_of_ambient_decimal_precision(
+    base_transaction_event: TransactionEvent,
+) -> None:
+    event = base_transaction_event.model_copy(
+        update={
+            "gross_transaction_amount": Decimal("1234567.1234567890"),
+            "trade_fee": Decimal("0.0000000001"),
+        }
+    )
+    rule = CashflowRule(
+        classification=CashflowClassification.INVESTMENT_OUTFLOW,
+        timing=CashflowTiming.BOD,
+        is_position_flow=True,
+        is_portfolio_flow=False,
+    )
+    original_precision = getcontext().prec
+    try:
+        getcontext().prec = 6
+        low_precision = _calculate(event, rule)
+        getcontext().prec = 50
+        high_precision = _calculate(event, rule)
+    finally:
+        getcontext().prec = original_precision
+
+    assert low_precision == high_precision
+    assert high_precision.amount == Decimal("-1234567.1234567891")
 
 
 def test_calculate_buy_transaction_normalizes_transaction_type(

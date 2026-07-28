@@ -22,6 +22,7 @@ from .domain.transaction_control_codes import (
     normalize_transaction_control_code,
 )
 from .domain.valuation.source_facts import resolve_optional_valuation_book_scope
+from .pydantic_financial_numeric import ExactDecimal18_10
 
 
 def _standardize_event_datetime_value(value: object) -> object:
@@ -496,7 +497,7 @@ class CashflowCalculatedEvent(CoreEventModel):
     security_id: Optional[str] = None
     cashflow_date: date
     epoch: Optional[int] = None
-    amount: Decimal
+    amount: ExactDecimal18_10
     currency: str
     classification: str
     timing: str
