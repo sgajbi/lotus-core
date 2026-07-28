@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from decimal import ROUND_HALF_EVEN, Context, Decimal, InvalidOperation, localcontext
 from typing import Callable
 
+from ..calculation_lineage import NumericOutputPolicyLineage
 from .precision import (
     DecimalPrecisionError,
     DecimalPrecisionPolicy,
@@ -45,6 +46,18 @@ class CalculatedDecimalPolicy:
     @property
     def policy_id(self) -> str:
         return self._persistence_policy.name
+
+    def lineage_identity(self) -> NumericOutputPolicyLineage:
+        """Return the complete policy identity for calculation lineage."""
+
+        return NumericOutputPolicyLineage(
+            name=self.name,
+            version=self.version,
+            precision=self.precision,
+            scale=self.scale,
+            working_precision=self.working_precision,
+            rounding=self.rounding,
+        )
 
     def arithmetic_context(self) -> AbstractContextManager[Context]:
         """Run intermediate arithmetic without inheriting ambient Decimal precision."""

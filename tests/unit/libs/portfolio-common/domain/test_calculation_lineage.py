@@ -8,6 +8,7 @@ import pytest
 from portfolio_common.domain.calculation_lineage import (
     CalculationLineage,
     FinancialSourceReference,
+    NumericOutputPolicyLineage,
     build_calculation_lineage,
     canonical_content_hash,
 )
@@ -15,6 +16,16 @@ from portfolio_common.domain.calculation_lineage import (
 
 class _Basis(StrEnum):
     CLEAN = "CLEAN"
+
+
+OUTPUT_POLICY = NumericOutputPolicyLineage(
+    name="accrued-income-ledger-output",
+    version="1.0.0",
+    precision=18,
+    scale=10,
+    working_precision=64,
+    rounding="ROUND_HALF_EVEN",
+)
 
 
 def _lineage(**overrides: object) -> CalculationLineage:
@@ -90,6 +101,60 @@ def test_input_algorithm_and_output_changes_have_bounded_hash_impact() -> None:
     assert changed_output.input_content_hash == baseline.input_content_hash
     assert changed_output.calculation_content_hash == baseline.calculation_content_hash
     assert changed_output.output_content_hash != baseline.output_content_hash
+
+
+def test_numeric_output_policy_is_bound_to_calculation_and_downstream_lineage() -> None:
+    baseline = _lineage(numeric_output_policy=OUTPUT_POLICY)
+    revised = _lineage(
+        numeric_output_policy=NumericOutputPolicyLineage(
+            name=OUTPUT_POLICY.name,
+            version="2.0.0",
+            precision=OUTPUT_POLICY.precision,
+            scale=OUTPUT_POLICY.scale,
+            working_precision=OUTPUT_POLICY.working_precision,
+            rounding=OUTPUT_POLICY.rounding,
+        )
+    )
+
+    assert baseline.input_content_hash == revised.input_content_hash
+    assert baseline.calculation_content_hash != revised.calculation_content_hash
+    assert baseline.output_content_hash != revised.output_content_hash
+    assert baseline.lineage_payload()["numeric_output_policy"] == {
+        "name": "accrued-income-ledger-output",
+        "precision": 18,
+        "rounding": "ROUND_HALF_EVEN",
+        "scale": 10,
+        "version": "1.0.0",
+        "working_precision": 64,
+    }
+
+
+@pytest.mark.parametrize(
+    ("overrides", "message"),
+    [
+        ({"name": " "}, "name must be nonblank"),
+        ({"version": ""}, "version must be nonblank"),
+        ({"precision": 0}, "precision must be positive"),
+        ({"scale": 19}, "scale must be between zero and precision"),
+        ({"working_precision": 17}, "working_precision must be at least precision"),
+    ],
+)
+def test_numeric_output_policy_lineage_rejects_ambiguous_identity(
+    overrides: dict[str, object],
+    message: str,
+) -> None:
+    values: dict[str, object] = {
+        "name": "valuation-output",
+        "version": "1.0.0",
+        "precision": 18,
+        "scale": 10,
+        "working_precision": 64,
+        "rounding": "ROUND_HALF_EVEN",
+    }
+    values.update(overrides)
+
+    with pytest.raises((TypeError, ValueError), match=message):
+        NumericOutputPolicyLineage(**values)  # type: ignore[arg-type]
 
 
 @pytest.mark.parametrize(

@@ -13,6 +13,52 @@ from typing import Any
 
 
 @dataclass(frozen=True, slots=True)
+class NumericOutputPolicyLineage:
+    """Versioned numeric-output policy bound to a financial calculation."""
+
+    name: str
+    version: str
+    precision: int
+    scale: int
+    working_precision: int
+    rounding: str
+
+    def __post_init__(self) -> None:
+        for field_name in ("name", "version", "rounding"):
+            value = getattr(self, field_name)
+            if not isinstance(value, str):
+                raise TypeError(f"{field_name} must be a string")
+            normalized = value.strip()
+            if not normalized:
+                raise ValueError(f"{field_name} must be nonblank")
+            object.__setattr__(self, field_name, normalized)
+        if self.precision < 1:
+            raise ValueError("precision must be positive")
+        if self.scale < 0 or self.scale > self.precision:
+            raise ValueError("scale must be between zero and precision")
+        if self.working_precision < self.precision:
+            raise ValueError("working_precision must be at least precision")
+
+    @property
+    def policy_id(self) -> str:
+        """Return the stable name/version identity."""
+
+        return f"{self.name}@{self.version}"
+
+    def lineage_payload(self) -> dict[str, object]:
+        """Return the complete policy identity used in lineage hashes."""
+
+        return {
+            "name": self.name,
+            "precision": self.precision,
+            "rounding": self.rounding,
+            "scale": self.scale,
+            "version": self.version,
+            "working_precision": self.working_precision,
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class CalculationLineage:
     """Three-layer deterministic evidence for one financial calculation."""
 
@@ -22,6 +68,7 @@ class CalculationLineage:
     input_content_hash: str
     calculation_content_hash: str
     output_content_hash: str
+    numeric_output_policy: NumericOutputPolicyLineage | None = None
 
     def __post_init__(self) -> None:
         if not self.algorithm_id.strip():
@@ -40,7 +87,7 @@ class CalculationLineage:
     def lineage_payload(self) -> dict[str, object]:
         """Return the canonical payload used when this calculation is a downstream input."""
 
-        return {
+        payload: dict[str, object] = {
             "algorithm_id": self.algorithm_id,
             "algorithm_version": self.algorithm_version,
             "calculation_content_hash": self.calculation_content_hash,
@@ -48,6 +95,9 @@ class CalculationLineage:
             "intermediate_precision": self.intermediate_precision,
             "output_content_hash": self.output_content_hash,
         }
+        if self.numeric_output_policy is not None:
+            payload["numeric_output_policy"] = self.numeric_output_policy.lineage_payload()
+        return payload
 
 
 @dataclass(frozen=True, slots=True)
@@ -96,6 +146,7 @@ def build_calculation_lineage(
     intermediate_precision: int,
     input_payload: Mapping[str, object],
     output_payload: Mapping[str, object],
+    numeric_output_policy: NumericOutputPolicyLineage | None = None,
 ) -> CalculationLineage:
     """Bind normalized inputs, algorithm semantics, and outputs with SHA-256 evidence."""
 
@@ -108,14 +159,15 @@ def build_calculation_lineage(
         raise ValueError("intermediate_precision must be positive")
 
     input_content_hash = canonical_content_hash(input_payload)
-    calculation_content_hash = canonical_content_hash(
-        {
-            "algorithm_id": normalized_algorithm_id,
-            "algorithm_version": algorithm_version,
-            "input_content_hash": input_content_hash,
-            "intermediate_precision": intermediate_precision,
-        }
-    )
+    calculation_payload: dict[str, object] = {
+        "algorithm_id": normalized_algorithm_id,
+        "algorithm_version": algorithm_version,
+        "input_content_hash": input_content_hash,
+        "intermediate_precision": intermediate_precision,
+    }
+    if numeric_output_policy is not None:
+        calculation_payload["numeric_output_policy"] = numeric_output_policy.lineage_payload()
+    calculation_content_hash = canonical_content_hash(calculation_payload)
     output_content_hash = canonical_content_hash(
         {
             "calculation_content_hash": calculation_content_hash,
@@ -129,6 +181,7 @@ def build_calculation_lineage(
         input_content_hash=input_content_hash,
         calculation_content_hash=calculation_content_hash,
         output_content_hash=output_content_hash,
+        numeric_output_policy=numeric_output_policy,
     )
 
 

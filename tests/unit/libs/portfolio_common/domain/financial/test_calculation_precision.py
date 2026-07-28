@@ -42,6 +42,20 @@ def test_calculated_policy_preserves_exact_value_representation() -> None:
     assert result.as_tuple() == value.as_tuple()
 
 
+def test_calculated_policy_exposes_complete_lineage_identity() -> None:
+    identity = POLICY.lineage_identity()
+
+    assert identity.policy_id == "test-calculated-ledger-output@1.0.0"
+    assert identity.lineage_payload() == {
+        "name": "test-calculated-ledger-output",
+        "precision": 18,
+        "rounding": "ROUND_HALF_EVEN",
+        "scale": 10,
+        "version": "1.0.0",
+        "working_precision": 64,
+    }
+
+
 def test_calculated_policy_uses_explicit_working_precision_for_products() -> None:
     original_precision = getcontext().prec
     try:
