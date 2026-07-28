@@ -17,7 +17,7 @@ from portfolio_common.logging_utils import operation_log_extra
 from portfolio_common.utils import async_timed
 from sqlalchemy import asc, desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import joinedload, selectinload
 
 from ..application.transaction_query import TransactionLedgerFilters, TransactionLedgerQuerySpec
 from .currency_query_expressions import currency_code_sql_expr
@@ -173,7 +173,8 @@ class TransactionRepository:
         Constructs a base query with all the common filters.
         """
         stmt = select(Transaction).options(
-            joinedload(Transaction.cashflow), joinedload(Transaction.costs)
+            joinedload(Transaction.cashflow),
+            selectinload(Transaction.costs),
         )
         return self._apply_filters(
             stmt,
