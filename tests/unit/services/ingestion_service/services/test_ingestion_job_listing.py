@@ -137,6 +137,10 @@ def _job_row(job_id: str):
         submitted_at=datetime(2026, 6, 1, tzinfo=UTC),
         completed_at=None,
         failure_reason=None,
+        failure_status_code=None,
+        failure_code=None,
+        failure_detail=None,
+        failure_headers=None,
         retry_count=0,
         last_retried_at=None,
     )
