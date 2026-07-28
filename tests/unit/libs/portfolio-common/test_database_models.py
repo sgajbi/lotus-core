@@ -507,6 +507,70 @@ def test_client_policy_numeric_models_enforce_finite_domain_policy(
     assert all(term in sign_sql for term in sign_terms)
 
 
+@pytest.mark.parametrize(
+    (
+        "table_name",
+        "finite_constraint_name",
+        "finite_columns",
+        "sign_constraint_name",
+        "sign_term",
+    ),
+    [
+        (
+            "simulation_changes",
+            "ck_simulation_change_values_finite",
+            ("quantity", "price", "amount"),
+            "ck_simulation_change_price_positive",
+            "price > 0",
+        ),
+        (
+            "position_history",
+            "ck_position_history_values_finite",
+            ("quantity", "cost_basis", "cost_basis_local"),
+            None,
+            None,
+        ),
+        (
+            "daily_position_snapshots",
+            "ck_daily_position_snapshot_values_finite",
+            (
+                "quantity",
+                "cost_basis",
+                "cost_basis_local",
+                "market_price",
+                "market_value",
+                "market_value_local",
+                "unrealized_gain_loss",
+                "unrealized_gain_loss_local",
+                "unrealized_price_gain_loss",
+                "unrealized_fx_gain_loss",
+            ),
+            "ck_daily_position_snapshot_price_positive",
+            "market_price > 0",
+        ),
+    ],
+)
+def test_position_state_numeric_models_enforce_finite_domain_policy(
+    table_name: str,
+    finite_constraint_name: str,
+    finite_columns: tuple[str, ...],
+    sign_constraint_name: str | None,
+    sign_term: str | None,
+) -> None:
+    table = Base.metadata.tables[table_name]
+    constraints = {
+        constraint.name: constraint
+        for constraint in table.constraints
+        if constraint.name is not None
+    }
+
+    finite_sql = str(constraints[finite_constraint_name].sqltext)
+    for column_name in finite_columns:
+        assert f"CAST({column_name} AS TEXT) NOT IN ('NaN', 'Infinity', '-Infinity')" in finite_sql
+    if sign_constraint_name is not None and sign_term is not None:
+        assert sign_term in str(constraints[sign_constraint_name].sqltext)
+
+
 def test_model_portfolio_tables_declare_dpm_source_indexes():
     definition_indexes = {index.name: index for index in ModelPortfolioDefinition.__table__.indexes}
     target_indexes = {index.name: index for index in ModelPortfolioTarget.__table__.indexes}

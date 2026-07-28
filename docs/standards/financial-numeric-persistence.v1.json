@@ -37,26 +37,26 @@
   ],
   "tables": {
     "simulation_changes": {
-      "quantity": {"profile": "nullable-finite", "rollout_status": "planned"},
-      "price": {"profile": "nullable-positive-finite", "rollout_status": "planned"},
-      "amount": {"profile": "nullable-finite", "rollout_status": "planned"}
+      "quantity": {"profile": "nullable-finite", "rollout_status": "orm-enforced"},
+      "price": {"profile": "nullable-positive-finite", "rollout_status": "orm-enforced"},
+      "amount": {"profile": "nullable-finite", "rollout_status": "orm-enforced"}
     },
     "position_history": {
-      "quantity": {"profile": "finite", "rollout_status": "planned"},
-      "cost_basis": {"profile": "finite", "rollout_status": "planned"},
-      "cost_basis_local": {"profile": "nullable-finite", "rollout_status": "planned"}
+      "quantity": {"profile": "finite", "rollout_status": "orm-enforced"},
+      "cost_basis": {"profile": "finite", "rollout_status": "orm-enforced"},
+      "cost_basis_local": {"profile": "nullable-finite", "rollout_status": "orm-enforced"}
     },
     "daily_position_snapshots": {
-      "quantity": {"profile": "finite", "rollout_status": "planned"},
-      "cost_basis": {"profile": "finite", "rollout_status": "planned"},
-      "cost_basis_local": {"profile": "nullable-finite", "rollout_status": "planned"},
-      "market_price": {"profile": "nullable-positive-finite", "rollout_status": "planned"},
-      "market_value": {"profile": "nullable-finite", "rollout_status": "planned"},
-      "market_value_local": {"profile": "nullable-finite", "rollout_status": "planned"},
-      "unrealized_gain_loss": {"profile": "nullable-finite", "rollout_status": "planned"},
-      "unrealized_gain_loss_local": {"profile": "nullable-finite", "rollout_status": "planned"},
-      "unrealized_price_gain_loss": {"profile": "nullable-finite", "rollout_status": "planned"},
-      "unrealized_fx_gain_loss": {"profile": "nullable-finite", "rollout_status": "planned"}
+      "quantity": {"profile": "finite", "rollout_status": "orm-enforced"},
+      "cost_basis": {"profile": "finite", "rollout_status": "orm-enforced"},
+      "cost_basis_local": {"profile": "nullable-finite", "rollout_status": "orm-enforced"},
+      "market_price": {"profile": "nullable-positive-finite", "rollout_status": "orm-enforced"},
+      "market_value": {"profile": "nullable-finite", "rollout_status": "orm-enforced"},
+      "market_value_local": {"profile": "nullable-finite", "rollout_status": "orm-enforced"},
+      "unrealized_gain_loss": {"profile": "nullable-finite", "rollout_status": "orm-enforced"},
+      "unrealized_gain_loss_local": {"profile": "nullable-finite", "rollout_status": "orm-enforced"},
+      "unrealized_price_gain_loss": {"profile": "nullable-finite", "rollout_status": "orm-enforced"},
+      "unrealized_fx_gain_loss": {"profile": "nullable-finite", "rollout_status": "orm-enforced"}
     },
     "fx_rates": {
       "rate": {"profile": "positive-finite", "rollout_status": "orm-enforced"}

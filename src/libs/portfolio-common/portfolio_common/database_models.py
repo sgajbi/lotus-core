@@ -154,6 +154,19 @@ class SimulationChange(Base):
     change_metadata = Column("metadata", JSON, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
+    __table_args__ = (
+        _finite_numeric_check_constraint(
+            "ck_simulation_change_values_finite",
+            "quantity",
+            "price",
+            "amount",
+        ),
+        CheckConstraint(
+            "price > 0",
+            name="ck_simulation_change_price_positive",
+        ),
+    )
+
 
 class PositionHistory(Base):
     __tablename__ = "position_history"
@@ -173,6 +186,12 @@ class PositionHistory(Base):
     )
 
     __table_args__ = (
+        _finite_numeric_check_constraint(
+            "ck_position_history_values_finite",
+            "quantity",
+            "cost_basis",
+            "cost_basis_local",
+        ),
         Index(
             "ix_position_history_portfolio_security_epoch_date",
             "portfolio_id",
@@ -246,6 +265,23 @@ class DailyPositionSnapshot(Base):
     )
 
     __table_args__ = (
+        _finite_numeric_check_constraint(
+            "ck_daily_position_snapshot_values_finite",
+            "quantity",
+            "cost_basis",
+            "cost_basis_local",
+            "market_price",
+            "market_value",
+            "market_value_local",
+            "unrealized_gain_loss",
+            "unrealized_gain_loss_local",
+            "unrealized_price_gain_loss",
+            "unrealized_fx_gain_loss",
+        ),
+        CheckConstraint(
+            "market_price > 0",
+            name="ck_daily_position_snapshot_price_positive",
+        ),
         UniqueConstraint(
             "portfolio_id", "security_id", "date", "epoch", name="_portfolio_security_date_epoch_uc"
         ),
