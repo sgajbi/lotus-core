@@ -2581,7 +2581,8 @@ class IngestionJob(Base):
         CheckConstraint(
             "(failure_status_code IS NULL AND failure_code IS NULL "
             "AND failure_detail IS NULL AND failure_headers IS NULL) OR "
-            "(failure_status_code BETWEEN 400 AND 599 "
+            "(failure_status_code IS NOT NULL "
+            "AND failure_status_code BETWEEN 400 AND 599 "
             "AND failure_code IS NOT NULL "
             "AND failure_code = btrim(failure_code) "
             "AND failure_code <> '')",

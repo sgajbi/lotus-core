@@ -67,6 +67,7 @@ def test_ingestion_failure_outcome_migration_is_bounded_and_reversible(monkeypat
         "ck_ingestion_jobs_failure_outcome_complete",
     )
     assert operations[4][4] == {"postgresql_not_valid": True}
+    assert "failure_status_code IS NOT NULL" in operations[4][3]
     assert operations[5] == (
         "execute",
         'ALTER TABLE "ingestion_jobs" '
