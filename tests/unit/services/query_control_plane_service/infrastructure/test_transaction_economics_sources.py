@@ -132,7 +132,7 @@ async def test_get_portfolio_base_currency(
     assert "portfolios.portfolio_id = 'P1'" in compiled_query
 
 
-async def test_list_transaction_cost_evidence_filters_window_scope_and_eager_loads_costs(
+async def test_list_transaction_cost_evidence_filters_scope_before_loading_costs(
     repository: SqlAlchemyTransactionEconomicsReader, mock_db_session: AsyncMock
 ):
     mock_rows = MagicMock()
@@ -164,7 +164,7 @@ async def test_list_transaction_cost_evidence_filters_window_scope_and_eager_loa
         "trim(transactions.security_id) IN ('EQ_US_AAPL', 'FI_US_TREASURY_10Y')" in compiled_query
     )
     assert "transactions.transaction_type IN ('BUY', 'SELL')" in compiled_query
-    assert "LEFT OUTER JOIN transaction_costs" in compiled_query
+    assert "LEFT OUTER JOIN transaction_costs" not in compiled_query
     assert "ORDER BY transactions.security_id ASC" in compiled_query
 
 
@@ -355,3 +355,4 @@ async def test_list_performance_component_economics_evidence_applies_cursor_and_
     assert "date(transactions.transaction_date) ASC" in compiled_query
     assert "transactions.transaction_id ASC" in compiled_query
     assert "LIMIT 11" in compiled_query
+    assert "transaction_costs" not in compiled_query
