@@ -2,7 +2,7 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 
 import pytest
-from portfolio_common.database_models import Portfolio, Transaction, TransactionCost
+from portfolio_common.database_models import Cashflow, Portfolio, Transaction, TransactionCost
 from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
@@ -42,6 +42,23 @@ def _transaction(*, sequence: int, cost_count: int) -> Transaction:
     )
 
 
+def _cashflow(*, epoch: int, amount: str) -> Cashflow:
+    return Cashflow(
+        transaction_id="TX-PAGE-3",
+        portfolio_id="PORT-PAGE",
+        security_id="SEC-3",
+        cashflow_date=date(2026, 1, 3),
+        epoch=epoch,
+        amount=Decimal(amount),
+        currency="USD",
+        classification="TRADE_SETTLEMENT",
+        timing="SETTLED",
+        calculation_type="TRANSACTION_DERIVED",
+        is_position_flow=True,
+        is_portfolio_flow=False,
+    )
+
+
 async def test_transaction_page_and_costs_share_one_bounded_statement_snapshot(
     clean_db,
     db_engine,
@@ -66,6 +83,8 @@ async def test_transaction_page_and_costs_share_one_bounded_statement_snapshot(
                 _transaction(sequence=1, cost_count=1),
                 _transaction(sequence=2, cost_count=2),
                 _transaction(sequence=3, cost_count=3),
+                _cashflow(epoch=1, amount="-900"),
+                _cashflow(epoch=2, amount="-1000"),
             ]
         )
         session.commit()
@@ -102,6 +121,9 @@ async def test_transaction_page_and_costs_share_one_bounded_statement_snapshot(
         "TX-PAGE-2",
     ]
     assert [len(transaction.costs) for transaction in transactions] == [3, 2]
+    assert transactions[0].cashflow is not None
+    assert transactions[0].cashflow.amount == Decimal("-1000")
+    assert transactions[1].cashflow is None
 
     select_statements = [
         statement for statement in statements if statement.lstrip().upper().startswith("SELECT")

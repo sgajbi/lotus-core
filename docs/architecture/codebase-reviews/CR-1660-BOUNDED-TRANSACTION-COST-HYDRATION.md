@@ -30,8 +30,13 @@ unchanged.
   aggregate closes that race without widening transaction isolation or changing session ownership.
 - Aggregate reconstruction fails closed if fee, amount, currency, or timestamp columns are not
   aligned.
-- Preserved the existing stable sort fields, filters, page size, cashflow selection, result mapping,
-  and serialized contracts.
+- Query Service now selects the latest retained cashflow epoch with a one-row lateral subquery
+  before constructing the ledger read record. This prevents historical replay epochs from
+  duplicating paged transactions or exposing an arbitrary cashflow version.
+- The repository maps ORM values into a persistence-independent ledger record, allowing removal of
+  its stale ORM-output guard exception.
+- Preserved the existing stable sort fields, filters, page size, result mapping, and serialized
+  contracts.
 
 This is an internal infrastructure-adapter optimization. It does not change runtime topology or
 introduce a new service boundary.
@@ -44,8 +49,8 @@ introduce a new service boundary.
   aggregate reconstruction proof.
 - Real PostgreSQL proof seeded three transactions with one, two, and three cost rows. A two-row
   page returned exactly the newest two transactions with all five applicable costs in exactly one
-  `SELECT`, retained one SQL row per transaction through `LATERAL` aggregation, and bounded the
-  result to the selected two-row page.
+  `SELECT`, retained one SQL row per transaction through `LATERAL` aggregation, selected epoch 2
+  from two retained cashflow epochs, and bounded the result to the selected two-row page.
 - Strict MyPy passed across 240 source files; scoped Ruff, format, and diff-hygiene checks passed.
 
 ## Compatibility and remaining batch work
