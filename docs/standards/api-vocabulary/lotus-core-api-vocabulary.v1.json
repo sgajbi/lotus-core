@@ -13,7 +13,7 @@
       "openApiVersion": "3.1.0"
     }
   ],
-  "generatedAt": "2026-07-28T01:48:11.019924+00:00",
+  "generatedAt": "2026-07-28T14:13:21.426617+00:00",
   "attributeCatalog": [
     {
       "semanticId": "lotus.accepted_count",
@@ -860,7 +860,7 @@
       "semanticId": "lotus.brokerage",
       "canonicalTerm": "brokerage",
       "preferredName": "brokerage",
-      "description": "Brokerage fee component. If provided with other fee components, trade_fee is recomputed from breakdown.",
+      "description": "Brokerage fee component. If provided with other fee components, trade_fee is recomputed from breakdown. The value must fit PostgreSQL NUMERIC(18,10) exactly; excess scale and magnitude overflow are rejected, not rounded.",
       "example": "2.50",
       "type": "object",
       "locations": [
@@ -2493,7 +2493,7 @@
       "semanticId": "lotus.exchange_fee",
       "canonicalTerm": "exchange_fee",
       "preferredName": "exchange_fee",
-      "description": "Exchange fee component.",
+      "description": "Exchange fee component. The value must fit PostgreSQL NUMERIC(18,10) exactly; excess scale and magnitude overflow are rejected, not rounded.",
       "example": "0.70",
       "type": "object",
       "locations": [
@@ -2886,7 +2886,7 @@
       "semanticId": "lotus.gst",
       "canonicalTerm": "gst",
       "preferredName": "gst",
-      "description": "Goods and services tax fee component.",
+      "description": "Goods and services tax fee component. The value must fit PostgreSQL NUMERIC(18,10) exactly; excess scale and magnitude overflow are rejected, not rounded.",
       "example": "0.45",
       "type": "object",
       "locations": [
@@ -4925,7 +4925,7 @@
       "semanticId": "lotus.other_fees",
       "canonicalTerm": "other_fees",
       "preferredName": "other_fees",
-      "description": "Other fee components not covered by standard fields.",
+      "description": "Other fee components not covered by standard fields. The value must fit PostgreSQL NUMERIC(18,10) exactly; excess scale and magnitude overflow are rejected, not rounded.",
       "example": "0.15",
       "type": "object",
       "locations": [
@@ -7787,7 +7787,7 @@
       "semanticId": "lotus.stamp_duty",
       "canonicalTerm": "stamp_duty",
       "preferredName": "stamp_duty",
-      "description": "Stamp duty fee component.",
+      "description": "Stamp duty fee component. The value must fit PostgreSQL NUMERIC(18,10) exactly; excess scale and magnitude overflow are rejected, not rounded.",
       "example": "1.20",
       "type": "object",
       "locations": [

@@ -11,6 +11,7 @@ from portfolio_common.enterprise_readiness import (
     _enterprise_auth_context_signature,
     _normalize_headers,
 )
+from portfolio_common.openapi_enrichment import exact_numeric_openapi_description
 
 from src.services.ingestion_service.app import main as ingestion_main
 from src.services.ingestion_service.app.main import app
@@ -924,10 +925,12 @@ async def test_openapi_describes_transaction_dual_leg_and_income_fields(async_te
     assert properties["interest_direction"]["description"] == (
         "Semantic direction for INTEREST transactions. Supported values are INCOME and EXPENSE."
     )
-    assert properties["net_interest_amount"]["description"] == (
+    assert properties["net_interest_amount"]["description"] == exact_numeric_openapi_description(
         "Interest amount after withholding tax and other interest deductions, "
         "but before separately reported transaction fees; when supplied upstream, "
-        "it is reconciled against the gross and deduction fields."
+        "it is reconciled against the gross and deduction fields.",
+        precision=18,
+        scale=10,
     )
 
 
@@ -958,7 +961,11 @@ async def test_openapi_describes_transaction_fx_fields(async_test_client):
         "Policy-driven mode for realized FX P&L population, for example NONE or UPSTREAM_PROVIDED."
     )
     assert properties["realized_total_pnl_base"]["description"] == (
-        "Total realized P&L translated into portfolio base currency."
+        exact_numeric_openapi_description(
+            "Total realized P&L translated into portfolio base currency.",
+            precision=18,
+            scale=10,
+        )
     )
 
 
