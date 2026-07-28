@@ -96,8 +96,7 @@ def test_legacy_failed_job_fails_closed_without_exposing_recorded_reason() -> No
         _job(
             status="failed",
             failure_reason=(
-                "password authentication failed for user internal_writer "
-                "at postgres.service.local"
+                "password authentication failed for user internal_writer at postgres.service.local"
             ),
         )
     )
