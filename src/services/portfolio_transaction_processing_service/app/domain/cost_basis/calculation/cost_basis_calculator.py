@@ -4,6 +4,9 @@ from decimal import Decimal
 from typing import Callable, Protocol, cast
 
 from portfolio_common.domain.decimal_amount import decimal_or_none
+from portfolio_common.domain.transaction.numeric_policy import (
+    TRANSACTION_COST_LEDGER_OUTPUT_V1,
+)
 from portfolio_common.domain.transaction.type_registry import (
     get_transaction_type_definition,
     is_production_booking_transaction_type,
@@ -138,7 +141,11 @@ def _cash_outflow_book_cost(transaction: CostBasisTransaction) -> Decimal:
     if _normalize_code(transaction.transaction_type) != "FEE":
         return cash_amount
     total_fees = transaction.fees.total_fees if transaction.fees else Decimal(0)
-    return cash_amount + total_fees
+    return TRANSACTION_COST_LEDGER_OUTPUT_V1.add(
+        cash_amount,
+        total_fees,
+        field_name="net_cost_local",
+    )
 
 
 def _decimal_or_zero(value: object, *, field_name: str) -> Decimal:
@@ -297,13 +304,30 @@ def _apply_buy_cost_fields(transaction: CostBasisTransaction) -> None:
     total_fees_local = _transaction_total_fees(transaction)
     accrued_interest_local = transaction.accrued_interest or Decimal(0)
     fx_rate = _transaction_fx_rate_or_one(transaction)
-    transaction.gross_cost = transaction.gross_transaction_amount * fx_rate
+    policy = TRANSACTION_COST_LEDGER_OUTPUT_V1
+    transaction.gross_cost = policy.multiply(
+        transaction.gross_transaction_amount,
+        fx_rate,
+        field_name="gross_cost",
+    )
 
-    transaction.net_cost_local = transaction.gross_transaction_amount + total_fees_local
+    transaction.net_cost_local = policy.add(
+        transaction.gross_transaction_amount,
+        total_fees_local,
+        field_name="net_cost_local",
+    )
     if not _is_accrued_interest_excluded_from_book_cost(transaction):
-        transaction.net_cost_local += accrued_interest_local
+        transaction.net_cost_local = policy.add(
+            transaction.net_cost_local,
+            accrued_interest_local,
+            field_name="net_cost_local",
+        )
 
-    transaction.net_cost = transaction.net_cost_local * fx_rate
+    transaction.net_cost = policy.multiply(
+        transaction.net_cost_local,
+        fx_rate,
+        field_name="net_cost",
+    )
     _apply_zero_realized_pnl(transaction)
 
 
@@ -361,7 +385,11 @@ def _record_buy_lot(
 
 
 def _net_sell_proceeds_local(transaction: CostBasisTransaction) -> Decimal:
-    return transaction.gross_transaction_amount - _transaction_total_fees(transaction)
+    return TRANSACTION_COST_LEDGER_OUTPUT_V1.subtract(
+        transaction.gross_transaction_amount,
+        _transaction_total_fees(transaction),
+        field_name="net_sell_proceeds_local",
+    )
 
 
 def _validate_sell_quantity_and_proceeds(
@@ -454,11 +482,20 @@ def _apply_sell_disposal_fields(
     cogs_base: Decimal,
     cogs_local: Decimal,
 ) -> None:
-    transaction.realized_gain_loss_local = net_sell_proceeds_local - cogs_local
-    transaction.realized_gain_loss = net_sell_proceeds_base - cogs_base
-    transaction.net_cost = -cogs_base
-    transaction.net_cost_local = -cogs_local
-    transaction.gross_cost = -cogs_base
+    policy = TRANSACTION_COST_LEDGER_OUTPUT_V1
+    transaction.realized_gain_loss_local = policy.subtract(
+        net_sell_proceeds_local,
+        cogs_local,
+        field_name="realized_gain_loss_local",
+    )
+    transaction.realized_gain_loss = policy.subtract(
+        net_sell_proceeds_base,
+        cogs_base,
+        field_name="realized_gain_loss",
+    )
+    transaction.net_cost = policy.normalize(-cogs_base, field_name="net_cost")
+    transaction.net_cost_local = policy.normalize(-cogs_local, field_name="net_cost_local")
+    transaction.gross_cost = policy.normalize(-cogs_base, field_name="gross_cost")
 
 
 def _validate_sell_disposal_fields(
@@ -579,7 +616,11 @@ class SellStrategy:
     ) -> None:
         net_sell_proceeds_local = _net_sell_proceeds_local(transaction)
         fx_rate = _transaction_fx_rate_or_one(transaction)
-        net_sell_proceeds_base = net_sell_proceeds_local * fx_rate
+        net_sell_proceeds_base = TRANSACTION_COST_LEDGER_OUTPUT_V1.multiply(
+            net_sell_proceeds_local,
+            fx_rate,
+            field_name="net_sell_proceeds_base",
+        )
         if not _validate_sell_quantity_and_proceeds(
             transaction,
             error_reporter,
@@ -626,7 +667,11 @@ class CashInflowStrategy:
         transaction.gross_cost = cash_amount_local
         transaction.net_cost_local = cash_amount_local
         fx_rate = _transaction_fx_rate_or_one(transaction)
-        transaction.net_cost = transaction.net_cost_local * fx_rate
+        transaction.net_cost = TRANSACTION_COST_LEDGER_OUTPUT_V1.multiply(
+            transaction.net_cost_local,
+            fx_rate,
+            field_name="net_cost",
+        )
         cash_buy_equivalent = transaction.model_copy()
         cash_buy_equivalent.quantity = cash_amount_local
 
@@ -643,7 +688,11 @@ class CashOutflowStrategy:
         cash_amount_local = _cash_outflow_book_cost(transaction)
         fx_rate = _transaction_fx_rate_or_one(transaction)
         transaction.net_cost_local = -cash_amount_local
-        transaction.net_cost = transaction.net_cost_local * fx_rate
+        transaction.net_cost = TRANSACTION_COST_LEDGER_OUTPUT_V1.multiply(
+            transaction.net_cost_local,
+            fx_rate,
+            field_name="net_cost",
+        )
         transaction.gross_cost = transaction.net_cost
         _apply_no_realized_pnl(transaction)
 
@@ -668,7 +717,11 @@ class AdjustmentStrategy:
         if direction == "OUTFLOW":
             signed_amount_local = -signed_amount_local
         transaction.net_cost_local = signed_amount_local
-        transaction.net_cost = signed_amount_local * _transaction_fx_rate_or_one(transaction)
+        transaction.net_cost = TRANSACTION_COST_LEDGER_OUTPUT_V1.multiply(
+            signed_amount_local,
+            _transaction_fx_rate_or_one(transaction),
+            field_name="net_cost",
+        )
         transaction.gross_cost = transaction.net_cost
         _apply_no_realized_pnl(transaction)
 
@@ -684,7 +737,11 @@ class SecurityInflowStrategy:
         transaction.net_cost_local = transaction.gross_transaction_amount
 
         fx_rate = _transaction_fx_rate_or_one(transaction)
-        transaction.net_cost = transaction.net_cost_local * fx_rate
+        transaction.net_cost = TRANSACTION_COST_LEDGER_OUTPUT_V1.multiply(
+            transaction.net_cost_local,
+            fx_rate,
+            field_name="net_cost",
+        )
 
         if transaction.quantity > Decimal(0):
             _record_buy_lot(transaction, disposition_engine, error_reporter)
@@ -707,9 +764,15 @@ class SecurityOutflowStrategy:
             return
 
         if consumed_quantity > Decimal(0):
-            transaction.net_cost = -cogs_base
-            transaction.net_cost_local = -cogs_local
-            transaction.gross_cost = -cogs_base
+            transaction.net_cost = TRANSACTION_COST_LEDGER_OUTPUT_V1.normalize(
+                -cogs_base,
+                field_name="net_cost",
+            )
+            transaction.net_cost_local = TRANSACTION_COST_LEDGER_OUTPUT_V1.normalize(
+                -cogs_local,
+                field_name="net_cost_local",
+            )
+            transaction.gross_cost = transaction.net_cost
             _apply_no_realized_pnl(transaction)
 
 
@@ -734,7 +797,11 @@ class PartialTransferOutStrategy:
 
         fx_rate = _transaction_fx_rate_or_one(transaction)
         basis_out_local = transaction.gross_transaction_amount
-        basis_out_base = basis_out_local * fx_rate
+        basis_out_base = TRANSACTION_COST_LEDGER_OUTPUT_V1.multiply(
+            basis_out_local,
+            fx_rate,
+            field_name="net_cost",
+        )
         error_reason = disposition_engine.transfer_basis_out(
             transaction,
             cost_base=basis_out_base,
@@ -975,7 +1042,11 @@ class DefaultStrategy:
         transaction.gross_cost = transaction.gross_transaction_amount
         transaction.net_cost_local = transaction.gross_transaction_amount
         fx_rate = _transaction_fx_rate_or_one(transaction)
-        transaction.net_cost = transaction.net_cost_local * fx_rate
+        transaction.net_cost = TRANSACTION_COST_LEDGER_OUTPUT_V1.multiply(
+            transaction.net_cost_local,
+            fx_rate,
+            field_name="net_cost",
+        )
 
 
 class UnsupportedTaxStrategy:

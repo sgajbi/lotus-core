@@ -162,6 +162,32 @@ def test_buy_strategy_dual_currency(cost_calculator, mock_disposition_engine):
     mock_disposition_engine.add_buy_lot.assert_called_once_with(dual_currency_buy)
 
 
+def test_buy_strategy_normalizes_cross_currency_calculated_costs(
+    cost_calculator,
+    mock_disposition_engine,
+) -> None:
+    transaction = CostBasisTransaction(
+        transaction_id="BUY_PRECISION_01",
+        portfolio_id="P_USD",
+        instrument_id="SEC_EUR",
+        security_id="SEC_EUR",
+        transaction_type="BUY",
+        transaction_date=datetime(2026, 7, 28),
+        quantity=Decimal("1"),
+        gross_transaction_amount=Decimal("1.0000000001"),
+        trade_currency="EUR",
+        portfolio_base_currency="USD",
+        transaction_fx_rate=Decimal("1.0000000001"),
+    )
+
+    cost_calculator.calculate_transaction_costs(transaction)
+
+    assert transaction.gross_cost == Decimal("1.0000000002")
+    assert transaction.net_cost_local == Decimal("1.0000000001")
+    assert transaction.net_cost == Decimal("1.0000000002")
+    mock_disposition_engine.add_buy_lot.assert_called_once_with(transaction)
+
+
 def test_cost_calculator_normalizes_same_currency_codes_before_fx_requirement(
     cost_calculator, mock_disposition_engine
 ):
@@ -906,6 +932,38 @@ def test_sell_strategy_dual_currency(cost_calculator, mock_disposition_engine):
     assert dual_currency_sell.realized_gain_loss.quantize(Decimal("0.01")) == Decimal("1340.40")
     assert dual_currency_sell.net_cost == Decimal("-8250")
     assert dual_currency_sell.net_cost_local == Decimal("-7500")
+
+
+def test_sell_strategy_normalizes_cross_currency_proceeds_and_realized_pnl(
+    cost_calculator,
+    mock_disposition_engine,
+) -> None:
+    transaction = CostBasisTransaction(
+        transaction_id="SELL_PRECISION_01",
+        portfolio_id="P_USD",
+        instrument_id="SEC_EUR",
+        security_id="SEC_EUR",
+        transaction_type="SELL",
+        transaction_date=datetime(2026, 7, 28),
+        quantity=Decimal("1"),
+        gross_transaction_amount=Decimal("1.0000000001"),
+        trade_currency="EUR",
+        portfolio_base_currency="USD",
+        transaction_fx_rate=Decimal("1.0000000001"),
+    )
+    mock_disposition_engine.consume_sell_quantity.return_value = (
+        Decimal("0.1000000000"),
+        Decimal("0.1000000000"),
+        Decimal("1"),
+        None,
+    )
+
+    cost_calculator.calculate_transaction_costs(transaction)
+
+    assert transaction.realized_gain_loss_local == Decimal("0.9000000001")
+    assert transaction.realized_gain_loss == Decimal("0.9000000002")
+    assert transaction.net_cost == Decimal("-0.1000000000")
+    assert transaction.net_cost_local == Decimal("-0.1000000000")
 
 
 def test_sell_strategy_rejects_negative_net_proceeds(
