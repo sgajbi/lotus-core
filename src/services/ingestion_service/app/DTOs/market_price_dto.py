@@ -101,8 +101,8 @@ class AuthoritativeMarketPriceSourceFact(BaseModel):
         gt=Decimal(0),
         allow_inf_nan=False,
         description=(
-            "Positive finite source value preserved without an implicit decimal scale or "
-            "quote-convention inference."
+            "Positive finite source value supplied as an exact JSON decimal string and preserved "
+            "without an implicit decimal scale or quote-convention inference."
         ),
         examples=["99.250000000000000000"],
     )
@@ -122,6 +122,7 @@ class AuthoritativeMarketPriceSourceFact(BaseModel):
     fact_version: int = Field(
         ...,
         ge=1,
+        strict=True,
         description="Monotonically increasing correction version for the stable source record.",
         examples=[1],
     )
@@ -174,6 +175,13 @@ class AuthoritativeMarketPriceSourceFact(BaseModel):
     @classmethod
     def normalize_currency(cls, value: object) -> str:
         return normalize_currency_code(value)
+
+    @field_validator("price", mode="before", json_schema_input_type=str)
+    @classmethod
+    def require_exact_decimal_string(cls, value: object) -> str:
+        if not isinstance(value, str):
+            raise ValueError("price must be supplied as an exact decimal string")
+        return value
 
     @field_validator("observed_at")
     @classmethod
