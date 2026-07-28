@@ -312,6 +312,12 @@ Current repository posture:
     enforcement migrations should add checks as `NOT VALID`, validate all new constraints for one
     table in one statement, fail atomically on contaminated history, and receive DB-direct
     rejection, finite boundary, downgrade, and reapply proof.
+    The v1 inventory currently covers all 96 SQLAlchemy Numeric columns across 30 tables with
+    96 ORM-enforced classifications and zero planned entries. Alembic `c120` protects the original
+    cost-ledger slice; ordered `c122` through `c126` protect reference inputs, client policy,
+    position state, transaction economics, cashflows, derived timeseries, and reconciliation.
+    This finite-value posture does not decide precision or scale; GitHub #829 owns that separate
+    domain-by-domain policy.
     Job-backed ingestion idempotency replay must resolve from durable lifecycle outcome evidence,
     never from job existence alone. A replay-safe queued job may return its existing `202`;
     recorded failures must reproduce the original status, stable code, source-safe detail, job

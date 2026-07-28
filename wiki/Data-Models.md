@@ -104,12 +104,14 @@ policy/version, effective-window, lifecycle, source revision, observation time, 
 history; runtime valuation migration remains separately governed.
 
 Financial `NUMERIC` persistence has an explicit finite-value policy. The machine-readable inventory
-in `docs/standards/financial-numeric-persistence.v1.json` classifies every ORM numeric column by
-nullability and signed, positive, or nonnegative semantics. Cost-ledger source/state boundaries and
-exact market-price source facts reject PostgreSQL `NaN`, `Infinity`, and `-Infinity`; sign checks
-remain independent so legitimate signed cashflow and P&L fields are not narrowed accidentally.
-Migrations add new checks as `NOT VALID` before validating retained rows, causing deployment to fail
-closed if historical contamination exists rather than coercing financial evidence.
+in `docs/standards/financial-numeric-persistence.v1.json` classifies all 96 ORM numeric columns
+across 30 tables by nullability and signed, positive, or nonnegative semantics; every entry is
+enforced. Source facts, client policy, position state, transaction economics, cashflows, derived
+timeseries, and reconciliation reject PostgreSQL `NaN`, `Infinity`, and `-Infinity`. Sign checks
+remain independent so legitimate signed cashflow, return, cost, market-value, and P&L fields are
+not narrowed accidentally. Migrations add checks as `NOT VALID` before validating retained rows,
+causing deployment to fail closed if historical contamination exists rather than coercing
+financial evidence. Precision and scale remain separately governed under issue #829.
 
 `market_price_source_facts` is an additive append-history authority store. Its source-version
 identity is the stable upstream source system, source record, and positive correction version;
