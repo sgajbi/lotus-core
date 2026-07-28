@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from decimal import Decimal
 from typing import Any
 
 from portfolio_common.database_models import (
@@ -268,10 +269,15 @@ class ReferenceDataIngestionService:
     ) -> None:
         if not records:
             return
-        facts = [
-            AuthoritativeMarketPriceSourceFact.model_validate(record).to_domain()
-            for record in records
-        ]
+        facts = []
+        for record in records:
+            price = record.get("price")
+            persistence_record = (
+                {**record, "price": str(price)} if isinstance(price, Decimal) else record
+            )
+            facts.append(
+                AuthoritativeMarketPriceSourceFact.model_validate(persistence_record).to_domain()
+            )
         try:
             await MarketPriceSourceFactWriter(self._db).append_many(facts)
             await self._db.commit()
