@@ -13,7 +13,7 @@
       "openApiVersion": "3.1.0"
     }
   ],
-  "generatedAt": "2026-07-28T14:13:21.426617+00:00",
+  "generatedAt": "2026-07-28T16:12:17.772654+00:00",
   "attributeCatalog": [
     {
       "semanticId": "lotus.accepted_count",
@@ -694,7 +694,7 @@
       "semanticId": "lotus.benchmark_return",
       "canonicalTerm": "benchmark_return",
       "preferredName": "benchmark_return",
-      "description": "Benchmark return value.",
+      "description": "Benchmark return value. The value must fit PostgreSQL NUMERIC(18,10) exactly; excess scale and magnitude overflow are rejected, not rounded.",
       "example": "0.0019000000",
       "type": "object",
       "locations": [
@@ -1713,7 +1713,7 @@
       "semanticId": "lotus.composition_weight",
       "canonicalTerm": "composition_weight",
       "preferredName": "composition_weight",
-      "description": "Component weight between 0 and 1.",
+      "description": "Component weight between 0 and 1. The value must fit PostgreSQL NUMERIC(18,10) exactly; excess scale and magnitude overflow are rejected, not rounded.",
       "example": "0.6000000000",
       "type": "object",
       "locations": [
@@ -3118,7 +3118,7 @@
       "semanticId": "lotus.index_price",
       "canonicalTerm": "index_price",
       "preferredName": "index_price",
-      "description": "Index price value.",
+      "description": "Index price value. The value must fit PostgreSQL NUMERIC(18,10) exactly; excess scale and magnitude overflow are rejected, not rounded.",
       "example": "4567.1234000000",
       "type": "object",
       "locations": [
@@ -3169,7 +3169,7 @@
       "semanticId": "lotus.index_return",
       "canonicalTerm": "index_return",
       "preferredName": "index_return",
-      "description": "Index return value.",
+      "description": "Index return value. The value must fit PostgreSQL NUMERIC(18,10) exactly; excess scale and magnitude overflow are rejected, not rounded.",
       "example": "0.0023000000",
       "type": "object",
       "locations": [
@@ -4237,7 +4237,7 @@
       "semanticId": "lotus.max_weight",
       "canonicalTerm": "max_weight",
       "preferredName": "max_weight",
-      "description": "Optional maximum policy band for the instrument.",
+      "description": "Optional maximum policy band for the instrument. The value must fit PostgreSQL NUMERIC(18,10) exactly; excess scale and magnitude overflow are rejected, not rounded.",
       "example": "0.1600000000",
       "type": "object",
       "locations": [
@@ -4251,7 +4251,7 @@
       "semanticId": "lotus.maximum_allocation",
       "canonicalTerm": "maximum_allocation",
       "preferredName": "maximum_allocation",
-      "description": "sustainability preference profile record field: maximum allocation.",
+      "description": "Maximum portfolio allocation ratio permitted by the source preference. The value must fit PostgreSQL NUMERIC(18,10) exactly; excess scale and magnitude overflow are rejected, not rounded.",
       "example": 125000.5,
       "type": "object",
       "locations": [
@@ -4293,7 +4293,7 @@
       "semanticId": "lotus.min_weight",
       "canonicalTerm": "min_weight",
       "preferredName": "min_weight",
-      "description": "Optional minimum policy band for the instrument.",
+      "description": "Optional minimum policy band for the instrument. The value must fit PostgreSQL NUMERIC(18,10) exactly; excess scale and magnitude overflow are rejected, not rounded.",
       "example": "0.0800000000",
       "type": "object",
       "locations": [
@@ -4307,7 +4307,7 @@
       "semanticId": "lotus.minimum_allocation",
       "canonicalTerm": "minimum_allocation",
       "preferredName": "minimum_allocation",
-      "description": "sustainability preference profile record field: minimum allocation.",
+      "description": "Minimum portfolio allocation ratio required by the source preference. The value must fit PostgreSQL NUMERIC(18,10) exactly; excess scale and magnitude overflow are rejected, not rounded.",
       "example": 125000.5,
       "type": "object",
       "locations": [
@@ -6369,7 +6369,7 @@
       "semanticId": "lotus.required_amount",
       "canonicalTerm": "required_amount",
       "preferredName": "required_amount",
-      "description": "Required reserve amount supplied by the source.",
+      "description": "Required reserve amount supplied by the source. The value must fit PostgreSQL NUMERIC(18,4) exactly; excess scale and magnitude overflow are rejected, not rounded.",
       "example": 125000.5,
       "type": "object",
       "locations": [
@@ -8156,7 +8156,7 @@
       "semanticId": "lotus.target_weight",
       "canonicalTerm": "target_weight",
       "preferredName": "target_weight",
-      "description": "Target instrument weight as a decimal ratio between 0 and 1.",
+      "description": "Target instrument weight as a decimal ratio between 0 and 1. The value must fit PostgreSQL NUMERIC(18,10) exactly; excess scale and magnitude overflow are rejected, not rounded.",
       "example": "0.1200000000",
       "type": "object",
       "locations": [
@@ -8370,7 +8370,7 @@
       "semanticId": "lotus.threshold_amount",
       "canonicalTerm": "threshold_amount",
       "preferredName": "threshold_amount",
-      "description": "Monetary value for threshold amount.",
+      "description": "Nonnegative monetary threshold supplied by the source rule set. The value must fit PostgreSQL NUMERIC(18,4) exactly; excess scale and magnitude overflow are rejected, not rounded.",
       "example": 125000.5,
       "type": "object",
       "locations": [
@@ -9062,7 +9062,7 @@
       "semanticId": "lotus.value",
       "canonicalTerm": "value",
       "preferredName": "value",
-      "description": "Risk-free value.",
+      "description": "Risk-free value. The value must fit PostgreSQL NUMERIC(18,10) exactly; excess scale and magnitude overflow are rejected, not rounded.",
       "example": "0.0350000000",
       "type": "object",
       "locations": [
@@ -9279,7 +9279,7 @@
       "semanticId": "lotus.withholding_tax_rate",
       "canonicalTerm": "withholding_tax_rate",
       "preferredName": "withholding_tax_rate",
-      "description": "Reference withholding rate ratio when supplied by the source.",
+      "description": "Reference withholding rate ratio when supplied by the source. The value must fit PostgreSQL NUMERIC(18,10) exactly; excess scale and magnitude overflow are rejected, not rounded.",
       "example": 125000.5,
       "type": "object",
       "locations": [
