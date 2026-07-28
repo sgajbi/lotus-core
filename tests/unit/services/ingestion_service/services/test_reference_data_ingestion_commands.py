@@ -13,10 +13,30 @@ from src.services.ingestion_service.app.services.reference_data_ingestion_comman
 )
 
 
-def _job_result(*, created: bool = True, job_id: str = "ref-job-1", accepted_count: int = 2):
+def _job_result(
+    *,
+    created: bool = True,
+    job_id: str = "ref-job-1",
+    accepted_count: int = 2,
+    status: str | None = None,
+    failure_reason: str | None = None,
+    failure_status_code: int | None = None,
+    failure_code: str | None = None,
+    failure_detail: dict | None = None,
+    failure_headers: dict[str, str] | None = None,
+):
     return SimpleNamespace(
         created=created,
-        job=SimpleNamespace(job_id=job_id, accepted_count=accepted_count),
+        job=SimpleNamespace(
+            job_id=job_id,
+            accepted_count=accepted_count,
+            status=status or ("accepted" if created else "queued"),
+            failure_reason=failure_reason,
+            failure_status_code=failure_status_code,
+            failure_code=failure_code,
+            failure_detail=failure_detail,
+            failure_headers=failure_headers,
+        ),
     )
 
 
@@ -94,6 +114,68 @@ async def test_reference_data_command_replay_skips_persist() -> None:
 
 
 @pytest.mark.asyncio
+async def test_reference_data_command_replays_original_failed_outcome() -> None:
+    handler = _handler()
+    handler.ingestion_job_service.create_or_get_job.return_value = _job_result(
+        created=False,
+        job_id="ref-job-failed",
+        status="failed",
+        failure_reason="competing exact price authority",
+        failure_status_code=409,
+        failure_code="MARKET_PRICE_SOURCE_FACT_CONFLICT",
+        failure_detail={
+            "message": "competing exact price authority",
+            "job_id": "ref-job-failed",
+        },
+    )
+    registry_command = _registry_command()
+
+    with pytest.raises(ReferenceDataIngestionCommandError) as exc_info:
+        await handler.ingest_reference_data(
+            ReferenceDataIngestionCommand(
+                endpoint="/ingest/authoritative-market-price-source-facts",
+                idempotency_key="ref-failed-replay",
+                registry_command=registry_command,
+                request=SimpleNamespace(records=[{"id": "R1"}]),
+            )
+        )
+
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail == {
+        "code": "MARKET_PRICE_SOURCE_FACT_CONFLICT",
+        "message": "competing exact price authority",
+        "job_id": "ref-job-failed",
+    }
+    registry_command.persist.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_reference_data_command_does_not_claim_unresolved_job_succeeded() -> None:
+    handler = _handler()
+    handler.ingestion_job_service.create_or_get_job.return_value = _job_result(
+        created=False,
+        job_id="ref-job-in-progress",
+        status="accepted",
+    )
+    registry_command = _registry_command()
+
+    with pytest.raises(ReferenceDataIngestionCommandError) as exc_info:
+        await handler.ingest_reference_data(
+            ReferenceDataIngestionCommand(
+                endpoint="/ingest/reference",
+                idempotency_key="ref-in-progress",
+                registry_command=registry_command,
+                request=SimpleNamespace(records=[{"id": "R1"}]),
+            )
+        )
+
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail["code"] == "INGESTION_REQUEST_IN_PROGRESS"
+    assert exc_info.value.detail["job_id"] == "ref-job-in-progress"
+    registry_command.persist.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_reference_data_command_marks_failed_on_persist_error() -> None:
     handler = _handler()
     registry_command = _registry_command(persist_side_effect=RuntimeError("db unavailable"))
@@ -118,6 +200,13 @@ async def test_reference_data_command_marks_failed_on_persist_error() -> None:
         "ref-job-1",
         "db unavailable",
         failure_phase="persist",
+        failure_status_code=500,
+        failure_code="REFERENCE_DATA_PERSIST_FAILED",
+        failure_detail={
+            "code": "REFERENCE_DATA_PERSIST_FAILED",
+            "message": "db unavailable",
+            "job_id": "ref-job-1",
+        },
     )
 
 
@@ -148,6 +237,13 @@ async def test_reference_data_command_maps_valuation_authority_conflict_to_409()
         "ref-job-1",
         "overlapping valuation authority",
         failure_phase="persist",
+        failure_status_code=409,
+        failure_code="VALUATION_POLICY_ASSIGNMENT_CONFLICT",
+        failure_detail={
+            "code": "VALUATION_POLICY_ASSIGNMENT_CONFLICT",
+            "message": "overlapping valuation authority",
+            "job_id": "ref-job-1",
+        },
     )
 
 
@@ -178,6 +274,13 @@ async def test_reference_data_command_maps_market_price_authority_conflict_to_40
         "ref-job-1",
         "competing exact price authority",
         failure_phase="persist",
+        failure_status_code=409,
+        failure_code="MARKET_PRICE_SOURCE_FACT_CONFLICT",
+        failure_detail={
+            "code": "MARKET_PRICE_SOURCE_FACT_CONFLICT",
+            "message": "competing exact price authority",
+            "job_id": "ref-job-1",
+        },
     )
 
 

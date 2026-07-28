@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, NoReturn
 
 from portfolio_common.domain.valuation.assignments import ValuationPolicyAssignmentError
 from portfolio_common.domain.valuation.source_facts import MarketPriceSourceFactError
 
+from ..application.ingestion_idempotency_replay import (
+    resolve_ingestion_idempotency_replay,
+)
 from ..application.reference_data_ingestion_registry import (
     ReferenceDataIngestionCommand as ReferenceDataRegistryCommand,
 )
@@ -27,10 +30,17 @@ HTTP_INTERNAL_SERVER_ERROR = 500
 
 
 class ReferenceDataIngestionCommandError(Exception):
-    def __init__(self, status_code: int, detail: dict[str, Any]) -> None:
+    def __init__(
+        self,
+        status_code: int,
+        detail: dict[str, Any],
+        *,
+        headers: dict[str, str] | None = None,
+    ) -> None:
         super().__init__(str(detail.get("message", detail.get("code", "command failed"))))
         self.status_code = status_code
         self.detail = detail
+        self.headers = headers
 
 
 class ReferenceDataBookkeepingFailed(Exception):
@@ -76,6 +86,18 @@ class ReferenceDataIngestionCommandHandler:
         job_result = await self._create_job(command=command, accepted_count=accepted_count)
         entity_type = command.registry_command.entity_type
         if not job_result.created:
+            replay = resolve_ingestion_idempotency_replay(job_result.job)
+            if not replay.accepted:
+                raise ReferenceDataIngestionCommandError(
+                    replay.status_code or HTTP_INTERNAL_SERVER_ERROR,
+                    replay.detail
+                    or {
+                        "code": "INGESTION_REPLAY_STATE_INVALID",
+                        "message": "The stored ingestion replay outcome is incomplete.",
+                        "job_id": job_result.job.job_id,
+                    },
+                    headers=replay.headers,
+                )
             return ReferenceDataIngestionCommandResult(
                 message="Duplicate ingestion request accepted via idempotency replay.",
                 entity_type=entity_type,
@@ -141,35 +163,49 @@ class ReferenceDataIngestionCommandHandler:
         try:
             await command.registry_command.persist(self.reference_data_service, command.request)
         except MarketPriceSourceFactError as exc:
-            await self.ingestion_job_service.mark_failed(job_id, str(exc), failure_phase="persist")
-            raise ReferenceDataIngestionCommandError(
-                HTTP_CONFLICT,
-                {
-                    "code": "MARKET_PRICE_SOURCE_FACT_CONFLICT",
-                    "message": str(exc),
-                    "job_id": job_id,
-                },
-            ) from exc
+            await self._mark_failed_and_raise(
+                job_id=job_id,
+                status_code=HTTP_CONFLICT,
+                code="MARKET_PRICE_SOURCE_FACT_CONFLICT",
+                exc=exc,
+            )
         except ValuationPolicyAssignmentError as exc:
-            await self.ingestion_job_service.mark_failed(job_id, str(exc), failure_phase="persist")
-            raise ReferenceDataIngestionCommandError(
-                HTTP_CONFLICT,
-                {
-                    "code": "VALUATION_POLICY_ASSIGNMENT_CONFLICT",
-                    "message": str(exc),
-                    "job_id": job_id,
-                },
-            ) from exc
+            await self._mark_failed_and_raise(
+                job_id=job_id,
+                status_code=HTTP_CONFLICT,
+                code="VALUATION_POLICY_ASSIGNMENT_CONFLICT",
+                exc=exc,
+            )
         except Exception as exc:
-            await self.ingestion_job_service.mark_failed(job_id, str(exc), failure_phase="persist")
-            raise ReferenceDataIngestionCommandError(
-                HTTP_INTERNAL_SERVER_ERROR,
-                {
-                    "code": "REFERENCE_DATA_PERSIST_FAILED",
-                    "message": str(exc),
-                    "job_id": job_id,
-                },
-            ) from exc
+            await self._mark_failed_and_raise(
+                job_id=job_id,
+                status_code=HTTP_INTERNAL_SERVER_ERROR,
+                code="REFERENCE_DATA_PERSIST_FAILED",
+                exc=exc,
+            )
+
+    async def _mark_failed_and_raise(
+        self,
+        *,
+        job_id: str,
+        status_code: int,
+        code: str,
+        exc: Exception,
+    ) -> NoReturn:
+        detail = {
+            "code": code,
+            "message": str(exc),
+            "job_id": job_id,
+        }
+        await self.ingestion_job_service.mark_failed(
+            job_id,
+            str(exc),
+            failure_phase="persist",
+            failure_status_code=status_code,
+            failure_code=code,
+            failure_detail=detail,
+        )
+        raise ReferenceDataIngestionCommandError(status_code, detail) from exc
 
     async def _mark_queued_or_raise(self, *, job_id: str) -> None:
         try:

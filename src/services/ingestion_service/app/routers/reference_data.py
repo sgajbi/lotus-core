@@ -107,7 +107,11 @@ async def _handle_reference_ingestion(
             )
         )
     except ReferenceDataIngestionCommandError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail=exc.detail,
+            headers=exc.headers,
+        ) from exc
     except ReferenceDataBookkeepingFailed as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

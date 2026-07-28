@@ -14,6 +14,7 @@ import pytest
 import pytest_asyncio
 from fastapi import HTTPException
 from openpyxl import Workbook
+from portfolio_common.domain.valuation.source_facts import MarketPriceSourceFactError
 from portfolio_common.event_publisher import KafkaEventPublisher
 from portfolio_common.kafka_utils import KafkaProducer, get_kafka_producer
 
@@ -232,12 +233,20 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
             failure_reason: str,
             failure_phase: str = "publish",
             failed_record_keys: list[str] | None = None,
+            failure_status_code: int | None = None,
+            failure_code: str | None = None,
+            failure_detail: dict | None = None,
+            failure_headers: dict[str, str] | None = None,
         ) -> None:
             if job_id not in self.jobs:
                 return
             record = self.jobs[job_id]
             record.status = "failed"
             record.failure_reason = failure_reason
+            record.failure_status_code = failure_status_code
+            record.failure_code = failure_code
+            record.failure_detail = failure_detail
+            record.failure_headers = failure_headers
             record.completed_at = datetime.now(UTC)
             self.jobs[job_id] = record
             self.failures.setdefault(job_id, []).append(
@@ -8176,9 +8185,16 @@ async def test_reference_data_ingestion_marks_job_failed_when_persist_fn_raises(
     response = await async_test_client.post(
         "/ingest/reference/cash-accounts",
         json=_cash_account_master_payload(),
+        headers={"X-Idempotency-Key": "cash-account-persist-failure-replay-001"},
+    )
+    replay = await async_test_client.post(
+        "/ingest/reference/cash-accounts",
+        json=_cash_account_master_payload(),
+        headers={"X-Idempotency-Key": "cash-account-persist-failure-replay-001"},
     )
 
-    assert response.status_code == 500
+    assert response.status_code == replay.status_code == 500
+    assert replay.json() == response.json()
     assert response.json()["detail"]["code"] == "REFERENCE_DATA_PERSIST_FAILED"
     job_id = response.json()["detail"]["job_id"]
     failed_jobs = [
@@ -8397,3 +8413,54 @@ async def test_ingest_authoritative_market_price_source_fact_rejects_duplicate_s
         ingestion_test_harness["fake_reference_data_service"].persisted["market_price_source_facts"]
         == []
     )
+
+
+async def test_authoritative_market_price_failure_replay_preserves_original_conflict(
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    monkeypatch,
+):
+    persist = AsyncMock(side_effect=MarketPriceSourceFactError("competing exact price authority"))
+    monkeypatch.setattr(
+        ingestion_test_harness["fake_reference_data_service"],
+        "append_authoritative_market_price_source_facts",
+        persist,
+    )
+    payload = {
+        "market_price_source_facts": [
+            {
+                "tenant_id": "LOTUS_PB_SG",
+                "legal_book_id": "SG_PRIVATE_BANK_BOOK",
+                "security_id": "BOND_US_CORP_2031",
+                "price_date": "2026-07-28",
+                "price": "99.25",
+                "currency": "USD",
+                "quote_basis": "PERCENT_OF_PRINCIPAL_CLEAN",
+                "fact_status": "ACTIVE",
+                "fact_version": 1,
+                "source_system": "approved_market_data",
+                "source_record_id": "PX-CONFLICT-20260728",
+                "source_revision": "rev-conflict",
+                "source_content_hash": "b" * 64,
+                "observed_at": "2026-07-28T09:31:00+08:00",
+            }
+        ]
+    }
+    headers = {"X-Idempotency-Key": "market-price-authority-failed-replay-001"}
+
+    first = await async_test_client.post(
+        "/ingest/authoritative-market-price-source-facts",
+        json=payload,
+        headers=headers,
+    )
+    replay = await async_test_client.post(
+        "/ingest/authoritative-market-price-source-facts",
+        json=payload,
+        headers=headers,
+    )
+
+    assert first.status_code == replay.status_code == 409
+    assert first.json() == replay.json()
+    assert first.json()["detail"]["code"] == "MARKET_PRICE_SOURCE_FACT_CONFLICT"
+    assert first.json()["detail"]["job_id"]
+    persist.assert_awaited_once()
