@@ -824,6 +824,15 @@ class SustainabilityPreferenceProfile(Base):
     )
 
     __table_args__ = (
+        _finite_numeric_check_constraint(
+            "ck_sustainability_allocations_finite",
+            "minimum_allocation",
+            "maximum_allocation",
+        ),
+        CheckConstraint(
+            "minimum_allocation >= 0 AND maximum_allocation >= 0",
+            name="ck_sustainability_allocations_nonnegative",
+        ),
         UniqueConstraint(
             "client_id",
             "portfolio_id",
@@ -886,6 +895,14 @@ class ClientTaxProfile(Base):
     )
 
     __table_args__ = (
+        _finite_numeric_check_constraint(
+            "ck_client_tax_withholding_rate_finite",
+            "withholding_tax_rate",
+        ),
+        CheckConstraint(
+            "withholding_tax_rate >= 0",
+            name="ck_client_tax_withholding_rate_nonnegative",
+        ),
         UniqueConstraint(
             "client_id",
             "portfolio_id",
@@ -949,6 +966,15 @@ class ClientTaxRuleSet(Base):
     )
 
     __table_args__ = (
+        _finite_numeric_check_constraint(
+            "ck_client_tax_rule_values_finite",
+            "rate",
+            "threshold_amount",
+        ),
+        CheckConstraint(
+            "rate >= 0 AND threshold_amount >= 0",
+            name="ck_client_tax_rule_values_nonnegative",
+        ),
         UniqueConstraint(
             "client_id",
             "portfolio_id",
@@ -1010,6 +1036,14 @@ class ClientIncomeNeedsSchedule(Base):
     )
 
     __table_args__ = (
+        _finite_numeric_check_constraint(
+            "ck_client_income_need_amount_finite",
+            "amount",
+        ),
+        CheckConstraint(
+            "amount > 0",
+            name="ck_client_income_need_amount_positive",
+        ),
         UniqueConstraint(
             "client_id",
             "portfolio_id",
@@ -1066,6 +1100,14 @@ class LiquidityReserveRequirement(Base):
     )
 
     __table_args__ = (
+        _finite_numeric_check_constraint(
+            "ck_liquidity_reserve_amount_finite",
+            "required_amount",
+        ),
+        CheckConstraint(
+            "required_amount > 0",
+            name="ck_liquidity_reserve_amount_positive",
+        ),
         UniqueConstraint(
             "client_id",
             "portfolio_id",
@@ -1121,6 +1163,14 @@ class PlannedWithdrawalSchedule(Base):
     )
 
     __table_args__ = (
+        _finite_numeric_check_constraint(
+            "ck_planned_withdrawal_amount_finite",
+            "amount",
+        ),
+        CheckConstraint(
+            "amount > 0",
+            name="ck_planned_withdrawal_amount_positive",
+        ),
         UniqueConstraint(
             "client_id",
             "portfolio_id",
@@ -1276,6 +1326,16 @@ class ModelPortfolioTarget(Base):
     )
 
     __table_args__ = (
+        _finite_numeric_check_constraint(
+            "ck_model_portfolio_weights_finite",
+            "target_weight",
+            "min_weight",
+            "max_weight",
+        ),
+        CheckConstraint(
+            "target_weight >= 0 AND min_weight >= 0 AND max_weight >= 0",
+            name="ck_model_portfolio_weights_nonnegative",
+        ),
         UniqueConstraint(
             "model_portfolio_id",
             "model_portfolio_version",
