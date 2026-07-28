@@ -91,6 +91,16 @@ def _performance_economics_transaction(
     return transaction
 
 
+def _transaction_cost_snapshot_row(transaction: Transaction):
+    return (
+        transaction,
+        [cost.fee_type for cost in transaction.costs] or None,
+        [cost.amount for cost in transaction.costs] or None,
+        [cost.currency for cost in transaction.costs] or None,
+        [cost.updated_at for cost in transaction.costs] or None,
+    )
+
+
 async def test_portfolio_exists_true(
     repository: SqlAlchemyTransactionEconomicsReader, mock_db_session: AsyncMock
 ):
@@ -136,7 +146,9 @@ async def test_list_transaction_cost_evidence_filters_scope_before_loading_costs
     repository: SqlAlchemyTransactionEconomicsReader, mock_db_session: AsyncMock
 ):
     mock_rows = MagicMock()
-    mock_rows.scalars.return_value.unique.return_value.all.return_value = [Transaction()]
+    mock_rows.all.return_value = [
+        _transaction_cost_snapshot_row(_performance_economics_transaction())
+    ]
     mock_db_session.execute = AsyncMock(return_value=mock_rows)
 
     rows = await repository.list_transaction_cost_evidence(
@@ -172,7 +184,9 @@ async def test_list_transaction_cost_evidence_filters_to_bounded_curve_keys(
     repository: SqlAlchemyTransactionEconomicsReader, mock_db_session: AsyncMock
 ):
     mock_rows = MagicMock()
-    mock_rows.scalars.return_value.unique.return_value.all.return_value = [Transaction()]
+    mock_rows.all.return_value = [
+        _transaction_cost_snapshot_row(_performance_economics_transaction())
+    ]
     mock_db_session.execute = AsyncMock(return_value=mock_rows)
 
     rows = await repository.list_transaction_cost_evidence(
@@ -275,8 +289,8 @@ async def test_list_performance_component_economics_evidence_selects_latest_cash
     repository: SqlAlchemyTransactionEconomicsReader, mock_db_session: AsyncMock
 ):
     mock_rows = MagicMock()
-    mock_rows.scalars.return_value.unique.return_value.all.return_value = [
-        _performance_economics_transaction()
+    mock_rows.all.return_value = [
+        _transaction_cost_snapshot_row(_performance_economics_transaction())
     ]
     mock_db_session.execute = AsyncMock(return_value=mock_rows)
 
@@ -326,7 +340,7 @@ async def test_list_performance_component_economics_evidence_applies_cursor_and_
     transaction = _performance_economics_transaction(transaction_id="TXN-PERF-002")
     transaction.cashflow = None
     transaction.costs = []
-    mock_rows.scalars.return_value.unique.return_value.all.return_value = [transaction]
+    mock_rows.all.return_value = [_transaction_cost_snapshot_row(transaction)]
     mock_db_session.execute = AsyncMock(return_value=mock_rows)
 
     rows = await repository.list_performance_component_economics_evidence(
@@ -355,4 +369,7 @@ async def test_list_performance_component_economics_evidence_applies_cursor_and_
     assert "date(transactions.transaction_date) ASC" in compiled_query
     assert "transactions.transaction_id ASC" in compiled_query
     assert "LIMIT 11" in compiled_query
-    assert "transaction_costs" not in compiled_query
+    assert "JOIN LATERAL" in compiled_query
+    assert "array_agg(transaction_costs.amount ORDER BY transaction_costs.id ASC)" in compiled_query
+    assert "LEFT OUTER JOIN transaction_costs" not in compiled_query
+    assert compiled_query.index("LIMIT 11") < compiled_query.index("JOIN LATERAL")

@@ -42,7 +42,7 @@ def _transaction(*, sequence: int, cost_count: int) -> Transaction:
     )
 
 
-async def test_transaction_page_is_selected_before_cost_collection_hydration(
+async def test_transaction_page_and_costs_share_one_bounded_statement_snapshot(
     clean_db,
     db_engine,
     async_db_session: AsyncSession,
@@ -106,7 +106,12 @@ async def test_transaction_page_is_selected_before_cost_collection_hydration(
     select_statements = [
         statement for statement in statements if statement.lstrip().upper().startswith("SELECT")
     ]
-    assert len(select_statements) == 2
-    assert "JOIN transaction_costs" not in select_statements[0]
-    assert "JOIN transaction_costs" in select_statements[1]
-    assert "WHERE transactions_1.id IN" in select_statements[1]
+    assert len(select_statements) == 1
+    assert "JOIN LATERAL" in select_statements[0]
+    assert (
+        "array_agg(transaction_costs.amount ORDER BY transaction_costs.id ASC)"
+        in (select_statements[0])
+    )
+    assert "LEFT OUTER JOIN transaction_costs" not in select_statements[0]
+    assert "LIMIT" in select_statements[0]
+    assert select_statements[0].index("LIMIT") < select_statements[0].index("JOIN LATERAL")

@@ -22,6 +22,10 @@ def mock_db_session() -> AsyncMock:
     session = AsyncMock(spec=AsyncSession)
 
     mock_result_list = MagicMock()
+    mock_result_list.all.return_value = [
+        (Transaction(), None, None, None, None),
+        (Transaction(), None, None, None, None),
+    ]
     mock_result_list.scalars.return_value.all.return_value = [Transaction(), Transaction()]
 
     mock_result_scalar = MagicMock()
@@ -211,8 +215,11 @@ async def test_get_transactions_pages_transactions_before_loading_cost_collectio
 
     assert "transactions.instrument_id = 'INST-AAPL-USD'" in compiled_query
     assert "LEFT OUTER JOIN cashflows" in compiled_query
-    assert "transaction_costs" not in compiled_query
+    assert "JOIN LATERAL" in compiled_query
+    assert "array_agg(transaction_costs.amount ORDER BY transaction_costs.id ASC)" in compiled_query
+    assert "LEFT OUTER JOIN transaction_costs" not in compiled_query
     assert "LIMIT 25" in compiled_query
+    assert compiled_query.index("LIMIT 25") < compiled_query.index("JOIN LATERAL")
 
 
 async def test_get_transactions_count(
