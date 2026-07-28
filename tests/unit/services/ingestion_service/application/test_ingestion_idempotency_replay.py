@@ -84,23 +84,47 @@ def test_durable_failure_outcome_takes_precedence_over_nonterminal_status() -> N
     assert resolution.status_code == 500
     assert resolution.detail == {
         "code": "INGESTION_JOB_BOOKKEEPING_FAILED",
-        "message": "Queue transition failed after persistence.",
+        "message": "The previous ingestion attempt failed.",
         "work_state": "persisted",
         "retry_safe": False,
         "job_id": "ing_job_001",
     }
 
 
-def test_legacy_failed_job_fails_closed_with_recorded_reason() -> None:
+def test_legacy_failed_job_fails_closed_without_exposing_recorded_reason() -> None:
     resolution = resolve_ingestion_idempotency_replay(
-        _job(status="failed", failure_reason="Legacy persistence failure.")
+        _job(
+            status="failed",
+            failure_reason=(
+                "password authentication failed for user internal_writer "
+                "at postgres.service.local"
+            ),
+        )
     )
 
     assert resolution.disposition is IngestionIdempotencyReplayDisposition.FAILED
     assert resolution.status_code == 500
     assert resolution.detail == {
         "code": "INGESTION_PREVIOUS_ATTEMPT_FAILED",
-        "message": "Legacy persistence failure.",
+        "message": "The previous ingestion attempt failed.",
+        "job_id": "ing_job_001",
+    }
+
+
+def test_durable_failure_without_client_detail_does_not_expose_recorded_reason() -> None:
+    resolution = resolve_ingestion_idempotency_replay(
+        _job(
+            status="failed",
+            failure_reason="broker sasl authentication failed at kafka.internal:9093",
+            failure_status_code=503,
+            failure_code="INGESTION_PUBLISH_FAILED",
+        )
+    )
+
+    assert resolution.status_code == 503
+    assert resolution.detail == {
+        "code": "INGESTION_PUBLISH_FAILED",
+        "message": "The previous ingestion attempt failed.",
         "job_id": "ing_job_001",
     }
 
