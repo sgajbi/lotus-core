@@ -520,7 +520,7 @@ def setup_as_of_positive_filter_data(db_engine):
                     transaction_type="SELL",
                     quantity=Decimal("10"),
                     price=Decimal("1"),
-                    gross_transaction_amount=Decimal("-10"),
+                    gross_transaction_amount=Decimal("10"),
                     trade_currency="USD",
                     currency="USD",
                 ),
