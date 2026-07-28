@@ -2,6 +2,7 @@
 .PHONY: profile-derived-state-price-restatement profile-derived-state-fx-restatement
 .PHONY: ingestion-gateway-rate-limit-policy-guard generated-artifact-tracking-guard
 .PHONY: test-critical-lifecycle-db
+.PHONY: calculated-output-policy-guard
 
 LATENCY_SEED_COMPLETION_TIMEOUT_SECONDS ?= 900
 OPENAPI_ARTIFACT_DIR ?= output/openapi
@@ -76,6 +77,7 @@ docs-evidence-pack:
 lint: quality-ruff-gate quality-ruff-format-gate
 	$(MAKE) monetary-float-guard
 	$(MAKE) financial-numeric-persistence-guard
+	$(MAKE) calculated-output-policy-guard
 	$(MAKE) ingestion-contract-gate
 	$(MAKE) ingestion-rate-limit-scope-guard
 	$(MAKE) ingestion-gateway-rate-limit-policy-guard
@@ -108,6 +110,9 @@ monetary-float-guard:
 
 financial-numeric-persistence-guard:
 	$(REPOSITORY_PYTHON) scripts/quality/financial_numeric_persistence_guard.py
+
+calculated-output-policy-guard:
+	$(REPOSITORY_PYTHON) scripts/quality/calculated_output_policy_guard.py
 
 qcp-problem-details-guard:
 	$(REPOSITORY_PYTHON) scripts/quality/qcp_problem_details_guard.py
