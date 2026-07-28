@@ -2,10 +2,10 @@
 
 ## Scope
 
-This bounded continuation of GitHub issue #829 covers generic simulation commands, position-history
-accumulation, durable cashflow amounts, and the shared calculated-output arithmetic context. It
-does not claim closure of accrued-income ownership, calculation-lineage cutover, or downstream
-Gateway compatibility tracked by `sgajbi/lotus-gateway#511`.
+This review tracks bounded GitHub issue #829 owner-specific numeric work across generic simulation,
+position-history accumulation, durable cashflow amounts, accrued-income calculation, position
+valuation, and the shared calculated-output arithmetic and lineage contracts. It does not claim
+closure of persisted lineage exposure or the complete producer-policy inventory.
 
 ## Findings
 
@@ -16,6 +16,10 @@ Gateway compatibility tracked by `sgajbi/lotus-gateway#511`.
 - The generator-based calculated-output context manager attempted to mutate exception traceback
   state during unwinding, which is incompatible with frozen domain exceptions.
 - Cashflow events did not independently enforce the amount storage contract.
+- Accrued-income and position-valuation calculations used explicit high-precision arithmetic but
+  returned scale-amplified outputs without executing their ledger-output policies.
+- Calculation lineage could bind algorithm and intermediate precision but could not distinguish a
+  numeric-output policy revision from an unchanged calculation method.
 
 ## Resolution
 
@@ -30,6 +34,15 @@ Gateway compatibility tracked by `sgajbi/lotus-gateway#511`.
 - Made the shared arithmetic-context API return the native decimal context manager so frozen
   domain exceptions retain their identity.
 - Applied exact `NUMERIC(18,10)` validation to durable cashflow events.
+- Added complete numeric-output policy identity to calculation lineage without changing hashes for
+  calculations that do not opt into the new evidence.
+- Added named `accrued-income-ledger-output@1.0.0` ownership and activated the existing
+  `position-valuation-ledger-output@1.0.0` policy.
+- Accrued-income and position-valuation calculations now use deterministic 64-digit working
+  precision, normalize once to `NUMERIC(18,10)`, fail before persistence on magnitude overflow,
+  and bind policy name/version/shape/rounding into calculation lineage.
+- Position valuation normalizes clean value and accrued income before deriving the durable total,
+  so the visible component sum remains exactly equal to total market value after rounding.
 
 No database schema, migration, topic identity, or runtime topology changed. Exactly representable
 inputs and serialized Decimal values remain unchanged.
@@ -43,16 +56,22 @@ inputs and serialized Decimal values remain unchanged.
 - Repository-native type checking passed across 240 source files.
 - OpenAPI quality, API vocabulary parity, financial-numeric persistence, domain-layer, Ruff,
   formatting, and diff-hygiene gates passed.
+- Signed commits `0cfbb2c57`, `fb83c0819`, and `8454cbaca` continue the review.
+- 87 warning-strict lineage, precision, accrued-income, and position-valuation tests passed,
+  including policy-version hash changes, ambient-context independence, half-even normalization,
+  component reconciliation, and pre-persistence overflow rejection.
+- Repository-native MyPy passed across 240 source files.
 
 ## Compatibility and remaining work
 
 The simulation contract intentionally rejects values that could previously be changed or rejected
-only after acceptance. Gateway #511 must forward lexical decimal values before this contract is
-downstream-safe. Issue #829 remains open for that proof, accrued-income ownership, the complete
-producer-policy inventory, and persisted calculation-policy lineage compatibility.
+only after acceptance. Gateway #511 is exact-main complete. Accrued-income and position-valuation
+lineage hashes intentionally change because numeric policy is now calculation identity. Issue #829
+remains open for complete producer-policy inventory reconciliation and persisted/exposed
+calculation-policy lineage compatibility.
 
 ## Documentation decision
 
-OpenAPI and this review ledger are the durable truth changed by the slice. No operator command,
-business methodology, database migration, or wiki-authored flow changed, so no wiki source update
-is required.
+Repository context and this existing review record carry the new implementation truth without
+adding a duplicate document. No API/OpenAPI shape, operator command, database migration, or
+wiki-authored workflow changed, so no wiki source update is required.

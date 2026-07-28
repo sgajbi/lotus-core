@@ -3029,9 +3029,15 @@ Most relevant current governance:
      lineage binds the exact policy and assignment plus only the price/value, currency,
      position/principal/factor, multiplier, accrued-income, and FX evidence that policy consumes.
      When accrued income is calculated separately, bind its calculation lineage as a derived input
-     rather than relabeling it as a source record. Run position scaling, aggregation, and FX
-     conversion in the governed 50-digit local Decimal context; the returned reporting values and
-     output hash must use those same intermediates.
+     rather than relabeling it as a source record. Calculated numeric lineage may additionally bind
+     the complete output-policy name, version, precision, scale, working precision, and rounding
+     mode; a policy revision changes calculation and output hashes without changing the input hash.
+     Accrued-income and position-valuation calculations use named `NUMERIC(18,10)` output policies,
+     run intermediate arithmetic in the policies' governed 64-digit local Decimal context,
+     normalize once at the output boundary, and fail before persistence on magnitude overflow.
+     Position valuation keeps normalized clean value plus normalized accrued income exactly equal
+     to normalized total market value. Returned reporting values and output hashes must use those
+     policy-owned results.
 208. Repository-native Python quality evidence is valid only when the active interpreter's tool
      version exactly matches `requirements/ci-tooling.lock.txt`. Route module-backed Ruff, MyPy,
      Bandit, Vulture, Deptry, Xenon, Radon, Interrogate, and pip-audit commands through
