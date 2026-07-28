@@ -143,6 +143,31 @@ async def test_add_simulation_changes_validation_maps_to_400(async_test_client):
     )
 
 
+@pytest.mark.parametrize("price", ["0", "-0.01"])
+async def test_add_simulation_changes_rejects_nonpositive_price_before_service(
+    async_test_client,
+    price,
+):
+    client, mock_service = async_test_client
+
+    response = await client.post(
+        "/simulation-sessions/S1/changes",
+        json={
+            "changes": [
+                {
+                    "security_id": "SEC_AAPL_US",
+                    "transaction_type": "BUY",
+                    "quantity": 10,
+                    "price": price,
+                }
+            ]
+        },
+    )
+
+    assert response.status_code == 422
+    mock_service.add_changes.assert_not_awaited()
+
+
 async def test_add_simulation_changes_missing_session_maps_to_404(async_test_client):
     client, mock_service = async_test_client
     mock_service.add_changes.side_effect = SimulationSessionNotFoundError(
