@@ -50,6 +50,25 @@ def _keyword_type_model() -> str:
     )
 
 
+def _finite_helper_model(*, dynamic_column: bool = False) -> str:
+    column_argument = "column_name" if dynamic_column else '"value"'
+    dynamic_declaration = 'column_name = "value"\n\n' if dynamic_column else ""
+    return (
+        "from sqlalchemy import CheckConstraint, Column, Numeric\n\n"
+        f"{dynamic_declaration}"
+        "class FinancialRow:\n"
+        '    __tablename__ = "financial_rows"\n'
+        "    value = Column(Numeric(18, 10), nullable=False)\n"
+        "    __table_args__ = (\n"
+        "        _finite_numeric_check_constraint(\n"
+        '            "ck_financial_value_finite",\n'
+        f"            {column_argument},\n"
+        "        ),\n"
+        '        CheckConstraint("value > 0", name="ck_financial_value_positive"),\n'
+        "    )\n"
+    )
+
+
 def _numeric_alias_model(*, keyword: bool, include_unclassified: bool = False) -> str:
     column_type = "type_=MONEY" if keyword else "MONEY"
     unclassified = (
@@ -188,6 +207,31 @@ def test_guard_accepts_postgresql_text_cast_finiteness_constraint(
     )
 
     assert evaluate_guard(tmp_path, contract_path).findings == ()
+
+
+def test_guard_accepts_canonical_finite_constraint_helper(tmp_path: Path) -> None:
+    contract_path = _write_fixture(
+        tmp_path,
+        model=_finite_helper_model(),
+        contract=_contract(),
+    )
+
+    assert evaluate_guard(tmp_path, contract_path).findings == ()
+
+
+def test_guard_rejects_dynamic_finite_constraint_helper_column(tmp_path: Path) -> None:
+    contract_path = _write_fixture(
+        tmp_path,
+        model=_finite_helper_model(dynamic_column=True),
+        contract=_contract(),
+    )
+
+    report = evaluate_guard(tmp_path, contract_path)
+
+    assert report.findings[0] == (
+        "cannot inventory ORM model database_models.py: "
+        "FinancialRow: _finite_numeric_check_constraint arguments must be string literals"
+    )
 
 
 def test_guard_inventories_keyword_type_numeric_column(tmp_path: Path) -> None:
