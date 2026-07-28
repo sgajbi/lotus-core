@@ -5,6 +5,10 @@ from datetime import UTC, datetime
 from decimal import Decimal, localcontext
 
 import pytest
+from portfolio_common.domain.financial.precision import (
+    DecimalPrecisionError,
+    DecimalPrecisionViolation,
+)
 from portfolio_common.domain.valuation import (
     AccruedIncomeTreatment,
     FinancialSourceReference,
@@ -110,7 +114,12 @@ def test_unit_price_and_nav_are_scaled_by_position_units(
     assert result.total_market_value_local == Decimal("4062.50")
     assert result.notional_exposure_local is None
     assert result.lineage.algorithm_id == "POSITION_VALUATION_SCALING"
-    assert result.lineage.intermediate_precision == 50
+    assert result.lineage.algorithm_version == 2
+    assert result.lineage.intermediate_precision == 64
+    assert result.lineage.numeric_output_policy is not None
+    assert (
+        result.lineage.numeric_output_policy.policy_id == "position-valuation-ledger-output@1.0.0"
+    )
 
 
 def test_position_lineage_changes_on_source_revision_even_when_value_is_equal() -> None:
@@ -238,11 +247,31 @@ def test_clean_ex_coupon_policy_adds_signed_rebate_interest_once() -> None:
     )
 
     assert result.clean_value_local == Decimal("1012500.00")
-    assert result.accrued_income_local == Decimal(
-        "-994.4751381215469613259668508287292817679558011050"
+    assert result.accrued_income_local == Decimal("-994.4751381215")
+    assert result.total_market_value_local == Decimal("1011505.5248618785")
+
+
+def test_clean_value_and_accrual_round_before_reconciled_total() -> None:
+    result = calculate_position_valuation(
+        policy=_policy(
+            input_basis=ValuationInputBasis.PERCENT_OF_PRINCIPAL_CLEAN,
+            principal_basis=PrincipalBasis.FACE_AMOUNT,
+            scaling=PositionScaling.PRINCIPAL,
+            accrued=AccruedIncomeTreatment.CALCULATED_SEPARATELY,
+            denominator=Decimal("100"),
+        ),
+        inputs=_inputs(
+            source_value=Decimal("100"),
+            signed_face_amount=Decimal("0.00000000005"),
+            calculated_accrued_income=Decimal("0.00000000005"),
+        ),
     )
-    assert result.total_market_value_local == Decimal(
-        "1011505.5248618784530386740331491712707182320441989"
+
+    assert result.clean_value_local == Decimal("0E-10")
+    assert result.accrued_income_local == Decimal("0E-10")
+    assert result.total_market_value_local == Decimal("0E-10")
+    assert result.total_market_value_local == (
+        result.clean_value_local + result.accrued_income_local
     )
 
 
@@ -277,6 +306,20 @@ def test_whole_position_fair_value_is_not_scaled_and_can_represent_a_liability()
     )
 
     assert result.total_market_value_local == Decimal("-12500")
+
+
+def test_position_valuation_fails_before_persistence_on_output_magnitude_overflow() -> None:
+    with pytest.raises(DecimalPrecisionError) as exc_info:
+        calculate_position_valuation(
+            policy=_policy(
+                input_basis=ValuationInputBasis.SUPPLIED_FAIR_VALUE_WHOLE_POSITION,
+                scaling=PositionScaling.NONE,
+            ),
+            inputs=_inputs(source_value=Decimal("100000000")),
+        )
+
+    assert exc_info.value.violation is DecimalPrecisionViolation.MAGNITUDE_OVERFLOW
+    assert exc_info.value.policy_name == "position-valuation-ledger-output@1.0.0"
 
 
 def test_futures_contract_value_populates_notional_but_never_market_value() -> None:
