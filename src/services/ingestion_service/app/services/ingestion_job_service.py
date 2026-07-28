@@ -196,12 +196,20 @@ class IngestionJobService:
         failure_reason: str,
         failure_phase: str = "publish",
         failed_record_keys: list[str] | None = None,
+        failure_status_code: int | None = None,
+        failure_code: str | None = None,
+        failure_detail: dict[str, Any] | None = None,
+        failure_headers: dict[str, str] | None = None,
     ) -> bool:
         return await mark_job_failed(
             job_id=job_id,
             failure_reason=failure_reason,
             failure_phase=failure_phase,
             failed_record_keys=failed_record_keys,
+            failure_status_code=failure_status_code,
+            failure_code=failure_code,
+            failure_detail=failure_detail,
+            failure_headers=failure_headers,
             session_factory=get_async_db_session,
         )
 
@@ -212,12 +220,20 @@ class IngestionJobService:
         *,
         failure_phase: str,
         failed_record_keys: list[str] | None = None,
+        failure_status_code: int | None = None,
+        failure_code: str | None = None,
+        failure_detail: dict[str, Any] | None = None,
+        failure_headers: dict[str, str] | None = None,
     ) -> None:
         await record_job_failure_observation(
             job_id=job_id,
             failure_reason=failure_reason,
             failure_phase=failure_phase,
             failed_record_keys=failed_record_keys,
+            failure_status_code=failure_status_code,
+            failure_code=failure_code,
+            failure_detail=failure_detail,
+            failure_headers=failure_headers,
             session_factory=get_async_db_session,
         )
 

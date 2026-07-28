@@ -15,6 +15,7 @@ from portfolio_common.database_models import (
     FinancialReconciliationFinding,
     FinancialReconciliationRun,
     IndexDefinition,
+    IngestionJob,
     Instrument,
     InstrumentEligibilityProfile,
     InstrumentLookthroughComponent,
@@ -65,6 +66,19 @@ def test_database_identifier_names_fit_postgresql_limit():
     too_long = sorted(name for name in names if len(name) > 63)
 
     assert too_long == []
+
+
+def test_ingestion_job_declares_complete_failure_outcome_contract() -> None:
+    table = IngestionJob.__table__
+    constraint_names = {constraint.name for constraint in table.constraints}
+
+    assert {
+        "failure_status_code",
+        "failure_code",
+        "failure_detail",
+        "failure_headers",
+    } <= set(table.columns.keys())
+    assert "ck_ingestion_jobs_failure_outcome_complete" in constraint_names
 
 
 def test_average_cost_pool_state_declares_integrity_constraints_and_support_index() -> None:

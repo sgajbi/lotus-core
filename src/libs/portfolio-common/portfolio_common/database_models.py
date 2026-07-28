@@ -2568,12 +2568,25 @@ class IngestionJob(Base):
     submitted_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     completed_at = Column(DateTime(timezone=True), nullable=True)
     failure_reason = Column(Text, nullable=True)
+    failure_status_code = Column(Integer, nullable=True)
+    failure_code = Column(String, nullable=True)
+    failure_detail = Column(JSON, nullable=True)
+    failure_headers = Column(JSON, nullable=True)
     request_payload = Column(JSON, nullable=True)
     request_payload_fingerprint = Column(String, nullable=True)
     retry_count = Column(Integer, nullable=False, default=0, server_default="0")
     last_retried_at = Column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
+        CheckConstraint(
+            "(failure_status_code IS NULL AND failure_code IS NULL "
+            "AND failure_detail IS NULL AND failure_headers IS NULL) OR "
+            "(failure_status_code BETWEEN 400 AND 599 "
+            "AND failure_code IS NOT NULL "
+            "AND failure_code = btrim(failure_code) "
+            "AND failure_code <> '')",
+            name="ck_ingestion_jobs_failure_outcome_complete",
+        ),
         Index("ix_ingestion_jobs_submitted_at", "submitted_at"),
         Index("ix_ingestion_jobs_status_submitted_at", "status", submitted_at.desc()),
         Index(

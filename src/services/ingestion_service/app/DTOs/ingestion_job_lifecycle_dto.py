@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -58,6 +58,38 @@ class IngestionJobResponse(BaseModel):
         default=None,
         description="Failure reason when status is failed.",
         examples=["Kafka publish timeout for topic transactions.raw.received."],
+    )
+    failure_status_code: int | None = Field(
+        default=None,
+        ge=400,
+        le=599,
+        description=(
+            "Original HTTP failure status preserved for deterministic idempotent replay."
+        ),
+        examples=[409],
+    )
+    failure_code: str | None = Field(
+        default=None,
+        description="Stable original error code preserved for deterministic idempotent replay.",
+        examples=["MARKET_PRICE_SOURCE_FACT_CONFLICT"],
+    )
+    failure_detail: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "Source-safe original error detail preserved for deterministic idempotent replay; "
+            "raw request payloads and secrets are excluded."
+        ),
+        examples=[
+            {
+                "message": "The authoritative source version conflicts with retained history.",
+                "job_id": "job_01J5S0J6D3BAVMK2E1V0WQ7MCC",
+            }
+        ],
+    )
+    failure_headers: dict[str, str] | None = Field(
+        default=None,
+        description="Safe response headers that must be reproduced with a failed replay.",
+        examples=[{"Retry-After": "30"}],
     )
     retry_count: int = Field(
         ge=0,
