@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from decimal import Decimal
 
 import pytest
@@ -235,6 +236,20 @@ def test_reference_numeric_fields_accept_exact_storage_boundaries() -> None:
     assert instrument.contract_rate == Decimal("1.0850000000")
 
 
+def test_reference_numeric_fields_reject_lossy_json_number_before_decimal_coercion() -> None:
+    payload = json.dumps(_instrument()).replace(
+        '"1.0850000000"',
+        "12345678.1234567890",
+    )
+
+    with pytest.raises(ValidationError) as exc_info:
+        Instrument.model_validate_json(payload)
+
+    error = exc_info.value.errors()[0]
+    assert error["loc"] == ("contract_rate",)
+    assert "floating-point input is not permitted" in error["msg"]
+
+
 @pytest.mark.parametrize(
     ("record_type", "field_name"),
     [
@@ -259,16 +274,16 @@ def test_reference_numeric_fields_publish_exact_openapi_contract(
     assert "excess scale and magnitude overflow are rejected, not rounded" in description
 
 
-def _numeric_json_schema(schema: dict[str, object]) -> dict[str, object]:
-    if schema.get("type") == "number":
+def _exact_numeric_json_schema(schema: dict[str, object]) -> dict[str, object]:
+    if schema.get("type") == "integer":
         return schema
     for alternative in schema.get("anyOf", []):
         if isinstance(alternative, dict):
             try:
-                return _numeric_json_schema(alternative)
+                return _exact_numeric_json_schema(alternative)
             except AssertionError:
                 continue
-    raise AssertionError(f"numeric JSON Schema alternative not found: {schema}")
+    raise AssertionError(f"exact numeric JSON Schema alternative not found: {schema}")
 
 
 @pytest.mark.parametrize(
@@ -311,8 +326,9 @@ def test_exact_numeric_bounds_remain_machine_readable_in_openapi(
     expected_bounds: dict[str, float],
 ) -> None:
     field_schema = record_type.model_json_schema()["properties"][field_name]
-    numeric_schema = _numeric_json_schema(field_schema)
+    numeric_schema = _exact_numeric_json_schema(field_schema)
 
     for keyword, expected_value in expected_bounds.items():
         assert numeric_schema[keyword] == expected_value
     assert not {"ge", "gt", "le", "lt"}.intersection(numeric_schema)
+    assert '"type": "number"' not in json.dumps(field_schema)

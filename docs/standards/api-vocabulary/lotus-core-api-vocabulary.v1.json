@@ -13,7 +13,7 @@
       "openApiVersion": "3.1.0"
     }
   ],
-  "generatedAt": "2026-07-28T16:12:17.772654+00:00",
+  "generatedAt": "2026-07-28T17:33:15.738297+00:00",
   "attributeCatalog": [
     {
       "semanticId": "lotus.accepted_count",
@@ -197,7 +197,6 @@
         "body"
       ],
       "observedTypes": [
-        "object",
         "string"
       ]
     },
@@ -696,12 +695,12 @@
       "preferredName": "benchmark_return",
       "description": "Benchmark return value. The value must fit PostgreSQL NUMERIC(18,10) exactly; excess scale and magnitude overflow are rejected, not rounded.",
       "example": "0.0019000000",
-      "type": "object",
+      "type": "string",
       "locations": [
         "body"
       ],
       "observedTypes": [
-        "object"
+        "string"
       ]
     },
     {
@@ -1020,12 +1019,13 @@
       "preferredName": "buy_amount",
       "description": "Positive magnitude of currency bought.",
       "example": 1095000.0,
-      "type": "object",
+      "type": "string",
       "locations": [
         "body"
       ],
       "observedTypes": [
-        "object"
+        "object",
+        "string"
       ]
     },
     {
@@ -1673,12 +1673,13 @@
       "example": {
         "id": "OBJ_001"
       },
-      "type": "object",
+      "type": "string",
       "locations": [
         "body"
       ],
       "observedTypes": [
-        "object"
+        "object",
+        "string"
       ]
     },
     {
@@ -1715,12 +1716,12 @@
       "preferredName": "composition_weight",
       "description": "Component weight between 0 and 1. The value must fit PostgreSQL NUMERIC(18,10) exactly; excess scale and magnitude overflow are rejected, not rounded.",
       "example": "0.6000000000",
-      "type": "object",
+      "type": "string",
       "locations": [
         "body"
       ],
       "observedTypes": [
-        "object"
+        "string"
       ]
     },
     {
@@ -1757,12 +1758,13 @@
       "preferredName": "contract_rate",
       "description": "Contractual FX rate.",
       "example": 1.095,
-      "type": "object",
+      "type": "string",
       "locations": [
         "body"
       ],
       "observedTypes": [
-        "object"
+        "object",
+        "string"
       ]
     },
     {
@@ -3023,7 +3025,7 @@
           "schedule_id": "SCHEDULE_001",
           "need_type": "RECURRING_WITHDRAWAL",
           "need_status": "active",
-          "amount": 125000.5,
+          "amount": "example_value",
           "currency": "USD",
           "frequency": "ONE_TIME",
           "start_date": "2026-02-27",
@@ -3120,12 +3122,12 @@
       "preferredName": "index_price",
       "description": "Index price value. The value must fit PostgreSQL NUMERIC(18,10) exactly; excess scale and magnitude overflow are rejected, not rounded.",
       "example": "4567.1234000000",
-      "type": "object",
+      "type": "string",
       "locations": [
         "body"
       ],
       "observedTypes": [
-        "object"
+        "string"
       ]
     },
     {
@@ -3171,12 +3173,12 @@
       "preferredName": "index_return",
       "description": "Index return value. The value must fit PostgreSQL NUMERIC(18,10) exactly; excess scale and magnitude overflow are rejected, not rounded.",
       "example": "0.0023000000",
-      "type": "object",
+      "type": "string",
       "locations": [
         "body"
       ],
       "observedTypes": [
-        "object"
+        "string"
       ]
     },
     {
@@ -3823,7 +3825,7 @@
           "reserve_requirement_id": "RESERVE_REQUIREMENT_001",
           "reserve_type": "MIN_CASH_BUFFER",
           "reserve_status": "active",
-          "required_amount": 125000.5,
+          "required_amount": "example_value",
           "currency": "USD",
           "horizon_days": 10,
           "priority": 10,
@@ -4239,12 +4241,12 @@
       "preferredName": "max_weight",
       "description": "Optional maximum policy band for the instrument. The value must fit PostgreSQL NUMERIC(18,10) exactly; excess scale and magnitude overflow are rejected, not rounded.",
       "example": "0.1600000000",
-      "type": "object",
+      "type": "string",
       "locations": [
         "body"
       ],
       "observedTypes": [
-        "object"
+        "string"
       ]
     },
     {
@@ -4252,13 +4254,13 @@
       "canonicalTerm": "maximum_allocation",
       "preferredName": "maximum_allocation",
       "description": "Maximum portfolio allocation ratio permitted by the source preference. The value must fit PostgreSQL NUMERIC(18,10) exactly; excess scale and magnitude overflow are rejected, not rounded.",
-      "example": 125000.5,
-      "type": "object",
+      "example": "STANDARD",
+      "type": "string",
       "locations": [
         "body"
       ],
       "observedTypes": [
-        "object"
+        "string"
       ]
     },
     {
@@ -4295,12 +4297,12 @@
       "preferredName": "min_weight",
       "description": "Optional minimum policy band for the instrument. The value must fit PostgreSQL NUMERIC(18,10) exactly; excess scale and magnitude overflow are rejected, not rounded.",
       "example": "0.0800000000",
-      "type": "object",
+      "type": "string",
       "locations": [
         "body"
       ],
       "observedTypes": [
-        "object"
+        "string"
       ]
     },
     {
@@ -4308,13 +4310,13 @@
       "canonicalTerm": "minimum_allocation",
       "preferredName": "minimum_allocation",
       "description": "Minimum portfolio allocation ratio required by the source preference. The value must fit PostgreSQL NUMERIC(18,10) exactly; excess scale and magnitude overflow are rejected, not rounded.",
-      "example": 125000.5,
-      "type": "object",
+      "example": "STANDARD",
+      "type": "string",
       "locations": [
         "body"
       ],
       "observedTypes": [
-        "object"
+        "string"
       ]
     },
     {
@@ -5130,7 +5132,7 @@
           "withdrawal_schedule_id": "WITHDRAWAL_SCHEDULE_001",
           "withdrawal_type": "PLANNED_WITHDRAWAL",
           "withdrawal_status": "active",
-          "amount": 125000.5,
+          "amount": "example_value",
           "currency": "USD",
           "scheduled_date": "2026-02-27",
           "recurrence_frequency": "ONE_TIME",
@@ -6370,13 +6372,13 @@
       "canonicalTerm": "required_amount",
       "preferredName": "required_amount",
       "description": "Required reserve amount supplied by the source. The value must fit PostgreSQL NUMERIC(18,4) exactly; excess scale and magnitude overflow are rejected, not rounded.",
-      "example": 125000.5,
-      "type": "object",
+      "example": "STANDARD",
+      "type": "string",
       "locations": [
         "body"
       ],
       "observedTypes": [
-        "object"
+        "string"
       ]
     },
     {
@@ -7036,12 +7038,13 @@
       "preferredName": "sell_amount",
       "description": "Positive magnitude of currency sold.",
       "example": 1000000.0,
-      "type": "object",
+      "type": "string",
       "locations": [
         "body"
       ],
       "observedTypes": [
-        "object"
+        "object",
+        "string"
       ]
     },
     {
@@ -7899,8 +7902,8 @@
           "preference_code": "example_preference_code",
           "preference_status": "active",
           "preference_source": "example_preference_source",
-          "minimum_allocation": 125000.5,
-          "maximum_allocation": 125000.5,
+          "minimum_allocation": "example_value",
+          "maximum_allocation": "example_value",
           "applies_to_asset_classes": [
             "example_value"
           ],
@@ -8158,12 +8161,12 @@
       "preferredName": "target_weight",
       "description": "Target instrument weight as a decimal ratio between 0 and 1. The value must fit PostgreSQL NUMERIC(18,10) exactly; excess scale and magnitude overflow are rejected, not rounded.",
       "example": "0.1200000000",
-      "type": "object",
+      "type": "string",
       "locations": [
         "body"
       ],
       "observedTypes": [
-        "object"
+        "string"
       ]
     },
     {
@@ -8223,7 +8226,7 @@
           "booking_tax_jurisdiction": "example_booking_tax_jurisdiction",
           "tax_status": "TAXABLE",
           "profile_status": "active",
-          "withholding_tax_rate": 125000.5,
+          "withholding_tax_rate": "example_value",
           "capital_gains_tax_applicable": true,
           "income_tax_applicable": true,
           "treaty_codes": [
@@ -8289,8 +8292,8 @@
           "applies_to_income_types": [
             "example_value"
           ],
-          "rate": 125000.5,
-          "threshold_amount": 125000.5,
+          "rate": "example_value",
+          "threshold_amount": "example_value",
           "threshold_currency": "example_value",
           "effective_from": "2026-02-27",
           "effective_to": "2026-02-27",
@@ -8371,13 +8374,13 @@
       "canonicalTerm": "threshold_amount",
       "preferredName": "threshold_amount",
       "description": "Nonnegative monetary threshold supplied by the source rule set. The value must fit PostgreSQL NUMERIC(18,4) exactly; excess scale and magnitude overflow are rejected, not rounded.",
-      "example": 125000.5,
-      "type": "object",
+      "example": "STANDARD",
+      "type": "string",
       "locations": [
         "body"
       ],
       "observedTypes": [
-        "object"
+        "string"
       ]
     },
     {
@@ -9064,12 +9067,12 @@
       "preferredName": "value",
       "description": "Risk-free value. The value must fit PostgreSQL NUMERIC(18,10) exactly; excess scale and magnitude overflow are rejected, not rounded.",
       "example": "0.0350000000",
-      "type": "object",
+      "type": "string",
       "locations": [
         "body"
       ],
       "observedTypes": [
-        "object"
+        "string"
       ]
     },
     {
@@ -9280,13 +9283,13 @@
       "canonicalTerm": "withholding_tax_rate",
       "preferredName": "withholding_tax_rate",
       "description": "Reference withholding rate ratio when supplied by the source. The value must fit PostgreSQL NUMERIC(18,10) exactly; excess scale and magnitude overflow are rejected, not rounded.",
-      "example": 125000.5,
-      "type": "object",
+      "example": "STANDARD",
+      "type": "string",
       "locations": [
         "body"
       ],
       "observedTypes": [
-        "object"
+        "string"
       ]
     },
     {
@@ -22961,7 +22964,7 @@
             "name": "instruments[].buy_amount",
             "location": "body",
             "required": false,
-            "type": "object",
+            "type": "string",
             "semanticId": "lotus.buy_amount",
             "attributeRef": "lotus.buy_amount"
           },
@@ -22969,7 +22972,7 @@
             "name": "instruments[].sell_amount",
             "location": "body",
             "required": false,
-            "type": "object",
+            "type": "string",
             "semanticId": "lotus.sell_amount",
             "attributeRef": "lotus.sell_amount"
           },
@@ -22977,7 +22980,7 @@
             "name": "instruments[].contract_rate",
             "location": "body",
             "required": false,
-            "type": "object",
+            "type": "string",
             "semanticId": "lotus.contract_rate",
             "attributeRef": "lotus.contract_rate"
           },
@@ -24382,7 +24385,7 @@
             "name": "instruments[].buy_amount",
             "location": "body",
             "required": false,
-            "type": "object",
+            "type": "string",
             "semanticId": "lotus.buy_amount",
             "attributeRef": "lotus.buy_amount"
           },
@@ -24390,7 +24393,7 @@
             "name": "instruments[].sell_amount",
             "location": "body",
             "required": false,
-            "type": "object",
+            "type": "string",
             "semanticId": "lotus.sell_amount",
             "attributeRef": "lotus.sell_amount"
           },
@@ -24398,7 +24401,7 @@
             "name": "instruments[].contract_rate",
             "location": "body",
             "required": false,
-            "type": "object",
+            "type": "string",
             "semanticId": "lotus.contract_rate",
             "attributeRef": "lotus.contract_rate"
           },
@@ -26163,7 +26166,7 @@
             "name": "model_portfolio_targets[].target_weight",
             "location": "body",
             "required": true,
-            "type": "object",
+            "type": "string",
             "semanticId": "lotus.target_weight",
             "attributeRef": "lotus.target_weight"
           },
@@ -26171,7 +26174,7 @@
             "name": "model_portfolio_targets[].min_weight",
             "location": "body",
             "required": false,
-            "type": "object",
+            "type": "string",
             "semanticId": "lotus.min_weight",
             "attributeRef": "lotus.min_weight"
           },
@@ -26179,7 +26182,7 @@
             "name": "model_portfolio_targets[].max_weight",
             "location": "body",
             "required": false,
-            "type": "object",
+            "type": "string",
             "semanticId": "lotus.max_weight",
             "attributeRef": "lotus.max_weight"
           },
@@ -27821,7 +27824,7 @@
             "name": "sustainability_preferences[].minimum_allocation",
             "location": "body",
             "required": false,
-            "type": "object",
+            "type": "string",
             "semanticId": "lotus.minimum_allocation",
             "attributeRef": "lotus.minimum_allocation"
           },
@@ -27829,7 +27832,7 @@
             "name": "sustainability_preferences[].maximum_allocation",
             "location": "body",
             "required": false,
-            "type": "object",
+            "type": "string",
             "semanticId": "lotus.maximum_allocation",
             "attributeRef": "lotus.maximum_allocation"
           },
@@ -28109,7 +28112,7 @@
             "name": "tax_profiles[].withholding_tax_rate",
             "location": "body",
             "required": false,
-            "type": "object",
+            "type": "string",
             "semanticId": "lotus.withholding_tax_rate",
             "attributeRef": "lotus.withholding_tax_rate"
           },
@@ -28440,7 +28443,7 @@
             "name": "tax_rule_sets[].rate",
             "location": "body",
             "required": false,
-            "type": "object",
+            "type": "string",
             "semanticId": "lotus.rate",
             "attributeRef": "lotus.rate"
           },
@@ -28448,7 +28451,7 @@
             "name": "tax_rule_sets[].threshold_amount",
             "location": "body",
             "required": false,
-            "type": "object",
+            "type": "string",
             "semanticId": "lotus.threshold_amount",
             "attributeRef": "lotus.threshold_amount"
           },
@@ -28693,7 +28696,7 @@
             "name": "income_needs_schedules[].amount",
             "location": "body",
             "required": true,
-            "type": "object",
+            "type": "string",
             "semanticId": "lotus.amount",
             "attributeRef": "lotus.amount"
           },
@@ -28955,7 +28958,7 @@
             "name": "liquidity_reserve_requirements[].required_amount",
             "location": "body",
             "required": true,
-            "type": "object",
+            "type": "string",
             "semanticId": "lotus.required_amount",
             "attributeRef": "lotus.required_amount"
           },
@@ -29222,7 +29225,7 @@
             "name": "planned_withdrawal_schedules[].amount",
             "location": "body",
             "required": true,
-            "type": "object",
+            "type": "string",
             "semanticId": "lotus.amount",
             "attributeRef": "lotus.amount"
           },
@@ -29737,7 +29740,7 @@
             "name": "benchmark_compositions[].composition_weight",
             "location": "body",
             "required": true,
-            "type": "object",
+            "type": "string",
             "semanticId": "lotus.composition_weight",
             "attributeRef": "lotus.composition_weight"
           },
@@ -30170,7 +30173,7 @@
             "name": "index_price_series[].index_price",
             "location": "body",
             "required": true,
-            "type": "object",
+            "type": "string",
             "semanticId": "lotus.index_price",
             "attributeRef": "lotus.index_price"
           },
@@ -30369,7 +30372,7 @@
             "name": "index_return_series[].index_return",
             "location": "body",
             "required": true,
-            "type": "object",
+            "type": "string",
             "semanticId": "lotus.index_return",
             "attributeRef": "lotus.index_return"
           },
@@ -30576,7 +30579,7 @@
             "name": "benchmark_return_series[].benchmark_return",
             "location": "body",
             "required": true,
-            "type": "object",
+            "type": "string",
             "semanticId": "lotus.benchmark_return",
             "attributeRef": "lotus.benchmark_return"
           },
@@ -30784,7 +30787,7 @@
             "name": "risk_free_series[].value",
             "location": "body",
             "required": true,
-            "type": "object",
+            "type": "string",
             "semanticId": "lotus.value",
             "attributeRef": "lotus.value"
           },
@@ -31385,7 +31388,7 @@
             "name": "lookthrough_components[].component_weight",
             "location": "body",
             "required": true,
-            "type": "object",
+            "type": "string",
             "semanticId": "lotus.component_weight",
             "attributeRef": "lotus.component_weight"
           },

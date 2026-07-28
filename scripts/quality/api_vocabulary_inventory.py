@@ -152,7 +152,7 @@ def _fallback_example(name: str, schema: dict[str, Any]) -> Any:
     if isinstance(enum_values, list) and enum_values:
         return enum_values[0]
 
-    schema_type = schema.get("type")
+    schema_type = _schema_type(schema)
     schema_format = schema.get("format")
     if schema_type == "boolean":
         return True
@@ -164,6 +164,17 @@ def _fallback_example(name: str, schema: dict[str, Any]) -> Any:
         if any(term in key for term in ("price", "rate")):
             return 1.2345
         return 10.5
+    exact_lexical_numeric = (
+        schema.get("type") is None
+        and schema_type == "string"
+        and any(schema.get(key) for key in ("anyOf", "oneOf"))
+    )
+    if exact_lexical_numeric:
+        if any(term in key for term in ("amount", "value", "pnl")):
+            return "125000.5"
+        if any(term in key for term in ("price", "rate", "allocation", "weight")):
+            return "1.2345"
+        return "10.5"
     if schema_type == "array":
         item_schema = schema.get("items", {})
         if isinstance(item_schema, dict):
@@ -256,6 +267,16 @@ def _resolve_schema(schema: dict[str, Any], components: dict[str, Any]) -> dict[
 def _schema_type(schema: dict[str, Any]) -> str:
     if "$ref" in schema:
         return str(schema["$ref"]).rsplit("/", 1)[-1]
+    for composition_key in ("anyOf", "oneOf"):
+        alternatives = schema.get(composition_key)
+        if isinstance(alternatives, list):
+            alternative_types = {
+                _schema_type(alternative)
+                for alternative in alternatives
+                if isinstance(alternative, dict) and alternative.get("type") != "null"
+            }
+            if alternative_types == {"string", "integer"}:
+                return "string"
     return str(schema.get("type", "object"))
 
 

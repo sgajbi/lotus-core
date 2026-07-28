@@ -10,10 +10,25 @@ import pytest
 from scripts.quality.api_vocabulary_inventory import (
     _build_attribute_catalog,
     _extract_request_fields,
+    _fallback_example,
+    _schema_type,
     main,
     validate_committed_inventory_parity,
     validate_inventory,
 )
+
+
+def test_composed_exact_decimal_schema_prefers_lexical_contract() -> None:
+    schema = {
+        "anyOf": [
+            {"type": "string"},
+            {"type": "integer", "exclusiveMinimum": 0},
+            {"type": "null"},
+        ]
+    }
+
+    assert _schema_type(schema) == "string"
+    assert _fallback_example("contract_rate", schema) == "1.2345"
 
 
 def _minimal_inventory() -> dict[str, Any]:
