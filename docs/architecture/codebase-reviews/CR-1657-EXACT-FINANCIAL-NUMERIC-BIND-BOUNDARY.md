@@ -46,6 +46,9 @@ processing failures.
 
 - Signed implementation commit `c33a9b3b213d05981731665a07fb56bbb938a0b9` and CI
   fix-forward commit `070441c9d6e75807447635973a31f0eb8df3db92`.
+- PR #839 was rebase-merged to `main` at
+  `19ab9458ab1762d6d2b81d3ecace84e41b3ead3f`.
+- PR Merge Gate run `30367647994` and exact-main Main Releasability run `30370626212` passed.
 - 116 focused model, guard, type, and migration-parity tests passed with warnings as errors.
 - 96 focused model, guard, Alembic-render, type, and migration-parity tests passed after review
   hardening.
@@ -53,6 +56,7 @@ processing failures.
 - `make test-fast`, `make typecheck`, `make financial-numeric-persistence-guard`, Ruff, formatting,
   Bandit, Vulture, and diff hygiene passed.
 - Guard inventory: 96 columns, 30 tables, 95 bounded, one exact-unbounded, ten domain families.
+- No wiki source changed; publication was not required.
 
 ## Remaining #829 work
 
