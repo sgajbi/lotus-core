@@ -79,6 +79,51 @@ def test_calculator_sums_position_economics_in_portfolio_currency() -> None:
     assert result.fees == Decimal("1.10")
 
 
+def test_calculator_normalizes_fx_amplified_outputs_once_at_portfolio_boundary() -> None:
+    result = calculate_portfolio_timeseries(
+        portfolio=_scope(),
+        aggregation_date=date(2026, 3, 8),
+        epoch=2,
+        contributions=[
+            PortfolioPositionContribution(
+                position_timeseries=_position(
+                    "SEC-PRECISION",
+                    bod_market_value=Decimal("1.0000000001"),
+                    bod_cashflow=Decimal("1.0000000001"),
+                    eod_cashflow=Decimal("1.0000000001"),
+                    eod_market_value=Decimal("1.0000000001"),
+                    fees=Decimal("1.0000000001"),
+                ),
+                fx_rate_to_portfolio_currency=Decimal("1.0000000001"),
+            )
+        ],
+    )
+
+    assert result.bod_market_value == Decimal("1.0000000002")
+    assert result.bod_cashflow == Decimal("1.0000000002")
+    assert result.eod_cashflow == Decimal("1.0000000002")
+    assert result.eod_market_value == Decimal("1.0000000002")
+    assert result.fees == Decimal("1.0000000002")
+
+
+def test_calculator_rejects_portfolio_total_magnitude_overflow() -> None:
+    contribution = PortfolioPositionContribution(
+        position_timeseries=_position(
+            "SEC-OVERFLOW",
+            bod_market_value=Decimal("60000000"),
+        ),
+        fx_rate_to_portfolio_currency=Decimal("2"),
+    )
+
+    with pytest.raises(ValueError, match="portfolio-timeseries-ledger-output@1.0.0"):
+        calculate_portfolio_timeseries(
+            portfolio=_scope(),
+            aggregation_date=date(2026, 3, 8),
+            epoch=2,
+            contributions=[contribution],
+        )
+
+
 def test_calculator_returns_zero_record_for_portfolio_without_positions() -> None:
     result = calculate_portfolio_timeseries(
         portfolio=_scope(),
