@@ -4,11 +4,18 @@ from __future__ import annotations
 
 from decimal import Decimal
 
+from portfolio_common.domain.financial.calculation_precision import CalculatedDecimalPolicy
 from portfolio_common.domain.financial.precision import DecimalPrecisionPolicy
 from portfolio_common.domain.transaction.fee_components import TRANSACTION_FEE_COMPONENT_FIELDS
 
 TRANSACTION_PERSISTENCE_PRECISION_V1 = DecimalPrecisionPolicy(
     name="transaction-persistence-v1",
+    precision=18,
+    scale=10,
+)
+TRANSACTION_COST_LEDGER_OUTPUT_V1 = CalculatedDecimalPolicy(
+    name="transaction-cost-ledger-output",
+    version="1.0.0",
     precision=18,
     scale=10,
 )
