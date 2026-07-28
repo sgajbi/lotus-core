@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any, Callable
 
 import pytest
 
-from scripts.quality.calculated_output_policy_guard import evaluate
+from scripts.quality.calculated_output_policy_guard import evaluate, main
 
 
 def _write_policy(
@@ -18,7 +19,7 @@ def _write_policy(
     lineage_bound: bool = True,
 ) -> None:
     source = root / "src" / "owner"
-    source.mkdir(parents=True)
+    source.mkdir(parents=True, exist_ok=True)
     policy = source / "numeric_policy.py"
     policy.write_text(
         "from portfolio_common.domain.financial.calculation_precision "
@@ -67,6 +68,16 @@ def _contract(root: Path, **overrides: object) -> Path:
         encoding="utf-8",
     )
     return path
+
+
+ContractMutation = Callable[[dict[str, Any]], None]
+
+
+def _rewrite_contract(path: Path, mutate: ContractMutation) -> None:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    assert isinstance(payload, dict)
+    mutate(payload)
+    path.write_text(json.dumps(payload), encoding="utf-8")
 
 
 def test_repository_calculated_output_policy_inventory_is_complete() -> None:
@@ -133,3 +144,146 @@ def test_guard_rejects_duplicate_contract_keys(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="duplicate JSON key: expected_inventory"):
         evaluate(tmp_path, contract)
+
+
+def test_guard_rejects_non_object_contract_root(tmp_path: Path) -> None:
+    contract = tmp_path / "contract.json"
+    contract.write_text("[]", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="contract root must be an object"):
+        evaluate(tmp_path, contract)
+
+
+def test_guard_rejects_nonliteral_policy_declaration(tmp_path: Path) -> None:
+    source = tmp_path / "src" / "owner"
+    source.mkdir(parents=True)
+    (source / "numeric_policy.py").write_text(
+        "from portfolio_common.domain.financial.calculation_precision "
+        "import CalculatedDecimalPolicy\n"
+        "TEST_LEDGER_OUTPUT_V1 = CalculatedDecimalPolicy("
+        "name=resolve_name(), version='1.0.0', precision=18, scale=10)\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="name must be a literal"):
+        evaluate(tmp_path, _contract(tmp_path))
+
+
+def test_guard_rejects_ambiguous_or_duplicate_policy_declarations(tmp_path: Path) -> None:
+    source = tmp_path / "src" / "owner"
+    source.mkdir(parents=True)
+    (source / "ambiguous.py").write_text(
+        "from portfolio_common.domain.financial.calculation_precision "
+        "import CalculatedDecimalPolicy\n"
+        "FIRST = SECOND = CalculatedDecimalPolicy("
+        "name='test-ledger-output', version='1.0.0', precision=18, scale=10)\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="must use one named assignment"):
+        evaluate(tmp_path, _contract(tmp_path))
+
+    (source / "ambiguous.py").unlink()
+    _write_policy(tmp_path)
+    (source / "duplicate.py").write_text(
+        "from portfolio_common.domain.financial.calculation_precision "
+        "import CalculatedDecimalPolicy\n"
+        "TEST_LEDGER_OUTPUT_V1 = CalculatedDecimalPolicy("
+        "name='duplicate', version='1.0.0', precision=18, scale=10)\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="duplicate calculated policy constant"):
+        evaluate(tmp_path, _contract(tmp_path))
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        (lambda root: root.pop("policies"), "contract root must contain"),
+        (lambda root: root.__setitem__("schema_version", "2.0.0"), "schema_version must be 1.0.0"),
+        (lambda root: root.__setitem__("policies", []), "policies must be an object"),
+        (
+            lambda root: root.__setitem__("expected_inventory", True),
+            "expected_inventory must be an integer",
+        ),
+        (
+            lambda root: root.__setitem__("expected_inventory", 2),
+            "expected_inventory=2 does not match contract count=1",
+        ),
+    ],
+)
+def test_guard_rejects_invalid_contract_envelope(
+    tmp_path: Path,
+    mutation: ContractMutation,
+    message: str,
+) -> None:
+    _write_policy(tmp_path)
+    contract = _contract(tmp_path)
+    _rewrite_contract(contract, mutation)
+
+    assert any(message in finding for finding in evaluate(tmp_path, contract))
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        (
+            lambda policy: policy.pop("owner"),
+            "policy keys must be",
+        ),
+        (
+            lambda policy: policy.__setitem__("owner", " "),
+            "TEST_LEDGER_OUTPUT_V1.owner: must be nonblank",
+        ),
+        (
+            lambda policy: policy.__setitem__("lineage_binding", "optional"),
+            "TEST_LEDGER_OUTPUT_V1.lineage_binding: must be one of",
+        ),
+    ],
+)
+def test_guard_rejects_invalid_policy_contract(
+    tmp_path: Path,
+    mutation: ContractMutation,
+    message: str,
+) -> None:
+    _write_policy(tmp_path)
+    contract = _contract(tmp_path)
+
+    def mutate_root(root: dict[str, object]) -> None:
+        policies = root["policies"]
+        assert isinstance(policies, dict)
+        policy = policies["TEST_LEDGER_OUTPUT_V1"]
+        assert isinstance(policy, dict)
+        mutation(policy)
+
+    _rewrite_contract(contract, mutate_root)
+
+    assert any(message in finding for finding in evaluate(tmp_path, contract))
+
+
+def test_main_reports_success_and_findings(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _write_policy(tmp_path)
+    contract = _contract(tmp_path)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "calculated-output-policy-guard",
+            "--repo-root",
+            str(tmp_path),
+            "--contract",
+            str(contract),
+        ],
+    )
+
+    assert main() == 0
+    assert "1 policies classified" in capsys.readouterr().out
+
+    contract_payload = json.loads(contract.read_text(encoding="utf-8"))
+    contract_payload["policies"]["TEST_LEDGER_OUTPUT_V1"]["scale"] = 4
+    contract.write_text(json.dumps(contract_payload), encoding="utf-8")
+    assert main() == 1
+    assert "TEST_LEDGER_OUTPUT_V1.scale" in capsys.readouterr().err
