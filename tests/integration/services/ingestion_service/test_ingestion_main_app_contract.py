@@ -66,6 +66,19 @@ def _mode_blocked_example(operation: dict) -> dict:
     ]
 
 
+def _schema_alternative(schema: dict, expected_type: str) -> dict:
+    if schema.get("type") == expected_type:
+        return schema
+    for composition_key in ("anyOf", "oneOf", "allOf"):
+        for alternative in schema.get(composition_key, []):
+            if isinstance(alternative, dict):
+                try:
+                    return _schema_alternative(alternative, expected_type)
+                except AssertionError:
+                    continue
+    raise AssertionError(f"{expected_type} schema alternative not found: {schema}")
+
+
 async def test_openapi_declares_metrics_as_text_plain(async_test_client):
     response = await async_test_client.get("/openapi.json")
 
@@ -483,9 +496,13 @@ async def test_openapi_describes_benchmark_composition_shared_schema(async_test_
     )
     assert record_schema["properties"]["benchmark_id"]["description"] == ("Benchmark identifier.")
     assert record_schema["properties"]["index_id"]["description"] == ("Component index identifier.")
-    composition_weight_number = record_schema["properties"]["composition_weight"]["anyOf"][0]
-    assert composition_weight_number["minimum"] == 0.0
-    assert composition_weight_number["maximum"] == 1.0
+    composition_weight_integer = _schema_alternative(
+        record_schema["properties"]["composition_weight"],
+        "integer",
+    )
+    assert composition_weight_integer["type"] == "integer"
+    assert composition_weight_integer["minimum"] == 0.0
+    assert composition_weight_integer["maximum"] == 1.0
     assert record_schema["properties"]["rebalance_event_id"]["description"] == (
         "Rebalance event identifier."
     )
@@ -529,8 +546,12 @@ async def test_openapi_describes_index_price_series_shared_schema(async_test_cli
     assert record_schema["properties"]["series_id"]["description"] == "Series identifier."
     assert record_schema["properties"]["index_id"]["description"] == "Index identifier."
     assert record_schema["properties"]["series_date"]["description"] == "Series date."
-    index_price_number = record_schema["properties"]["index_price"]["anyOf"][0]
-    assert index_price_number["exclusiveMinimum"] == 0.0
+    index_price_integer = _schema_alternative(
+        record_schema["properties"]["index_price"],
+        "integer",
+    )
+    assert index_price_integer["type"] == "integer"
+    assert index_price_integer["exclusiveMinimum"] == 0.0
     assert record_schema["properties"]["series_currency"]["examples"] == ["USD"]
     assert record_schema["properties"]["value_convention"]["examples"] == ["close_price"]
     assert record_schema["properties"]["observed_at"]["description"] == (
@@ -556,7 +577,10 @@ async def test_openapi_describes_index_return_series_shared_schema(async_test_cl
     assert record_schema["properties"]["series_id"]["description"] == "Series identifier."
     assert record_schema["properties"]["index_id"]["description"] == "Index identifier."
     assert record_schema["properties"]["series_date"]["description"] == "Series date."
-    assert record_schema["properties"]["index_return"]["description"] == "Index return value."
+    assert record_schema["properties"]["index_return"]["description"] == (
+        "Index return value. The value must fit PostgreSQL NUMERIC(18,10) exactly; "
+        "excess scale and magnitude overflow are rejected, not rounded."
+    )
     assert record_schema["properties"]["return_period"]["examples"] == ["1d"]
     assert record_schema["properties"]["return_convention"]["examples"] == ["total_return_index"]
     assert record_schema["properties"]["series_currency"]["examples"] == ["USD"]
@@ -584,7 +608,8 @@ async def test_openapi_describes_benchmark_return_series_shared_schema(async_tes
     assert record_schema["properties"]["benchmark_id"]["description"] == ("Benchmark identifier.")
     assert record_schema["properties"]["series_date"]["description"] == "Series date."
     assert record_schema["properties"]["benchmark_return"]["description"] == (
-        "Benchmark return value."
+        "Benchmark return value. The value must fit PostgreSQL NUMERIC(18,10) exactly; "
+        "excess scale and magnitude overflow are rejected, not rounded."
     )
     assert record_schema["properties"]["return_period"]["examples"] == ["1d"]
     assert record_schema["properties"]["return_convention"]["examples"] == ["total_return_index"]
@@ -611,7 +636,10 @@ async def test_openapi_describes_risk_free_series_shared_schema(async_test_clien
     assert record_schema["properties"]["risk_free_curve_id"]["description"] == (
         "Risk-free curve identifier."
     )
-    assert record_schema["properties"]["value"]["description"] == "Risk-free value."
+    assert record_schema["properties"]["value"]["description"] == (
+        "Risk-free value. The value must fit PostgreSQL NUMERIC(18,10) exactly; "
+        "excess scale and magnitude overflow are rejected, not rounded."
+    )
     assert record_schema["properties"]["value_convention"]["enum"] == [
         "annualized_rate",
         "period_return",
@@ -712,9 +740,13 @@ async def test_openapi_describes_instrument_lookthrough_shared_schema(async_test
     )
     assert record_schema["properties"]["effective_from"]["examples"] == ["2026-01-01"]
     assert record_schema["properties"]["effective_to"]["examples"] == ["2026-12-31"]
-    component_weight_number = record_schema["properties"]["component_weight"]["anyOf"][0]
-    assert component_weight_number["minimum"] == 0.0
-    assert component_weight_number["maximum"] == 1.0
+    component_weight_integer = _schema_alternative(
+        record_schema["properties"]["component_weight"],
+        "integer",
+    )
+    assert component_weight_integer["type"] == "integer"
+    assert component_weight_integer["minimum"] == 0.0
+    assert component_weight_integer["maximum"] == 1.0
     assert record_schema["properties"]["source_system"]["examples"] == ["lotus-manage"]
     assert record_schema["properties"]["source_record_id"]["examples"] == ["lt-001"]
 

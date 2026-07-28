@@ -22,6 +22,9 @@ after synchronous validation had succeeded and asynchronous processing had begun
 - Preserved existing allocation and rate ranges.
 - Ordered range metadata before exact-value validation so generated OpenAPI retains standard
   `minimum`, `maximum`, and `exclusiveMinimum` keywords for SDK and form generators.
+- Rejected JSON floating-point inputs before Pydantic can coerce them to a rounded `Decimal`.
+  Exact financial numerics now advertise decimal strings and lossless integers as their accepted
+  JSON input shapes while retaining machine-readable range bounds.
 - Enforced positive instrument buy amount, sell amount, and contract rate at ingress, matching the
   existing persistence profile.
 - Published each exact storage shape and reject-not-round behavior in generated OpenAPI.
@@ -31,17 +34,18 @@ that are exactly representable retain their prior value.
 
 ## Compatibility
 
-Values with excess scale or magnitude overflow, and nonpositive FX-contract economics, now fail
-synchronously instead of failing or changing during persistence. This is an intentional
-correctness hardening. No blanket rounding was introduced.
+Values supplied as JSON floating-point numbers, values with excess scale or magnitude overflow,
+and nonpositive FX-contract economics now fail synchronously instead of failing or changing during
+persistence. Callers must send fractional financial values as decimal strings. This is an
+intentional correctness hardening. No blanket rounding was introduced.
 
 ## Evidence
 
 - Signed client-policy commit `6657bef0f001dac024189f2579449588d9bee7cc`.
 - Signed benchmark/reference/instrument commit
   `afed3e010643ea55e0cc20e5aa113bb7aa970000`.
-- 102 focused tests passed with warnings treated as errors, including machine-readable JSON Schema
-  range assertions for all 17 bounded fields.
+- 149 focused tests passed with warnings treated as errors, including loss-prone JSON-number
+  rejection and machine-readable JSON Schema range assertions for all 17 bounded fields.
 - Type checking passed across 238 source files.
 - OpenAPI quality, vocabulary parity, Spectral, Ruff, formatting, and diff-hygiene gates passed.
 
