@@ -10,6 +10,7 @@ from portfolio_common.runtime_providers import Clock, IdGenerator
 
 from ..domain.simulation import SimulationChange, SimulationPositionBaseline, SimulationSession
 from ..domain.simulation_effects import transaction_quantity_effect
+from ..domain.simulation_numeric_policy import require_exact_simulation_change_values
 from ..ports.simulation import SimulationBaselineReader, SimulationStore, SimulationUnitOfWork
 
 
@@ -169,7 +170,7 @@ class SimulationService:
         session_id: str,
         changes: list[SimulationChangeCommand],
     ) -> SimulationChangesResult:
-        self._validate_change_prices(changes)
+        self._validate_change_values(changes)
         session = await self._require_active_session(session_id)
         await self._store.stage_changes(
             session,
@@ -239,15 +240,18 @@ class SimulationService:
         return session
 
     @staticmethod
-    def _validate_change_prices(changes: list[SimulationChangeCommand]) -> None:
-        if any(
-            change.price is not None
-            and (not change.price.is_finite() or change.price <= Decimal("0"))
-            for change in changes
-        ):
+    def _validate_change_values(changes: list[SimulationChangeCommand]) -> None:
+        try:
+            for change in changes:
+                require_exact_simulation_change_values(
+                    quantity=change.quantity,
+                    price=change.price,
+                    amount=change.amount,
+                )
+        except (TypeError, ValueError) as exc:
             raise SimulationMutationInvalidError(
-                "Simulation change price must be a finite positive value"
-            )
+                "Simulation change financial values violate the persistence contract"
+            ) from exc
 
     async def _commit(self) -> None:
         try:

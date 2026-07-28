@@ -2,6 +2,11 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 
+from portfolio_common.openapi_enrichment import exact_numeric_openapi_description
+from portfolio_common.pydantic_financial_numeric import (
+    ExactDecimal18_10,
+    ExactPositiveDecimal18_10,
+)
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -90,23 +95,33 @@ class SimulationChangeInput(BaseModel):
         description="Transaction type used to derive the position impact of the proposed change.",
         examples=["BUY"],
     )
-    quantity: float | None = Field(
+    quantity: ExactDecimal18_10 | None = Field(
         default=None,
-        description="Transaction quantity used for quantity-driven changes.",
-        examples=[100.0],
-    )
-    price: Decimal | None = Field(
-        default=None,
-        gt=0,
-        description=(
-            "Strictly positive unit price associated with the simulated transaction, when relevant."
+        description=exact_numeric_openapi_description(
+            "Transaction quantity used for quantity-driven changes.",
+            precision=18,
+            scale=10,
         ),
-        examples=[127.45],
+        examples=["100.0000000000"],
     )
-    amount: Decimal | None = Field(
+    price: ExactPositiveDecimal18_10 | None = Field(
         default=None,
-        description="Cash amount associated with the simulated transaction, when relevant.",
-        examples=[12745.0],
+        description=exact_numeric_openapi_description(
+            "Strictly positive unit price associated with the simulated transaction, "
+            "when relevant.",
+            precision=18,
+            scale=10,
+        ),
+        examples=["127.4500000000"],
+    )
+    amount: ExactDecimal18_10 | None = Field(
+        default=None,
+        description=exact_numeric_openapi_description(
+            "Cash amount associated with the simulated transaction, when relevant.",
+            precision=18,
+            scale=10,
+        ),
+        examples=["12745.0000000000"],
     )
     currency: str | None = Field(
         default=None,
@@ -153,10 +168,10 @@ class SimulationChangeRecord(BaseModel):
         description="Transaction type used to derive the projected position effect.",
         examples=["BUY"],
     )
-    quantity: float | None = Field(
+    quantity: Decimal | None = Field(
         default=None,
-        description="Projected transaction quantity.",
-        examples=[100.0],
+        description="Exact persisted transaction quantity.",
+        examples=["100.0000000000"],
     )
     price: Decimal | None = Field(
         default=None,

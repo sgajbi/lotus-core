@@ -168,6 +168,41 @@ async def test_add_simulation_changes_rejects_nonpositive_price_before_service(
     mock_service.add_changes.assert_not_awaited()
 
 
+@pytest.mark.parametrize(
+    ("field_name", "value"),
+    [
+        ("quantity", "1.00000000001"),
+        ("price", "100000000.0000000000"),
+        ("amount", "1.00000000001"),
+        ("quantity", 0.1),
+        ("price", 0.1),
+        ("amount", 0.1),
+    ],
+)
+async def test_add_simulation_changes_rejects_unpersistable_numeric_input_before_service(
+    async_test_client,
+    field_name,
+    value,
+):
+    client, mock_service = async_test_client
+    change = {
+        "security_id": "SEC_AAPL_US",
+        "transaction_type": "BUY",
+        "quantity": "10.0000000000",
+        "price": "210.5000000000",
+        "amount": "2105.0000000000",
+    }
+    change[field_name] = value
+
+    response = await client.post(
+        "/simulation-sessions/S1/changes",
+        json={"changes": [change]},
+    )
+
+    assert response.status_code == 422
+    mock_service.add_changes.assert_not_awaited()
+
+
 async def test_add_simulation_changes_missing_session_maps_to_404(async_test_client):
     client, mock_service = async_test_client
     mock_service.add_changes.side_effect = SimulationSessionNotFoundError(
