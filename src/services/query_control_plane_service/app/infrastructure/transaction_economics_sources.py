@@ -7,7 +7,7 @@ from portfolio_common.database_models import Cashflow, Portfolio, Transaction, T
 from portfolio_common.identifiers import normalize_lookup_identifier
 from sqlalchemy import and_, exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import aliased, contains_eager, joinedload
+from sqlalchemy.orm import aliased, contains_eager, selectinload
 
 from ..domain.transaction_economics import (
     BookedTransactionEconomics,
@@ -169,7 +169,7 @@ class SqlAlchemyTransactionEconomicsReader:
     ) -> list[BookedTransactionEconomics]:
         stmt = (
             select(Transaction)
-            .options(joinedload(Transaction.costs))
+            .options(selectinload(Transaction.costs))
             .where(
                 Transaction.portfolio_id == portfolio_id,
                 Transaction.transaction_date >= _start_of_day(start_date),
@@ -372,7 +372,7 @@ class SqlAlchemyTransactionEconomicsReader:
             )
             .outerjoin(latest_cashflow, latest_cashflow.id == ranked_cashflows.c.id)
             .options(
-                joinedload(Transaction.costs),
+                selectinload(Transaction.costs),
                 contains_eager(Transaction.cashflow, alias=latest_cashflow),
             )
             .where(
