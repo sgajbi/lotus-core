@@ -6,6 +6,7 @@ from portfolio_common.domain.financial.precision import (
     DecimalPrecisionViolation,
 )
 from portfolio_common.financial_numeric import ExactNumeric
+from sqlalchemy import literal, select
 from sqlalchemy.dialects import postgresql, sqlite
 
 
@@ -75,3 +76,9 @@ def test_exact_numeric_fails_closed_for_non_postgresql_persistence() -> None:
 
     with pytest.raises(RuntimeError, match="requires PostgreSQL"):
         processor(Decimal("1.0000000000"))
+
+
+def test_exact_numeric_supports_generic_compile_only_literal_rendering() -> None:
+    statement = select(literal(Decimal("1.0000000000"), type_=ExactNumeric(18, 10)))
+
+    assert "1.0000000000" in str(statement.compile(compile_kwargs={"literal_binds": True}))
