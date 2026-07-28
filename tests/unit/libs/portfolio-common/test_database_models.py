@@ -684,6 +684,73 @@ def test_cashflow_numeric_model_preserves_signed_amount_and_fences_special_value
     )
 
 
+@pytest.mark.parametrize(
+    ("table_name", "constraint_name", "column_names"),
+    [
+        (
+            "position_timeseries",
+            "ck_position_timeseries_values_finite",
+            (
+                "bod_market_value",
+                "bod_cashflow_position",
+                "eod_cashflow_position",
+                "bod_cashflow_portfolio",
+                "eod_cashflow_portfolio",
+                "eod_market_value",
+                "fees",
+                "quantity",
+                "cost",
+            ),
+        ),
+        (
+            "portfolio_timeseries",
+            "ck_portfolio_timeseries_values_finite",
+            (
+                "bod_market_value",
+                "bod_cashflow",
+                "eod_cashflow",
+                "eod_market_value",
+                "fees",
+            ),
+        ),
+    ],
+)
+def test_timeseries_numeric_models_fence_special_values_without_sign_narrowing(
+    table_name: str,
+    constraint_name: str,
+    column_names: tuple[str, ...],
+) -> None:
+    constraints = {
+        constraint.name: str(constraint.sqltext)
+        for constraint in Base.metadata.tables[table_name].constraints
+        if constraint.name is not None and hasattr(constraint, "sqltext")
+    }
+
+    for column_name in column_names:
+        assert (
+            f"CAST({column_name} AS TEXT) NOT IN ('NaN', 'Infinity', '-Infinity')"
+            in constraints[constraint_name]
+        )
+    assert all(
+        "> 0" not in sql and ">= 0" not in sql
+        for name, sql in constraints.items()
+        if name == constraint_name
+    )
+
+
+def test_reconciliation_tolerance_is_finite_and_nonnegative() -> None:
+    constraints = {
+        constraint.name: str(constraint.sqltext)
+        for constraint in FinancialReconciliationRun.__table__.constraints
+        if constraint.name is not None and hasattr(constraint, "sqltext")
+    }
+
+    assert constraints["ck_fin_recon_tolerance_finite"] == (
+        "CAST(tolerance AS TEXT) NOT IN ('NaN', 'Infinity', '-Infinity')"
+    )
+    assert constraints["ck_fin_recon_tolerance_nonnegative"] == "tolerance >= 0"
+
+
 def test_model_portfolio_tables_declare_dpm_source_indexes():
     definition_indexes = {index.name: index for index in ModelPortfolioDefinition.__table__.indexes}
     target_indexes = {index.name: index for index in ModelPortfolioTarget.__table__.indexes}
