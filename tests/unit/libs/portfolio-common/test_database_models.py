@@ -13,6 +13,7 @@ from portfolio_common.database_models import (
     ClientTaxProfile,
     ClientTaxRuleSet,
     DailyPositionSnapshot,
+    DailyPositionValuationReceiptRecord,
     FinancialReconciliationFinding,
     FinancialReconciliationRun,
     IndexDefinition,
@@ -341,6 +342,31 @@ def test_market_price_source_fact_model_preserves_exact_append_history() -> None
         "price_date",
         "source_system",
         "source_record_id",
+    ]
+
+
+def test_daily_position_valuation_receipt_enforces_complete_one_to_one_evidence() -> None:
+    table = DailyPositionValuationReceiptRecord.__table__
+    constraints = {constraint.name: constraint for constraint in table.constraints}
+
+    assert {
+        "ck_daily_position_valuation_receipt_supportability",
+        "ck_daily_position_valuation_receipt_reasons_nonempty",
+        "ck_daily_position_valuation_receipt_evidence_complete",
+        "ck_daily_position_valuation_receipt_assignment_hash",
+        "ck_daily_position_valuation_receipt_price_hash",
+        "ck_daily_position_valuation_receipt_hash",
+    } <= constraints.keys()
+    assert table.columns.snapshot_id.unique is True
+    foreign_key = next(iter(table.columns.snapshot_id.foreign_keys))
+    assert foreign_key.target_fullname == "daily_position_snapshots.id"
+    assert foreign_key.ondelete == "CASCADE"
+    supportability_index = {index.name: index for index in table.indexes}[
+        "ix_daily_position_valuation_receipt_supportability_snapshot"
+    ]
+    assert [column.name for column in supportability_index.columns] == [
+        "supportability",
+        "snapshot_id",
     ]
 
 
