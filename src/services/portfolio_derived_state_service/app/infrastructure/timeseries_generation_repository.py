@@ -9,6 +9,7 @@ from portfolio_common.database_models import (
     Cashflow,
     DailyPositionSnapshot,
     PortfolioAggregationJob,
+    PortfolioTimeseries,
     PositionTimeseries,
 )
 from portfolio_common.durable_correlation import durable_correlation_diagnostics
@@ -21,7 +22,7 @@ from portfolio_common.infrastructure.persistence.timeseries_upsert_statements im
 )
 from portfolio_common.monitoring import observe_control_queue_outcome
 from portfolio_common.utils import async_timed
-from sqlalchemy import case, func, or_, select
+from sqlalchemy import case, delete, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from ..domain.position_timeseries.models import (
@@ -106,6 +107,53 @@ class TimeseriesGenerationRepository(TimeseriesMarketDataReader):
         except Exception as exc:
             logger.error("Failed to stage upsert for position time series: %s", exc, exc_info=True)
             raise
+
+    async def invalidate_numeric_materializations(
+        self,
+        portfolio_id: str,
+        security_id: str,
+        dates: list[date],
+        epoch: int,
+    ) -> set[date]:
+        """Remove position and portfolio outputs derived from unavailable valuation."""
+
+        normalized_dates = sorted(set(dates))
+        if not normalized_dates:
+            return set()
+        position_result = await self.db.execute(
+            delete(PositionTimeseries)
+            .where(
+                PositionTimeseries.portfolio_id == portfolio_id,
+                PositionTimeseries.security_id == security_id,
+                PositionTimeseries.date.in_(normalized_dates),
+                PositionTimeseries.epoch == epoch,
+            )
+            .returning(PositionTimeseries.date)
+        )
+        portfolio_result = await self.db.execute(
+            delete(PortfolioTimeseries)
+            .where(
+                PortfolioTimeseries.portfolio_id == portfolio_id,
+                PortfolioTimeseries.date.in_(normalized_dates),
+                PortfolioTimeseries.epoch == epoch,
+            )
+            .returning(PortfolioTimeseries.date)
+        )
+        invalidated_dates = {
+            cast(date, row[0])
+            for result in (position_result, portfolio_result)
+            for row in result.fetchall()
+        }
+        logger.warning(
+            "Invalidated timeseries derived from unavailable position valuation.",
+            extra={
+                "portfolio_id": portfolio_id,
+                "security_id": security_id,
+                "invalidated_day_count": len(invalidated_dates),
+                "epoch": epoch,
+            },
+        )
+        return invalidated_dates
 
     @async_timed(repository="TimeseriesRepository", method="get_all_cashflows_for_security_date")
     async def get_all_cashflows_for_security_date(
@@ -390,6 +438,7 @@ def to_position_snapshot_record(
         quantity=cast(Decimal, row.quantity),
         cost_basis_local=cast(Decimal | None, row.cost_basis_local),
         market_value_local=cast(Decimal | None, row.market_value_local),
+        valuation_status=str(row.valuation_status),
         source_updated_at=cast(datetime, row.updated_at),
     )
 

@@ -41,6 +41,7 @@ class InMemoryPositionTimeseriesRepository:
         self.existing_by_date: dict[date, PositionTimeseriesRecord] = {}
         self.cashflows_by_date: dict[date, list[PositionCashflowRecord]] = {}
         self.upserted: list[PositionTimeseriesRecord] = []
+        self.invalidated_dates: list[date] = []
         self.staged_dates: list[date] = []
         self.staged_epochs: list[int] = []
 
@@ -73,6 +74,20 @@ class InMemoryPositionTimeseriesRepository:
     async def upsert_position_timeseries(self, record: PositionTimeseriesRecord) -> None:
         self.upserted.append(record)
         self.existing_by_date[record.date] = record
+
+    async def invalidate_numeric_materializations(
+        self,
+        portfolio_id: str,
+        security_id: str,
+        dates: list[date],
+        epoch: int,
+    ) -> set[date]:
+        del portfolio_id, security_id, epoch
+        invalidated = {a_date for a_date in dates if a_date in self.existing_by_date}
+        for a_date in invalidated:
+            self.existing_by_date.pop(a_date)
+        self.invalidated_dates.extend(sorted(invalidated))
+        return invalidated
 
     async def get_all_cashflows_for_security_date(
         self, portfolio_id: str, security_id: str, a_date: date, epoch: int
@@ -207,6 +222,37 @@ async def test_materialization_is_a_noop_when_snapshot_is_missing() -> None:
     assert result.dependent_days_changed == 0
     assert repository.upserted == []
     assert repository.staged_dates == []
+    assert provider.transaction_count == 1
+
+
+async def test_unavailable_valuation_invalidates_current_and_dependent_materializations() -> None:
+    failed_snapshot = replace(
+        _snapshot(),
+        market_value_local=None,
+        valuation_status="FAILED",
+    )
+    future_snapshot = _snapshot(date(2026, 4, 11))
+    repository = InMemoryPositionTimeseriesRepository(failed_snapshot)
+    repository.future_snapshots = [future_snapshot]
+    repository.existing_by_date = {
+        failed_snapshot.date: _timeseries_record(
+            replace(failed_snapshot, market_value_local=Decimal("1260"))
+        ),
+        future_snapshot.date: _timeseries_record(future_snapshot),
+    }
+    provider = InMemoryRepositoryProvider(repository)
+
+    result = await MaterializePositionTimeseries(repository_provider=provider).execute(_command())
+
+    assert result.snapshot_found is True
+    assert result.current_day_changed is True
+    assert result.dependent_days_changed == 1
+    assert result.dependent_propagation_truncated is False
+    assert repository.invalidated_dates == [date(2026, 4, 10), date(2026, 4, 11)]
+    assert repository.existing_by_date == {}
+    assert repository.staged_dates == [date(2026, 4, 10), date(2026, 4, 11)]
+    assert repository.staged_epochs == [3, 3]
+    assert repository.upserted == []
     assert provider.transaction_count == 1
 
 

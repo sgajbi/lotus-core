@@ -16,6 +16,7 @@ class PositionSnapshotRecord:
     quantity: Decimal
     cost_basis_local: Decimal | None
     market_value_local: Decimal | None
+    valuation_status: str = "VALUED_CURRENT"
     source_updated_at: datetime | None = None
 
 
