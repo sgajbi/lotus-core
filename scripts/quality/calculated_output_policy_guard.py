@@ -9,7 +9,7 @@ import sys
 from dataclasses import dataclass
 from decimal import ROUND_HALF_EVEN
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONTRACT = Path("docs/standards/financial-calculated-output-policies.v1.json")
@@ -237,6 +237,60 @@ class _UsageVisitor(ast.NodeVisitor):
         for imported in node.names:
             if imported.name in self._constants:
                 self._policy_aliases[-1][imported.asname or imported.name] = imported.name
+
+    def visit_If(self, node: ast.If) -> None:
+        self.visit(node.test)
+        incoming = self._current_alias_state()
+        body_state = self._visit_branch(incoming, node.body)
+        else_state = self._visit_branch(incoming, node.orelse) if node.orelse else incoming
+        self._restore_alias_state(self._join_alias_states(body_state, else_state))
+
+    def _visit_branch(
+        self,
+        incoming: tuple[dict[str, str | None], ...],
+        statements: list[ast.stmt],
+    ) -> tuple[dict[str, str | None], ...]:
+        self._restore_alias_state(incoming)
+        for statement in statements:
+            self.visit(statement)
+        return self._current_alias_state()
+
+    def _current_alias_state(self) -> tuple[dict[str, str | None], ...]:
+        return (
+            self._policy_aliases[-1].copy(),
+            self._lineage_identity_aliases[-1].copy(),
+            self._execution_method_aliases[-1].copy(),
+        )
+
+    def _restore_alias_state(
+        self,
+        state: tuple[dict[str, str | None], ...],
+    ) -> None:
+        (
+            self._policy_aliases[-1],
+            self._lineage_identity_aliases[-1],
+            self._execution_method_aliases[-1],
+        ) = (aliases.copy() for aliases in state)
+
+    @staticmethod
+    def _join_alias_states(
+        *states: tuple[dict[str, str | None], ...],
+    ) -> tuple[dict[str, str | None], ...]:
+        missing = object()
+        joined_state: list[dict[str, str | None]] = []
+        for alias_maps in zip(*states, strict=True):
+            joined: dict[str, str | None] = {}
+            for name in set().union(*(aliases.keys() for aliases in alias_maps)):
+                values = [aliases.get(name, missing) for aliases in alias_maps]
+                first = values[0]
+                if all(value == first for value in values[1:]):
+                    # The union guarantees at least one branch contains the name,
+                    # so equal branch values cannot all be the missing sentinel.
+                    joined[name] = cast(str | None, first)
+                else:
+                    joined[name] = None
+            joined_state.append(joined)
+        return tuple(joined_state)
 
     def visit_Assign(self, node: ast.Assign) -> None:
         self.generic_visit(node)

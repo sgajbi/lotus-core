@@ -226,6 +226,43 @@ def test_guard_rejects_lineage_identity_overwritten_before_propagation(
     assert "TEST_LEDGER_OUTPUT_V1: required lineage binding is incomplete" in findings
 
 
+def test_guard_rejects_lineage_identity_bound_on_only_one_conditional_exit(
+    tmp_path: Path,
+) -> None:
+    _write_policy(tmp_path, lineage_bound=False)
+    consumer = tmp_path / "src" / "owner" / "consumer.py"
+    consumer.write_text(
+        consumer.read_text(encoding="utf-8")
+        + "identity = None\n"
+        + "if expose_lineage:\n"
+        + "    identity = TEST_LEDGER_OUTPUT_V1.lineage_identity()\n"
+        + "lineage = build_calculation_lineage(numeric_output_policy=identity)\n",
+        encoding="utf-8",
+    )
+
+    findings = evaluate(tmp_path, _contract(tmp_path))
+
+    assert "TEST_LEDGER_OUTPUT_V1: required lineage binding is incomplete" in findings
+
+
+def test_guard_accepts_same_lineage_identity_on_every_conditional_exit(
+    tmp_path: Path,
+) -> None:
+    _write_policy(tmp_path, lineage_bound=False)
+    consumer = tmp_path / "src" / "owner" / "consumer.py"
+    consumer.write_text(
+        consumer.read_text(encoding="utf-8")
+        + "if expose_lineage:\n"
+        + "    identity = TEST_LEDGER_OUTPUT_V1.lineage_identity()\n"
+        + "else:\n"
+        + "    identity = TEST_LEDGER_OUTPUT_V1.lineage_identity()\n"
+        + "lineage = build_calculation_lineage(numeric_output_policy=identity)\n",
+        encoding="utf-8",
+    )
+
+    assert evaluate(tmp_path, _contract(tmp_path)) == ()
+
+
 def test_guard_rejects_missing_required_lineage_binding(tmp_path: Path) -> None:
     _write_policy(tmp_path, lineage_bound=False)
 
