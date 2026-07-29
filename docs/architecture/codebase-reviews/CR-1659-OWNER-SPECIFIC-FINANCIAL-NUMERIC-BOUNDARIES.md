@@ -122,7 +122,11 @@ inputs and serialized Decimal values remain unchanged.
   lineage rejection. Signed commit `5694b6996` adds the #845 matrix across all four tracked alias
   classes for aliased `import`, aliased `from ... import`, ordinary dotted import, ordinary
   `from ... import`, and wildcard import, plus valid policy and canonical-builder reinstallation
-  after invalidation.
+  after invalidation. PR #846 review then proved that a same-named constant imported from an
+  unrelated module could be reinstalled as trusted. The fix derives each policy's importable module
+  from its declaration path, resolves absolute and relative imports against the consumer module,
+  and reinstalls a policy alias only when those modules match. Ninety-eight warning-strict guard
+  tests cover valid declaration imports plus unrelated absolute, relative, and aliased collisions.
 - Signed commits `d5972b4d4` and `fef520f84` add the Query Service response contract and generated
   vocabulary truth. Nine focused DTO tests, one live OpenAPI assertion, and 715 warning-strict
   Query Service unit/integration tests passed; OpenAPI quality, vocabulary parity, MyPy across

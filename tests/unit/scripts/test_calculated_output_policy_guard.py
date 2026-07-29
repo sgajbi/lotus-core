@@ -8,7 +8,7 @@ from typing import Any, Callable
 
 import pytest
 
-from scripts.quality.calculated_output_policy_guard import evaluate, main
+from scripts.quality.calculated_output_policy_guard import _source_module, evaluate, main
 
 
 def _write_policy(
@@ -108,6 +108,33 @@ def test_repository_calculated_output_policy_inventory_is_complete() -> None:
         )
         == ()
     )
+
+
+@pytest.mark.parametrize(
+    ("source_path", "module"),
+    [
+        ("src/owner/numeric_policy.py", "owner.numeric_policy"),
+        (
+            "src/libs/portfolio-common/portfolio_common/domain/numeric_policy.py",
+            "portfolio_common.domain.numeric_policy",
+        ),
+        (
+            "src/services/portfolio_service/app/domain/numeric_policy.py",
+            "app.domain.numeric_policy",
+        ),
+    ],
+)
+def test_guard_derives_importable_policy_module(
+    source_path: str,
+    module: str,
+) -> None:
+    assert _source_module(source_path) == module
+
+
+@pytest.mark.parametrize("source_path", ["numeric_policy.py", "src"])
+def test_guard_rejects_non_module_policy_paths(source_path: str) -> None:
+    with pytest.raises(ValueError, match="calculated policy path"):
+        _source_module(source_path)
 
 
 def test_guard_accepts_exact_used_and_lineage_bound_policy(tmp_path: Path) -> None:
@@ -820,6 +847,49 @@ def test_guard_installs_recognized_policy_binding_after_import_invalidation(
                 tmp_path,
                 lineage_binding="not-exposed",
                 lineage_gap_callsites=["src/owner/consumer.py::<module>"],
+            ),
+        )
+        == ()
+    )
+
+
+@pytest.mark.parametrize(
+    "unrelated_import",
+    [
+        "from unrelated import TEST_LEDGER_OUTPUT_V1",
+        "from .unrelated import TEST_LEDGER_OUTPUT_V1",
+        "from ...unrelated import TEST_LEDGER_OUTPUT_V1",
+        "from unrelated import TEST_LEDGER_OUTPUT_V1 as rebound",
+    ],
+)
+def test_guard_does_not_trust_policy_name_imported_from_unrelated_module(
+    tmp_path: Path,
+    unrelated_import: str,
+) -> None:
+    _write_policy(tmp_path, used=False)
+    imported_name = (
+        "rebound" if unrelated_import.endswith(" as rebound") else "TEST_LEDGER_OUTPUT_V1"
+    )
+    (tmp_path / "src" / "owner" / "consumer.py").write_text(
+        "from decimal import Decimal\n"
+        "from owner.numeric_policy import TEST_LEDGER_OUTPUT_V1\n"
+        "def governed_calculation():\n"
+        "    return TEST_LEDGER_OUTPUT_V1.normalize(Decimal('1'), field_name='value')\n"
+        f"{unrelated_import}\n"
+        "def unrelated_calculation():\n"
+        f"    return {imported_name}.normalize(Decimal('2'), field_name='value')\n",
+        encoding="utf-8",
+    )
+
+    assert (
+        evaluate(
+            tmp_path,
+            _contract(
+                tmp_path,
+                lineage_binding="not-exposed",
+                lineage_gap_callsites=[
+                    "src/owner/consumer.py::governed_calculation",
+                ],
             ),
         )
         == ()
