@@ -3302,6 +3302,9 @@ Most relevant current governance:
      current. Fully observed, unpaginated final/restated windows are `COMPLETE` with
      `source_evidence_current=true`; position coverage is measured against canonical business
      dates, and missing dates or any continuation page (including the final page) remain `PARTIAL`.
+     Unpaginated position diagnostics report the canonical business-date gap in
+     `missing_dates_count`; paginated responses must not classify dates outside the returned page
+     as missing.
      Only genuinely non-current states contribute to `stale_points_count`. E2E acceptance must
      prove exact economics and current evidence without requiring the schedule-dependent recovery
      epoch to remain zero.

@@ -1615,6 +1615,7 @@ async def test_get_position_timeseries_normalizes_sparse_numeric_rows() -> None:
     assert row.beginning_market_value_position_currency == Decimal("0")
     assert row.ending_market_value_position_currency == Decimal("11.25")
     assert row.quantity == Decimal("0")
+    assert response.diagnostics.missing_dates_count == 1
     assert response.data_quality_status == "PARTIAL"
     assert response.source_evidence_current is False
     assert response.freshness_status == "UNAVAILABLE"

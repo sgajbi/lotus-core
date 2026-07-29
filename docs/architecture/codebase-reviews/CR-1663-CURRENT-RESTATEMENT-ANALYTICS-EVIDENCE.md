@@ -29,6 +29,8 @@ scheduler timing.
 - Keep missing dates and every continuation page incomplete. Portfolio and position responses
   remain partial when either an incoming or outgoing page token exists; an unpaginated position
   window is complete only when its observed dates cover the canonical business-date window.
+  Its `missing_dates_count` reports that canonical gap; paginated responses do not misclassify
+  dates outside the returned page as missing.
 - Retain the complete quality-status distribution so consumers can distinguish original from
   restated values.
 - Make E2E acceptance require exact economics plus current evidence while accepting either legal

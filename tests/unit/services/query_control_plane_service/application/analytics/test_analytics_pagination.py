@@ -87,10 +87,12 @@ def test_portfolio_diagnostics_keeps_authoritative_restatements_current() -> Non
 def test_position_diagnostics_preserves_current_restatement_and_request_metadata() -> None:
     diagnostics = position_timeseries_diagnostics(
         quality_distribution={"final": 1, "restated": 2},
+        missing_dates_count=1,
         dimensions=["asset_class", "sector"],
         include_cash_flows=False,
     )
 
+    assert diagnostics.missing_dates_count == 1
     assert diagnostics.stale_points_count == 0
     assert diagnostics.requested_dimensions == ["asset_class", "sector"]
     assert diagnostics.cash_flows_included is False
