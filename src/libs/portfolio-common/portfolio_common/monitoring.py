@@ -570,6 +570,12 @@ VALUATION_JOBS_FAILED_TOTAL = Counter(
     labelnames=("reason",),
 )
 
+VALUATION_QUOTE_AUTHORITY_PATH_TOTAL = Counter(
+    "valuation_quote_authority_path_total",
+    "Total valuation executions routed by explicit quote-authority posture.",
+    labelnames=("path", "reason"),
+)
+
 VALUATION_SCHEDULER_POLL_DURATION_SECONDS = Histogram(
     "valuation_scheduler_poll_duration_seconds",
     "Duration of valuation scheduler poll work in seconds.",

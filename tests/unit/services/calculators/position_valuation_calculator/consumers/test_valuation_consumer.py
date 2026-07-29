@@ -1,6 +1,6 @@
 # tests/unit/services/calculators/position-valuation-calculator/consumers/test_valuation_consumer.py
 from contextlib import asynccontextmanager
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -12,6 +12,17 @@ from portfolio_common.database_models import (
     MarketPrice,
     Portfolio,
     PositionHistory,
+)
+from portfolio_common.domain.valuation import (
+    FinancialSourceReference,
+    MarketPriceQuoteBasis,
+    MarketPriceSourceFact,
+    MarketPriceSourceFactStatus,
+    MissingValuationPolicyAssignmentError,
+    PositionValuationEvidence,
+    ValuationAuthorityScope,
+    canonical_content_hash,
+    resolve_position_valuation_policy,
 )
 from portfolio_common.events import (
     PortfolioValuationRequiredEvent,
@@ -25,6 +36,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.calculators.position_valuation_calculator.app.consumers.valuation_consumer import (
     ValuationConsumer,
+)
+from services.calculators.position_valuation_calculator.app.ports import (
+    ResolvedRuntimeValuationPolicy,
 )
 from services.calculators.position_valuation_calculator.app.repositories.valuation_repository import (  # noqa: E501
     ValuationRepository,
@@ -97,13 +111,17 @@ def mock_dependencies():
 
     get_session_gen = make_single_session_getter(mock_db_session)
 
+    market_price_source_fact_resolver = AsyncMock()
+    valuation_policy_assignment_resolver = AsyncMock()
+    source_evidence_builder = MagicMock()
     dependency_factory = MagicMock()
     dependency_factory.from_session.return_value = ValuationProcessorDependencies(
         repo=mock_valuation_repo,
         idempotency_repo=mock_idempotency_repo,
         outbox_repo=mock_outbox_repo,
-        market_price_source_fact_resolver=AsyncMock(),
-        valuation_policy_assignment_resolver=AsyncMock(),
+        market_price_source_fact_resolver=market_price_source_fact_resolver,
+        valuation_policy_assignment_resolver=valuation_policy_assignment_resolver,
+        source_evidence_builder=source_evidence_builder,
     )
     processor = ValuationJobProcessor(
         session_provider=get_session_gen,
@@ -114,8 +132,21 @@ def mock_dependencies():
         "outbox_repo": mock_outbox_repo,
         "valuation_repo": mock_valuation_repo,
         "dependency_factory": dependency_factory,
+        "market_price_source_fact_resolver": market_price_source_fact_resolver,
         "processor": processor,
+        "source_evidence_builder": source_evidence_builder,
+        "valuation_policy_assignment_resolver": valuation_policy_assignment_resolver,
     }
+
+
+def _source_reference(record_id: str) -> FinancialSourceReference:
+    return FinancialSourceReference(
+        source_system="valuation-worker-test",
+        source_record_id=record_id,
+        source_revision="1",
+        source_content_hash=canonical_content_hash({"record_id": record_id}),
+        observed_at=datetime(2025, 8, 1, 8, tzinfo=UTC),
+    )
 
 
 async def test_invalid_valuation_event_is_raised_to_shared_recovery_boundary(
@@ -166,11 +197,15 @@ async def test_valuation_processor_executes_success_path_without_kafka_consumer(
     )
     mock_valuation_repo.upsert_daily_snapshot.return_value = persisted_snapshot
 
-    await mock_dependencies["processor"].process_valid_event(
-        mock_event,
-        "valuation.job.requested-0-91",
-        "processor-corr-id",
-    )
+    with patch(
+        "services.calculators.position_valuation_calculator.app."
+        "valuation_processor.VALUATION_QUOTE_AUTHORITY_PATH_TOTAL"
+    ) as authority_path_metric:
+        await mock_dependencies["processor"].process_valid_event(
+            mock_event,
+            "valuation.job.requested-0-91",
+            "processor-corr-id",
+        )
 
     mock_idempotency_repo.claim_event_processing.assert_awaited_once_with(
         "valuation.job.requested-0-91",
@@ -186,6 +221,134 @@ async def test_valuation_processor_executes_success_path_without_kafka_consumer(
     assert mock_outbox_repo.create_outbox_event.call_args.kwargs["correlation_id"] == (
         "processor-corr-id"
     )
+    mock_dependencies["valuation_policy_assignment_resolver"].resolve_many.assert_not_awaited()
+    mock_dependencies["market_price_source_fact_resolver"].resolve_many.assert_not_awaited()
+    authority_path_metric.labels.assert_called_once_with("legacy", "unscoped_portfolio")
+
+
+async def test_scoped_portfolio_uses_exact_authority_without_legacy_price_read(
+    mock_event: PortfolioValuationRequiredEvent,
+    mock_dependencies: dict,
+) -> None:
+    repo = mock_dependencies["valuation_repo"]
+    mock_dependencies["idempotency_repo"].claim_event_processing.return_value = True
+    position = PositionHistory(
+        quantity=Decimal("10"),
+        cost_basis=Decimal("10000"),
+        cost_basis_local=Decimal("10000"),
+    )
+    repo.get_last_position_history_before_date.return_value = position
+    repo.get_instrument.return_value = Instrument(
+        currency="USD",
+        security_id=mock_event.security_id,
+    )
+    portfolio = Portfolio(
+        base_currency="USD",
+        portfolio_id=mock_event.portfolio_id,
+        tenant_id="TENANT-SG",
+        legal_book_id="BOOK-SG",
+    )
+    repo.get_portfolio.return_value = portfolio
+
+    def _persist(snapshot: DailyPositionSnapshot) -> DailyPositionSnapshot:
+        snapshot.id = 9
+        return snapshot
+
+    repo.upsert_daily_snapshot.side_effect = _persist
+
+    price_fact = MarketPriceSourceFact(
+        scope=ValuationAuthorityScope(
+            "TENANT-SG",
+            "BOOK-SG",
+            mock_event.security_id,
+        ),
+        price_date=mock_event.valuation_date,
+        price=Decimal("1013.5"),
+        currency="USD",
+        quote_basis=MarketPriceQuoteBasis.UNIT_PRICE,
+        source_reference=_source_reference("market-price"),
+        fact_status=MarketPriceSourceFactStatus.ACTIVE,
+        fact_version=1,
+    )
+    policy_resolution = ResolvedRuntimeValuationPolicy(
+        assignment=MagicMock(),
+        policy=resolve_position_valuation_policy("UNIT_PRICE_MARKET_VALUE", 1),
+    )
+    policy_resolver = mock_dependencies["valuation_policy_assignment_resolver"]
+    price_resolver = mock_dependencies["market_price_source_fact_resolver"]
+    policy_resolver.resolve_many.side_effect = lambda requests: {requests[0].key: policy_resolution}
+    price_resolver.resolve_many.side_effect = lambda requests: {requests[0].key: price_fact}
+    evidence = PositionValuationEvidence(
+        policy_assignment=_source_reference("policy-assignment"),
+        source_value=price_fact.source_reference,
+        source_currency=price_fact.source_reference,
+        reporting_currency=_source_reference("portfolio"),
+        signed_quantity=_source_reference("position"),
+    )
+    mock_dependencies["source_evidence_builder"].return_value = evidence
+
+    with patch(
+        "services.calculators.position_valuation_calculator.app."
+        "valuation_processor.VALUATION_QUOTE_AUTHORITY_PATH_TOTAL"
+    ) as authority_path_metric:
+        await mock_dependencies["processor"].process_valid_event(
+            mock_event,
+            "valuation.job.requested-0-95",
+            "processor-corr-id",
+        )
+
+    repo.get_latest_price_for_position.assert_not_awaited()
+    policy_resolver.resolve_many.assert_awaited_once()
+    price_resolver.resolve_many.assert_awaited_once()
+    mock_dependencies["source_evidence_builder"].assert_called_once()
+    persisted_snapshot = repo.upsert_daily_snapshot.await_args.args[0]
+    assert persisted_snapshot.market_price == Decimal("1013.5")
+    assert persisted_snapshot.market_value_local == Decimal("10135.0000000000")
+    assert persisted_snapshot.unrealized_gain_loss_local == Decimal("135.0000000000")
+    assert persisted_snapshot.valuation_status == "VALUED_CURRENT"
+    authority_path_metric.labels.assert_called_once_with(
+        "authoritative",
+        "exact_portfolio_scope",
+    )
+
+
+async def test_scoped_portfolio_fails_closed_when_policy_authority_is_missing(
+    mock_event: PortfolioValuationRequiredEvent,
+    mock_dependencies: dict,
+) -> None:
+    repo = mock_dependencies["valuation_repo"]
+    mock_dependencies["idempotency_repo"].claim_event_processing.return_value = True
+    repo.get_last_position_history_before_date.return_value = PositionHistory(
+        quantity=Decimal("10"),
+        cost_basis=Decimal("10000"),
+        cost_basis_local=Decimal("10000"),
+    )
+    repo.get_instrument.return_value = Instrument(
+        currency="USD",
+        security_id=mock_event.security_id,
+    )
+    repo.get_portfolio.return_value = Portfolio(
+        base_currency="USD",
+        portfolio_id=mock_event.portfolio_id,
+        tenant_id="TENANT-SG",
+        legal_book_id="BOOK-SG",
+    )
+    policy_resolver = mock_dependencies["valuation_policy_assignment_resolver"]
+    policy_resolver.resolve_many.side_effect = MissingValuationPolicyAssignmentError(
+        "no exact authority"
+    )
+
+    with pytest.raises(MissingValuationPolicyAssignmentError, match="exact authority"):
+        await mock_dependencies["processor"].process_valid_event(
+            mock_event,
+            "valuation.job.requested-0-96",
+            "processor-corr-id",
+        )
+
+    repo.get_latest_price_for_position.assert_not_awaited()
+    mock_dependencies["market_price_source_fact_resolver"].resolve_many.assert_not_awaited()
+    repo.upsert_daily_snapshot.assert_not_awaited()
+    mock_dependencies["outbox_repo"].create_outbox_event.assert_not_awaited()
 
 
 async def test_valuation_processor_duplicate_claim_skips_valuation_reads(

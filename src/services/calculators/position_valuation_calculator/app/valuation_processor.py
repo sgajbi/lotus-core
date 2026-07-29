@@ -14,16 +14,39 @@ from portfolio_common.database_models import (
     Instrument,
     MarketPrice,
     Portfolio,
+    PositionHistory,
 )
 from portfolio_common.domain.eventing import portfolio_security_partition_key
+from portfolio_common.domain.valuation import (
+    MarketPriceSourceFact,
+    PositionValuationEvidence,
+    ResolvedValuationPolicyAssignment,
+    UnsupportedValuationError,
+    ValuationAuthorityScope,
+    ValuationBookScope,
+    resolve_optional_valuation_book_scope,
+)
 from portfolio_common.events import (
     DailyPositionSnapshotPersistedEvent,
     PortfolioValuationRequiredEvent,
 )
-from portfolio_common.monitoring import VALUATION_JOBS_FAILED_TOTAL, VALUATION_JOBS_SKIPPED_TOTAL
+from portfolio_common.monitoring import (
+    VALUATION_JOBS_FAILED_TOTAL,
+    VALUATION_JOBS_SKIPPED_TOTAL,
+    VALUATION_QUOTE_AUTHORITY_PATH_TOTAL,
+)
 from portfolio_common.valuation_job_contracts import ValuationJobTransitionOutcome
 
+from .logic import (
+    AuthoritativeValuationRequest,
+    AuthoritativeValuationResult,
+    calculate_authoritative_valuation,
+)
 from .logic.valuation_logic import ValuationComponents, ValuationLogic
+from .ports import (
+    MarketPriceAuthorityRequest,
+    ValuationPolicyAuthorityRequest,
+)
 
 if TYPE_CHECKING:
     from portfolio_common.idempotency_repository import IdempotencyRepository
@@ -68,6 +91,20 @@ class ValuationSnapshotResult:
     job_failure_reason: str | None
 
 
+class ValuationSourceEvidenceBuilder(Protocol):
+    """Build calculation evidence from persisted valuation inputs."""
+
+    def __call__(
+        self,
+        *,
+        assignment: ResolvedValuationPolicyAssignment,
+        price_fact: MarketPriceSourceFact,
+        position: PositionHistory,
+        portfolio: Portfolio,
+        fx_rate: FxRate | None,
+    ) -> PositionValuationEvidence: ...
+
+
 @dataclass(frozen=True, slots=True)
 class ValuationProcessorDependencies:
     repo: ValuationRepository
@@ -75,6 +112,7 @@ class ValuationProcessorDependencies:
     outbox_repo: OutboxRepository
     market_price_source_fact_resolver: MarketPriceSourceFactResolver
     valuation_policy_assignment_resolver: ValuationPolicyAssignmentResolver
+    source_evidence_builder: ValuationSourceEvidenceBuilder
 
 
 class ValuationProcessorDependencyFactory(Protocol):
@@ -130,7 +168,7 @@ class ValuationJobProcessor:
                 logger.warning("Event %s already processed. Skipping.", event_id)
                 return
 
-            snapshot_result = await self._build_snapshot_for_event(dependencies.repo, event)
+            snapshot_result = await self._build_snapshot_for_event(dependencies, event)
             if snapshot_result is None:
                 return
 
@@ -168,9 +206,10 @@ class ValuationJobProcessor:
 
     async def _build_snapshot_for_event(
         self,
-        repo: ValuationRepository,
+        dependencies: ValuationProcessorDependencies,
         event: PortfolioValuationRequiredEvent,
     ) -> ValuationSnapshotResult | None:
+        repo = dependencies.repo
         position_state = await self._position_state_for_event(repo, event)
         reference_data = await self._reference_data_for_event(repo, event)
 
@@ -189,9 +228,10 @@ class ValuationJobProcessor:
         )
 
         return await self._value_snapshot(
-            repo=repo,
+            dependencies=dependencies,
             event=event,
             snapshot=snapshot,
+            position=position_state,
             instrument=reference_data.instrument,
             portfolio=reference_data.portfolio,
             price=reference_data.price,
@@ -221,10 +261,25 @@ class ValuationJobProcessor:
         repo: ValuationRepository,
         event: PortfolioValuationRequiredEvent,
     ) -> ValuationReferenceData:
+        instrument = await repo.get_instrument(event.security_id)
+        portfolio = await repo.get_portfolio(event.portfolio_id)
+        price = None
+        if (
+            portfolio is None
+            or resolve_optional_valuation_book_scope(
+                tenant_id=portfolio.tenant_id,
+                legal_book_id=portfolio.legal_book_id,
+            )
+            is None
+        ):
+            price = await repo.get_latest_price_for_position(
+                event.security_id,
+                event.valuation_date,
+            )
         return ValuationReferenceData(
-            instrument=await repo.get_instrument(event.security_id),
-            portfolio=await repo.get_portfolio(event.portfolio_id),
-            price=await repo.get_latest_price_for_position(event.security_id, event.valuation_date),
+            instrument=instrument,
+            portfolio=portfolio,
+            price=price,
         )
 
     async def _mark_missing_reference_data(
@@ -265,6 +320,48 @@ class ValuationJobProcessor:
         return error_msg
 
     async def _value_snapshot(
+        self,
+        *,
+        dependencies: ValuationProcessorDependencies,
+        event: PortfolioValuationRequiredEvent,
+        snapshot: DailyPositionSnapshot,
+        position: PositionHistory,
+        instrument: Instrument,
+        portfolio: Portfolio,
+        price: MarketPrice | None,
+    ) -> ValuationSnapshotResult:
+        book_scope = resolve_optional_valuation_book_scope(
+            tenant_id=portfolio.tenant_id,
+            legal_book_id=portfolio.legal_book_id,
+        )
+        if book_scope is not None:
+            VALUATION_QUOTE_AUTHORITY_PATH_TOTAL.labels(
+                "authoritative",
+                "exact_portfolio_scope",
+            ).inc()
+            return await self._value_authoritative_snapshot(
+                dependencies=dependencies,
+                event=event,
+                snapshot=snapshot,
+                position=position,
+                instrument=instrument,
+                portfolio=portfolio,
+                book_scope=book_scope,
+            )
+        VALUATION_QUOTE_AUTHORITY_PATH_TOTAL.labels(
+            "legacy",
+            "unscoped_portfolio",
+        ).inc()
+        return await self._value_legacy_snapshot(
+            repo=dependencies.repo,
+            event=event,
+            snapshot=snapshot,
+            instrument=instrument,
+            portfolio=portfolio,
+            price=price,
+        )
+
+    async def _value_legacy_snapshot(
         self,
         *,
         repo: ValuationRepository,
@@ -320,6 +417,97 @@ class ValuationJobProcessor:
             reason="valuation_logic_failed",
         ).inc()
         return ValuationSnapshotResult(snapshot=snapshot, job_failure_reason=failure_reason)
+
+    async def _value_authoritative_snapshot(
+        self,
+        *,
+        dependencies: ValuationProcessorDependencies,
+        event: PortfolioValuationRequiredEvent,
+        snapshot: DailyPositionSnapshot,
+        position: PositionHistory,
+        instrument: Instrument,
+        portfolio: Portfolio,
+        book_scope: ValuationBookScope,
+    ) -> ValuationSnapshotResult:
+        scope = ValuationAuthorityScope(
+            tenant_id=book_scope.tenant_id,
+            legal_book_id=book_scope.legal_book_id,
+            security_id=event.security_id,
+        )
+        policy_request = ValuationPolicyAuthorityRequest(
+            scope=scope,
+            valuation_date=event.valuation_date,
+        )
+        price_request = MarketPriceAuthorityRequest(
+            scope=scope,
+            price_date=event.valuation_date,
+        )
+        policy_resolution = (
+            await dependencies.valuation_policy_assignment_resolver.resolve_many([policy_request])
+        )[policy_request.key]
+        price_fact = (
+            await dependencies.market_price_source_fact_resolver.resolve_many([price_request])
+        )[price_request.key]
+        instrument_currency = _normalize_currency_code(instrument.currency)
+        if price_fact.currency != instrument_currency:
+            raise UnsupportedValuationError(
+                "authoritative market-price currency must match instrument currency"
+            )
+        portfolio_currency = _normalize_currency_code(portfolio.base_currency)
+        fx_rate = await self._instrument_to_portfolio_fx_rate(
+            repo=dependencies.repo,
+            event=event,
+            instrument_currency=instrument_currency,
+            portfolio_currency=portfolio_currency,
+        )
+        if instrument_currency != portfolio_currency and fx_rate is None:
+            return self._failed_missing_fx_snapshot(
+                snapshot=snapshot,
+                event=event,
+                instrument_currency=instrument_currency,
+                portfolio_currency=portfolio_currency,
+            )
+        evidence = dependencies.source_evidence_builder(
+            assignment=policy_resolution.assignment,
+            price_fact=price_fact,
+            position=position,
+            portfolio=portfolio,
+            fx_rate=fx_rate,
+        )
+        result = calculate_authoritative_valuation(
+            AuthoritativeValuationRequest(
+                policy=policy_resolution.policy,
+                price_fact=price_fact,
+                signed_quantity=snapshot.quantity,
+                cost_basis_reporting=snapshot.cost_basis,
+                cost_basis_local=snapshot.cost_basis_local,
+                reporting_currency=portfolio_currency,
+                evidence=evidence,
+                direct_source_to_reporting_fx_rate=fx_rate.rate if fx_rate else None,
+            )
+        )
+        self._apply_authoritative_valuation_result(
+            snapshot=snapshot,
+            price_fact=price_fact,
+            result=result,
+        )
+        return ValuationSnapshotResult(snapshot=snapshot, job_failure_reason=None)
+
+    @staticmethod
+    def _apply_authoritative_valuation_result(
+        *,
+        snapshot: DailyPositionSnapshot,
+        price_fact: MarketPriceSourceFact,
+        result: AuthoritativeValuationResult,
+    ) -> None:
+        snapshot.market_price = price_fact.price
+        snapshot.market_value = result.market_value_reporting
+        snapshot.market_value_local = result.market_value_local
+        snapshot.unrealized_gain_loss = result.unrealized_total_reporting
+        snapshot.unrealized_gain_loss_local = result.unrealized_total_local
+        snapshot.unrealized_price_gain_loss = result.unrealized_price_reporting
+        snapshot.unrealized_fx_gain_loss = result.unrealized_fx_reporting
+        snapshot.valuation_status = VALUATION_VALUED_CURRENT
 
     @staticmethod
     async def _instrument_to_portfolio_fx_rate(
