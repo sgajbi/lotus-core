@@ -12,7 +12,8 @@
       "scale": 10,
       "working_precision": 64,
       "rounding": "ROUND_HALF_EVEN",
-      "lineage_binding": "required"
+      "lineage_binding": "required",
+      "lineage_gap_paths": []
     },
     "POSITION_VALUATION_LEDGER_OUTPUT_V1": {
       "declaration_path": "src/libs/portfolio-common/portfolio_common/domain/valuation/numeric_policy.py",
@@ -24,7 +25,10 @@
       "scale": 10,
       "working_precision": 64,
       "rounding": "ROUND_HALF_EVEN",
-      "lineage_binding": "required"
+      "lineage_binding": "partial",
+      "lineage_gap_paths": [
+        "src/services/calculators/position_valuation_calculator/app/logic/valuation_logic.py"
+      ]
     },
     "TRANSACTION_COST_LEDGER_OUTPUT_V1": {
       "declaration_path": "src/libs/portfolio-common/portfolio_common/domain/transaction/numeric_policy.py",
@@ -36,7 +40,11 @@
       "scale": 10,
       "working_precision": 64,
       "rounding": "ROUND_HALF_EVEN",
-      "lineage_binding": "not-exposed"
+      "lineage_binding": "not-exposed",
+      "lineage_gap_paths": [
+        "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_calculator.py",
+        "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/corporate_action_cash_economics.py"
+      ]
     },
     "COST_BASIS_STATE_LEDGER_OUTPUT_V1": {
       "declaration_path": "src/libs/portfolio-common/portfolio_common/domain/transaction/numeric_policy.py",
@@ -48,7 +56,13 @@
       "scale": 10,
       "working_precision": 64,
       "rounding": "ROUND_HALF_EVEN",
-      "lineage_binding": "not-exposed"
+      "lineage_binding": "not-exposed",
+      "lineage_gap_paths": [
+        "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/average_cost_source_allocation.py",
+        "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_strategies.py",
+        "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/lot_state.py",
+        "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/residual_allocation.py"
+      ]
     },
     "POSITION_HISTORY_LEDGER_OUTPUT_V1": {
       "declaration_path": "src/services/portfolio_transaction_processing_service/app/domain/position/numeric_policy.py",
@@ -60,7 +74,10 @@
       "scale": 10,
       "working_precision": 64,
       "rounding": "ROUND_HALF_EVEN",
-      "lineage_binding": "not-exposed"
+      "lineage_binding": "not-exposed",
+      "lineage_gap_paths": [
+        "src/services/portfolio_transaction_processing_service/app/domain/position/reducer.py"
+      ]
     },
     "CASHFLOW_LEDGER_OUTPUT_V1": {
       "declaration_path": "src/services/portfolio_transaction_processing_service/app/domain/cashflow/numeric_policy.py",
@@ -72,7 +89,10 @@
       "scale": 10,
       "working_precision": 64,
       "rounding": "ROUND_HALF_EVEN",
-      "lineage_binding": "not-exposed"
+      "lineage_binding": "not-exposed",
+      "lineage_gap_paths": [
+        "src/services/portfolio_transaction_processing_service/app/domain/cashflow/calculation.py"
+      ]
     },
     "POSITION_TIMESERIES_LEDGER_OUTPUT_V1": {
       "declaration_path": "src/services/portfolio_derived_state_service/app/domain/position_timeseries/numeric_policy.py",
@@ -84,7 +104,10 @@
       "scale": 10,
       "working_precision": 64,
       "rounding": "ROUND_HALF_EVEN",
-      "lineage_binding": "not-exposed"
+      "lineage_binding": "not-exposed",
+      "lineage_gap_paths": [
+        "src/services/portfolio_derived_state_service/app/domain/position_timeseries/calculator.py"
+      ]
     },
     "PORTFOLIO_TIMESERIES_LEDGER_OUTPUT_V1": {
       "declaration_path": "src/services/portfolio_derived_state_service/app/domain/portfolio_timeseries/numeric_policy.py",
@@ -96,7 +119,10 @@
       "scale": 10,
       "working_precision": 64,
       "rounding": "ROUND_HALF_EVEN",
-      "lineage_binding": "not-exposed"
+      "lineage_binding": "not-exposed",
+      "lineage_gap_paths": [
+        "src/services/portfolio_derived_state_service/app/domain/portfolio_timeseries/calculator.py"
+      ]
     }
   }
 }

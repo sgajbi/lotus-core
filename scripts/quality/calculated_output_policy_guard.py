@@ -6,7 +6,6 @@ import argparse
 import ast
 import json
 import sys
-from collections import Counter
 from dataclasses import dataclass
 from decimal import ROUND_HALF_EVEN
 from pathlib import Path
@@ -25,8 +24,9 @@ POLICY_KEYS = {
     "working_precision",
     "rounding",
     "lineage_binding",
+    "lineage_gap_paths",
 }
-LINEAGE_BINDINGS = {"required", "not-exposed"}
+LINEAGE_BINDINGS = {"required", "partial", "not-exposed"}
 EXECUTION_METHODS = {
     "add",
     "arithmetic_context",
@@ -115,10 +115,14 @@ def _declarations(repo_root: Path) -> dict[str, PolicyDeclaration]:
     return declarations
 
 
-def _usage(repo_root: Path, constants: set[str]) -> tuple[Counter[str], Counter[str]]:
-    execution: Counter[str] = Counter()
-    lineage: Counter[str] = Counter()
+def _usage(
+    repo_root: Path,
+    constants: set[str],
+) -> tuple[dict[str, set[str]], dict[str, set[str]]]:
+    execution = {constant: set() for constant in constants}
+    lineage = {constant: set() for constant in constants}
     for path in sorted((repo_root / "src").rglob("*.py")):
+        relative_path = path.relative_to(repo_root).as_posix()
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         aliases = _policy_aliases(tree, constants)
         for node in ast.walk(tree):
@@ -131,9 +135,9 @@ def _usage(repo_root: Path, constants: set[str]) -> tuple[Counter[str], Counter[
             if constant is None:
                 continue
             if node.func.attr in EXECUTION_METHODS:
-                execution[constant] += 1
+                execution[constant].add(relative_path)
             if node.func.attr == "lineage_identity":
-                lineage[constant] += 1
+                lineage[constant].add(relative_path)
     return execution, lineage
 
 
@@ -206,10 +210,35 @@ def evaluate(repo_root: Path, contract_path: Path) -> tuple[str, ...]:
             findings.append(
                 f"{constant}.lineage_binding: must be one of {sorted(LINEAGE_BINDINGS)}"
             )
-        if execution[constant] == 0:
+        gap_paths = policy["lineage_gap_paths"]
+        valid_gap_paths = (
+            isinstance(gap_paths, list)
+            and all(isinstance(path, str) and path.strip() for path in gap_paths)
+            and gap_paths == sorted(set(gap_paths))
+        )
+        if not valid_gap_paths:
+            findings.append(
+                f"{constant}.lineage_gap_paths: must be a sorted list of unique nonblank paths"
+            )
+            continue
+        execution_paths = execution[constant]
+        lineage_paths = lineage[constant]
+        computed_gaps = execution_paths - lineage_paths
+        contract_gaps = set(gap_paths)
+        for path in sorted(computed_gaps - contract_gaps):
+            findings.append(f"{constant}: unclassified lineage gap at {path}")
+        for path in sorted(contract_gaps - computed_gaps):
+            findings.append(f"{constant}: stale lineage gap at {path}")
+        if not execution_paths:
             findings.append(f"{constant}: no execution consumer found")
-        if binding == "required" and lineage[constant] == 0:
-            findings.append(f"{constant}: required lineage binding not found")
+        if binding == "required" and (not lineage_paths or computed_gaps):
+            findings.append(f"{constant}: required lineage binding is incomplete")
+        if binding == "partial" and (not lineage_paths or not computed_gaps):
+            findings.append(
+                f"{constant}: partial lineage binding requires bound and unbound consumers"
+            )
+        if binding == "not-exposed" and lineage_paths:
+            findings.append(f"{constant}: not-exposed policy has a lineage binding")
     if len(declarations) != expected_inventory:
         findings.append(
             f"source inventory={len(declarations)} does not match expected={expected_inventory}"
