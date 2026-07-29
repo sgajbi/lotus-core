@@ -137,6 +137,15 @@ checks reject non-finite prices and observation times. Existing valuation,
 reconciliation, query, freshness, demo, and replay consumers remain on that legacy projection until
 both financial consumers complete a governed, tenant-safe cutover.
 
+Scoped position-valuation jobs are the first staged consumer of this authority. They resolve the
+exact policy assignment and market-price fact without reading the global projection, then persist a
+one-to-one `daily_position_valuation_receipts` row alongside the snapshot and outbox event. A
+supported receipt binds policy/assignment versions, immutable source references and hashes,
+numeric-output policy, and deterministic input/calculation/output lineage. Unscoped compatibility
+is explicitly marked unsupported and carries no invented authority evidence; failed replacement
+snapshots remove stale receipts. Financial reconciliation and correction-triggered replay remain
+outside this staged cutover until #451 acceptance is complete.
+
 ### Timeseries and analytics-input foundations
 
 Primary time-series tables include:

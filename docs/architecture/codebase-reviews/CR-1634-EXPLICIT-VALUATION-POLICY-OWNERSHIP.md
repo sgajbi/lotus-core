@@ -158,6 +158,15 @@ narrow framework-free contract therefore belongs in `portfolio_common.domain.val
 - Fixed position-scaling, aggregation, and FX conversion to a 50-digit local Decimal context. A
   regression test caught reporting-currency conversion escaping the context; both returned values
   and output lineage now use the identical fixed-precision results.
+- Routed scoped position-valuation jobs through exact tenant, legal-book, instrument, and valuation-
+  date authority. The worker batches assignment and price-fact resolution, rejects quote-basis
+  mismatches, and never reads the global `market_prices` projection on this path. Unscoped
+  portfolios retain an explicitly metered legacy path while migration remains incomplete.
+- Added a one-to-one valuation-calculation receipt for every persisted snapshot outcome. Supported
+  receipts bind the exact snapshot identity, policy and assignment versions, assignment/source-fact
+  hashes and references, numeric-output policy, and input/calculation/output lineage. Legacy
+  unscoped valuations carry an explicit unsupported receipt without fabricated authority evidence;
+  failed or unvalued replacements delete any stale receipt in the same snapshot/outbox transaction.
 
 ## Ownership Boundary
 
@@ -183,9 +192,12 @@ The market-price authority slice adds a second reversible history table, a publi
 contract backed by the insert-only boundary, and a position-valuation-owned bulk resolver without
 changing the legacy projection, existing event contracts, or any runtime consumer. It is a
 migration primitive, not permission to reinterpret historical global prices as tenant-safe facts.
-Existing correct unit-price behavior is characterized under an explicit policy. The legacy bond
-heuristic remains in the runtime path until authoritative market-price persistence and both
-valuation consumers are wired; it will be deleted rather than retained as a fallback then.
+Existing correct unit-price behavior is characterized under an explicit policy. Scoped
+position-valuation jobs now use exact authority and persist an additive one-to-one receipt; existing
+event and API shapes are unchanged. The legacy bond heuristic remains only for explicitly unscoped
+position valuation and financial reconciliation until portfolio scope migration, principal
+authority, correction-triggered replay, and reconciliation parity are proven. It will be deleted,
+not retained as a fallback, when those acceptance criteria are complete.
 
 ## Validation
 
@@ -248,6 +260,11 @@ valuation consumers are wired; it will be deleted rather than retained as a fall
   positive price/version, governed representation/lifecycle, duplicate source-version rejection,
   moved ACTIVE/SUSPENDED/RETIRED fencing, and concurrent competing-writer serialization.
   Unchanged-source and generated-project teardown evidence is recorded on issue #451.
+- The scoped runtime and receipt cohort passes warning-strict worker, domain, repository,
+  composition, model, and migration tests. Tests prove no legacy price read on exact authority,
+  deterministic unit-price calculation, quote-policy compatibility, fail-closed missing authority,
+  supported versus legacy receipt evidence, exact one-row persistence/reconstruction/deletion, and
+  the reversible single-head migration. Configured MyPy passes all 240 source files.
 
 Primary methodology references for the day-count slice are the
 [FpML day-count scheme publication](https://www.fpml.org/specs_news/publication-of-fpml-set-of-coding-schemes-catalog-version-1-121/),
@@ -272,8 +289,11 @@ Repository context, the canonical position-valuation methodology, risk-based cov
 this review ledger change because calculation and evidence truth changed. The methodology labels
 the new domain as a runtime migration in progress. The new source-write API updates the generated
 route/vocabulary catalogs plus the ingestion, API-surface, and data-model wiki sources. The
-service-local resolver does not add another wiki change: it is an internal migration seam and is not
-yet invoked by production valuation or reconciliation. The later portfolio-authority prerequisite
+service-local resolver now drives scoped production position valuation, so `Data-Models` and
+repository context record its staged compatibility boundary and durable receipt. Financial
+reconciliation, correction-triggered replay, Query exposure, and complete heuristic deletion remain
+open acceptance criteria on #451 rather than being represented as complete. The later
+portfolio-authority prerequisite
 updates the generated API vocabulary plus `Data-Models` and `Ingestion-Service` wiki sources because
 the additive request/event/schema contract changed. README and supported-feature status do not
 change. The separate market-price authority table, append writer, and bulk resolver update

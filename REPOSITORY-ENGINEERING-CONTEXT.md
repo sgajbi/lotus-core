@@ -2682,8 +2682,10 @@ Most relevant current governance:
      such as `fx_rate`, `market_price`, and `valuation_unit_price` and tests mirroring that package.
      Do not restore flat `portfolio_common.fx_rates`, `market_prices`, or `valuation_prices` roots.
      Product-specific quote conventions and valuation methodology require an explicit governed
-     domain decision; the current legacy bond quote heuristic remains tracked under #451 and must
-     not be generalized during structural moves.
+     domain decision. Scoped position-valuation jobs resolve exact tenant/legal-book/instrument/date
+     policy and market-price authority and persist a one-to-one calculation receipt; do not bypass
+     that path or generalize the explicitly metered unscoped legacy heuristic while #451 remains
+     open.
 183. Timeseries instrument/FX records shared by generation and aggregation belong under
      `portfolio_common.domain.market_data.timeseries`. The SQL reader remains shared infrastructure
      because both service-owned repositories reuse it. `TimeseriesMarketDataPort` belongs under
@@ -2990,8 +2992,12 @@ Most relevant current governance:
      narrow them with an undeclared precision/scale because correction replay compares exact
      source facts. Database checks reject non-finite price and observation values. Reject missing,
      conflicting, and competing exact-scope authority. Do not widen only the legacy write key or
-     route scoped authority through unscoped readers. Cut over valuation and financial
-     reconciliation together only after replay scheduling, lineage, and mixed-book proof.
+     route scoped authority through unscoped readers. A scoped position valuation must persist its
+     supported receipt in the same unit of work as the snapshot and outbox event; a legacy unscoped
+     valuation must persist an explicitly unsupported receipt without invented authority evidence,
+     and a failed replacement must remove stale receipt evidence. Financial reconciliation,
+     correction-triggered replay, principal authority, Query exposure, mixed-book proof, and final
+     heuristic deletion remain mandatory before #451 can close.
 205. Valuation day-count policy resolves an exact governed convention code and version; unknown
      conventions and versions fail closed. `ACT/365.FIXED` and `ACT/360` use actual elapsed calendar
      days with their fixed denominators. `BUS/252` requires a source-owned, versioned business-day
