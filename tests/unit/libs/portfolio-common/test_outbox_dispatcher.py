@@ -171,6 +171,57 @@ def test_dispatcher_retry_delay_uses_bounded_exponential_backoff() -> None:
     assert dispatcher._retry_delay_seconds(4) == 45.0
 
 
+def test_dispatcher_retry_delay_adds_bounded_jitter_before_delay_cap() -> None:
+    import portfolio_common.outbox_dispatcher as module
+
+    dispatcher = module.OutboxDispatcher(
+        kafka_producer=MagicMock(spec=KafkaProducer),
+        retry_initial_delay_seconds=10,
+        retry_max_delay_seconds=45,
+        retry_jitter_seconds=5,
+    )
+    dispatcher._retry_random = MagicMock()
+    dispatcher._retry_random.uniform.return_value = 3
+
+    assert dispatcher._retry_delay_seconds(2) == 23.0
+    dispatcher._retry_random.uniform.assert_called_once_with(0, 5)
+
+
+def test_dispatcher_flush_marks_only_callbackless_events_failed() -> None:
+    import portfolio_common.outbox_dispatcher as module
+
+    producer = MagicMock(spec=KafkaProducer)
+    producer.flush.return_value = 1
+    dispatcher = module.OutboxDispatcher(kafka_producer=producer)
+    now = module.datetime.now(module.timezone.utc)
+    events = [
+        module._ClaimedOutboxEvent(
+            id=event_id,
+            aggregate_type="OutboxFlush",
+            aggregate_id=f"agg-{event_id}",
+            partition_key=f"PORT_001|SEC_{event_id}",
+            event_type="TestEvent",
+            payload={},
+            topic="flush.topic",
+            correlation_id=None,
+            traceparent=None,
+            retry_count=0,
+            created_at=now,
+            claim_token=f"claim-{event_id}",
+            claim_expires_at=now + timedelta(seconds=30),
+        )
+        for event_id in (101, 102)
+    ]
+    delivery_ack = {102: True}
+    delivery_errs: dict[int, str] = {}
+
+    dispatcher._flush_delivery_results(events, delivery_ack, delivery_errs)
+
+    producer.flush.assert_called_once_with(timeout=10)
+    assert delivery_ack == {101: False, 102: True}
+    assert delivery_errs == {101: "Kafka flush timed out before delivery callback."}
+
+
 def test_dispatcher_elapsed_retry_budget_moves_failure_to_terminal() -> None:
     import portfolio_common.outbox_dispatcher as module
 
