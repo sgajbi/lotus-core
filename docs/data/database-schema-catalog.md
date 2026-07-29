@@ -1149,7 +1149,7 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
 ## `portfolio_aggregation_jobs`
 
 - **Purpose**: Durable aggregation work queue.
-- **Description**: Portfolio/date tasks for timeseries aggregation with status tracking.
+- **Description**: Portfolio/date tasks for timeseries aggregation with status, target-epoch, material-source, and lease tracking.
 - **Relationships**: No explicit foreign-key relationships declared.
 - **Usage (modules/features)**: `src/services/query_service/app/repositories/operations_repository.py`, `src/services/portfolio_derived_state_service/app/infrastructure/portfolio_aggregation_repository.py`, `src/services/portfolio_derived_state_service/app/application/aggregation_jobs/scheduler.py`, `src/services/portfolio_derived_state_service/app/infrastructure/timeseries_generation_repository.py`, `src/services/portfolio_derived_state_service/app/main.py`
 - **Typical access patterns**: Deterministic ready-job polling with `FOR UPDATE SKIP LOCKED`, token-fenced terminal writes, expiry-based recovery, and operator status reads.
@@ -1160,6 +1160,8 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
   - `status` (String): Current lifecycle status for the record/work item.
   - `correlation_id` (String): Trace/correlation id used across logs and events.
   - `attempt_count` (Integer): Number of durable claim attempts.
+  - `target_epoch` (Integer): Highest authoritative source epoch the claimed calculation may materialize.
+  - `source_revision` (Integer): Positive material-staging generation used with target epoch and lease token to fence terminal writes.
   - `failure_reason` (Text): Durable reprocess or terminal-failure context.
   - `lease_owner` (String): Runtime instance that owns the active claim; nullable when unclaimed.
   - `lease_token` (String): Opaque fencing token required for terminal writes; nullable when unclaimed.

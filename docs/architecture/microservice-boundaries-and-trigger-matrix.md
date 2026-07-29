@@ -137,11 +137,13 @@ runtime-boundary catalog.
 7. `portfolio_derived_state_service` consumes `valuation.snapshot.persisted` using the preserved
    `timeseries_generator_group_positions` offsets.
 8. Its position application use case stages aggregation jobs atomically with changed
-   position-timeseries persistence.
+   position-timeseries persistence, carrying the authoritative target epoch and a monotonic
+   material-source revision.
 9. Its aggregation scheduler recovers expired leases, claims eligible aggregation jobs with
-   fenced ownership, computes portfolio timeseries through bounded workers, and atomically stages
-   both the `portfolio_day.aggregation.completed` compatibility fact and
-   `portfolio_day.reconciliation.requested`.
+   lease and source-identity fencing, computes the claim-owned epoch through bounded workers, and
+   atomically stages both the `portfolio_day.aggregation.completed` compatibility fact and
+   `portfolio_day.reconciliation.requested`. A newer staged source identity requeues the same
+   portfolio/day rather than permitting stale completion.
 10. `financial_reconciliation_service` consumes `portfolio_day.reconciliation.requested`, runs the automatic reconciliation bundle with deterministic dedupe keys per `(reconciliation_type, portfolio_id, business_date, epoch, aggregation_revision)`, persists only the newest aggregation revision as authoritative control evidence, suppresses old or duplicate revisions, and atomically stages `portfolio_day.reconciliation.completed` plus `portfolio_day.controls.evaluated` for an accepted latest-epoch revision.
 11. `portfolio_day.controls.evaluated` is the canonical portfolio-day controls decision:
     `controls_blocking=true` and `publish_allowed=false` for `FAILED` / `REQUIRES_REPLAY`,

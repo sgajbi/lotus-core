@@ -3262,6 +3262,17 @@ Most relevant current governance:
      Core Actions run, source commit, and artifact digest; fault proof also binds the injection,
      expected owning node, and observed result. The ledger governs test value and placement; #728
      separately owns private-banking scenario economics and fixture validity.
+225. Portfolio aggregation work identity is the durable portfolio/date
+     `target_epoch` plus positive `source_revision` captured when material position-timeseries
+     changes are staged. Carry both values through claim, application command, calculation, and
+     success/failure terminal writes; a matching lease token alone is insufficient. Calculation
+     must use the claim-owned target epoch rather than re-read a schedule-dependent current epoch.
+     A newer epoch or source revision supersedes the active claim and returns the same job to
+     `PENDING`; it cannot publish or fail over newer source material. Eligibility fails closed when
+     an authoritative snapshot is newer than the staged target. Preserve one-round-trip
+     portfolio/date coalescing and expose `new`, `rearmed`, `superseded`, and `no_op` staging
+     outcomes. Do not substitute correlation identity, timestamps, debounce, timeout increases, or
+     Kafka arrival order for this database-backed source fence.
 
 ## Context Maintenance Rule
 

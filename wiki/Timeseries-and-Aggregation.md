@@ -12,7 +12,8 @@ application/domain modules, not one mixed calculation module.
    `valuation.snapshot.persisted`.
 2. The position delivery adapter maps that event into `MaterializePositionTimeseries`.
 3. The use case writes current and materially dependent future `position_timeseries` rows and
-   idempotently stages affected `portfolio_aggregation_jobs` in the same transaction.
+   idempotently stages affected `portfolio_aggregation_jobs` in the same transaction, carrying the
+   authoritative target epoch and material-source revision.
 4. The aggregation scheduler recovers expired claims and leases eligible jobs in deterministic
    portfolio/date order using `FOR UPDATE SKIP LOCKED`.
 5. Bounded workers invoke `MaterializePortfolioTimeseries` and write `portfolio_timeseries`.
@@ -28,6 +29,13 @@ reopened portfolio day from Kafka redelivery without inventing arrival-time orde
 reconciliation therefore calculates each new revision once while duplicate or older revisions are
 safe no-ops. Epoch remains the portfolio correction/restatement generation; aggregation revision is
 the ordered materialization generation within that epoch.
+
+The claimed job also carries `target_epoch` and `source_revision`. Workers calculate only the
+claim-owned epoch and terminal writes require the lease token and both source-identity fields. If a
+newer position epoch or same-epoch material revision arrives during processing, the existing
+portfolio/day job is requeued and the stale claim publishes nothing. This fence is distinct from
+`aggregation_revision`: source revision protects calculation input identity, while aggregation
+revision is the positive claim sequence published to reconciliation.
 
 ## Compatibility
 
@@ -45,9 +53,10 @@ aggregation-command transport are not compatibility surfaces.
 ## Operations
 
 Monitor valuation-snapshot consumer lag, pending/processing/failed aggregation jobs, oldest queue
-age, claim/recovery counts, position and portfolio materialization latency, DLQ events, database
-pool pressure, and reconciliation outcomes. A missing instrument or FX source fails the owned job;
-Core does not publish a partial portfolio aggregate.
+age, staging outcomes (`new`, `rearmed`, `superseded`, `no_op`), claim/recovery counts, position and
+portfolio materialization latency, DLQ events, database pool pressure, and reconciliation outcomes.
+A missing instrument or FX source fails the current owned job; a superseded claim is requeued
+instead. Core does not publish a partial or stale portfolio aggregate.
 
 The governed bank-day report records p50, p95, p99, maximum, and sample count for both
 valuation-to-position and position-to-portfolio materialization. Portfolio-stage samples are grouped
