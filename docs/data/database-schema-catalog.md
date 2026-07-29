@@ -1128,14 +1128,19 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
 ## `outbox_events`
 
 - **Purpose**: Transactional outbox for reliable publish-after-commit.
-- **Description**: Stores domain events pending dispatch to Kafka topics.
+- **Description**: Stores domain events pending dispatch to Kafka topics. Unresolved rows form
+  ordered `(topic, partition_key)` streams by `(created_at, id)`.
 - **Relationships**: No explicit foreign-key relationships declared.
 - **Usage (modules/features)**: `src/libs/portfolio-common/portfolio_common/outbox_dispatcher.py`, `src/libs/portfolio-common/portfolio_common/monitoring.py`, `src/libs/portfolio-common/portfolio_common/outbox_repository.py`
-- **Typical access patterns**: As-of/date-range reads, idempotent upserts for event processing, status-filtered job polling where applicable.
+- **Typical access patterns**: Claim eligible unresolved stream heads with
+  `FOR UPDATE SKIP LOCKED`, publish outside the claim transaction, and persist token-fenced
+  delivery results. The partial `(topic, partition_key, created_at, id)` index covers `PENDING`
+  and `FAILED` stream barriers.
 - **Column definitions**:
   - `id` (Integer): Surrogate primary key for internal row identity.
   - `aggregate_type` (String): Domain type discriminator used to branch processing behavior.
   - `aggregate_id` (String): Identifier for aggregate.
+  - `partition_key` (String): Ordered Kafka transport-stream identity within `topic`.
   - `event_type` (String): Domain type discriminator used to branch processing behavior.
   - `payload` (JSON): JSON payload storing structured request/result or metadata content.
   - `topic` (String): Domain attribute used by the owning module.
@@ -1143,6 +1148,9 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
   - `correlation_id` (String): Trace/correlation id used across logs and events.
   - `retry_count` (Integer): Domain attribute used by the owning module.
   - `last_attempted_at` (DateTime): Business/event date or timestamp used for ordering, as-of queries, or lifecycle tracking.
+  - `next_attempt_at` (DateTime): Earliest retry-eligible timestamp; a future head blocks only its stream.
+  - `claim_token` (String): Lease fencing token for delivery-result persistence.
+  - `claim_expires_at` (DateTime): UTC expiry after which the stream head is reclaimable.
   - `created_at` (DateTime): Server timestamp when row was created.
   - `processed_at` (DateTime): Business/event date or timestamp used for ordering, as-of queries, or lifecycle tracking.
 
