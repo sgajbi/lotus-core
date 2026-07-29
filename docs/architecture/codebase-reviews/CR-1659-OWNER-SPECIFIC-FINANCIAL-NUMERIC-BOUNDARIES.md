@@ -50,7 +50,8 @@ closure of persisted lineage exposure or the complete producer-policy inventory.
   identity is not lineage evidence. Extracting an arithmetic or normalization method into a local
   callable alias does not bypass execution tracking. Scope-local overwrites and function-parameter
   shadows invalidate prior aliases, and imported, qualified, or chained constructor aliases remain
-  part of declaration inventory discovery.
+  part of declaration inventory discovery. Conditional branches are analyzed from the same incoming
+  state and joined fail closed; only an alias identical on every exit can certify later lineage.
 - Wired the guard into `make lint`. Accrued income and position valuation are truthfully `partial`:
   their public calculation callables bind lineage, while internal arithmetic helpers and the legacy
   `valuation_logic.py` consumer do not independently emit it. Six policies are `not-exposed`. Every
@@ -83,14 +84,14 @@ inputs and serialized Decimal values remain unchanged.
   bound function cannot hide an unbound sibling in the same file.
 - Signed commit `9535ccf0e` resolves direct `as` imports, module-qualified policy access, and local
   assignments from qualified policies, so an aliased unbound consumer cannot bypass the inventory.
-- Forty-one focused guard tests passed with 99% line/branch coverage, including repository parity;
+- Forty-three focused guard tests passed with 99% line/branch coverage, including repository parity;
   mutation-style shape drift; malformed envelopes and policy entries; stale, unclassified, unused,
   partially bound, and missing-lineage policies; ambiguous/duplicate source declarations; duplicate
   JSON keys; exact callable-gap parity; same-file bound/unbound siblings; imported and qualified
   aliases; CLI success/failure evidence; rejection of lineage-only pseudo-use; discarded-identity
   and overwritten-identity rejection; extracted, chained, overwritten, and parameter-shadowed
-  execution aliases; constructor aliases; and direct, local-name, and module-qualified
-  calculation-lineage propagation.
+  execution aliases; constructor aliases; conditional-only rejection and all-exit acceptance; and
+  direct, local-name, and module-qualified calculation-lineage propagation.
 
 ## Compatibility and remaining work
 
