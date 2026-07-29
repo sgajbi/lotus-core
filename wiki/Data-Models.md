@@ -97,6 +97,7 @@ Primary position and valuation tables include:
 - `position_state`
 - `instrument_valuation_policy_assignments`
 - `market_price_source_facts`
+- `daily_position_valuation_receipts`
 
 This layer carries the reconstruction and valuation state needed to explain holdings as of a given
 business date. Valuation-policy assignment rows preserve exact tenant, legal-book, instrument,
@@ -142,9 +143,13 @@ exact policy assignment and market-price fact without reading the global project
 one-to-one `daily_position_valuation_receipts` row alongside the snapshot and outbox event. A
 supported receipt binds policy/assignment versions, immutable source references and hashes,
 numeric-output policy, and deterministic input/calculation/output lineage. Unscoped compatibility
-is explicitly marked unsupported and carries no invented authority evidence; failed replacement
-snapshots remove stale receipts. Financial reconciliation and correction-triggered replay remain
-outside this staged cutover until #451 acceptance is complete.
+is explicitly marked unsupported and carries no invented authority evidence. Deterministic
+authority failures replace the exact snapshot with failed/null derived state and remove stale
+receipts in the same transaction. Financial reconciliation outer-joins the receipt in its
+set-based snapshot read: supported unit-price evidence follows the recorded policy instead of the
+legacy bond heuristic, while inconsistent authoritative evidence blocks. Principal-policy
+reconciliation, correction-triggered replay, cross-event batching, Query exposure, and final
+legacy deletion remain outside this staged cutover until #451 acceptance is complete.
 
 ### Timeseries and analytics-input foundations
 

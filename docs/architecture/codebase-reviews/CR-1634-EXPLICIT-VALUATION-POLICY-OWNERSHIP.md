@@ -159,14 +159,25 @@ narrow framework-free contract therefore belongs in `portfolio_common.domain.val
   regression test caught reporting-currency conversion escaping the context; both returned values
   and output lineage now use the identical fixed-precision results.
 - Routed scoped position-valuation jobs through exact tenant, legal-book, instrument, and valuation-
-  date authority. The worker batches assignment and price-fact resolution, rejects quote-basis
-  mismatches, and never reads the global `market_prices` projection on this path. Unscoped
-  portfolios retain an explicitly metered legacy path while migration remains incomplete.
+  date authority. The bounded resolver interfaces support bulk reads, but the current Kafka
+  consumer invokes them once per event; cross-event production batching remains explicit #451
+  scope. The worker rejects quote-basis mismatches and never reads the global `market_prices`
+  projection on this path. Unscoped portfolios retain an explicitly metered legacy path while
+  migration remains incomplete.
 - Added a one-to-one valuation-calculation receipt for every persisted snapshot outcome. Supported
   receipts bind the exact snapshot identity, policy and assignment versions, assignment/source-fact
   hashes and references, numeric-output policy, and input/calculation/output lineage. Legacy
   unscoped valuations carry an explicit unsupported receipt without fabricated authority evidence;
   failed or unvalued replacements delete any stale receipt in the same snapshot/outbox transaction.
+- Deterministic scoped-authority failures replace the exact snapshot with `FAILED`, clear derived
+  values, remove the old receipt, update the job, and stage the existing persisted-snapshot event
+  in one transaction. A previously supported valuation cannot remain visible under stale authority
+  after reprocessing.
+- Financial reconciliation outer-joins receipt evidence in its existing set-based snapshot query.
+  Supported unit-price/quantity receipts use the recorded exact policy rather than the legacy bond
+  heuristic; unsupported or inconsistent authoritative receipts produce a blocking finding.
+  Historical snapshots with no receipt and explicit legacy-unscoped receipts retain their prior
+  compatibility behavior.
 
 ## Ownership Boundary
 
@@ -194,10 +205,11 @@ changing the legacy projection, existing event contracts, or any runtime consume
 migration primitive, not permission to reinterpret historical global prices as tenant-safe facts.
 Existing correct unit-price behavior is characterized under an explicit policy. Scoped
 position-valuation jobs now use exact authority and persist an additive one-to-one receipt; existing
-event and API shapes are unchanged. The legacy bond heuristic remains only for explicitly unscoped
-position valuation and financial reconciliation until portfolio scope migration, principal
-authority, correction-triggered replay, and reconciliation parity are proven. It will be deleted,
-not retained as a fallback, when those acceptance criteria are complete.
+event and API shapes are unchanged. Financial reconciliation consumes supported unit-price receipt
+identity without changing its public contract and retains the legacy heuristic only for historical
+receiptless or explicitly unscoped evidence. Principal-policy reconciliation, portfolio scope
+migration, correction-triggered replay, and production batching remain incomplete. The heuristic
+will be deleted, not retained as a fallback, when those acceptance criteria are complete.
 
 ## Validation
 
@@ -226,6 +238,11 @@ not retained as a fallback, when those acceptance criteria are complete.
   equivalent-instant timezone normalization, calendar-content sensitivity, and rejection of
   ambiguous value types/metadata.
 - Scoped Ruff lint and formatting passed.
+- Review fix-forward passed 73 warning-strict focused unit tests, two real-PostgreSQL
+  reconciliation repository tests, configured MyPy across 240 source files, Ruff, formatting, and
+  diff hygiene. The tests prove failed scoped authority replaces stale valued state and removes its
+  receipt, supported unit-price bonds bypass magnitude inference, malformed authoritative receipt
+  evidence fails closed, and historical receiptless rows remain in the set-based read.
 - Strict MyPy passed for all seven valuation-domain source modules and the focused position test.
 - The persistence contract passed 35 focused domain/model/migration tests under the warning gate;
   Alembic reports the new revision as the single head and the repository migration contract accepts
