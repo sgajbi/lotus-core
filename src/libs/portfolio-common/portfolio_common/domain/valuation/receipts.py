@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 from enum import StrEnum
+from typing import cast
 
 from ..calculation_lineage import (
     CalculationLineage,
@@ -119,22 +120,22 @@ class ValuationCalculationReceipt:
         missing = [name for name, value in required.items() if value is None]
         if missing:
             raise ValueError(f"supported valuation receipt is missing fields: {sorted(missing)}")
-        assert self.policy_id is not None
-        if not self.policy_id.strip():
+        policy_id = cast(str, self.policy_id)
+        policy_version = cast(int, self.policy_version)
+        assignment_version = cast(int, self.assignment_version)
+        price_fact_version = cast(int, self.price_fact_version)
+        assignment_content_hash = cast(str, self.assignment_content_hash)
+        price_fact_content_hash = cast(str, self.price_fact_content_hash)
+        if not policy_id.strip():
             raise ValueError("policy_id must be nonblank")
-        assert self.policy_version is not None
-        assert self.assignment_version is not None
-        assert self.price_fact_version is not None
-        if min(self.policy_version, self.assignment_version, self.price_fact_version) < 1:
+        if min(policy_version, assignment_version, price_fact_version) < 1:
             raise ValueError("policy and source versions must be positive")
-        assert self.assignment_content_hash is not None
-        assert self.price_fact_content_hash is not None
         require_sha256_digest(
-            self.assignment_content_hash,
+            assignment_content_hash,
             "assignment_content_hash",
         )
         require_sha256_digest(
-            self.price_fact_content_hash,
+            price_fact_content_hash,
             "price_fact_content_hash",
         )
 
