@@ -176,7 +176,7 @@ async def test_resolve_many_rejects_unbounded_batches_before_database_access() -
     session.scalars.assert_not_awaited()
 
 
-def test_authority_request_rejects_datetime_as_business_date() -> None:
+async def test_authority_request_rejects_datetime_as_business_date() -> None:
     with pytest.raises(TypeError, match="exact date"):
         ValuationPolicyAuthorityRequest(
             scope=_request().scope,
