@@ -5,7 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from decimal import Decimal
 
-from portfolio_common.domain.calculation_lineage import CalculationLineage
+from portfolio_common.domain.calculation_lineage import (
+    CalculationLineage,
+    build_calculation_lineage,
+)
 from portfolio_common.domain.valuation import (
     MarketPriceSourceFact,
     PositionValuationEvidence,
@@ -116,6 +119,25 @@ def calculate_authoritative_valuation(
         unrealized_fx_reporting,
         field_name="unrealized_price_gain_loss",
     )
+    calculation_lineage = build_calculation_lineage(
+        algorithm_id="authoritative-position-snapshot-valuation",
+        algorithm_version=1,
+        intermediate_precision=output_policy.working_precision,
+        input_payload={
+            "cost_basis_local": request.cost_basis_local,
+            "cost_basis_reporting": request.cost_basis_reporting,
+            "position_valuation": result.lineage.lineage_payload(),
+        },
+        output_payload={
+            "market_value_local": market_value_local,
+            "market_value_reporting": market_value_reporting,
+            "unrealized_fx_reporting": unrealized_fx_reporting,
+            "unrealized_price_reporting": unrealized_price_reporting,
+            "unrealized_total_local": unrealized_total_local,
+            "unrealized_total_reporting": unrealized_total_reporting,
+        },
+        numeric_output_policy=output_policy.lineage_identity(),
+    )
     return AuthoritativeValuationResult(
         market_value_reporting=market_value_reporting,
         market_value_local=market_value_local,
@@ -123,7 +145,7 @@ def calculate_authoritative_valuation(
         unrealized_total_local=unrealized_total_local,
         unrealized_price_reporting=unrealized_price_reporting,
         unrealized_fx_reporting=unrealized_fx_reporting,
-        calculation_lineage=result.lineage,
+        calculation_lineage=calculation_lineage,
     )
 
 

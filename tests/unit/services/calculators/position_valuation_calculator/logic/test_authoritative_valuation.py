@@ -74,7 +74,42 @@ def test_unit_price_collision_is_not_rescaled_from_cost_magnitude() -> None:
 
     assert result.market_value_local == Decimal("992.5000000000")
     assert result.unrealized_total_local == Decimal("-9007.5000000000")
+    assert result.calculation_lineage.algorithm_id == "authoritative-position-snapshot-valuation"
     assert result.calculation_lineage.numeric_output_policy is not None
+
+
+def test_snapshot_lineage_binds_cost_basis_and_complete_outputs() -> None:
+    common = {
+        "policy": resolve_position_valuation_policy("UNIT_PRICE_MARKET_VALUE", 1),
+        "price_fact": _fact(MarketPriceQuoteBasis.UNIT_PRICE, "99.25"),
+        "signed_quantity": Decimal("10"),
+        "cost_basis_local": Decimal("10000"),
+        "reporting_currency": "USD",
+        "evidence": _evidence(),
+    }
+
+    first = calculate_authoritative_valuation(
+        AuthoritativeValuationRequest(
+            **common,
+            cost_basis_reporting=Decimal("10000"),
+        )
+    )
+    corrected = calculate_authoritative_valuation(
+        AuthoritativeValuationRequest(
+            **common,
+            cost_basis_reporting=Decimal("9999"),
+        )
+    )
+
+    assert first.calculation_lineage.input_content_hash != (
+        corrected.calculation_lineage.input_content_hash
+    )
+    assert first.calculation_lineage.calculation_content_hash != (
+        corrected.calculation_lineage.calculation_content_hash
+    )
+    assert first.calculation_lineage.output_content_hash != (
+        corrected.calculation_lineage.output_content_hash
+    )
 
 
 def test_percent_of_principal_uses_explicit_face_amount_and_denominator() -> None:
