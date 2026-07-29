@@ -168,3 +168,30 @@ def test_evidence_rejects_unpersisted_or_naive_rows() -> None:
             portfolio=_portfolio(),
             fx_rate=None,
         )
+
+
+@pytest.mark.parametrize(
+    ("field_name", "invalid_value", "expected_error", "message"),
+    [
+        ("updated_at", "2026-07-29T09:05:00Z", TypeError, "must be a datetime"),
+        ("portfolio_id", None, TypeError, "must be a string"),
+        ("portfolio_id", "   ", ValueError, "must be nonblank"),
+    ],
+)
+def test_evidence_rejects_malformed_persisted_position_identity(
+    field_name: str,
+    invalid_value: object,
+    expected_error: type[Exception],
+    message: str,
+) -> None:
+    position = _position()
+    setattr(position, field_name, invalid_value)
+
+    with pytest.raises(expected_error, match=message):
+        build_authoritative_valuation_evidence(
+            assignment=_assignment(),
+            price_fact=_price_fact(),
+            position=position,
+            portfolio=_portfolio(),
+            fx_rate=None,
+        )
