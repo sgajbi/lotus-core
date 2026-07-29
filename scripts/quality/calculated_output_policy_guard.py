@@ -245,6 +245,68 @@ class _UsageVisitor(ast.NodeVisitor):
         else_state = self._visit_branch(incoming, node.orelse) if node.orelse else incoming
         self._restore_alias_state(self._join_alias_states(body_state, else_state))
 
+    def visit_For(self, node: ast.For) -> None:
+        self.visit(node.iter)
+        self._visit_loop(node)
+
+    def visit_AsyncFor(self, node: ast.AsyncFor) -> None:
+        self.visit(node.iter)
+        self._visit_loop(node)
+
+    def visit_While(self, node: ast.While) -> None:
+        self.visit(node.test)
+        self._visit_loop(node)
+
+    def _visit_loop(self, node: ast.For | ast.AsyncFor | ast.While) -> None:
+        incoming = self._current_alias_state()
+        body_state = self._visit_branch(incoming, node.body)
+        else_state = self._visit_branch(incoming, node.orelse) if node.orelse else incoming
+        # A loop can execute zero times, and a break can skip its else suite.
+        self._restore_alias_state(self._join_alias_states(incoming, body_state, else_state))
+
+    def visit_Try(self, node: ast.Try) -> None:
+        self._visit_try(node)
+
+    def visit_TryStar(self, node: ast.TryStar) -> None:
+        self._visit_try(node)
+
+    def _visit_try(self, node: ast.Try | ast.TryStar) -> None:
+        incoming = self._current_alias_state()
+        body_state = self._visit_branch(incoming, node.body)
+        completed_state = self._visit_branch(body_state, node.orelse) if node.orelse else body_state
+        exit_states = [incoming, completed_state]
+        for handler in node.handlers:
+            self._restore_alias_state(incoming)
+            if handler.type is not None:
+                self.visit(handler.type)
+            if handler.name is not None:
+                self._shadow_alias(handler.name)
+            for statement in handler.body:
+                self.visit(statement)
+            exit_states.append(self._current_alias_state())
+        self._restore_alias_state(self._join_alias_states(*exit_states))
+        for statement in node.finalbody:
+            self.visit(statement)
+
+    def visit_Match(self, node: ast.Match) -> None:
+        self.visit(node.subject)
+        incoming = self._current_alias_state()
+        exit_states = [incoming]
+        for case in node.cases:
+            self._restore_alias_state(incoming)
+            if case.guard is not None:
+                self.visit(case.guard)
+            for statement in case.body:
+                self.visit(statement)
+            exit_states.append(self._current_alias_state())
+        # Include the incoming state because a match need not select a case.
+        self._restore_alias_state(self._join_alias_states(*exit_states))
+
+    def _shadow_alias(self, name: str) -> None:
+        self._policy_aliases[-1][name] = None
+        self._lineage_identity_aliases[-1][name] = None
+        self._execution_method_aliases[-1][name] = None
+
     def _visit_branch(
         self,
         incoming: tuple[dict[str, str | None], ...],

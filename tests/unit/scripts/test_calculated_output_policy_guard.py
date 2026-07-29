@@ -263,6 +263,84 @@ def test_guard_accepts_same_lineage_identity_on_every_conditional_exit(
     assert evaluate(tmp_path, _contract(tmp_path)) == ()
 
 
+@pytest.mark.parametrize(
+    "control_flow",
+    [
+        ("for item in items:\n        identity = TEST_LEDGER_OUTPUT_V1.lineage_identity()\n"),
+        (
+            "for item in items:\n"
+            "        identity = TEST_LEDGER_OUTPUT_V1.lineage_identity()\n"
+            "    else:\n"
+            "        identity = TEST_LEDGER_OUTPUT_V1.lineage_identity()\n"
+        ),
+        ("while expose_lineage:\n        identity = TEST_LEDGER_OUTPUT_V1.lineage_identity()\n"),
+        (
+            "try:\n"
+            "        identity = TEST_LEDGER_OUTPUT_V1.lineage_identity()\n"
+            "    except Exception as identity:\n"
+            "        pass\n"
+        ),
+        (
+            "try:\n"
+            "        identity = TEST_LEDGER_OUTPUT_V1.lineage_identity()\n"
+            "    except:\n"
+            "        pass\n"
+        ),
+        (
+            "try:\n"
+            "        identity = TEST_LEDGER_OUTPUT_V1.lineage_identity()\n"
+            "    except* Exception as identity:\n"
+            "        pass\n"
+        ),
+        (
+            "match lineage_mode:\n"
+            "        case 'expose' if allow_lineage:\n"
+            "            identity = TEST_LEDGER_OUTPUT_V1.lineage_identity()\n"
+        ),
+    ],
+)
+def test_guard_rejects_identity_missing_on_a_control_flow_exit(
+    tmp_path: Path,
+    control_flow: str,
+) -> None:
+    _write_policy(tmp_path, used=False)
+    (tmp_path / "src" / "owner" / "consumer.py").write_text(
+        "from decimal import Decimal\n"
+        "from owner.numeric_policy import TEST_LEDGER_OUTPUT_V1\n"
+        "def calculate():\n"
+        "    value = TEST_LEDGER_OUTPUT_V1.normalize(Decimal('1'), field_name='value')\n"
+        "    identity = None\n"
+        f"    {control_flow}"
+        "    return build_calculation_lineage(numeric_output_policy=identity)\n",
+        encoding="utf-8",
+    )
+
+    findings = evaluate(tmp_path, _contract(tmp_path))
+
+    assert "TEST_LEDGER_OUTPUT_V1: required lineage binding is incomplete" in findings
+
+
+def test_guard_rejects_identity_bound_only_inside_async_loop(
+    tmp_path: Path,
+) -> None:
+    _write_policy(tmp_path, used=False)
+    (tmp_path / "src" / "owner" / "consumer.py").write_text(
+        "from decimal import Decimal\n"
+        "from owner.numeric_policy import TEST_LEDGER_OUTPUT_V1\n"
+        "async def calculate():\n"
+        "    value = TEST_LEDGER_OUTPUT_V1.normalize(Decimal('1'), field_name='value')\n"
+        "    identity = None\n"
+        "    async for item in items:\n"
+        "        identity = TEST_LEDGER_OUTPUT_V1.lineage_identity()\n"
+        "    return build_calculation_lineage(numeric_output_policy=identity)\n",
+        encoding="utf-8",
+    )
+
+    findings = evaluate(tmp_path, _contract(tmp_path))
+
+    assert "TEST_LEDGER_OUTPUT_V1: required lineage binding is incomplete" in findings
+
+
 def test_guard_rejects_missing_required_lineage_binding(tmp_path: Path) -> None:
     _write_policy(tmp_path, lineage_bound=False)
 
