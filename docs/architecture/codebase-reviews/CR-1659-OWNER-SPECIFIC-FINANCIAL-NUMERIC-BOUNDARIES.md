@@ -66,6 +66,10 @@ closure of persisted lineage exposure or the complete producer-policy inventory.
   with their governed policy while ordinary caller-supplied parameter shadows stay fail closed.
   Callable and control-flow suites stop at the first guaranteed `return`, `raise`, `break`, or
   `continue`; unreachable lineage construction cannot certify an already returned output.
+  Every local name rebound by ordinary, aliased, dotted, or wildcard imports first invalidates
+  policy-receiver, lineage-identity, extracted-execution, and canonical-builder evidence. A
+  recognized policy or lineage-builder import then installs only its proven binding; wildcard
+  imports remain fully fail closed because their exported names are not statically knowable.
 - Wired the guard into `make lint`. Accrued income and position valuation are truthfully `partial`:
   their public calculation callables bind lineage, while internal arithmetic helpers and the legacy
   `valuation_logic.py` consumer do not independently emit it. Six policies are `not-exposed`. Every
@@ -98,7 +102,8 @@ inputs and serialized Decimal values remain unchanged.
   bound function cannot hide an unbound sibling in the same file.
 - Signed commit `9535ccf0e` resolves direct `as` imports, module-qualified policy access, and local
   assignments from qualified policies, so an aliased unbound consumer cannot bypass the inventory.
-- Sixty-four focused guard tests passed with 99% line/branch coverage, including repository parity;
+- Eighty-nine focused guard tests passed with 99.21% combined line/branch coverage, including
+  repository parity;
   mutation-style shape drift; malformed envelopes and policy entries; stale, unclassified, unused,
   partially bound, and missing-lineage policies; ambiguous/duplicate source declarations; duplicate
   JSON keys; exact callable-gap parity; same-file bound/unbound siblings; imported and qualified
@@ -110,7 +115,10 @@ inputs and serialized Decimal values remain unchanged.
   verified direct, local-name, module-alias, and fully qualified lineage propagation; expression
   branches, short-circuit exits, intervening exceptional exits, predicate propagation, and governed
   positional/keyword-only defaults are mutation-proved, along with unreachable callable and branch
-  lineage rejection.
+  lineage rejection. Signed commit `5694b6996` adds the #845 matrix across all four tracked alias
+  classes for aliased `import`, aliased `from ... import`, ordinary dotted import, ordinary
+  `from ... import`, and wildcard import, plus valid policy and canonical-builder reinstallation
+  after invalidation.
 
 ## Compatibility and remaining work
 
@@ -129,4 +137,6 @@ persistence/query/replay proof before #829 can close.
 
 Repository context and this existing review record carry the new implementation truth without
 adding a duplicate document. No API/OpenAPI shape, operator command, database migration, or
-wiki-authored workflow changed, so no wiki source update is required.
+wiki-authored workflow changed, so no wiki source update is required. The repository context already
+identifies this guard and its fail-closed ownership contract, so no context update is required for
+the narrower import-rebinding implementation.
