@@ -15,6 +15,8 @@ from portfolio_common.domain.valuation import (
     ValuationBookScope,
     resolve_market_price_source_fact,
     resolve_optional_valuation_book_scope,
+    resolve_position_valuation_policy,
+    validate_market_price_policy_compatibility,
 )
 
 
@@ -149,6 +151,49 @@ def test_market_price_source_fact_accepts_explicit_quote_basis(
     assert fact.price == price
     assert fact.currency == "USD"
     assert fact.scope.key == ("TENANT-SG", "PB-SG-01", "BOND-001")
+
+
+@pytest.mark.parametrize(
+    ("quote_basis", "policy_id"),
+    [
+        (MarketPriceQuoteBasis.UNIT_PRICE, "UNIT_PRICE_MARKET_VALUE"),
+        (
+            MarketPriceQuoteBasis.PERCENT_OF_PRINCIPAL_CLEAN,
+            "CLEAN_PERCENT_FACE_NO_PERIODIC_ACCRUAL",
+        ),
+        (
+            MarketPriceQuoteBasis.PERCENT_OF_PRINCIPAL_DIRTY,
+            "DIRTY_PERCENT_FACE_MARKET_VALUE",
+        ),
+    ],
+)
+def test_market_price_fact_requires_matching_executable_policy_representation(
+    quote_basis: MarketPriceQuoteBasis,
+    policy_id: str,
+) -> None:
+    validate_market_price_policy_compatibility(
+        fact=_fact(quote_basis=quote_basis),
+        policy=resolve_position_valuation_policy(policy_id, 1),
+    )
+
+
+def test_market_price_fact_rejects_mismatched_executable_policy_representation() -> None:
+    with pytest.raises(MarketPriceSourceFactError, match="does not match"):
+        validate_market_price_policy_compatibility(
+            fact=_fact(quote_basis=MarketPriceQuoteBasis.PERCENT_OF_PRINCIPAL_CLEAN),
+            policy=resolve_position_valuation_policy("UNIT_PRICE_MARKET_VALUE", 1),
+        )
+
+
+def test_market_price_fact_rejects_non_market_price_policy_representation() -> None:
+    with pytest.raises(MarketPriceSourceFactError, match="does not match"):
+        validate_market_price_policy_compatibility(
+            fact=_fact(quote_basis=MarketPriceQuoteBasis.UNIT_PRICE),
+            policy=resolve_position_valuation_policy(
+                "SUPPLIED_WHOLE_POSITION_MARKET_VALUE",
+                1,
+            ),
+        )
 
 
 def test_market_price_source_fact_hash_binds_scope_representation_and_lineage() -> None:
