@@ -29,6 +29,10 @@ if TYPE_CHECKING:
     from portfolio_common.idempotency_repository import IdempotencyRepository
     from portfolio_common.outbox_repository import OutboxRepository
 
+    from .ports import (
+        MarketPriceSourceFactResolver,
+        ValuationPolicyAssignmentResolver,
+    )
     from .repositories.valuation_repository import ValuationRepository
 
 logger = logging.getLogger(__name__)
@@ -69,6 +73,8 @@ class ValuationProcessorDependencies:
     repo: ValuationRepository
     idempotency_repo: IdempotencyRepository
     outbox_repo: OutboxRepository
+    market_price_source_fact_resolver: MarketPriceSourceFactResolver
+    valuation_policy_assignment_resolver: ValuationPolicyAssignmentResolver
 
 
 class ValuationProcessorDependencyFactory(Protocol):

@@ -32,6 +32,14 @@ def test_sqlalchemy_dependency_factory_constructs_concrete_adapters() -> None:
     with (
         patch.object(valuation_dependencies, "ValuationRepository") as repository,
         patch.object(valuation_dependencies, "IdempotencyRepository") as idempotency_repository,
+        patch.object(
+            valuation_dependencies,
+            "SqlAlchemyMarketPriceSourceFactResolver",
+        ) as market_price_source_fact_resolver,
+        patch.object(
+            valuation_dependencies,
+            "SqlAlchemyValuationPolicyAssignmentResolver",
+        ) as valuation_policy_assignment_resolver,
         patch.object(valuation_dependencies, "OutboxRepository") as outbox_repository,
     ):
         dependencies = SqlAlchemyValuationProcessorDependencyFactory().from_session(session)
@@ -39,9 +47,19 @@ def test_sqlalchemy_dependency_factory_constructs_concrete_adapters() -> None:
     repository.assert_called_once_with(session)
     idempotency_repository.assert_called_once_with(session)
     outbox_repository.assert_called_once_with(session)
+    market_price_source_fact_resolver.assert_called_once_with(session)
+    valuation_policy_assignment_resolver.assert_called_once_with(session)
     assert dependencies.repo is repository.return_value
     assert dependencies.idempotency_repo is idempotency_repository.return_value
     assert dependencies.outbox_repo is outbox_repository.return_value
+    assert (
+        dependencies.market_price_source_fact_resolver
+        is market_price_source_fact_resolver.return_value
+    )
+    assert (
+        dependencies.valuation_policy_assignment_resolver
+        is valuation_policy_assignment_resolver.return_value
+    )
 
 
 def test_valuation_processor_does_not_construct_infrastructure() -> None:
@@ -51,6 +69,8 @@ def test_valuation_processor_does_not_construct_infrastructure() -> None:
     assert "ValuationRepository(" not in source
     assert "IdempotencyRepository(" not in source
     assert "OutboxRepository(" not in source
+    assert "SqlAlchemyMarketPriceSourceFactResolver(" not in source
+    assert "SqlAlchemyValuationPolicyAssignmentResolver(" not in source
 
 
 def test_new_valuation_infrastructure_modules_have_responsibility_docstrings() -> None:

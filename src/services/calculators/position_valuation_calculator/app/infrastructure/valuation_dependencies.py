@@ -9,6 +9,10 @@ from portfolio_common.outbox_repository import OutboxRepository
 
 from ..repositories.valuation_repository import ValuationRepository
 from ..valuation_processor import ValuationProcessorDependencies
+from .market_price_source_fact_repository import SqlAlchemyMarketPriceSourceFactResolver
+from .valuation_policy_assignment_repository import (
+    SqlAlchemyValuationPolicyAssignmentResolver,
+)
 
 
 class SqlAlchemyValuationProcessorDependencyFactory:
@@ -19,4 +23,6 @@ class SqlAlchemyValuationProcessorDependencyFactory:
             repo=ValuationRepository(db),
             idempotency_repo=IdempotencyRepository(db),
             outbox_repo=OutboxRepository(db),
+            market_price_source_fact_resolver=SqlAlchemyMarketPriceSourceFactResolver(db),
+            valuation_policy_assignment_resolver=SqlAlchemyValuationPolicyAssignmentResolver(db),
         )
