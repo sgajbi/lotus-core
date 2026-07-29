@@ -17,6 +17,7 @@ def _write_policy(
     constant: str = "TEST_LEDGER_OUTPUT_V1",
     used: bool = True,
     lineage_bound: bool = True,
+    unbound_consumer: bool = False,
 ) -> None:
     source = root / "src" / "owner"
     source.mkdir(parents=True, exist_ok=True)
@@ -42,6 +43,13 @@ def _write_policy(
             "\n".join(consumer_lines) + "\n",
             encoding="utf-8",
         )
+    if unbound_consumer:
+        (source / "unbound_consumer.py").write_text(
+            "from decimal import Decimal\n"
+            "from owner.numeric_policy import TEST_LEDGER_OUTPUT_V1\n"
+            "value = TEST_LEDGER_OUTPUT_V1.normalize(Decimal('2'), field_name='value')\n",
+            encoding="utf-8",
+        )
 
 
 def _contract(root: Path, **overrides: object) -> Path:
@@ -56,6 +64,7 @@ def _contract(root: Path, **overrides: object) -> Path:
         "working_precision": 64,
         "rounding": "ROUND_HALF_EVEN",
         "lineage_binding": "required",
+        "lineage_gap_paths": [],
     }
     policy.update(overrides)
     path = root / "contract.json"
@@ -139,16 +148,89 @@ def test_guard_does_not_treat_lineage_binding_as_execution(tmp_path: Path) -> No
     findings = evaluate(tmp_path, _contract(tmp_path))
 
     assert "TEST_LEDGER_OUTPUT_V1: no execution consumer found" in findings
-    assert "TEST_LEDGER_OUTPUT_V1: required lineage binding not found" not in findings
+    assert "TEST_LEDGER_OUTPUT_V1: required lineage binding is incomplete" not in findings
 
 
 def test_guard_rejects_missing_required_lineage_binding(tmp_path: Path) -> None:
     _write_policy(tmp_path, lineage_bound=False)
 
-    assert "TEST_LEDGER_OUTPUT_V1: required lineage binding not found" in evaluate(
+    assert "TEST_LEDGER_OUTPUT_V1: required lineage binding is incomplete" in evaluate(
         tmp_path,
         _contract(tmp_path),
     )
+
+
+def test_guard_accepts_partial_binding_with_exact_consumer_gap(tmp_path: Path) -> None:
+    _write_policy(tmp_path, unbound_consumer=True)
+
+    assert (
+        evaluate(
+            tmp_path,
+            _contract(
+                tmp_path,
+                lineage_binding="partial",
+                lineage_gap_paths=["src/owner/unbound_consumer.py"],
+            ),
+        )
+        == ()
+    )
+
+
+def test_guard_rejects_required_binding_with_unbound_consumer(tmp_path: Path) -> None:
+    _write_policy(tmp_path, unbound_consumer=True)
+
+    findings = evaluate(tmp_path, _contract(tmp_path))
+
+    assert (
+        "TEST_LEDGER_OUTPUT_V1: unclassified lineage gap at src/owner/unbound_consumer.py"
+    ) in findings
+    assert "TEST_LEDGER_OUTPUT_V1: required lineage binding is incomplete" in findings
+
+
+def test_guard_rejects_missing_and_stale_consumer_gaps(tmp_path: Path) -> None:
+    _write_policy(tmp_path, unbound_consumer=True)
+
+    findings = evaluate(
+        tmp_path,
+        _contract(
+            tmp_path,
+            lineage_binding="partial",
+            lineage_gap_paths=["src/owner/stale.py"],
+        ),
+    )
+
+    assert (
+        "TEST_LEDGER_OUTPUT_V1: unclassified lineage gap at src/owner/unbound_consumer.py"
+    ) in findings
+    assert "TEST_LEDGER_OUTPUT_V1: stale lineage gap at src/owner/stale.py" in findings
+
+
+def test_guard_rejects_not_exposed_binding_with_lineage_consumer(tmp_path: Path) -> None:
+    _write_policy(tmp_path)
+
+    findings = evaluate(
+        tmp_path,
+        _contract(tmp_path, lineage_binding="not-exposed"),
+    )
+
+    assert "TEST_LEDGER_OUTPUT_V1: not-exposed policy has a lineage binding" in findings
+
+
+def test_guard_rejects_duplicate_or_unsorted_consumer_gaps(tmp_path: Path) -> None:
+    _write_policy(tmp_path, lineage_bound=False)
+
+    findings = evaluate(
+        tmp_path,
+        _contract(
+            tmp_path,
+            lineage_binding="not-exposed",
+            lineage_gap_paths=["src/owner/consumer.py", "src/owner/consumer.py"],
+        ),
+    )
+
+    assert (
+        "TEST_LEDGER_OUTPUT_V1.lineage_gap_paths: must be a sorted list of unique nonblank paths"
+    ) in findings
 
 
 def test_guard_rejects_duplicate_contract_keys(tmp_path: Path) -> None:
