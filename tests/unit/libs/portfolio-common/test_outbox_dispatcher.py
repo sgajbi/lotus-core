@@ -27,7 +27,7 @@ def test_get_outbox_runtime_settings_uses_default(monkeypatch):
 
     assert settings.poll_interval_seconds == 5
     assert settings.batch_size == 50
-    assert settings.claim_lease_seconds == 60
+    assert settings.claim_lease_seconds == 130
     assert settings.max_retries == 3
     assert settings.retry_max_elapsed_seconds == 0
     assert settings.retry_initial_delay_seconds == 5
@@ -78,7 +78,7 @@ def test_get_outbox_runtime_settings_falls_back_on_invalid_env(monkeypatch, capl
 
     assert settings.poll_interval_seconds == 5
     assert settings.batch_size == 50
-    assert settings.claim_lease_seconds == 60
+    assert settings.claim_lease_seconds == 130
     assert settings.max_retries == 3
     assert settings.retry_max_elapsed_seconds == 0
     assert settings.retry_initial_delay_seconds == 5
@@ -114,7 +114,7 @@ def test_dispatcher_constructor_allows_explicit_max_retries(monkeypatch):
         poll_interval=2,
         batch_size=4,
         max_retries=2,
-        claim_lease_seconds=12,
+        claim_lease_seconds=15,
         retry_max_elapsed_seconds=120,
         retry_initial_delay_seconds=7,
         retry_max_delay_seconds=70,
@@ -124,7 +124,7 @@ def test_dispatcher_constructor_allows_explicit_max_retries(monkeypatch):
     assert dispatcher._poll_interval == 2
     assert dispatcher._batch_size == 4
     assert dispatcher._max_retries == 2
-    assert dispatcher._claim_lease_seconds == 12
+    assert dispatcher._claim_lease_seconds == 15
     assert dispatcher._retry_max_elapsed_seconds == 120
     assert dispatcher._retry_initial_delay_seconds == 7
     assert dispatcher._retry_max_delay_seconds == 70
@@ -153,6 +153,38 @@ def test_dispatcher_constructor_uses_runtime_defaults(monkeypatch):
     assert dispatcher._retry_initial_delay_seconds == 19
     assert dispatcher._retry_max_delay_seconds == 190
     assert dispatcher._retry_jitter_seconds == 5
+
+
+def test_dispatcher_rejects_claim_lease_shorter_than_delivery_fence() -> None:
+    import portfolio_common.outbox_dispatcher as module
+
+    producer = MagicMock()
+    producer.producer_policy = SimpleNamespace(delivery_timeout_ms=120_000)
+
+    with pytest.raises(
+        OutboxRuntimeConfigurationError,
+        match="OUTBOX_DISPATCHER_CLAIM_LEASE_SECONDS: expected at least 126 seconds",
+    ):
+        module.OutboxDispatcher(
+            kafka_producer=producer,
+            claim_lease_seconds=125,
+        )
+
+
+def test_dispatcher_flush_waits_until_kafka_delivery_is_fenced() -> None:
+    import portfolio_common.outbox_dispatcher as module
+
+    producer = MagicMock()
+    producer.producer_policy = SimpleNamespace(delivery_timeout_ms=120_000)
+    producer.flush.return_value = 0
+    dispatcher = module.OutboxDispatcher(
+        kafka_producer=producer,
+        claim_lease_seconds=130,
+    )
+
+    dispatcher._flush_delivery_results([], {}, {})
+
+    producer.flush.assert_called_once_with(timeout=121)
 
 
 def test_dispatcher_retry_delay_uses_bounded_exponential_backoff() -> None:

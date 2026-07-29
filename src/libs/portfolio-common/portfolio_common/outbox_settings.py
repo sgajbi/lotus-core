@@ -65,7 +65,7 @@ def get_outbox_runtime_settings(
     *,
     poll_interval_default: int = 5,
     batch_size_default: int = 50,
-    claim_lease_default: int = 60,
+    claim_lease_default: int = 130,
     max_retries_default: int = 3,
     retry_max_elapsed_default: int = 0,
     retry_initial_delay_default: int = 5,
