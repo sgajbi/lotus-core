@@ -13,7 +13,7 @@
       "openApiVersion": "3.1.0"
     }
   ],
-  "generatedAt": "2026-07-28T17:33:15.738297+00:00",
+  "generatedAt": "2026-07-29T05:08:51.821330+00:00",
   "attributeCatalog": [
     {
       "semanticId": "lotus.accepted_count",
@@ -1098,7 +1098,15 @@
         "intermediate_precision": 10,
         "input_content_hash": "example_input_content_hash",
         "calculation_content_hash": "example_calculation_content_hash",
-        "output_content_hash": "example_output_content_hash"
+        "output_content_hash": "example_output_content_hash",
+        "numeric_output_policy": {
+          "name": "position-valuation-ledger-output",
+          "version": "1.0.0",
+          "precision": 18,
+          "scale": 10,
+          "working_precision": 64,
+          "rounding": "ROUND_HALF_EVEN"
+        }
       },
       "type": "object",
       "locations": [
@@ -4723,6 +4731,27 @@
       "observedTypes": [
         "object",
         "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.numeric_output_policy",
+      "canonicalTerm": "numeric_output_policy",
+      "preferredName": "numeric_output_policy",
+      "description": "Exact owner-defined numeric-output boundary included in calculation identity. Absent when the calculation does not execute a governed output policy.",
+      "example": {
+        "name": "position-valuation-ledger-output",
+        "version": "1.0.0",
+        "precision": 18,
+        "scale": 10,
+        "working_precision": 64,
+        "rounding": "ROUND_HALF_EVEN"
+      },
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
       ]
     },
     {
@@ -12377,6 +12406,7 @@
           "maturity_bearing_holding_count",
           "missing_maturity_date_count",
           "next_maturity_date",
+          "numeric_output_policy",
           "output_content_hash",
           "policy_version",
           "portfolio_id",
@@ -12904,6 +12934,14 @@
             "type": "string",
             "semanticId": "lotus.output_content_hash",
             "attributeRef": "lotus.output_content_hash"
+          },
+          {
+            "name": "calculation_lineage.numeric_output_policy",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.numeric_output_policy",
+            "attributeRef": "lotus.numeric_output_policy"
           }
         ]
       }
@@ -14231,6 +14269,7 @@
           "latest_evidence_timestamp",
           "movement_direction",
           "notes",
+          "numeric_output_policy",
           "output_content_hash",
           "output_group_count",
           "policy_version",
@@ -14819,6 +14858,14 @@
             "type": "string",
             "semanticId": "lotus.output_content_hash",
             "attributeRef": "lotus.output_content_hash"
+          },
+          {
+            "name": "calculation_lineage.numeric_output_policy",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.numeric_output_policy",
+            "attributeRef": "lotus.numeric_output_policy"
           },
           {
             "name": "notes",
@@ -17780,6 +17827,7 @@
           "latest_evidence_timestamp",
           "net_cashflow",
           "notes",
+          "numeric_output_policy",
           "output_content_hash",
           "output_group_count",
           "points",
@@ -18390,6 +18438,14 @@
             "type": "string",
             "semanticId": "lotus.output_content_hash",
             "attributeRef": "lotus.output_content_hash"
+          },
+          {
+            "name": "calculation_lineage.numeric_output_policy",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.numeric_output_policy",
+            "attributeRef": "lotus.numeric_output_policy"
           },
           {
             "name": "notes",
@@ -19421,6 +19477,7 @@
           "look_through",
           "look_through_mode",
           "market_value_reporting_currency",
+          "numeric_output_policy",
           "omitted_market_value_reporting_currency",
           "output_content_hash",
           "portfolio_id",
@@ -19686,6 +19743,14 @@
             "type": "string",
             "semanticId": "lotus.output_content_hash",
             "attributeRef": "lotus.output_content_hash"
+          },
+          {
+            "name": "calculation_lineage.numeric_output_policy",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.numeric_output_policy",
+            "attributeRef": "lotus.numeric_output_policy"
           },
           {
             "name": "views",
