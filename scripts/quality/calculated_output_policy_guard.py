@@ -140,15 +140,33 @@ def _declarations(repo_root: Path) -> dict[str, PolicyDeclaration]:
     return declarations
 
 
+def _source_module(source_path: str) -> str:
+    parts = list(Path(source_path).with_suffix("").parts)
+    if not parts or parts[0] != "src":
+        raise ValueError(f"calculated policy path must be below src/: {source_path}")
+    if len(parts) >= 4 and parts[1] in {"libs", "services"}:
+        parts = parts[3:]
+    else:
+        parts = parts[1:]
+    if not parts:
+        raise ValueError(f"calculated policy path must identify a module: {source_path}")
+    return ".".join(parts)
+
+
 def _usage(
     repo_root: Path,
-    constants: set[str],
+    declarations: dict[str, PolicyDeclaration],
 ) -> tuple[
     dict[str, set[str]],
     dict[str, set[str]],
     dict[str, set[str]],
     dict[str, set[str]],
 ]:
+    constants = set(declarations)
+    policy_modules = {
+        constant: _source_module(declaration.declaration_path)
+        for constant, declaration in declarations.items()
+    }
     execution = {constant: set() for constant in constants}
     lineage = {constant: set() for constant in constants}
     control_flow_gaps = {constant: set() for constant in constants}
@@ -159,6 +177,7 @@ def _usage(
         _UsageVisitor(
             relative_path=relative_path,
             constants=constants,
+            policy_modules=policy_modules,
             execution=execution,
             lineage=lineage,
             control_flow_gaps=control_flow_gaps,
@@ -173,6 +192,7 @@ class _UsageVisitor(ast.NodeVisitor):
         *,
         relative_path: str,
         constants: set[str],
+        policy_modules: dict[str, str],
         execution: dict[str, set[str]],
         lineage: dict[str, set[str]],
         control_flow_gaps: dict[str, set[str]],
@@ -180,6 +200,7 @@ class _UsageVisitor(ast.NodeVisitor):
     ) -> None:
         self._relative_path = relative_path
         self._constants = constants
+        self._policy_modules = policy_modules
         self._execution = execution
         self._lineage = lineage
         self._control_flow_gaps = control_flow_gaps
@@ -283,13 +304,17 @@ class _UsageVisitor(ast.NodeVisitor):
         return bindings
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+        source_module = self._import_from_module(node)
         for imported in node.names:
             if imported.name == "*":
                 self._shadow_visible_aliases()
                 continue
             local_name = imported.asname or imported.name
             self._shadow_alias(local_name)
-            if imported.name in self._constants:
+            if (
+                imported.name in self._constants
+                and source_module == self._policy_modules[imported.name]
+            ):
                 self._policy_aliases[-1][local_name] = imported.name
             if (
                 node.module == CALCULATION_LINEAGE_MODULE
@@ -298,6 +323,19 @@ class _UsageVisitor(ast.NodeVisitor):
                 self._lineage_builder_aliases[-1][local_name] = "function"
             if node.module == "portfolio_common.domain" and imported.name == "calculation_lineage":
                 self._lineage_builder_aliases[-1][local_name] = "module"
+
+    def _import_from_module(self, node: ast.ImportFrom) -> str:
+        if node.level == 0:
+            return node.module or ""
+        current_module = _source_module(self._relative_path)
+        package_parts = current_module.split(".")[:-1]
+        retained_parts = len(package_parts) - (node.level - 1)
+        if retained_parts < 0:
+            return ""
+        resolved_parts = package_parts[:retained_parts]
+        if node.module:
+            resolved_parts.extend(node.module.split("."))
+        return ".".join(resolved_parts)
 
     def visit_Import(self, node: ast.Import) -> None:
         for imported in node.names:
@@ -760,7 +798,7 @@ def evaluate(repo_root: Path, contract_path: Path) -> tuple[str, ...]:
         lineage,
         control_flow_gaps,
         terminal_control_flow_gaps,
-    ) = _usage(repo_root, set(declarations))
+    ) = _usage(repo_root, declarations)
     for constant in sorted(set(declarations) & set(policies)):
         declaration = declarations[constant]
         policy = policies[constant]
