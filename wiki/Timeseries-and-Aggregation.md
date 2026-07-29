@@ -41,6 +41,12 @@ then recheck supersession after a concurrent zero-row write. This fence is disti
 `aggregation_revision`: source revision protects calculation input identity, while aggregation
 revision is the positive claim sequence published to reconciliation.
 
+`target_epoch` remains the maximum staged epoch for the portfolio day, but every materially changed
+per-security stage advances `source_revision`, including a delayed lower-epoch row. If such a stage
+supersedes an active claim and that worker later expires, recovery requeues `REPROCESS_REQUESTED`
+work before applying the old claim's retry-exhaustion policy. The new source revision therefore
+receives its own attempt.
+
 ## Compatibility
 
 - Input topic: `valuation.snapshot.persisted`

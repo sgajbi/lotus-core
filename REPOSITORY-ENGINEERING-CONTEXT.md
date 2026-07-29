@@ -3275,8 +3275,11 @@ Most relevant current governance:
      terminal write, recheck supersession before reporting lost ownership; this closes the
      committed-snapshot / pending-staging and terminal-write interleaving windows. Preserve one-round-trip
      portfolio/date coalescing and expose `new`, `rearmed`, `superseded`, and `no_op` staging
-     outcomes. Do not substitute correlation identity, timestamps, debounce, timeout increases, or
-     Kafka arrival order for this database-backed source fence.
+     outcomes. A material stage at a lower per-security epoch must still advance source revision
+     while `target_epoch` preserves the portfolio maximum. Expiry recovery must requeue
+     `REPROCESS_REQUESTED` work even when the superseded claim exhausted its attempts; the new
+     source revision has not yet been attempted. Do not substitute correlation identity, debounce,
+     timeout increases, or Kafka arrival order for this database-backed source fence.
 
 ## Context Maintenance Rule
 

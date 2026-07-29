@@ -23,7 +23,8 @@ while epoch-currentness remained `restated` / `STALE` until the E2E deadline.
 1. `portfolio_aggregation_jobs.target_epoch` records the highest authoritative source epoch staged
    for the portfolio day.
 2. `source_revision` advances for each material staging update that changes pending work or
-   supersedes/rearms claimed or terminal work.
+   supersedes/rearms claimed or terminal work, including delayed lower-per-security epochs while
+   `target_epoch` preserves the portfolio maximum.
 3. The migration backfills existing target epochs from portfolio-owned `position_state` so queued
    work does not regress to epoch zero during deployment.
 4. Claims carry both fields through the framework-free domain model and application command.
@@ -41,6 +42,8 @@ while epoch-currentness remained `restated` / `STALE` until the E2E deadline.
    update.
 9. The existing single PostgreSQL upsert remains the staging hot path. Returned durable state
    increments the existing control-queue metric with `new`, `rearmed`, `superseded`, or `no_op`.
+10. Expiry recovery always requeues `REPROCESS_REQUESTED` work before retry exhaustion can fail the
+    superseded lease. The new source revision therefore receives its own processing attempt.
 
 ## Same-Pattern Review
 
@@ -49,8 +52,8 @@ success/failure terminal writes, lease recovery, reconciliation completion, and 
 currentness.
 
 - Aggregation success and failure shared the missing source-identity fence and were both fixed.
-- Lease recovery already rechecks status and expiry at the write boundary; it carries forward the
-  latest persisted target/revision and needs no separate epoch predicate.
+- Lease recovery rechecks status, expiry, and the supersession marker at the write boundary. A
+  concurrent staging update cannot be failed by the superseded claim's attempt count.
 - Reconciliation already consumes the completed epoch plus positive `aggregation_revision` and
   rejects older or duplicate revisions.
 - Analytics currentness consumes portfolio/position epoch and reconciliation evidence; it does not
@@ -71,18 +74,24 @@ because operator interpretation of aggregation staging metrics and job identity 
 ## Evidence
 
 - focused warning-strict unit proof: 118 passed before review and 25 repository tests passed after
-  the review fix-forward;
+  the source-freshness fix-forward; 41 aggregation repositories tests passed after the final
+  recovery/lower-epoch review;
 - repository-native MyPy: 240 source files, zero issues;
 - Ruff lint and formatting: passed;
 - Alembic heads: exactly `c127b2c3d500`;
 - exact-branch, fresh-image PostgreSQL rollover proof:
-  `test_newer_epoch_supersedes_claim_and_rearms_same_portfolio_day`, 1 passed in 95.95 seconds;
+  `test_newer_epoch_supersedes_claim_and_rearms_same_portfolio_day`, including delayed lower-epoch
+  rearming, 1 passed in 100.61 seconds;
 - review fix-forward proof now commits the newer snapshot independently before staging and verifies
   that the old claim is requeued rather than completed;
 - same-epoch correction proof commits two changed snapshots before their staging updates and proves
   both success and failure paths requeue before the final refreshed claim completes;
-- full aggregation repository integration proof: 6 passed in 77.35 seconds;
-- timeseries contract E2E proof: 4 passed in 83.57 seconds;
+- delayed lower-epoch staging preserves the maximum target epoch, advances source revision, and
+  requeues the superseded active claim;
+- expired `REPROCESS_REQUESTED` work requeues after the prior claim reaches its attempt limit;
+- superseded-attempt recovery plus lower-epoch proof: 2 passed in 100.81 seconds;
+- full aggregation repository integration proof: 7 passed in 88.22 seconds;
+- timeseries contract E2E proof: 4 passed in 83.81 seconds;
 - no test timeout, assertion, partition, debounce, topology, or lock-order change.
 
 Remaining proof is protected PR review and final-head CI, exact-main validation, wiki
