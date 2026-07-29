@@ -61,6 +61,9 @@ closure of persisted lineage exposure or the complete producer-policy inventory.
   Conditional expressions and short-circuit Boolean operands are separate exits. Within protected
   `try` bodies, an exceptional exit between policy execution and later lineage construction remains
   an unbound path even when the normal exit eventually builds lineage.
+  Governed execution in predicates, iterators, and match subjects/guards is propagated to every
+  corresponding exit. Resolvable positional and keyword-only policy defaults remain associated
+  with their governed policy while ordinary caller-supplied parameter shadows stay fail closed.
 - Wired the guard into `make lint`. Accrued income and position valuation are truthfully `partial`:
   their public calculation callables bind lineage, while internal arithmetic helpers and the legacy
   `valuation_logic.py` consumer do not independently emit it. Six policies are `not-exposed`. Every
@@ -93,7 +96,7 @@ inputs and serialized Decimal values remain unchanged.
   bound function cannot hide an unbound sibling in the same file.
 - Signed commit `9535ccf0e` resolves direct `as` imports, module-qualified policy access, and local
   assignments from qualified policies, so an aliased unbound consumer cannot bypass the inventory.
-- Fifty-nine focused guard tests passed with 99% line/branch coverage, including repository parity;
+- Sixty-two focused guard tests passed with 99% line/branch coverage, including repository parity;
   mutation-style shape drift; malformed envelopes and policy entries; stale, unclassified, unused,
   partially bound, and missing-lineage policies; ambiguous/duplicate source declarations; duplicate
   JSON keys; exact callable-gap parity; same-file bound/unbound siblings; imported and qualified
@@ -103,7 +106,8 @@ inputs and serialized Decimal values remain unchanged.
   zero-iteration sync/async loops, loop `else`, normal/exception-group handlers, guarded match
   cases, cross-branch execution/lineage mismatch, unrelated same-named builder rejection, and
   verified direct, local-name, module-alias, and fully qualified lineage propagation; expression
-  branches, short-circuit exits, and intervening exceptional exits are mutation-proved.
+  branches, short-circuit exits, intervening exceptional exits, predicate propagation, and governed
+  positional/keyword-only defaults are mutation-proved.
 
 ## Compatibility and remaining work
 

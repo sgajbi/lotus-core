@@ -277,6 +277,60 @@ def test_guard_rejects_execution_and_lineage_split_across_expression_exits(
     assert "TEST_LEDGER_OUTPUT_V1: required lineage binding is incomplete" in findings
 
 
+def test_guard_propagates_predicate_execution_to_every_exit(
+    tmp_path: Path,
+) -> None:
+    _write_policy(tmp_path, used=False)
+    (tmp_path / "src" / "owner" / "consumer.py").write_text(
+        "from decimal import Decimal\n"
+        "from portfolio_common.domain.calculation_lineage import build_calculation_lineage\n"
+        "from owner.numeric_policy import TEST_LEDGER_OUTPUT_V1\n"
+        "def calculate():\n"
+        "    if (value := TEST_LEDGER_OUTPUT_V1.normalize("
+        "Decimal('1'), field_name='value')):\n"
+        "        return build_calculation_lineage("
+        "numeric_output_policy=TEST_LEDGER_OUTPUT_V1.lineage_identity())\n"
+        "    return value\n",
+        encoding="utf-8",
+    )
+
+    findings = evaluate(tmp_path, _contract(tmp_path))
+
+    assert (
+        "TEST_LEDGER_OUTPUT_V1: unclassified lineage gap at src/owner/consumer.py::calculate"
+    ) in findings
+    assert "TEST_LEDGER_OUTPUT_V1: required lineage binding is incomplete" in findings
+
+
+@pytest.mark.parametrize(
+    "signature",
+    [
+        "policy=TEST_LEDGER_OUTPUT_V1",
+        "*, policy=TEST_LEDGER_OUTPUT_V1",
+    ],
+)
+def test_guard_resolves_policy_parameter_defaults(
+    tmp_path: Path,
+    signature: str,
+) -> None:
+    _write_policy(tmp_path)
+    (tmp_path / "src" / "owner" / "default_consumer.py").write_text(
+        "from decimal import Decimal\n"
+        "from owner.numeric_policy import TEST_LEDGER_OUTPUT_V1\n"
+        f"def calculate({signature}):\n"
+        "    return policy.normalize(Decimal('1'), field_name='value')\n",
+        encoding="utf-8",
+    )
+
+    findings = evaluate(tmp_path, _contract(tmp_path))
+
+    assert (
+        "TEST_LEDGER_OUTPUT_V1: unclassified lineage gap at "
+        "src/owner/default_consumer.py::calculate"
+    ) in findings
+    assert "TEST_LEDGER_OUTPUT_V1: required lineage binding is incomplete" in findings
+
+
 def test_guard_rejects_exceptional_exit_between_execution_and_lineage(
     tmp_path: Path,
 ) -> None:
