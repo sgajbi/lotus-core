@@ -26,8 +26,11 @@ scheduler timing.
   states remain stale.
 - Derive source currentness from complete requested-window coverage after the repository's exact
   current-epoch fence.
-- Keep missing dates and pagination incomplete, and retain the complete quality-status
-  distribution so consumers can distinguish original from restated values.
+- Keep missing dates and every continuation page incomplete. Portfolio and position responses
+  remain partial when either an incoming or outgoing page token exists; an unpaginated position
+  window is complete only when its observed dates cover the canonical business-date window.
+- Retain the complete quality-status distribution so consumers can distinguish original from
+  restated values.
 - Make E2E acceptance require exact economics plus current evidence while accepting either legal
   epoch lineage.
 
@@ -44,4 +47,5 @@ Downstream consumers still receive `valuation_status=restated` and the quality d
 - Exact-source pre-change isolated E2E: `4 passed in 393.62s`.
 - Focused analytics unit proof after correction: `86 passed in 2.21s`.
 - Post-correction exact-source E2E: `4 passed in 61.10s`.
+- Review fix-forward proof covers incomplete position windows and final continuation pages.
 - Final protected CI and exact-main evidence are recorded on issue #490.

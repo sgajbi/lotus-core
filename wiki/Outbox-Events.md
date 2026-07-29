@@ -64,6 +64,12 @@ blocking other keys or topics. A batch claims at most one row per stream and imm
 another batch after productive work, preserving cross-stream capacity without allowing same-stream
 overtaking.
 
+The dispatcher flush fence follows the producer's configured Kafka `delivery.timeout.ms`, and the
+claim lease must exceed that fence by the governed safety margin. The default lease is 130 seconds
+for the default 120-second producer delivery timeout. Startup fails when an override is too short,
+so a publisher cannot outlive its database lease and deliver an old head after a reclaimed stream
+has advanced.
+
 This gives `lotus-core` a durable database-backed publish queue rather than relying on in-memory
 best effort after a write succeeds.
 

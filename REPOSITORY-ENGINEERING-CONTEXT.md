@@ -3300,17 +3300,20 @@ Most relevant current governance:
      Query-control-plane analytics inputs must preserve `valuation_status=restated` while treating
      rows selected through the exact `PositionTimeseries.epoch == PositionState.epoch` fence as
      current. Fully observed, unpaginated final/restated windows are `COMPLETE` with
-     `source_evidence_current=true`; missing dates or pagination remain `PARTIAL`; only genuinely
-     non-current states contribute to `stale_points_count`. E2E acceptance must prove exact
-     economics and current evidence without requiring the schedule-dependent recovery epoch to
-     remain zero.
+     `source_evidence_current=true`; position coverage is measured against canonical business
+     dates, and missing dates or any continuation page (including the final page) remain `PARTIAL`.
+     Only genuinely non-current states contribute to `stale_points_count`. E2E acceptance must
+     prove exact economics and current evidence without requiring the schedule-dependent recovery
+     epoch to remain zero.
 227. Shared outbox dispatch preserves ordering per `(topic, partition_key)` through a durable
      stream-head claim fence. The head is the oldest unresolved `PENDING` or `FAILED` row ordered
      by `(created_at, id)`; active leases, retry waits, and terminal failures block only that
      stream, while different keys and topics remain parallel. Claim at most one row per stream in
      a batch and drain productive batches immediately. Keep Kafka I/O outside row-lock
-     transactions and retain claim-token-fenced result writes. Deployments changing this rule must
-     quiesce every dispatcher-owning worker before migrating and restart only the compatible
+     transactions and retain claim-token-fenced result writes. The flush fence must cover the
+     producer's configured Kafka delivery timeout, and the claim lease must exceed that fence by
+     the governed safety margin; reject unsafe overrides at startup. Deployments changing this rule
+     must quiesce every dispatcher-owning worker before migrating and restart only the compatible
      version; mixed dispatcher versions are not ordering-safe.
 
 ## Context Maintenance Rule
