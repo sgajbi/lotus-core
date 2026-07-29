@@ -107,6 +107,7 @@ async def test_upsert_round_trips_complete_receipt_and_uses_snapshot_conflict_ke
         )
     )
     assert "ON CONFLICT (snapshot_id) DO UPDATE" in compiled
+    assert "updated_at = now()" in compiled
     assert "RETURNING daily_position_valuation_receipts" in compiled
 
 

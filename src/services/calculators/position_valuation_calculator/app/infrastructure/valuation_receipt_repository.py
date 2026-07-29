@@ -20,7 +20,7 @@ from portfolio_common.domain.valuation import (
     ValuationReceiptSupportability,
     ValuationSnapshotIdentity,
 )
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -41,12 +41,14 @@ class SqlAlchemyValuationReceiptRepository:
             raise ValueError("snapshot_id must be a positive integer")
         values = _record_values(snapshot_id=snapshot_id, receipt=receipt)
         record = DailyPositionValuationReceiptRecord
+        replacement_values = {key: value for key, value in values.items() if key != "snapshot_id"}
+        replacement_values["updated_at"] = func.now()
         statement = (
             pg_insert(record)
             .values(**values)
             .on_conflict_do_update(
                 index_elements=[record.snapshot_id],
-                set_={key: value for key, value in values.items() if key != "snapshot_id"},
+                set_=replacement_values,
             )
             .returning(record)
         )
