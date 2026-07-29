@@ -8,6 +8,8 @@ from .market_price_source_facts import (
 from .valuation_policy_assignments import (
     ResolvedRuntimeValuationPolicy,
     ValuationPolicyAssignmentResolver,
+    ValuationPolicyAuthorityKey,
+    ValuationPolicyAuthorityRequest,
 )
 
 __all__ = [
@@ -15,5 +17,7 @@ __all__ = [
     "MarketPriceAuthorityRequest",
     "MarketPriceSourceFactResolver",
     "ResolvedRuntimeValuationPolicy",
+    "ValuationPolicyAuthorityKey",
+    "ValuationPolicyAuthorityRequest",
     "ValuationPolicyAssignmentResolver",
 ]

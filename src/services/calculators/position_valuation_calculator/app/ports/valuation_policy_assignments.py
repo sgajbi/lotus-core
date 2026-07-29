@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
 from typing import Protocol
@@ -9,7 +10,28 @@ from typing import Protocol
 from portfolio_common.domain.valuation import (
     PositionValuationPolicy,
     ResolvedValuationPolicyAssignment,
+    ValuationAuthorityScope,
 )
+
+ValuationPolicyAuthorityKey = tuple[str, str, str, date]
+
+
+@dataclass(frozen=True, slots=True)
+class ValuationPolicyAuthorityRequest:
+    """One exact-scope, effective-dated policy authority request."""
+
+    scope: ValuationAuthorityScope
+    valuation_date: date
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.scope, ValuationAuthorityScope):
+            raise TypeError("scope must be a ValuationAuthorityScope")
+        if type(self.valuation_date) is not date:
+            raise TypeError("valuation_date must be an exact date")
+
+    @property
+    def key(self) -> ValuationPolicyAuthorityKey:
+        return (*self.scope.key, self.valuation_date)
 
 
 @dataclass(frozen=True, slots=True)
@@ -21,13 +43,9 @@ class ResolvedRuntimeValuationPolicy:
 
 
 class ValuationPolicyAssignmentResolver(Protocol):
-    """Resolve one exact-scope, effective-dated valuation policy."""
+    """Bulk-resolve exact-scope, effective-dated valuation policies."""
 
-    async def resolve(
+    async def resolve_many(
         self,
-        *,
-        tenant_id: str,
-        legal_book_id: str,
-        security_id: str,
-        valuation_date: date,
-    ) -> ResolvedRuntimeValuationPolicy: ...
+        requests: Sequence[ValuationPolicyAuthorityRequest],
+    ) -> Mapping[ValuationPolicyAuthorityKey, ResolvedRuntimeValuationPolicy]: ...

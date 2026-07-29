@@ -7,11 +7,17 @@ from portfolio_common.database_models import (
     Instrument,
     InstrumentValuationPolicyAssignmentRecord,
 )
-from portfolio_common.domain.valuation import MissingValuationPolicyAssignmentError
+from portfolio_common.domain.valuation import (
+    MissingValuationPolicyAssignmentError,
+    ValuationAuthorityScope,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.calculators.position_valuation_calculator.app.infrastructure import (
     SqlAlchemyValuationPolicyAssignmentResolver,
+)
+from src.services.calculators.position_valuation_calculator.app.ports import (
+    ValuationPolicyAuthorityRequest,
 )
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration_db]
@@ -81,12 +87,15 @@ async def test_resolver_ranks_corrections_before_lifecycle_and_effective_filters
     await async_db_session.flush()
     resolver = SqlAlchemyValuationPolicyAssignmentResolver(async_db_session)
 
-    resolved = await resolver.resolve(
-        tenant_id="LOTUS_PB_SG",
-        legal_book_id="SG_PRIVATE_BANK_BOOK",
-        security_id="BOND_US_CORP_2031",
+    current_request = ValuationPolicyAuthorityRequest(
+        scope=ValuationAuthorityScope(
+            tenant_id="LOTUS_PB_SG",
+            legal_book_id="SG_PRIVATE_BANK_BOOK",
+            security_id="BOND_US_CORP_2031",
+        ),
         valuation_date=date(2026, 7, 19),
     )
+    resolved = (await resolver.resolve_many([current_request]))[current_request.key]
 
     assert resolved.policy.policy_id == "DIRTY_PERCENT_FACE_MARKET_VALUE"
     assert resolved.assignment.assignment.source_record_id.endswith("SUCCESSOR")
@@ -94,9 +103,11 @@ async def test_resolver_ranks_corrections_before_lifecycle_and_effective_filters
     assert resolved.assignment.cache_key.legal_book_id == "SG_PRIVATE_BANK_BOOK"
 
     with pytest.raises(MissingValuationPolicyAssignmentError):
-        await resolver.resolve(
-            tenant_id="LOTUS_PB_SG",
-            legal_book_id="SG_PRIVATE_BANK_BOOK",
-            security_id="BOND_US_CORP_2031",
-            valuation_date=date(2025, 12, 31),
+        await resolver.resolve_many(
+            [
+                ValuationPolicyAuthorityRequest(
+                    scope=current_request.scope,
+                    valuation_date=date(2025, 12, 31),
+                )
+            ]
         )

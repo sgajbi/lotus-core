@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import date
+from collections.abc import Sequence
+from typing import TypeVar
 
 from portfolio_common.database_models import InstrumentValuationPolicyAssignmentRecord
 from portfolio_common.domain.valuation import (
@@ -11,11 +12,19 @@ from portfolio_common.domain.valuation import (
     resolve_position_valuation_policy,
     resolve_valuation_policy_assignment,
 )
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
-from ..ports import ResolvedRuntimeValuationPolicy
+from ..ports import (
+    ResolvedRuntimeValuationPolicy,
+    ValuationPolicyAuthorityKey,
+    ValuationPolicyAuthorityRequest,
+)
+
+MAX_VALUATION_POLICY_AUTHORITY_REQUESTS = 500
+VALUATION_POLICY_AUTHORITY_QUERY_CHUNK_SIZE = 100
+_Value = TypeVar("_Value")
 
 
 class SqlAlchemyValuationPolicyAssignmentResolver:
@@ -24,65 +33,85 @@ class SqlAlchemyValuationPolicyAssignmentResolver:
     def __init__(self, db: AsyncSession) -> None:
         self._db = db
 
-    async def resolve(
+    async def resolve_many(
         self,
-        *,
-        tenant_id: str,
-        legal_book_id: str,
-        security_id: str,
-        valuation_date: date,
-    ) -> ResolvedRuntimeValuationPolicy:
-        """Return the sole active authority and exact registered policy for a date."""
+        requests: Sequence[ValuationPolicyAuthorityRequest],
+    ) -> dict[ValuationPolicyAuthorityKey, ResolvedRuntimeValuationPolicy]:
+        """Return one exact registered policy per deduplicated authority request."""
 
-        normalized_tenant_id = _required_identifier(tenant_id, "tenant_id")
-        normalized_legal_book_id = _required_identifier(legal_book_id, "legal_book_id")
-        normalized_security_id = _required_identifier(security_id, "security_id")
+        if len(requests) > MAX_VALUATION_POLICY_AUTHORITY_REQUESTS:
+            raise ValueError(
+                "valuation-policy authority request batch exceeds "
+                f"{MAX_VALUATION_POLICY_AUTHORITY_REQUESTS}"
+            )
+        request_by_key = {request.key: request for request in requests}
+        if not request_by_key:
+            return {}
 
         record = InstrumentValuationPolicyAssignmentRecord
-        source_rank = (
-            func.row_number()
-            .over(
-                partition_by=(
-                    record.tenant_id,
-                    record.legal_book_id,
-                    record.security_id,
-                    record.source_system,
-                    record.source_record_id,
-                ),
-                order_by=record.assignment_version.desc(),
+        rows: list[InstrumentValuationPolicyAssignmentRecord] = []
+        requested_scopes = list(dict.fromkeys(key[:3] for key in request_by_key))
+        for scope_chunk in _chunks(
+            requested_scopes,
+            VALUATION_POLICY_AUTHORITY_QUERY_CHUNK_SIZE,
+        ):
+            source_rank = (
+                func.row_number()
+                .over(
+                    partition_by=(
+                        record.tenant_id,
+                        record.legal_book_id,
+                        record.security_id,
+                        record.source_system,
+                        record.source_record_id,
+                    ),
+                    order_by=record.assignment_version.desc(),
+                )
+                .label("source_rank")
             )
-            .label("source_rank")
-        )
-        ranked_source_versions = (
-            select(record, source_rank)
-            .where(
-                record.tenant_id == normalized_tenant_id,
-                record.legal_book_id == normalized_legal_book_id,
-                record.security_id == normalized_security_id,
+            ranked_source_versions = (
+                select(record, source_rank)
+                .where(
+                    tuple_(
+                        record.tenant_id,
+                        record.legal_book_id,
+                        record.security_id,
+                    ).in_(scope_chunk)
+                )
+                .subquery()
             )
-            .subquery()
-        )
-        latest_record = aliased(record, ranked_source_versions)
-        statement = select(latest_record).where(
-            ranked_source_versions.c.source_rank == 1,
-            latest_record.assignment_status == ValuationPolicyAssignmentStatus.ACTIVE.value,
-            latest_record.valid_from <= valuation_date,
-            or_(latest_record.valid_to.is_(None), latest_record.valid_to >= valuation_date),
-        )
+            latest_record = aliased(record, ranked_source_versions)
+            statement = select(latest_record).where(
+                ranked_source_versions.c.source_rank == 1,
+            )
+            rows.extend((await self._db.scalars(statement)).all())
 
-        records = (await self._db.scalars(statement)).all()
-        assignment = resolve_valuation_policy_assignment(
-            [_assignment_from_record(item) for item in records],
-            tenant_id=normalized_tenant_id,
-            legal_book_id=normalized_legal_book_id,
-            security_id=normalized_security_id,
-            valuation_date=valuation_date,
-        )
-        policy = resolve_position_valuation_policy(
-            assignment.assignment.policy_id,
-            assignment.assignment.policy_version,
-        )
-        return ResolvedRuntimeValuationPolicy(assignment=assignment, policy=policy)
+        assignments_by_scope: dict[
+            tuple[str, str, str],
+            list[InstrumentValuationPolicyAssignment],
+        ] = {}
+        for row in rows:
+            assignment = _assignment_from_record(row)
+            assignments_by_scope.setdefault(assignment.scope_key, []).append(assignment)
+
+        resolved: dict[ValuationPolicyAuthorityKey, ResolvedRuntimeValuationPolicy] = {}
+        for key, request in request_by_key.items():
+            assignment = resolve_valuation_policy_assignment(
+                assignments_by_scope.get(request.scope.key, []),
+                tenant_id=request.scope.tenant_id,
+                legal_book_id=request.scope.legal_book_id,
+                security_id=request.scope.security_id,
+                valuation_date=request.valuation_date,
+            )
+            policy = resolve_position_valuation_policy(
+                assignment.assignment.policy_id,
+                assignment.assignment.policy_version,
+            )
+            resolved[key] = ResolvedRuntimeValuationPolicy(
+                assignment=assignment,
+                policy=policy,
+            )
+        return resolved
 
 
 def _assignment_from_record(
@@ -111,8 +140,5 @@ def _assignment_from_record(
     )
 
 
-def _required_identifier(value: str, field_name: str) -> str:
-    normalized = value.strip()
-    if not normalized:
-        raise ValueError(f"{field_name} must be nonblank")
-    return normalized
+def _chunks(values: list[_Value], size: int) -> list[list[_Value]]:
+    return [values[offset : offset + size] for offset in range(0, len(values), size)]
