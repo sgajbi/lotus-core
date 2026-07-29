@@ -419,6 +419,7 @@ async def test_newer_epoch_supersedes_claim_and_rearms_same_portfolio_day(
     )[0]
     assert first_claim.target_epoch == 0
     assert first_claim.source_revision == 1
+    await async_db_session.commit()
 
     async_db_session.add(
         DailyPositionSnapshot(
@@ -432,6 +433,26 @@ async def test_newer_epoch_supersedes_claim_and_rearms_same_portfolio_day(
             valuation_status="VALUED_CURRENT",
         )
     )
+    await async_db_session.commit()
+
+    disposition = await repository.complete_or_requeue_job(
+        job_id=first_claim.id,
+        lease_token=first_claim.lease.token,
+        target_epoch=first_claim.target_epoch,
+        source_revision=first_claim.source_revision,
+    )
+    await async_db_session.commit()
+
+    assert disposition is AggregationJobCompletionDisposition.REQUEUED
+    requeued_job = await async_db_session.get(
+        PortfolioAggregationJob,
+        first_claim.id,
+    )
+    assert requeued_job is not None
+    assert requeued_job.status == "PENDING"
+    assert requeued_job.target_epoch == 0
+    assert requeued_job.source_revision == 1
+
     async_db_session.add(
         PositionTimeseries(
             portfolio_id=portfolio_id,
@@ -456,15 +477,8 @@ async def test_newer_epoch_supersedes_claim_and_rearms_same_portfolio_day(
         1,
         "corr-epoch-one",
     )
-    disposition = await repository.complete_or_requeue_job(
-        job_id=first_claim.id,
-        lease_token=first_claim.lease.token,
-        target_epoch=first_claim.target_epoch,
-        source_revision=first_claim.source_revision,
-    )
     await async_db_session.commit()
 
-    assert disposition is AggregationJobCompletionDisposition.REQUEUED
     second_claim = (
         await repository.claim_eligible_jobs(
             batch_size=1,

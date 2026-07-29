@@ -31,10 +31,14 @@ while epoch-currentness remained `restated` / `STALE` until the E2E deadline.
    when a newer authoritative snapshot exists without a matching staging update.
 6. Calculation uses the claim-owned target epoch. The obsolete execution-time current-epoch query
    and its persistence surface were removed.
-7. Success and failure terminal writes compare lease token, target epoch, and source revision.
-   Superseded work returns to `PENDING` with the newer identity instead of publishing or failing the
-   current job.
-8. The existing single PostgreSQL upsert remains the staging hot path. Returned durable state
+7. Success and failure terminal writes compare lease token, target epoch, source revision, and the
+   absence of a newer authoritative snapshot. Superseded work returns to `PENDING` instead of
+   publishing or failing the current job, including when a snapshot is committed before its
+   position-timeseries staging update.
+8. A zero-row terminal write rechecks supersession before reporting lost ownership, closing the
+   interleaving where newer identity becomes durable between the initial requeue check and terminal
+   update.
+9. The existing single PostgreSQL upsert remains the staging hot path. Returned durable state
    increments the existing control-queue metric with `new`, `rearmed`, `superseded`, or `no_op`.
 
 ## Same-Pattern Review
@@ -65,13 +69,18 @@ because operator interpretation of aggregation staging metrics and job identity 
 
 ## Evidence
 
-- focused warning-strict unit proof: 118 passed;
+- focused warning-strict unit proof: 118 passed before review and 25 repository tests passed after
+  the review fix-forward;
 - repository-native MyPy: 240 source files, zero issues;
 - Ruff lint and formatting: passed;
 - Alembic heads: exactly `c127b2c3d500`;
 - exact-branch, fresh-image PostgreSQL rollover proof:
-  `test_newer_epoch_supersedes_claim_and_rearms_same_portfolio_day`, 1 passed in 363.86 seconds;
+  `test_newer_epoch_supersedes_claim_and_rearms_same_portfolio_day`, 1 passed in 95.95 seconds;
+- review fix-forward proof now commits the newer snapshot independently before staging and verifies
+  that the old claim is requeued rather than completed;
+- full aggregation repository integration proof: 5 passed in 75.01 seconds;
+- timeseries contract E2E proof: 4 passed in 77.65 seconds;
 - no test timeout, assertion, partition, debounce, topology, or lock-order change.
 
-Remaining proof is broader derived-state regression/E2E, protected PR review and CI, exact-main
-validation, wiki publication/parity, issue evidence, and branch/worktree reconciliation.
+Remaining proof is protected PR review and final-head CI, exact-main validation, wiki
+publication/parity, issue evidence, and branch/worktree reconciliation.

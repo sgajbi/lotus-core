@@ -372,7 +372,11 @@ async def test_complete_or_requeue_job_reports_lost_ownership(
     repository: PortfolioAggregationRepository,
     mock_db_session: AsyncMock,
 ) -> None:
-    mock_db_session.execute.side_effect = [MagicMock(rowcount=0), MagicMock(rowcount=0)]
+    mock_db_session.execute.side_effect = [
+        MagicMock(rowcount=0),
+        MagicMock(rowcount=0),
+        MagicMock(rowcount=0),
+    ]
 
     disposition = await repository.complete_or_requeue_job(
         job_id=7,
@@ -382,6 +386,27 @@ async def test_complete_or_requeue_job_reports_lost_ownership(
     )
 
     assert disposition is AggregationJobCompletionDisposition.LOST_OWNERSHIP
+
+
+async def test_complete_or_requeue_job_rechecks_supersession_after_terminal_race(
+    repository: PortfolioAggregationRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    mock_db_session.execute.side_effect = [
+        MagicMock(rowcount=0),
+        MagicMock(rowcount=0),
+        MagicMock(rowcount=1),
+    ]
+
+    disposition = await repository.complete_or_requeue_job(
+        job_id=7,
+        lease_token="lease-token-1",
+        target_epoch=4,
+        source_revision=5,
+    )
+
+    assert disposition is AggregationJobCompletionDisposition.REQUEUED
+    assert mock_db_session.execute.await_count == 3
 
 
 async def test_fail_or_requeue_job_fails_only_current_owned_processing_job(
@@ -434,6 +459,28 @@ async def test_fail_or_requeue_job_requeues_superseded_source_identity(
     assert "status='PENDING'" in compiled
     assert "portfolio_aggregation_jobs.target_epoch != 4" in compiled
     assert "portfolio_aggregation_jobs.source_revision != 5" in compiled
+    assert "daily_position_snapshots.epoch > 4" in compiled
+
+
+async def test_fail_or_requeue_job_rechecks_supersession_after_terminal_race(
+    repository: PortfolioAggregationRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    mock_db_session.execute.side_effect = [
+        MagicMock(rowcount=0),
+        MagicMock(rowcount=0),
+        MagicMock(rowcount=1),
+    ]
+
+    disposition = await repository.fail_or_requeue_job(
+        job_id=7,
+        lease_token="lease-token-1",
+        target_epoch=4,
+        source_revision=5,
+    )
+
+    assert disposition is AggregationJobFailureDisposition.REQUEUED
+    assert mock_db_session.execute.await_count == 3
 
 
 async def test_claim_eligible_jobs_persists_and_returns_lease_identity(
@@ -514,7 +561,11 @@ async def test_complete_or_requeue_claim_reports_lost_ownership_after_reclaim(
     repository: PortfolioAggregationRepository,
     mock_db_session: AsyncMock,
 ) -> None:
-    mock_db_session.execute.side_effect = [MagicMock(rowcount=0), MagicMock(rowcount=0)]
+    mock_db_session.execute.side_effect = [
+        MagicMock(rowcount=0),
+        MagicMock(rowcount=0),
+        MagicMock(rowcount=0),
+    ]
 
     disposition = await repository.complete_or_requeue_job(
         job_id=7,

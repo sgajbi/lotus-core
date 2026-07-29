@@ -81,6 +81,7 @@ class PortfolioAggregationRepository(TimeseriesMarketDataReader):
             .where(
                 PortfolioAggregationJob.target_epoch == target_epoch,
                 PortfolioAggregationJob.source_revision == source_revision,
+                ~_newer_snapshot_than_claim_exists(target_epoch),
             )
             .values(
                 status="COMPLETE",
@@ -91,6 +92,13 @@ class PortfolioAggregationRepository(TimeseriesMarketDataReader):
         )
         if int(complete_result.rowcount or 0) == 1:
             return AggregationJobCompletionDisposition.COMPLETE
+        if await self._requeue_superseded_claim(
+            job_id=job_id,
+            lease_token=lease_token,
+            target_epoch=target_epoch,
+            source_revision=source_revision,
+        ):
+            return AggregationJobCompletionDisposition.REQUEUED
         return AggregationJobCompletionDisposition.LOST_OWNERSHIP
 
     async def fail_or_requeue_job(
@@ -116,6 +124,7 @@ class PortfolioAggregationRepository(TimeseriesMarketDataReader):
             .where(
                 PortfolioAggregationJob.target_epoch == target_epoch,
                 PortfolioAggregationJob.source_revision == source_revision,
+                ~_newer_snapshot_than_claim_exists(target_epoch),
             )
             .values(
                 status="FAILED",
@@ -126,6 +135,13 @@ class PortfolioAggregationRepository(TimeseriesMarketDataReader):
         )
         if int(result.rowcount or 0) == 1:
             return AggregationJobFailureDisposition.FAILED
+        if await self._requeue_superseded_claim(
+            job_id=job_id,
+            lease_token=lease_token,
+            target_epoch=target_epoch,
+            source_revision=source_revision,
+        ):
+            return AggregationJobFailureDisposition.REQUEUED
         return AggregationJobFailureDisposition.LOST_OWNERSHIP
 
     async def _requeue_superseded_claim(
@@ -143,6 +159,7 @@ class PortfolioAggregationRepository(TimeseriesMarketDataReader):
                     PortfolioAggregationJob.target_epoch != target_epoch,
                     PortfolioAggregationJob.source_revision != source_revision,
                     PortfolioAggregationJob.failure_reason == AGGREGATION_REPROCESS_REQUESTED,
+                    _newer_snapshot_than_claim_exists(target_epoch),
                 )
             )
             .values(
@@ -252,6 +269,7 @@ class PortfolioAggregationRepository(TimeseriesMarketDataReader):
                 lease_expires_at=lease.expires_at,
             )
             .returning(job)
+            .execution_options(populate_existing=True)
         )
         return sorted(
             cast(list[PortfolioAggregationJob], result.scalars().all()),
@@ -459,6 +477,19 @@ def _expired_job_leases_statement(now: datetime):
     ).where(
         PortfolioAggregationJob.status == "PROCESSING",
         PortfolioAggregationJob.lease_expires_at <= now,
+    )
+
+
+def _newer_snapshot_than_claim_exists(target_epoch: int):
+    return (
+        select(1)
+        .where(
+            DailyPositionSnapshot.portfolio_id == PortfolioAggregationJob.portfolio_id,
+            DailyPositionSnapshot.date <= PortfolioAggregationJob.aggregation_date,
+            DailyPositionSnapshot.epoch > target_epoch,
+        )
+        .correlate(PortfolioAggregationJob)
+        .exists()
     )
 
 
