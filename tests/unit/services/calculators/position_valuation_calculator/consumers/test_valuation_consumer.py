@@ -102,6 +102,8 @@ def mock_dependencies():
         repo=mock_valuation_repo,
         idempotency_repo=mock_idempotency_repo,
         outbox_repo=mock_outbox_repo,
+        market_price_source_fact_resolver=AsyncMock(),
+        valuation_policy_assignment_resolver=AsyncMock(),
     )
     processor = ValuationJobProcessor(
         session_provider=get_session_gen,
