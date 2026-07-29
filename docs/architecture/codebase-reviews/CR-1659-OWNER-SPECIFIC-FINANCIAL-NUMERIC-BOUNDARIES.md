@@ -52,6 +52,8 @@ closure of persisted lineage exposure or the complete producer-policy inventory.
   shadows invalidate prior aliases, and imported, qualified, or chained constructor aliases remain
   part of declaration inventory discovery. Conditional branches are analyzed from the same incoming
   state and joined fail closed; only an alias identical on every exit can certify later lineage.
+  Zero-iteration loop exits, exceptional exits, and non-matching structural-pattern exits follow the
+  same rule; `finally` assignments remain visible because they execute on every try exit.
 - Wired the guard into `make lint`. Accrued income and position valuation are truthfully `partial`:
   their public calculation callables bind lineage, while internal arithmetic helpers and the legacy
   `valuation_logic.py` consumer do not independently emit it. Six policies are `not-exposed`. Every
@@ -84,14 +86,15 @@ inputs and serialized Decimal values remain unchanged.
   bound function cannot hide an unbound sibling in the same file.
 - Signed commit `9535ccf0e` resolves direct `as` imports, module-qualified policy access, and local
   assignments from qualified policies, so an aliased unbound consumer cannot bypass the inventory.
-- Forty-three focused guard tests passed with 99% line/branch coverage, including repository parity;
+- Fifty-one focused guard tests passed with 99% line/branch coverage, including repository parity;
   mutation-style shape drift; malformed envelopes and policy entries; stale, unclassified, unused,
   partially bound, and missing-lineage policies; ambiguous/duplicate source declarations; duplicate
   JSON keys; exact callable-gap parity; same-file bound/unbound siblings; imported and qualified
   aliases; CLI success/failure evidence; rejection of lineage-only pseudo-use; discarded-identity
   and overwritten-identity rejection; extracted, chained, overwritten, and parameter-shadowed
   execution aliases; constructor aliases; conditional-only rejection and all-exit acceptance; and
-  direct, local-name, and module-qualified calculation-lineage propagation.
+  zero-iteration sync/async loops, loop `else`, normal/exception-group handlers, guarded match
+  cases, and direct, local-name, and module-qualified calculation-lineage propagation.
 
 ## Compatibility and remaining work
 
