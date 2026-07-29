@@ -852,6 +852,23 @@ async def test_openapi_describes_position_contract_examples(async_test_client):
     assert lineage_schema["properties"]["input_content_hash"]["pattern"] == "^[0-9a-f]{64}$"
     assert lineage_schema["properties"]["calculation_content_hash"]["pattern"] == ("^[0-9a-f]{64}$")
     assert lineage_schema["properties"]["output_content_hash"]["pattern"] == "^[0-9a-f]{64}$"
+    numeric_policy_reference = lineage_schema["properties"]["numeric_output_policy"]
+    assert numeric_policy_reference["anyOf"][0]["$ref"] == (
+        "#/components/schemas/NumericOutputPolicyLineageResponse"
+    )
+    assert "owner-defined numeric-output boundary" in numeric_policy_reference["description"]
+    numeric_policy_schema = schema["components"]["schemas"]["NumericOutputPolicyLineageResponse"]
+    assert numeric_policy_schema["properties"]["precision"]["minimum"] == 1
+    assert numeric_policy_schema["properties"]["scale"]["minimum"] == 0
+    assert numeric_policy_schema["properties"]["working_precision"]["minimum"] == 1
+    assert set(numeric_policy_schema["required"]) == {
+        "name",
+        "version",
+        "precision",
+        "scale",
+        "working_precision",
+        "rounding",
+    }
 
 
 async def test_openapi_describes_cashflow_projection_contract_examples(async_test_client):
