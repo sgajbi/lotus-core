@@ -70,6 +70,10 @@ closure of persisted lineage exposure or the complete producer-policy inventory.
   policy-receiver, lineage-identity, extracted-execution, and canonical-builder evidence. A
   recognized policy or lineage-builder import then installs only its proven binding; wildcard
   imports remain fully fail closed because their exported names are not statically knowable.
+- Extended the reusable Query Service calculation-lineage response with a typed optional
+  `numeric_output_policy` object. It preserves the complete owner policy identity emitted by the
+  domain, rejects blank or contradictory numeric shapes, and publishes the additive contract
+  through generated OpenAPI and the governed API vocabulary.
 - Wired the guard into `make lint`. Accrued income and position valuation are truthfully `partial`:
   their public calculation callables bind lineage, while internal arithmetic helpers and the legacy
   `valuation_logic.py` consumer do not independently emit it. Six policies are `not-exposed`. Every
@@ -119,14 +123,20 @@ inputs and serialized Decimal values remain unchanged.
   classes for aliased `import`, aliased `from ... import`, ordinary dotted import, ordinary
   `from ... import`, and wildcard import, plus valid policy and canonical-builder reinstallation
   after invalidation.
+- Signed commits `d5972b4d4` and `fef520f84` add the Query Service response contract and generated
+  vocabulary truth. Nine focused DTO tests, one live OpenAPI assertion, and 715 warning-strict
+  Query Service unit/integration tests passed; OpenAPI quality, vocabulary parity, MyPy across
+  240 source files, Ruff, formatting, and diff hygiene passed.
 
 ## Compatibility and remaining work
 
 The simulation contract intentionally rejects values that could previously be changed or rejected
 only after acceptance. Gateway #511 is exact-main complete. Accrued-income and position-valuation
-lineage hashes intentionally change because numeric policy is now calculation identity. Issue #829
-remains open for complete producer-policy inventory reconciliation and persisted/exposed
-calculation-policy lineage compatibility.
+lineage hashes intentionally change because numeric policy is now calculation identity. Query
+Service calculation-lineage responses now expose an additive optional policy object; calculations
+that do not execute a governed output policy remain valid with `numeric_output_policy=null`.
+Issue #829 remains open for complete producer-policy inventory reconciliation and durable
+persistence/query/replay compatibility.
 
 The declaration inventory is now complete and enforced. The residual is narrower: accrued income
 and position valuation are explicitly `partial` at callable granularity, six executing policies
@@ -135,8 +145,8 @@ persistence/query/replay proof before #829 can close.
 
 ## Documentation decision
 
-Repository context and this existing review record carry the new implementation truth without
-adding a duplicate document. No API/OpenAPI shape, operator command, database migration, or
-wiki-authored workflow changed, so no wiki source update is required. The repository context already
-identifies this guard and its fail-closed ownership contract, so no context update is required for
-the narrower import-rebinding implementation.
+Repository context and this existing review record carry the implementation detail without adding
+a duplicate document. The additive public lineage field is reflected in generated OpenAPI,
+API-vocabulary truth, and the existing API wiki page. No database migration, topic, operator
+command, or runtime topology changed. The repository context already identifies the guard and its
+fail-closed ownership contract, so no context update is required.

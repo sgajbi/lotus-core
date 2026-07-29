@@ -114,7 +114,9 @@ movement summary reconciles source-row count and per-currency totals to returned
 netting currencies. A zero-row window is explicit supported `EMPTY_SOURCE_WINDOW` evidence with a
 null evidence timestamp. Count, total, or populated-timestamp contradictions fail closed as
 `BLOCKED`/`UNAVAILABLE`; consumers must accept the scope, digest, reconciliation, supportability,
-and calculation lineage together.
+and calculation lineage together. The shared lineage contract includes an optional typed
+`numeric_output_policy` identity when a calculation executes a governed owner-defined output
+boundary; its absence does not imply a default or inferred rounding policy.
 
 Allocation analysis:
 
