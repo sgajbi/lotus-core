@@ -325,6 +325,88 @@ class DailyPositionSnapshot(Base):
     )
 
 
+class DailyPositionValuationReceiptRecord(Base):
+    """One durable calculation/supportability receipt per position snapshot."""
+
+    __tablename__ = "daily_position_valuation_receipts"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    snapshot_id = Column(
+        Integer,
+        ForeignKey("daily_position_snapshots.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+    )
+    supportability = Column(String, nullable=False)
+    supportability_reasons = Column(JSON, nullable=False)
+    policy_id = Column(String, nullable=True)
+    policy_version = Column(Integer, nullable=True)
+    assignment_version = Column(Integer, nullable=True)
+    assignment_content_hash = Column(String(64), nullable=True)
+    policy_assignment_source = Column(JSON, nullable=True)
+    quote_basis = Column(String, nullable=True)
+    price_fact_version = Column(Integer, nullable=True)
+    price_fact_content_hash = Column(String(64), nullable=True)
+    market_price_source = Column(JSON, nullable=True)
+    calculation_lineage = Column(JSON, nullable=True)
+    receipt_hash = Column(String(64), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "supportability IN ('SUPPORTED', 'LEGACY_UNSCOPED')",
+            name="ck_daily_position_valuation_receipt_supportability",
+        ),
+        CheckConstraint(
+            "json_array_length(supportability_reasons) > 0",
+            name="ck_daily_position_valuation_receipt_reasons_nonempty",
+        ),
+        CheckConstraint(
+            "("
+            "supportability = 'SUPPORTED' "
+            "AND policy_id IS NOT NULL AND btrim(policy_id) <> '' "
+            "AND policy_version >= 1 AND assignment_version >= 1 "
+            "AND assignment_content_hash IS NOT NULL "
+            "AND policy_assignment_source IS NOT NULL "
+            "AND quote_basis IS NOT NULL "
+            "AND price_fact_version >= 1 AND price_fact_content_hash IS NOT NULL "
+            "AND market_price_source IS NOT NULL AND calculation_lineage IS NOT NULL"
+            ") OR ("
+            "supportability = 'LEGACY_UNSCOPED' "
+            "AND policy_id IS NULL AND policy_version IS NULL "
+            "AND assignment_version IS NULL AND assignment_content_hash IS NULL "
+            "AND policy_assignment_source IS NULL AND quote_basis IS NULL "
+            "AND price_fact_version IS NULL AND price_fact_content_hash IS NULL "
+            "AND market_price_source IS NULL AND calculation_lineage IS NULL"
+            ")",
+            name="ck_daily_position_valuation_receipt_evidence_complete",
+        ),
+        CheckConstraint(
+            "assignment_content_hash IS NULL OR assignment_content_hash ~ '^[0-9a-f]{64}$'",
+            name="ck_daily_position_valuation_receipt_assignment_hash",
+        ),
+        CheckConstraint(
+            "price_fact_content_hash IS NULL OR price_fact_content_hash ~ '^[0-9a-f]{64}$'",
+            name="ck_daily_position_valuation_receipt_price_hash",
+        ),
+        CheckConstraint(
+            "receipt_hash ~ '^[0-9a-f]{64}$'",
+            name="ck_daily_position_valuation_receipt_hash",
+        ),
+        Index(
+            "ix_daily_position_valuation_receipt_supportability_snapshot",
+            "supportability",
+            "snapshot_id",
+        ),
+    )
+
+
 class FxRate(Base):
     __tablename__ = "fx_rates"
 
