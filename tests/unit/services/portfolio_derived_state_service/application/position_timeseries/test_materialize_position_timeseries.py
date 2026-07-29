@@ -232,13 +232,16 @@ async def test_unavailable_valuation_invalidates_current_and_dependent_materiali
         valuation_status="FAILED",
     )
     future_snapshot = _snapshot(date(2026, 4, 11))
+    later_snapshot = _snapshot(date(2026, 4, 12))
+    later_timeseries = _timeseries_record(later_snapshot)
     repository = InMemoryPositionTimeseriesRepository(failed_snapshot)
-    repository.future_snapshots = [future_snapshot]
+    repository.future_snapshots = [future_snapshot, later_snapshot]
     repository.existing_by_date = {
         failed_snapshot.date: _timeseries_record(
             replace(failed_snapshot, market_value_local=Decimal("1260"))
         ),
         future_snapshot.date: _timeseries_record(future_snapshot),
+        later_snapshot.date: later_timeseries,
     }
     provider = InMemoryRepositoryProvider(repository)
 
@@ -249,7 +252,7 @@ async def test_unavailable_valuation_invalidates_current_and_dependent_materiali
     assert result.dependent_days_changed == 1
     assert result.dependent_propagation_truncated is False
     assert repository.invalidated_dates == [date(2026, 4, 10), date(2026, 4, 11)]
-    assert repository.existing_by_date == {}
+    assert repository.existing_by_date == {date(2026, 4, 12): later_timeseries}
     assert repository.staged_dates == [date(2026, 4, 10), date(2026, 4, 11)]
     assert repository.staged_epochs == [3, 3]
     assert repository.upserted == []

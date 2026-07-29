@@ -2704,10 +2704,10 @@ Most relevant current governance:
      Treat the persisted snapshot as authoritative and fail
      closed before writes when repeated trigger portfolio, security, date, or epoch identity differs.
      A failed or null-valued position snapshot uses the persisted-snapshot trigger to invalidate
-     current and bounded dependent position/portfolio timeseries and rearm affected aggregation
-     work. The position-timeseries domain also rejects null current or prior market values; never
-     reinterpret unavailable authoritative valuation as numeric zero or leave prior materialization
-     queryable as current.
+     current and immediate-successor position/portfolio timeseries and rearm affected aggregation
+     work while preserving later valued boundaries. The position-timeseries domain also rejects
+     null current or prior market values; never reinterpret unavailable authoritative valuation as
+     numeric zero or leave prior materialization queryable as current.
      Keep the portfolio-timeseries stage separate as a testable module while #714 consolidates the
      runtime; do not move either workflow into Kafka consumers or `portfolio_common`.
      Portfolio aggregation delivery follows the same rule: claim durable jobs with lease owner,
