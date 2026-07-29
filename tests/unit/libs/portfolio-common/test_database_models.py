@@ -358,6 +358,12 @@ def test_daily_position_valuation_receipt_enforces_complete_one_to_one_evidence(
         "ck_daily_position_valuation_receipt_hash",
     } <= constraints.keys()
     assert table.columns.snapshot_id.unique is True
+    for field_name in (
+        "policy_assignment_source",
+        "market_price_source",
+        "calculation_lineage",
+    ):
+        assert table.columns[field_name].type.none_as_null is True
     foreign_key = next(iter(table.columns.snapshot_id.foreign_keys))
     assert foreign_key.target_fullname == "daily_position_snapshots.id"
     assert foreign_key.ondelete == "CASCADE"

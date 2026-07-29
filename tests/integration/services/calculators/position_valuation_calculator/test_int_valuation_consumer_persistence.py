@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from portfolio_common.database_models import (
     DailyPositionSnapshot,
+    DailyPositionValuationReceiptRecord,
     Instrument,
     MarketPrice,
     OutboxEvent,
@@ -177,8 +178,18 @@ async def test_valuation_message_persists_snapshot_outbox_and_idempotency(
     )
 
     assert len(snapshots) == 1
+    receipt = await async_db_session.scalar(
+        select(DailyPositionValuationReceiptRecord).where(
+            DailyPositionValuationReceiptRecord.snapshot_id == snapshots[0].id
+        )
+    )
     assert snapshots[0].valuation_status == "VALUED_CURRENT"
     assert snapshots[0].market_value == Decimal("1015.0000000000")
+    assert receipt is not None
+    assert receipt.supportability == "LEGACY_UNSCOPED"
+    assert receipt.policy_assignment_source is None
+    assert receipt.market_price_source is None
+    assert receipt.calculation_lineage is None
     assert len(outbox_rows) == 1
     assert outbox_rows[0].correlation_id == "corr-val-int-01"
     assert len(processed_rows) == 1
