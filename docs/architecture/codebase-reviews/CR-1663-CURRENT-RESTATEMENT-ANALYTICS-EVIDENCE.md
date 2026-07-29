@@ -43,5 +43,5 @@ Downstream consumers still receive `valuation_status=restated` and the quality d
 
 - Exact-source pre-change isolated E2E: `4 passed in 393.62s`.
 - Focused analytics unit proof after correction: `86 passed in 2.21s`.
-- Final lint, OpenAPI, E2E, protected CI, and exact-main evidence are recorded on issue #490.
-
+- Post-correction exact-source E2E: `4 passed in 61.10s`.
+- Final protected CI and exact-main evidence are recorded on issue #490.
