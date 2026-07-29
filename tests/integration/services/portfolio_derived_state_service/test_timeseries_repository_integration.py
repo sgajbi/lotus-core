@@ -84,7 +84,7 @@ def _snapshot(
         market_value_local=Decimal("100"),
         unrealized_gain_loss=Decimal("0"),
         unrealized_gain_loss_local=Decimal("0"),
-        valuation_status="VALUED",
+        valuation_status="VALUED_CURRENT",
     )
 
 
