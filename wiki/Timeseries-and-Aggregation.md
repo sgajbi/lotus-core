@@ -33,7 +33,9 @@ the ordered materialization generation within that epoch.
 The claimed job also carries `target_epoch` and `source_revision`. Workers calculate only the
 claim-owned epoch and terminal writes require the lease token and both source-identity fields. If a
 newer position epoch or same-epoch material revision arrives during processing, the existing
-portfolio/day job is requeued and the stale claim publishes nothing. This fence is distinct from
+portfolio/day job is requeued and the stale claim publishes nothing. Terminal success and failure
+also reject a newer authoritative snapshot even when its position-timeseries staging is still
+pending, then recheck supersession after a concurrent zero-row terminal write. This fence is distinct from
 `aggregation_revision`: source revision protects calculation input identity, while aggregation
 revision is the positive claim sequence published to reconciliation.
 
