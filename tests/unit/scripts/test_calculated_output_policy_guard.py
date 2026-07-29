@@ -345,6 +345,47 @@ def test_guard_does_not_hide_unbound_import_alias_beside_bound_consumer(
     assert "TEST_LEDGER_OUTPUT_V1: required lineage binding is incomplete" in findings
 
 
+def test_guard_does_not_hide_unbound_extracted_method_beside_bound_consumer(
+    tmp_path: Path,
+) -> None:
+    _write_policy(tmp_path)
+    (tmp_path / "src" / "owner" / "method_alias_consumer.py").write_text(
+        "from decimal import Decimal\n"
+        "from owner.numeric_policy import TEST_LEDGER_OUTPUT_V1\n"
+        "normalize_output = TEST_LEDGER_OUTPUT_V1.normalize\n"
+        "def calculate():\n"
+        "    return normalize_output(Decimal('1'), field_name='value')\n",
+        encoding="utf-8",
+    )
+
+    findings = evaluate(tmp_path, _contract(tmp_path))
+
+    assert (
+        "TEST_LEDGER_OUTPUT_V1: unclassified lineage gap at "
+        "src/owner/method_alias_consumer.py::calculate"
+    ) in findings
+    assert "TEST_LEDGER_OUTPUT_V1: required lineage binding is incomplete" in findings
+
+
+def test_guard_accepts_chained_extracted_method_with_lineage_propagation(
+    tmp_path: Path,
+) -> None:
+    _write_policy(tmp_path, used=False)
+    (tmp_path / "src" / "owner" / "consumer.py").write_text(
+        "from decimal import Decimal\n"
+        "from owner.numeric_policy import TEST_LEDGER_OUTPUT_V1\n"
+        "def calculate():\n"
+        "    normalize_output: object = TEST_LEDGER_OUTPUT_V1.normalize\n"
+        "    normalize_alias = normalize_output\n"
+        "    value = normalize_alias(Decimal('1'), field_name='value')\n"
+        "    return build_calculation_lineage("
+        "numeric_output_policy=TEST_LEDGER_OUTPUT_V1.lineage_identity())\n",
+        encoding="utf-8",
+    )
+
+    assert evaluate(tmp_path, _contract(tmp_path)) == ()
+
+
 def test_guard_rejects_required_binding_with_unbound_consumer(tmp_path: Path) -> None:
     _write_policy(tmp_path, unbound_consumer=True)
 

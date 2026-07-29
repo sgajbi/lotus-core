@@ -47,7 +47,8 @@ closure of persisted lineage exposure or the complete producer-policy inventory.
   AST guard. It rejects unclassified or stale declarations, literal source/contract drift, blank
   ownership, unused policies, invalid lineage posture, and missing required lineage propagation
   into `build_calculation_lineage` per enclosing callable. Computing and discarding a policy
-  identity is not lineage evidence.
+  identity is not lineage evidence. Extracting an arithmetic or normalization method into a local
+  callable alias does not bypass execution tracking.
 - Wired the guard into `make lint`. Accrued income and position valuation are truthfully `partial`:
   their public calculation callables bind lineage, while internal arithmetic helpers and the legacy
   `valuation_logic.py` consumer do not independently emit it. Six policies are `not-exposed`. Every
@@ -80,12 +81,13 @@ inputs and serialized Decimal values remain unchanged.
   bound function cannot hide an unbound sibling in the same file.
 - Signed commit `9535ccf0e` resolves direct `as` imports, module-qualified policy access, and local
   assignments from qualified policies, so an aliased unbound consumer cannot bypass the inventory.
-- Thirty-four focused guard tests passed with 99% line/branch coverage, including repository parity;
+- Thirty-six focused guard tests passed with 99% line/branch coverage, including repository parity;
   mutation-style shape drift; malformed envelopes and policy entries; stale, unclassified, unused,
   partially bound, and missing-lineage policies; ambiguous/duplicate source declarations; duplicate
   JSON keys; exact callable-gap parity; same-file bound/unbound siblings; imported and qualified
   aliases; CLI success/failure evidence; rejection of lineage-only pseudo-use; discarded-identity
-  rejection; and direct, local-name, and module-qualified calculation-lineage propagation.
+  rejection; extracted and chained execution-method aliases; and direct, local-name, and
+  module-qualified calculation-lineage propagation.
 
 ## Compatibility and remaining work
 

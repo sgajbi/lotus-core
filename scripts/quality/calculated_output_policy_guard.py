@@ -177,6 +177,7 @@ class _UsageVisitor(ast.NodeVisitor):
         self._lineage = lineage
         self._scope: list[str] = []
         self._lineage_identity_aliases: list[dict[str, str]] = [{}]
+        self._execution_method_aliases: list[dict[str, str]] = [{}]
 
     @property
     def _callsite(self) -> str:
@@ -186,7 +187,9 @@ class _UsageVisitor(ast.NodeVisitor):
     def _visit_scope(self, node: ast.AST, name: str) -> None:
         self._scope.append(name)
         self._lineage_identity_aliases.append({})
+        self._execution_method_aliases.append({})
         self.generic_visit(node)
+        self._execution_method_aliases.pop()
         self._lineage_identity_aliases.pop()
         self._scope.pop()
 
@@ -204,22 +207,35 @@ class _UsageVisitor(ast.NodeVisitor):
 
     def visit_Assign(self, node: ast.Assign) -> None:
         self.generic_visit(node)
-        constant = self._resolve_lineage_identity(node.value)
-        if constant is None:
-            return
         for target in node.targets:
-            if isinstance(target, ast.Name):
-                self._lineage_identity_aliases[-1][target.id] = constant
+            if not isinstance(target, ast.Name):
+                continue
+            lineage_constant = self._resolve_lineage_identity(node.value)
+            if lineage_constant is not None:
+                self._lineage_identity_aliases[-1][target.id] = lineage_constant
+            execution_constant = self._resolve_execution_method(node.value)
+            if execution_constant is not None:
+                self._execution_method_aliases[-1][target.id] = execution_constant
 
     def visit_AnnAssign(self, node: ast.AnnAssign) -> None:
         self.generic_visit(node)
         if node.value is None or not isinstance(node.target, ast.Name):
             return
-        constant = self._resolve_lineage_identity(node.value)
-        if constant is not None:
-            self._lineage_identity_aliases[-1][node.target.id] = constant
+        lineage_constant = self._resolve_lineage_identity(node.value)
+        if lineage_constant is not None:
+            self._lineage_identity_aliases[-1][node.target.id] = lineage_constant
+        execution_constant = self._resolve_execution_method(node.value)
+        if execution_constant is not None:
+            self._execution_method_aliases[-1][node.target.id] = execution_constant
 
     def visit_Call(self, node: ast.Call) -> None:
+        if isinstance(node.func, ast.Name):
+            constant = self._lookup_scoped_alias(
+                node.func.id,
+                self._execution_method_aliases,
+            )
+            if constant is not None:
+                self._execution[constant].add(self._callsite)
         if isinstance(node.func, ast.Attribute):
             constant = self._resolve_policy(node.func.value)
             if constant is not None:
@@ -248,9 +264,30 @@ class _UsageVisitor(ast.NodeVisitor):
         ):
             return self._resolve_policy(expression.func.value)
         if isinstance(expression, ast.Name):
-            for aliases in reversed(self._lineage_identity_aliases):
-                if expression.id in aliases:
-                    return aliases[expression.id]
+            return self._lookup_scoped_alias(
+                expression.id,
+                self._lineage_identity_aliases,
+            )
+        return None
+
+    def _resolve_execution_method(self, expression: ast.expr) -> str | None:
+        if isinstance(expression, ast.Attribute) and expression.attr in EXECUTION_METHODS:
+            return self._resolve_policy(expression.value)
+        if isinstance(expression, ast.Name):
+            return self._lookup_scoped_alias(
+                expression.id,
+                self._execution_method_aliases,
+            )
+        return None
+
+    @staticmethod
+    def _lookup_scoped_alias(
+        name: str,
+        scopes: list[dict[str, str]],
+    ) -> str | None:
+        for aliases in reversed(scopes):
+            if name in aliases:
+                return aliases[name]
         return None
 
     def _resolve_policy(self, receiver: ast.expr) -> str | None:
