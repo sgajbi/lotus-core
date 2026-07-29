@@ -3269,10 +3269,11 @@ Most relevant current governance:
      must use the claim-owned target epoch rather than re-read a schedule-dependent current epoch.
      A newer epoch or source revision supersedes the active claim and returns the same job to
      `PENDING`; it cannot publish or fail over newer source material. Eligibility fails closed when
-     an authoritative snapshot is newer than the staged target. Success and failure writes must
-     repeat that authoritative-snapshot check atomically and, after a zero-row terminal write,
-     recheck supersession before reporting lost ownership; this closes the committed-snapshot /
-     pending-staging and terminal-write interleaving windows. Preserve one-round-trip
+     an authoritative snapshot is not yet materialized at equal or greater freshness in position
+     timeseries, including higher-epoch restatements and same-epoch valuation corrections. Success
+     and failure writes must repeat that authoritative-source check atomically and, after a zero-row
+     terminal write, recheck supersession before reporting lost ownership; this closes the
+     committed-snapshot / pending-staging and terminal-write interleaving windows. Preserve one-round-trip
      portfolio/date coalescing and expose `new`, `rearmed`, `superseded`, and `no_op` staging
      outcomes. Do not substitute correlation identity, timestamps, debounce, timeout increases, or
      Kafka arrival order for this database-backed source fence.

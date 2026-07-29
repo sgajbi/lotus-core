@@ -12,12 +12,13 @@ from portfolio_common.database_models import (
     PortfolioAggregationJob,
     PositionTimeseries,
 )
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import Session
 
 from src.services.portfolio_derived_state_service.app.domain.aggregation_jobs.models import (
     AggregationJobCompletionDisposition,
+    AggregationJobFailureDisposition,
     AggregationJobLease,
 )
 from src.services.portfolio_derived_state_service.app.infrastructure import (
@@ -29,6 +30,79 @@ PortfolioAggregationRepository = portfolio_aggregation_repository.PortfolioAggre
 TimeseriesGenerationRepository = timeseries_generation_repository.TimeseriesGenerationRepository
 
 pytestmark = pytest.mark.asyncio
+
+
+async def _seed_aggregation_fence_scope(
+    session: AsyncSession,
+    *,
+    portfolio_id: str,
+    security_id: str,
+    aggregation_date: date,
+) -> None:
+    session.add(
+        Portfolio(
+            portfolio_id=portfolio_id,
+            base_currency="USD",
+            open_date=date(2024, 1, 1),
+            risk_exposure="a",
+            investment_time_horizon="b",
+            portfolio_type="c",
+            booking_center_code="d",
+            client_id="e",
+            status="ACTIVE",
+        )
+    )
+    session.add(
+        Instrument(
+            security_id=security_id,
+            name="Aggregation Source Fence Instrument",
+            isin=f"US-{security_id}",
+            asset_class="EQUITY",
+            product_type="COMMON_STOCK",
+            currency="USD",
+        )
+    )
+    await session.flush()
+    session.add(
+        PortfolioAggregationJob(
+            portfolio_id=portfolio_id,
+            aggregation_date=aggregation_date,
+            status="PENDING",
+            target_epoch=0,
+            source_revision=1,
+        )
+    )
+    session.add(
+        DailyPositionSnapshot(
+            portfolio_id=portfolio_id,
+            security_id=security_id,
+            date=aggregation_date,
+            epoch=0,
+            quantity=Decimal("1"),
+            cost_basis=Decimal("1"),
+            cost_basis_local=Decimal("1"),
+            market_value=Decimal("1"),
+            valuation_status="VALUED_CURRENT",
+        )
+    )
+    session.add(
+        PositionTimeseries(
+            portfolio_id=portfolio_id,
+            security_id=security_id,
+            date=aggregation_date,
+            epoch=0,
+            bod_market_value=Decimal("1"),
+            bod_cashflow_position=Decimal("0"),
+            eod_cashflow_position=Decimal("0"),
+            bod_cashflow_portfolio=Decimal("0"),
+            eod_cashflow_portfolio=Decimal("0"),
+            eod_market_value=Decimal("1"),
+            fees=Decimal("0"),
+            quantity=Decimal("1"),
+            cost=Decimal("1"),
+        )
+    )
+    await session.commit()
 
 
 @pytest.fixture(scope="function")
@@ -342,69 +416,12 @@ async def test_newer_epoch_supersedes_claim_and_rearms_same_portfolio_day(
     portfolio_id = "P-AGG-EPOCH-FENCE"
     security_id = "SEC-AGG-EPOCH-FENCE"
     aggregation_date = date(2025, 8, 15)
-    async_db_session.add(
-        Portfolio(
-            portfolio_id=portfolio_id,
-            base_currency="USD",
-            open_date=date(2024, 1, 1),
-            risk_exposure="a",
-            investment_time_horizon="b",
-            portfolio_type="c",
-            booking_center_code="d",
-            client_id="e",
-            status="ACTIVE",
-        )
+    await _seed_aggregation_fence_scope(
+        async_db_session,
+        portfolio_id=portfolio_id,
+        security_id=security_id,
+        aggregation_date=aggregation_date,
     )
-    async_db_session.add(
-        Instrument(
-            security_id=security_id,
-            name="Aggregation Epoch Fence Instrument",
-            isin="US-AGG-EPOCH-FENCE",
-            asset_class="EQUITY",
-            product_type="COMMON_STOCK",
-            currency="USD",
-        )
-    )
-    await async_db_session.flush()
-    async_db_session.add(
-        PortfolioAggregationJob(
-            portfolio_id=portfolio_id,
-            aggregation_date=aggregation_date,
-            status="PENDING",
-            target_epoch=0,
-            source_revision=1,
-        )
-    )
-    async_db_session.add(
-        DailyPositionSnapshot(
-            portfolio_id=portfolio_id,
-            security_id=security_id,
-            date=aggregation_date,
-            epoch=0,
-            quantity=Decimal("1"),
-            cost_basis=Decimal("1"),
-            cost_basis_local=Decimal("1"),
-            valuation_status="VALUED_CURRENT",
-        )
-    )
-    async_db_session.add(
-        PositionTimeseries(
-            portfolio_id=portfolio_id,
-            security_id=security_id,
-            date=aggregation_date,
-            epoch=0,
-            bod_market_value=Decimal("1"),
-            bod_cashflow_position=Decimal("0"),
-            eod_cashflow_position=Decimal("0"),
-            bod_cashflow_portfolio=Decimal("0"),
-            eod_cashflow_portfolio=Decimal("0"),
-            eod_market_value=Decimal("1"),
-            fees=Decimal("0"),
-            quantity=Decimal("1"),
-            cost=Decimal("1"),
-        )
-    )
-    await async_db_session.commit()
 
     repository = PortfolioAggregationRepository(async_db_session)
     first_claim = (
@@ -492,3 +509,144 @@ async def test_newer_epoch_supersedes_claim_and_rearms_same_portfolio_day(
     assert second_claim.id == first_claim.id
     assert second_claim.target_epoch == 1
     assert second_claim.source_revision == 2
+
+
+@pytest.mark.lifecycle
+async def test_same_epoch_snapshot_corrections_requeue_success_and_failure(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    """Fence both terminal paths while corrected same-epoch staging is pending."""
+
+    portfolio_id = "P-AGG-SAME-EPOCH-FENCE"
+    security_id = "SEC-AGG-SAME-EPOCH-FENCE"
+    aggregation_date = date(2025, 8, 16)
+    await _seed_aggregation_fence_scope(
+        async_db_session,
+        portfolio_id=portfolio_id,
+        security_id=security_id,
+        aggregation_date=aggregation_date,
+    )
+    repository = PortfolioAggregationRepository(async_db_session)
+
+    first_claim = (
+        await repository.claim_eligible_jobs(
+            batch_size=1,
+            lease=AggregationJobLease(
+                owner="aggregation-runtime-same-epoch-success",
+                token="lease-token-same-epoch-success",
+                expires_at=datetime.now(UTC) + timedelta(minutes=5),
+            ),
+        )
+    )[0]
+    await async_db_session.commit()
+    await async_db_session.execute(
+        update(DailyPositionSnapshot)
+        .where(
+            DailyPositionSnapshot.portfolio_id == portfolio_id,
+            DailyPositionSnapshot.security_id == security_id,
+            DailyPositionSnapshot.date == aggregation_date,
+            DailyPositionSnapshot.epoch == 0,
+        )
+        .values(market_value=Decimal("2"), updated_at=func.now())
+    )
+    await async_db_session.commit()
+
+    completion = await repository.complete_or_requeue_job(
+        job_id=first_claim.id,
+        lease_token=first_claim.lease.token,
+        target_epoch=first_claim.target_epoch,
+        source_revision=first_claim.source_revision,
+    )
+    await async_db_session.commit()
+    assert completion is AggregationJobCompletionDisposition.REQUEUED
+
+    await async_db_session.execute(
+        update(PositionTimeseries)
+        .where(
+            PositionTimeseries.portfolio_id == portfolio_id,
+            PositionTimeseries.security_id == security_id,
+            PositionTimeseries.date == aggregation_date,
+            PositionTimeseries.epoch == 0,
+        )
+        .values(eod_market_value=Decimal("2"), updated_at=func.now())
+    )
+    await TimeseriesGenerationRepository(async_db_session).stage_aggregation_jobs(
+        portfolio_id,
+        [aggregation_date],
+        0,
+        "corr-same-epoch-one",
+    )
+    await async_db_session.commit()
+
+    second_claim = (
+        await repository.claim_eligible_jobs(
+            batch_size=1,
+            lease=AggregationJobLease(
+                owner="aggregation-runtime-same-epoch-failure",
+                token="lease-token-same-epoch-failure",
+                expires_at=datetime.now(UTC) + timedelta(minutes=5),
+            ),
+        )
+    )[0]
+    assert second_claim.target_epoch == 0
+    assert second_claim.source_revision == 2
+    await async_db_session.commit()
+    await async_db_session.execute(
+        update(DailyPositionSnapshot)
+        .where(
+            DailyPositionSnapshot.portfolio_id == portfolio_id,
+            DailyPositionSnapshot.security_id == security_id,
+            DailyPositionSnapshot.date == aggregation_date,
+            DailyPositionSnapshot.epoch == 0,
+        )
+        .values(market_value=Decimal("3"), updated_at=func.now())
+    )
+    await async_db_session.commit()
+
+    failure = await repository.fail_or_requeue_job(
+        job_id=second_claim.id,
+        lease_token=second_claim.lease.token,
+        target_epoch=second_claim.target_epoch,
+        source_revision=second_claim.source_revision,
+    )
+    await async_db_session.commit()
+    assert failure is AggregationJobFailureDisposition.REQUEUED
+
+    await async_db_session.execute(
+        update(PositionTimeseries)
+        .where(
+            PositionTimeseries.portfolio_id == portfolio_id,
+            PositionTimeseries.security_id == security_id,
+            PositionTimeseries.date == aggregation_date,
+            PositionTimeseries.epoch == 0,
+        )
+        .values(eod_market_value=Decimal("3"), updated_at=func.now())
+    )
+    await TimeseriesGenerationRepository(async_db_session).stage_aggregation_jobs(
+        portfolio_id,
+        [aggregation_date],
+        0,
+        "corr-same-epoch-two",
+    )
+    await async_db_session.commit()
+
+    final_claim = (
+        await repository.claim_eligible_jobs(
+            batch_size=1,
+            lease=AggregationJobLease(
+                owner="aggregation-runtime-same-epoch-final",
+                token="lease-token-same-epoch-final",
+                expires_at=datetime.now(UTC) + timedelta(minutes=5),
+            ),
+        )
+    )[0]
+    assert final_claim.target_epoch == 0
+    assert final_claim.source_revision == 3
+    final_completion = await repository.complete_or_requeue_job(
+        job_id=final_claim.id,
+        lease_token=final_claim.lease.token,
+        target_epoch=final_claim.target_epoch,
+        source_revision=final_claim.source_revision,
+    )
+    assert final_completion is AggregationJobCompletionDisposition.COMPLETE

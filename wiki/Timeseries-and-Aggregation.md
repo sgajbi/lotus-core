@@ -35,7 +35,9 @@ claim-owned epoch and terminal writes require the lease token and both source-id
 newer position epoch or same-epoch material revision arrives during processing, the existing
 portfolio/day job is requeued and the stale claim publishes nothing. Terminal success and failure
 also reject a newer authoritative snapshot even when its position-timeseries staging is still
-pending, then recheck supersession after a concurrent zero-row terminal write. This fence is distinct from
+pending. Freshness compares the authoritative snapshot with its matching position-timeseries row,
+so same-epoch valuation corrections are fenced as well as higher-epoch restatements. Terminal paths
+then recheck supersession after a concurrent zero-row write. This fence is distinct from
 `aggregation_revision`: source revision protects calculation input identity, while aggregation
 revision is the positive claim sequence published to reconciliation.
 

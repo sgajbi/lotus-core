@@ -27,12 +27,13 @@ while epoch-currentness remained `restated` / `STALE` until the E2E deadline.
 3. The migration backfills existing target epochs from portfolio-owned `position_state` so queued
    work does not regress to epoch zero during deployment.
 4. Claims carry both fields through the framework-free domain model and application command.
-5. Eligibility requires authoritative snapshots at or below the staged epoch and remains blocked
-   when a newer authoritative snapshot exists without a matching staging update.
+5. Eligibility requires each authoritative snapshot to have a matching position-timeseries row at
+   equal or greater materialization freshness. It remains blocked when either a higher-epoch
+   restatement or same-epoch valuation correction commits before the matching staging update.
 6. Calculation uses the claim-owned target epoch. The obsolete execution-time current-epoch query
    and its persistence surface were removed.
-7. Success and failure terminal writes compare lease token, target epoch, source revision, and the
-   absence of a newer authoritative snapshot. Superseded work returns to `PENDING` instead of
+7. Success and failure terminal writes compare lease token, target epoch, source revision, and
+   authoritative snapshot/materialization freshness. Superseded work returns to `PENDING` instead of
    publishing or failing the current job, including when a snapshot is committed before its
    position-timeseries staging update.
 8. A zero-row terminal write rechecks supersession before reporting lost ownership, closing the
@@ -78,8 +79,10 @@ because operator interpretation of aggregation staging metrics and job identity 
   `test_newer_epoch_supersedes_claim_and_rearms_same_portfolio_day`, 1 passed in 95.95 seconds;
 - review fix-forward proof now commits the newer snapshot independently before staging and verifies
   that the old claim is requeued rather than completed;
-- full aggregation repository integration proof: 5 passed in 75.01 seconds;
-- timeseries contract E2E proof: 4 passed in 77.65 seconds;
+- same-epoch correction proof commits two changed snapshots before their staging updates and proves
+  both success and failure paths requeue before the final refreshed claim completes;
+- full aggregation repository integration proof: 6 passed in 77.35 seconds;
+- timeseries contract E2E proof: 4 passed in 83.57 seconds;
 - no test timeout, assertion, partition, debounce, topology, or lock-order change.
 
 Remaining proof is protected PR review and final-head CI, exact-main validation, wiki

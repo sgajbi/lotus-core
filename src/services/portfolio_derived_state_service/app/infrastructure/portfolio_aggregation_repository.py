@@ -81,7 +81,7 @@ class PortfolioAggregationRepository(TimeseriesMarketDataReader):
             .where(
                 PortfolioAggregationJob.target_epoch == target_epoch,
                 PortfolioAggregationJob.source_revision == source_revision,
-                ~_newer_snapshot_than_claim_exists(target_epoch),
+                ~_unmaterialized_authoritative_snapshot_exists(target_epoch),
             )
             .values(
                 status="COMPLETE",
@@ -124,7 +124,7 @@ class PortfolioAggregationRepository(TimeseriesMarketDataReader):
             .where(
                 PortfolioAggregationJob.target_epoch == target_epoch,
                 PortfolioAggregationJob.source_revision == source_revision,
-                ~_newer_snapshot_than_claim_exists(target_epoch),
+                ~_unmaterialized_authoritative_snapshot_exists(target_epoch),
             )
             .values(
                 status="FAILED",
@@ -159,7 +159,7 @@ class PortfolioAggregationRepository(TimeseriesMarketDataReader):
                     PortfolioAggregationJob.target_epoch != target_epoch,
                     PortfolioAggregationJob.source_revision != source_revision,
                     PortfolioAggregationJob.failure_reason == AGGREGATION_REPROCESS_REQUESTED,
-                    _newer_snapshot_than_claim_exists(target_epoch),
+                    _unmaterialized_authoritative_snapshot_exists(target_epoch),
                 )
             )
             .values(
@@ -231,13 +231,15 @@ class PortfolioAggregationRepository(TimeseriesMarketDataReader):
         snapshot = DailyPositionSnapshot
         position_timeseries = PositionTimeseries
         authoritative_scope = _authoritative_snapshot_scope(job, snapshot)
-        completeness_ready = _authoritative_snapshot_exists(
-            job, snapshot, authoritative_scope
-        ) & ~_missing_position_timeseries_exists(
-            job,
-            snapshot,
-            position_timeseries,
-            authoritative_scope,
+        completeness_ready = (
+            _authoritative_snapshot_exists(job, snapshot, authoritative_scope)
+            & ~_missing_position_timeseries_exists(
+                job,
+                snapshot,
+                position_timeseries,
+                authoritative_scope,
+            )
+            & ~_unmaterialized_authoritative_snapshot_exists(job.target_epoch)
         )
         result_proxy = await self.db.execute(
             select(job.id)
@@ -480,13 +482,46 @@ def _expired_job_leases_statement(now: datetime):
     )
 
 
-def _newer_snapshot_than_claim_exists(target_epoch: int):
+def _unmaterialized_authoritative_snapshot_exists(target_epoch: int):
+    snapshot = aliased(DailyPositionSnapshot)
+    newer_snapshot = aliased(DailyPositionSnapshot)
+    position_timeseries = aliased(PositionTimeseries)
+    newer_snapshot_exists = (
+        select(1)
+        .where(
+            newer_snapshot.portfolio_id == PortfolioAggregationJob.portfolio_id,
+            newer_snapshot.security_id == snapshot.security_id,
+            newer_snapshot.date <= PortfolioAggregationJob.aggregation_date,
+            or_(
+                newer_snapshot.date > snapshot.date,
+                and_(
+                    newer_snapshot.date == snapshot.date,
+                    newer_snapshot.epoch > snapshot.epoch,
+                ),
+            ),
+        )
+        .correlate(PortfolioAggregationJob, snapshot)
+        .exists()
+    )
+    materialized_snapshot_exists = (
+        select(1)
+        .where(
+            position_timeseries.portfolio_id == PortfolioAggregationJob.portfolio_id,
+            position_timeseries.security_id == snapshot.security_id,
+            position_timeseries.date == snapshot.date,
+            position_timeseries.epoch == snapshot.epoch,
+            position_timeseries.updated_at >= snapshot.updated_at,
+        )
+        .correlate(PortfolioAggregationJob, snapshot)
+        .exists()
+    )
     return (
         select(1)
         .where(
-            DailyPositionSnapshot.portfolio_id == PortfolioAggregationJob.portfolio_id,
-            DailyPositionSnapshot.date <= PortfolioAggregationJob.aggregation_date,
-            DailyPositionSnapshot.epoch > target_epoch,
+            snapshot.portfolio_id == PortfolioAggregationJob.portfolio_id,
+            snapshot.date <= PortfolioAggregationJob.aggregation_date,
+            ~newer_snapshot_exists,
+            or_(snapshot.epoch > target_epoch, ~materialized_snapshot_exists),
         )
         .correlate(PortfolioAggregationJob)
         .exists()
