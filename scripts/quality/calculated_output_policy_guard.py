@@ -82,11 +82,34 @@ def _declarations(repo_root: Path) -> dict[str, PolicyDeclaration]:
     declarations: dict[str, PolicyDeclaration] = {}
     for path in sorted((repo_root / "src").rglob("*.py")):
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        constructor_aliases = {"CalculatedDecimalPolicy"}
         for statement in tree.body:
+            if isinstance(statement, ast.ImportFrom):
+                for imported in statement.names:
+                    if imported.name == "CalculatedDecimalPolicy":
+                        constructor_aliases.add(imported.asname or imported.name)
+                continue
             if not isinstance(statement, (ast.Assign, ast.AnnAssign)):
                 continue
             targets = statement.targets if isinstance(statement, ast.Assign) else [statement.target]
             value = statement.value
+            if (
+                len(targets) == 1
+                and isinstance(targets[0], ast.Name)
+                and not isinstance(
+                    value,
+                    ast.Call,
+                )
+            ):
+                target_name = targets[0].id
+                is_constructor_alias = (
+                    isinstance(value, ast.Name) and value.id in constructor_aliases
+                ) or (isinstance(value, ast.Attribute) and value.attr == "CalculatedDecimalPolicy")
+                if is_constructor_alias:
+                    constructor_aliases.add(target_name)
+                else:
+                    constructor_aliases.discard(target_name)
+                continue
             if (
                 value is None
                 or not isinstance(value, ast.Call)
@@ -94,7 +117,7 @@ def _declarations(repo_root: Path) -> dict[str, PolicyDeclaration]:
             ):
                 continue
             constructor = value.func.id if isinstance(value.func, ast.Name) else value.func.attr
-            if constructor != "CalculatedDecimalPolicy":
+            if constructor not in constructor_aliases:
                 continue
             if len(targets) != 1 or not isinstance(targets[0], ast.Name):
                 raise ValueError(f"{path}: calculated policy must use one named assignment")
@@ -124,40 +147,13 @@ def _usage(
     for path in sorted((repo_root / "src").rglob("*.py")):
         relative_path = path.relative_to(repo_root).as_posix()
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        aliases = _policy_aliases(tree, constants)
         _UsageVisitor(
             relative_path=relative_path,
             constants=constants,
-            aliases=aliases,
             execution=execution,
             lineage=lineage,
         ).visit(tree)
     return execution, lineage
-
-
-def _policy_aliases(tree: ast.Module, constants: set[str]) -> dict[str, str]:
-    aliases: dict[str, str] = {}
-    for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom):
-            for imported in node.names:
-                if imported.name in constants:
-                    aliases[imported.asname or imported.name] = imported.name
-            continue
-        if isinstance(node, ast.Assign) and len(node.targets) == 1:
-            target = node.targets[0]
-            value = node.value
-        elif isinstance(node, ast.AnnAssign):
-            target = node.target
-            value = node.value
-        else:
-            continue
-        if not isinstance(target, ast.Name):
-            continue
-        if isinstance(value, ast.Name) and (value.id in constants or value.id in aliases):
-            aliases[target.id] = aliases.get(value.id, value.id)
-        elif isinstance(value, ast.Attribute) and value.attr in constants:
-            aliases[target.id] = value.attr
-    return aliases
 
 
 class _UsageVisitor(ast.NodeVisitor):
@@ -166,67 +162,104 @@ class _UsageVisitor(ast.NodeVisitor):
         *,
         relative_path: str,
         constants: set[str],
-        aliases: dict[str, str],
         execution: dict[str, set[str]],
         lineage: dict[str, set[str]],
     ) -> None:
         self._relative_path = relative_path
         self._constants = constants
-        self._aliases = aliases
         self._execution = execution
         self._lineage = lineage
         self._scope: list[str] = []
-        self._lineage_identity_aliases: list[dict[str, str]] = [{}]
-        self._execution_method_aliases: list[dict[str, str]] = [{}]
+        self._policy_aliases: list[dict[str, str | None]] = [{}]
+        self._lineage_identity_aliases: list[dict[str, str | None]] = [{}]
+        self._execution_method_aliases: list[dict[str, str | None]] = [{}]
 
     @property
     def _callsite(self) -> str:
         scope = ".".join(self._scope) if self._scope else "<module>"
         return f"{self._relative_path}::{scope}"
 
-    def _visit_scope(self, node: ast.AST, name: str) -> None:
+    def _visit_scope(
+        self,
+        node: ast.AST,
+        name: str,
+        *,
+        shadowed_names: set[str] | None = None,
+    ) -> None:
+        shadows = shadowed_names or set()
         self._scope.append(name)
-        self._lineage_identity_aliases.append({})
-        self._execution_method_aliases.append({})
+        self._policy_aliases.append(dict.fromkeys(shadows))
+        self._lineage_identity_aliases.append(dict.fromkeys(shadows))
+        self._execution_method_aliases.append(dict.fromkeys(shadows))
         self.generic_visit(node)
         self._execution_method_aliases.pop()
         self._lineage_identity_aliases.pop()
+        self._policy_aliases.pop()
         self._scope.pop()
 
     def visit_ClassDef(self, node: ast.ClassDef) -> None:
         self._visit_scope(node, node.name)
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
-        self._visit_scope(node, node.name)
+        self._visit_scope(
+            node,
+            node.name,
+            shadowed_names=self._argument_names(node.args),
+        )
 
     def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
-        self._visit_scope(node, node.name)
+        self._visit_scope(
+            node,
+            node.name,
+            shadowed_names=self._argument_names(node.args),
+        )
 
     def visit_Lambda(self, node: ast.Lambda) -> None:
-        self._visit_scope(node, f"<lambda>@{node.lineno}")
+        self._visit_scope(
+            node,
+            f"<lambda>@{node.lineno}",
+            shadowed_names=self._argument_names(node.args),
+        )
+
+    @staticmethod
+    def _argument_names(arguments: ast.arguments) -> set[str]:
+        names = {
+            argument.arg
+            for argument in (*arguments.posonlyargs, *arguments.args, *arguments.kwonlyargs)
+        }
+        if arguments.vararg is not None:
+            names.add(arguments.vararg.arg)
+        if arguments.kwarg is not None:
+            names.add(arguments.kwarg.arg)
+        return names
+
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+        for imported in node.names:
+            if imported.name in self._constants:
+                self._policy_aliases[-1][imported.asname or imported.name] = imported.name
 
     def visit_Assign(self, node: ast.Assign) -> None:
         self.generic_visit(node)
+        policy_constant = self._resolve_policy(node.value)
+        lineage_constant = self._resolve_lineage_identity(node.value)
+        execution_constant = self._resolve_execution_method(node.value)
         for target in node.targets:
             if not isinstance(target, ast.Name):
                 continue
-            lineage_constant = self._resolve_lineage_identity(node.value)
-            if lineage_constant is not None:
-                self._lineage_identity_aliases[-1][target.id] = lineage_constant
-            execution_constant = self._resolve_execution_method(node.value)
-            if execution_constant is not None:
-                self._execution_method_aliases[-1][target.id] = execution_constant
+            self._policy_aliases[-1][target.id] = policy_constant
+            self._lineage_identity_aliases[-1][target.id] = lineage_constant
+            self._execution_method_aliases[-1][target.id] = execution_constant
 
     def visit_AnnAssign(self, node: ast.AnnAssign) -> None:
         self.generic_visit(node)
         if node.value is None or not isinstance(node.target, ast.Name):
             return
+        policy_constant = self._resolve_policy(node.value)
+        self._policy_aliases[-1][node.target.id] = policy_constant
         lineage_constant = self._resolve_lineage_identity(node.value)
-        if lineage_constant is not None:
-            self._lineage_identity_aliases[-1][node.target.id] = lineage_constant
+        self._lineage_identity_aliases[-1][node.target.id] = lineage_constant
         execution_constant = self._resolve_execution_method(node.value)
-        if execution_constant is not None:
-            self._execution_method_aliases[-1][node.target.id] = execution_constant
+        self._execution_method_aliases[-1][node.target.id] = execution_constant
 
     def visit_Call(self, node: ast.Call) -> None:
         if isinstance(node.func, ast.Name):
@@ -283,7 +316,7 @@ class _UsageVisitor(ast.NodeVisitor):
     @staticmethod
     def _lookup_scoped_alias(
         name: str,
-        scopes: list[dict[str, str]],
+        scopes: list[dict[str, str | None]],
     ) -> str | None:
         for aliases in reversed(scopes):
             if name in aliases:
@@ -292,7 +325,10 @@ class _UsageVisitor(ast.NodeVisitor):
 
     def _resolve_policy(self, receiver: ast.expr) -> str | None:
         if isinstance(receiver, ast.Name):
-            return receiver.id if receiver.id in self._constants else self._aliases.get(receiver.id)
+            for aliases in reversed(self._policy_aliases):
+                if receiver.id in aliases:
+                    return aliases[receiver.id]
+            return receiver.id if receiver.id in self._constants else None
         if isinstance(receiver, ast.Attribute) and receiver.attr in self._constants:
             return receiver.attr
         return None
