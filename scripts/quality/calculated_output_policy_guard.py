@@ -284,20 +284,27 @@ class _UsageVisitor(ast.NodeVisitor):
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
         for imported in node.names:
+            if imported.name == "*":
+                self._shadow_visible_aliases()
+                continue
+            local_name = imported.asname or imported.name
+            self._shadow_alias(local_name)
             if imported.name in self._constants:
-                self._policy_aliases[-1][imported.asname or imported.name] = imported.name
+                self._policy_aliases[-1][local_name] = imported.name
             if (
                 node.module == CALCULATION_LINEAGE_MODULE
                 or (node.level > 0 and node.module == "calculation_lineage")
             ) and imported.name == CALCULATION_LINEAGE_BUILDER:
-                self._lineage_builder_aliases[-1][imported.asname or imported.name] = "function"
+                self._lineage_builder_aliases[-1][local_name] = "function"
             if node.module == "portfolio_common.domain" and imported.name == "calculation_lineage":
-                self._lineage_builder_aliases[-1][imported.asname or imported.name] = "module"
+                self._lineage_builder_aliases[-1][local_name] = "module"
 
     def visit_Import(self, node: ast.Import) -> None:
         for imported in node.names:
+            local_name = imported.asname or imported.name.partition(".")[0]
+            self._shadow_alias(local_name)
             if imported.name == CALCULATION_LINEAGE_MODULE and imported.asname:
-                self._lineage_builder_aliases[-1][imported.asname] = "module"
+                self._lineage_builder_aliases[-1][local_name] = "module"
 
     def visit_If(self, node: ast.If) -> None:
         predicate_usage = self._visit_control_expression(node.test)
@@ -484,6 +491,18 @@ class _UsageVisitor(ast.NodeVisitor):
         self._lineage_identity_aliases[-1][name] = None
         self._execution_method_aliases[-1][name] = None
         self._lineage_builder_aliases[-1][name] = None
+
+    def _shadow_visible_aliases(self) -> None:
+        visible_names = set(self._constants)
+        for scoped_aliases in (
+            self._policy_aliases,
+            self._lineage_identity_aliases,
+            self._execution_method_aliases,
+            self._lineage_builder_aliases,
+        ):
+            visible_names.update(name for aliases in scoped_aliases for name in aliases)
+        for name in visible_names:
+            self._shadow_alias(name)
 
     def _visit_branch(
         self,

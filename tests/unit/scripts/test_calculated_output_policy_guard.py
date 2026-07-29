@@ -711,6 +711,160 @@ def test_guard_resolves_imported_and_qualified_policy_aliases(
     assert findings == ()
 
 
+@pytest.mark.parametrize(
+    ("local_name", "rebind_line"),
+    [
+        ("tracked", "from unrelated import replacement as tracked"),
+        ("tracked", "import unrelated as tracked"),
+        ("replacement", "from unrelated import replacement"),
+        ("unrelated", "import unrelated.replacement"),
+        ("tracked", "from unrelated import *"),
+    ],
+)
+@pytest.mark.parametrize(
+    "alias_kind",
+    ["policy_receiver", "lineage_identity", "execution_method", "lineage_builder"],
+)
+def test_guard_invalidates_every_alias_kind_rebound_by_import(
+    tmp_path: Path,
+    local_name: str,
+    rebind_line: str,
+    alias_kind: str,
+) -> None:
+    _write_policy(tmp_path, used=False)
+    setup_and_use = {
+        "policy_receiver": (
+            f"{local_name} = TEST_LEDGER_OUTPUT_V1",
+            f"{local_name}.normalize(Decimal('1'), field_name='value')",
+        ),
+        "lineage_identity": (
+            f"{local_name} = TEST_LEDGER_OUTPUT_V1.lineage_identity()",
+            "TEST_LEDGER_OUTPUT_V1.normalize(Decimal('1'), field_name='value')\n"
+            "build_calculation_lineage("
+            f"numeric_output_policy={local_name})",
+        ),
+        "execution_method": (
+            f"{local_name} = TEST_LEDGER_OUTPUT_V1.normalize",
+            f"{local_name}(Decimal('1'), field_name='value')",
+        ),
+        "lineage_builder": (
+            f"{local_name} = build_calculation_lineage",
+            "TEST_LEDGER_OUTPUT_V1.normalize(Decimal('1'), field_name='value')\n"
+            f"{local_name}("
+            "numeric_output_policy=TEST_LEDGER_OUTPUT_V1.lineage_identity())",
+        ),
+    }
+    setup, use = setup_and_use[alias_kind]
+    (tmp_path / "src" / "owner" / "consumer.py").write_text(
+        "from decimal import Decimal\n"
+        "from portfolio_common.domain.calculation_lineage import build_calculation_lineage\n"
+        "from owner.numeric_policy import TEST_LEDGER_OUTPUT_V1\n"
+        f"{setup}\n"
+        f"{rebind_line}\n"
+        f"{use}\n",
+        encoding="utf-8",
+    )
+
+    findings = evaluate(
+        tmp_path,
+        _contract(
+            tmp_path,
+            lineage_binding="not-exposed"
+            if alias_kind in {"policy_receiver", "execution_method"}
+            else "required",
+        ),
+    )
+
+    if alias_kind in {"policy_receiver", "execution_method"} or rebind_line.endswith("import *"):
+        assert "TEST_LEDGER_OUTPUT_V1: no execution consumer found" in findings
+        assert not any("lineage gap" in finding for finding in findings)
+    else:
+        assert (
+            "TEST_LEDGER_OUTPUT_V1: unclassified lineage gap at src/owner/consumer.py::<module>"
+        ) in findings
+        assert "TEST_LEDGER_OUTPUT_V1: required lineage binding is incomplete" in findings
+
+
+@pytest.mark.parametrize(
+    ("recognized_import", "execution"),
+    [
+        (
+            "from owner.numeric_policy import TEST_LEDGER_OUTPUT_V1 as rebound",
+            "rebound.normalize(Decimal('1'), field_name='value')",
+        ),
+        (
+            "from owner.numeric_policy import TEST_LEDGER_OUTPUT_V1",
+            "TEST_LEDGER_OUTPUT_V1.normalize(Decimal('1'), field_name='value')",
+        ),
+    ],
+)
+def test_guard_installs_recognized_policy_binding_after_import_invalidation(
+    tmp_path: Path,
+    recognized_import: str,
+    execution: str,
+) -> None:
+    _write_policy(tmp_path, used=False)
+    local_name = "rebound" if recognized_import.endswith(" as rebound") else "TEST_LEDGER_OUTPUT_V1"
+    (tmp_path / "src" / "owner" / "consumer.py").write_text(
+        "from decimal import Decimal\n"
+        f"{local_name} = unrelated_policy\n"
+        f"{recognized_import}\n"
+        f"{execution}\n",
+        encoding="utf-8",
+    )
+
+    assert (
+        evaluate(
+            tmp_path,
+            _contract(
+                tmp_path,
+                lineage_binding="not-exposed",
+                lineage_gap_callsites=["src/owner/consumer.py::<module>"],
+            ),
+        )
+        == ()
+    )
+
+
+@pytest.mark.parametrize(
+    ("recognized_import", "builder_call"),
+    [
+        (
+            "from portfolio_common.domain.calculation_lineage "
+            "import build_calculation_lineage as rebound",
+            "rebound",
+        ),
+        (
+            "from portfolio_common.domain.calculation_lineage import build_calculation_lineage",
+            "build_calculation_lineage",
+        ),
+        (
+            "import portfolio_common.domain.calculation_lineage as rebound",
+            "rebound.build_calculation_lineage",
+        ),
+    ],
+)
+def test_guard_installs_recognized_lineage_builder_after_import_invalidation(
+    tmp_path: Path,
+    recognized_import: str,
+    builder_call: str,
+) -> None:
+    _write_policy(tmp_path, used=False)
+    local_name = "rebound" if "rebound" in recognized_import else "build_calculation_lineage"
+    (tmp_path / "src" / "owner" / "consumer.py").write_text(
+        "from decimal import Decimal\n"
+        "from owner.numeric_policy import TEST_LEDGER_OUTPUT_V1\n"
+        f"{local_name} = unrelated_builder\n"
+        f"{recognized_import}\n"
+        "TEST_LEDGER_OUTPUT_V1.normalize(Decimal('1'), field_name='value')\n"
+        f"{builder_call}("
+        "numeric_output_policy=TEST_LEDGER_OUTPUT_V1.lineage_identity())\n",
+        encoding="utf-8",
+    )
+
+    assert evaluate(tmp_path, _contract(tmp_path)) == ()
+
+
 def test_guard_does_not_hide_unbound_import_alias_beside_bound_consumer(
     tmp_path: Path,
 ) -> None:
