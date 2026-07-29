@@ -22,7 +22,8 @@ transaction and row-lock lifetime for the selected outbox rows.
   1. a short claim transaction that assigns a per-batch claim token and lease,
   2. Kafka publish and flush outside the database transaction,
   3. a short result transaction that only updates rows still carrying the matching claim token.
-- Added configurable `OUTBOX_DISPATCHER_CLAIM_LEASE_SECONDS` with a 60-second default.
+- Added configurable `OUTBOX_DISPATCHER_CLAIM_LEASE_SECONDS`; its initial 60-second default was
+  superseded by CR-1664's 130-second delivery-timeout-safe default.
 - Cleared claim fields on successful, retryable-failure, and terminal-failure result updates.
 
 ## Expected Improvement
