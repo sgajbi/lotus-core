@@ -276,6 +276,33 @@ class _UsageVisitor(ast.NodeVisitor):
         else_state = self._visit_branch(incoming, node.orelse) if node.orelse else incoming
         self._restore_alias_state(self._join_alias_states(body_state, else_state))
 
+    def visit_IfExp(self, node: ast.IfExp) -> None:
+        self.visit(node.test)
+        incoming = self._current_alias_state()
+        body_state = self._visit_expression_branch(incoming, node.body)
+        else_state = self._visit_expression_branch(incoming, node.orelse)
+        self._restore_alias_state(self._join_alias_states(body_state, else_state))
+
+    def visit_BoolOp(self, node: ast.BoolOp) -> None:
+        incoming = self._current_alias_state()
+        exit_states = [incoming]
+        for value in node.values:
+            exit_states.append(self._visit_expression_branch(incoming, value))
+        self._restore_alias_state(self._join_alias_states(*exit_states))
+
+    def _visit_expression_branch(
+        self,
+        incoming: tuple[dict[str, str | None], ...],
+        expression: ast.expr,
+    ) -> tuple[dict[str, str | None], ...]:
+        self._restore_alias_state(incoming)
+        self._branch_usage.append((set(), set()))
+        self.visit(expression)
+        execution, lineage = self._branch_usage.pop()
+        for constant in execution - lineage:
+            self._control_flow_gaps[constant].add(self._callsite)
+        return self._current_alias_state()
+
     def visit_For(self, node: ast.For) -> None:
         self.visit(node.iter)
         self._visit_loop(node)
@@ -303,7 +330,11 @@ class _UsageVisitor(ast.NodeVisitor):
 
     def _visit_try(self, node: ast.Try | ast.TryStar) -> None:
         incoming = self._current_alias_state()
-        body_state = self._visit_branch(incoming, node.body)
+        body_state = self._visit_try_body(
+            incoming,
+            node.body,
+            has_exceptional_exit=bool(node.handlers),
+        )
         completed_state = self._visit_branch(body_state, node.orelse) if node.orelse else body_state
         exit_states = [incoming, completed_state]
         for handler in node.handlers:
@@ -322,6 +353,36 @@ class _UsageVisitor(ast.NodeVisitor):
         self._restore_alias_state(self._join_alias_states(*exit_states))
         for statement in node.finalbody:
             self.visit(statement)
+
+    def _visit_try_body(
+        self,
+        incoming: tuple[dict[str, str | None], ...],
+        statements: list[ast.stmt],
+        *,
+        has_exceptional_exit: bool,
+    ) -> tuple[dict[str, str | None], ...]:
+        self._restore_alias_state(incoming)
+        self._branch_usage.append((set(), set()))
+        prior_execution: set[str] = set()
+        prior_lineage: set[str] = set()
+        for index, statement in enumerate(statements):
+            if index > 0 and has_exceptional_exit:
+                for constant in prior_execution - prior_lineage:
+                    self._terminal_control_flow_gaps[constant].add(self._callsite)
+            self._branch_usage.append((set(), set()))
+            self.visit(statement)
+            statement_execution, statement_lineage = self._branch_usage.pop()
+            prior_execution.update(statement_execution)
+            prior_lineage.update(statement_lineage)
+        execution, lineage = self._branch_usage.pop()
+        for constant in execution - lineage:
+            gaps = (
+                self._terminal_control_flow_gaps
+                if self._branch_terminates(statements)
+                else self._control_flow_gaps
+            )
+            gaps[constant].add(self._callsite)
+        return self._current_alias_state()
 
     def visit_Match(self, node: ast.Match) -> None:
         self.visit(node.subject)
