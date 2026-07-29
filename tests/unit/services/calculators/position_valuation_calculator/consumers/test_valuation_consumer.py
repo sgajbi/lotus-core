@@ -505,8 +505,102 @@ async def test_valuation_processor_marks_snapshot_unvalued_when_price_is_missing
 
     persisted_snapshot = mock_valuation_repo.upsert_daily_snapshot.call_args.args[0]
     assert persisted_snapshot.valuation_status == "UNVALUED"
+    assert persisted_snapshot.market_value is None
+    assert persisted_snapshot.market_value_local is None
     mock_valuation_repo.update_job_status.assert_awaited_once()
+    mock_dependencies["valuation_receipt_repo"].delete.assert_awaited_once_with(snapshot_id=93)
+    mock_dependencies["valuation_receipt_repo"].upsert.assert_not_awaited()
     mock_dependencies["outbox_repo"].create_outbox_event.assert_awaited_once()
+
+
+async def test_valuation_processor_values_flat_position_without_market_price(
+    mock_event: PortfolioValuationRequiredEvent,
+    mock_dependencies: dict,
+) -> None:
+    mock_valuation_repo = mock_dependencies["valuation_repo"]
+    mock_dependencies["idempotency_repo"].claim_event_processing.return_value = True
+    mock_valuation_repo.get_last_position_history_before_date.return_value = PositionHistory(
+        quantity=Decimal("0"),
+        cost_basis=Decimal("0"),
+        cost_basis_local=Decimal("0"),
+    )
+    mock_valuation_repo.get_instrument.return_value = Instrument(
+        currency="USD",
+        security_id=mock_event.security_id,
+    )
+    mock_valuation_repo.get_portfolio.return_value = Portfolio(
+        base_currency="USD",
+        portfolio_id=mock_event.portfolio_id,
+    )
+    mock_valuation_repo.get_latest_price_for_position.return_value = None
+
+    def persist_snapshot(snapshot):
+        snapshot.id = 94
+        return snapshot
+
+    mock_valuation_repo.upsert_daily_snapshot.side_effect = persist_snapshot
+
+    await mock_dependencies["processor"].process_valid_event(
+        mock_event,
+        "valuation.job.requested-0-94",
+        "processor-corr-id",
+    )
+
+    persisted_snapshot = mock_valuation_repo.upsert_daily_snapshot.call_args.args[0]
+    assert persisted_snapshot.market_price is None
+    assert persisted_snapshot.market_value == Decimal("0")
+    assert persisted_snapshot.market_value_local == Decimal("0")
+    assert persisted_snapshot.unrealized_gain_loss == Decimal("0")
+    assert persisted_snapshot.unrealized_gain_loss_local == Decimal("0")
+    assert persisted_snapshot.unrealized_price_gain_loss == Decimal("0")
+    assert persisted_snapshot.unrealized_fx_gain_loss == Decimal("0")
+    assert persisted_snapshot.valuation_status == "VALUED_CURRENT"
+    receipt = mock_dependencies["valuation_receipt_repo"].upsert.await_args.kwargs["receipt"]
+    assert receipt.snapshot_identity.security_id == mock_event.security_id
+    assert receipt.supportability.value == "LEGACY_UNSCOPED"
+    mock_dependencies["valuation_receipt_repo"].delete.assert_not_awaited()
+    mock_dependencies["outbox_repo"].create_outbox_event.assert_awaited_once()
+
+
+async def test_valuation_processor_does_not_zero_value_residual_cost_without_price(
+    mock_event: PortfolioValuationRequiredEvent,
+    mock_dependencies: dict,
+) -> None:
+    mock_valuation_repo = mock_dependencies["valuation_repo"]
+    mock_dependencies["idempotency_repo"].claim_event_processing.return_value = True
+    mock_valuation_repo.get_last_position_history_before_date.return_value = PositionHistory(
+        quantity=Decimal("0"),
+        cost_basis=Decimal("1"),
+        cost_basis_local=Decimal("1"),
+    )
+    mock_valuation_repo.get_instrument.return_value = Instrument(
+        currency="USD",
+        security_id=mock_event.security_id,
+    )
+    mock_valuation_repo.get_portfolio.return_value = Portfolio(
+        base_currency="USD",
+        portfolio_id=mock_event.portfolio_id,
+    )
+    mock_valuation_repo.get_latest_price_for_position.return_value = None
+
+    def persist_snapshot(snapshot):
+        snapshot.id = 95
+        return snapshot
+
+    mock_valuation_repo.upsert_daily_snapshot.side_effect = persist_snapshot
+
+    await mock_dependencies["processor"].process_valid_event(
+        mock_event,
+        "valuation.job.requested-0-95",
+        "processor-corr-id",
+    )
+
+    persisted_snapshot = mock_valuation_repo.upsert_daily_snapshot.call_args.args[0]
+    assert persisted_snapshot.valuation_status == "UNVALUED"
+    assert persisted_snapshot.market_value is None
+    assert persisted_snapshot.market_value_local is None
+    mock_dependencies["valuation_receipt_repo"].delete.assert_awaited_once_with(snapshot_id=95)
+    mock_dependencies["valuation_receipt_repo"].upsert.assert_not_awaited()
 
 
 async def test_valuation_processor_marks_snapshot_stale_when_price_date_precedes_valuation_date(

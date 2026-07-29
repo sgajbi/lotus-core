@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import TYPE_CHECKING, Any, Protocol
 
 from portfolio_common.config import KAFKA_VALUATION_SNAPSHOT_PERSISTED_TOPIC
@@ -76,6 +77,7 @@ VALUATION_VALUED_CURRENT = "VALUED_CURRENT"
 VALUATION_VALUED_STALE = "VALUED_STALE"
 VALUATION_JOB_COMPLETE = "COMPLETE"
 VALUATION_JOB_SKIPPED_NO_POSITION = "SKIPPED_NO_POSITION"
+ZERO = Decimal("0")
 
 
 def _normalize_currency_code(value: object) -> str:
@@ -408,6 +410,15 @@ class ValuationJobProcessor:
         price: MarketPrice | None,
     ) -> ValuationSnapshotResult:
         if not price:
+            if self._is_flat_position(snapshot):
+                self._apply_flat_position_valuation(snapshot)
+                return ValuationSnapshotResult(
+                    snapshot=snapshot,
+                    job_failure_reason=None,
+                    receipt=build_legacy_valuation_receipt(
+                        snapshot_identity=_snapshot_identity(snapshot)
+                    ),
+                )
             snapshot.valuation_status = VALUATION_UNVALUED
             return ValuationSnapshotResult(snapshot=snapshot, job_failure_reason=None)
 
@@ -459,6 +470,28 @@ class ValuationJobProcessor:
             reason="valuation_logic_failed",
         ).inc()
         return ValuationSnapshotResult(snapshot=snapshot, job_failure_reason=failure_reason)
+
+    @staticmethod
+    def _is_flat_position(snapshot: DailyPositionSnapshot) -> bool:
+        """Return whether a quote-independent zero valuation is fully supported."""
+
+        return (
+            snapshot.quantity == ZERO
+            and snapshot.cost_basis == ZERO
+            and snapshot.cost_basis_local == ZERO
+        )
+
+    @staticmethod
+    def _apply_flat_position_valuation(snapshot: DailyPositionSnapshot) -> None:
+        """Persist an exact zero valuation without fabricating price authority."""
+
+        snapshot.market_value = ZERO
+        snapshot.market_value_local = ZERO
+        snapshot.unrealized_gain_loss = ZERO
+        snapshot.unrealized_gain_loss_local = ZERO
+        snapshot.unrealized_price_gain_loss = ZERO
+        snapshot.unrealized_fx_gain_loss = ZERO
+        snapshot.valuation_status = VALUATION_VALUED_CURRENT
 
     async def _value_authoritative_snapshot(
         self,
