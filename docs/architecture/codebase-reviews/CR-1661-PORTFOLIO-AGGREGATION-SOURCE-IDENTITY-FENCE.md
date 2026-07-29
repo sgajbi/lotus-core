@@ -94,7 +94,14 @@ because operator interpretation of aggregation staging metrics and job identity 
   of the protected `critical-lifecycle-db` suite;
 - full aggregation repository integration proof: 7 passed in 88.22 seconds;
 - timeseries contract E2E proof: 4 passed in 83.81 seconds;
+- PR #847 merged by the repository-approved rebase method as main SHA
+  `bd69c967a945b2e86b653750f4b919331138f2ff`; exact-main run `30444124515` then exposed two
+  older full-integration fixtures that created epoch-zero jobs beside epoch-one authoritative
+  state. The production fail-closed eligibility fence correctly rejected them. Both fixtures now
+  declare `target_epoch=1`, assert the claimed epoch, and the affected PostgreSQL module passes
+  `8 passed in 62.06 seconds`;
 - no test timeout, assertion, partition, debounce, topology, or lock-order change.
 
-Remaining proof is protected PR review and final-head CI, exact-main validation, wiki
-publication/parity, issue evidence, and branch/worktree reconciliation.
+The source wiki was published after PR #847 at wiki commit `257f6b3` with strict zero-diff parity.
+Current exact-main validation, issue closure, and branch/worktree reconciliation evidence is
+maintained in GitHub issue #490 so this review record does not preserve a stale lifecycle label.

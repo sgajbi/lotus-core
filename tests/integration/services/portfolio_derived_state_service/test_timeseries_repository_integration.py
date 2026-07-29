@@ -482,7 +482,10 @@ async def test_claim_eligible_jobs_accepts_mixed_latest_epochs_per_security(
         )
         session.add(
             PortfolioAggregationJob(
-                portfolio_id=portfolio_id, aggregation_date=a_date, status="PENDING"
+                portfolio_id=portfolio_id,
+                aggregation_date=a_date,
+                status="PENDING",
+                target_epoch=1,
             )
         )
         session.add(
@@ -516,6 +519,7 @@ async def test_claim_eligible_jobs_accepts_mixed_latest_epochs_per_security(
 
     assert len(claimed_jobs) == 1
     assert claimed_jobs[0].aggregation_date == a_date
+    assert claimed_jobs[0].target_epoch == 1
 
 
 async def test_claim_eligible_jobs_claims_all_complete_days_without_history_dependency(
@@ -659,7 +663,10 @@ async def test_claim_eligible_jobs_does_not_need_prior_day_when_current_epoch_ha
         )
         session.add(
             PortfolioAggregationJob(
-                portfolio_id=portfolio_id, aggregation_date=target_day, status="PENDING"
+                portfolio_id=portfolio_id,
+                aggregation_date=target_day,
+                status="PENDING",
+                target_epoch=1,
             )
         )
         session.add(
@@ -693,6 +700,7 @@ async def test_claim_eligible_jobs_does_not_need_prior_day_when_current_epoch_ha
 
     assert len(claimed_jobs) == 1
     assert claimed_jobs[0].aggregation_date == target_day
+    assert claimed_jobs[0].target_epoch == 1
 
 
 async def test_get_all_position_timeseries_for_date_returns_one_authoritative_asof_row_per_security(
