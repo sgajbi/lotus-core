@@ -241,6 +241,71 @@ def test_guard_rejects_execution_and_lineage_split_across_branches(
 
 
 @pytest.mark.parametrize(
+    "expression",
+    [
+        (
+            "TEST_LEDGER_OUTPUT_V1.normalize(Decimal('1'), field_name='value') "
+            "if execute_output else build_calculation_lineage("
+            "numeric_output_policy=TEST_LEDGER_OUTPUT_V1.lineage_identity())"
+        ),
+        (
+            "TEST_LEDGER_OUTPUT_V1.normalize(Decimal('1'), field_name='value') "
+            "or build_calculation_lineage("
+            "numeric_output_policy=TEST_LEDGER_OUTPUT_V1.lineage_identity())"
+        ),
+    ],
+)
+def test_guard_rejects_execution_and_lineage_split_across_expression_exits(
+    tmp_path: Path,
+    expression: str,
+) -> None:
+    _write_policy(tmp_path, used=False)
+    (tmp_path / "src" / "owner" / "consumer.py").write_text(
+        "from decimal import Decimal\n"
+        "from portfolio_common.domain.calculation_lineage import build_calculation_lineage\n"
+        "from owner.numeric_policy import TEST_LEDGER_OUTPUT_V1\n"
+        "def calculate(execute_output):\n"
+        f"    return {expression}\n",
+        encoding="utf-8",
+    )
+
+    findings = evaluate(tmp_path, _contract(tmp_path))
+
+    assert (
+        "TEST_LEDGER_OUTPUT_V1: unclassified lineage gap at src/owner/consumer.py::calculate"
+    ) in findings
+    assert "TEST_LEDGER_OUTPUT_V1: required lineage binding is incomplete" in findings
+
+
+def test_guard_rejects_exceptional_exit_between_execution_and_lineage(
+    tmp_path: Path,
+) -> None:
+    _write_policy(tmp_path, used=False)
+    (tmp_path / "src" / "owner" / "consumer.py").write_text(
+        "from decimal import Decimal\n"
+        "from portfolio_common.domain.calculation_lineage import build_calculation_lineage\n"
+        "from owner.numeric_policy import TEST_LEDGER_OUTPUT_V1\n"
+        "def calculate():\n"
+        "    try:\n"
+        "        value = TEST_LEDGER_OUTPUT_V1.normalize("
+        "Decimal('1'), field_name='value')\n"
+        "        fallible_operation()\n"
+        "        return build_calculation_lineage("
+        "numeric_output_policy=TEST_LEDGER_OUTPUT_V1.lineage_identity())\n"
+        "    except Exception:\n"
+        "        return value\n",
+        encoding="utf-8",
+    )
+
+    findings = evaluate(tmp_path, _contract(tmp_path))
+
+    assert (
+        "TEST_LEDGER_OUTPUT_V1: unclassified lineage gap at src/owner/consumer.py::calculate"
+    ) in findings
+    assert "TEST_LEDGER_OUTPUT_V1: required lineage binding is incomplete" in findings
+
+
+@pytest.mark.parametrize(
     ("import_line", "builder"),
     [
         (
@@ -365,6 +430,8 @@ def test_guard_accepts_same_lineage_identity_on_every_conditional_exit(
         (
             "try:\n"
             "        identity = TEST_LEDGER_OUTPUT_V1.lineage_identity()\n"
+            "        value = TEST_LEDGER_OUTPUT_V1.normalize("
+            "Decimal('2'), field_name='value')\n"
             "    except:\n"
             "        pass\n"
         ),
@@ -380,6 +447,11 @@ def test_guard_accepts_same_lineage_identity_on_every_conditional_exit(
             "            identity = TEST_LEDGER_OUTPUT_V1.lineage_identity()\n"
             "            value = TEST_LEDGER_OUTPUT_V1.normalize("
             "Decimal('2'), field_name='value')\n"
+        ),
+        (
+            "match lineage_mode:\n"
+            "        case 'expose':\n"
+            "            identity = TEST_LEDGER_OUTPUT_V1.lineage_identity()\n"
         ),
     ],
 )
