@@ -573,7 +573,7 @@ VALUATION_JOBS_FAILED_TOTAL = Counter(
 VALUATION_QUOTE_AUTHORITY_PATH_TOTAL = Counter(
     "valuation_quote_authority_path_total",
     "Total valuation executions routed by explicit quote-authority posture.",
-    labelnames=("path", "reason"),
+    labelnames=("mode", "reason"),
 )
 
 VALUATION_SCHEDULER_POLL_DURATION_SECONDS = Histogram(
