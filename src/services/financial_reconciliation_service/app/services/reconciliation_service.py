@@ -19,6 +19,7 @@ from portfolio_common.runtime_providers import (
 from ..adapters.reconciliation_finding_mapper import reconciliation_finding_to_orm
 from ..domain.reconciliation_policies import (
     PositionValuationEvidence,
+    PositionValuationReceiptEvidence,
     ReconciliationFinding,
     build_reconciliation_summary,
     position_valuation_reconciliation_findings,
@@ -518,7 +519,7 @@ class ReconciliationService:
         )
         domain_findings: list[ReconciliationFinding] = []
         examined = 0
-        for snapshot, instrument, _portfolio in rows:
+        for snapshot, instrument, _portfolio, receipt in rows:
             examined += 1
             domain_findings.extend(
                 position_valuation_reconciliation_findings(
@@ -533,6 +534,17 @@ class ReconciliationService:
                         cost_basis_local=snapshot.cost_basis_local,
                         unrealized_gain_loss_local=snapshot.unrealized_gain_loss_local,
                         product_type=instrument.product_type,
+                        valuation_receipt=(
+                            PositionValuationReceiptEvidence(
+                                supportability=receipt.supportability,
+                                policy_id=receipt.policy_id,
+                                policy_version=receipt.policy_version,
+                                quote_basis=receipt.quote_basis,
+                                receipt_hash=receipt.receipt_hash,
+                            )
+                            if receipt is not None
+                            else None
+                        ),
                     ),
                     tolerance=tolerance,
                 )

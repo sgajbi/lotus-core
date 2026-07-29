@@ -9,6 +9,7 @@ from portfolio_common.database_models import (
     Cashflow,
     CashflowRule,
     DailyPositionSnapshot,
+    DailyPositionValuationReceiptRecord,
     FinancialReconciliationFinding,
     FinancialReconciliationRun,
     FxRate,
@@ -204,9 +205,18 @@ class ReconciliationRepository:
                 )
             ranked_snapshot_rows = ranked_snapshot_rows.subquery()
         stmt = (
-            select(DailyPositionSnapshot, Instrument, Portfolio)
+            select(
+                DailyPositionSnapshot,
+                Instrument,
+                Portfolio,
+                DailyPositionValuationReceiptRecord,
+            )
             .join(Instrument, instrument_security_id == snapshot_security_id)
             .join(Portfolio, Portfolio.portfolio_id == DailyPositionSnapshot.portfolio_id)
+            .outerjoin(
+                DailyPositionValuationReceiptRecord,
+                DailyPositionValuationReceiptRecord.snapshot_id == DailyPositionSnapshot.id,
+            )
             .where(
                 DailyPositionSnapshot.market_price.is_not(None),
                 DailyPositionSnapshot.market_value_local.is_not(None),

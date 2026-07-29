@@ -4,6 +4,7 @@ from decimal import Decimal
 from services.financial_reconciliation_service.app.domain.reconciliation_policies import (
     DEFAULT_VALUE_TOLERANCE,
     PositionValuationEvidence,
+    PositionValuationReceiptEvidence,
     build_reconciliation_summary,
     expected_market_value_local,
     position_valuation_reconciliation_findings,
@@ -79,6 +80,63 @@ def test_position_valuation_policy_respects_bond_percent_of_par_pricing() -> Non
 
     assert market_value == Decimal("182430.0")
     assert findings == []
+
+
+def test_authoritative_unit_price_receipt_bypasses_legacy_bond_heuristic() -> None:
+    findings = position_valuation_reconciliation_findings(
+        evidence=PositionValuationEvidence(
+            portfolio_id="PORT-BOND",
+            security_id="BOND-UNIT",
+            business_date=date(2026, 3, 8),
+            epoch=0,
+            quantity=Decimal("10"),
+            market_price=Decimal("100"),
+            market_value_local=Decimal("1000"),
+            cost_basis_local=Decimal("10000"),
+            unrealized_gain_loss_local=Decimal("-9000"),
+            product_type="BOND",
+            valuation_receipt=PositionValuationReceiptEvidence(
+                supportability="SUPPORTED",
+                policy_id="UNIT_PRICE_MARKET_VALUE",
+                policy_version=1,
+                quote_basis="UNIT_PRICE",
+                receipt_hash="a" * 64,
+            ),
+        ),
+        tolerance=Decimal("0.0001"),
+    )
+
+    assert findings == []
+
+
+def test_invalid_authoritative_receipt_fails_closed_without_legacy_heuristic() -> None:
+    findings = position_valuation_reconciliation_findings(
+        evidence=PositionValuationEvidence(
+            portfolio_id="PORT-BOND",
+            security_id="BOND-UNSUPPORTED",
+            business_date=date(2026, 3, 8),
+            epoch=0,
+            quantity=Decimal("10"),
+            market_price=Decimal("100"),
+            market_value_local=Decimal("10000"),
+            cost_basis_local=Decimal("10000"),
+            unrealized_gain_loss_local=Decimal("0"),
+            product_type="BOND",
+            valuation_receipt=PositionValuationReceiptEvidence(
+                supportability="SUPPORTED",
+                policy_id="UNIT_PRICE_MARKET_VALUE",
+                policy_version=1,
+                quote_basis="PERCENT_OF_PRINCIPAL_CLEAN",
+                receipt_hash="b" * 64,
+            ),
+        ),
+        tolerance=Decimal("0.0001"),
+    )
+
+    assert [finding.finding_type for finding in findings] == [
+        "unsupported_authoritative_valuation_receipt"
+    ]
+    assert findings[0].detail == {"receipt_hash": "b" * 64}
 
 
 def test_position_valuation_policy_records_invalid_market_price_without_derived_math() -> None:

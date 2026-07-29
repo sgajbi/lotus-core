@@ -95,6 +95,7 @@ async def test_position_valuation_rows_select_latest_security_state_through_targ
         ("SEC-B", 1),
         ("SEC-C", 3),
     ]
+    assert [row[3] for row in rows] == [None, None, None]
 
 
 async def test_create_run_deduplicates_concurrent_requests(
