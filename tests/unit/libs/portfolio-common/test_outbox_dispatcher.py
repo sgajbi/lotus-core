@@ -288,6 +288,54 @@ async def test_dispatcher_immediately_drains_after_a_productive_batch(monkeypatc
 
 
 @pytest.mark.asyncio
+async def test_dispatcher_logs_batch_failure_and_honors_concurrent_stop(
+    monkeypatch,
+    caplog,
+) -> None:
+    import portfolio_common.outbox_dispatcher as module
+
+    dispatcher = module.OutboxDispatcher(
+        kafka_producer=MagicMock(spec=KafkaProducer),
+        poll_interval=60,
+    )
+
+    def _fail_batch() -> int:
+        dispatcher.stop()
+        raise RuntimeError("deterministic batch failure")
+
+    monkeypatch.setattr(dispatcher, "_process_batch_sync", _fail_batch)
+
+    with caplog.at_level(logging.ERROR):
+        await dispatcher.run()
+
+    assert "Outbox dispatcher batch processing failed." in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_dispatcher_continues_after_idle_poll_timeout(monkeypatch) -> None:
+    import portfolio_common.outbox_dispatcher as module
+
+    dispatcher = module.OutboxDispatcher(
+        kafka_producer=MagicMock(spec=KafkaProducer),
+        poll_interval=1,
+    )
+    batch_count = 0
+
+    def _process_batch_sync() -> int:
+        nonlocal batch_count
+        batch_count += 1
+        if batch_count == 2:
+            dispatcher.stop()
+        return 0
+
+    monkeypatch.setattr(dispatcher, "_process_batch_sync", _process_batch_sync)
+
+    await dispatcher.run()
+
+    assert batch_count == 2
+
+
+@pytest.mark.asyncio
 async def test_dispatcher_stop_interrupts_poll_sleep(monkeypatch):
     import portfolio_common.outbox_dispatcher as module
 
