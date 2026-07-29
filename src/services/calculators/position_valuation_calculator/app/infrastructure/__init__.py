@@ -11,6 +11,7 @@ from .valuation_dependencies import SqlAlchemyValuationProcessorDependencyFactor
 from .valuation_policy_assignment_repository import (
     SqlAlchemyValuationPolicyAssignmentResolver,
 )
+from .valuation_receipt_repository import SqlAlchemyValuationReceiptRepository
 
 __all__ = [
     "MARKET_PRICE_AUTHORITY_QUERY_CHUNK_SIZE",
@@ -18,6 +19,7 @@ __all__ = [
     "SqlAlchemyMarketPriceSourceFactResolver",
     "SqlAlchemyValuationProcessorDependencyFactory",
     "SqlAlchemyValuationPolicyAssignmentResolver",
+    "SqlAlchemyValuationReceiptRepository",
     "build_authoritative_valuation_evidence",
     "build_valuation_job_processor",
 ]

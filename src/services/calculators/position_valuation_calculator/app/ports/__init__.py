@@ -11,6 +11,7 @@ from .valuation_policy_assignments import (
     ValuationPolicyAuthorityKey,
     ValuationPolicyAuthorityRequest,
 )
+from .valuation_receipts import ValuationReceiptRepository
 
 __all__ = [
     "MarketPriceAuthorityKey",
@@ -20,4 +21,5 @@ __all__ = [
     "ValuationPolicyAuthorityKey",
     "ValuationPolicyAuthorityRequest",
     "ValuationPolicyAssignmentResolver",
+    "ValuationReceiptRepository",
 ]
