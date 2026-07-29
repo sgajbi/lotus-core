@@ -138,6 +138,11 @@ def _usage(
 def _policy_aliases(tree: ast.Module, constants: set[str]) -> dict[str, str]:
     aliases: dict[str, str] = {}
     for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            for imported in node.names:
+                if imported.name in constants:
+                    aliases[imported.asname or imported.name] = imported.name
+            continue
         if isinstance(node, ast.Assign) and len(node.targets) == 1:
             target = node.targets[0]
             value = node.value
@@ -146,8 +151,12 @@ def _policy_aliases(tree: ast.Module, constants: set[str]) -> dict[str, str]:
             value = node.value
         else:
             continue
-        if isinstance(target, ast.Name) and isinstance(value, ast.Name) and value.id in constants:
-            aliases[target.id] = value.id
+        if not isinstance(target, ast.Name):
+            continue
+        if isinstance(value, ast.Name) and (value.id in constants or value.id in aliases):
+            aliases[target.id] = aliases.get(value.id, value.id)
+        elif isinstance(value, ast.Attribute) and value.attr in constants:
+            aliases[target.id] = value.attr
     return aliases
 
 
@@ -191,17 +200,21 @@ class _UsageVisitor(ast.NodeVisitor):
         self._visit_scope(node, f"<lambda>@{node.lineno}")
 
     def visit_Call(self, node: ast.Call) -> None:
-        if isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Name):
-            receiver = node.func.value
-            constant = (
-                receiver.id if receiver.id in self._constants else self._aliases.get(receiver.id)
-            )
+        if isinstance(node.func, ast.Attribute):
+            constant = self._resolve_policy(node.func.value)
             if constant is not None:
                 if node.func.attr in EXECUTION_METHODS:
                     self._execution[constant].add(self._callsite)
                 if node.func.attr == "lineage_identity":
                     self._lineage[constant].add(self._callsite)
         self.generic_visit(node)
+
+    def _resolve_policy(self, receiver: ast.expr) -> str | None:
+        if isinstance(receiver, ast.Name):
+            return receiver.id if receiver.id in self._constants else self._aliases.get(receiver.id)
+        if isinstance(receiver, ast.Attribute) and receiver.attr in self._constants:
+            return receiver.attr
+        return None
 
 
 def evaluate(repo_root: Path, contract_path: Path) -> tuple[str, ...]:
