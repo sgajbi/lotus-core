@@ -27,6 +27,9 @@ to one producer service or event family.
 - Fence the producer through its configured Kafka `delivery.timeout.ms` before treating a flush as
   complete. Require the claim lease to exceed that fence by a safety margin, preventing an expired
   publisher from delivering an old stream head after a reclaimed head has released the tail.
+- If `flush(...)` raises with ambiguous queued records, purge both queued and in-flight records,
+  drain their callbacks, and replace the underlying producer before releasing any row for retry.
+  If purge confirmation fails, retain the database claims by aborting result persistence.
 - Add a partial lookup index over unresolved stream order.
 
 Kafka publication remains outside the claim transaction and result writes remain claim-token
@@ -40,7 +43,9 @@ default 120-second Kafka delivery timeout plus the delivery fence and safety mar
 lease shorter than the producer-specific minimum now fails dispatcher construction. The intentional
 behavior change prevents later same-stream publication while an earlier event is pending, leased,
 retry-waiting, failed, or still capable of broker delivery. A terminal failed head must be reviewed
-and governed-requeued before that stream advances.
+and governed-requeued before that stream advances. A flush exception now resets the underlying
+producer before rows become retryable; this changes only failure recovery, not successful publish
+behavior or event contracts.
 
 Mixed dispatcher versions are unsafe because an old process does not honor the stream-head
 barrier. Deployments must quiesce all dispatcher-owning workers, apply migration
@@ -53,5 +58,7 @@ barrier. Deployments must quiesce all dispatcher-owning workers, apply migration
 - Corrected proof covers active claims, same-timestamp `id` ordering, retry-waiting and terminal
   barriers, independent keys, topic isolation, lease/delivery-timeout validation, and producer
   flush fencing.
+- Flush-exception proof covers successful producer purge/replacement before retry release and
+  fail-closed claim retention when purge confirmation fails.
 - Final focused, migration, protected CI, exact-main, and operational evidence is recorded on
   issue #795.

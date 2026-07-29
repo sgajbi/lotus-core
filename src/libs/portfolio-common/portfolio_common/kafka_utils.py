@@ -17,6 +17,10 @@ from .monitoring import observe_kafka_producer_event
 logger = logging.getLogger(__name__)
 
 
+class KafkaProducerRecoveryError(RuntimeError):
+    """Raised when a failed producer cannot be safely purged before replacement."""
+
+
 class KafkaProducer:
     """
     Thin wrapper around confluent_kafka.Producer with production-safe defaults:
@@ -179,6 +183,40 @@ class KafkaProducer:
         if self.producer:
             return self.producer.flush(timeout)
         return 0
+
+    def reset_after_flush_failure(self) -> None:
+        """Purge an ambiguous producer queue and replace the underlying producer.
+
+        A flush exception leaves delivery state unknown. The old producer must not remain capable
+        of delivering queued records after an outbox claim is released for retry.
+        """
+        failed_producer = self.producer
+        self.producer = None
+        recovery_error: Exception | None = None
+        if failed_producer is not None:
+            try:
+                failed_producer.purge(in_queue=True, in_flight=True, blocking=True)
+                failed_producer.flush(0)
+            except Exception as exc:
+                recovery_error = exc
+                logger.error(
+                    "Kafka producer recovery purge failed.",
+                    exc_info=True,
+                    extra=operation_log_extra(
+                        event_name="kafka.producer.recovery_failed",
+                        operation="kafka.produce",
+                        status="failed",
+                        reason_code="producer_purge_error",
+                        error_type=type(exc).__name__,
+                        service=self.service_name,
+                    ),
+                )
+
+        self._initialize_producer()
+        if recovery_error is not None:
+            raise KafkaProducerRecoveryError(
+                "Kafka producer could not confirm pending-message purge."
+            ) from recovery_error
 
     def close(self, timeout: int = 10) -> None:
         if self.producer:

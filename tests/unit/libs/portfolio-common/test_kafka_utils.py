@@ -299,3 +299,38 @@ def test_kafka_producer_close_logs_flush_exception_and_clears_producer(MockProdu
     mock_confluent_producer.flush.assert_called_once_with(3)
     assert producer.producer is None
     assert "Kafka producer close flush failed." == mock_log_error.call_args.args[0]
+
+
+@patch("portfolio_common.kafka_utils.Producer")
+def test_kafka_producer_recovery_purges_and_replaces_ambiguous_producer(MockProducer):
+    failed_producer = MagicMock()
+    replacement_producer = MagicMock()
+    MockProducer.side_effect = [failed_producer, replacement_producer]
+    producer = KafkaProducer()
+
+    producer.reset_after_flush_failure()
+
+    failed_producer.purge.assert_called_once_with(
+        in_queue=True,
+        in_flight=True,
+        blocking=True,
+    )
+    failed_producer.flush.assert_called_once_with(0)
+    assert producer.producer is replacement_producer
+
+
+@patch("portfolio_common.kafka_utils.Producer")
+def test_kafka_producer_recovery_replaces_then_fails_closed_on_purge_error(MockProducer):
+    from portfolio_common.kafka_utils import KafkaProducerRecoveryError
+
+    failed_producer = MagicMock()
+    failed_producer.purge.side_effect = RuntimeError("purge failed")
+    replacement_producer = MagicMock()
+    MockProducer.side_effect = [failed_producer, replacement_producer]
+    producer = KafkaProducer()
+
+    with pytest.raises(KafkaProducerRecoveryError, match="confirm pending-message purge"):
+        producer.reset_after_flush_failure()
+
+    failed_producer.flush.assert_not_called()
+    assert producer.producer is replacement_producer
