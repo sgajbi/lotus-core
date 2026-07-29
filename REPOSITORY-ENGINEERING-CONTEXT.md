@@ -3304,6 +3304,14 @@ Most relevant current governance:
      non-current states contribute to `stale_points_count`. E2E acceptance must prove exact
      economics and current evidence without requiring the schedule-dependent recovery epoch to
      remain zero.
+227. Shared outbox dispatch preserves ordering per `(topic, partition_key)` through a durable
+     stream-head claim fence. The head is the oldest unresolved `PENDING` or `FAILED` row ordered
+     by `(created_at, id)`; active leases, retry waits, and terminal failures block only that
+     stream, while different keys and topics remain parallel. Claim at most one row per stream in
+     a batch and drain productive batches immediately. Keep Kafka I/O outside row-lock
+     transactions and retain claim-token-fenced result writes. Deployments changing this rule must
+     quiesce every dispatcher-owning worker before migrating and restart only the compatible
+     version; mixed dispatcher versions are not ordering-safe.
 
 ## Context Maintenance Rule
 

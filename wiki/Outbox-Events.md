@@ -57,6 +57,13 @@ ordered transport stream. Keeping them separate prevents database record identit
 or retry identifiers from accidentally changing Kafka ordering. The dispatcher always publishes
 with the stored partition key.
 
+Multiple dispatcher instances preserve that order through a database-visible stream-head rule. For
+each `(topic, partition_key)`, only the oldest unresolved row by `(created_at, id)` is claimable.
+An active lease, future retry, or terminal failure blocks later rows for that stream without
+blocking other keys or topics. A batch claims at most one row per stream and immediately requests
+another batch after productive work, preserving cross-stream capacity without allowing same-stream
+overtaking.
+
 This gives `lotus-core` a durable database-backed publish queue rather than relying on in-memory
 best effort after a write succeeds.
 
@@ -133,6 +140,10 @@ The request must include `requested_by`, a source-safe `reason`, optional `corre
 `confirm_payload_contract_reviewed=true`. The command records `outbox_recovery_audit` evidence and
 rejects blind requeue attempts or rows that are no longer terminal `FAILED`.
 
+Because a terminal failed row remains the ordered stream head, later rows for the same topic and
+partition key do not publish until that row is governed-requeued and processed. This is an
+intentional fail-closed ordering control.
+
 To review recovery history without direct database access, use:
 
 ```text
@@ -166,6 +177,9 @@ Use this page together with:
   [the machine-readable Kafka runtime contract](../contracts/eventing/kafka-topic-runtime-contract.v1.json)
 - use the [Kafka Partition Migration Runbook](../docs/operations/kafka-partition-migration-runbook.md)
   before changing existing topic metadata
+- when deploying a dispatcher stream-order change, quiesce all services that own a dispatcher,
+  apply the database migration, and restart only the new version; mixed dispatcher versions are
+  not ordering-safe
 
 ## Related references
 
