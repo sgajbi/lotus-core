@@ -8,8 +8,8 @@ from random import SystemRandom
 from typing import Dict, List, Optional, cast
 from uuid import uuid4
 
-from sqlalchemy import func, or_, update
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy import and_, func, or_, update
+from sqlalchemy.orm import aliased, sessionmaker
 
 from portfolio_common.database_models import OutboxEvent
 from portfolio_common.db import SessionLocal
@@ -182,7 +182,7 @@ class OutboxDispatcher:
                 )
                 set_outbox_oldest_pending_age_seconds(age_seconds)
 
-    def _process_batch_sync(self) -> None:
+    def _process_batch_sync(self) -> int:
         """
         Single batch:
         - Read pending gauge using a separate short-lived session (no open tx carried over)
@@ -196,7 +196,7 @@ class OutboxDispatcher:
             events_to_process = self._claim_pending_events()
 
             if not events_to_process:
-                return
+                return 0
 
             delivery_ack: Dict[int, bool] = {}
             delivery_errs: Dict[int, str] = {}
@@ -212,6 +212,7 @@ class OutboxDispatcher:
                         delivery_ack,
                         delivery_errs,
                     )
+            return len(events_to_process)
 
     def _claim_pending_events(self) -> list[_ClaimedOutboxEvent]:
         claim_token = uuid4().hex
@@ -220,27 +221,47 @@ class OutboxDispatcher:
 
         with self._session_factory() as db:
             with db.begin():
+                candidate = aliased(OutboxEvent, name="candidate_outbox_event")
+                earlier_unresolved = aliased(OutboxEvent, name="earlier_unresolved_outbox_event")
+                earlier_stream_event_exists = (
+                    db.query(earlier_unresolved.id)
+                    .filter(
+                        earlier_unresolved.topic == candidate.topic,
+                        earlier_unresolved.partition_key == candidate.partition_key,
+                        earlier_unresolved.status.in_(("PENDING", TERMINAL_FAILURE_STATUS)),
+                        or_(
+                            earlier_unresolved.created_at < candidate.created_at,
+                            and_(
+                                earlier_unresolved.created_at == candidate.created_at,
+                                earlier_unresolved.id < candidate.id,
+                            ),
+                        ),
+                    )
+                    .exists()
+                )
                 events_to_claim: List[OutboxEvent] = (
-                    db.query(OutboxEvent)
-                    .filter(OutboxEvent.status == "PENDING")
+                    db.query(candidate)
+                    .filter(candidate.status == "PENDING")
                     .filter(
                         or_(
-                            OutboxEvent.next_attempt_at.is_(None),
-                            OutboxEvent.next_attempt_at <= now,
+                            candidate.next_attempt_at.is_(None),
+                            candidate.next_attempt_at <= now,
                         )
                     )
                     .filter(
                         or_(
-                            OutboxEvent.claim_token.is_(None),
-                            OutboxEvent.claim_expires_at.is_(None),
-                            OutboxEvent.claim_expires_at <= now,
+                            candidate.claim_token.is_(None),
+                            candidate.claim_expires_at.is_(None),
+                            candidate.claim_expires_at <= now,
                         )
                     )
+                    .filter(~earlier_stream_event_exists)
                     .order_by(
-                        OutboxEvent.next_attempt_at.asc().nullsfirst(),
-                        OutboxEvent.created_at.asc(),
+                        candidate.next_attempt_at.asc().nullsfirst(),
+                        candidate.created_at.asc(),
+                        candidate.id.asc(),
                     )
-                    .with_for_update(skip_locked=True, of=OutboxEvent)
+                    .with_for_update(skip_locked=True, of=candidate)
                     .limit(self._batch_size)
                     .all()
                 )
@@ -622,8 +643,9 @@ class OutboxDispatcher:
         )
 
         while self._running:
+            processed_count = 0
             try:
-                await asyncio.to_thread(self._process_batch_sync)
+                processed_count = await asyncio.to_thread(self._process_batch_sync)
             except Exception:
                 logger.error(
                     "Outbox dispatcher batch processing failed.",
@@ -635,6 +657,10 @@ class OutboxDispatcher:
                         reason_code="batch_processing_error",
                     ),
                 )
+
+            if processed_count:
+                await asyncio.sleep(0)
+                continue
 
             try:
                 await asyncio.wait_for(self._stop_event.wait(), timeout=self._poll_interval)

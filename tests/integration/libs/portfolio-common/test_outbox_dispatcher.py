@@ -245,6 +245,193 @@ def test_dispatcher_reclaims_expired_claim(db_engine, clean_db, smart_mock_kafka
 
 
 @pytest.mark.lifecycle
+def test_concurrent_dispatcher_cannot_claim_later_event_for_active_ordering_stream(
+    db_engine,
+    clean_db,
+):
+    """An active stream-head lease must fence later events with the same Kafka key."""
+
+    test_session_factory = sessionmaker(autocommit=False, autoflush=False, bind=db_engine)
+    partition_key = f"PORT-ORDERING-{uuid.uuid4()}|SEC-ORDERING-01"
+    created_at = datetime.now(timezone.utc)
+
+    with test_session_factory() as session:
+        with session.begin():
+            session.add_all(
+                [
+                    OutboxEvent(
+                        aggregate_type="OrderingFenceTest",
+                        aggregate_id=f"ordering-head-{uuid.uuid4()}",
+                        partition_key=partition_key,
+                        status="PENDING",
+                        event_type="TestEvent",
+                        payload='{"sequence": 1}',
+                        topic="ordering-fence.topic",
+                        created_at=created_at,
+                    ),
+                    OutboxEvent(
+                        aggregate_type="OrderingFenceTest",
+                        aggregate_id=f"ordering-tail-{uuid.uuid4()}",
+                        partition_key=partition_key,
+                        status="PENDING",
+                        event_type="TestEvent",
+                        payload='{"sequence": 2}',
+                        topic="ordering-fence.topic",
+                        created_at=created_at + timedelta(microseconds=1),
+                    ),
+                ]
+            )
+
+    first_dispatcher = OutboxDispatcher(
+        kafka_producer=MagicMock(spec=KafkaProducer),
+        batch_size=1,
+        db_session_factory=test_session_factory,
+        claim_lease_seconds=30,
+    )
+    competing_dispatcher = OutboxDispatcher(
+        kafka_producer=MagicMock(spec=KafkaProducer),
+        batch_size=1,
+        db_session_factory=test_session_factory,
+        claim_lease_seconds=30,
+    )
+
+    first_claim = first_dispatcher._claim_pending_events()
+    competing_claim = competing_dispatcher._claim_pending_events()
+
+    assert [json.loads(str(event.payload))["sequence"] for event in first_claim] == [1]
+    assert competing_claim == []
+
+
+@pytest.mark.lifecycle
+def test_dispatcher_claims_one_head_per_stream_then_releases_the_tail(
+    db_engine,
+    clean_db,
+):
+    """A batch may span streams but must advance each stream in durable id order."""
+
+    test_session_factory = sessionmaker(autocommit=False, autoflush=False, bind=db_engine)
+    shared_key = f"PORT-ORDERING-{uuid.uuid4()}|SEC-ORDERING-02"
+    independent_key = f"PORT-ORDERING-{uuid.uuid4()}|SEC-ORDERING-03"
+    created_at = datetime.now(timezone.utc)
+
+    with test_session_factory() as session:
+        with session.begin():
+            session.add_all(
+                [
+                    OutboxEvent(
+                        aggregate_type="OrderingFenceTest",
+                        aggregate_id=f"ordering-{sequence}-{uuid.uuid4()}",
+                        partition_key=partition_key,
+                        status="PENDING",
+                        event_type="TestEvent",
+                        payload={"sequence": sequence},
+                        topic=topic,
+                        created_at=created_at,
+                    )
+                    for sequence, partition_key, topic in (
+                        (1, shared_key, "ordered.topic"),
+                        (2, shared_key, "ordered.topic"),
+                        (3, independent_key, "ordered.topic"),
+                        (4, shared_key, "independent.topic"),
+                    )
+                ]
+            )
+
+    dispatcher = OutboxDispatcher(
+        kafka_producer=MagicMock(spec=KafkaProducer),
+        batch_size=10,
+        db_session_factory=test_session_factory,
+        claim_lease_seconds=30,
+    )
+
+    first_claim = dispatcher._claim_pending_events()
+
+    assert [event.payload["sequence"] for event in first_claim] == [1, 3, 4]
+
+    shared_head = next(event for event in first_claim if event.payload["sequence"] == 1)
+    with test_session_factory() as session:
+        with session.begin():
+            session.query(OutboxEvent).filter(OutboxEvent.id == shared_head.id).update(
+                {
+                    OutboxEvent.status: "PROCESSED",
+                    OutboxEvent.claim_token: None,
+                    OutboxEvent.claim_expires_at: None,
+                }
+            )
+
+    second_claim = dispatcher._claim_pending_events()
+
+    assert [event.payload["sequence"] for event in second_claim] == [2]
+
+
+@pytest.mark.lifecycle
+@pytest.mark.parametrize("blocking_status", ["PENDING", "FAILED"])
+def test_unresolved_stream_head_blocks_tail_without_blocking_other_streams(
+    db_engine,
+    clean_db,
+    blocking_status,
+):
+    """Retry waits and terminal failures stop only their own ordered stream."""
+
+    test_session_factory = sessionmaker(autocommit=False, autoflush=False, bind=db_engine)
+    blocked_key = f"PORT-ORDERING-{uuid.uuid4()}|SEC-BLOCKED"
+    ready_key = f"PORT-ORDERING-{uuid.uuid4()}|SEC-READY"
+    created_at = datetime.now(timezone.utc)
+
+    with test_session_factory() as session:
+        with session.begin():
+            session.add_all(
+                [
+                    OutboxEvent(
+                        aggregate_type="OrderingFenceTest",
+                        aggregate_id=f"blocked-head-{uuid.uuid4()}",
+                        partition_key=blocked_key,
+                        status=blocking_status,
+                        event_type="TestEvent",
+                        payload={"sequence": 1},
+                        topic="blocked-stream.topic",
+                        created_at=created_at,
+                        next_attempt_at=(
+                            created_at + timedelta(minutes=5)
+                            if blocking_status == "PENDING"
+                            else None
+                        ),
+                    ),
+                    OutboxEvent(
+                        aggregate_type="OrderingFenceTest",
+                        aggregate_id=f"blocked-tail-{uuid.uuid4()}",
+                        partition_key=blocked_key,
+                        status="PENDING",
+                        event_type="TestEvent",
+                        payload={"sequence": 2},
+                        topic="blocked-stream.topic",
+                        created_at=created_at + timedelta(microseconds=1),
+                    ),
+                    OutboxEvent(
+                        aggregate_type="OrderingFenceTest",
+                        aggregate_id=f"ready-{uuid.uuid4()}",
+                        partition_key=ready_key,
+                        status="PENDING",
+                        event_type="TestEvent",
+                        payload={"sequence": 3},
+                        topic="blocked-stream.topic",
+                        created_at=created_at + timedelta(microseconds=2),
+                    ),
+                ]
+            )
+
+    dispatcher = OutboxDispatcher(
+        kafka_producer=MagicMock(spec=KafkaProducer),
+        batch_size=10,
+        db_session_factory=test_session_factory,
+    )
+
+    claim = dispatcher._claim_pending_events()
+
+    assert [event.payload["sequence"] for event in claim] == [3]
+
+
+@pytest.mark.lifecycle
 def test_dispatcher_does_not_update_result_after_claim_is_reclaimed(db_engine, clean_db):
     """
     GIVEN a dispatcher loses the claim token before delivery results are persisted
