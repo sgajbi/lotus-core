@@ -19,12 +19,15 @@ from portfolio_common.database_models import (
 from portfolio_common.domain.eventing import portfolio_security_partition_key
 from portfolio_common.domain.valuation import (
     MarketPriceSourceFact,
+    MarketPriceSourceFactError,
     PositionValuationEvidence,
     ResolvedValuationPolicyAssignment,
+    UnknownValuationPolicyError,
     UnsupportedValuationError,
     ValuationAuthorityScope,
     ValuationBookScope,
     ValuationCalculationReceipt,
+    ValuationPolicyAssignmentError,
     ValuationSnapshotIdentity,
     build_authoritative_valuation_receipt,
     build_legacy_valuation_receipt,
@@ -347,15 +350,40 @@ class ValuationJobProcessor:
                 "authoritative",
                 "exact_portfolio_scope",
             ).inc()
-            return await self._value_authoritative_snapshot(
-                dependencies=dependencies,
-                event=event,
-                snapshot=snapshot,
-                position=position,
-                instrument=instrument,
-                portfolio=portfolio,
-                book_scope=book_scope,
-            )
+            try:
+                return await self._value_authoritative_snapshot(
+                    dependencies=dependencies,
+                    event=event,
+                    snapshot=snapshot,
+                    position=position,
+                    instrument=instrument,
+                    portfolio=portfolio,
+                    book_scope=book_scope,
+                )
+            except (
+                MarketPriceSourceFactError,
+                UnknownValuationPolicyError,
+                UnsupportedValuationError,
+                ValuationPolicyAssignmentError,
+            ) as exc:
+                snapshot.valuation_status = VALUATION_FAILED
+                VALUATION_JOBS_FAILED_TOTAL.labels(
+                    reason="authoritative_valuation_unsupported",
+                ).inc()
+                logger.warning(
+                    "Authoritative valuation failed closed.",
+                    extra={
+                        "portfolio_id": event.portfolio_id,
+                        "security_id": event.security_id,
+                        "valuation_date": event.valuation_date.isoformat(),
+                        "epoch": event.epoch,
+                        "reason": str(exc),
+                    },
+                )
+                return ValuationSnapshotResult(
+                    snapshot=snapshot,
+                    job_failure_reason=str(exc),
+                )
         VALUATION_QUOTE_AUTHORITY_PATH_TOTAL.labels(
             "legacy",
             "unscoped_portfolio",
