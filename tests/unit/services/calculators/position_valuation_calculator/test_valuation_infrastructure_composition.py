@@ -40,6 +40,10 @@ def test_sqlalchemy_dependency_factory_constructs_concrete_adapters() -> None:
             valuation_dependencies,
             "SqlAlchemyValuationPolicyAssignmentResolver",
         ) as valuation_policy_assignment_resolver,
+        patch.object(
+            valuation_dependencies,
+            "SqlAlchemyValuationReceiptRepository",
+        ) as valuation_receipt_repository,
         patch.object(valuation_dependencies, "OutboxRepository") as outbox_repository,
     ):
         dependencies = SqlAlchemyValuationProcessorDependencyFactory().from_session(session)
@@ -49,6 +53,7 @@ def test_sqlalchemy_dependency_factory_constructs_concrete_adapters() -> None:
     outbox_repository.assert_called_once_with(session)
     market_price_source_fact_resolver.assert_called_once_with(session)
     valuation_policy_assignment_resolver.assert_called_once_with(session)
+    valuation_receipt_repository.assert_called_once_with(session)
     assert dependencies.repo is repository.return_value
     assert dependencies.idempotency_repo is idempotency_repository.return_value
     assert dependencies.outbox_repo is outbox_repository.return_value
@@ -60,6 +65,7 @@ def test_sqlalchemy_dependency_factory_constructs_concrete_adapters() -> None:
         dependencies.valuation_policy_assignment_resolver
         is valuation_policy_assignment_resolver.return_value
     )
+    assert dependencies.valuation_receipt_repo is valuation_receipt_repository.return_value
     assert (
         dependencies.source_evidence_builder
         is valuation_dependencies.build_authoritative_valuation_evidence
@@ -75,6 +81,7 @@ def test_valuation_processor_does_not_construct_infrastructure() -> None:
     assert "OutboxRepository(" not in source
     assert "SqlAlchemyMarketPriceSourceFactResolver(" not in source
     assert "SqlAlchemyValuationPolicyAssignmentResolver(" not in source
+    assert "SqlAlchemyValuationReceiptRepository(" not in source
 
 
 def test_new_valuation_infrastructure_modules_have_responsibility_docstrings() -> None:

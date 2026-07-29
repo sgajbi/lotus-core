@@ -15,14 +15,17 @@ from portfolio_common.database_models import (
 )
 from portfolio_common.domain.valuation import (
     FinancialSourceReference,
+    InstrumentValuationPolicyAssignment,
     MarketPriceQuoteBasis,
     MarketPriceSourceFact,
     MarketPriceSourceFactStatus,
     MissingValuationPolicyAssignmentError,
     PositionValuationEvidence,
     ValuationAuthorityScope,
+    ValuationPolicyAssignmentStatus,
     canonical_content_hash,
     resolve_position_valuation_policy,
+    resolve_valuation_policy_assignment,
 )
 from portfolio_common.events import (
     PortfolioValuationRequiredEvent,
@@ -113,6 +116,7 @@ def mock_dependencies():
 
     market_price_source_fact_resolver = AsyncMock()
     valuation_policy_assignment_resolver = AsyncMock()
+    valuation_receipt_repo = AsyncMock()
     source_evidence_builder = MagicMock()
     dependency_factory = MagicMock()
     dependency_factory.from_session.return_value = ValuationProcessorDependencies(
@@ -121,6 +125,7 @@ def mock_dependencies():
         outbox_repo=mock_outbox_repo,
         market_price_source_fact_resolver=market_price_source_fact_resolver,
         valuation_policy_assignment_resolver=valuation_policy_assignment_resolver,
+        valuation_receipt_repo=valuation_receipt_repo,
         source_evidence_builder=source_evidence_builder,
     )
     processor = ValuationJobProcessor(
@@ -136,6 +141,7 @@ def mock_dependencies():
         "processor": processor,
         "source_evidence_builder": source_evidence_builder,
         "valuation_policy_assignment_resolver": valuation_policy_assignment_resolver,
+        "valuation_receipt_repo": valuation_receipt_repo,
     }
 
 
@@ -223,6 +229,7 @@ async def test_valuation_processor_executes_success_path_without_kafka_consumer(
     )
     mock_dependencies["valuation_policy_assignment_resolver"].resolve_many.assert_not_awaited()
     mock_dependencies["market_price_source_fact_resolver"].resolve_many.assert_not_awaited()
+    mock_dependencies["valuation_receipt_repo"].upsert.assert_awaited_once()
     authority_path_metric.labels.assert_called_once_with("legacy", "unscoped_portfolio")
 
 
@@ -270,8 +277,32 @@ async def test_scoped_portfolio_uses_exact_authority_without_legacy_price_read(
         fact_status=MarketPriceSourceFactStatus.ACTIVE,
         fact_version=1,
     )
+    policy_assignment = resolve_valuation_policy_assignment(
+        [
+            InstrumentValuationPolicyAssignment(
+                tenant_id="TENANT-SG",
+                legal_book_id="BOOK-SG",
+                security_id=mock_event.security_id,
+                policy_id="UNIT_PRICE_MARKET_VALUE",
+                policy_version=1,
+                valid_from=mock_event.valuation_date,
+                valid_to=None,
+                assignment_status=ValuationPolicyAssignmentStatus.ACTIVE,
+                assignment_version=1,
+                source_system="policy-master",
+                source_record_id="assignment-1",
+                source_revision="1",
+                observed_at=datetime(2025, 8, 1, tzinfo=UTC),
+                assignment_reason="unit-price instrument",
+            )
+        ],
+        tenant_id="TENANT-SG",
+        legal_book_id="BOOK-SG",
+        security_id=mock_event.security_id,
+        valuation_date=mock_event.valuation_date,
+    )
     policy_resolution = ResolvedRuntimeValuationPolicy(
-        assignment=MagicMock(),
+        assignment=policy_assignment,
         policy=resolve_position_valuation_policy("UNIT_PRICE_MARKET_VALUE", 1),
     )
     policy_resolver = mock_dependencies["valuation_policy_assignment_resolver"]
@@ -306,6 +337,9 @@ async def test_scoped_portfolio_uses_exact_authority_without_legacy_price_read(
     assert persisted_snapshot.market_value_local == Decimal("10135.0000000000")
     assert persisted_snapshot.unrealized_gain_loss_local == Decimal("135.0000000000")
     assert persisted_snapshot.valuation_status == "VALUED_CURRENT"
+    receipt = mock_dependencies["valuation_receipt_repo"].upsert.await_args.kwargs["receipt"]
+    assert receipt.policy_id == "UNIT_PRICE_MARKET_VALUE"
+    assert receipt.receipt_hash
     authority_path_metric.labels.assert_called_once_with(
         "authoritative",
         "exact_portfolio_scope",

@@ -20,7 +20,7 @@ from portfolio_common.domain.valuation import (
     ValuationReceiptSupportability,
     ValuationSnapshotIdentity,
 )
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -86,6 +86,15 @@ class SqlAlchemyValuationReceiptRepository:
             )
             for persisted_receipt, persisted_snapshot in rows
         }
+
+    async def delete(self, *, snapshot_id: int) -> None:
+        if not isinstance(snapshot_id, int) or isinstance(snapshot_id, bool) or snapshot_id < 1:
+            raise ValueError("snapshot_id must be a positive integer")
+        await self._db.execute(
+            delete(DailyPositionValuationReceiptRecord).where(
+                DailyPositionValuationReceiptRecord.snapshot_id == snapshot_id
+            )
+        )
 
 
 def _record_values(

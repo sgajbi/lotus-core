@@ -144,6 +144,27 @@ async def test_empty_fetch_and_invalid_ids_do_not_reach_database() -> None:
         await repository.fetch_many([0])
     with pytest.raises(ValueError, match="positive integer"):
         await repository.upsert(snapshot_id=True, receipt=_receipt())
+    with pytest.raises(ValueError, match="positive integer"):
+        await repository.delete(snapshot_id=0)
 
     session.execute.assert_not_awaited()
     session.scalars.assert_not_awaited()
+
+
+async def test_delete_targets_only_the_exact_snapshot_receipt() -> None:
+    session = AsyncMock()
+    repository = SqlAlchemyValuationReceiptRepository(session)
+
+    await repository.delete(snapshot_id=17)
+
+    statement = session.execute.await_args.args[0]
+    compiled = str(
+        statement.compile(
+            dialect=postgresql.dialect(),
+            compile_kwargs={"literal_binds": True},
+        )
+    )
+    assert compiled == (
+        "DELETE FROM daily_position_valuation_receipts "
+        "WHERE daily_position_valuation_receipts.snapshot_id = 17"
+    )

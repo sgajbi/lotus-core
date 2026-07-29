@@ -24,6 +24,10 @@ from portfolio_common.domain.valuation import (
     UnsupportedValuationError,
     ValuationAuthorityScope,
     ValuationBookScope,
+    ValuationCalculationReceipt,
+    ValuationSnapshotIdentity,
+    build_authoritative_valuation_receipt,
+    build_legacy_valuation_receipt,
     resolve_optional_valuation_book_scope,
 )
 from portfolio_common.events import (
@@ -55,6 +59,7 @@ if TYPE_CHECKING:
     from .ports import (
         MarketPriceSourceFactResolver,
         ValuationPolicyAssignmentResolver,
+        ValuationReceiptRepository,
     )
     from .repositories.valuation_repository import ValuationRepository
 
@@ -89,6 +94,7 @@ class ValuationReferenceData:
 class ValuationSnapshotResult:
     snapshot: DailyPositionSnapshot
     job_failure_reason: str | None
+    receipt: ValuationCalculationReceipt | None = None
 
 
 class ValuationSourceEvidenceBuilder(Protocol):
@@ -112,6 +118,7 @@ class ValuationProcessorDependencies:
     outbox_repo: OutboxRepository
     market_price_source_fact_resolver: MarketPriceSourceFactResolver
     valuation_policy_assignment_resolver: ValuationPolicyAssignmentResolver
+    valuation_receipt_repo: ValuationReceiptRepository
     source_evidence_builder: ValuationSourceEvidenceBuilder
 
 
@@ -178,7 +185,8 @@ class ValuationJobProcessor:
             await self._persist_and_publish_snapshot(
                 repo=dependencies.repo,
                 outbox_repo=dependencies.outbox_repo,
-                snapshot=snapshot_result.snapshot,
+                receipt_repo=dependencies.valuation_receipt_repo,
+                snapshot_result=snapshot_result,
                 correlation_id=correlation_id,
             )
 
@@ -407,7 +415,13 @@ class ValuationJobProcessor:
         )
         if valuation_result:
             self._apply_valuation_result(snapshot, price, event, valuation_result)
-            return ValuationSnapshotResult(snapshot=snapshot, job_failure_reason=None)
+            return ValuationSnapshotResult(
+                snapshot=snapshot,
+                job_failure_reason=None,
+                receipt=build_legacy_valuation_receipt(
+                    snapshot_identity=_snapshot_identity(snapshot)
+                ),
+            )
 
         snapshot.valuation_status = VALUATION_FAILED
         failure_reason = (
@@ -491,7 +505,21 @@ class ValuationJobProcessor:
             price_fact=price_fact,
             result=result,
         )
-        return ValuationSnapshotResult(snapshot=snapshot, job_failure_reason=None)
+        assignment = policy_resolution.assignment
+        return ValuationSnapshotResult(
+            snapshot=snapshot,
+            job_failure_reason=None,
+            receipt=build_authoritative_valuation_receipt(
+                snapshot_identity=_snapshot_identity(snapshot),
+                policy_id=policy_resolution.policy.policy_id,
+                policy_version=policy_resolution.policy.policy_version,
+                assignment_version=assignment.assignment.assignment_version,
+                assignment_content_hash=assignment.cache_key.assignment_content_hash,
+                policy_assignment_source=assignment.assignment.source_reference(),
+                price_fact=price_fact,
+                calculation_lineage=result.calculation_lineage,
+            ),
+        )
 
     @staticmethod
     def _apply_authoritative_valuation_result(
@@ -601,10 +629,18 @@ class ValuationJobProcessor:
         *,
         repo: ValuationRepository,
         outbox_repo: OutboxRepository,
-        snapshot: DailyPositionSnapshot,
+        receipt_repo: ValuationReceiptRepository,
+        snapshot_result: ValuationSnapshotResult,
         correlation_id: str,
     ) -> None:
-        persisted_snapshot = await repo.upsert_daily_snapshot(snapshot)
+        persisted_snapshot = await repo.upsert_daily_snapshot(snapshot_result.snapshot)
+        if snapshot_result.receipt is None:
+            await receipt_repo.delete(snapshot_id=persisted_snapshot.id)
+        else:
+            await receipt_repo.upsert(
+                snapshot_id=persisted_snapshot.id,
+                receipt=snapshot_result.receipt,
+            )
         completion_event = DailyPositionSnapshotPersistedEvent.model_validate(persisted_snapshot)
 
         await outbox_repo.create_outbox_event(
@@ -685,3 +721,12 @@ class ValuationJobProcessor:
             },
         )
         return False
+
+
+def _snapshot_identity(snapshot: DailyPositionSnapshot) -> ValuationSnapshotIdentity:
+    return ValuationSnapshotIdentity(
+        portfolio_id=snapshot.portfolio_id,
+        security_id=snapshot.security_id,
+        valuation_date=snapshot.date,
+        epoch=snapshot.epoch,
+    )

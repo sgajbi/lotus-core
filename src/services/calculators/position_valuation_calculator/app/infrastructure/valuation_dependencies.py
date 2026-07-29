@@ -14,6 +14,7 @@ from .source_evidence import build_authoritative_valuation_evidence
 from .valuation_policy_assignment_repository import (
     SqlAlchemyValuationPolicyAssignmentResolver,
 )
+from .valuation_receipt_repository import SqlAlchemyValuationReceiptRepository
 
 
 class SqlAlchemyValuationProcessorDependencyFactory:
@@ -26,5 +27,6 @@ class SqlAlchemyValuationProcessorDependencyFactory:
             outbox_repo=OutboxRepository(db),
             market_price_source_fact_resolver=SqlAlchemyMarketPriceSourceFactResolver(db),
             valuation_policy_assignment_resolver=SqlAlchemyValuationPolicyAssignmentResolver(db),
+            valuation_receipt_repo=SqlAlchemyValuationReceiptRepository(db),
             source_evidence_builder=build_authoritative_valuation_evidence,
         )
