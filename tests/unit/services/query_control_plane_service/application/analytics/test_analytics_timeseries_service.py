@@ -66,6 +66,20 @@ def make_service() -> AnalyticsTimeseriesService:
     )
 
 
+def _position_repo(**methods: object) -> SimpleNamespace:
+    async def list_business_dates(*, start_date: date, end_date: date) -> list[date]:
+        return [
+            date.fromordinal(ordinal)
+            for ordinal in range(start_date.toordinal(), end_date.toordinal() + 1)
+            if date.fromordinal(ordinal).weekday() < 5
+        ]
+
+    return SimpleNamespace(
+        list_business_dates=AsyncMock(side_effect=list_business_dates),
+        **methods,
+    )
+
+
 def _sum_external_flows(cash_flows) -> Decimal:
     return sum(
         (flow.amount for flow in cash_flows if flow.cash_flow_type == "external_flow"),
@@ -1388,6 +1402,22 @@ async def test_get_portfolio_timeseries_position_path_defaults_snapshot_epoch_an
     token_payload = service._decode_page_token(response.page.next_page_token)  # pylint: disable=protected-access
     assert token_payload["snapshot_epoch"] == 0
 
+    final_page = await service.get_portfolio_timeseries(
+        portfolio_id="P1",
+        request=PortfolioAnalyticsTimeseriesRequest(
+            as_of_date="2025-01-02",
+            window=AnalyticsWindow(start_date="2025-01-01", end_date="2025-01-02"),
+            page=PageRequest(page_size=1, page_token=response.page.next_page_token),
+            reporting_currency="USD",
+        ),
+    )
+
+    assert len(final_page.observations) == 1
+    assert final_page.page.next_page_token is None
+    assert final_page.data_quality_status == "PARTIAL"
+    assert final_page.source_evidence_current is False
+    assert final_page.freshness_status == "UNAVAILABLE"
+
 
 @pytest.mark.asyncio
 async def test_get_portfolio_timeseries_normalizes_sparse_numeric_rows() -> None:
@@ -1443,7 +1473,7 @@ async def test_get_portfolio_timeseries_normalizes_sparse_numeric_rows() -> None
 @pytest.mark.asyncio
 async def test_get_position_timeseries_paging_token_generation() -> None:
     service = make_service()
-    service.repo = SimpleNamespace(
+    service.repo = _position_repo(
         get_portfolio=AsyncMock(
             return_value=SimpleNamespace(
                 portfolio_id="DEMO_DPM_EUR_001",
@@ -1536,7 +1566,7 @@ async def test_get_position_timeseries_paging_token_generation() -> None:
 @pytest.mark.asyncio
 async def test_get_position_timeseries_normalizes_sparse_numeric_rows() -> None:
     service = make_service()
-    service.repo = SimpleNamespace(
+    service.repo = _position_repo(
         get_portfolio=AsyncMock(
             return_value=SimpleNamespace(
                 portfolio_id="P1",
@@ -1576,8 +1606,8 @@ async def test_get_position_timeseries_normalizes_sparse_numeric_rows() -> None:
     response = await service.get_position_timeseries(
         portfolio_id="P1",
         request=PositionAnalyticsTimeseriesRequest(
-            as_of_date="2025-01-01",
-            window=AnalyticsWindow(start_date="2025-01-01", end_date="2025-01-01"),
+            as_of_date="2025-01-02",
+            window=AnalyticsWindow(start_date="2025-01-01", end_date="2025-01-02"),
         ),
     )
 
@@ -1585,6 +1615,9 @@ async def test_get_position_timeseries_normalizes_sparse_numeric_rows() -> None:
     assert row.beginning_market_value_position_currency == Decimal("0")
     assert row.ending_market_value_position_currency == Decimal("11.25")
     assert row.quantity == Decimal("0")
+    assert response.data_quality_status == "PARTIAL"
+    assert response.source_evidence_current is False
+    assert response.freshness_status == "UNAVAILABLE"
 
 
 @pytest.mark.asyncio
@@ -1728,7 +1761,7 @@ async def test_position_timeseries_reuses_token_snapshot_epoch_under_concurrent_
             [],
         ]
     )
-    service.repo = SimpleNamespace(
+    service.repo = _position_repo(
         get_portfolio=AsyncMock(
             return_value=SimpleNamespace(
                 portfolio_id="DEMO_DPM_EUR_001",
@@ -2065,7 +2098,7 @@ async def test_get_portfolio_timeseries_period_resolution_and_missing_fx() -> No
 @pytest.mark.asyncio
 async def test_get_position_timeseries_with_cash_flows_and_cursor() -> None:
     service = make_service()
-    service.repo = SimpleNamespace(
+    service.repo = _position_repo(
         get_portfolio=AsyncMock(
             return_value=SimpleNamespace(
                 portfolio_id="P1",
@@ -2156,9 +2189,9 @@ async def test_get_position_timeseries_with_cash_flows_and_cursor() -> None:
     assert response.diagnostics.cash_flows_included is True
     assert response.diagnostics.requested_dimensions == ["asset_class", "sector", "country"]
     assert response.diagnostics.stale_points_count == 0
-    assert response.data_quality_status == "COMPLETE"
-    assert response.source_evidence_current is True
-    assert response.freshness_status == "CURRENT"
+    assert response.data_quality_status == "PARTIAL"
+    assert response.source_evidence_current is False
+    assert response.freshness_status == "UNAVAILABLE"
     assert response.rows[0].cash_flow_currency == "USD"
     assert response.rows[0].portfolio_to_reporting_fx_rate == Decimal("1.2")
 
@@ -2176,7 +2209,7 @@ async def test_get_position_timeseries_reads_page_support_inputs_sequentially() 
         call_order.append("position_cashflow")
         return []
 
-    service.repo = SimpleNamespace(
+    service.repo = _position_repo(
         get_portfolio=AsyncMock(
             return_value=SimpleNamespace(
                 portfolio_id="P1",
@@ -2227,7 +2260,7 @@ async def test_get_position_timeseries_reads_page_support_inputs_sequentially() 
 @pytest.mark.asyncio
 async def test_position_timeseries_distinguishes_internal_trade_from_external_funding() -> None:
     service = make_service()
-    service.repo = SimpleNamespace(
+    service.repo = _position_repo(
         get_portfolio=AsyncMock(
             return_value=SimpleNamespace(
                 portfolio_id="P1",
@@ -2337,7 +2370,7 @@ async def test_position_timeseries_distinguishes_internal_trade_from_external_fu
 @pytest.mark.asyncio
 async def test_get_position_timeseries_repairs_beginning_values_for_continuity() -> None:
     service = make_service()
-    service.repo = SimpleNamespace(
+    service.repo = _position_repo(
         get_portfolio=AsyncMock(
             return_value=SimpleNamespace(
                 portfolio_id="P1",
@@ -2476,7 +2509,7 @@ async def test_get_position_timeseries_repairs_beginning_values_for_continuity()
 @pytest.mark.asyncio
 async def test_get_position_timeseries_normalizes_security_ids_for_continuity_and_flows() -> None:
     service = make_service()
-    service.repo = SimpleNamespace(
+    service.repo = _position_repo(
         get_portfolio=AsyncMock(
             return_value=SimpleNamespace(
                 portfolio_id="P1",
@@ -2560,7 +2593,7 @@ async def test_get_position_timeseries_normalizes_security_ids_for_continuity_an
 @pytest.mark.asyncio
 async def test_get_position_timeseries_does_not_carry_beginning_across_absent_dates() -> None:
     service = make_service()
-    service.repo = SimpleNamespace(
+    service.repo = _position_repo(
         get_portfolio=AsyncMock(
             return_value=SimpleNamespace(
                 portfolio_id="P1",
@@ -2665,7 +2698,7 @@ async def test_get_position_timeseries_does_not_carry_beginning_across_absent_da
 @pytest.mark.asyncio
 async def test_get_position_timeseries_cash_only_staged_external_flows_are_not_doubled() -> None:
     service = make_service()
-    service.repo = SimpleNamespace(
+    service.repo = _position_repo(
         get_portfolio=AsyncMock(
             return_value=SimpleNamespace(
                 portfolio_id="P_STAGE",
@@ -2793,7 +2826,7 @@ async def test_get_position_timeseries_cash_only_staged_external_flows_are_not_d
 @pytest.mark.asyncio
 async def test_get_position_timeseries_seeded_stock_contract_semantics() -> None:
     service = make_service()
-    service.repo = SimpleNamespace(
+    service.repo = _position_repo(
         get_portfolio=AsyncMock(
             return_value=SimpleNamespace(
                 portfolio_id="E2E_TS_PORT",
@@ -2893,7 +2926,7 @@ async def test_get_position_timeseries_seeded_stock_contract_semantics() -> None
 @pytest.mark.asyncio
 async def test_position_timeseries_converts_values_to_portfolio_and_reporting_currency() -> None:
     service = make_service()
-    service.repo = SimpleNamespace(
+    service.repo = _position_repo(
         get_portfolio=AsyncMock(
             return_value=SimpleNamespace(
                 portfolio_id="P1",

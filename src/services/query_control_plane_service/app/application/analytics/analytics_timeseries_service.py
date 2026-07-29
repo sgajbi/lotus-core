@@ -743,7 +743,9 @@ class AnalyticsTimeseriesService:
             required_count=len(expected_business_dates),
             observed_count=len(observed_dates),
             stale_count=diagnostics.stale_points_count,
-            warning_issue_count=1 if next_page_token else 0,
+            warning_issue_count=(
+                1 if request.page.page_token is not None or next_page_token is not None else 0
+            ),
         )
         fingerprint = self._request_fingerprint(
             {
@@ -918,11 +920,23 @@ class AnalyticsTimeseriesService:
             dimensions=request.dimensions,
             include_cash_flows=request.include_cash_flows,
         )
+        expected_business_dates = await self.repo.list_business_dates(
+            start_date=resolved_window.start_date,
+            end_date=resolved_window.end_date,
+        )
+        expected_business_date_set = set(expected_business_dates)
+        observed_business_dates = {
+            row.valuation_date
+            for row in response_rows
+            if row.valuation_date in expected_business_date_set
+        }
         data_quality_status = timeseries_data_quality_status(
-            required_count=len(response_rows),
-            observed_count=len(response_rows),
+            required_count=len(expected_business_dates),
+            observed_count=len(observed_business_dates),
             stale_count=diagnostics.stale_points_count,
-            warning_issue_count=1 if next_page_token else 0,
+            warning_issue_count=(
+                1 if request.page.page_token is not None or next_page_token is not None else 0
+            ),
         )
 
         fingerprint = self._request_fingerprint(
