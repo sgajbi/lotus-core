@@ -409,16 +409,16 @@ class ValuationJobProcessor:
         portfolio: Portfolio,
         price: MarketPrice | None,
     ) -> ValuationSnapshotResult:
+        if self._is_flat_position(snapshot):
+            self._apply_flat_position_valuation(snapshot)
+            return ValuationSnapshotResult(
+                snapshot=snapshot,
+                job_failure_reason=None,
+                receipt=build_legacy_valuation_receipt(
+                    snapshot_identity=_snapshot_identity(snapshot)
+                ),
+            )
         if not price:
-            if self._is_flat_position(snapshot):
-                self._apply_flat_position_valuation(snapshot)
-                return ValuationSnapshotResult(
-                    snapshot=snapshot,
-                    job_failure_reason=None,
-                    receipt=build_legacy_valuation_receipt(
-                        snapshot_identity=_snapshot_identity(snapshot)
-                    ),
-                )
             snapshot.valuation_status = VALUATION_UNVALUED
             return ValuationSnapshotResult(snapshot=snapshot, job_failure_reason=None)
 

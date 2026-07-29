@@ -513,9 +513,27 @@ async def test_valuation_processor_marks_snapshot_unvalued_when_price_is_missing
     mock_dependencies["outbox_repo"].create_outbox_event.assert_awaited_once()
 
 
-async def test_valuation_processor_values_flat_position_without_market_price(
+@pytest.mark.parametrize(
+    ("market_price", "instrument_currency", "portfolio_currency"),
+    [
+        (None, "USD", "USD"),
+        (
+            MarketPrice(
+                price=Decimal("99"),
+                currency="EUR",
+                price_date=date(2025, 7, 31),
+            ),
+            "EUR",
+            "USD",
+        ),
+    ],
+)
+async def test_valuation_processor_values_flat_position_without_quote_dependencies(
     mock_event: PortfolioValuationRequiredEvent,
     mock_dependencies: dict,
+    market_price: MarketPrice | None,
+    instrument_currency: str,
+    portfolio_currency: str,
 ) -> None:
     mock_valuation_repo = mock_dependencies["valuation_repo"]
     mock_dependencies["idempotency_repo"].claim_event_processing.return_value = True
@@ -525,14 +543,14 @@ async def test_valuation_processor_values_flat_position_without_market_price(
         cost_basis_local=Decimal("0"),
     )
     mock_valuation_repo.get_instrument.return_value = Instrument(
-        currency="USD",
+        currency=instrument_currency,
         security_id=mock_event.security_id,
     )
     mock_valuation_repo.get_portfolio.return_value = Portfolio(
-        base_currency="USD",
+        base_currency=portfolio_currency,
         portfolio_id=mock_event.portfolio_id,
     )
-    mock_valuation_repo.get_latest_price_for_position.return_value = None
+    mock_valuation_repo.get_latest_price_for_position.return_value = market_price
 
     def persist_snapshot(snapshot):
         snapshot.id = 94
@@ -558,6 +576,7 @@ async def test_valuation_processor_values_flat_position_without_market_price(
     receipt = mock_dependencies["valuation_receipt_repo"].upsert.await_args.kwargs["receipt"]
     assert receipt.snapshot_identity.security_id == mock_event.security_id
     assert receipt.supportability.value == "LEGACY_UNSCOPED"
+    mock_valuation_repo.get_fx_rate.assert_not_awaited()
     mock_dependencies["valuation_receipt_repo"].delete.assert_not_awaited()
     mock_dependencies["outbox_repo"].create_outbox_event.assert_awaited_once()
 
