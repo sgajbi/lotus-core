@@ -379,6 +379,7 @@ class OutboxDispatcher:
                     error_type=type(e).__name__,
                 ),
             )
+            self._producer.reset_after_flush_failure()
             _mark_callbackless_events_failed(
                 events_to_process,
                 delivery_ack,

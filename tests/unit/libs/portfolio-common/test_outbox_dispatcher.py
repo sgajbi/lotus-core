@@ -254,6 +254,60 @@ def test_dispatcher_flush_marks_only_callbackless_events_failed() -> None:
     assert delivery_errs == {101: "Kafka flush timed out before delivery callback."}
 
 
+def test_dispatcher_resets_ambiguous_producer_before_retrying_flush_exception() -> None:
+    import portfolio_common.outbox_dispatcher as module
+
+    producer = MagicMock(spec=KafkaProducer)
+    producer.flush.side_effect = RuntimeError("flush failed")
+    dispatcher = module.OutboxDispatcher(kafka_producer=producer)
+    now = module.datetime.now(module.timezone.utc)
+    event = module._ClaimedOutboxEvent(
+        id=101,
+        aggregate_type="OutboxFlush",
+        aggregate_id="agg-101",
+        partition_key="PORT_001|SEC_A",
+        event_type="TestEvent",
+        payload={},
+        topic="flush.topic",
+        correlation_id=None,
+        traceparent=None,
+        retry_count=0,
+        created_at=now,
+        claim_token="claim-101",
+        claim_expires_at=now + timedelta(seconds=30),
+    )
+    delivery_ack: dict[int, bool] = {}
+    delivery_errs: dict[int, str] = {}
+
+    dispatcher._flush_delivery_results([event], delivery_ack, delivery_errs)
+
+    producer.reset_after_flush_failure.assert_called_once_with()
+    assert delivery_ack == {101: False}
+    assert delivery_errs == {101: "flush failed"}
+
+
+def test_dispatcher_retains_claim_when_ambiguous_producer_reset_fails(
+    monkeypatch,
+) -> None:
+    import portfolio_common.outbox_dispatcher as module
+
+    producer = MagicMock(spec=KafkaProducer)
+    producer.flush.side_effect = RuntimeError("flush failed")
+    producer.reset_after_flush_failure.side_effect = RuntimeError("purge failed")
+    dispatcher = module.OutboxDispatcher(kafka_producer=producer)
+    event = MagicMock()
+    monkeypatch.setattr(dispatcher, "_read_pending_gauge", MagicMock())
+    monkeypatch.setattr(dispatcher, "_claim_pending_events", MagicMock(return_value=[event]))
+    monkeypatch.setattr(dispatcher, "_publish_events", MagicMock())
+    persist_results = MagicMock()
+    monkeypatch.setattr(dispatcher, "_persist_delivery_results", persist_results)
+
+    with pytest.raises(RuntimeError, match="purge failed"):
+        dispatcher._process_batch_sync()
+
+    persist_results.assert_not_called()
+
+
 def test_dispatcher_elapsed_retry_budget_moves_failure_to_terminal() -> None:
     import portfolio_common.outbox_dispatcher as module
 

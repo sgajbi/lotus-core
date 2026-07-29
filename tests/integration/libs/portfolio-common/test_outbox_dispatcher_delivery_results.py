@@ -287,3 +287,52 @@ async def test_flush_timeout_without_callbacks_is_accounted_as_retry(db_engine, 
     assert rows[1].next_attempt_at is not None
     assert all(row.claim_token is None for row in rows)
     assert all(row.claim_expires_at is None for row in rows)
+
+
+async def test_flush_exception_replaces_producer_before_releasing_claim(db_engine, clean_db):
+    """
+    GIVEN a producer whose flush raises after accepting an outbox record
+    WHEN the dispatcher processes the batch
+    THEN it purges/replaces that producer before the row becomes retryable.
+    """
+    mock_producer = MagicMock(spec=KafkaProducer)
+    mock_producer.flush.side_effect = RuntimeError("flush failed")
+    test_session_factory = _build_test_session_factory(db_engine)
+
+    with test_session_factory() as session:
+        with session.begin():
+            event = OutboxEvent(
+                aggregate_type="FlushExceptionTest",
+                aggregate_id=f"agg-flush-exception-{uuid.uuid4()}",
+                status="PENDING",
+                event_type="TestEvent",
+                payload=json.dumps({"sequence": 1}),
+                topic="test.topic",
+            )
+            session.add(event)
+            session.flush()
+            event_id = event.id
+
+    dispatcher = OutboxDispatcher(
+        kafka_producer=mock_producer,
+        poll_interval=0.1,
+        batch_size=1,
+        db_session_factory=test_session_factory,
+    )
+    dispatcher._process_batch_sync()
+
+    with test_session_factory() as session:
+        row = session.execute(
+            text(
+                "SELECT status, retry_count, next_attempt_at, claim_token, claim_expires_at "
+                "FROM outbox_events WHERE id = :event_id"
+            ),
+            {"event_id": event_id},
+        ).one()
+
+    mock_producer.reset_after_flush_failure.assert_called_once_with()
+    assert row.status == "PENDING"
+    assert row.retry_count == 1
+    assert row.next_attempt_at is not None
+    assert row.claim_token is None
+    assert row.claim_expires_at is None
