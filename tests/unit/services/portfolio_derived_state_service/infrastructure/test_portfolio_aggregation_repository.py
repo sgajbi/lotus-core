@@ -127,6 +127,8 @@ async def test_claim_eligible_jobs_completeness_gate_stays_correlated(
         "daily_position_snapshots.epoch <= portfolio_aggregation_jobs.target_epoch"
         in compiled_query
     )
+    assert ".updated_at >= daily_position_snapshots_" in compiled_query
+    assert "position_timeseries_" in compiled_query
 
 
 async def test_claim_eligible_jobs_has_no_legacy_count_window_gate(
@@ -459,7 +461,8 @@ async def test_fail_or_requeue_job_requeues_superseded_source_identity(
     assert "status='PENDING'" in compiled
     assert "portfolio_aggregation_jobs.target_epoch != 4" in compiled
     assert "portfolio_aggregation_jobs.source_revision != 5" in compiled
-    assert "daily_position_snapshots.epoch > 4" in compiled
+    assert "daily_position_snapshots_1.epoch > 4" in compiled
+    assert "position_timeseries_1.updated_at >= daily_position_snapshots_1.updated_at" in compiled
 
 
 async def test_fail_or_requeue_job_rechecks_supersession_after_terminal_race(
