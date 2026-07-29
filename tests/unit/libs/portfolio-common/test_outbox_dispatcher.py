@@ -252,6 +252,41 @@ def test_terminal_failure_update_persists_structured_failure_metadata() -> None:
     assert compiled_params["last_failure_at"] is not None
 
 
+def test_process_batch_reports_zero_when_no_stream_head_is_claimable(monkeypatch) -> None:
+    import portfolio_common.outbox_dispatcher as module
+
+    dispatcher = module.OutboxDispatcher(kafka_producer=MagicMock(spec=KafkaProducer))
+    monkeypatch.setattr(dispatcher, "_read_pending_gauge", MagicMock())
+    monkeypatch.setattr(dispatcher, "_claim_pending_events", MagicMock(return_value=[]))
+
+    assert dispatcher._process_batch_sync() == 0
+
+
+@pytest.mark.asyncio
+async def test_dispatcher_immediately_drains_after_a_productive_batch(monkeypatch) -> None:
+    import portfolio_common.outbox_dispatcher as module
+
+    dispatcher = module.OutboxDispatcher(
+        kafka_producer=MagicMock(spec=KafkaProducer),
+        poll_interval=60,
+    )
+    process_batch = MagicMock()
+
+    def _process_one_batch() -> int:
+        process_batch()
+        dispatcher.stop()
+        return 1
+
+    monkeypatch.setattr(dispatcher, "_process_batch_sync", _process_one_batch)
+    poll_wait = MagicMock(side_effect=AssertionError("productive batches must not poll-wait"))
+    monkeypatch.setattr(module.asyncio, "wait_for", poll_wait)
+
+    await dispatcher.run()
+
+    process_batch.assert_called_once_with()
+    poll_wait.assert_not_called()
+
+
 @pytest.mark.asyncio
 async def test_dispatcher_stop_interrupts_poll_sleep(monkeypatch):
     import portfolio_common.outbox_dispatcher as module
