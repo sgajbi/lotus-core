@@ -70,6 +70,7 @@ from .source_facts import (
     ValuationBookScope,
     resolve_market_price_source_fact,
     resolve_optional_valuation_book_scope,
+    validate_market_price_policy_compatibility,
 )
 
 __all__ = [
@@ -130,4 +131,5 @@ __all__ = [
     "supported_position_valuation_policies",
     "supported_day_count_conventions",
     "validate_no_overlapping_active_assignments",
+    "validate_market_price_policy_compatibility",
 ]

@@ -6,10 +6,14 @@ from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 from enum import StrEnum
+from typing import TYPE_CHECKING
 
 from ..calculation_lineage import FinancialSourceReference, canonical_content_hash
 from ..currency import normalize_currency_code
 from .source_versions import latest_source_versions
+
+if TYPE_CHECKING:
+    from .position_valuation import PositionValuationPolicy
 
 
 class MarketPriceSourceFactError(ValueError):
@@ -219,3 +223,21 @@ def resolve_market_price_source_fact(
             f"overlapping active market-price source facts: {sources}"
         )
     return active[0]
+
+
+def validate_market_price_policy_compatibility(
+    *,
+    fact: MarketPriceSourceFact,
+    policy: PositionValuationPolicy,
+) -> None:
+    """Reject a source representation that does not match its executable policy."""
+
+    from .position_valuation import PositionValuationPolicy
+
+    if not isinstance(policy, PositionValuationPolicy):
+        raise TypeError("policy must be a PositionValuationPolicy")
+    if policy.input_basis.value != fact.quote_basis.value:
+        raise MarketPriceSourceFactError(
+            "market-price quote basis does not match valuation policy input basis: "
+            f"quote_basis={fact.quote_basis.value}, input_basis={policy.input_basis.value}"
+        )
