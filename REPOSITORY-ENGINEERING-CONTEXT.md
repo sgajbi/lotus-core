@@ -2703,6 +2703,9 @@ Most relevant current governance:
      Do not restore the ambiguous `app.core` package or flat `app.domain.timeseries_records` module.
      Treat the persisted snapshot as authoritative and fail
      closed before writes when repeated trigger portfolio, security, date, or epoch identity differs.
+     A failed or null-valued position snapshot must not emit the ordinary numeric-materialization
+     trigger. The position-timeseries domain must also reject null current or prior market values;
+     never reinterpret unavailable authoritative valuation as numeric zero.
      Keep the portfolio-timeseries stage separate as a testable module while #714 consolidates the
      runtime; do not move either workflow into Kafka consumers or `portfolio_common`.
      Portfolio aggregation delivery follows the same rule: claim durable jobs with lease owner,

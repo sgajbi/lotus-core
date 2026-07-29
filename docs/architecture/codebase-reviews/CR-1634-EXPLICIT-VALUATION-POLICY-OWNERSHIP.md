@@ -170,9 +170,11 @@ narrow framework-free contract therefore belongs in `portfolio_common.domain.val
   unscoped valuations carry an explicit unsupported receipt without fabricated authority evidence;
   failed or unvalued replacements delete any stale receipt in the same snapshot/outbox transaction.
 - Deterministic scoped-authority failures replace the exact snapshot with `FAILED`, clear derived
-  values, remove the old receipt, update the job, and stage the existing persisted-snapshot event
-  in one transaction. A previously supported valuation cannot remain visible under stale authority
-  after reprocessing.
+  values, remove the old receipt, and update the job in one transaction. They do not stage the
+  numeric persisted-snapshot event. The downstream calculation independently rejects null current
+  or prior market values, so unavailable authority cannot become zero-valued timeseries. A
+  previously supported snapshot cannot remain falsely valued under stale authority after
+  reprocessing.
 - Financial reconciliation outer-joins receipt evidence in its existing set-based snapshot query.
   Supported unit-price/quantity receipts use the recorded exact policy rather than the legacy bond
   heuristic; unsupported or inconsistent authoritative receipts produce a blocking finding.
@@ -243,6 +245,11 @@ will be deleted, not retained as a fallback, when those acceptance criteria are 
   diff hygiene. The tests prove failed scoped authority replaces stale valued state and removes its
   receipt, supported unit-price bonds bypass magnitude inference, malformed authoritative receipt
   evidence fails closed, and historical receiptless rows remain in the set-based read.
+- A late review found that the ordinary snapshot-persisted event could turn failed/null valuation
+  into zero-valued position and portfolio timeseries. The producer now withholds numeric
+  materialization events for failed or null-valued snapshots, while the position-timeseries domain
+  independently rejects null current and prior market values. Forty warning-strict producer,
+  domain, and materialization tests plus configured MyPy prove the fail-closed handoff.
 - Strict MyPy passed for all seven valuation-domain source modules and the focused position test.
 - The persistence contract passed 35 focused domain/model/migration tests under the warning gate;
   Alembic reports the new revision as the single head and the repository migration contract accepts

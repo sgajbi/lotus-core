@@ -15,15 +15,31 @@ from .numeric_policy import POSITION_TIMESERIES_LEDGER_OUTPUT_V1
 ZERO = Decimal("0")
 
 
+class PositionSnapshotNotValuedError(ValueError):
+    """Raised when numeric timeseries input lacks an authoritative market value."""
+
+
 def _decimal_or_zero(value: object) -> Decimal:
     amount = decimal_or_none(value)
     return amount if amount is not None else ZERO
 
 
 def _beginning_market_value(previous_snapshot: PositionSnapshotRecord | None) -> Decimal:
-    if previous_snapshot and previous_snapshot.market_value_local is not None:
-        return _decimal_or_zero(previous_snapshot.market_value_local)
-    return ZERO
+    if previous_snapshot is None:
+        return ZERO
+    return _required_market_value(previous_snapshot, boundary="beginning")
+
+
+def _required_market_value(
+    snapshot: PositionSnapshotRecord,
+    *,
+    boundary: str,
+) -> Decimal:
+    if snapshot.market_value_local is None:
+        raise PositionSnapshotNotValuedError(
+            f"{boundary} position snapshot has no authoritative local market value"
+        )
+    return _decimal_or_zero(snapshot.market_value_local)
 
 
 def _average_cost(*, cost_basis: Decimal, quantity: Decimal) -> Decimal:
@@ -113,6 +129,7 @@ def calculate_position_timeseries(
 ) -> PositionTimeseriesRecord:
     """Calculate one complete position-timeseries record."""
 
+    eod_market_value = _required_market_value(current_snapshot, boundary="end-of-day")
     eod_quantity = _decimal_or_zero(current_snapshot.quantity)
     eod_cost_basis = _decimal_or_zero(current_snapshot.cost_basis_local)
     cashflow_buckets = _cashflow_buckets(cashflows)
@@ -127,7 +144,7 @@ def calculate_position_timeseries(
         eod_cashflow_position=cashflow_buckets.eod_position,
         bod_cashflow_portfolio=cashflow_buckets.bod_portfolio,
         eod_cashflow_portfolio=cashflow_buckets.eod_portfolio,
-        eod_market_value=_decimal_or_zero(current_snapshot.market_value_local),
+        eod_market_value=eod_market_value,
         fees=cashflow_buckets.fees,
         quantity=eod_quantity,
         cost=_average_cost(cost_basis=eod_cost_basis, quantity=eod_quantity),
