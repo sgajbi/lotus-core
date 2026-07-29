@@ -77,11 +77,13 @@ inputs and serialized Decimal values remain unchanged.
 - Signed commits `123471fe8` and `f9ff1d582` address the accepted per-consumer review findings.
   Call-site hardening associates execution and lineage evidence with the enclosing callable so one
   bound function cannot hide an unbound sibling in the same file.
-- Twenty-six focused guard tests passed with 99% line/branch coverage, including repository parity;
+- Signed commit `9535ccf0e` resolves direct `as` imports, module-qualified policy access, and local
+  assignments from qualified policies, so an aliased unbound consumer cannot bypass the inventory.
+- Thirty focused guard tests passed with 99% line/branch coverage, including repository parity;
   mutation-style shape drift; malformed envelopes and policy entries; stale, unclassified, unused,
   partially bound, and missing-lineage policies; ambiguous/duplicate source declarations; duplicate
-  JSON keys; exact callable-gap parity; same-file bound/unbound siblings; CLI success/failure
-  evidence; and rejection of lineage-only pseudo-use.
+  JSON keys; exact callable-gap parity; same-file bound/unbound siblings; imported and qualified
+  aliases; CLI success/failure evidence; and rejection of lineage-only pseudo-use.
 
 ## Compatibility and remaining work
 
