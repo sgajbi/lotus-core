@@ -19,8 +19,7 @@ from sqlalchemy.orm import sessionmaker
 TRACEPARENT = "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
 
 
-@pytest.fixture
-def smart_mock_kafka_producer() -> MagicMock:
+def _smart_mock_kafka_producer() -> MagicMock:
     """
     Provides a mock of KafkaProducer that allows assertions on publish_message
     and simulates successful delivery callbacks when flush is called.
@@ -48,6 +47,11 @@ def smart_mock_kafka_producer() -> MagicMock:
     mock.publish_message.side_effect = _publish_message
     mock.flush.side_effect = _flush
     return mock
+
+
+@pytest.fixture
+def smart_mock_kafka_producer() -> MagicMock:
+    return _smart_mock_kafka_producer()
 
 
 @pytest.mark.asyncio
@@ -948,7 +952,9 @@ async def test_dispatcher_is_concurrent_safe(db_engine, clean_db, smart_mock_kaf
         db_session_factory=TestSessionFactory,
     )
     dispatcher2 = OutboxDispatcher(
-        kafka_producer=smart_mock_kafka_producer,
+        # Each runtime owns a producer. Separate callback queues keep the test faithful to
+        # production and avoid one mock flush delivering another dispatcher's callbacks.
+        kafka_producer=_smart_mock_kafka_producer(),
         poll_interval=0.1,
         batch_size=5,
         db_session_factory=TestSessionFactory,

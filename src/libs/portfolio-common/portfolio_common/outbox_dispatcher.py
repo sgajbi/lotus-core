@@ -30,12 +30,17 @@ from portfolio_common.monitoring import (
     set_outbox_retry_eligible_pending,
     set_outbox_retry_waiting_pending,
 )
-from portfolio_common.outbox_settings import get_outbox_runtime_settings
+from portfolio_common.outbox_settings import (
+    OutboxRuntimeConfigurationError,
+    get_outbox_runtime_settings,
+)
 
 logger = logging.getLogger(__name__)
 
 TERMINAL_FAILURE_STATUS = "FAILED"
 MAX_FAILURE_MESSAGE_LENGTH = 512
+DEFAULT_DELIVERY_FENCE_TIMEOUT_SECONDS = 10
+CLAIM_LEASE_SAFETY_SECONDS = 5
 
 
 @dataclass(frozen=True, slots=True)
@@ -92,11 +97,22 @@ class OutboxDispatcher:
         self._max_retries = (
             max(1, int(max_retries)) if max_retries is not None else runtime_settings.max_retries
         )
+        self._delivery_fence_timeout_seconds = _delivery_fence_timeout_seconds(kafka_producer)
         self._claim_lease_seconds = (
             max(1, int(claim_lease_seconds))
             if claim_lease_seconds is not None
             else runtime_settings.claim_lease_seconds
         )
+        minimum_claim_lease_seconds = (
+            self._delivery_fence_timeout_seconds + CLAIM_LEASE_SAFETY_SECONDS
+        )
+        if self._claim_lease_seconds < minimum_claim_lease_seconds:
+            raise OutboxRuntimeConfigurationError(
+                "Invalid outbox runtime configuration for "
+                "OUTBOX_DISPATCHER_CLAIM_LEASE_SECONDS: expected at least "
+                f"{minimum_claim_lease_seconds} seconds so an expired publisher "
+                "cannot deliver after its stream lease is reclaimed"
+            )
         self._retry_max_elapsed_seconds = (
             max(0, int(retry_max_elapsed_seconds))
             if retry_max_elapsed_seconds is not None
@@ -331,7 +347,7 @@ class OutboxDispatcher:
         delivery_errs: Dict[int, str],
     ) -> None:
         try:
-            undelivered_count = self._producer.flush(timeout=10)
+            undelivered_count = self._producer.flush(timeout=self._delivery_fence_timeout_seconds)
             logger.debug(
                 "Outbox dispatcher flush completed.",
                 extra=operation_log_extra(
@@ -694,6 +710,17 @@ def _make_on_delivery(
             delivery_errs[outbox_id] = str(error_message)
 
     return _cb
+
+
+def _delivery_fence_timeout_seconds(kafka_producer: KafkaProducer) -> int:
+    producer_policy = getattr(kafka_producer, "producer_policy", None)
+    delivery_timeout_ms = getattr(producer_policy, "delivery_timeout_ms", None)
+    if isinstance(delivery_timeout_ms, int) and delivery_timeout_ms > 0:
+        return max(
+            DEFAULT_DELIVERY_FENCE_TIMEOUT_SECONDS,
+            ((delivery_timeout_ms + 999) // 1000) + 1,
+        )
+    return DEFAULT_DELIVERY_FENCE_TIMEOUT_SECONDS
 
 
 def _delivery_ids_by_outcome(delivery_ack: Dict[int, bool], *, successful: bool) -> list[int]:
