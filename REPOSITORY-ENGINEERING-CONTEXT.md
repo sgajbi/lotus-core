@@ -2995,9 +2995,14 @@ Most relevant current governance:
      route scoped authority through unscoped readers. A scoped position valuation must persist its
      supported receipt in the same unit of work as the snapshot and outbox event; a legacy unscoped
      valuation must persist an explicitly unsupported receipt without invented authority evidence,
-     and a failed replacement must remove stale receipt evidence. Financial reconciliation,
-     correction-triggered replay, principal authority, Query exposure, mixed-book proof, and final
-     heuristic deletion remain mandatory before #451 can close.
+     and a failed replacement must remove stale receipt evidence. Financial reconciliation reads
+     the one-to-one receipt in the same set-based snapshot query: supported unit-price receipts
+     reconcile as explicit quantity-times-price and never enter the legacy bond magnitude
+     heuristic, while missing or explicitly legacy-unscoped receipts preserve historical
+     compatibility. Unknown, inconsistent, or not-yet-supported authoritative receipt policies
+     produce a blocking finding instead of falling back. Correction-triggered replay, principal
+     authority and reconciliation, Query exposure, mixed-book proof, production event batching,
+     and final heuristic deletion remain mandatory before #451 can close.
 205. Valuation day-count policy resolves an exact governed convention code and version; unknown
      conventions and versions fail closed. `ACT/365.FIXED` and `ACT/360` use actual elapsed calendar
      days with their fixed denominators. `BUS/252` requires a source-owned, versioned business-day
