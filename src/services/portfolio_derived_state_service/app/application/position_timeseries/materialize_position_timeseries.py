@@ -129,18 +129,16 @@ class MaterializePositionTimeseries:
         current_snapshot: PositionSnapshotRecord,
         correlation_id: str | None,
     ) -> PositionTimeseriesMaterializationResult:
-        future_row_capacity = MAX_DEPENDENT_PROPAGATION_ROWS_PER_COMMAND - 1
         future_snapshots = await repository.get_next_snapshots_after(
             current_snapshot.portfolio_id,
             current_snapshot.security_id,
             current_snapshot.date,
             current_snapshot.epoch,
-            future_row_capacity + 1,
+            1,
         )
-        propagation_truncated = len(future_snapshots) > future_row_capacity
         affected_dates = [
             current_snapshot.date,
-            *(snapshot.date for snapshot in future_snapshots[:future_row_capacity]),
+            *(snapshot.date for snapshot in future_snapshots),
         ]
         invalidated_dates = await repository.invalidate_numeric_materializations(
             current_snapshot.portfolio_id,
@@ -156,20 +154,11 @@ class MaterializePositionTimeseries:
             correlation_id,
         )
         current_day_changed = current_snapshot.date in invalidated_dates
-        if propagation_truncated:
-            logger.warning(
-                "Unavailable-valuation invalidation reached its command limit.",
-                extra={
-                    "portfolio_id": current_snapshot.portfolio_id,
-                    "security_id": current_snapshot.security_id,
-                    "row_limit": MAX_DEPENDENT_PROPAGATION_ROWS_PER_COMMAND,
-                },
-            )
         return PositionTimeseriesMaterializationResult(
             snapshot_found=True,
             current_day_changed=current_day_changed,
             dependent_days_changed=len(invalidated_dates) - int(current_day_changed),
-            dependent_propagation_truncated=propagation_truncated,
+            dependent_propagation_truncated=False,
         )
 
     @staticmethod
