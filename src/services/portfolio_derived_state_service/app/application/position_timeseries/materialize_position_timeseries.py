@@ -95,6 +95,7 @@ class MaterializePositionTimeseries:
             await repository.stage_aggregation_jobs(
                 current_snapshot.portfolio_id,
                 [current_snapshot.date],
+                current_snapshot.epoch,
                 command.correlation_id,
             )
 
@@ -275,6 +276,7 @@ class MaterializePositionTimeseries:
         await repository.stage_aggregation_jobs(
             current_snapshot.portfolio_id,
             changed_dates,
+            epoch,
             correlation_id,
         )
         if has_more_future_snapshots:

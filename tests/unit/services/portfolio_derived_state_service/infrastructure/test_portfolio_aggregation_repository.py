@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.portfolio_derived_state_service.app.domain.aggregation_jobs.models import (
     AggregationJobCompletionDisposition,
+    AggregationJobFailureDisposition,
     AggregationJobLease,
     ExpiredAggregationJobRecovery,
 )
@@ -74,16 +75,6 @@ async def test_get_portfolio_returns_immutable_aggregation_scope(
     assert portfolio is not row
 
 
-async def test_get_current_epoch_for_portfolio_trims_portfolio_id(
-    repository: PortfolioAggregationRepository, mock_db_session: AsyncMock
-):
-    await repository.get_current_epoch_for_portfolio(" P1 ")
-    compiled = str(
-        mock_db_session.execute.call_args[0][0].compile(compile_kwargs={"literal_binds": True})
-    )
-    assert "trim(position_state.portfolio_id) = 'P1'" in compiled
-
-
 async def test_upsert_portfolio_timeseries(
     repository: PortfolioAggregationRepository, mock_db_session: AsyncMock
 ):
@@ -132,6 +123,10 @@ async def test_claim_eligible_jobs_completeness_gate_stays_correlated(
         "daily_position_snapshots.date <= portfolio_aggregation_jobs.aggregation_date"
         in compiled_query
     )
+    assert (
+        "daily_position_snapshots.epoch <= portfolio_aggregation_jobs.target_epoch"
+        in compiled_query
+    )
 
 
 async def test_claim_eligible_jobs_has_no_legacy_count_window_gate(
@@ -177,6 +172,8 @@ async def test_claim_eligible_jobs_increments_attempt_count(
             portfolio_id="P1",
             aggregation_date=date(2025, 1, 1),
             attempt_count=4,
+            target_epoch=3,
+            source_revision=2,
             correlation_id=None,
             lease_owner=_lease().owner,
             lease_token=_lease().token,
@@ -210,6 +207,8 @@ async def test_claim_eligible_jobs_returns_claimed_jobs_in_claim_order(
             aggregation_date=date(2025, 1, 1),
             id=2,
             attempt_count=8,
+            target_epoch=3,
+            source_revision=4,
             correlation_id=None,
             lease_owner=_lease().owner,
             lease_token=_lease().token,
@@ -220,6 +219,8 @@ async def test_claim_eligible_jobs_returns_claimed_jobs_in_claim_order(
             aggregation_date=date(2025, 1, 2),
             id=3,
             attempt_count=7,
+            target_epoch=3,
+            source_revision=4,
             correlation_id=None,
             lease_owner=_lease().owner,
             lease_token=_lease().token,
@@ -230,6 +231,8 @@ async def test_claim_eligible_jobs_returns_claimed_jobs_in_claim_order(
             aggregation_date=date(2025, 1, 1),
             id=1,
             attempt_count=6,
+            target_epoch=3,
+            source_revision=4,
             correlation_id=None,
             lease_owner=_lease().owner,
             lease_token=_lease().token,
@@ -323,6 +326,8 @@ async def test_complete_or_requeue_job_requeues_late_material_input(
     disposition = await repository.complete_or_requeue_job(
         job_id=7,
         lease_token="lease-token-1",
+        target_epoch=4,
+        source_revision=5,
     )
 
     assert disposition is AggregationJobCompletionDisposition.REQUEUED
@@ -347,6 +352,8 @@ async def test_complete_or_requeue_job_completes_owned_job(
     disposition = await repository.complete_or_requeue_job(
         job_id=7,
         lease_token="lease-token-1",
+        target_epoch=4,
+        source_revision=5,
     )
 
     assert disposition is AggregationJobCompletionDisposition.COMPLETE
@@ -370,28 +377,63 @@ async def test_complete_or_requeue_job_reports_lost_ownership(
     disposition = await repository.complete_or_requeue_job(
         job_id=7,
         lease_token="lease-token-1",
+        target_epoch=4,
+        source_revision=5,
     )
 
     assert disposition is AggregationJobCompletionDisposition.LOST_OWNERSHIP
 
 
-async def test_mark_job_failed_only_updates_owned_processing_job(
+async def test_fail_or_requeue_job_fails_only_current_owned_processing_job(
     repository: PortfolioAggregationRepository,
     mock_db_session: AsyncMock,
 ) -> None:
-    mock_db_session.execute.return_value = MagicMock(rowcount=1)
+    mock_db_session.execute.side_effect = [MagicMock(rowcount=0), MagicMock(rowcount=1)]
 
-    updated = await repository.mark_job_failed(job_id=7, lease_token="lease-token-1")
+    disposition = await repository.fail_or_requeue_job(
+        job_id=7,
+        lease_token="lease-token-1",
+        target_epoch=4,
+        source_revision=5,
+    )
 
-    assert updated is True
+    assert disposition is AggregationJobFailureDisposition.FAILED
     compiled = str(
-        mock_db_session.execute.await_args.args[0].compile(
+        mock_db_session.execute.await_args_list[1]
+        .args[0]
+        .compile(
             dialect=postgresql.dialect(),
             compile_kwargs={"literal_binds": True},
         )
     )
     assert "status='FAILED'" in compiled
     assert "portfolio_aggregation_jobs.status = 'PROCESSING'" in compiled
+
+
+async def test_fail_or_requeue_job_requeues_superseded_source_identity(
+    repository: PortfolioAggregationRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    mock_db_session.execute.return_value = MagicMock(rowcount=1)
+
+    disposition = await repository.fail_or_requeue_job(
+        job_id=7,
+        lease_token="lease-token-1",
+        target_epoch=4,
+        source_revision=5,
+    )
+
+    assert disposition is AggregationJobFailureDisposition.REQUEUED
+    mock_db_session.execute.assert_awaited_once()
+    compiled = str(
+        mock_db_session.execute.await_args.args[0].compile(
+            dialect=postgresql.dialect(),
+            compile_kwargs={"literal_binds": True},
+        )
+    )
+    assert "status='PENDING'" in compiled
+    assert "portfolio_aggregation_jobs.target_epoch != 4" in compiled
+    assert "portfolio_aggregation_jobs.source_revision != 5" in compiled
 
 
 async def test_claim_eligible_jobs_persists_and_returns_lease_identity(
@@ -412,6 +454,8 @@ async def test_claim_eligible_jobs_persists_and_returns_lease_identity(
             portfolio_id="P1",
             aggregation_date=date(2026, 7, 15),
             attempt_count=9,
+            target_epoch=4,
+            source_revision=5,
             correlation_id="corr-1",
             lease_owner=lease.owner,
             lease_token=lease.token,
@@ -424,6 +468,8 @@ async def test_claim_eligible_jobs_persists_and_returns_lease_identity(
 
     assert claimed_jobs[0].lease == lease
     assert claimed_jobs[0].aggregation_revision == 9
+    assert claimed_jobs[0].target_epoch == 4
+    assert claimed_jobs[0].source_revision == 5
     claim_statement = mock_db_session.execute.await_args_list[1].args[0]
     compiled = str(
         claim_statement.compile(
@@ -445,6 +491,8 @@ async def test_complete_or_requeue_claim_fences_terminal_write_and_clears_lease(
     disposition = await repository.complete_or_requeue_job(
         job_id=7,
         lease_token="lease-token-1",
+        target_epoch=4,
+        source_revision=5,
     )
 
     assert disposition is AggregationJobCompletionDisposition.COMPLETE
@@ -471,6 +519,8 @@ async def test_complete_or_requeue_claim_reports_lost_ownership_after_reclaim(
     disposition = await repository.complete_or_requeue_job(
         job_id=7,
         lease_token="expired-lease-token",
+        target_epoch=4,
+        source_revision=5,
     )
 
     assert disposition is AggregationJobCompletionDisposition.LOST_OWNERSHIP
@@ -484,17 +534,24 @@ async def test_complete_or_requeue_claim_reports_lost_ownership_after_reclaim(
         assert "portfolio_aggregation_jobs.lease_token = 'expired-lease-token'" in compiled
 
 
-async def test_mark_claim_failed_fences_terminal_write_and_clears_lease(
+async def test_fail_current_claim_fences_terminal_write_and_clears_lease(
     repository: PortfolioAggregationRepository,
     mock_db_session: AsyncMock,
 ) -> None:
-    mock_db_session.execute.return_value = MagicMock(rowcount=1)
+    mock_db_session.execute.side_effect = [MagicMock(rowcount=0), MagicMock(rowcount=1)]
 
-    updated = await repository.mark_job_failed(job_id=7, lease_token="lease-token-1")
+    disposition = await repository.fail_or_requeue_job(
+        job_id=7,
+        lease_token="lease-token-1",
+        target_epoch=4,
+        source_revision=5,
+    )
 
-    assert updated is True
+    assert disposition is AggregationJobFailureDisposition.FAILED
     compiled = str(
-        mock_db_session.execute.await_args.args[0].compile(
+        mock_db_session.execute.await_args_list[1]
+        .args[0]
+        .compile(
             dialect=postgresql.dialect(),
             compile_kwargs={"literal_binds": True},
         )

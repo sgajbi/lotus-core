@@ -2657,6 +2657,8 @@ class PortfolioAggregationJob(Base):
     alternate_lookup_key = Column(String, nullable=True)
     failure_reason = Column(Text, nullable=True)
     attempt_count = Column(Integer, nullable=False, default=0, server_default="0")
+    target_epoch = Column(Integer, nullable=False, default=0, server_default="0")
+    source_revision = Column(Integer, nullable=False, default=1, server_default="1")
     lease_owner = Column(String(128), nullable=True)
     lease_token = Column(String(64), nullable=True)
     lease_expires_at = Column(DateTime(timezone=True), nullable=True)
@@ -2672,6 +2674,14 @@ class PortfolioAggregationJob(Base):
             "(lease_owner IS NOT NULL AND lease_token IS NOT NULL AND "
             "lease_expires_at IS NOT NULL)",
             name="ck_portfolio_aggregation_jobs_lease_complete",
+        ),
+        CheckConstraint(
+            "target_epoch >= 0",
+            name="ck_portfolio_aggregation_jobs_target_epoch_nonnegative",
+        ),
+        CheckConstraint(
+            "source_revision >= 1",
+            name="ck_portfolio_aggregation_jobs_source_revision_positive",
         ),
         Index(
             "ix_portfolio_aggregation_jobs_status_aggregation_date",

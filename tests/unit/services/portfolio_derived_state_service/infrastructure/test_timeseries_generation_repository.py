@@ -33,7 +33,7 @@ def mock_db_session() -> AsyncMock:
         {"id": 1, "portfolio_id": "P1", "aggregation_date": date(2025, 1, 1)}
     ]
     mock_result.scalar.return_value = True
-    mock_result.fetchall.return_value = [MagicMock(security_id="SEC1")]
+    mock_result.fetchall.return_value = []
     mock_result.rowcount = 1
 
     session.execute = AsyncMock(return_value=mock_result)
@@ -285,6 +285,7 @@ async def test_stage_aggregation_jobs_rearms_completed_day_for_late_material_inp
     await repository.stage_aggregation_jobs(
         "PORT_TS_POS_01",
         [date(2025, 8, 12)],
+        4,
         "corr-456",
     )
 
@@ -297,9 +298,38 @@ async def test_stage_aggregation_jobs_rearms_completed_day_for_late_material_inp
     compiled_values = set(compiled.params.values())
 
     assert "DO UPDATE SET status" in compiled_stmt
+    assert "target_epoch" in compiled_stmt
+    assert "source_revision" in compiled_stmt
+    assert "greatest(portfolio_aggregation_jobs.target_epoch" in compiled_stmt
+    assert "portfolio_aggregation_jobs.source_revision + 1" in compiled_stmt
     assert "correlation_id" in compiled_stmt
     assert "portfolio_aggregation_jobs.status !=" in compiled_stmt
     assert "REPROCESS_REQUESTED" in compiled_stmt or "REPROCESS_REQUESTED" in compiled_values
+
+
+async def test_aggregation_staging_metrics_distinguish_material_outcomes(monkeypatch) -> None:
+    observations: list[tuple[str, str, str, int]] = []
+    monkeypatch.setattr(
+        timeseries_generation_repository,
+        "observe_control_queue_outcome",
+        lambda queue, stage, outcome, count: observations.append((queue, stage, outcome, count)),
+    )
+
+    timeseries_generation_repository._observe_aggregation_staging_outcomes(
+        staged_rows=[
+            MagicMock(status="PENDING", attempt_count=0, source_revision=1),
+            MagicMock(status="PENDING", attempt_count=2, source_revision=3),
+            MagicMock(status="PROCESSING", attempt_count=1, source_revision=4),
+        ],
+        requested_count=4,
+    )
+
+    assert observations == [
+        ("aggregation", "staging", "new", 1),
+        ("aggregation", "staging", "rearmed", 1),
+        ("aggregation", "staging", "superseded", 1),
+        ("aggregation", "staging", "no_op", 1),
+    ]
 
 
 async def test_stage_aggregation_jobs_deduplicates_and_orders_dates(
@@ -309,6 +339,7 @@ async def test_stage_aggregation_jobs_deduplicates_and_orders_dates(
     await repository.stage_aggregation_jobs(
         "PORT_TS_POS_01",
         [date(2025, 8, 14), date(2025, 8, 13), date(2025, 8, 13)],
+        4,
         "corr-789",
     )
 
@@ -332,6 +363,7 @@ async def test_stage_aggregation_jobs_records_missing_correlation_diagnostics(
     await repository.stage_aggregation_jobs(
         "PORT_TS_POS_01",
         [date(2025, 8, 12)],
+        4,
         None,
     )
 
@@ -355,6 +387,6 @@ async def test_stage_aggregation_jobs_skips_empty_date_set(
     repository: TimeseriesGenerationRepository,
     mock_db_session: AsyncMock,
 ) -> None:
-    await repository.stage_aggregation_jobs("PORT_TS_POS_01", [], "corr-empty")
+    await repository.stage_aggregation_jobs("PORT_TS_POS_01", [], 4, "corr-empty")
 
     mock_db_session.execute.assert_not_awaited()
