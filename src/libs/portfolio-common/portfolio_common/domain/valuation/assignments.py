@@ -7,7 +7,7 @@ from datetime import date, datetime
 from enum import StrEnum
 from typing import cast
 
-from ..calculation_lineage import canonical_content_hash
+from ..calculation_lineage import FinancialSourceReference, canonical_content_hash
 from .source_facts import ValuationAuthorityScope
 from .source_versions import latest_source_versions
 
@@ -122,6 +122,17 @@ class InstrumentValuationPolicyAssignment:
             }
         )
         return cast(str, content_hash)
+
+    def source_reference(self) -> FinancialSourceReference:
+        """Return immutable source evidence for policy-assignment calculation lineage."""
+
+        return FinancialSourceReference(
+            source_system=self.source_system,
+            source_record_id=self.source_record_id,
+            source_revision=self.source_revision,
+            source_content_hash=self.content_hash(),
+            observed_at=self.observed_at,
+        )
 
 
 @dataclass(frozen=True, slots=True)

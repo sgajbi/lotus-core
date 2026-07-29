@@ -76,6 +76,18 @@ def test_assignment_hash_normalizes_equivalent_observation_instants() -> None:
     assert singapore.content_hash() == baseline.content_hash()
 
 
+def test_assignment_exposes_complete_source_reference_for_calculation_lineage() -> None:
+    assignment = _assignment()
+
+    source_reference = assignment.source_reference()
+
+    assert source_reference.source_system == assignment.source_system
+    assert source_reference.source_record_id == assignment.source_record_id
+    assert source_reference.source_revision == assignment.source_revision
+    assert source_reference.source_content_hash == assignment.content_hash()
+    assert source_reference.observed_at == assignment.observed_at
+
+
 @pytest.mark.parametrize(
     ("tenant_id", "legal_book_id", "security_id"),
     [
