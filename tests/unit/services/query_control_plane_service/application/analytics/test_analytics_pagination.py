@@ -67,7 +67,7 @@ def test_position_next_page_token_encodes_last_row_scope() -> None:
     ]
 
 
-def test_portfolio_diagnostics_counts_missing_and_stale_dates() -> None:
+def test_portfolio_diagnostics_keeps_authoritative_restatements_current() -> None:
     diagnostics = portfolio_timeseries_diagnostics(
         quality_distribution={"final": 2, "restated": 1},
         expected_business_dates=[date(2025, 1, 30), date(2025, 1, 31)],
@@ -75,7 +75,7 @@ def test_portfolio_diagnostics_counts_missing_and_stale_dates() -> None:
     )
 
     assert diagnostics.missing_dates_count == 1
-    assert diagnostics.stale_points_count == 1
+    assert diagnostics.stale_points_count == 0
     assert diagnostics.expected_business_dates_count == 2
     assert diagnostics.expected_business_dates_digest == request_fingerprint(
         {"business_dates": ["2025-01-30", "2025-01-31"]}
@@ -84,13 +84,13 @@ def test_portfolio_diagnostics_counts_missing_and_stale_dates() -> None:
     assert diagnostics.cash_flows_included is True
 
 
-def test_position_diagnostics_preserves_requested_dimensions_and_cash_flow_flag() -> None:
+def test_position_diagnostics_preserves_current_restatement_and_request_metadata() -> None:
     diagnostics = position_timeseries_diagnostics(
         quality_distribution={"final": 1, "restated": 2},
         dimensions=["asset_class", "sector"],
         include_cash_flows=False,
     )
 
-    assert diagnostics.stale_points_count == 2
+    assert diagnostics.stale_points_count == 0
     assert diagnostics.requested_dimensions == ["asset_class", "sector"]
     assert diagnostics.cash_flows_included is False

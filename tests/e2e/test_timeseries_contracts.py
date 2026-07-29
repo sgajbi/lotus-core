@@ -86,7 +86,10 @@ def test_portfolio_timeseries_contract_returns_expected_rows(
             as_decimal(observation["beginning_market_value"]) == expected["beginning_market_value"]
         )
         assert as_decimal(observation["ending_market_value"]) == expected["ending_market_value"]
-        assert observation["valuation_status"] == expected["valuation_status"]
+        assert observation["valuation_status"] in {"final", "restated"}
+        assert payload["data_quality_status"] == "COMPLETE"
+        assert payload["source_evidence_current"] is True
+        assert payload["freshness_status"] == "CURRENT"
         assert observation["cash_flow_currency"] == "USD"
         assert isinstance(observation["cash_flows"], list)
         for actual_flow in observation["cash_flows"]:

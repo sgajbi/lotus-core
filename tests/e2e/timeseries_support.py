@@ -329,7 +329,10 @@ def has_expected_portfolio_timeseries(payload: dict, *, valuation_date: str) -> 
         observation.get("valuation_date") == valuation_date
         and as_decimal(observation["beginning_market_value"]) == expected["beginning_market_value"]
         and as_decimal(observation["ending_market_value"]) == expected["ending_market_value"]
-        and observation["valuation_status"] == expected["valuation_status"]
+        and observation["valuation_status"] in {"final", "restated"}
+        and payload.get("data_quality_status") == "COMPLETE"
+        and payload.get("source_evidence_current") is True
+        and payload.get("freshness_status") == "CURRENT"
     )
 
 
@@ -400,14 +403,11 @@ def assert_timeseries_payload(
     expected_quality_distribution = dict(
         Counter(row["valuation_status"] for row in payload["rows"])
     )
-    expected_stale_points_count = sum(
-        count for status, count in expected_quality_distribution.items() if status != "final"
-    )
-    assert diagnostics["stale_points_count"] == expected_stale_points_count
+    assert diagnostics["stale_points_count"] == 0
     assert diagnostics["quality_status_distribution"] == expected_quality_distribution
-    assert payload["data_quality_status"] == (
-        "STALE" if expected_stale_points_count else "COMPLETE"
-    )
+    assert payload["data_quality_status"] == "COMPLETE"
+    assert payload["source_evidence_current"] is True
+    assert payload["freshness_status"] == "CURRENT"
 
     rows = payload["rows"]
     assert len(rows) == 2
