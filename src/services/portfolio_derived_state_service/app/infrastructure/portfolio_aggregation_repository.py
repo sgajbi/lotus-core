@@ -310,10 +310,17 @@ class PortfolioAggregationRepository(TimeseriesMarketDataReader):
             list[Any],
             (await self.db.execute(_expired_job_leases_statement(now))).all(),
         )
-        failed_job_ids = [row.id for row in expired_rows if row.attempt_count >= max_attempts]
-        requeued_job_ids = [row.id for row in expired_rows if row.attempt_count < max_attempts]
+        failed_job_ids = [
+            row.id
+            for row in expired_rows
+            if row.attempt_count >= max_attempts
+            and row.failure_reason != AGGREGATION_REPROCESS_REQUESTED
+        ]
         failed_count = await self._fail_expired_job_leases(failed_job_ids, now)
-        requeued_count = await self._requeue_expired_job_leases(requeued_job_ids, now)
+        requeued_count = await self._requeue_expired_job_leases(
+            [row.id for row in expired_rows],
+            now,
+        )
         return ExpiredAggregationJobRecovery(
             requeued_count=requeued_count,
             failed_count=failed_count,
@@ -324,6 +331,10 @@ class PortfolioAggregationRepository(TimeseriesMarketDataReader):
             return 0
         result = await self.db.execute(
             _expired_job_leases_update(job_ids, now)
+            .where(
+                func.coalesce(PortfolioAggregationJob.failure_reason, "")
+                != AGGREGATION_REPROCESS_REQUESTED
+            )
             .values(
                 status="FAILED",
                 failure_reason="Aggregation job lease expired after max attempts",
@@ -476,6 +487,7 @@ def _expired_job_leases_statement(now: datetime):
     return select(
         PortfolioAggregationJob.id,
         PortfolioAggregationJob.attempt_count,
+        PortfolioAggregationJob.failure_reason,
     ).where(
         PortfolioAggregationJob.status == "PROCESSING",
         PortfolioAggregationJob.lease_expires_at <= now,

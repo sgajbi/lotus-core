@@ -20,6 +20,7 @@ from src.services.portfolio_derived_state_service.app.domain.aggregation_jobs.mo
     AggregationJobCompletionDisposition,
     AggregationJobFailureDisposition,
     AggregationJobLease,
+    ExpiredAggregationJobRecovery,
 )
 from src.services.portfolio_derived_state_service.app.infrastructure import (
     portfolio_aggregation_repository,
@@ -509,6 +510,37 @@ async def test_newer_epoch_supersedes_claim_and_rearms_same_portfolio_day(
     assert second_claim.id == first_claim.id
     assert second_claim.target_epoch == 1
     assert second_claim.source_revision == 2
+    await async_db_session.commit()
+
+    await TimeseriesGenerationRepository(async_db_session).stage_aggregation_jobs(
+        portfolio_id,
+        [aggregation_date],
+        0,
+        "corr-delayed-lower-epoch",
+    )
+    await async_db_session.commit()
+    delayed_lower_epoch_disposition = await repository.complete_or_requeue_job(
+        job_id=second_claim.id,
+        lease_token=second_claim.lease.token,
+        target_epoch=second_claim.target_epoch,
+        source_revision=second_claim.source_revision,
+    )
+    await async_db_session.commit()
+
+    assert delayed_lower_epoch_disposition is AggregationJobCompletionDisposition.REQUEUED
+    third_claim = (
+        await repository.claim_eligible_jobs(
+            batch_size=1,
+            lease=AggregationJobLease(
+                owner="aggregation-runtime-third",
+                token="lease-token-third",
+                expires_at=datetime.now(UTC) + timedelta(minutes=5),
+            ),
+        )
+    )[0]
+    assert third_claim.id == first_claim.id
+    assert third_claim.target_epoch == 1
+    assert third_claim.source_revision == 3
 
 
 @pytest.mark.lifecycle
@@ -650,3 +682,45 @@ async def test_same_epoch_snapshot_corrections_requeue_success_and_failure(
         source_revision=final_claim.source_revision,
     )
     assert final_completion is AggregationJobCompletionDisposition.COMPLETE
+
+
+@pytest.mark.lifecycle
+async def test_expired_superseded_revision_requeues_after_prior_attempt_exhaustion(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    """Do not fail a source revision that has never received its own attempt."""
+
+    now = datetime.now(UTC)
+    job = PortfolioAggregationJob(
+        portfolio_id="P-AGG-SUPERSEDED-RECOVERY",
+        aggregation_date=date(2025, 8, 17),
+        status="PROCESSING",
+        attempt_count=3,
+        target_epoch=2,
+        source_revision=4,
+        failure_reason="REPROCESS_REQUESTED",
+        lease_owner="expired-worker",
+        lease_token="expired-worker-token",
+        lease_expires_at=now - timedelta(minutes=1),
+    )
+    async_db_session.add(job)
+    await async_db_session.commit()
+
+    recovery = await PortfolioAggregationRepository(async_db_session).recover_expired_job_leases(
+        now=now, max_attempts=3
+    )
+    await async_db_session.commit()
+    await async_db_session.refresh(job)
+
+    assert recovery == ExpiredAggregationJobRecovery(
+        requeued_count=1,
+        failed_count=0,
+    )
+    assert job.status == "PENDING"
+    assert job.attempt_count == 3
+    assert job.source_revision == 4
+    assert job.failure_reason is None
+    assert job.lease_owner is None
+    assert job.lease_token is None
+    assert job.lease_expires_at is None

@@ -1161,7 +1161,7 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
   - `correlation_id` (String): Trace/correlation id used across logs and events.
   - `attempt_count` (Integer): Number of durable claim attempts.
   - `target_epoch` (Integer): Highest authoritative source epoch the claimed calculation may materialize.
-  - `source_revision` (Integer): Positive material-staging generation used with target epoch and lease token to fence terminal writes.
+  - `source_revision` (Integer): Positive material-staging generation, including delayed lower-per-security epoch changes, used with target epoch and lease token to fence terminal writes.
   - `failure_reason` (Text): Durable reprocess or terminal-failure context.
   - `lease_owner` (String): Runtime instance that owns the active claim; nullable when unclaimed.
   - `lease_token` (String): Opaque fencing token required for terminal writes; nullable when unclaimed.

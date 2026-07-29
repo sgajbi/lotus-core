@@ -623,7 +623,7 @@ async def test_recover_expired_job_leases_requeues_retryable_claim_and_clears_le
 ) -> None:
     now = datetime(2026, 7, 15, 8, 30, tzinfo=timezone.utc)
     expired_result = MagicMock()
-    expired_result.all.return_value = [MagicMock(id=7, attempt_count=1)]
+    expired_result.all.return_value = [MagicMock(id=7, attempt_count=1, failure_reason=None)]
     reset_result = MagicMock(rowcount=1)
     mock_db_session.execute.side_effect = [expired_result, reset_result]
 
@@ -661,9 +661,10 @@ async def test_recover_expired_job_leases_fails_retry_exhausted_claim(
 ) -> None:
     now = datetime(2026, 7, 15, 8, 30, tzinfo=timezone.utc)
     expired_result = MagicMock()
-    expired_result.all.return_value = [MagicMock(id=7, attempt_count=3)]
+    expired_result.all.return_value = [MagicMock(id=7, attempt_count=3, failure_reason=None)]
     failed_result = MagicMock(rowcount=1)
-    mock_db_session.execute.side_effect = [expired_result, failed_result]
+    reset_result = MagicMock(rowcount=0)
+    mock_db_session.execute.side_effect = [expired_result, failed_result, reset_result]
 
     result = await repository.recover_expired_job_leases(now=now, max_attempts=3)
 
@@ -678,5 +679,37 @@ async def test_recover_expired_job_leases_fails_retry_exhausted_claim(
     )
     assert "status='FAILED'" in failed_sql
     assert "lease expired after max attempts" in failed_sql
+    assert "coalesce(portfolio_aggregation_jobs.failure_reason, '') !=" in failed_sql
     assert "lease_expires_at <= '2026-07-15 08:30:00+00:00'" in failed_sql
     assert "lease_owner=NULL" in failed_sql
+
+
+async def test_recover_expired_job_leases_requeues_unattempted_superseded_revision(
+    repository: PortfolioAggregationRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    now = datetime(2026, 7, 15, 8, 30, tzinfo=timezone.utc)
+    expired_result = MagicMock()
+    expired_result.all.return_value = [
+        MagicMock(
+            id=7,
+            attempt_count=3,
+            failure_reason="REPROCESS_REQUESTED",
+        )
+    ]
+    reset_result = MagicMock(rowcount=1)
+    mock_db_session.execute.side_effect = [expired_result, reset_result]
+
+    result = await repository.recover_expired_job_leases(now=now, max_attempts=3)
+
+    assert result == ExpiredAggregationJobRecovery(requeued_count=1, failed_count=0)
+    reset_sql = str(
+        mock_db_session.execute.await_args_list[1]
+        .args[0]
+        .compile(
+            dialect=postgresql.dialect(),
+            compile_kwargs={"literal_binds": True},
+        )
+    )
+    assert "status='PENDING'" in reset_sql
+    assert "failure_reason=NULL" in reset_sql

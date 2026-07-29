@@ -325,13 +325,10 @@ class TimeseriesGenerationRepository(TimeseriesMarketDataReader):
                     ),
                 },
                 where=or_(
-                    PortfolioAggregationJob.target_epoch < insert_statement.excluded.target_epoch,
-                    (PortfolioAggregationJob.target_epoch == insert_statement.excluded.target_epoch)
-                    & or_(
-                        PortfolioAggregationJob.status != "PENDING",
-                        func.coalesce(PortfolioAggregationJob.correlation_id, "")
-                        != (normalized_correlation_id or ""),
-                    ),
+                    PortfolioAggregationJob.target_epoch != insert_statement.excluded.target_epoch,
+                    PortfolioAggregationJob.status != "PENDING",
+                    func.coalesce(PortfolioAggregationJob.correlation_id, "")
+                    != (normalized_correlation_id or ""),
                 ),
             ).returning(
                 PortfolioAggregationJob.status,

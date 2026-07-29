@@ -304,6 +304,8 @@ async def test_stage_aggregation_jobs_rearms_completed_day_for_late_material_inp
     assert "portfolio_aggregation_jobs.source_revision + 1" in compiled_stmt
     assert "correlation_id" in compiled_stmt
     assert "portfolio_aggregation_jobs.status !=" in compiled_stmt
+    assert "portfolio_aggregation_jobs.target_epoch =" not in compiled_stmt
+    assert "portfolio_aggregation_jobs.target_epoch != excluded.target_epoch" in compiled_stmt
     assert "REPROCESS_REQUESTED" in compiled_stmt or "REPROCESS_REQUESTED" in compiled_values
 
 
