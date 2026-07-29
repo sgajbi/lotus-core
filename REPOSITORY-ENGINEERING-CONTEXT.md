@@ -3296,6 +3296,14 @@ Most relevant current governance:
      `REPROCESS_REQUESTED` work even when the superseded claim exhausted its attempts; the new
      source revision has not yet been attempted. Do not substitute correlation identity, debounce,
      timeout increases, or Kafka arrival order for this database-backed source fence.
+226. A positive position epoch is recovery/restatement lineage, not a stale-evidence flag.
+     Query-control-plane analytics inputs must preserve `valuation_status=restated` while treating
+     rows selected through the exact `PositionTimeseries.epoch == PositionState.epoch` fence as
+     current. Fully observed, unpaginated final/restated windows are `COMPLETE` with
+     `source_evidence_current=true`; missing dates or pagination remain `PARTIAL`; only genuinely
+     non-current states contribute to `stale_points_count`. E2E acceptance must prove exact
+     economics and current evidence without requiring the schedule-dependent recovery epoch to
+     remain zero.
 
 ## Context Maintenance Rule
 
