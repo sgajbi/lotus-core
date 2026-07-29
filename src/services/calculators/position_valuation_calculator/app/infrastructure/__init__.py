@@ -6,6 +6,7 @@ from .market_price_source_fact_repository import (
     MAX_MARKET_PRICE_AUTHORITY_REQUESTS,
     SqlAlchemyMarketPriceSourceFactResolver,
 )
+from .source_evidence import build_authoritative_valuation_evidence
 from .valuation_dependencies import SqlAlchemyValuationProcessorDependencyFactory
 from .valuation_policy_assignment_repository import (
     SqlAlchemyValuationPolicyAssignmentResolver,
@@ -17,5 +18,6 @@ __all__ = [
     "SqlAlchemyMarketPriceSourceFactResolver",
     "SqlAlchemyValuationProcessorDependencyFactory",
     "SqlAlchemyValuationPolicyAssignmentResolver",
+    "build_authoritative_valuation_evidence",
     "build_valuation_job_processor",
 ]
