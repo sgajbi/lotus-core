@@ -14,11 +14,17 @@ class MaterializePortfolioTimeseriesCommand:
     portfolio_id: str
     aggregation_date: date
     aggregation_revision: int
+    target_epoch: int
+    source_revision: int
     correlation_id: str | None = None
 
     def __post_init__(self) -> None:
         if self.aggregation_revision < 1:
             raise ValueError("Portfolio aggregation revision must be positive.")
+        if self.target_epoch < 0:
+            raise ValueError("Portfolio aggregation target epoch cannot be negative.")
+        if self.source_revision < 1:
+            raise ValueError("Portfolio aggregation source revision must be positive.")
 
 
 class PortfolioTimeseriesMaterializationStatus(StrEnum):

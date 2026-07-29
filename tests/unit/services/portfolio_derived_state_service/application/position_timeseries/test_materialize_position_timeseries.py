@@ -42,6 +42,7 @@ class InMemoryPositionTimeseriesRepository:
         self.cashflows_by_date: dict[date, list[PositionCashflowRecord]] = {}
         self.upserted: list[PositionTimeseriesRecord] = []
         self.staged_dates: list[date] = []
+        self.staged_epochs: list[int] = []
 
     async def get_position_snapshot(
         self, snapshot_id: int, *, fallback_epoch: int
@@ -112,10 +113,12 @@ class InMemoryPositionTimeseriesRepository:
         self,
         portfolio_id: str,
         aggregation_dates: list[date],
+        target_epoch: int,
         correlation_id: str | None,
     ) -> None:
         del portfolio_id, correlation_id
         self.staged_dates.extend(aggregation_dates)
+        self.staged_epochs.extend([target_epoch] * len(aggregation_dates))
 
 
 class InMemoryRepositoryProvider:
@@ -189,6 +192,7 @@ async def test_materialization_persists_changed_day_and_stages_aggregation() -> 
     assert result.dependent_days_changed == 0
     assert [record.date for record in repository.upserted] == [date(2026, 4, 10)]
     assert repository.staged_dates == [date(2026, 4, 10)]
+    assert repository.staged_epochs == [3]
     assert provider.transaction_count == 1
 
 

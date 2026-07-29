@@ -9,7 +9,6 @@ from portfolio_common.database_models import (
     DailyPositionSnapshot,
     Portfolio,
     PortfolioAggregationJob,
-    PositionState,
     PositionTimeseries,
 )
 from portfolio_common.identifiers import normalize_lookup_identifier
@@ -25,6 +24,7 @@ from sqlalchemy.orm import aliased
 
 from ..domain.aggregation_jobs.models import (
     AggregationJobCompletionDisposition,
+    AggregationJobFailureDisposition,
     AggregationJobLease,
     ClaimedAggregationJob,
     ExpiredAggregationJobRecovery,
@@ -42,16 +42,6 @@ AGGREGATION_REPROCESS_REQUESTED = "REPROCESS_REQUESTED"
 
 class PortfolioAggregationRepository(TimeseriesMarketDataReader):
     """Persist portfolio aggregation outputs and coordinate aggregation jobs."""
-
-    @async_timed(repository="TimeseriesRepository", method="get_current_epoch_for_portfolio")
-    async def get_current_epoch_for_portfolio(self, portfolio_id: str) -> int:
-        normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
-        result = await self.db.execute(
-            select(func.max(PositionState.epoch)).where(
-                func.trim(PositionState.portfolio_id) == normalized_portfolio_id
-            )
-        )
-        return result.scalar_one_or_none() or 0
 
     @async_timed(repository="TimeseriesRepository", method="upsert_portfolio_timeseries")
     async def upsert_portfolio_timeseries(self, record: PortfolioTimeseriesRecord) -> None:
@@ -73,24 +63,26 @@ class PortfolioAggregationRepository(TimeseriesMarketDataReader):
         *,
         job_id: int,
         lease_token: str,
+        target_epoch: int,
+        source_revision: int,
     ) -> AggregationJobCompletionDisposition:
         """Release one job only when its durable lease token still matches."""
 
-        requeue_result = await self.db.execute(
-            _owned_claim_update(job_id=job_id, lease_token=lease_token)
-            .where(PortfolioAggregationJob.failure_reason == AGGREGATION_REPROCESS_REQUESTED)
-            .values(
-                status="PENDING",
-                failure_reason=None,
-                updated_at=func.now(),
-                **_cleared_lease_values(),
-            )
-        )
-        if int(requeue_result.rowcount or 0) == 1:
+        if await self._requeue_superseded_claim(
+            job_id=job_id,
+            lease_token=lease_token,
+            target_epoch=target_epoch,
+            source_revision=source_revision,
+        ):
             return AggregationJobCompletionDisposition.REQUEUED
 
         complete_result = await self.db.execute(
-            _owned_claim_update(job_id=job_id, lease_token=lease_token).values(
+            _owned_claim_update(job_id=job_id, lease_token=lease_token)
+            .where(
+                PortfolioAggregationJob.target_epoch == target_epoch,
+                PortfolioAggregationJob.source_revision == source_revision,
+            )
+            .values(
                 status="COMPLETE",
                 failure_reason=None,
                 updated_at=func.now(),
@@ -101,12 +93,61 @@ class PortfolioAggregationRepository(TimeseriesMarketDataReader):
             return AggregationJobCompletionDisposition.COMPLETE
         return AggregationJobCompletionDisposition.LOST_OWNERSHIP
 
-    async def mark_job_failed(self, *, job_id: int, lease_token: str) -> bool:
-        """Fail one job only when its durable lease token still matches."""
+    async def fail_or_requeue_job(
+        self,
+        *,
+        job_id: int,
+        lease_token: str,
+        target_epoch: int,
+        source_revision: int,
+    ) -> AggregationJobFailureDisposition:
+        """Fail current work or requeue it when newer source identity superseded the claim."""
+
+        if await self._requeue_superseded_claim(
+            job_id=job_id,
+            lease_token=lease_token,
+            target_epoch=target_epoch,
+            source_revision=source_revision,
+        ):
+            return AggregationJobFailureDisposition.REQUEUED
 
         result = await self.db.execute(
-            _owned_claim_update(job_id=job_id, lease_token=lease_token).values(
+            _owned_claim_update(job_id=job_id, lease_token=lease_token)
+            .where(
+                PortfolioAggregationJob.target_epoch == target_epoch,
+                PortfolioAggregationJob.source_revision == source_revision,
+            )
+            .values(
                 status="FAILED",
+                failure_reason=None,
+                updated_at=func.now(),
+                **_cleared_lease_values(),
+            )
+        )
+        if int(result.rowcount or 0) == 1:
+            return AggregationJobFailureDisposition.FAILED
+        return AggregationJobFailureDisposition.LOST_OWNERSHIP
+
+    async def _requeue_superseded_claim(
+        self,
+        *,
+        job_id: int,
+        lease_token: str,
+        target_epoch: int,
+        source_revision: int,
+    ) -> bool:
+        result = await self.db.execute(
+            _owned_claim_update(job_id=job_id, lease_token=lease_token)
+            .where(
+                or_(
+                    PortfolioAggregationJob.target_epoch != target_epoch,
+                    PortfolioAggregationJob.source_revision != source_revision,
+                    PortfolioAggregationJob.failure_reason == AGGREGATION_REPROCESS_REQUESTED,
+                )
+            )
+            .values(
+                status="PENDING",
+                failure_reason=None,
                 updated_at=func.now(),
                 **_cleared_lease_values(),
             )
@@ -344,6 +385,8 @@ def _claimed_aggregation_job(row: PortfolioAggregationJob) -> ClaimedAggregation
         portfolio_id=str(row.portfolio_id),
         aggregation_date=cast(date, row.aggregation_date),
         aggregation_revision=int(row.attempt_count),
+        target_epoch=int(row.target_epoch),
+        source_revision=int(row.source_revision),
         correlation_id=str(row.correlation_id) if row.correlation_id is not None else None,
         lease=AggregationJobLease(
             owner=str(row.lease_owner),
@@ -375,6 +418,7 @@ def _authoritative_snapshot_scope(job_model, snapshot_model):
     return (
         snapshot_model.portfolio_id == job_model.portfolio_id,
         snapshot_model.date <= job_model.aggregation_date,
+        snapshot_model.epoch <= job_model.target_epoch,
         ~newer_snapshot_exists,
     )
 

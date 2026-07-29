@@ -3,7 +3,7 @@
 import logging
 from datetime import date, datetime
 from decimal import Decimal
-from typing import cast
+from typing import Any, Sequence, cast
 
 from portfolio_common.database_models import (
     Cashflow,
@@ -19,6 +19,7 @@ from portfolio_common.infrastructure.persistence.timeseries_market_data_reader i
 from portfolio_common.infrastructure.persistence.timeseries_upsert_statements import (
     build_position_timeseries_upsert_statement,
 )
+from portfolio_common.monitoring import observe_control_queue_outcome
 from portfolio_common.utils import async_timed
 from sqlalchemy import case, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -259,13 +260,16 @@ class TimeseriesGenerationRepository(TimeseriesMarketDataReader):
         self,
         portfolio_id: str,
         aggregation_dates: list[date],
+        target_epoch: int,
         correlation_id: str | None,
     ) -> None:
-        """Idempotently stage every materially affected portfolio day."""
+        """Idempotently stage every materially affected portfolio day at its source epoch."""
 
         normalized_dates = sorted(set(aggregation_dates))
         if not normalized_dates:
             return
+        if target_epoch < 0:
+            raise ValueError("Aggregation target epoch cannot be negative.")
 
         insert_values = []
         for aggregation_date in normalized_dates:
@@ -280,6 +284,8 @@ class TimeseriesGenerationRepository(TimeseriesMarketDataReader):
                     "portfolio_id": portfolio_id,
                     "aggregation_date": aggregation_date,
                     "status": "PENDING",
+                    "target_epoch": target_epoch,
+                    "source_revision": 1,
                     "correlation_id": diagnostics.correlation_id,
                     "correlation_missing_reason": diagnostics.correlation_missing_reason,
                     "alternate_lookup_key": diagnostics.alternate_lookup_key,
@@ -288,10 +294,15 @@ class TimeseriesGenerationRepository(TimeseriesMarketDataReader):
 
         normalized_correlation_id = insert_values[0]["correlation_id"]
         insert_statement = pg_insert(PortfolioAggregationJob).values(insert_values)
-        await self.db.execute(
+        result = await self.db.execute(
             insert_statement.on_conflict_do_update(
                 index_elements=["portfolio_id", "aggregation_date"],
                 set_={
+                    "target_epoch": func.greatest(
+                        PortfolioAggregationJob.target_epoch,
+                        insert_statement.excluded.target_epoch,
+                    ),
+                    "source_revision": PortfolioAggregationJob.source_revision + 1,
                     "status": case(
                         (
                             PortfolioAggregationJob.status == "PROCESSING",
@@ -314,11 +325,24 @@ class TimeseriesGenerationRepository(TimeseriesMarketDataReader):
                     ),
                 },
                 where=or_(
-                    PortfolioAggregationJob.status != "PENDING",
-                    func.coalesce(PortfolioAggregationJob.correlation_id, "")
-                    != (normalized_correlation_id or ""),
+                    PortfolioAggregationJob.target_epoch < insert_statement.excluded.target_epoch,
+                    (PortfolioAggregationJob.target_epoch == insert_statement.excluded.target_epoch)
+                    & or_(
+                        PortfolioAggregationJob.status != "PENDING",
+                        func.coalesce(PortfolioAggregationJob.correlation_id, "")
+                        != (normalized_correlation_id or ""),
+                    ),
                 ),
+            ).returning(
+                PortfolioAggregationJob.status,
+                PortfolioAggregationJob.attempt_count,
+                PortfolioAggregationJob.source_revision,
             )
+        )
+        staged_rows = result.fetchall()
+        _observe_aggregation_staging_outcomes(
+            staged_rows=staged_rows,
+            requested_count=len(normalized_dates),
         )
         logger.debug(
             "Staged portfolio aggregation jobs.",
@@ -327,8 +351,31 @@ class TimeseriesGenerationRepository(TimeseriesMarketDataReader):
                 "portfolio_id": portfolio_id,
                 "aggregation_date_from": normalized_dates[0].isoformat(),
                 "aggregation_date_to": normalized_dates[-1].isoformat(),
+                "target_epoch": target_epoch,
             },
         )
+
+
+def _observe_aggregation_staging_outcomes(
+    *,
+    staged_rows: Sequence[Any],
+    requested_count: int,
+) -> None:
+    outcomes = {
+        "new": 0,
+        "rearmed": 0,
+        "superseded": 0,
+        "no_op": requested_count - len(staged_rows),
+    }
+    for row in staged_rows:
+        if int(row.source_revision) == 1:
+            outcomes["new"] += 1
+        elif str(row.status) == "PROCESSING" or int(row.attempt_count) == 0:
+            outcomes["superseded"] += 1
+        else:
+            outcomes["rearmed"] += 1
+    for outcome, count in outcomes.items():
+        observe_control_queue_outcome("aggregation", "staging", outcome, count)
 
 
 def to_position_snapshot_record(

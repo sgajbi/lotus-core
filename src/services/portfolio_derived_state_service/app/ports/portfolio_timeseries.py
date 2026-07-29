@@ -6,7 +6,10 @@ from collections.abc import Awaitable, Callable
 from datetime import date
 from typing import Protocol, TypeVar
 
-from ..domain.aggregation_jobs.models import AggregationJobCompletionDisposition
+from ..domain.aggregation_jobs.models import (
+    AggregationJobCompletionDisposition,
+    AggregationJobFailureDisposition,
+)
 from ..domain.portfolio_timeseries.models import (
     PortfolioAggregationScope,
     PortfolioTimeseriesRecord,
@@ -23,8 +26,6 @@ class PortfolioTimeseriesRepository(TimeseriesMarketDataPort, Protocol):
 
     async def get_portfolio(self, portfolio_id: str) -> PortfolioAggregationScope | None: ...
 
-    async def get_current_epoch_for_portfolio(self, portfolio_id: str) -> int: ...
-
     async def get_all_position_timeseries_for_date(
         self,
         portfolio_id: str,
@@ -39,9 +40,18 @@ class PortfolioTimeseriesRepository(TimeseriesMarketDataPort, Protocol):
         *,
         job_id: int,
         lease_token: str,
+        target_epoch: int,
+        source_revision: int,
     ) -> AggregationJobCompletionDisposition: ...
 
-    async def mark_job_failed(self, *, job_id: int, lease_token: str) -> bool: ...
+    async def fail_or_requeue_job(
+        self,
+        *,
+        job_id: int,
+        lease_token: str,
+        target_epoch: int,
+        source_revision: int,
+    ) -> AggregationJobFailureDisposition: ...
 
 
 class PortfolioTimeseriesCalculation(Protocol):

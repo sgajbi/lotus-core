@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import logging
 
-from ...domain.aggregation_jobs.models import AggregationJobCompletionDisposition
+from ...domain.aggregation_jobs.models import (
+    AggregationJobCompletionDisposition,
+    AggregationJobFailureDisposition,
+)
 from ...domain.portfolio_timeseries.models import PortfolioAggregationCompletion
 from ...ports.aggregation_completion import AggregationCompletionEventStager
 from ...ports.portfolio_timeseries import (
@@ -63,20 +66,18 @@ class MaterializePortfolioTimeseries:
             async def mark_failed(
                 repository: PortfolioTimeseriesRepository,
                 _event_stager: AggregationCompletionEventStager,
-            ) -> bool:
-                return await repository.mark_job_failed(
+            ) -> AggregationJobFailureDisposition:
+                return await repository.fail_or_requeue_job(
                     job_id=command.job_id,
                     lease_token=command.lease_token,
+                    target_epoch=command.target_epoch,
+                    source_revision=command.source_revision,
                 )
 
-            failure_recorded = await self._unit_of_work_provider.run_in_transaction(mark_failed)
+            failure_disposition = await self._unit_of_work_provider.run_in_transaction(mark_failed)
             return PortfolioTimeseriesMaterializationResult(
-                status=(
-                    PortfolioTimeseriesMaterializationStatus.FAILED
-                    if failure_recorded
-                    else PortfolioTimeseriesMaterializationStatus.LOST_OWNERSHIP
-                ),
-                failure_recorded=failure_recorded,
+                status=PortfolioTimeseriesMaterializationStatus(failure_disposition.value),
+                failure_recorded=(failure_disposition is AggregationJobFailureDisposition.FAILED),
             )
 
     async def _materialize_in_transaction(
@@ -91,27 +92,28 @@ class MaterializePortfolioTimeseries:
                 "Authoritative portfolio scope was not found for aggregation."
             )
 
-        target_epoch = await repository.get_current_epoch_for_portfolio(command.portfolio_id)
         position_timeseries = await repository.get_all_position_timeseries_for_date(
             command.portfolio_id,
             command.aggregation_date,
-            target_epoch,
+            command.target_epoch,
         )
         portfolio_timeseries = await self._calculator.calculate_daily_record(
             portfolio,
             command.aggregation_date,
-            target_epoch,
+            command.target_epoch,
             position_timeseries,
             repository,
         )
         disposition = await repository.complete_or_requeue_job(
             job_id=command.job_id,
             lease_token=command.lease_token,
+            target_epoch=command.target_epoch,
+            source_revision=command.source_revision,
         )
         if disposition is not AggregationJobCompletionDisposition.COMPLETE:
             return PortfolioTimeseriesMaterializationResult(
                 status=PortfolioTimeseriesMaterializationStatus(disposition.value),
-                target_epoch=target_epoch,
+                target_epoch=command.target_epoch,
             )
 
         await repository.upsert_portfolio_timeseries(portfolio_timeseries)
@@ -119,12 +121,12 @@ class MaterializePortfolioTimeseries:
             PortfolioAggregationCompletion(
                 portfolio_id=command.portfolio_id,
                 aggregation_date=command.aggregation_date,
-                epoch=target_epoch,
+                epoch=command.target_epoch,
                 aggregation_revision=command.aggregation_revision,
             ),
             correlation_id=command.correlation_id,
         )
         return PortfolioTimeseriesMaterializationResult(
             status=PortfolioTimeseriesMaterializationStatus.COMPLETE,
-            target_epoch=target_epoch,
+            target_epoch=command.target_epoch,
         )

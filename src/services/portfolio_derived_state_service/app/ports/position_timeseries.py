@@ -83,6 +83,7 @@ class PositionTimeseriesRepository(Protocol):
         self,
         portfolio_id: str,
         aggregation_dates: list[date],
+        target_epoch: int,
         correlation_id: str | None,
     ) -> None: ...
 

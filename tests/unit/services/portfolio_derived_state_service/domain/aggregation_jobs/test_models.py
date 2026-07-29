@@ -6,6 +6,7 @@ import pytest
 
 from src.services.portfolio_derived_state_service.app.domain.aggregation_jobs.models import (
     AggregationJobLease,
+    ClaimedAggregationJob,
 )
 
 
@@ -41,3 +42,32 @@ def test_aggregation_job_lease_rejects_invalid_persistence_identity(
 ) -> None:
     with pytest.raises(ValueError, match=message):
         AggregationJobLease(owner=owner, token=token, expires_at=expires_at)
+
+
+@pytest.mark.parametrize(
+    ("target_epoch", "source_revision", "message"),
+    [
+        (-1, 1, "target epoch"),
+        (0, 0, "source revision"),
+    ],
+)
+def test_claimed_aggregation_job_rejects_invalid_source_identity(
+    target_epoch: int,
+    source_revision: int,
+    message: str,
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        ClaimedAggregationJob(
+            id=1,
+            portfolio_id="P1",
+            aggregation_date=datetime.now(timezone.utc).date(),
+            aggregation_revision=1,
+            target_epoch=target_epoch,
+            source_revision=source_revision,
+            correlation_id=None,
+            lease=AggregationJobLease(
+                owner="worker",
+                token="lease",
+                expires_at=datetime.now(timezone.utc),
+            ),
+        )

@@ -103,6 +103,8 @@ def _claimed_job() -> ClaimedAggregationJob:
         portfolio_id="PORT-7",
         aggregation_date=date(2026, 7, 15),
         aggregation_revision=3,
+        target_epoch=4,
+        source_revision=5,
         correlation_id="corr-7",
         lease=AggregationJobLease(
             owner="aggregation-runtime-1",

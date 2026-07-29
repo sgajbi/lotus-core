@@ -13,6 +13,14 @@ class AggregationJobCompletionDisposition(StrEnum):
     LOST_OWNERSHIP = "LOST_OWNERSHIP"
 
 
+class AggregationJobFailureDisposition(StrEnum):
+    """Describe the durable result of failing one claimed aggregation job."""
+
+    FAILED = "FAILED"
+    REQUEUED = "REQUEUED"
+    LOST_OWNERSHIP = "LOST_OWNERSHIP"
+
+
 @dataclass(frozen=True, slots=True, kw_only=True)
 class AggregationJobLease:
     """Fenced ownership of one or more aggregation jobs for a bounded interval."""
@@ -46,12 +54,18 @@ class ClaimedAggregationJob:
     portfolio_id: str
     aggregation_date: date
     aggregation_revision: int
+    target_epoch: int
+    source_revision: int
     correlation_id: str | None
     lease: AggregationJobLease
 
     def __post_init__(self) -> None:
         if self.aggregation_revision < 1:
             raise ValueError("Claimed aggregation revision must be positive.")
+        if self.target_epoch < 0:
+            raise ValueError("Claimed aggregation target epoch cannot be negative.")
+        if self.source_revision < 1:
+            raise ValueError("Claimed aggregation source revision must be positive.")
 
 
 @dataclass(frozen=True, slots=True)

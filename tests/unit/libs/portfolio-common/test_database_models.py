@@ -1309,6 +1309,10 @@ def test_portfolio_aggregation_job_declares_operations_hot_path_indexes():
     assert columns["lease_token"].nullable is True
     assert columns["lease_expires_at"].nullable is True
     assert "ck_portfolio_aggregation_jobs_lease_complete" in constraint_names
+    assert columns["target_epoch"].nullable is False
+    assert columns["source_revision"].nullable is False
+    assert "ck_portfolio_aggregation_jobs_target_epoch_nonnegative" in constraint_names
+    assert "ck_portfolio_aggregation_jobs_source_revision_positive" in constraint_names
 
     assert [column.name for column in portfolio_status_updated.columns] == [
         "portfolio_id",

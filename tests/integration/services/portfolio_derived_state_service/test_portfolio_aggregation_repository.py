@@ -17,13 +17,16 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import Session
 
 from src.services.portfolio_derived_state_service.app.domain.aggregation_jobs.models import (
+    AggregationJobCompletionDisposition,
     AggregationJobLease,
 )
 from src.services.portfolio_derived_state_service.app.infrastructure import (
     portfolio_aggregation_repository,
+    timeseries_generation_repository,
 )
 
 PortfolioAggregationRepository = portfolio_aggregation_repository.PortfolioAggregationRepository
+TimeseriesGenerationRepository = timeseries_generation_repository.TimeseriesGenerationRepository
 
 pytestmark = pytest.mark.asyncio
 
@@ -327,3 +330,151 @@ async def test_claim_eligible_jobs_does_not_double_claim_under_concurrency(
     assert jobs[0].status == "PROCESSING"
     assert jobs[0].attempt_count == 1
     assert jobs[0].lease_token in {"lease-token-one", "lease-token-two"}
+
+
+@pytest.mark.lifecycle
+async def test_newer_epoch_supersedes_claim_and_rearms_same_portfolio_day(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    """Fence an epoch-zero claim once epoch-one source material arrives."""
+
+    portfolio_id = "P-AGG-EPOCH-FENCE"
+    security_id = "SEC-AGG-EPOCH-FENCE"
+    aggregation_date = date(2025, 8, 15)
+    async_db_session.add(
+        Portfolio(
+            portfolio_id=portfolio_id,
+            base_currency="USD",
+            open_date=date(2024, 1, 1),
+            risk_exposure="a",
+            investment_time_horizon="b",
+            portfolio_type="c",
+            booking_center_code="d",
+            client_id="e",
+            status="ACTIVE",
+        )
+    )
+    async_db_session.add(
+        Instrument(
+            security_id=security_id,
+            name="Aggregation Epoch Fence Instrument",
+            isin="US-AGG-EPOCH-FENCE",
+            asset_class="EQUITY",
+            product_type="COMMON_STOCK",
+            currency="USD",
+        )
+    )
+    await async_db_session.flush()
+    async_db_session.add(
+        PortfolioAggregationJob(
+            portfolio_id=portfolio_id,
+            aggregation_date=aggregation_date,
+            status="PENDING",
+            target_epoch=0,
+            source_revision=1,
+        )
+    )
+    async_db_session.add(
+        DailyPositionSnapshot(
+            portfolio_id=portfolio_id,
+            security_id=security_id,
+            date=aggregation_date,
+            epoch=0,
+            quantity=Decimal("1"),
+            cost_basis=Decimal("1"),
+            cost_basis_local=Decimal("1"),
+            valuation_status="VALUED_CURRENT",
+        )
+    )
+    async_db_session.add(
+        PositionTimeseries(
+            portfolio_id=portfolio_id,
+            security_id=security_id,
+            date=aggregation_date,
+            epoch=0,
+            bod_market_value=Decimal("1"),
+            bod_cashflow_position=Decimal("0"),
+            eod_cashflow_position=Decimal("0"),
+            bod_cashflow_portfolio=Decimal("0"),
+            eod_cashflow_portfolio=Decimal("0"),
+            eod_market_value=Decimal("1"),
+            fees=Decimal("0"),
+            quantity=Decimal("1"),
+            cost=Decimal("1"),
+        )
+    )
+    await async_db_session.commit()
+
+    repository = PortfolioAggregationRepository(async_db_session)
+    first_claim = (
+        await repository.claim_eligible_jobs(
+            batch_size=1,
+            lease=AggregationJobLease(
+                owner="aggregation-runtime-first",
+                token="lease-token-first",
+                expires_at=datetime.now(UTC) + timedelta(minutes=5),
+            ),
+        )
+    )[0]
+    assert first_claim.target_epoch == 0
+    assert first_claim.source_revision == 1
+
+    async_db_session.add(
+        DailyPositionSnapshot(
+            portfolio_id=portfolio_id,
+            security_id=security_id,
+            date=aggregation_date,
+            epoch=1,
+            quantity=Decimal("1"),
+            cost_basis=Decimal("1"),
+            cost_basis_local=Decimal("1"),
+            valuation_status="VALUED_CURRENT",
+        )
+    )
+    async_db_session.add(
+        PositionTimeseries(
+            portfolio_id=portfolio_id,
+            security_id=security_id,
+            date=aggregation_date,
+            epoch=1,
+            bod_market_value=Decimal("1"),
+            bod_cashflow_position=Decimal("0"),
+            eod_cashflow_position=Decimal("0"),
+            bod_cashflow_portfolio=Decimal("0"),
+            eod_cashflow_portfolio=Decimal("0"),
+            eod_market_value=Decimal("2"),
+            fees=Decimal("0"),
+            quantity=Decimal("1"),
+            cost=Decimal("1"),
+        )
+    )
+    await async_db_session.flush()
+    await TimeseriesGenerationRepository(async_db_session).stage_aggregation_jobs(
+        portfolio_id,
+        [aggregation_date],
+        1,
+        "corr-epoch-one",
+    )
+    disposition = await repository.complete_or_requeue_job(
+        job_id=first_claim.id,
+        lease_token=first_claim.lease.token,
+        target_epoch=first_claim.target_epoch,
+        source_revision=first_claim.source_revision,
+    )
+    await async_db_session.commit()
+
+    assert disposition is AggregationJobCompletionDisposition.REQUEUED
+    second_claim = (
+        await repository.claim_eligible_jobs(
+            batch_size=1,
+            lease=AggregationJobLease(
+                owner="aggregation-runtime-second",
+                token="lease-token-second",
+                expires_at=datetime.now(UTC) + timedelta(minutes=5),
+            ),
+        )
+    )[0]
+    assert second_claim.id == first_claim.id
+    assert second_claim.target_epoch == 1
+    assert second_claim.source_revision == 2

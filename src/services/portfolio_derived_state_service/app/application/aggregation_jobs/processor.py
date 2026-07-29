@@ -68,6 +68,8 @@ class ProcessClaimedAggregationJobs:
                             portfolio_id=job.portfolio_id,
                             aggregation_date=job.aggregation_date,
                             aggregation_revision=job.aggregation_revision,
+                            target_epoch=job.target_epoch,
+                            source_revision=job.source_revision,
                             correlation_id=job.correlation_id,
                         )
                     )

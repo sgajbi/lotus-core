@@ -26,6 +26,8 @@ def _job(job_id: int) -> ClaimedAggregationJob:
         portfolio_id=f"PORT-{job_id}",
         aggregation_date=date(2026, 7, 15),
         aggregation_revision=job_id + 10,
+        target_epoch=3,
+        source_revision=job_id + 20,
         correlation_id=f"corr-{job_id}",
         lease=AggregationJobLease(
             owner="aggregation-runtime-1",
@@ -80,6 +82,14 @@ async def test_processor_bounds_concurrency_and_preserves_lease_commands() -> No
         13,
         14,
         15,
+    ]
+    assert [command.target_epoch for command in materializer.commands] == [3] * 5
+    assert [command.source_revision for command in materializer.commands] == [
+        21,
+        22,
+        23,
+        24,
+        25,
     ]
 
 
