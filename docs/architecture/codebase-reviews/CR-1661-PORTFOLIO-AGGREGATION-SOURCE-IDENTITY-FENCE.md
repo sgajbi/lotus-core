@@ -90,6 +90,8 @@ because operator interpretation of aggregation staging metrics and job identity 
   requeues the superseded active claim;
 - expired `REPROCESS_REQUESTED` work requeues after the prior claim reaches its attempt limit;
 - superseded-attempt recovery plus lower-epoch proof: 2 passed in 100.81 seconds;
+- stale-lease materialization command contract proof: 1 passed in 65.84 seconds and is now part
+  of the protected `critical-lifecycle-db` suite;
 - full aggregation repository integration proof: 7 passed in 88.22 seconds;
 - timeseries contract E2E proof: 4 passed in 83.81 seconds;
 - no test timeout, assertion, partition, debounce, topology, or lock-order change.

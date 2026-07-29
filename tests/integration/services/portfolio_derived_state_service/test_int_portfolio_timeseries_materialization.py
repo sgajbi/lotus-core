@@ -26,6 +26,7 @@ from src.services.portfolio_derived_state_service.app.infrastructure import (
 pytestmark = pytest.mark.asyncio
 
 
+@pytest.mark.lifecycle
 async def test_stale_lease_cannot_persist_portfolio_output_or_completion_event(
     clean_db,
     async_db_session: AsyncSession,
@@ -60,6 +61,8 @@ async def test_stale_lease_cannot_persist_portfolio_output_or_completion_event(
     job_id = int(job.id)
     portfolio_id = str(job.portfolio_id)
     aggregation_date = job.aggregation_date
+    target_epoch = int(job.target_epoch)
+    source_revision = int(job.source_revision)
     await async_db_session.rollback()
 
     async def override_session():
@@ -97,6 +100,8 @@ async def test_stale_lease_cannot_persist_portfolio_output_or_completion_event(
                 portfolio_id=portfolio_id,
                 aggregation_date=aggregation_date,
                 aggregation_revision=1,
+                target_epoch=target_epoch,
+                source_revision=source_revision,
                 correlation_id="corr-agg-int-01",
             )
         )
