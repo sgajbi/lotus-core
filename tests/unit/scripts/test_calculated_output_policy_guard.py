@@ -208,6 +208,24 @@ def test_guard_accepts_annotated_identity_passed_to_qualified_lineage_builder(
     assert evaluate(tmp_path, _contract(tmp_path)) == ()
 
 
+def test_guard_rejects_lineage_identity_overwritten_before_propagation(
+    tmp_path: Path,
+) -> None:
+    _write_policy(tmp_path, lineage_bound=False)
+    consumer = tmp_path / "src" / "owner" / "consumer.py"
+    consumer.write_text(
+        consumer.read_text(encoding="utf-8")
+        + "identity = TEST_LEDGER_OUTPUT_V1.lineage_identity()\n"
+        + "identity = None\n"
+        + "lineage = build_calculation_lineage(numeric_output_policy=identity)\n",
+        encoding="utf-8",
+    )
+
+    findings = evaluate(tmp_path, _contract(tmp_path))
+
+    assert "TEST_LEDGER_OUTPUT_V1: required lineage binding is incomplete" in findings
+
+
 def test_guard_rejects_missing_required_lineage_binding(tmp_path: Path) -> None:
     _write_policy(tmp_path, lineage_bound=False)
 
@@ -386,6 +404,66 @@ def test_guard_accepts_chained_extracted_method_with_lineage_propagation(
     assert evaluate(tmp_path, _contract(tmp_path)) == ()
 
 
+def test_guard_does_not_count_extracted_method_after_overwrite(
+    tmp_path: Path,
+) -> None:
+    _write_policy(tmp_path, used=False)
+    (tmp_path / "src" / "owner" / "consumer.py").write_text(
+        "from decimal import Decimal\n"
+        "from owner.numeric_policy import TEST_LEDGER_OUTPUT_V1\n"
+        "normalize_output = TEST_LEDGER_OUTPUT_V1.normalize\n"
+        "normalize_output = unrelated_normalizer\n"
+        "value = normalize_output(Decimal('1'), field_name='value')\n",
+        encoding="utf-8",
+    )
+
+    findings = evaluate(
+        tmp_path,
+        _contract(tmp_path, lineage_binding="not-exposed"),
+    )
+
+    assert "TEST_LEDGER_OUTPUT_V1: no execution consumer found" in findings
+    assert not any("lineage gap" in finding for finding in findings)
+
+
+def test_guard_does_not_leak_policy_alias_across_parameter_shadow(
+    tmp_path: Path,
+) -> None:
+    _write_policy(tmp_path)
+    (tmp_path / "src" / "owner" / "shadowed_consumer.py").write_text(
+        "from decimal import Decimal\n"
+        "from owner.numeric_policy import TEST_LEDGER_OUTPUT_V1\n"
+        "policy = TEST_LEDGER_OUTPUT_V1\n"
+        "def calculate(policy):\n"
+        "    return policy.normalize(Decimal('1'), field_name='value')\n",
+        encoding="utf-8",
+    )
+
+    assert evaluate(tmp_path, _contract(tmp_path)) == ()
+
+
+def test_guard_invalidates_overwritten_policy_receiver_alias(
+    tmp_path: Path,
+) -> None:
+    _write_policy(tmp_path, used=False)
+    (tmp_path / "src" / "owner" / "consumer.py").write_text(
+        "from decimal import Decimal\n"
+        "from owner.numeric_policy import TEST_LEDGER_OUTPUT_V1\n"
+        "policy = TEST_LEDGER_OUTPUT_V1\n"
+        "policy = unrelated_policy\n"
+        "value = policy.normalize(Decimal('1'), field_name='value')\n",
+        encoding="utf-8",
+    )
+
+    findings = evaluate(
+        tmp_path,
+        _contract(tmp_path, lineage_binding="not-exposed"),
+    )
+
+    assert "TEST_LEDGER_OUTPUT_V1: no execution consumer found" in findings
+    assert not any("lineage gap" in finding for finding in findings)
+
+
 def test_guard_rejects_required_binding_with_unbound_consumer(tmp_path: Path) -> None:
     _write_policy(tmp_path, unbound_consumer=True)
 
@@ -507,6 +585,25 @@ def test_guard_rejects_ambiguous_or_duplicate_policy_declarations(tmp_path: Path
     )
     with pytest.raises(ValueError, match="duplicate calculated policy constant"):
         evaluate(tmp_path, _contract(tmp_path))
+
+
+def test_guard_discovers_imported_and_chained_constructor_aliases(
+    tmp_path: Path,
+) -> None:
+    _write_policy(tmp_path)
+    (tmp_path / "src" / "owner" / "unclassified.py").write_text(
+        "from portfolio_common.domain.financial import calculation_precision\n"
+        "Policy = calculation_precision.CalculatedDecimalPolicy\n"
+        "PolicyAlias = Policy\n"
+        "UNCLASSIFIED_OUTPUT_V1 = PolicyAlias("
+        "name='unclassified', version='1.0.0', precision=18, scale=10)\n",
+        encoding="utf-8",
+    )
+
+    findings = evaluate(tmp_path, _contract(tmp_path))
+
+    assert "UNCLASSIFIED_OUTPUT_V1: missing contract classification" in findings
+    assert "source inventory=2 does not match expected=1" in findings
 
 
 @pytest.mark.parametrize(
