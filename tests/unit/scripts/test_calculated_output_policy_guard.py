@@ -31,8 +31,10 @@ def _write_policy(
     )
     if used:
         consumer_lines = [
+            "from decimal import Decimal",
             "from owner.numeric_policy import TEST_LEDGER_OUTPUT_V1",
-            "value = TEST_LEDGER_OUTPUT_V1.normalize",
+            "policy = TEST_LEDGER_OUTPUT_V1",
+            "value = policy.normalize(Decimal('1'), field_name='value')",
         ]
         if lineage_bound:
             consumer_lines.append("identity = TEST_LEDGER_OUTPUT_V1.lineage_identity()")
@@ -123,6 +125,21 @@ def test_guard_rejects_unused_policy(tmp_path: Path) -> None:
         tmp_path,
         _contract(tmp_path),
     )
+
+
+def test_guard_does_not_treat_lineage_binding_as_execution(tmp_path: Path) -> None:
+    _write_policy(tmp_path, used=False)
+    source = tmp_path / "src" / "owner"
+    (source / "lineage_only.py").write_text(
+        "from owner.numeric_policy import TEST_LEDGER_OUTPUT_V1\n"
+        "identity = TEST_LEDGER_OUTPUT_V1.lineage_identity()\n",
+        encoding="utf-8",
+    )
+
+    findings = evaluate(tmp_path, _contract(tmp_path))
+
+    assert "TEST_LEDGER_OUTPUT_V1: no execution consumer found" in findings
+    assert "TEST_LEDGER_OUTPUT_V1: required lineage binding not found" not in findings
 
 
 def test_guard_rejects_missing_required_lineage_binding(tmp_path: Path) -> None:

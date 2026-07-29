@@ -27,6 +27,14 @@ POLICY_KEYS = {
     "lineage_binding",
 }
 LINEAGE_BINDINGS = {"required", "not-exposed"}
+EXECUTION_METHODS = {
+    "add",
+    "arithmetic_context",
+    "divide",
+    "multiply",
+    "normalize",
+    "subtract",
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -112,19 +120,37 @@ def _usage(repo_root: Path, constants: set[str]) -> tuple[Counter[str], Counter[
     lineage: Counter[str] = Counter()
     for path in sorted((repo_root / "src").rglob("*.py")):
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        aliases = _policy_aliases(tree, constants)
         for node in ast.walk(tree):
-            if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
-                if node.id in constants:
-                    execution[node.id] += 1
-            if (
-                isinstance(node, ast.Call)
-                and isinstance(node.func, ast.Attribute)
-                and node.func.attr == "lineage_identity"
-                and isinstance(node.func.value, ast.Name)
-                and node.func.value.id in constants
-            ):
-                lineage[node.func.value.id] += 1
+            if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+                continue
+            receiver = node.func.value
+            if not isinstance(receiver, ast.Name):
+                continue
+            constant = receiver.id if receiver.id in constants else aliases.get(receiver.id)
+            if constant is None:
+                continue
+            if node.func.attr in EXECUTION_METHODS:
+                execution[constant] += 1
+            if node.func.attr == "lineage_identity":
+                lineage[constant] += 1
     return execution, lineage
+
+
+def _policy_aliases(tree: ast.Module, constants: set[str]) -> dict[str, str]:
+    aliases: dict[str, str] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign) and len(node.targets) == 1:
+            target = node.targets[0]
+            value = node.value
+        elif isinstance(node, ast.AnnAssign):
+            target = node.target
+            value = node.value
+        else:
+            continue
+        if isinstance(target, ast.Name) and isinstance(value, ast.Name) and value.id in constants:
+            aliases[target.id] = value.id
+    return aliases
 
 
 def evaluate(repo_root: Path, contract_path: Path) -> tuple[str, ...]:
