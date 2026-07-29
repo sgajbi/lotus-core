@@ -211,6 +211,67 @@ def test_guard_distinguishes_bound_and_unbound_callables_in_one_file(
     )
 
 
+@pytest.mark.parametrize(
+    ("import_line", "receiver"),
+    [
+        (
+            "from owner.numeric_policy import TEST_LEDGER_OUTPUT_V1 as output_policy",
+            "output_policy",
+        ),
+        ("import owner.numeric_policy as policies", "policies.TEST_LEDGER_OUTPUT_V1"),
+        (
+            "import owner.numeric_policy as policies\n"
+            "output_policy = policies.TEST_LEDGER_OUTPUT_V1",
+            "output_policy",
+        ),
+    ],
+)
+def test_guard_resolves_imported_and_qualified_policy_aliases(
+    tmp_path: Path,
+    import_line: str,
+    receiver: str,
+) -> None:
+    _write_policy(tmp_path, used=False)
+    (tmp_path / "src" / "owner" / "consumer.py").write_text(
+        "from decimal import Decimal\n"
+        f"{import_line}\n"
+        "def calculate():\n"
+        f"    return {receiver}.normalize(Decimal('1'), field_name='value')\n",
+        encoding="utf-8",
+    )
+
+    findings = evaluate(
+        tmp_path,
+        _contract(
+            tmp_path,
+            lineage_binding="not-exposed",
+            lineage_gap_callsites=["src/owner/consumer.py::calculate"],
+        ),
+    )
+
+    assert findings == ()
+
+
+def test_guard_does_not_hide_unbound_import_alias_beside_bound_consumer(
+    tmp_path: Path,
+) -> None:
+    _write_policy(tmp_path)
+    (tmp_path / "src" / "owner" / "alias_consumer.py").write_text(
+        "from decimal import Decimal\n"
+        "from owner.numeric_policy import TEST_LEDGER_OUTPUT_V1 as output_policy\n"
+        "def calculate():\n"
+        "    return output_policy.normalize(Decimal('1'), field_name='value')\n",
+        encoding="utf-8",
+    )
+
+    findings = evaluate(tmp_path, _contract(tmp_path))
+
+    assert (
+        "TEST_LEDGER_OUTPUT_V1: unclassified lineage gap at src/owner/alias_consumer.py::calculate"
+    ) in findings
+    assert "TEST_LEDGER_OUTPUT_V1: required lineage binding is incomplete" in findings
+
+
 def test_guard_rejects_required_binding_with_unbound_consumer(tmp_path: Path) -> None:
     _write_policy(tmp_path, unbound_consumer=True)
 
