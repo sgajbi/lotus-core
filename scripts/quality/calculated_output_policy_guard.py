@@ -176,6 +176,7 @@ class _UsageVisitor(ast.NodeVisitor):
         self._execution = execution
         self._lineage = lineage
         self._scope: list[str] = []
+        self._lineage_identity_aliases: list[dict[str, str]] = [{}]
 
     @property
     def _callsite(self) -> str:
@@ -184,7 +185,9 @@ class _UsageVisitor(ast.NodeVisitor):
 
     def _visit_scope(self, node: ast.AST, name: str) -> None:
         self._scope.append(name)
+        self._lineage_identity_aliases.append({})
         self.generic_visit(node)
+        self._lineage_identity_aliases.pop()
         self._scope.pop()
 
     def visit_ClassDef(self, node: ast.ClassDef) -> None:
@@ -199,15 +202,56 @@ class _UsageVisitor(ast.NodeVisitor):
     def visit_Lambda(self, node: ast.Lambda) -> None:
         self._visit_scope(node, f"<lambda>@{node.lineno}")
 
+    def visit_Assign(self, node: ast.Assign) -> None:
+        self.generic_visit(node)
+        constant = self._resolve_lineage_identity(node.value)
+        if constant is None:
+            return
+        for target in node.targets:
+            if isinstance(target, ast.Name):
+                self._lineage_identity_aliases[-1][target.id] = constant
+
+    def visit_AnnAssign(self, node: ast.AnnAssign) -> None:
+        self.generic_visit(node)
+        if node.value is None or not isinstance(node.target, ast.Name):
+            return
+        constant = self._resolve_lineage_identity(node.value)
+        if constant is not None:
+            self._lineage_identity_aliases[-1][node.target.id] = constant
+
     def visit_Call(self, node: ast.Call) -> None:
         if isinstance(node.func, ast.Attribute):
             constant = self._resolve_policy(node.func.value)
             if constant is not None:
                 if node.func.attr in EXECUTION_METHODS:
                     self._execution[constant].add(self._callsite)
-                if node.func.attr == "lineage_identity":
+        if self._is_calculation_lineage_builder(node.func):
+            for keyword in node.keywords:
+                if keyword.arg != "numeric_output_policy":
+                    continue
+                constant = self._resolve_lineage_identity(keyword.value)
+                if constant is not None:
                     self._lineage[constant].add(self._callsite)
         self.generic_visit(node)
+
+    @staticmethod
+    def _is_calculation_lineage_builder(function: ast.expr) -> bool:
+        if isinstance(function, ast.Name):
+            return function.id == "build_calculation_lineage"
+        return isinstance(function, ast.Attribute) and function.attr == "build_calculation_lineage"
+
+    def _resolve_lineage_identity(self, expression: ast.expr) -> str | None:
+        if (
+            isinstance(expression, ast.Call)
+            and isinstance(expression.func, ast.Attribute)
+            and expression.func.attr == "lineage_identity"
+        ):
+            return self._resolve_policy(expression.func.value)
+        if isinstance(expression, ast.Name):
+            for aliases in reversed(self._lineage_identity_aliases):
+                if expression.id in aliases:
+                    return aliases[expression.id]
+        return None
 
     def _resolve_policy(self, receiver: ast.expr) -> str | None:
         if isinstance(receiver, ast.Name):

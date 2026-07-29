@@ -33,12 +33,18 @@ def _write_policy(
     if used:
         consumer_lines = [
             "from decimal import Decimal",
+            "from portfolio_common.domain.calculation_lineage import build_calculation_lineage",
             "from owner.numeric_policy import TEST_LEDGER_OUTPUT_V1",
             "policy = TEST_LEDGER_OUTPUT_V1",
             "value = policy.normalize(Decimal('1'), field_name='value')",
         ]
         if lineage_bound:
-            consumer_lines.append("identity = TEST_LEDGER_OUTPUT_V1.lineage_identity()")
+            consumer_lines.append(
+                "lineage = build_calculation_lineage("
+                "algorithm_id='test', algorithm_version=1, intermediate_precision=64, "
+                "input_payload={}, output_payload={'value': value}, "
+                "numeric_output_policy=TEST_LEDGER_OUTPUT_V1.lineage_identity())"
+            )
         (source / "consumer.py").write_text(
             "\n".join(consumer_lines) + "\n",
             encoding="utf-8",
@@ -148,7 +154,58 @@ def test_guard_does_not_treat_lineage_binding_as_execution(tmp_path: Path) -> No
     findings = evaluate(tmp_path, _contract(tmp_path))
 
     assert "TEST_LEDGER_OUTPUT_V1: no execution consumer found" in findings
-    assert "TEST_LEDGER_OUTPUT_V1: required lineage binding is incomplete" not in findings
+    assert "TEST_LEDGER_OUTPUT_V1: required lineage binding is incomplete" in findings
+
+
+def test_guard_rejects_lineage_identity_that_is_computed_but_discarded(
+    tmp_path: Path,
+) -> None:
+    _write_policy(tmp_path, lineage_bound=False)
+    consumer = tmp_path / "src" / "owner" / "consumer.py"
+    consumer.write_text(
+        consumer.read_text(encoding="utf-8")
+        + "identity = TEST_LEDGER_OUTPUT_V1.lineage_identity()\n"
+        + "holder.identity = TEST_LEDGER_OUTPUT_V1.lineage_identity()\n",
+        encoding="utf-8",
+    )
+
+    findings = evaluate(tmp_path, _contract(tmp_path))
+
+    assert "TEST_LEDGER_OUTPUT_V1: required lineage binding is incomplete" in findings
+
+
+def test_guard_accepts_lineage_identity_propagated_through_local_name(
+    tmp_path: Path,
+) -> None:
+    _write_policy(tmp_path, lineage_bound=False)
+    consumer = tmp_path / "src" / "owner" / "consumer.py"
+    consumer.write_text(
+        consumer.read_text(encoding="utf-8")
+        + "identity = TEST_LEDGER_OUTPUT_V1.lineage_identity()\n"
+        + "lineage = build_calculation_lineage("
+        + "algorithm_id='test', algorithm_version=1, intermediate_precision=64, "
+        + "input_payload={}, output_payload={'value': value}, "
+        + "numeric_output_policy=identity)\n",
+        encoding="utf-8",
+    )
+
+    assert evaluate(tmp_path, _contract(tmp_path)) == ()
+
+
+def test_guard_accepts_annotated_identity_passed_to_qualified_lineage_builder(
+    tmp_path: Path,
+) -> None:
+    _write_policy(tmp_path, lineage_bound=False)
+    consumer = tmp_path / "src" / "owner" / "consumer.py"
+    consumer.write_text(
+        consumer.read_text(encoding="utf-8")
+        + "identity: object = TEST_LEDGER_OUTPUT_V1.lineage_identity()\n"
+        + "lineage = calculation_lineage.build_calculation_lineage("
+        + "numeric_output_policy=identity)\n",
+        encoding="utf-8",
+    )
+
+    assert evaluate(tmp_path, _contract(tmp_path)) == ()
 
 
 def test_guard_rejects_missing_required_lineage_binding(tmp_path: Path) -> None:
@@ -176,16 +233,32 @@ def test_guard_accepts_partial_binding_with_exact_consumer_gap(tmp_path: Path) -
     )
 
 
+def test_guard_rejects_partial_binding_without_both_consumer_states(
+    tmp_path: Path,
+) -> None:
+    _write_policy(tmp_path)
+
+    assert (
+        "TEST_LEDGER_OUTPUT_V1: partial lineage binding requires bound and unbound consumers"
+        in evaluate(
+            tmp_path,
+            _contract(tmp_path, lineage_binding="partial"),
+        )
+    )
+
+
 def test_guard_distinguishes_bound_and_unbound_callables_in_one_file(
     tmp_path: Path,
 ) -> None:
     _write_policy(tmp_path)
     (tmp_path / "src" / "owner" / "consumer.py").write_text(
         "from decimal import Decimal\n"
+        "from portfolio_common.domain.calculation_lineage import build_calculation_lineage\n"
         "from owner.numeric_policy import TEST_LEDGER_OUTPUT_V1\n"
         "def bound_calculation():\n"
         "    value = TEST_LEDGER_OUTPUT_V1.normalize(Decimal('1'), field_name='value')\n"
-        "    return value, TEST_LEDGER_OUTPUT_V1.lineage_identity()\n"
+        "    return build_calculation_lineage("
+        "numeric_output_policy=TEST_LEDGER_OUTPUT_V1.lineage_identity())\n"
         "def unbound_calculation():\n"
         "    return TEST_LEDGER_OUTPUT_V1.normalize(Decimal('2'), field_name='value')\n",
         encoding="utf-8",
