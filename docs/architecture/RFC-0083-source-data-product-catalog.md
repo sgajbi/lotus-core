@@ -475,13 +475,15 @@ mixed per-security epochs remain null rather than claiming a portfolio-wide epoc
 
 The analytics-input timeseries products reuse their existing `lineage.generated_at` timestamp for
 the top-level `generated_at` supportability field so lineage and envelope metadata stay internally
-consistent. They derive `data_quality_status` from expected/observed valuation dates, stale or
-restated points, and pagination completeness using the shared reconciliation-quality helper: fully
-observed final windows are `COMPLETE`, paginated responses are `PARTIAL`, stale or restated returned
-points are `STALE`, missing expected dates are `PARTIAL`, and empty windows remain `UNKNOWN` or
-`UNRECONCILED` depending on whether the request had expected dates. They leave tenant, evidence,
-snapshot, and policy fields null until those controls are resolved in the analytics-input contract
-path.
+consistent. They derive `data_quality_status` from expected/observed valuation dates, genuinely
+stale points, and pagination completeness using the shared reconciliation-quality helper. Fully
+observed windows containing `final` or authoritative `restated` observations are `COMPLETE`;
+pagination and missing expected dates are `PARTIAL`; stale, provisional, or unknown returned points
+are `STALE`; and empty windows remain `UNKNOWN` or `UNRECONCILED` depending on whether the request
+had expected dates. `valuation_status=restated` preserves correction lineage but does not make an
+epoch-current row stale. Complete windows selected through the current-epoch repository fence
+publish `source_evidence_current=true` and `freshness_status=CURRENT`. Tenant, snapshot, and policy
+fields remain null until those controls are resolved in the analytics-input contract path.
 
 The analytics-input serving path also normalizes day-boundary beginning capital for TWR safety.
 Persisted position-timeseries BOD values that are stale relative to prior EOD state are repaired at

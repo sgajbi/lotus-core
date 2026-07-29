@@ -218,6 +218,11 @@ Instead, the run points to a different defect class:
     validates net-neutral beginning and ending exposure across stock and cash legs.
 26. Full local E2E validation on 2026-04-19 passed after the review slice:
     `make test-e2e-all` completed with `67 passed`.
+27. A later deterministic-currentness review corrected one stale semantic: a positive epoch is a
+    recovery/restatement lineage marker, not evidence that the selected row is stale. Analytics
+    inputs now keep `valuation_status=restated` while reporting a complete, epoch-current window as
+    current; `stale_points_count` is reserved for observations that are not current under the
+    staleness policy.
 
 ## Requirement-to-Implementation Traceability
 

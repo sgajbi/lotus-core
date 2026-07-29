@@ -103,6 +103,13 @@ Primary contract areas include:
 - simulation session and projected-state contracts
 - analytics export job state
 
+For `PortfolioTimeseriesInput` and `PositionTimeseriesInput`, a positive position epoch is
+authoritative restatement lineage rather than stale evidence. A complete window selected through
+the current-position-epoch fence reports `valuation_status=restated` where applicable while
+remaining `data_quality_status=COMPLETE`, `source_evidence_current=true`, and
+`freshness_status=CURRENT`. Missing dates, incomplete pagination, and genuinely non-current rows
+remain degraded.
+
 These outputs feed:
 
 - `lotus-gateway`
