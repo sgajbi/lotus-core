@@ -1,5 +1,6 @@
 """Domain tests for deterministic position-timeseries calculation."""
 
+from dataclasses import replace
 from datetime import date
 from decimal import Decimal
 from typing import cast
@@ -7,6 +8,7 @@ from typing import cast
 import pytest
 
 from src.services.portfolio_derived_state_service.app.domain.position_timeseries.calculator import (
+    PositionSnapshotNotValuedError,
     calculate_position_timeseries,
 )
 from src.services.portfolio_derived_state_service.app.domain.position_timeseries.models import (
@@ -93,6 +95,35 @@ def test_first_position_day_has_zero_beginning_market_value(
     )
 
     assert record.bod_market_value == Decimal("0")
+
+
+@pytest.mark.parametrize(
+    ("missing_boundary", "expected_message"),
+    [
+        ("current", "end-of-day position snapshot"),
+        ("previous", "beginning position snapshot"),
+    ],
+)
+def test_calculation_rejects_unvalued_numeric_boundaries(
+    current_snapshot: PositionSnapshotRecord,
+    previous_snapshot: PositionSnapshotRecord,
+    missing_boundary: str,
+    expected_message: str,
+) -> None:
+    current = current_snapshot
+    previous = previous_snapshot
+    if missing_boundary == "current":
+        current = replace(current, market_value_local=None)
+    else:
+        previous = replace(previous, market_value_local=None)
+
+    with pytest.raises(PositionSnapshotNotValuedError, match=expected_message):
+        calculate_position_timeseries(
+            current_snapshot=current,
+            previous_snapshot=previous,
+            cashflows=[],
+            epoch=5,
+        )
 
 
 def test_calculation_separates_position_and_portfolio_cashflows(

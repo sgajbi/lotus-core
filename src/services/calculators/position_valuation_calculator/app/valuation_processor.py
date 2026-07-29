@@ -185,7 +185,7 @@ class ValuationJobProcessor:
             if not await self._complete_valuation_job(dependencies.repo, event, snapshot_result):
                 return
 
-            await self._persist_and_publish_snapshot(
+            await self._persist_snapshot_and_publish_if_materializable(
                 repo=dependencies.repo,
                 outbox_repo=dependencies.outbox_repo,
                 receipt_repo=dependencies.valuation_receipt_repo,
@@ -653,7 +653,7 @@ class ValuationJobProcessor:
         )
 
     @staticmethod
-    async def _persist_and_publish_snapshot(
+    async def _persist_snapshot_and_publish_if_materializable(
         *,
         repo: ValuationRepository,
         outbox_repo: OutboxRepository,
@@ -669,6 +669,20 @@ class ValuationJobProcessor:
                 snapshot_id=persisted_snapshot.id,
                 receipt=snapshot_result.receipt,
             )
+        if (
+            persisted_snapshot.valuation_status in FAILED_JOB_STATUSES
+            or persisted_snapshot.market_value_local is None
+        ):
+            logger.warning(
+                "Valuation snapshot persisted without a numeric materialization event.",
+                extra={
+                    "snapshot_id": persisted_snapshot.id,
+                    "portfolio_id": persisted_snapshot.portfolio_id,
+                    "security_id": persisted_snapshot.security_id,
+                    "valuation_status": persisted_snapshot.valuation_status,
+                },
+            )
+            return
         completion_event = DailyPositionSnapshotPersistedEvent.model_validate(persisted_snapshot)
 
         await outbox_repo.create_outbox_event(
