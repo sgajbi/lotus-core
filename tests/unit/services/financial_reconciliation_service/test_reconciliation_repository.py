@@ -345,6 +345,10 @@ async def test_fetch_position_valuation_rows_selects_authoritative_rows_through_
         "JOIN instruments ON trim(instruments.security_id) = "
         "trim(daily_position_snapshots.security_id)"
     ) in compiled_query
+    assert (
+        "LEFT OUTER JOIN daily_position_valuation_receipts ON "
+        "daily_position_valuation_receipts.snapshot_id = daily_position_snapshots.id"
+    ) in compiled_query
     assert "daily_position_snapshots.portfolio_id = 'P1'" in compiled_query
     assert "daily_position_snapshots.date = '2026-05-28'" in compiled_query
     assert "daily_position_snapshots.epoch <= 4" in compiled_query

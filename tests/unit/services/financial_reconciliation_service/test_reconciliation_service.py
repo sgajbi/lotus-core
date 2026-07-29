@@ -142,7 +142,9 @@ async def test_run_position_valuation_records_both_core_arithmetic_failures():
     portfolio = SimpleNamespace(base_currency="USD")
     repository = AsyncMock()
     repository.create_run.return_value = (run, True)
-    repository.fetch_position_valuation_rows.return_value = [(snapshot, instrument, portfolio)]
+    repository.fetch_position_valuation_rows.return_value = [
+        (snapshot, instrument, portfolio, None)
+    ]
 
     service = ReconciliationService(repository)
     with patch(
@@ -183,7 +185,9 @@ async def test_run_position_valuation_respects_bond_percent_of_par_pricing():
     portfolio = SimpleNamespace(base_currency="USD")
     repository = AsyncMock()
     repository.create_run.return_value = (run, True)
-    repository.fetch_position_valuation_rows.return_value = [(snapshot, instrument, portfolio)]
+    repository.fetch_position_valuation_rows.return_value = [
+        (snapshot, instrument, portfolio, None)
+    ]
 
     service = ReconciliationService(repository)
     with patch(
@@ -200,6 +204,49 @@ async def test_run_position_valuation_respects_bond_percent_of_par_pricing():
     assert findings == []
     summary = repository.mark_run_completed.await_args.kwargs["summary"]
     assert summary["finding_count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_run_position_valuation_uses_supported_receipt_instead_of_bond_heuristic():
+    run = SimpleNamespace(run_id="recon-authoritative-unit-price")
+    snapshot = SimpleNamespace(
+        portfolio_id="PORT-BOND",
+        security_id="BOND-UNIT",
+        date=date(2026, 3, 8),
+        epoch=0,
+        quantity=Decimal("10"),
+        market_price=Decimal("100"),
+        market_value_local=Decimal("1000"),
+        cost_basis=Decimal("10000"),
+        cost_basis_local=Decimal("10000"),
+        unrealized_gain_loss_local=Decimal("-9000"),
+    )
+    instrument = SimpleNamespace(currency="USD", product_type="BOND")
+    portfolio = SimpleNamespace(base_currency="USD")
+    receipt = SimpleNamespace(
+        supportability="SUPPORTED",
+        policy_id="UNIT_PRICE_MARKET_VALUE",
+        policy_version=1,
+        quote_basis="UNIT_PRICE",
+        receipt_hash="a" * 64,
+    )
+    repository = AsyncMock()
+    repository.create_run.return_value = (run, True)
+    repository.fetch_position_valuation_rows.return_value = [
+        (snapshot, instrument, portfolio, receipt)
+    ]
+
+    service = ReconciliationService(repository)
+    await service.run_position_valuation(
+        request=ReconciliationRunRequest(
+            portfolio_id="PORT-BOND",
+            business_date=date(2026, 3, 8),
+        ),
+        correlation_id="corr-authoritative-unit-price",
+    )
+
+    assert repository.add_findings.await_args.args[0] == []
+    assert repository.mark_run_completed.await_args.kwargs["summary"]["passed"] is True
 
 
 @pytest.mark.asyncio
@@ -221,7 +268,9 @@ async def test_run_position_valuation_normalizes_string_amounts():
     portfolio = SimpleNamespace(base_currency="USD")
     repository = AsyncMock()
     repository.create_run.return_value = (run, True)
-    repository.fetch_position_valuation_rows.return_value = [(snapshot, instrument, portfolio)]
+    repository.fetch_position_valuation_rows.return_value = [
+        (snapshot, instrument, portfolio, None)
+    ]
 
     service = ReconciliationService(repository)
     await service.run_position_valuation(
@@ -255,7 +304,9 @@ async def test_run_position_valuation_records_invalid_market_price_without_deriv
     portfolio = SimpleNamespace(base_currency="USD")
     repository = AsyncMock()
     repository.create_run.return_value = (run, True)
-    repository.fetch_position_valuation_rows.return_value = [(snapshot, instrument, portfolio)]
+    repository.fetch_position_valuation_rows.return_value = [
+        (snapshot, instrument, portfolio, None)
+    ]
 
     service = ReconciliationService(repository)
     await service.run_position_valuation(

@@ -4,7 +4,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
-from typing import Any
+from typing import Any, cast
 
 from portfolio_common.domain.decimal_amount import required_decimal
 from portfolio_common.domain.financial.precision import DecimalPrecisionPolicy
@@ -13,6 +13,15 @@ from portfolio_common.domain.market_data.market_price import (
 )
 from portfolio_common.domain.market_data.valuation_unit_price import (
     resolve_valuation_unit_price,
+)
+from portfolio_common.domain.valuation import (
+    PositionScaling,
+    UnknownValuationPolicyError,
+    ValuationOutputMeasure,
+    resolve_position_valuation_policy,
+)
+from portfolio_common.domain.valuation.numeric_policy import (
+    POSITION_VALUATION_LEDGER_OUTPUT_V1,
 )
 
 DEFAULT_VALUE_TOLERANCE = Decimal("0.0001")
@@ -79,6 +88,18 @@ class PositionValuationEvidence:
     cost_basis_local: object
     unrealized_gain_loss_local: object
     product_type: str | None
+    valuation_receipt: PositionValuationReceiptEvidence | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class PositionValuationReceiptEvidence:
+    """Minimum persisted authority evidence required for independent reconciliation."""
+
+    supportability: str
+    policy_id: str | None
+    policy_version: int | None
+    quote_basis: str | None
+    receipt_hash: str
 
 
 def build_reconciliation_summary(
@@ -111,6 +132,67 @@ def expected_market_value_local(
         product_type=product_type,
     )
     return quantity * valuation_price_local
+
+
+def _authoritative_market_value_local(
+    *,
+    quantity: Decimal,
+    market_price: Decimal,
+    receipt: PositionValuationReceiptEvidence,
+) -> Decimal | None:
+    if (
+        not isinstance(receipt.policy_id, str)
+        or not isinstance(receipt.policy_version, int)
+        or isinstance(receipt.policy_version, bool)
+        or not isinstance(receipt.quote_basis, str)
+    ):
+        return None
+    try:
+        policy = resolve_position_valuation_policy(
+            receipt.policy_id,
+            receipt.policy_version,
+        )
+    except (TypeError, ValueError, UnknownValuationPolicyError):
+        return None
+    if (
+        policy.input_basis.value != receipt.quote_basis
+        or policy.output_measure is not ValuationOutputMeasure.MARKET_VALUE
+        or policy.position_scaling is not PositionScaling.QUANTITY
+        or policy.input_basis.value != "UNIT_PRICE"
+    ):
+        return None
+    return cast(
+        Decimal,
+        POSITION_VALUATION_LEDGER_OUTPUT_V1.multiply(
+            quantity,
+            market_price,
+            field_name="reconciled_market_value_local",
+        ),
+    )
+
+
+def _unsupported_authoritative_receipt_finding(
+    evidence: PositionValuationEvidence,
+    receipt: PositionValuationReceiptEvidence,
+) -> ReconciliationFinding:
+    return ReconciliationFinding(
+        reconciliation_type="position_valuation",
+        finding_type="unsupported_authoritative_valuation_receipt",
+        severity="ERROR",
+        portfolio_id=evidence.portfolio_id,
+        security_id=evidence.security_id,
+        transaction_id=None,
+        business_date=evidence.business_date,
+        epoch=evidence.epoch,
+        expected_value={"supportability": "SUPPORTED_UNIT_PRICE_QUANTITY"},
+        observed_value={
+            "policy_id": receipt.policy_id,
+            "policy_version": receipt.policy_version,
+            "quote_basis": receipt.quote_basis,
+            "supportability": receipt.supportability,
+        },
+        detail={"receipt_hash": receipt.receipt_hash},
+    )
 
 
 def requires_authoritative_fx_rate(from_currency: str, to_currency: str) -> bool:
@@ -148,12 +230,25 @@ def position_valuation_reconciliation_findings(
             )
         ]
 
-    expected_market_value = expected_market_value_local(
-        quantity=quantity,
-        market_price=market_price,
-        cost_basis_local=cost_basis_local,
-        product_type=evidence.product_type,
-    )
+    receipt = evidence.valuation_receipt
+    if receipt is None or receipt.supportability == "LEGACY_UNSCOPED":
+        expected_market_value = expected_market_value_local(
+            quantity=quantity,
+            market_price=market_price,
+            cost_basis_local=cost_basis_local,
+            product_type=evidence.product_type,
+        )
+    elif receipt.supportability == "SUPPORTED":
+        authoritative_market_value = _authoritative_market_value_local(
+            quantity=quantity,
+            market_price=market_price,
+            receipt=receipt,
+        )
+        if authoritative_market_value is None:
+            return [_unsupported_authoritative_receipt_finding(evidence, receipt)]
+        expected_market_value = authoritative_market_value
+    else:
+        return [_unsupported_authoritative_receipt_finding(evidence, receipt)]
     expected_unrealized = expected_market_value - cost_basis_local
     observed_market_value = required_decimal(
         evidence.market_value_local,
