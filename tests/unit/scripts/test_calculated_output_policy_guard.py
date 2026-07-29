@@ -64,7 +64,7 @@ def _contract(root: Path, **overrides: object) -> Path:
         "working_precision": 64,
         "rounding": "ROUND_HALF_EVEN",
         "lineage_binding": "required",
-        "lineage_gap_paths": [],
+        "lineage_gap_callsites": [],
     }
     policy.update(overrides)
     path = root / "contract.json"
@@ -169,7 +169,42 @@ def test_guard_accepts_partial_binding_with_exact_consumer_gap(tmp_path: Path) -
             _contract(
                 tmp_path,
                 lineage_binding="partial",
-                lineage_gap_paths=["src/owner/unbound_consumer.py"],
+                lineage_gap_callsites=["src/owner/unbound_consumer.py::<module>"],
+            ),
+        )
+        == ()
+    )
+
+
+def test_guard_distinguishes_bound_and_unbound_callables_in_one_file(
+    tmp_path: Path,
+) -> None:
+    _write_policy(tmp_path)
+    (tmp_path / "src" / "owner" / "consumer.py").write_text(
+        "from decimal import Decimal\n"
+        "from owner.numeric_policy import TEST_LEDGER_OUTPUT_V1\n"
+        "def bound_calculation():\n"
+        "    value = TEST_LEDGER_OUTPUT_V1.normalize(Decimal('1'), field_name='value')\n"
+        "    return value, TEST_LEDGER_OUTPUT_V1.lineage_identity()\n"
+        "def unbound_calculation():\n"
+        "    return TEST_LEDGER_OUTPUT_V1.normalize(Decimal('2'), field_name='value')\n",
+        encoding="utf-8",
+    )
+
+    required_findings = evaluate(tmp_path, _contract(tmp_path))
+    assert (
+        "TEST_LEDGER_OUTPUT_V1: unclassified lineage gap at "
+        "src/owner/consumer.py::unbound_calculation"
+    ) in required_findings
+    assert "TEST_LEDGER_OUTPUT_V1: required lineage binding is incomplete" in required_findings
+
+    assert (
+        evaluate(
+            tmp_path,
+            _contract(
+                tmp_path,
+                lineage_binding="partial",
+                lineage_gap_callsites=["src/owner/consumer.py::unbound_calculation"],
             ),
         )
         == ()
@@ -182,7 +217,7 @@ def test_guard_rejects_required_binding_with_unbound_consumer(tmp_path: Path) ->
     findings = evaluate(tmp_path, _contract(tmp_path))
 
     assert (
-        "TEST_LEDGER_OUTPUT_V1: unclassified lineage gap at src/owner/unbound_consumer.py"
+        "TEST_LEDGER_OUTPUT_V1: unclassified lineage gap at src/owner/unbound_consumer.py::<module>"
     ) in findings
     assert "TEST_LEDGER_OUTPUT_V1: required lineage binding is incomplete" in findings
 
@@ -195,14 +230,14 @@ def test_guard_rejects_missing_and_stale_consumer_gaps(tmp_path: Path) -> None:
         _contract(
             tmp_path,
             lineage_binding="partial",
-            lineage_gap_paths=["src/owner/stale.py"],
+            lineage_gap_callsites=["src/owner/stale.py::calculate"],
         ),
     )
 
     assert (
-        "TEST_LEDGER_OUTPUT_V1: unclassified lineage gap at src/owner/unbound_consumer.py"
+        "TEST_LEDGER_OUTPUT_V1: unclassified lineage gap at src/owner/unbound_consumer.py::<module>"
     ) in findings
-    assert "TEST_LEDGER_OUTPUT_V1: stale lineage gap at src/owner/stale.py" in findings
+    assert ("TEST_LEDGER_OUTPUT_V1: stale lineage gap at src/owner/stale.py::calculate") in findings
 
 
 def test_guard_rejects_not_exposed_binding_with_lineage_consumer(tmp_path: Path) -> None:
@@ -224,12 +259,16 @@ def test_guard_rejects_duplicate_or_unsorted_consumer_gaps(tmp_path: Path) -> No
         _contract(
             tmp_path,
             lineage_binding="not-exposed",
-            lineage_gap_paths=["src/owner/consumer.py", "src/owner/consumer.py"],
+            lineage_gap_callsites=[
+                "src/owner/consumer.py::<module>",
+                "src/owner/consumer.py::<module>",
+            ],
         ),
     )
 
     assert (
-        "TEST_LEDGER_OUTPUT_V1.lineage_gap_paths: must be a sorted list of unique nonblank paths"
+        "TEST_LEDGER_OUTPUT_V1.lineage_gap_callsites: must be a sorted list of unique "
+        "path::callable values"
     ) in findings
 
 

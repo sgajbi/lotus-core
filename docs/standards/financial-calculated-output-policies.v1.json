@@ -12,8 +12,10 @@
       "scale": 10,
       "working_precision": 64,
       "rounding": "ROUND_HALF_EVEN",
-      "lineage_binding": "required",
-      "lineage_gap_paths": []
+      "lineage_binding": "partial",
+      "lineage_gap_callsites": [
+        "src/libs/portfolio-common/portfolio_common/domain/valuation/accrued_income.py::_calculate_segments"
+      ]
     },
     "POSITION_VALUATION_LEDGER_OUTPUT_V1": {
       "declaration_path": "src/libs/portfolio-common/portfolio_common/domain/valuation/numeric_policy.py",
@@ -26,8 +28,11 @@
       "working_precision": 64,
       "rounding": "ROUND_HALF_EVEN",
       "lineage_binding": "partial",
-      "lineage_gap_paths": [
-        "src/services/calculators/position_valuation_calculator/app/logic/valuation_logic.py"
+      "lineage_gap_callsites": [
+        "src/libs/portfolio-common/portfolio_common/domain/valuation/position_valuation.py::_convert_and_normalize",
+        "src/libs/portfolio-common/portfolio_common/domain/valuation/position_valuation.py::_normalize_optional",
+        "src/libs/portfolio-common/portfolio_common/domain/valuation/position_valuation.py::_normalize_outputs",
+        "src/services/calculators/position_valuation_calculator/app/logic/valuation_logic.py::ValuationLogic.calculate_valuation_components"
       ]
     },
     "TRANSACTION_COST_LEDGER_OUTPUT_V1": {
@@ -41,9 +46,21 @@
       "working_precision": 64,
       "rounding": "ROUND_HALF_EVEN",
       "lineage_binding": "not-exposed",
-      "lineage_gap_paths": [
-        "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_calculator.py",
-        "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/corporate_action_cash_economics.py"
+      "lineage_gap_callsites": [
+        "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_calculator.py::AdjustmentStrategy.calculate_costs",
+        "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_calculator.py::CashInflowStrategy.calculate_costs",
+        "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_calculator.py::CashOutflowStrategy.calculate_costs",
+        "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_calculator.py::DefaultStrategy.calculate_costs",
+        "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_calculator.py::PartialTransferOutStrategy.calculate_costs",
+        "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_calculator.py::SecurityInflowStrategy.calculate_costs",
+        "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_calculator.py::SecurityOutflowStrategy.calculate_costs",
+        "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_calculator.py::SellStrategy.calculate_costs",
+        "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_calculator.py::_apply_buy_cost_fields",
+        "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_calculator.py::_apply_sell_disposal_fields",
+        "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_calculator.py::_cash_outflow_book_cost",
+        "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_calculator.py::_net_sell_proceeds_local",
+        "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/corporate_action_cash_economics.py::_required_cross_currency_components",
+        "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/corporate_action_cash_economics.py::calculate_corporate_action_cash_economics"
       ]
     },
     "COST_BASIS_STATE_LEDGER_OUTPUT_V1": {
@@ -57,11 +74,25 @@
       "working_precision": 64,
       "rounding": "ROUND_HALF_EVEN",
       "lineage_binding": "not-exposed",
-      "lineage_gap_paths": [
-        "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/average_cost_source_allocation.py",
-        "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_strategies.py",
-        "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/lot_state.py",
-        "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/residual_allocation.py"
+      "lineage_gap_callsites": [
+        "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/average_cost_source_allocation.py::AverageCostPool.add",
+        "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/average_cost_source_allocation.py::AverageCostPool.dispose",
+        "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/average_cost_source_allocation.py::AverageCostPool.transfer_basis_out",
+        "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/average_cost_source_allocation.py::AverageCostSourceAllocation._disposal_factor",
+        "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/average_cost_source_allocation.py::AverageCostSourceAllocation.apply_disposal",
+        "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/average_cost_source_allocation.py::AverageCostSourceAllocation.materialize",
+        "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/average_cost_source_allocation.py::_materialized_cost",
+        "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/average_cost_source_allocation.py::_materialized_quantity",
+        "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/average_cost_source_allocation.py::_scaled_basis_factor",
+        "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_strategies.py::FIFOBasisStrategy.add_buy_lot",
+        "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_strategies.py::FIFOBasisStrategy.consume_sell_quantity",
+        "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_strategies.py::_allocate_fifo_basis_transfer",
+        "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_strategies.py::_assign_fifo_lot_costs",
+        "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_strategies.py::_consume_next_fifo_lot",
+        "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/lot_state.py::CostLot.open_state",
+        "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/lot_state.py::CostLot.total_cost_base",
+        "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/lot_state.py::CostLot.total_cost_local",
+        "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/residual_allocation.py::allocate_nonnegative_storage_share"
       ]
     },
     "POSITION_HISTORY_LEDGER_OUTPUT_V1": {
@@ -75,8 +106,9 @@
       "working_precision": 64,
       "rounding": "ROUND_HALF_EVEN",
       "lineage_binding": "not-exposed",
-      "lineage_gap_paths": [
-        "src/services/portfolio_transaction_processing_service/app/domain/position/reducer.py"
+      "lineage_gap_callsites": [
+        "src/services/portfolio_transaction_processing_service/app/domain/position/reducer.py::_position_state",
+        "src/services/portfolio_transaction_processing_service/app/domain/position/reducer.py::calculate_next_position_state"
       ]
     },
     "CASHFLOW_LEDGER_OUTPUT_V1": {
@@ -90,8 +122,8 @@
       "working_precision": 64,
       "rounding": "ROUND_HALF_EVEN",
       "lineage_binding": "not-exposed",
-      "lineage_gap_paths": [
-        "src/services/portfolio_transaction_processing_service/app/domain/cashflow/calculation.py"
+      "lineage_gap_callsites": [
+        "src/services/portfolio_transaction_processing_service/app/domain/cashflow/calculation.py::calculate_transaction_cashflow"
       ]
     },
     "POSITION_TIMESERIES_LEDGER_OUTPUT_V1": {
@@ -105,8 +137,11 @@
       "working_precision": 64,
       "rounding": "ROUND_HALF_EVEN",
       "lineage_binding": "not-exposed",
-      "lineage_gap_paths": [
-        "src/services/portfolio_derived_state_service/app/domain/position_timeseries/calculator.py"
+      "lineage_gap_callsites": [
+        "src/services/portfolio_derived_state_service/app/domain/position_timeseries/calculator.py::_CashflowBuckets._add_portfolio_flow",
+        "src/services/portfolio_derived_state_service/app/domain/position_timeseries/calculator.py::_CashflowBuckets._add_position_flow",
+        "src/services/portfolio_derived_state_service/app/domain/position_timeseries/calculator.py::_CashflowBuckets.add",
+        "src/services/portfolio_derived_state_service/app/domain/position_timeseries/calculator.py::_average_cost"
       ]
     },
     "PORTFOLIO_TIMESERIES_LEDGER_OUTPUT_V1": {
@@ -120,8 +155,8 @@
       "working_precision": 64,
       "rounding": "ROUND_HALF_EVEN",
       "lineage_binding": "not-exposed",
-      "lineage_gap_paths": [
-        "src/services/portfolio_derived_state_service/app/domain/portfolio_timeseries/calculator.py"
+      "lineage_gap_callsites": [
+        "src/services/portfolio_derived_state_service/app/domain/portfolio_timeseries/calculator.py::calculate_portfolio_timeseries"
       ]
     }
   }

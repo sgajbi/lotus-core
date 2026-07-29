@@ -24,7 +24,7 @@ POLICY_KEYS = {
     "working_precision",
     "rounding",
     "lineage_binding",
-    "lineage_gap_paths",
+    "lineage_gap_callsites",
 }
 LINEAGE_BINDINGS = {"required", "partial", "not-exposed"}
 EXECUTION_METHODS = {
@@ -125,19 +125,13 @@ def _usage(
         relative_path = path.relative_to(repo_root).as_posix()
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         aliases = _policy_aliases(tree, constants)
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
-                continue
-            receiver = node.func.value
-            if not isinstance(receiver, ast.Name):
-                continue
-            constant = receiver.id if receiver.id in constants else aliases.get(receiver.id)
-            if constant is None:
-                continue
-            if node.func.attr in EXECUTION_METHODS:
-                execution[constant].add(relative_path)
-            if node.func.attr == "lineage_identity":
-                lineage[constant].add(relative_path)
+        _UsageVisitor(
+            relative_path=relative_path,
+            constants=constants,
+            aliases=aliases,
+            execution=execution,
+            lineage=lineage,
+        ).visit(tree)
     return execution, lineage
 
 
@@ -155,6 +149,59 @@ def _policy_aliases(tree: ast.Module, constants: set[str]) -> dict[str, str]:
         if isinstance(target, ast.Name) and isinstance(value, ast.Name) and value.id in constants:
             aliases[target.id] = value.id
     return aliases
+
+
+class _UsageVisitor(ast.NodeVisitor):
+    def __init__(
+        self,
+        *,
+        relative_path: str,
+        constants: set[str],
+        aliases: dict[str, str],
+        execution: dict[str, set[str]],
+        lineage: dict[str, set[str]],
+    ) -> None:
+        self._relative_path = relative_path
+        self._constants = constants
+        self._aliases = aliases
+        self._execution = execution
+        self._lineage = lineage
+        self._scope: list[str] = []
+
+    @property
+    def _callsite(self) -> str:
+        scope = ".".join(self._scope) if self._scope else "<module>"
+        return f"{self._relative_path}::{scope}"
+
+    def _visit_scope(self, node: ast.AST, name: str) -> None:
+        self._scope.append(name)
+        self.generic_visit(node)
+        self._scope.pop()
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        self._visit_scope(node, node.name)
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        self._visit_scope(node, node.name)
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        self._visit_scope(node, node.name)
+
+    def visit_Lambda(self, node: ast.Lambda) -> None:
+        self._visit_scope(node, f"<lambda>@{node.lineno}")
+
+    def visit_Call(self, node: ast.Call) -> None:
+        if isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Name):
+            receiver = node.func.value
+            constant = (
+                receiver.id if receiver.id in self._constants else self._aliases.get(receiver.id)
+            )
+            if constant is not None:
+                if node.func.attr in EXECUTION_METHODS:
+                    self._execution[constant].add(self._callsite)
+                if node.func.attr == "lineage_identity":
+                    self._lineage[constant].add(self._callsite)
+        self.generic_visit(node)
 
 
 def evaluate(repo_root: Path, contract_path: Path) -> tuple[str, ...]:
@@ -210,34 +257,38 @@ def evaluate(repo_root: Path, contract_path: Path) -> tuple[str, ...]:
             findings.append(
                 f"{constant}.lineage_binding: must be one of {sorted(LINEAGE_BINDINGS)}"
             )
-        gap_paths = policy["lineage_gap_paths"]
-        valid_gap_paths = (
-            isinstance(gap_paths, list)
-            and all(isinstance(path, str) and path.strip() for path in gap_paths)
-            and gap_paths == sorted(set(gap_paths))
+        gap_callsites = policy["lineage_gap_callsites"]
+        valid_gap_callsites = (
+            isinstance(gap_callsites, list)
+            and all(
+                isinstance(callsite, str) and callsite.strip() and "::" in callsite
+                for callsite in gap_callsites
+            )
+            and gap_callsites == sorted(set(gap_callsites))
         )
-        if not valid_gap_paths:
+        if not valid_gap_callsites:
             findings.append(
-                f"{constant}.lineage_gap_paths: must be a sorted list of unique nonblank paths"
+                f"{constant}.lineage_gap_callsites: must be a sorted list of unique "
+                "path::callable values"
             )
             continue
-        execution_paths = execution[constant]
-        lineage_paths = lineage[constant]
-        computed_gaps = execution_paths - lineage_paths
-        contract_gaps = set(gap_paths)
-        for path in sorted(computed_gaps - contract_gaps):
-            findings.append(f"{constant}: unclassified lineage gap at {path}")
-        for path in sorted(contract_gaps - computed_gaps):
-            findings.append(f"{constant}: stale lineage gap at {path}")
-        if not execution_paths:
+        execution_callsites = execution[constant]
+        lineage_callsites = lineage[constant]
+        computed_gaps = execution_callsites - lineage_callsites
+        contract_gaps = set(gap_callsites)
+        for callsite in sorted(computed_gaps - contract_gaps):
+            findings.append(f"{constant}: unclassified lineage gap at {callsite}")
+        for callsite in sorted(contract_gaps - computed_gaps):
+            findings.append(f"{constant}: stale lineage gap at {callsite}")
+        if not execution_callsites:
             findings.append(f"{constant}: no execution consumer found")
-        if binding == "required" and (not lineage_paths or computed_gaps):
+        if binding == "required" and (not lineage_callsites or computed_gaps):
             findings.append(f"{constant}: required lineage binding is incomplete")
-        if binding == "partial" and (not lineage_paths or not computed_gaps):
+        if binding == "partial" and (not lineage_callsites or not computed_gaps):
             findings.append(
                 f"{constant}: partial lineage binding requires bound and unbound consumers"
             )
-        if binding == "not-exposed" and lineage_paths:
+        if binding == "not-exposed" and lineage_callsites:
             findings.append(f"{constant}: not-exposed policy has a lineage binding")
     if len(declarations) != expected_inventory:
         findings.append(
