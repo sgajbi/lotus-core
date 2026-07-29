@@ -372,17 +372,50 @@ async def test_scoped_portfolio_fails_closed_when_policy_authority_is_missing(
         "no exact authority"
     )
 
-    with pytest.raises(MissingValuationPolicyAssignmentError, match="exact authority"):
-        await mock_dependencies["processor"].process_valid_event(
-            mock_event,
-            "valuation.job.requested-0-96",
-            "processor-corr-id",
-        )
+    repo.upsert_daily_snapshot.side_effect = lambda snapshot: DailyPositionSnapshot(
+        id=77,
+        portfolio_id=snapshot.portfolio_id,
+        security_id=snapshot.security_id,
+        date=snapshot.date,
+        epoch=snapshot.epoch,
+        quantity=snapshot.quantity,
+        cost_basis=snapshot.cost_basis,
+        cost_basis_local=snapshot.cost_basis_local,
+        valuation_status=snapshot.valuation_status,
+    )
+
+    await mock_dependencies["processor"].process_valid_event(
+        mock_event,
+        "valuation.job.requested-0-96",
+        "processor-corr-id",
+    )
 
     repo.get_latest_price_for_position.assert_not_awaited()
     mock_dependencies["market_price_source_fact_resolver"].resolve_many.assert_not_awaited()
-    repo.upsert_daily_snapshot.assert_not_awaited()
-    mock_dependencies["outbox_repo"].create_outbox_event.assert_not_awaited()
+    repo.update_job_status.assert_awaited_once_with(
+        mock_event.portfolio_id,
+        mock_event.security_id,
+        mock_event.valuation_date,
+        mock_event.epoch,
+        "FAILED",
+        failure_reason="no exact authority",
+    )
+    failed_snapshot = repo.upsert_daily_snapshot.await_args.args[0]
+    assert failed_snapshot.valuation_status == "FAILED"
+    assert failed_snapshot.quantity == Decimal("10")
+    assert failed_snapshot.cost_basis == Decimal("10000")
+    assert failed_snapshot.market_price is None
+    assert failed_snapshot.market_value is None
+    assert failed_snapshot.market_value_local is None
+    assert failed_snapshot.unrealized_gain_loss is None
+    assert failed_snapshot.unrealized_gain_loss_local is None
+    mock_dependencies["valuation_receipt_repo"].delete.assert_awaited_once_with(snapshot_id=77)
+    mock_dependencies["valuation_receipt_repo"].upsert.assert_not_awaited()
+    mock_dependencies["outbox_repo"].create_outbox_event.assert_awaited_once()
+    assert (
+        mock_dependencies["outbox_repo"].create_outbox_event.await_args.kwargs["aggregate_id"]
+        == mock_event.portfolio_id
+    )
 
 
 async def test_valuation_processor_duplicate_claim_skips_valuation_reads(
