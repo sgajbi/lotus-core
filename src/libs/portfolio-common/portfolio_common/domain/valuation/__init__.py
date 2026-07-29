@@ -59,6 +59,13 @@ from .position_valuation import (
     ValuationOutputMeasure,
     calculate_position_valuation,
 )
+from .receipts import (
+    ValuationCalculationReceipt,
+    ValuationReceiptSupportability,
+    ValuationSnapshotIdentity,
+    build_authoritative_valuation_receipt,
+    build_legacy_valuation_receipt,
+)
 from .source_facts import (
     MarketPriceQuoteBasis,
     MarketPriceSourceFact,
@@ -113,12 +120,17 @@ __all__ = [
     "ValuationOutputMeasure",
     "ValuationAuthorityScope",
     "ValuationBookScope",
+    "ValuationCalculationReceipt",
+    "ValuationReceiptSupportability",
+    "ValuationSnapshotIdentity",
     "ValuationPolicyAssignmentCacheKey",
     "ValuationPolicyAssignmentError",
     "ValuationPolicyAssignmentStatus",
     "calculate_position_valuation",
     "calculate_segmented_accrued_income",
     "build_calculation_lineage",
+    "build_authoritative_valuation_receipt",
+    "build_legacy_valuation_receipt",
     "canonical_content_hash",
     "require_sha256_digest",
     "calculate_year_fraction",
