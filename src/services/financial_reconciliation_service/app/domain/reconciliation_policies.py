@@ -4,7 +4,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
-from typing import Any, cast
+from typing import Any
 
 from portfolio_common.domain.decimal_amount import required_decimal
 from portfolio_common.domain.financial.precision import DecimalPrecisionPolicy
@@ -19,9 +19,6 @@ from portfolio_common.domain.valuation import (
     UnknownValuationPolicyError,
     ValuationOutputMeasure,
     resolve_position_valuation_policy,
-)
-from portfolio_common.domain.valuation.numeric_policy import (
-    POSITION_VALUATION_LEDGER_OUTPUT_V1,
 )
 
 DEFAULT_VALUE_TOLERANCE = Decimal("0.0001")
@@ -161,14 +158,7 @@ def _authoritative_market_value_local(
         or policy.input_basis.value != "UNIT_PRICE"
     ):
         return None
-    return cast(
-        Decimal,
-        POSITION_VALUATION_LEDGER_OUTPUT_V1.multiply(
-            quantity,
-            market_price,
-            field_name="reconciled_market_value_local",
-        ),
-    )
+    return quantity * market_price
 
 
 def _unsupported_authoritative_receipt_finding(
