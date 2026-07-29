@@ -2683,6 +2683,14 @@ class OutboxEvent(Base):
             "status",
             "last_failure_at",
         ),
+        Index(
+            "ix_outbox_events_stream_unresolved_order",
+            "topic",
+            "partition_key",
+            "created_at",
+            "id",
+            postgresql_where=status.in_(("PENDING", "FAILED")),
+        ),
         Index("ix_outbox_events_alternate_lookup_key", "alternate_lookup_key"),
     )
 
