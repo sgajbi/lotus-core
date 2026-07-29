@@ -39,6 +39,12 @@ def timeseries_data_quality_status(
     )
 
 
+def timeseries_source_evidence_current(*, data_quality_status: str) -> bool:
+    """Return current only when the requested timeseries window is complete and non-stale."""
+
+    return data_quality_status.strip().upper() == COMPLETE
+
+
 def portfolio_reference_data_quality_status(*, performance_end_date: date | None) -> str:
     return cast(str, COMPLETE if performance_end_date is not None else PARTIAL)
 

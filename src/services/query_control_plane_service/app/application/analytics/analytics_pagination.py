@@ -174,6 +174,11 @@ def position_timeseries_diagnostics(
 
 
 def stale_points_count_from_distribution(quality_distribution: dict[str, int]) -> int:
+    """Count non-current observations without treating authoritative restatements as stale."""
+
+    current_statuses = {"final", "restated"}
     return sum(
-        count for status_name, count in quality_distribution.items() if status_name != "final"
+        count
+        for status_name, count in quality_distribution.items()
+        if status_name.strip().lower() not in current_statuses
     )

@@ -369,6 +369,8 @@ async def test_get_portfolio_timeseries_happy_path() -> None:
     assert response.restatement_version == "current"
     assert response.reconciliation_status == "UNKNOWN"
     assert response.data_quality_status == "COMPLETE"
+    assert response.source_evidence_current is True
+    assert response.freshness_status == "CURRENT"
     assert response.tenant_id is None
     assert response.snapshot_id is None
     assert response.policy_version is None
@@ -463,8 +465,9 @@ async def test_get_portfolio_timeseries_tracks_missing_business_dates_and_report
     assert response.observations[0].cash_flows[0].flow_scope == "external"
     assert response.observations[0].cash_flow_currency == "USD"
     assert response.diagnostics.missing_dates_count == 1
-    assert response.diagnostics.stale_points_count == 1
-    assert response.data_quality_status == "STALE"
+    assert response.diagnostics.stale_points_count == 0
+    assert response.data_quality_status == "PARTIAL"
+    assert response.source_evidence_current is False
 
 
 @pytest.mark.asyncio
@@ -2152,8 +2155,10 @@ async def test_get_position_timeseries_with_cash_flows_and_cursor() -> None:
     assert response.rows[0].cash_flows[2].cash_flow_type == "fee"
     assert response.diagnostics.cash_flows_included is True
     assert response.diagnostics.requested_dimensions == ["asset_class", "sector", "country"]
-    assert response.diagnostics.stale_points_count == 1
-    assert response.data_quality_status == "STALE"
+    assert response.diagnostics.stale_points_count == 0
+    assert response.data_quality_status == "COMPLETE"
+    assert response.source_evidence_current is True
+    assert response.freshness_status == "CURRENT"
     assert response.rows[0].cash_flow_currency == "USD"
     assert response.rows[0].portfolio_to_reporting_fx_rate == Decimal("1.2")
 

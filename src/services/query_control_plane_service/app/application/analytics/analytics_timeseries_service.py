@@ -123,6 +123,7 @@ from .analytics_quality import (
     portfolio_reference_evidence_timestamp,
     quality_status_from_epoch,
     timeseries_data_quality_status,
+    timeseries_source_evidence_current,
 )
 from .analytics_windows import AnalyticsWindowError, resolve_analytics_window
 
@@ -781,6 +782,9 @@ class AnalyticsTimeseriesService:
                 as_of_date=request.as_of_date,
                 generated_at=generated_at,
                 data_quality_status=data_quality_status,
+                source_evidence_current=timeseries_source_evidence_current(
+                    data_quality_status=data_quality_status
+                ),
             ),
         )
 
@@ -955,6 +959,9 @@ class AnalyticsTimeseriesService:
                 as_of_date=request.as_of_date,
                 generated_at=generated_at,
                 data_quality_status=data_quality_status,
+                source_evidence_current=timeseries_source_evidence_current(
+                    data_quality_status=data_quality_status
+                ),
             ),
         )
 

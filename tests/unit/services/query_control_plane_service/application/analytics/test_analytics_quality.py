@@ -13,6 +13,7 @@ from src.services.query_control_plane_service.app.application.analytics.analytic
     portfolio_reference_evidence_timestamp,
     quality_status_from_epoch,
     timeseries_data_quality_status,
+    timeseries_source_evidence_current,
 )
 
 
@@ -30,6 +31,12 @@ def test_timeseries_data_quality_status_classifies_empty_and_missing_windows() -
         timeseries_data_quality_status(required_count=3, observed_count=2, stale_count=0)
         == "PARTIAL"
     )
+
+
+def test_timeseries_source_currentness_requires_complete_coverage() -> None:
+    assert timeseries_source_evidence_current(data_quality_status="COMPLETE") is True
+    assert timeseries_source_evidence_current(data_quality_status="PARTIAL") is False
+    assert timeseries_source_evidence_current(data_quality_status="STALE") is False
 
 
 def test_portfolio_reference_quality_status_depends_on_performance_date() -> None:

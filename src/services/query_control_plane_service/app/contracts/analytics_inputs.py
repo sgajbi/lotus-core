@@ -129,7 +129,11 @@ class QualityDiagnostics(BaseModel):
     )
     stale_points_count: int = Field(
         0,
-        description="Count of stale points detected based on staleness policy.",
+        description=(
+            "Count of observations that are not current under the staleness policy. "
+            "Authoritative restatements remain current and are reported separately in the "
+            "quality-status distribution."
+        ),
         examples=[1],
     )
     requested_dimensions: list[str] = Field(
@@ -164,7 +168,11 @@ class PortfolioQualityDiagnostics(BaseModel):
     )
     stale_points_count: int = Field(
         0,
-        description="Count of returned observations whose valuation state is not final.",
+        description=(
+            "Count of returned observations that are not current under the staleness policy. "
+            "Authoritative restatements remain current and are reported separately in the "
+            "quality-status distribution."
+        ),
         examples=[1],
     )
     expected_business_dates_count: int = Field(
