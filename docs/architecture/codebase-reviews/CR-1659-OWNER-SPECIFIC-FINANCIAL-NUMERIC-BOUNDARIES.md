@@ -67,12 +67,14 @@ inputs and serialized Decimal values remain unchanged.
   including policy-version hash changes, ambient-context independence, half-even normalization,
   component reconciliation, and pre-persistence overflow rejection.
 - Repository-native MyPy passed across 240 source files.
-- Signed commits `5f5ceac94`, `44bc50938`, and `de6785f5a` add, enforce, and
-  coverage-harden the policy inventory.
-- Nineteen focused guard tests passed with 99% line/branch coverage, including repository parity;
+- Signed commits `5f5ceac94`, `44bc50938`, `de6785f5a`, and `cd8bb4484` add,
+  enforce, coverage-harden, and exact-head review-harden the policy inventory. The final review fix
+  requires a real arithmetic or normalization call, including through a local alias; lineage-only
+  references cannot satisfy execution-use evidence.
+- Twenty focused guard tests passed with 99% line/branch coverage, including repository parity;
   mutation-style shape drift; malformed envelopes and policy entries; stale, unclassified, unused,
   and missing-lineage policies; ambiguous/duplicate source declarations; duplicate JSON keys; and
-  CLI success/failure evidence.
+  CLI success/failure evidence; and rejection of lineage-only pseudo-use.
 
 ## Compatibility and remaining work
 
