@@ -21,6 +21,9 @@ from src.services.calculators.position_valuation_calculator.app.logic import (
     AuthoritativeValuationRequest,
     calculate_authoritative_valuation,
 )
+from src.services.calculators.position_valuation_calculator.app.logic import (
+    authoritative_valuation as authoritative_valuation_module,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -169,6 +172,35 @@ def test_principal_policy_fails_closed_without_face_amount() -> None:
                 signed_quantity=Decimal("1000"),
                 cost_basis_reporting=Decimal("990000"),
                 cost_basis_local=Decimal("990000"),
+                reporting_currency="USD",
+                evidence=_evidence(),
+            )
+        )
+
+
+def test_snapshot_publication_rejects_non_market_value_policy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        authoritative_valuation_module,
+        "validate_market_price_policy_compatibility",
+        lambda **_kwargs: None,
+    )
+
+    with pytest.raises(UnsupportedValuationError, match="requires a MARKET_VALUE policy"):
+        calculate_authoritative_valuation(
+            AuthoritativeValuationRequest(
+                policy=resolve_position_valuation_policy(
+                    "SUPPLIED_WHOLE_POSITION_SETTLEMENT_VARIATION",
+                    1,
+                ),
+                price_fact=_fact(
+                    MarketPriceQuoteBasis.UNIT_PRICE,
+                    "2500",
+                ),
+                signed_quantity=Decimal("10"),
+                cost_basis_reporting=Decimal("10000"),
+                cost_basis_local=Decimal("10000"),
                 reporting_currency="USD",
                 evidence=_evidence(),
             )
