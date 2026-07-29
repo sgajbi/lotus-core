@@ -329,11 +329,11 @@ Current repository posture:
      `docs/standards/financial-calculated-output-policies.v1.json` and enforced by
      `make calculated-output-policy-guard`, which runs under `make lint`. Every
      `CalculatedDecimalPolicy` declaration requires exact source-shape parity, a nonblank owner and
-     output family, at least one execution consumer, and an explicit lineage posture per execution
-     source path. Policies marked `required` must bind every execution path; `partial` requires both
-     bound and explicitly classified unbound paths; `not-exposed` requires every execution path to
-     be recorded as a gap. `partial` and `not-exposed` are visible gaps owned by GitHub #829, not
-     exemptions from future lineage work.
+     output family, at least one execution consumer, and an explicit lineage posture per enclosing
+     callable. Policies marked `required` must bind every execution callable; `partial` requires
+     both bound and explicitly classified unbound `path::callable` values; `not-exposed` requires
+     every execution callable to be recorded as a gap. `partial` and `not-exposed` are visible gaps
+     owned by GitHub #829, not exemptions from future lineage work.
     Job-backed ingestion idempotency replay must resolve from durable lifecycle outcome evidence,
     never from job existence alone. A replay-safe queued job may return its existing `202`;
     recorded failures must reproduce the original status, stable code, source-safe detail, job

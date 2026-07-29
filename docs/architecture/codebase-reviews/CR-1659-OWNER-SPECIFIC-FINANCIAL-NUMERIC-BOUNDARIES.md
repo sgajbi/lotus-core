@@ -46,12 +46,12 @@ closure of persisted lineage exposure or the complete producer-policy inventory.
 - Added a compact versioned inventory for all eight calculated-output policies and a deterministic
   AST guard. It rejects unclassified or stale declarations, literal source/contract drift, blank
   ownership, unused policies, invalid lineage posture, and missing required lineage binding per
-  execution file.
-- Wired the guard into `make lint`. Accrued income is fully lineage-bound. Position valuation is
-  truthfully `partial` because its legacy `valuation_logic.py` execution path does not yet emit
-  calculation lineage, and six policies are `not-exposed`. Every exact gap path is recorded in the
-  contract, keeping the remaining work visible under #829 instead of treating absence as
-  non-applicability.
+  enclosing callable.
+- Wired the guard into `make lint`. Accrued income and position valuation are truthfully `partial`:
+  their public calculation callables bind lineage, while internal arithmetic helpers and the legacy
+  `valuation_logic.py` consumer do not independently emit it. Six policies are `not-exposed`. Every
+  exact `path::callable` gap is recorded in the contract, keeping the remaining work visible under
+  #829 instead of treating absence as non-applicability.
 
 No database schema, migration, topic identity, or runtime topology changed. Exactly representable
 inputs and serialized Decimal values remain unchanged.
@@ -74,13 +74,14 @@ inputs and serialized Decimal values remain unchanged.
   enforce, coverage-harden, and exact-head review-harden the policy inventory. The final review fix
   requires a real arithmetic or normalization call, including through a local alias; lineage-only
   references cannot satisfy execution-use evidence.
-- Signed commit `123471fe8` addresses the accepted per-consumer review finding: execution and
-  lineage evidence are compared by source path, and missing or stale gap classifications fail.
-- Twenty-five focused guard tests passed with 99% line/branch coverage, including repository parity;
+- Signed commits `123471fe8` and `f9ff1d582` address the accepted per-consumer review findings.
+  Call-site hardening associates execution and lineage evidence with the enclosing callable so one
+  bound function cannot hide an unbound sibling in the same file.
+- Twenty-six focused guard tests passed with 99% line/branch coverage, including repository parity;
   mutation-style shape drift; malformed envelopes and policy entries; stale, unclassified, unused,
   partially bound, and missing-lineage policies; ambiguous/duplicate source declarations; duplicate
-  JSON keys; exact consumer-gap parity; CLI success/failure evidence; and rejection of lineage-only
-  pseudo-use.
+  JSON keys; exact callable-gap parity; same-file bound/unbound siblings; CLI success/failure
+  evidence; and rejection of lineage-only pseudo-use.
 
 ## Compatibility and remaining work
 
@@ -90,10 +91,10 @@ lineage hashes intentionally change because numeric policy is now calculation id
 remains open for complete producer-policy inventory reconciliation and persisted/exposed
 calculation-policy lineage compatibility.
 
-The declaration inventory is now complete and enforced. The residual is narrower: the legacy
-position-valuation consumer is explicitly `partial`, six executing policies remain `not-exposed`,
-and calculation-policy lineage still needs compatible durable persistence/query/replay proof before
-#829 can close.
+The declaration inventory is now complete and enforced. The residual is narrower: accrued income
+and position valuation are explicitly `partial` at callable granularity, six executing policies
+remain `not-exposed`, and calculation-policy lineage still needs compatible durable
+persistence/query/replay proof before #829 can close.
 
 ## Documentation decision
 
