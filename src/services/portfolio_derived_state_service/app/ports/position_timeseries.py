@@ -46,6 +46,14 @@ class PositionTimeseriesRepository(Protocol):
         record: PositionTimeseriesRecord,
     ) -> None: ...
 
+    async def invalidate_numeric_materializations(
+        self,
+        portfolio_id: str,
+        security_id: str,
+        dates: list[date],
+        epoch: int,
+    ) -> set[date]: ...
+
     async def get_all_cashflows_for_security_date(
         self,
         portfolio_id: str,

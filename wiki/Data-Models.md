@@ -161,8 +161,8 @@ Primary time-series tables include:
 These are upstream foundations for downstream analytics services. `lotus-core` owns the canonical
 input products, not the downstream performance or risk conclusions built from them.
 Failed or null-valued daily position snapshots are supportability state, not numeric zero: they do
-not trigger position-timeseries materialization, and the timeseries calculation boundary rejects
-null current or prior market values.
+trigger removal of current and bounded dependent position/portfolio timeseries plus aggregation
+restaging, and the timeseries calculation boundary rejects null current or prior market values.
 
 ### Operations, lineage, and supportability
 

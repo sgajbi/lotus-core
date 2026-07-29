@@ -105,6 +105,60 @@ async def test_get_position_timeseries_for_dates_filters_exact_dates_and_epoch(
     assert "position_timeseries.epoch = 14" in compiled_query
 
 
+async def test_invalidation_removes_exact_position_and_portfolio_days(
+    repository: TimeseriesGenerationRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    first_date = date(2025, 1, 10)
+    second_date = date(2025, 1, 11)
+    position_result = MagicMock()
+    position_result.fetchall.return_value = [(first_date,)]
+    portfolio_result = MagicMock()
+    portfolio_result.fetchall.return_value = [(first_date,), (second_date,)]
+    mock_db_session.execute.side_effect = [position_result, portfolio_result]
+
+    invalidated_dates = await repository.invalidate_numeric_materializations(
+        "P1",
+        "S1",
+        [second_date, first_date, first_date],
+        14,
+    )
+
+    assert invalidated_dates == {first_date, second_date}
+    position_statement, portfolio_statement = (
+        call.args[0] for call in mock_db_session.execute.await_args_list
+    )
+    compiled_position = str(
+        position_statement.compile(
+            dialect=postgresql.dialect(),
+            compile_kwargs={"literal_binds": True},
+        )
+    )
+    compiled_portfolio = str(
+        portfolio_statement.compile(
+            dialect=postgresql.dialect(),
+            compile_kwargs={"literal_binds": True},
+        )
+    )
+    assert "DELETE FROM position_timeseries" in compiled_position
+    assert "position_timeseries.portfolio_id = 'P1'" in compiled_position
+    assert "position_timeseries.security_id = 'S1'" in compiled_position
+    assert "position_timeseries.date IN ('2025-01-10', '2025-01-11')" in compiled_position
+    assert "position_timeseries.epoch = 14" in compiled_position
+    assert "DELETE FROM portfolio_timeseries" in compiled_portfolio
+    assert "portfolio_timeseries.portfolio_id = 'P1'" in compiled_portfolio
+    assert "portfolio_timeseries.date IN ('2025-01-10', '2025-01-11')" in compiled_portfolio
+    assert "portfolio_timeseries.epoch = 14" in compiled_portfolio
+
+
+async def test_invalidation_skips_empty_date_set(
+    repository: TimeseriesGenerationRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    assert await repository.invalidate_numeric_materializations("P1", "S1", [], 14) == set()
+    mock_db_session.execute.assert_not_awaited()
+
+
 async def test_get_position_timeseries_for_dates_returns_immutable_records(
     repository: TimeseriesGenerationRepository, mock_db_session: AsyncMock
 ):

@@ -412,7 +412,7 @@ async def test_scoped_portfolio_fails_closed_when_policy_authority_is_missing(
     assert failed_snapshot.unrealized_gain_loss_local is None
     mock_dependencies["valuation_receipt_repo"].delete.assert_awaited_once_with(snapshot_id=77)
     mock_dependencies["valuation_receipt_repo"].upsert.assert_not_awaited()
-    mock_dependencies["outbox_repo"].create_outbox_event.assert_not_awaited()
+    mock_dependencies["outbox_repo"].create_outbox_event.assert_awaited_once()
 
 
 async def test_valuation_processor_duplicate_claim_skips_valuation_reads(
@@ -506,7 +506,7 @@ async def test_valuation_processor_marks_snapshot_unvalued_when_price_is_missing
     persisted_snapshot = mock_valuation_repo.upsert_daily_snapshot.call_args.args[0]
     assert persisted_snapshot.valuation_status == "UNVALUED"
     mock_valuation_repo.update_job_status.assert_awaited_once()
-    mock_dependencies["outbox_repo"].create_outbox_event.assert_not_awaited()
+    mock_dependencies["outbox_repo"].create_outbox_event.assert_awaited_once()
 
 
 async def test_valuation_processor_marks_snapshot_stale_when_price_date_precedes_valuation_date(
@@ -856,7 +856,7 @@ async def test_process_message_marks_job_failed_when_fx_rate_missing(
     update_kwargs = mock_valuation_repo.update_job_status.call_args.kwargs
     assert update_args[4] == "FAILED"
     assert "Missing FX rate" in update_kwargs["failure_reason"]
-    mock_outbox_repo.create_outbox_event.assert_not_called()
+    mock_outbox_repo.create_outbox_event.assert_called_once()
     consumer._send_to_dlq_async.assert_not_called()
     assert mock_idempotency_repo.claim_event_processing.await_count == 1
 
