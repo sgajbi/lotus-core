@@ -211,7 +211,12 @@ class _UsageVisitor(ast.NodeVisitor):
         self._execution_method_aliases.append(dict.fromkeys(shadows))
         self._lineage_builder_aliases.append(dict.fromkeys(shadows))
         self._policy_aliases[-1].update(policy_bindings or {})
-        self.generic_visit(node)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            self._visit_reachable_statements(node.body)
+        elif isinstance(node, ast.Lambda):
+            self.visit(node.body)
+        else:
+            self.generic_visit(node)
         self._lineage_builder_aliases.pop()
         self._execution_method_aliases.pop()
         self._lineage_identity_aliases.pop()
@@ -407,13 +412,14 @@ class _UsageVisitor(ast.NodeVisitor):
             self._branch_usage.append((set(), set()))
             for statement in handler.body:
                 self.visit(statement)
+                if self._statement_terminates(statement):
+                    break
             execution, lineage = self._branch_usage.pop()
             for constant in execution - lineage:
                 self._control_flow_gaps[constant].add(self._callsite)
             exit_states.append(self._current_alias_state())
         self._restore_alias_state(self._join_alias_states(*exit_states))
-        for statement in node.finalbody:
-            self.visit(statement)
+        self._visit_reachable_statements(node.finalbody)
 
     def _visit_try_body(
         self,
@@ -435,6 +441,8 @@ class _UsageVisitor(ast.NodeVisitor):
             statement_execution, statement_lineage = self._branch_usage.pop()
             prior_execution.update(statement_execution)
             prior_lineage.update(statement_lineage)
+            if self._statement_terminates(statement):
+                break
         execution, lineage = self._branch_usage.pop()
         for constant in execution - lineage:
             gaps = (
@@ -462,6 +470,8 @@ class _UsageVisitor(ast.NodeVisitor):
             self._branch_usage.append((case_execution, case_lineage))
             for statement in case.body:
                 self.visit(statement)
+                if self._statement_terminates(statement):
+                    break
             execution, lineage = self._branch_usage.pop()
             for constant in execution - lineage:
                 self._control_flow_gaps[constant].add(self._callsite)
@@ -487,6 +497,8 @@ class _UsageVisitor(ast.NodeVisitor):
         self._branch_usage.append((execution.copy(), lineage.copy()))
         for statement in statements:
             self.visit(statement)
+            if self._statement_terminates(statement):
+                break
         execution, lineage = self._branch_usage.pop()
         for constant in execution - lineage:
             gaps = (
@@ -499,8 +511,24 @@ class _UsageVisitor(ast.NodeVisitor):
 
     @staticmethod
     def _branch_terminates(statements: list[ast.stmt]) -> bool:
-        return bool(statements) and isinstance(
-            statements[-1],
+        return any(
+            isinstance(
+                statement,
+                (ast.Return, ast.Raise, ast.Break, ast.Continue),
+            )
+            for statement in statements
+        )
+
+    def _visit_reachable_statements(self, statements: list[ast.stmt]) -> None:
+        for statement in statements:
+            self.visit(statement)
+            if self._statement_terminates(statement):
+                break
+
+    @staticmethod
+    def _statement_terminates(statement: ast.stmt) -> bool:
+        return isinstance(
+            statement,
             (ast.Return, ast.Raise, ast.Break, ast.Continue),
         )
 
