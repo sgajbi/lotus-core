@@ -60,6 +60,10 @@ def test_sqlalchemy_dependency_factory_constructs_concrete_adapters() -> None:
         dependencies.valuation_policy_assignment_resolver
         is valuation_policy_assignment_resolver.return_value
     )
+    assert (
+        dependencies.source_evidence_builder
+        is valuation_dependencies.build_authoritative_valuation_evidence
+    )
 
 
 def test_valuation_processor_does_not_construct_infrastructure() -> None:
