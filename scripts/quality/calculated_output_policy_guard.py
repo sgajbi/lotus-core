@@ -35,6 +35,8 @@ EXECUTION_METHODS = {
     "normalize",
     "subtract",
 }
+CALCULATION_LINEAGE_MODULE = "portfolio_common.domain.calculation_lineage"
+CALCULATION_LINEAGE_BUILDER = "build_calculation_lineage"
 
 
 @dataclass(frozen=True, slots=True)
@@ -141,9 +143,16 @@ def _declarations(repo_root: Path) -> dict[str, PolicyDeclaration]:
 def _usage(
     repo_root: Path,
     constants: set[str],
-) -> tuple[dict[str, set[str]], dict[str, set[str]]]:
+) -> tuple[
+    dict[str, set[str]],
+    dict[str, set[str]],
+    dict[str, set[str]],
+    dict[str, set[str]],
+]:
     execution = {constant: set() for constant in constants}
     lineage = {constant: set() for constant in constants}
+    control_flow_gaps = {constant: set() for constant in constants}
+    terminal_control_flow_gaps = {constant: set() for constant in constants}
     for path in sorted((repo_root / "src").rglob("*.py")):
         relative_path = path.relative_to(repo_root).as_posix()
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
@@ -152,8 +161,10 @@ def _usage(
             constants=constants,
             execution=execution,
             lineage=lineage,
+            control_flow_gaps=control_flow_gaps,
+            terminal_control_flow_gaps=terminal_control_flow_gaps,
         ).visit(tree)
-    return execution, lineage
+    return execution, lineage, control_flow_gaps, terminal_control_flow_gaps
 
 
 class _UsageVisitor(ast.NodeVisitor):
@@ -164,15 +175,21 @@ class _UsageVisitor(ast.NodeVisitor):
         constants: set[str],
         execution: dict[str, set[str]],
         lineage: dict[str, set[str]],
+        control_flow_gaps: dict[str, set[str]],
+        terminal_control_flow_gaps: dict[str, set[str]],
     ) -> None:
         self._relative_path = relative_path
         self._constants = constants
         self._execution = execution
         self._lineage = lineage
+        self._control_flow_gaps = control_flow_gaps
+        self._terminal_control_flow_gaps = terminal_control_flow_gaps
         self._scope: list[str] = []
         self._policy_aliases: list[dict[str, str | None]] = [{}]
         self._lineage_identity_aliases: list[dict[str, str | None]] = [{}]
         self._execution_method_aliases: list[dict[str, str | None]] = [{}]
+        self._lineage_builder_aliases: list[dict[str, str | None]] = [{}]
+        self._branch_usage: list[tuple[set[str], set[str]]] = []
 
     @property
     def _callsite(self) -> str:
@@ -191,7 +208,9 @@ class _UsageVisitor(ast.NodeVisitor):
         self._policy_aliases.append(dict.fromkeys(shadows))
         self._lineage_identity_aliases.append(dict.fromkeys(shadows))
         self._execution_method_aliases.append(dict.fromkeys(shadows))
+        self._lineage_builder_aliases.append(dict.fromkeys(shadows))
         self.generic_visit(node)
+        self._lineage_builder_aliases.pop()
         self._execution_method_aliases.pop()
         self._lineage_identity_aliases.pop()
         self._policy_aliases.pop()
@@ -237,6 +256,18 @@ class _UsageVisitor(ast.NodeVisitor):
         for imported in node.names:
             if imported.name in self._constants:
                 self._policy_aliases[-1][imported.asname or imported.name] = imported.name
+            if (
+                node.module == CALCULATION_LINEAGE_MODULE
+                or (node.level > 0 and node.module == "calculation_lineage")
+            ) and imported.name == CALCULATION_LINEAGE_BUILDER:
+                self._lineage_builder_aliases[-1][imported.asname or imported.name] = "function"
+            if node.module == "portfolio_common.domain" and imported.name == "calculation_lineage":
+                self._lineage_builder_aliases[-1][imported.asname or imported.name] = "module"
+
+    def visit_Import(self, node: ast.Import) -> None:
+        for imported in node.names:
+            if imported.name == CALCULATION_LINEAGE_MODULE and imported.asname:
+                self._lineage_builder_aliases[-1][imported.asname] = "module"
 
     def visit_If(self, node: ast.If) -> None:
         self.visit(node.test)
@@ -281,8 +312,12 @@ class _UsageVisitor(ast.NodeVisitor):
                 self.visit(handler.type)
             if handler.name is not None:
                 self._shadow_alias(handler.name)
+            self._branch_usage.append((set(), set()))
             for statement in handler.body:
                 self.visit(statement)
+            execution, lineage = self._branch_usage.pop()
+            for constant in execution - lineage:
+                self._control_flow_gaps[constant].add(self._callsite)
             exit_states.append(self._current_alias_state())
         self._restore_alias_state(self._join_alias_states(*exit_states))
         for statement in node.finalbody:
@@ -296,8 +331,12 @@ class _UsageVisitor(ast.NodeVisitor):
             self._restore_alias_state(incoming)
             if case.guard is not None:
                 self.visit(case.guard)
+            self._branch_usage.append((set(), set()))
             for statement in case.body:
                 self.visit(statement)
+            execution, lineage = self._branch_usage.pop()
+            for constant in execution - lineage:
+                self._control_flow_gaps[constant].add(self._callsite)
             exit_states.append(self._current_alias_state())
         # Include the incoming state because a match need not select a case.
         self._restore_alias_state(self._join_alias_states(*exit_states))
@@ -306,6 +345,7 @@ class _UsageVisitor(ast.NodeVisitor):
         self._policy_aliases[-1][name] = None
         self._lineage_identity_aliases[-1][name] = None
         self._execution_method_aliases[-1][name] = None
+        self._lineage_builder_aliases[-1][name] = None
 
     def _visit_branch(
         self,
@@ -313,15 +353,32 @@ class _UsageVisitor(ast.NodeVisitor):
         statements: list[ast.stmt],
     ) -> tuple[dict[str, str | None], ...]:
         self._restore_alias_state(incoming)
+        self._branch_usage.append((set(), set()))
         for statement in statements:
             self.visit(statement)
+        execution, lineage = self._branch_usage.pop()
+        for constant in execution - lineage:
+            gaps = (
+                self._terminal_control_flow_gaps
+                if self._branch_terminates(statements)
+                else self._control_flow_gaps
+            )
+            gaps[constant].add(self._callsite)
         return self._current_alias_state()
+
+    @staticmethod
+    def _branch_terminates(statements: list[ast.stmt]) -> bool:
+        return bool(statements) and isinstance(
+            statements[-1],
+            (ast.Return, ast.Raise, ast.Break, ast.Continue),
+        )
 
     def _current_alias_state(self) -> tuple[dict[str, str | None], ...]:
         return (
             self._policy_aliases[-1].copy(),
             self._lineage_identity_aliases[-1].copy(),
             self._execution_method_aliases[-1].copy(),
+            self._lineage_builder_aliases[-1].copy(),
         )
 
     def _restore_alias_state(
@@ -332,6 +389,7 @@ class _UsageVisitor(ast.NodeVisitor):
             self._policy_aliases[-1],
             self._lineage_identity_aliases[-1],
             self._execution_method_aliases[-1],
+            self._lineage_builder_aliases[-1],
         ) = (aliases.copy() for aliases in state)
 
     @staticmethod
@@ -359,12 +417,14 @@ class _UsageVisitor(ast.NodeVisitor):
         policy_constant = self._resolve_policy(node.value)
         lineage_constant = self._resolve_lineage_identity(node.value)
         execution_constant = self._resolve_execution_method(node.value)
+        builder_reference = self._resolve_lineage_builder_reference(node.value)
         for target in node.targets:
             if not isinstance(target, ast.Name):
                 continue
             self._policy_aliases[-1][target.id] = policy_constant
             self._lineage_identity_aliases[-1][target.id] = lineage_constant
             self._execution_method_aliases[-1][target.id] = execution_constant
+            self._lineage_builder_aliases[-1][target.id] = builder_reference
 
     def visit_AnnAssign(self, node: ast.AnnAssign) -> None:
         self.generic_visit(node)
@@ -376,6 +436,9 @@ class _UsageVisitor(ast.NodeVisitor):
         self._lineage_identity_aliases[-1][node.target.id] = lineage_constant
         execution_constant = self._resolve_execution_method(node.value)
         self._execution_method_aliases[-1][node.target.id] = execution_constant
+        self._lineage_builder_aliases[-1][node.target.id] = self._resolve_lineage_builder_reference(
+            node.value
+        )
 
     def visit_Call(self, node: ast.Call) -> None:
         if isinstance(node.func, ast.Name):
@@ -384,26 +447,66 @@ class _UsageVisitor(ast.NodeVisitor):
                 self._execution_method_aliases,
             )
             if constant is not None:
-                self._execution[constant].add(self._callsite)
+                self._record_execution(constant)
         if isinstance(node.func, ast.Attribute):
             constant = self._resolve_policy(node.func.value)
             if constant is not None:
                 if node.func.attr in EXECUTION_METHODS:
-                    self._execution[constant].add(self._callsite)
-        if self._is_calculation_lineage_builder(node.func):
+                    self._record_execution(constant)
+        if self._resolve_lineage_builder_reference(node.func) == "function":
             for keyword in node.keywords:
                 if keyword.arg != "numeric_output_policy":
                     continue
                 constant = self._resolve_lineage_identity(keyword.value)
                 if constant is not None:
-                    self._lineage[constant].add(self._callsite)
+                    self._record_lineage(constant)
         self.generic_visit(node)
 
+    def _record_execution(self, constant: str) -> None:
+        self._execution[constant].add(self._callsite)
+        for execution, _ in self._branch_usage:
+            execution.add(constant)
+
+    def _record_lineage(self, constant: str) -> None:
+        self._lineage[constant].add(self._callsite)
+        if not self._branch_usage:
+            # A builder after a control-flow join can bind every surviving output
+            # path; a builder inside a sibling branch cannot.
+            self._control_flow_gaps[constant].discard(self._callsite)
+        for _, lineage in self._branch_usage:
+            lineage.add(constant)
+
+    def _resolve_lineage_builder_reference(self, expression: ast.expr) -> str | None:
+        if isinstance(expression, ast.Name):
+            return self._lookup_scoped_alias(
+                expression.id,
+                self._lineage_builder_aliases,
+            )
+        if not isinstance(expression, ast.Attribute):
+            return None
+        if expression.attr == CALCULATION_LINEAGE_BUILDER:
+            if self._dotted_name(expression.value) == CALCULATION_LINEAGE_MODULE:
+                return "function"
+            if isinstance(expression.value, ast.Name):
+                receiver = self._lookup_scoped_alias(
+                    expression.value.id,
+                    self._lineage_builder_aliases,
+                )
+                if receiver == "module":
+                    return "function"
+        return None
+
     @staticmethod
-    def _is_calculation_lineage_builder(function: ast.expr) -> bool:
-        if isinstance(function, ast.Name):
-            return function.id == "build_calculation_lineage"
-        return isinstance(function, ast.Attribute) and function.attr == "build_calculation_lineage"
+    def _dotted_name(expression: ast.expr) -> str | None:
+        parts: list[str] = []
+        current = expression
+        while isinstance(current, ast.Attribute):
+            parts.append(current.attr)
+            current = current.value
+        if not isinstance(current, ast.Name):
+            return None
+        parts.append(current.id)
+        return ".".join(reversed(parts))
 
     def _resolve_lineage_identity(self, expression: ast.expr) -> str | None:
         if (
@@ -474,7 +577,12 @@ def evaluate(repo_root: Path, contract_path: Path) -> tuple[str, ...]:
     stale = sorted(set(policies) - set(declarations))
     findings.extend(f"{constant}: missing contract classification" for constant in missing)
     findings.extend(f"{constant}: stale contract classification" for constant in stale)
-    execution, lineage = _usage(repo_root, set(declarations))
+    (
+        execution,
+        lineage,
+        control_flow_gaps,
+        terminal_control_flow_gaps,
+    ) = _usage(repo_root, set(declarations))
     for constant in sorted(set(declarations) & set(policies)):
         declaration = declarations[constant]
         policy = policies[constant]
@@ -520,7 +628,11 @@ def evaluate(repo_root: Path, contract_path: Path) -> tuple[str, ...]:
             continue
         execution_callsites = execution[constant]
         lineage_callsites = lineage[constant]
-        computed_gaps = execution_callsites - lineage_callsites
+        computed_gaps = (
+            (execution_callsites - lineage_callsites)
+            | control_flow_gaps[constant]
+            | terminal_control_flow_gaps[constant]
+        )
         contract_gaps = set(gap_callsites)
         for callsite in sorted(computed_gaps - contract_gaps):
             findings.append(f"{constant}: unclassified lineage gap at {callsite}")
