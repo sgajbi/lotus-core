@@ -333,7 +333,9 @@ Current repository posture:
      callable. Policies marked `required` must bind every execution callable; `partial` requires
      both bound and explicitly classified unbound `path::callable` values; `not-exposed` requires
      every execution callable to be recorded as a gap. `partial` and `not-exposed` are visible gaps
-     owned by GitHub #829, not exemptions from future lineage work.
+     owned by GitHub #829, not exemptions from future lineage work. The guard resolves direct and
+     aliased policy imports, module-qualified references, and local assignments from qualified
+     policies; do not rely on import spelling to define lineage posture.
     Job-backed ingestion idempotency replay must resolve from durable lifecycle outcome evidence,
     never from job existence alone. A replay-safe queued job may return its existing `202`;
     recorded failures must reproduce the original status, stable code, source-safe detail, job
