@@ -160,13 +160,14 @@ def position_timeseries_next_page_token(
 def position_timeseries_diagnostics(
     *,
     quality_distribution: dict[str, int],
+    missing_dates_count: int,
     dimensions: list[str],
     include_cash_flows: bool,
 ) -> QualityDiagnostics:
     stale_points_count = stale_points_count_from_distribution(quality_distribution)
     return QualityDiagnostics(
         quality_status_distribution=quality_distribution,
-        missing_dates_count=0,
+        missing_dates_count=missing_dates_count,
         stale_points_count=stale_points_count,
         requested_dimensions=list(dimensions),
         cash_flows_included=include_cash_flows,

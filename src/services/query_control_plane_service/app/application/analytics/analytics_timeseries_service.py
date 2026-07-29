@@ -915,11 +915,6 @@ class AnalyticsTimeseriesService:
             snapshot_epoch=snapshot_epoch,
             request_scope_fingerprint=request_scope_fingerprint,
         )
-        diagnostics = self._position_timeseries_diagnostics(
-            quality_distribution=quality_distribution,
-            dimensions=request.dimensions,
-            include_cash_flows=request.include_cash_flows,
-        )
         expected_business_dates = await self.repo.list_business_dates(
             start_date=resolved_window.start_date,
             end_date=resolved_window.end_date,
@@ -930,13 +925,22 @@ class AnalyticsTimeseriesService:
             for row in response_rows
             if row.valuation_date in expected_business_date_set
         }
+        is_paginated_response = request.page.page_token is not None or next_page_token is not None
+        diagnostics = self._position_timeseries_diagnostics(
+            quality_distribution=quality_distribution,
+            missing_dates_count=(
+                0
+                if is_paginated_response
+                else len(expected_business_date_set - observed_business_dates)
+            ),
+            dimensions=request.dimensions,
+            include_cash_flows=request.include_cash_flows,
+        )
         data_quality_status = timeseries_data_quality_status(
             required_count=len(expected_business_dates),
             observed_count=len(observed_business_dates),
             stale_count=diagnostics.stale_points_count,
-            warning_issue_count=(
-                1 if request.page.page_token is not None or next_page_token is not None else 0
-            ),
+            warning_issue_count=1 if is_paginated_response else 0,
         )
 
         fingerprint = self._request_fingerprint(
@@ -1064,11 +1068,13 @@ class AnalyticsTimeseriesService:
     def _position_timeseries_diagnostics(
         *,
         quality_distribution: dict[str, int],
+        missing_dates_count: int,
         dimensions: list[str],
         include_cash_flows: bool,
     ) -> QualityDiagnostics:
         return position_timeseries_diagnostics(
             quality_distribution=quality_distribution,
+            missing_dates_count=missing_dates_count,
             dimensions=dimensions,
             include_cash_flows=include_cash_flows,
         )

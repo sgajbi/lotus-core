@@ -109,7 +109,9 @@ the current-position-epoch fence reports `valuation_status=restated` where appli
 remaining `data_quality_status=COMPLETE`, `source_evidence_current=true`, and
 `freshness_status=CURRENT`. Position completeness is measured against the canonical business-date
 window. Missing dates, every continuation page (including the final page), and genuinely
-non-current rows remain degraded.
+non-current rows remain degraded. For unpaginated position windows, `missing_dates_count` reports
+the canonical business-date gap; paginated responses do not treat dates outside the page as
+missing.
 
 These outputs feed:
 
