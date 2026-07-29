@@ -202,6 +202,7 @@ class _UsageVisitor(ast.NodeVisitor):
         name: str,
         *,
         shadowed_names: set[str] | None = None,
+        policy_bindings: dict[str, str] | None = None,
     ) -> None:
         shadows = shadowed_names or set()
         self._scope.append(name)
@@ -209,6 +210,7 @@ class _UsageVisitor(ast.NodeVisitor):
         self._lineage_identity_aliases.append(dict.fromkeys(shadows))
         self._execution_method_aliases.append(dict.fromkeys(shadows))
         self._lineage_builder_aliases.append(dict.fromkeys(shadows))
+        self._policy_aliases[-1].update(policy_bindings or {})
         self.generic_visit(node)
         self._lineage_builder_aliases.pop()
         self._execution_method_aliases.pop()
@@ -224,6 +226,7 @@ class _UsageVisitor(ast.NodeVisitor):
             node,
             node.name,
             shadowed_names=self._argument_names(node.args),
+            policy_bindings=self._parameter_policy_bindings(node.args),
         )
 
     def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
@@ -231,6 +234,7 @@ class _UsageVisitor(ast.NodeVisitor):
             node,
             node.name,
             shadowed_names=self._argument_names(node.args),
+            policy_bindings=self._parameter_policy_bindings(node.args),
         )
 
     def visit_Lambda(self, node: ast.Lambda) -> None:
@@ -238,6 +242,7 @@ class _UsageVisitor(ast.NodeVisitor):
             node,
             f"<lambda>@{node.lineno}",
             shadowed_names=self._argument_names(node.args),
+            policy_bindings=self._parameter_policy_bindings(node.args),
         )
 
     @staticmethod
@@ -251,6 +256,26 @@ class _UsageVisitor(ast.NodeVisitor):
         if arguments.kwarg is not None:
             names.add(arguments.kwarg.arg)
         return names
+
+    def _parameter_policy_bindings(self, arguments: ast.arguments) -> dict[str, str]:
+        bindings: dict[str, str] = {}
+        positional = (*arguments.posonlyargs, *arguments.args)
+        default_arguments = positional[len(positional) - len(arguments.defaults) :]
+        for argument, default in zip(default_arguments, arguments.defaults, strict=True):
+            constant = self._resolve_policy(default)
+            if constant is not None:
+                bindings[argument.arg] = constant
+        for argument, default in zip(
+            arguments.kwonlyargs,
+            arguments.kw_defaults,
+            strict=True,
+        ):
+            if default is None:
+                continue
+            constant = self._resolve_policy(default)
+            if constant is not None:
+                bindings[argument.arg] = constant
+        return bindings
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
         for imported in node.names:
@@ -270,17 +295,33 @@ class _UsageVisitor(ast.NodeVisitor):
                 self._lineage_builder_aliases[-1][imported.asname] = "module"
 
     def visit_If(self, node: ast.If) -> None:
-        self.visit(node.test)
+        predicate_usage = self._visit_control_expression(node.test)
         incoming = self._current_alias_state()
-        body_state = self._visit_branch(incoming, node.body)
-        else_state = self._visit_branch(incoming, node.orelse) if node.orelse else incoming
+        body_state = self._visit_branch(
+            incoming,
+            node.body,
+            initial_usage=predicate_usage,
+        )
+        else_state = self._visit_branch(
+            incoming,
+            node.orelse,
+            initial_usage=predicate_usage,
+        )
         self._restore_alias_state(self._join_alias_states(body_state, else_state))
 
     def visit_IfExp(self, node: ast.IfExp) -> None:
-        self.visit(node.test)
+        predicate_usage = self._visit_control_expression(node.test)
         incoming = self._current_alias_state()
-        body_state = self._visit_expression_branch(incoming, node.body)
-        else_state = self._visit_expression_branch(incoming, node.orelse)
+        body_state = self._visit_expression_branch(
+            incoming,
+            node.body,
+            initial_usage=predicate_usage,
+        )
+        else_state = self._visit_expression_branch(
+            incoming,
+            node.orelse,
+            initial_usage=predicate_usage,
+        )
         self._restore_alias_state(self._join_alias_states(body_state, else_state))
 
     def visit_BoolOp(self, node: ast.BoolOp) -> None:
@@ -294,31 +335,51 @@ class _UsageVisitor(ast.NodeVisitor):
         self,
         incoming: tuple[dict[str, str | None], ...],
         expression: ast.expr,
+        *,
+        initial_usage: tuple[set[str], set[str]] | None = None,
     ) -> tuple[dict[str, str | None], ...]:
         self._restore_alias_state(incoming)
-        self._branch_usage.append((set(), set()))
+        execution, lineage = initial_usage or (set(), set())
+        self._branch_usage.append((execution.copy(), lineage.copy()))
         self.visit(expression)
         execution, lineage = self._branch_usage.pop()
         for constant in execution - lineage:
             self._control_flow_gaps[constant].add(self._callsite)
         return self._current_alias_state()
 
+    def _visit_control_expression(
+        self,
+        expression: ast.expr,
+    ) -> tuple[set[str], set[str]]:
+        self._branch_usage.append((set(), set()))
+        self.visit(expression)
+        return self._branch_usage.pop()
+
     def visit_For(self, node: ast.For) -> None:
-        self.visit(node.iter)
-        self._visit_loop(node)
+        self._visit_loop(node, self._visit_control_expression(node.iter))
 
     def visit_AsyncFor(self, node: ast.AsyncFor) -> None:
-        self.visit(node.iter)
-        self._visit_loop(node)
+        self._visit_loop(node, self._visit_control_expression(node.iter))
 
     def visit_While(self, node: ast.While) -> None:
-        self.visit(node.test)
-        self._visit_loop(node)
+        self._visit_loop(node, self._visit_control_expression(node.test))
 
-    def _visit_loop(self, node: ast.For | ast.AsyncFor | ast.While) -> None:
+    def _visit_loop(
+        self,
+        node: ast.For | ast.AsyncFor | ast.While,
+        predicate_usage: tuple[set[str], set[str]],
+    ) -> None:
         incoming = self._current_alias_state()
-        body_state = self._visit_branch(incoming, node.body)
-        else_state = self._visit_branch(incoming, node.orelse) if node.orelse else incoming
+        body_state = self._visit_branch(
+            incoming,
+            node.body,
+            initial_usage=predicate_usage,
+        )
+        else_state = self._visit_branch(
+            incoming,
+            node.orelse,
+            initial_usage=predicate_usage,
+        )
         # A loop can execute zero times, and a break can skip its else suite.
         self._restore_alias_state(self._join_alias_states(incoming, body_state, else_state))
 
@@ -385,14 +446,20 @@ class _UsageVisitor(ast.NodeVisitor):
         return self._current_alias_state()
 
     def visit_Match(self, node: ast.Match) -> None:
-        self.visit(node.subject)
+        subject_usage = self._visit_control_expression(node.subject)
         incoming = self._current_alias_state()
-        exit_states = [incoming]
+        exit_states = [self._visit_branch(incoming, [], initial_usage=subject_usage)]
         for case in node.cases:
             self._restore_alias_state(incoming)
+            case_execution, case_lineage = (
+                subject_usage[0].copy(),
+                subject_usage[1].copy(),
+            )
             if case.guard is not None:
-                self.visit(case.guard)
-            self._branch_usage.append((set(), set()))
+                guard_execution, guard_lineage = self._visit_control_expression(case.guard)
+                case_execution.update(guard_execution)
+                case_lineage.update(guard_lineage)
+            self._branch_usage.append((case_execution, case_lineage))
             for statement in case.body:
                 self.visit(statement)
             execution, lineage = self._branch_usage.pop()
@@ -412,9 +479,12 @@ class _UsageVisitor(ast.NodeVisitor):
         self,
         incoming: tuple[dict[str, str | None], ...],
         statements: list[ast.stmt],
+        *,
+        initial_usage: tuple[set[str], set[str]] | None = None,
     ) -> tuple[dict[str, str | None], ...]:
         self._restore_alias_state(incoming)
-        self._branch_usage.append((set(), set()))
+        execution, lineage = initial_usage or (set(), set())
+        self._branch_usage.append((execution.copy(), lineage.copy()))
         for statement in statements:
             self.visit(statement)
         execution, lineage = self._branch_usage.pop()
