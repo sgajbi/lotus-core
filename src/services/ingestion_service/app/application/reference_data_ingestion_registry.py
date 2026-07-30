@@ -84,7 +84,7 @@ REFERENCE_DATA_INGESTION_REGISTRY = ReferenceDataIngestionRegistry(
             endpoint="/ingest/instrument-valuation-policy-assignments",
             entity_type="instrument_valuation_policy_assignment",
             records_attribute="valuation_policy_assignments",
-            persist_method_name="upsert_instrument_valuation_policy_assignments",
+            persist_method_name="append_instrument_valuation_policy_assignments",
         ),
         ReferenceDataIngestionCommand(
             command_key="authoritative_market_price_source_fact",

@@ -1132,7 +1132,7 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
         ) -> None:
             self.persisted["lookthrough_components"].extend(records)
 
-        async def upsert_instrument_valuation_policy_assignments(
+        async def append_instrument_valuation_policy_assignments(
             self, records: list[dict[str, object]]
         ) -> None:
             self.persisted["valuation_policy_assignments"].extend(records)

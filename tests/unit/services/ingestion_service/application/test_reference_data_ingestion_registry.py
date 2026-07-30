@@ -40,7 +40,7 @@ EXPECTED_COMMANDS = {
         "/ingest/instrument-valuation-policy-assignments",
         "instrument_valuation_policy_assignment",
         "valuation_policy_assignments",
-        "upsert_instrument_valuation_policy_assignments",
+        "append_instrument_valuation_policy_assignments",
     ),
     "authoritative_market_price_source_fact": (
         "/ingest/authoritative-market-price-source-facts",
