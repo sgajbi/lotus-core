@@ -130,9 +130,22 @@ async def test_complete_benchmark_coverage_exposes_deterministic_source_proof() 
     second_response = await second.get_benchmark(benchmark_id="BMK_1", request=_request())
 
     assert first_response.data_quality_status == "COMPLETE"
+    assert first_response.coverage_report_id == second_response.coverage_report_id
+    assert first_response.required_count == 2
+    assert first_response.observed_count == 2
+    assert first_response.stale_count == 0
+    assert first_response.blocking_issue_count == 0
+    assert first_response.warning_issue_count == 0
+    assert first_response.freshness_threshold_minutes == 1440
+    assert first_response.evidence_age_minutes == 60
+    assert first_response.publication_gate == "ALLOW"
+    assert first_response.publication_block_reasons == []
+    assert first_response.contributing_evidence_refs == sorted(
+        first_response.contributing_evidence_refs
+    )
     assert first_response.source_evidence_current is True
     assert first_response.freshness_status == "CURRENT"
-    assert first_response.source_batch_fingerprint == first_response.content_hash
+    assert first_response.source_batch_fingerprint is None
     assert first_response.source_digest == first_response.content_hash
     assert first_response.content_hash == second_response.content_hash
     assert first_response.generated_at != second_response.generated_at
@@ -149,6 +162,8 @@ async def test_risk_free_coverage_normalizes_currency_and_reports_empty_source()
     assert response.data_quality_status == "UNRECONCILED"
     assert response.freshness_status == "UNAVAILABLE"
     assert response.source_evidence_current is False
+    assert response.publication_gate == "BLOCK"
+    assert "NO_OBSERVED_COVERAGE" in response.publication_block_reasons
 
 
 @pytest.mark.asyncio
@@ -164,6 +179,8 @@ async def test_risk_free_coverage_propagates_stale_quality() -> None:
     assert response.data_quality_status == "STALE"
     assert response.quality_status_distribution == {"accepted": 1, "stale": 1}
     assert response.source_evidence_current is False
+    assert response.stale_count == 1
+    assert response.publication_gate == "BLOCK"
 
 
 def _component(index_id: str) -> BenchmarkComponentEvidence:

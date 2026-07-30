@@ -33,6 +33,11 @@ class CoverageResponse(SourceDataProductRuntimeMetadata):
         description="Deterministic request fingerprint for the coverage diagnostics scope.",
         examples=["2cb014be96ad2cb65ce1833d9f2b88a2"],
     )
+    coverage_report_id: str = Field(
+        ...,
+        description="Deterministic identity for this exact data-quality coverage report.",
+        examples=["dqc_0123456789abcdef0123456789abcdef"],
+    )
     observed_start_date: date | None = Field(
         None,
         description="Observed first date in data window.",
@@ -58,6 +63,18 @@ class CoverageResponse(SourceDataProductRuntimeMetadata):
         description="Total points available in observed window.",
         examples=[31],
     )
+    required_count: int = Field(
+        ...,
+        ge=0,
+        description="Required observation count for the inclusive requested window.",
+        examples=[31],
+    )
+    observed_count: int = Field(
+        ...,
+        ge=0,
+        description="Distinct required-scope dates with complete observed source coverage.",
+        examples=[29],
+    )
     missing_dates_count: int = Field(
         ...,
         description="Count of missing calendar dates within expected window.",
@@ -72,6 +89,49 @@ class CoverageResponse(SourceDataProductRuntimeMetadata):
         default_factory=dict,
         description="Quality status distribution over observed points.",
         examples=[{"accepted": 29, "estimated": 2}],
+    )
+    stale_count: int = Field(
+        ...,
+        ge=0,
+        description="Observed source records classified with stale quality.",
+        examples=[1],
+    )
+    blocking_issue_count: int = Field(
+        ...,
+        ge=0,
+        description="Observed source records carrying a blocking quality classification.",
+        examples=[0],
+    )
+    warning_issue_count: int = Field(
+        ...,
+        ge=0,
+        description="Observed source records carrying partial or warning quality.",
+        examples=[2],
+    )
+    freshness_threshold_minutes: int = Field(
+        ...,
+        ge=0,
+        description="Freshness threshold applied to the latest contributing evidence.",
+        examples=[1440],
+    )
+    evidence_age_minutes: int | None = Field(
+        None,
+        ge=0,
+        description="Whole-minute age of the latest contributing source evidence.",
+        examples=[60],
+    )
+    contributing_evidence_refs: list[str] = Field(
+        default_factory=list,
+        description="Deterministic source-owned references contributing to this report.",
+    )
+    publication_gate: Literal["ALLOW", "BLOCK"] = Field(
+        ...,
+        description="Fail-closed downstream usage decision for this coverage report.",
+        examples=["ALLOW"],
+    )
+    publication_block_reasons: list[str] = Field(
+        default_factory=list,
+        description="Bounded reasons why downstream use of this coverage report is blocked.",
     )
 
     model_config = ConfigDict()
