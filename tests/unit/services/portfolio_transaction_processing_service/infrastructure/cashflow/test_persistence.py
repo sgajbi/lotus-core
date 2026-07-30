@@ -186,3 +186,74 @@ async def test_replace_returns_updated_domain_result_from_one_database_write() -
     assert saved.economic_event_id == "EVENT-003"
     assert saved.linked_transaction_group_id == "GROUP-003"
     db_session.execute.assert_awaited_once()
+
+
+@pytest.mark.parametrize(
+    ("portfolio_exists", "transaction_exists"),
+    [
+        (True, True),
+        (False, False),
+    ],
+)
+async def test_reference_existence_reads_return_database_truth(
+    portfolio_exists: bool,
+    transaction_exists: bool,
+) -> None:
+    db_session = AsyncMock()
+    portfolio_result = MagicMock()
+    portfolio_result.scalar_one_or_none.return_value = "PORT-001" if portfolio_exists else None
+    transaction_result = MagicMock()
+    transaction_result.scalar_one_or_none.return_value = "TXN-001" if transaction_exists else None
+    db_session.execute.side_effect = [portfolio_result, transaction_result]
+    repository = SqlAlchemyCashflowRepository(db_session)
+
+    assert await repository.portfolio_exists("PORT-001") is portfolio_exists
+    assert (
+        await repository.transaction_exists("TXN-001", portfolio_id="PORT-001")
+        is transaction_exists
+    )
+
+    transaction_statement = db_session.execute.await_args_list[1].args[0]
+    assert "transactions.portfolio_id" in str(transaction_statement)
+
+
+async def test_transaction_existence_read_allows_unscoped_identity_lookup() -> None:
+    db_session = AsyncMock()
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = "TXN-001"
+    db_session.execute.return_value = result
+
+    exists = await SqlAlchemyCashflowRepository(db_session).transaction_exists("TXN-001")
+
+    assert exists is True
+    statement = db_session.execute.await_args.args[0]
+    assert "transactions.portfolio_id" not in str(statement)
+
+
+async def test_create_fails_closed_when_conflict_winner_cannot_be_read() -> None:
+    db_session = AsyncMock()
+    insert_result = MagicMock()
+    insert_result.scalar_one_or_none.return_value = None
+    missing_result = MagicMock()
+    missing_result.scalars.return_value.first.return_value = None
+    db_session.execute.side_effect = [insert_result, missing_result]
+    cashflow = Cashflow(
+        transaction_id="TXN-MISSING-001",
+        portfolio_id="PORT-001",
+        security_id=None,
+        cashflow_date=date(2026, 4, 15),
+        amount=Decimal("10"),
+        currency="USD",
+        classification="INCOME",
+        timing="EOD",
+        calculation_type="NET",
+        is_position_flow=False,
+        is_portfolio_flow=True,
+        epoch=7,
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="conflicted without an existing transaction/epoch row",
+    ):
+        await SqlAlchemyCashflowRepository(db_session).create(cashflow)

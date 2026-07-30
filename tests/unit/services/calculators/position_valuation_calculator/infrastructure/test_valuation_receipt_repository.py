@@ -169,3 +169,29 @@ async def test_delete_targets_only_the_exact_snapshot_receipt() -> None:
         "DELETE FROM daily_position_valuation_receipts "
         "WHERE daily_position_valuation_receipts.snapshot_id = 17"
     )
+
+
+async def test_optional_source_payload_round_trips_absence() -> None:
+    assert receipt_repository._source_payload(None) is None
+    assert receipt_repository._source_from_payload(None) is None
+
+
+@pytest.mark.parametrize(
+    ("payload", "message"),
+    [
+        ([], "source payload must be an object"),
+        (
+            {
+                **_source("invalid-source").lineage_payload(),
+                "source_system": 7,
+            },
+            "source_system must be a string",
+        ),
+    ],
+)
+async def test_source_payload_rehydration_fails_closed(
+    payload: object,
+    message: str,
+) -> None:
+    with pytest.raises(TypeError, match=message):
+        receipt_repository._source_from_payload(payload)
