@@ -93,6 +93,44 @@ async def test_list_consumer_dlq_event_responses_maps_rows() -> None:
     assert [item.event_id for item in result] == ["dlq-1", "dlq-2"]
 
 
+async def test_list_consumer_dlq_event_responses_filters_by_job_correlation() -> None:
+    statements = []
+
+    class _FakeSession:
+        async def scalars(self, stmt):
+            statements.append(stmt)
+            return _FakeScalars([])
+
+    await list_consumer_dlq_event_responses(
+        limit=50,
+        original_topic=None,
+        consumer_group=None,
+        correlation_id="corr-1",
+        session_factory=lambda: _SingleSessionAsyncIterator(_FakeSession()),
+    )
+
+    assert "consumer_dlq_events.correlation_id =" in str(statements[0])
+
+
+async def test_list_consumer_dlq_event_responses_filters_replay_event_ids() -> None:
+    statements = []
+
+    class _FakeSession:
+        async def scalars(self, stmt):
+            statements.append(stmt)
+            return _FakeScalars([])
+
+    await list_consumer_dlq_event_responses(
+        limit=50,
+        original_topic=None,
+        consumer_group=None,
+        event_ids=("dlq-1", "dlq-2"),
+        session_factory=lambda: _SingleSessionAsyncIterator(_FakeSession()),
+    )
+
+    assert "consumer_dlq_events.event_id IN" in str(statements[0])
+
+
 async def test_get_consumer_dlq_event_response_returns_none_when_missing() -> None:
     class _FakeSession:
         async def scalar(self, _stmt):
