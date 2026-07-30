@@ -28,6 +28,7 @@ from src.services.query_control_plane_service.app.domain.dpm_source_readiness im
     InstrumentEligibilityEvidence,
     MarketPriceEvidence,
 )
+from src.services.query_service.app.application.transaction_query import TransactionLedgerFilters
 from src.services.query_service.app.dtos.cashflow_projection_dto import (
     CashflowProjectionResponse,
 )
@@ -89,7 +90,8 @@ def test_positions_contract_exposes_field_level_fallback_provenance() -> None:
     assert response.data_quality_status == PARTIAL
     assert response.degradation.status == "PARTIAL"
     assert response.degradation.details[0].source_kind == "FALLBACK"
-    assert response.source_batch_fingerprint == response.content_hash
+    assert response.source_batch_fingerprint is None
+    assert response.source_lineage["reconstruction_scope_id"].startswith("rs_")
     assert response.correlation_id == CORRELATION_ID
 
 
@@ -105,6 +107,10 @@ def test_transactions_contract_reports_partial_page_and_missing_reference() -> N
             effective_as_of_date=date(2026, 4, 10),
             end_date=None,
             latest_evidence_timestamp=datetime(2026, 4, 10, 8, tzinfo=UTC),
+            ledger_filters=TransactionLedgerFilters(
+                portfolio_id="PB1",
+                as_of_date=date(2026, 4, 10),
+            ),
             missing_instrument_security_ids=["UNKNOWN_SEC"],
         )
     )

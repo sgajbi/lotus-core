@@ -7,6 +7,11 @@ from typing import Any, Awaitable, Callable, cast
 
 from portfolio_common.domain.currency import normalize_currency_code
 from portfolio_common.reconciliation_quality import COMPLETE, PARTIAL, UNKNOWN
+from portfolio_common.reconstruction_identity import (
+    CURRENT_RESTATEMENT_VERSION,
+    ProductReconstructionScope,
+    build_reconstruction_scope_evidence,
+)
 from portfolio_common.request_fingerprints import request_fingerprint
 from portfolio_common.source_data_product_metadata import source_data_product_runtime_metadata
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -86,6 +91,31 @@ class CashBalanceResolver:
             account_records=account_records,
             latest_evidence_timestamp=latest_evidence_timestamp,
         )
+        content_hash = f"sha256:{source_fingerprint}"
+        policy_version = "holdings-as-of-cash-balances-v1"
+        reconstruction_evidence = build_reconstruction_scope_evidence(
+            ProductReconstructionScope(
+                product="HoldingsAsOf",
+                portfolio_id=portfolio.portfolio_id,
+                as_of_date=resolved_as_of_date,
+                source_data_products=(
+                    "HoldingsAsOf",
+                    "InstrumentReferenceBundle",
+                    "MarketDataWindow",
+                ),
+                restatement_version=CURRENT_RESTATEMENT_VERSION,
+                policy_version=policy_version,
+                qualifiers=(
+                    ("mode", "cash_balances"),
+                    ("portfolio_currency", portfolio_currency),
+                    ("reporting_currency", reporting_currency),
+                ),
+                material_evidence=(
+                    ("content_hash", content_hash),
+                    ("latest_evidence_timestamp", latest_evidence_timestamp),
+                ),
+            )
+        )
         return CashBalancesResponse(
             portfolio_id=portfolio.portfolio_id,
             portfolio_currency=portfolio_currency,
@@ -109,8 +139,23 @@ class CashBalanceResolver:
                     account_records=account_records,
                 ),
                 latest_evidence_timestamp=latest_evidence_timestamp,
-                source_batch_fingerprint=source_fingerprint,
                 snapshot_id=f"holdings_as_of_cash_balances:{source_fingerprint}",
+                policy_version=policy_version,
+                content_hash=content_hash,
+                source_refs=[
+                    (
+                        "lotus-core://source/HoldingsAsOf/"
+                        f"{portfolio.portfolio_id}/{resolved_as_of_date.isoformat()}"
+                        "?mode=cash_balances"
+                    )
+                ],
+                lineage={
+                    "source_owner": "lotus-core",
+                    "source_product": "HoldingsAsOf",
+                    "source_product_version": "v1",
+                    "source_product_mode": "cash_balances",
+                    **reconstruction_evidence.lineage(),
+                },
             ),
         )
 

@@ -94,11 +94,13 @@ async def test_portfolio_holdings_response_assembles_snapshot_holdings() -> None
     assert response.snapshot_id is not None
     assert response.policy_version == "holdings-as-of-v1"
     assert response.latest_evidence_timestamp == datetime(2025, 1, 1, 10, 5, tzinfo=UTC)
-    assert response.source_batch_fingerprint == response.content_hash
+    assert response.source_batch_fingerprint is None
     assert response.content_hash.startswith("sha256:")
     assert response.source_digest == response.content_hash
     assert response.source_refs == ["lotus-core://source/HoldingsAsOf/P1/2025-01-01"]
     assert response.source_lineage["source_product"] == "HoldingsAsOf"
+    assert response.source_lineage["reconstruction_scope_id"].startswith("rs_")
+    assert response.source_lineage["reconstruction_restatement_version"] == "current"
     assert response.degradation.status == "NONE"
     assert len(response.positions) == 1
     assert response.positions[0].security_id == "SEC_A"
@@ -150,7 +152,7 @@ async def test_portfolio_holdings_response_exposes_fallback_degradation_metadata
     assert response.reconciliation_status == "UNRECONCILED"
     assert response.freshness_status == "UNAVAILABLE"
     assert response.source_evidence_current is False
-    assert response.source_batch_fingerprint == response.content_hash
+    assert response.source_batch_fingerprint is None
     assert response.degradation.status == "PARTIAL"
     assert response.degradation.reason_codes == ["HOLDINGS_VALUATION_FALLBACK"]
     assert response.degradation.details[0].record_key == "security_id:HIST_A"
