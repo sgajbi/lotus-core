@@ -121,7 +121,6 @@ def build_benchmark_market_series_response(
         freshness_status=(
             "CURRENT" if current else "UNAVAILABLE" if resolved_quality == "EMPTY" else "PARTIAL"
         ),
-        use_content_hash_as_source_batch_fingerprint=True,
     )
     return BenchmarkMarketSeriesResponse(
         benchmark_id=benchmark_id,

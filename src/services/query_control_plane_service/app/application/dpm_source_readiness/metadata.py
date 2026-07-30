@@ -41,6 +41,5 @@ def dpm_source_runtime_metadata(
             lineage={"source_product": product_name, "source_owner": "lotus-core", **lineage},
             source_evidence_current=source_evidence_current,
             freshness_status=freshness_status,
-            use_content_hash_as_source_batch_fingerprint=True,
         ),
     )

@@ -59,7 +59,8 @@ def test_accepted_catalog_is_complete_current_and_deterministic() -> None:
     assert response.completeness_status == "COMPLETE"
     assert response.source_evidence_current is True
     assert response.freshness_status == "CURRENT"
-    assert response.source_batch_fingerprint == response.content_hash == response.source_digest
+    assert response.source_batch_fingerprint is None
+    assert response.source_digest == response.content_hash
     assert response.records[0].classification_labels["sector"] == "broad_market_equity"
 
 

@@ -99,7 +99,6 @@ def build_benchmark_assignment_response(
             "benchmark_id": evidence.benchmark_id,
             "assignment_version": str(evidence.assignment_version),
         },
-        use_content_hash_as_source_batch_fingerprint=True,
     )
     return BenchmarkAssignmentResponse(
         portfolio_id=evidence.portfolio_id,

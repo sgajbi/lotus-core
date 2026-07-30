@@ -103,7 +103,6 @@ def build_benchmark_catalog_response(
         else "UNAVAILABLE"
         if not records
         else "PARTIAL",
-        use_content_hash_as_source_batch_fingerprint=True,
     )
     return BenchmarkCatalogResponse(
         records=records,

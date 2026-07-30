@@ -84,7 +84,8 @@ def test_active_complete_mandate_is_ready_and_current() -> None:
     assert response.data_quality_status == "COMPLETE"
     assert response.source_evidence_current is True
     assert response.freshness_status == "CURRENT"
-    assert response.source_batch_fingerprint == response.content_hash == response.source_digest
+    assert response.source_batch_fingerprint is None
+    assert response.source_digest == response.content_hash
     assert response.rebalance_bands.default_band.as_tuple().exponent == -10
     assert response.source_lineage["source_owner"] == "lotus-core"
 

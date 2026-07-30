@@ -65,7 +65,7 @@ async def test_service_reads_scope_and_returns_current_source_proof() -> None:
     assert response.freshness_status == "CURRENT"
     assert response.source_evidence_current is True
     assert response.content_hash
-    assert response.source_batch_fingerprint == response.content_hash
+    assert response.source_batch_fingerprint is None
     assert response.source_refs
     assert response.source_lineage["source_owner"] == "lotus-core"
 

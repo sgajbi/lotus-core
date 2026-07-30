@@ -103,7 +103,8 @@ def test_rebalance_boundaries_are_inferred_and_complete() -> None:
     assert response.incomplete_period_starts == []
     assert response.source_evidence_current is True
     assert response.freshness_status == "CURRENT"
-    assert response.source_batch_fingerprint == response.content_hash == response.source_digest
+    assert response.source_batch_fingerprint is None
+    assert response.source_digest == response.content_hash
     assert [
         (segment.index_id, segment.composition_effective_from, segment.composition_effective_to)
         for segment in response.segments
