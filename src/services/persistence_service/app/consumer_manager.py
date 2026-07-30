@@ -115,9 +115,7 @@ class ConsumerManager:
             )
         )
 
-        self.dispatcher = OutboxDispatcher(
-            kafka_producer=create_kafka_producer()
-        )
+        self.dispatcher = OutboxDispatcher(kafka_producer=create_kafka_producer())
 
         logger.info("ConsumerManager initialized", extra={"num_consumers": len(self.consumers)})
 

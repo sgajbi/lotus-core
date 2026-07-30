@@ -36,9 +36,7 @@ class ConsumerManager:
         self.dispatcher = (
             dispatcher
             if dispatcher is not None
-            else OutboxDispatcher(
-                kafka_producer=create_kafka_producer()
-            )
+            else OutboxDispatcher(kafka_producer=create_kafka_producer())
         )
         self.tasks: list[asyncio.Task[Any]] = []
         self._shutdown_event = asyncio.Event()
