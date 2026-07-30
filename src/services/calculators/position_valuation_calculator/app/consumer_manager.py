@@ -11,7 +11,7 @@ from portfolio_common.config import (
 )
 from portfolio_common.health_server import health_probe_bind_host
 from portfolio_common.kafka_admin import ensure_topics_exist
-from portfolio_common.kafka_utils import get_kafka_producer
+from portfolio_common.kafka_utils import create_kafka_producer
 from portfolio_common.outbox_dispatcher import OutboxDispatcher
 from portfolio_common.runtime_supervision import (
     shutdown_runtime_components,
@@ -24,6 +24,7 @@ from .web import WORKER_READINESS_SERVICE_NAME
 from .web import app as web_app
 
 logger = logging.getLogger(__name__)
+OUTBOX_PRODUCER_SERVICE_NAME = "position_valuation_calculator.outbox_dispatcher"
 
 
 class ConsumerManager:
@@ -55,8 +56,9 @@ class ConsumerManager:
             for _ in range(self._settings.worker_count)
         )
 
-        kafka_producer = get_kafka_producer()
-        self.dispatcher = OutboxDispatcher(kafka_producer=kafka_producer)
+        self.dispatcher = OutboxDispatcher(
+            kafka_producer=create_kafka_producer(service_name=OUTBOX_PRODUCER_SERVICE_NAME)
+        )
 
         logger.info(
             "ConsumerManager initialized with %s valuation worker consumer(s).",

@@ -12,7 +12,7 @@ from portfolio_common.config import (
     KAFKA_TRANSACTION_PROCESSING_READY_TOPIC,
 )
 from portfolio_common.kafka_admin import ensure_topics_exist
-from portfolio_common.kafka_utils import get_kafka_producer
+from portfolio_common.kafka_utils import create_kafka_producer
 from portfolio_common.outbox_dispatcher import OutboxDispatcher
 from portfolio_common.worker_runtime import run_kafka_worker_runtime
 
@@ -21,6 +21,7 @@ from ..web import app as web_app
 from .consumer_composition import build_transaction_processing_consumers
 
 logger = logging.getLogger(__name__)
+OUTBOX_PRODUCER_SERVICE_NAME = "portfolio_transaction_processing_service.outbox_dispatcher"
 
 
 class ConsumerManager:
@@ -36,7 +37,9 @@ class ConsumerManager:
         self.dispatcher = (
             dispatcher
             if dispatcher is not None
-            else OutboxDispatcher(kafka_producer=get_kafka_producer())
+            else OutboxDispatcher(
+                kafka_producer=create_kafka_producer(service_name=OUTBOX_PRODUCER_SERVICE_NAME)
+            )
         )
         self.tasks: list[asyncio.Task[Any]] = []
         self._shutdown_event = asyncio.Event()

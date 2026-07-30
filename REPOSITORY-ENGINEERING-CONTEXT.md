@@ -3318,9 +3318,11 @@ Most relevant current governance:
      the governed safety margin; reject unsafe overrides at startup. A flush exception must purge
      queued and in-flight messages and replace the underlying producer before releasing any
      affected claim; if purge confirmation fails, abort result persistence so delivery uncertainty
-     cannot advance the stream. Deployments changing this rule must quiesce every dispatcher-owning
-     worker before migrating and restart only the compatible version; mixed dispatcher versions
-     are not ordering-safe.
+     cannot advance the stream. Every production dispatcher must own a fresh, non-cached producer;
+     replay, direct publication, and consumer DLQ paths retain a separate shared producer so
+     dispatcher purge/replacement cannot discard unrelated records. Deployments changing this rule
+     must quiesce every dispatcher-owning worker before migrating and restart only the compatible
+     version; mixed dispatcher versions are not ordering-safe.
 
 ## Context Maintenance Rule
 

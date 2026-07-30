@@ -16,7 +16,7 @@ from portfolio_common.config import (
 )
 from portfolio_common.health_server import health_probe_bind_host
 from portfolio_common.kafka_admin import ensure_topics_exist
-from portfolio_common.kafka_utils import get_kafka_producer
+from portfolio_common.kafka_utils import create_kafka_producer
 from portfolio_common.outbox_dispatcher import OutboxDispatcher
 from portfolio_common.runtime_providers import UuidIdGenerator
 from portfolio_common.runtime_supervision import (
@@ -47,6 +47,7 @@ logger = logging.getLogger(__name__)
 
 POSITION_TIMESERIES_CONSUMER_GROUP = "timeseries_generator_group_positions"
 HEALTH_PORT = 8085
+OUTBOX_PRODUCER_SERVICE_NAME = "portfolio_derived_state_service.outbox_dispatcher"
 
 
 class PortfolioDerivedStateRuntime:
@@ -77,7 +78,9 @@ class PortfolioDerivedStateRuntime:
             clock=SystemAggregationSchedulerClock(),
             token_generator=id_generator,
         )
-        self.dispatcher = OutboxDispatcher(kafka_producer=get_kafka_producer())
+        self.dispatcher = OutboxDispatcher(
+            kafka_producer=create_kafka_producer(service_name=OUTBOX_PRODUCER_SERVICE_NAME)
+        )
 
     @staticmethod
     def _position_timeseries_consumer() -> PositionTimeseriesConsumer:

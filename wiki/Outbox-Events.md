@@ -71,7 +71,9 @@ so a publisher cannot outlive its database lease and deliver an old head after a
 has advanced. If `flush(...)` raises with ambiguous queued records, the dispatcher purges queued
 and in-flight messages and replaces the underlying producer before releasing rows for retry. If
 purge confirmation fails, result persistence aborts so the claims are retained rather than
-advancing the stream on uncertain delivery.
+advancing the stream on uncertain delivery. Each production dispatcher owns a fresh, non-cached
+producer; replay, direct publication, and consumer DLQ records use a separate shared producer, so
+outbox recovery cannot purge an unrelated publication.
 
 This gives `lotus-core` a durable database-backed publish queue rather than relying on in-memory
 best effort after a write succeeds.
@@ -189,6 +191,8 @@ Use this page together with:
 - when deploying a dispatcher stream-order change, quiesce all services that own a dispatcher,
   apply the database migration, and restart only the new version; mixed dispatcher versions are
   not ordering-safe
+- construct production dispatchers only with an exclusive producer; never reuse the cached
+  replay/direct/DLQ producer across the outbox recovery boundary
 
 ## Related references
 

@@ -5,7 +5,12 @@ import pytest
 
 # The module we are testing
 from portfolio_common.kafka_producer_policy import load_kafka_producer_policy
-from portfolio_common.kafka_utils import KafkaProducer, get_kafka_producer, reset_kafka_producer
+from portfolio_common.kafka_utils import (
+    KafkaProducer,
+    create_kafka_producer,
+    get_kafka_producer,
+    reset_kafka_producer,
+)
 from portfolio_common.runtime_settings import RuntimeConfigurationError
 
 
@@ -266,6 +271,35 @@ def test_reset_kafka_producer_clears_singleton(MockProducer):
 
     assert mock_confluent_producer.flush.call_count == 2
     assert get_kafka_producer() is not producer
+
+
+@patch("portfolio_common.kafka_utils.Producer")
+def test_created_producer_has_exclusive_recovery_boundary(MockProducer):
+    dispatcher_client = MagicMock()
+    shared_client = MagicMock()
+    replacement_dispatcher_client = MagicMock()
+    MockProducer.side_effect = [
+        dispatcher_client,
+        shared_client,
+        replacement_dispatcher_client,
+    ]
+
+    dispatcher_producer = create_kafka_producer(service_name="service.outbox_dispatcher")
+    shared_producer = get_kafka_producer(service_name="service")
+    shared_producer.publish_message(topic="replay.requested", key="request-1", value={"id": "1"})
+
+    dispatcher_producer.reset_after_flush_failure()
+
+    assert dispatcher_producer is not shared_producer
+    dispatcher_client.purge.assert_called_once_with(
+        in_queue=True,
+        in_flight=True,
+        blocking=True,
+    )
+    shared_client.purge.assert_not_called()
+    shared_client.produce.assert_called_once()
+    assert shared_producer.producer is shared_client
+    assert dispatcher_producer.producer is replacement_dispatcher_client
 
 
 @patch("portfolio_common.kafka_utils.Producer")

@@ -88,7 +88,7 @@ def _reset_fakes() -> None:
 def patch_runtime(monkeypatch) -> Callable[..., None]:
     monkeypatch.setattr(runtime, "ensure_topics_exist", lambda *_: None)
     monkeypatch.setattr(runtime.signal, "signal", lambda *_: None)
-    monkeypatch.setattr(runtime, "get_kafka_producer", lambda: object())
+    monkeypatch.setattr(runtime, "create_kafka_producer", lambda **_: object())
     monkeypatch.setattr(runtime, "OutboxDispatcher", _FakeDispatcher)
     monkeypatch.setattr(runtime.uvicorn, "Config", lambda *args, **kwargs: object())
     monkeypatch.setattr(runtime.uvicorn, "Server", _FakeServer)

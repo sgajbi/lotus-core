@@ -15,6 +15,11 @@ or broker timing could then publish the later event first.
 The same defect pattern affected every runtime embedding the shared dispatcher. It was not limited
 to one producer service or event family.
 
+Late review also proved that dispatcher recovery did not own its producer boundary. Production
+dispatchers used the same cached producer wrapper as replay, direct event, and consumer DLQ
+publishers in the process. Purging ambiguous outbox records after a flush exception could therefore
+purge an unrelated direct publication and let its caller observe a misleading empty flush.
+
 ## Correction
 
 - Define the stream head as the oldest unresolved `PENDING` or `FAILED` row by
@@ -30,6 +35,9 @@ to one producer service or event family.
 - If `flush(...)` raises with ambiguous queued records, purge both queued and in-flight records,
   drain their callbacks, and replace the underlying producer before releasing any row for retry.
   If purge confirmation fails, retain the database claims by aborting result persistence.
+- Give every production dispatcher a fresh, non-cached producer. Keep replay, direct event, and DLQ
+  publishers on their separate shared producer so dispatcher recovery cannot purge their records.
+- Guard every production `OutboxDispatcher` composition against shared-producer construction.
 - Add a partial lookup index over unresolved stream order.
 
 Kafka publication remains outside the claim transaction and result writes remain claim-token
@@ -45,7 +53,8 @@ behavior change prevents later same-stream publication while an earlier event is
 retry-waiting, failed, or still capable of broker delivery. A terminal failed head must be reviewed
 and governed-requeued before that stream advances. A flush exception now resets the underlying
 producer before rows become retryable; this changes only failure recovery, not successful publish
-behavior or event contracts.
+behavior or event contracts. Each dispatcher-owning service process now maintains one additional
+Kafka producer connection for the exclusive outbox recovery boundary.
 
 Mixed dispatcher versions are unsafe because an old process does not honor the stream-head
 barrier. Deployments must quiesce all dispatcher-owning workers, apply migration
@@ -60,5 +69,8 @@ barrier. Deployments must quiesce all dispatcher-owning workers, apply migration
   flush fencing.
 - Flush-exception proof covers successful producer purge/replacement before retry release and
   fail-closed claim retention when purge confirmation fails.
+- Producer-ownership proof covers distinct dispatcher/shared wrappers, recovery isolation for an
+  already-queued direct publication, every production runtime composition, and a source guard
+  rejecting cached-producer dispatcher wiring.
 - Final focused, migration, protected CI, exact-main, and operational evidence is recorded on
   issue #795.
