@@ -5,7 +5,7 @@
 This review tracks bounded GitHub issue #829 owner-specific numeric work across generic simulation,
 position-history accumulation, durable cashflow amounts, accrued-income calculation, position
 valuation, and the shared calculated-output arithmetic and lineage contracts. It does not claim
-closure of persisted lineage exposure or the complete producer-policy inventory.
+closure of the complete producer-policy inventory.
 
 ## Findings
 
@@ -28,6 +28,9 @@ closure of persisted lineage exposure or the complete producer-policy inventory.
   governed Decimal context and represented only the effective FX cash component type. Identical
   economics could therefore acquire ambient-context-dependent hashes, while different booked FX
   product families could lose their distinct source identity.
+- Accrued-income segment arithmetic and legacy unscoped valuation still had calculated-output paths
+  that were not bound to the named output policy, and legacy valuation receipts could not retain
+  calculation evidence even when the output was non-flat.
 
 ## Resolution
 
@@ -94,11 +97,17 @@ closure of persisted lineage exposure or the complete producer-policy inventory.
   then carry that exact value into the input hash without a second ambient-context calculation.
   Record both the booked transaction family and the effective processing component type so
   `FX_SPOT`, `FX_FORWARD`, and `FX_SWAP` cash components retain distinct source lineage.
-- Wired the guard into `make lint`. Accrued income and position valuation are truthfully `partial`:
-  their public calculation callables bind lineage, while internal arithmetic helpers and the legacy
-  `valuation_logic.py` consumer do not independently emit it. Six policies are `not-exposed`. Every
+- Wired the guard into `make lint`. Every
   exact `path::callable` gap is recorded in the contract, keeping the remaining work visible under
   #829 instead of treating absence as non-applicability.
+- Bound accrued-income segment arithmetic and every position-valuation output path to their named
+  policy. Legacy non-flat valuation now records deterministic algorithm, consumed-input,
+  intermediate-precision, normalized-output, and numeric-policy evidence.
+- Added reversible migration `c131b2c3d504` so new legacy non-flat valuation receipts persist that
+  lineage while retaining `LEGACY_UNSCOPED` authority semantics. Existing rows and flat,
+  quote-independent zero valuations remain explicitly nullable rather than receiving invented
+  historical evidence. The inventory now reports three `required`, zero `partial`, and five
+  `not-exposed` policies.
 
 The later cashflow persistence slice adds one nullable JSON column and no topic or runtime-topology
 change. Exactly representable inputs, cashflow formulas, serialized Decimal amounts, transaction
@@ -158,6 +167,12 @@ identity, and public response shapes remain unchanged.
   real-PostgreSQL backdated-rebuild proof (`1 passed in 375.02s`).
 - PR review fix-forward adds ambient-precision determinism with component fees and booked-versus-
   effective FX transaction identity proof; 88 warning-strict cashflow calculation tests passed.
+- Signed commits `f2b88de1b`, `514259f24`, `b10c68022`, and `a30e07c77` close the valuation-family
+  callable gaps and persist legacy non-flat calculation lineage. Eighty warning-strict focused
+  tests, single-head migration smoke at `c131b2c3d504`, MyPy across 240 source files, Ruff, format,
+  calculated-output-policy, domain-layer, and diff guards passed. A rebuilt exact-image PostgreSQL
+  persistence test passed (`1 passed in 404.20s`); the preceding stale-image constraint failure was
+  classified as invalid diagnostic evidence.
 
 ## Compatibility and remaining work
 
@@ -169,16 +184,16 @@ that do not execute a governed output policy remain valid with `numeric_output_p
 Issue #829 remains open for complete producer-policy inventory reconciliation and durable
 persistence/query/replay compatibility.
 
-The declaration inventory is complete and enforced. Cashflow is now lineage-bound and persisted;
-the residual is narrower: accrued income and position valuation are explicitly `partial` at
-callable granularity, five other executing policies remain `not-exposed`, cashflow legacy/backfill
-policy remains explicit rather than inferred, and the remaining families still need compatible
-durable persistence/query/replay proof before #829 can close.
+The declaration inventory is complete and enforced. Cashflow, accrued income, and position
+valuation are lineage-bound; cashflow and non-flat legacy valuation evidence are persisted. The
+residual is narrower: five executing policies remain `not-exposed`, cashflow and valuation
+legacy/backfill absence remains explicit rather than inferred, and the remaining families still
+need compatible durable persistence/query/replay proof before #829 can close.
 
 ## Documentation decision
 
 Repository context and this existing review record carry the implementation detail without adding
-a duplicate document. The additive Query lineage field remains reflected in generated OpenAPI,
-API-vocabulary truth, and the existing API wiki page. The cashflow persistence change is recorded
-in the existing rounding/precision standard and Cashflow wiki page. No new public API shape,
-operator command, topic, or runtime topology changed.
+a duplicate document. The additive Query lineage field remains reflected in generated OpenAPI and
+API-vocabulary truth. Cashflow and valuation persistence are recorded in the existing
+rounding/precision standard and their existing wiki pages. No new route, operator command, topic,
+or runtime topology changed.

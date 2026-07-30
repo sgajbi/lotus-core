@@ -3064,7 +3064,11 @@ Most relevant current governance:
      normalize once at the output boundary, and fail before persistence on magnitude overflow.
      Position valuation keeps normalized clean value plus normalized accrued income exactly equal
      to normalized total market value. Returned reporting values and output hashes must use those
-     policy-owned results.
+     policy-owned results. New non-flat legacy unscoped valuations persist deterministic
+     calculation lineage without claiming source-policy authority; existing receipts and flat
+     quote-independent zero valuations may remain explicitly null. The eight-policy calculated
+     output inventory currently has three lineage-required, zero partial, and five not-exposed
+     policies.
 208. Repository-native Python quality evidence is valid only when the active interpreter's tool
      version exactly matches `requirements/ci-tooling.lock.txt`. Route module-backed Ruff, MyPy,
      Bandit, Vulture, Deptry, Xenon, Radon, Interrogate, and pip-audit commands through

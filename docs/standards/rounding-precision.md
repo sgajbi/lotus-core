@@ -37,6 +37,13 @@ This repository adopts the platform-wide mandatory standard defined in `lotus-pl
 - The cashflow lineage column is nullable for compatibility with rows created before migration
   `c130b2c3d503`. Null legacy lineage is an explicit absence of evidence; consumers must not infer
   a policy version or synthesize hashes from the stored amount.
+- Accrued income and position valuation execute their named 64-digit working-precision policies
+  across every output path. New non-flat legacy unscoped valuations persist deterministic
+  calculation lineage through migration `c131b2c3d504`; their source-policy authority remains
+  explicitly unscoped. Existing receipts and flat quote-independent zero valuations may remain
+  null, and consumers must not invent historical evidence.
+- The enforced eight-policy inventory currently classifies three policies as lineage `required`,
+  zero as `partial`, and five as `not-exposed`.
 - Changes to a policy version, source-input identity, calculation method, or normalized output must
   change the corresponding lineage identity. Identical inputs and policy must remain deterministic.
 

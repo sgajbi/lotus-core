@@ -44,6 +44,9 @@ into an `application` package based on its name alone.
 Primary durable outputs include:
 
 - `daily_position_snapshots`
+- one-to-one valuation receipts carrying supported authority evidence or explicit legacy-unscoped
+  provenance; new non-flat legacy calculations include deterministic input, calculation,
+  normalized-output, and numeric-output-policy lineage
 - `PortfolioValuationJob` status transitions
 
 These outputs feed:
@@ -68,6 +71,8 @@ That makes valuation supportability a first-class contract, not just a calculati
 - position state is upstream input, not owned here
 - market/reference and FX completeness materially affect this service
 - valuation produces canonical daily snapshot truth inside core
+- existing legacy receipts and flat quote-independent zero valuations may have null calculation
+  lineage; absence remains explicit and is never backfilled by inference
 - downstream performance and risk conclusions still belong outside `lotus-core`
 
 ## Operational hints
