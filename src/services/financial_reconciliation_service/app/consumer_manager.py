@@ -77,6 +77,7 @@ class ConsumerManager:
             consumers=self.consumers,
             stop_callbacks=[self.dispatcher.stop],
             server=server,
+            shutdown_timeout_seconds=self.dispatcher.shutdown_timeout_seconds,
         )
         if runtime_error is not None:
             raise runtime_error

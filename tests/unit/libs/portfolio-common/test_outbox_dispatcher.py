@@ -17,6 +17,7 @@ def test_get_outbox_runtime_settings_uses_default(monkeypatch):
     monkeypatch.delenv("OUTBOX_DISPATCHER_POLL_INTERVAL_SECONDS", raising=False)
     monkeypatch.delenv("OUTBOX_DISPATCHER_BATCH_SIZE", raising=False)
     monkeypatch.delenv("OUTBOX_DISPATCHER_CLAIM_LEASE_SECONDS", raising=False)
+    monkeypatch.delenv("OUTBOX_DISPATCHER_TERMINATION_GRACE_SECONDS", raising=False)
     monkeypatch.delenv("OUTBOX_DISPATCHER_RETRY_INITIAL_DELAY_SECONDS", raising=False)
     monkeypatch.delenv("OUTBOX_DISPATCHER_RETRY_MAX_DELAY_SECONDS", raising=False)
     monkeypatch.delenv("OUTBOX_DISPATCHER_RETRY_JITTER_SECONDS", raising=False)
@@ -28,6 +29,7 @@ def test_get_outbox_runtime_settings_uses_default(monkeypatch):
     assert settings.poll_interval_seconds == 5
     assert settings.batch_size == 50
     assert settings.claim_lease_seconds == 130
+    assert settings.termination_grace_seconds == 150
     assert settings.max_retries == 3
     assert settings.retry_max_elapsed_seconds == 0
     assert settings.retry_initial_delay_seconds == 5
@@ -40,6 +42,7 @@ def test_get_outbox_runtime_settings_uses_env_override(monkeypatch):
     monkeypatch.setenv("OUTBOX_DISPATCHER_POLL_INTERVAL_SECONDS", "11")
     monkeypatch.setenv("OUTBOX_DISPATCHER_BATCH_SIZE", "77")
     monkeypatch.setenv("OUTBOX_DISPATCHER_CLAIM_LEASE_SECONDS", "45")
+    monkeypatch.setenv("OUTBOX_DISPATCHER_TERMINATION_GRACE_SECONDS", "175")
     monkeypatch.setenv("OUTBOX_DISPATCHER_MAX_RETRIES", "7")
     monkeypatch.setenv("OUTBOX_DISPATCHER_RETRY_MAX_ELAPSED_SECONDS", "900")
     monkeypatch.setenv("OUTBOX_DISPATCHER_RETRY_INITIAL_DELAY_SECONDS", "13")
@@ -53,6 +56,7 @@ def test_get_outbox_runtime_settings_uses_env_override(monkeypatch):
     assert settings.poll_interval_seconds == 11
     assert settings.batch_size == 77
     assert settings.claim_lease_seconds == 45
+    assert settings.termination_grace_seconds == 175
     assert settings.max_retries == 7
     assert settings.retry_max_elapsed_seconds == 900
     assert settings.retry_initial_delay_seconds == 13
@@ -66,6 +70,7 @@ def test_get_outbox_runtime_settings_falls_back_on_invalid_env(monkeypatch, capl
     monkeypatch.setenv("OUTBOX_DISPATCHER_POLL_INTERVAL_SECONDS", "nope")
     monkeypatch.setenv("OUTBOX_DISPATCHER_BATCH_SIZE", "0")
     monkeypatch.setenv("OUTBOX_DISPATCHER_CLAIM_LEASE_SECONDS", "0")
+    monkeypatch.setenv("OUTBOX_DISPATCHER_TERMINATION_GRACE_SECONDS", "0")
     monkeypatch.setenv("OUTBOX_DISPATCHER_MAX_RETRIES", "-4")
     monkeypatch.setenv("OUTBOX_DISPATCHER_RETRY_MAX_ELAPSED_SECONDS", "-10")
     monkeypatch.setenv("OUTBOX_DISPATCHER_RETRY_INITIAL_DELAY_SECONDS", "0")
@@ -79,6 +84,7 @@ def test_get_outbox_runtime_settings_falls_back_on_invalid_env(monkeypatch, capl
     assert settings.poll_interval_seconds == 5
     assert settings.batch_size == 50
     assert settings.claim_lease_seconds == 130
+    assert settings.termination_grace_seconds == 150
     assert settings.max_retries == 3
     assert settings.retry_max_elapsed_seconds == 0
     assert settings.retry_initial_delay_seconds == 5
@@ -101,6 +107,7 @@ def test_dispatcher_constructor_allows_explicit_max_retries(monkeypatch):
     monkeypatch.setenv("OUTBOX_DISPATCHER_POLL_INTERVAL_SECONDS", "13")
     monkeypatch.setenv("OUTBOX_DISPATCHER_BATCH_SIZE", "88")
     monkeypatch.setenv("OUTBOX_DISPATCHER_CLAIM_LEASE_SECONDS", "44")
+    monkeypatch.setenv("OUTBOX_DISPATCHER_TERMINATION_GRACE_SECONDS", "160")
     monkeypatch.setenv("OUTBOX_DISPATCHER_MAX_RETRIES", "9")
     monkeypatch.setenv("OUTBOX_DISPATCHER_RETRY_MAX_ELAPSED_SECONDS", "810")
     monkeypatch.setenv("OUTBOX_DISPATCHER_RETRY_INITIAL_DELAY_SECONDS", "21")
@@ -115,6 +122,7 @@ def test_dispatcher_constructor_allows_explicit_max_retries(monkeypatch):
         batch_size=4,
         max_retries=2,
         claim_lease_seconds=15,
+        termination_grace_seconds=25,
         retry_max_elapsed_seconds=120,
         retry_initial_delay_seconds=7,
         retry_max_delay_seconds=70,
@@ -125,6 +133,8 @@ def test_dispatcher_constructor_allows_explicit_max_retries(monkeypatch):
     assert dispatcher._batch_size == 4
     assert dispatcher._max_retries == 2
     assert dispatcher._claim_lease_seconds == 15
+    assert dispatcher._termination_grace_seconds == 25
+    assert dispatcher.shutdown_timeout_seconds == 15
     assert dispatcher._retry_max_elapsed_seconds == 120
     assert dispatcher._retry_initial_delay_seconds == 7
     assert dispatcher._retry_max_delay_seconds == 70
@@ -135,6 +145,7 @@ def test_dispatcher_constructor_uses_runtime_defaults(monkeypatch):
     monkeypatch.setenv("OUTBOX_DISPATCHER_POLL_INTERVAL_SECONDS", "17")
     monkeypatch.setenv("OUTBOX_DISPATCHER_BATCH_SIZE", "91")
     monkeypatch.setenv("OUTBOX_DISPATCHER_CLAIM_LEASE_SECONDS", "31")
+    monkeypatch.setenv("OUTBOX_DISPATCHER_TERMINATION_GRACE_SECONDS", "45")
     monkeypatch.setenv("OUTBOX_DISPATCHER_MAX_RETRIES", "6")
     monkeypatch.setenv("OUTBOX_DISPATCHER_RETRY_MAX_ELAPSED_SECONDS", "720")
     monkeypatch.setenv("OUTBOX_DISPATCHER_RETRY_INITIAL_DELAY_SECONDS", "19")
@@ -149,6 +160,8 @@ def test_dispatcher_constructor_uses_runtime_defaults(monkeypatch):
     assert dispatcher._batch_size == 91
     assert dispatcher._max_retries == 6
     assert dispatcher._claim_lease_seconds == 31
+    assert dispatcher._termination_grace_seconds == 45
+    assert dispatcher.shutdown_timeout_seconds == 15
     assert dispatcher._retry_max_elapsed_seconds == 720
     assert dispatcher._retry_initial_delay_seconds == 19
     assert dispatcher._retry_max_delay_seconds == 190
@@ -171,6 +184,23 @@ def test_dispatcher_rejects_claim_lease_shorter_than_delivery_fence() -> None:
         )
 
 
+def test_dispatcher_rejects_termination_grace_shorter_than_supervision_fence() -> None:
+    import portfolio_common.outbox_dispatcher as module
+
+    producer = MagicMock()
+    producer.producer_policy = SimpleNamespace(delivery_timeout_ms=120_000)
+
+    with pytest.raises(
+        OutboxRuntimeConfigurationError,
+        match="OUTBOX_DISPATCHER_TERMINATION_GRACE_SECONDS: expected at least 136 seconds",
+    ):
+        module.OutboxDispatcher(
+            kafka_producer=producer,
+            claim_lease_seconds=130,
+            termination_grace_seconds=135,
+        )
+
+
 def test_dispatcher_flush_waits_until_kafka_delivery_is_fenced() -> None:
     import portfolio_common.outbox_dispatcher as module
 
@@ -180,8 +210,10 @@ def test_dispatcher_flush_waits_until_kafka_delivery_is_fenced() -> None:
     dispatcher = module.OutboxDispatcher(
         kafka_producer=producer,
         claim_lease_seconds=130,
+        termination_grace_seconds=150,
     )
 
+    assert dispatcher.shutdown_timeout_seconds == 126
     dispatcher._flush_delivery_results([], {}, {})
 
     producer.flush.assert_called_once_with(timeout=121)

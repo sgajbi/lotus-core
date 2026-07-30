@@ -3,6 +3,11 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from portfolio_common.kafka_producer_policy import DEFAULT_DELIVERY_TIMEOUT_MS
+from portfolio_common.outbox_dispatcher import (
+    SHUTDOWN_DRAIN_SAFETY_SECONDS,
+    TERMINATION_GRACE_SAFETY_SECONDS,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 BASE_MANIFEST = (
@@ -43,7 +48,20 @@ def test_transaction_processing_deployment_is_digest_pinned_and_hardened() -> No
     assert re.fullmatch(r".+@sha256:[0-9a-f]{64}", container["image"])
     assert ":latest" not in container["image"]
     assert pod_spec["automountServiceAccountToken"] is False
-    assert pod_spec["terminationGracePeriodSeconds"] >= 60
+    termination_grace_seconds = pod_spec["terminationGracePeriodSeconds"]
+    configured_grace_seconds = int(
+        next(
+            item["value"]
+            for item in container["env"]
+            if item["name"] == "OUTBOX_DISPATCHER_TERMINATION_GRACE_SECONDS"
+        )
+    )
+    delivery_fence_seconds = ((DEFAULT_DELIVERY_TIMEOUT_MS + 999) // 1000) + 1
+    minimum_grace_seconds = (
+        delivery_fence_seconds + SHUTDOWN_DRAIN_SAFETY_SECONDS + TERMINATION_GRACE_SAFETY_SECONDS
+    )
+    assert termination_grace_seconds == configured_grace_seconds
+    assert termination_grace_seconds >= minimum_grace_seconds
     assert pod_spec["securityContext"]["runAsNonRoot"] is True
     assert pod_spec["securityContext"]["seccompProfile"]["type"] == "RuntimeDefault"
     assert container["securityContext"] == {

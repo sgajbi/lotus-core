@@ -20,6 +20,11 @@ dispatchers used the same cached producer wrapper as replay, direct event, and c
 publishers in the process. Purging ambiguous outbox records after a flush exception could therefore
 purge an unrelated direct publication and let its caller observe a misleading empty flush.
 
+A further lifecycle review found that the default 121-second delivery fence did not fit the
+60-second Kubernetes termination grace. Shared supervision could cancel the dispatcher task before
+delivery was fenced, while cancellation of its `asyncio.to_thread(...)` coroutine could not stop the
+underlying batch thread. Kubernetes could then terminate the process before the thread completed.
+
 ## Correction
 
 - Define the stream head as the oldest unresolved `PENDING` or `FAILED` row by
@@ -38,6 +43,12 @@ purge an unrelated direct publication and let its caller observe a misleading em
 - Give every production dispatcher a fresh, non-cached producer. Keep replay, direct event, and DLQ
   publishers on their separate shared producer so dispatcher recovery cannot purge their records.
 - Guard every production `OutboxDispatcher` composition against shared-producer construction.
+- Derive a dispatcher supervision timeout from the producer-specific delivery fence plus a drain
+  margin, and pass it from every dispatcher-owning runtime to shared shutdown supervision.
+- Require the configured pod termination grace to exceed that supervision budget by a further
+  process-termination margin. Fail dispatcher construction for unsafe combinations.
+- Increase the governed derived-state and transaction-processing pod grace from 60 to 150 seconds
+  and bind `OUTBOX_DISPATCHER_TERMINATION_GRACE_SECONDS=150` in each deployment.
 - Add a partial lookup index over unresolved stream order.
 
 Kafka publication remains outside the claim transaction and result writes remain claim-token
@@ -55,6 +66,12 @@ and governed-requeued before that stream advances. A flush exception now resets 
 producer before rows become retryable; this changes only failure recovery, not successful publish
 behavior or event contracts. Each dispatcher-owning service process now maintains one additional
 Kafka producer connection for the exclusive outbox recovery boundary.
+The two governed Kubernetes deployments now allow 150 seconds for termination instead of 60.
+Runtime supervision waits 126 seconds for a producer using the default 120-second Kafka delivery
+timeout, and dispatcher startup rejects termination grace below 136 seconds. Operator overrides of
+Kafka delivery timeout must therefore be paired with a sufficiently large outbox claim lease and
+termination grace. These are lifecycle controls only; successful dispatch, message contracts, and
+retry semantics are unchanged.
 
 Mixed dispatcher versions are unsafe because an old process does not honor the stream-head
 barrier. Deployments must quiesce all dispatcher-owning workers, apply migration
@@ -72,5 +89,8 @@ barrier. Deployments must quiesce all dispatcher-owning workers, apply migration
 - Producer-ownership proof covers distinct dispatcher/shared wrappers, recovery isolation for an
   already-queued direct publication, every production runtime composition, and a source guard
   rejecting cached-producer dispatcher wiring.
+- Shutdown-fence proof covers runtime budget propagation, fail-closed termination-grace validation,
+  and manifest equality between the pod grace and runtime configuration for both governed
+  dispatcher deployments.
 - Final focused, migration, protected CI, exact-main, and operational evidence is recorded on
   issue #795.

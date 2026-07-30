@@ -21,6 +21,7 @@ async def test_run_kafka_worker_runtime_composes_consumers_dispatcher_and_health
     dispatcher = MagicMock()
     dispatcher.run = AsyncMock()
     dispatcher.stop = MagicMock()
+    dispatcher.shutdown_timeout_seconds = 126
     server = MagicMock()
     server.serve = AsyncMock()
     server_config_factory = MagicMock(return_value="server-config")
@@ -80,6 +81,7 @@ async def test_run_kafka_worker_runtime_composes_consumers_dispatcher_and_health
     dispatcher.run.assert_awaited_once()
     server.serve.assert_awaited_once()
     shutdown.assert_awaited_once()
+    assert shutdown.await_args.kwargs["shutdown_timeout_seconds"] == 126
 
 
 def test_consumer_task_name_is_bounded_and_source_safe() -> None:

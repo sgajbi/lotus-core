@@ -164,6 +164,7 @@ class ConsumerManager:
             consumers=self.consumers,
             stop_callbacks=[self.dispatcher.stop],
             server=server,
+            shutdown_timeout_seconds=self.dispatcher.shutdown_timeout_seconds,
         )
         logger.info(
             "All consumer, dispatcher, and web server tasks have been successfully shut down."

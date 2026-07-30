@@ -141,6 +141,7 @@ async def run_kafka_worker_runtime(
         consumers=consumers,
         stop_callbacks=[dispatcher.stop],
         server=server,
+        shutdown_timeout_seconds=dispatcher.shutdown_timeout_seconds,
         logger=logger,
     )
     if runtime_error is not None:
