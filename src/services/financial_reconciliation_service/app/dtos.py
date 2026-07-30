@@ -161,6 +161,46 @@ class ReconciliationFindingResponse(BaseModel):
             }
         ],
     )
+    owner: str = Field(
+        description="Domain operations function accountable for resolving this finding.",
+        examples=["TRANSACTION_OPERATIONS"],
+    )
+    resolution_state: Literal["OPEN", "IN_PROGRESS", "RESOLVED", "WAIVED", "SUPPRESSED"] = Field(
+        description="Governed lifecycle state for the reconciliation finding.",
+        examples=["OPEN"],
+    )
+    resolution_actor: str | None = Field(
+        default=None,
+        description="Actor that resolved, waived, or suppressed the finding.",
+        examples=["ops.control@lotus.local"],
+    )
+    resolved_at: datetime | None = Field(
+        default=None,
+        description="UTC timestamp when the terminal resolution state was recorded.",
+        examples=["2026-03-06T15:10:00Z"],
+    )
+    tolerance: Decimal | None = Field(
+        default=None,
+        description=exact_numeric_openapi_description(
+            "Applied comparison tolerance when the finding is value-based.",
+            precision=18,
+            scale=10,
+        ),
+        examples=["0.0100000000"],
+    )
+    observed_delta: Decimal | None = Field(
+        default=None,
+        description=exact_numeric_openapi_description(
+            "Signed observed-minus-expected delta when the finding has one scalar comparison.",
+            precision=18,
+            scale=10,
+        ),
+        examples=["-10.0000000000"],
+    )
+    repair_recommendation: str = Field(
+        description="Bounded operator action recommended for the finding class.",
+        examples=["REGENERATE_CASHFLOW"],
+    )
     created_at: datetime = Field(
         description="UTC timestamp when the finding was persisted.",
         examples=["2026-03-06T14:03:11Z"],
