@@ -415,14 +415,27 @@ async def async_test_client():
     mock_reference_coverage_service.get_benchmark = AsyncMock(
         return_value={
             "request_fingerprint": "fp-benchmark-coverage-1",
+            "coverage_report_id": "dqc_benchmark_coverage_1",
             "observed_start_date": "2026-01-01",
             "observed_end_date": "2026-01-31",
             "expected_start_date": "2026-01-01",
             "expected_end_date": "2026-01-31",
             "total_points": 31,
+            "required_count": 31,
+            "observed_count": 31,
             "missing_dates_count": 0,
             "missing_dates_sample": [],
             "quality_status_distribution": {"ACCEPTED": 31},
+            "stale_count": 0,
+            "blocking_issue_count": 0,
+            "warning_issue_count": 0,
+            "freshness_threshold_minutes": 1440,
+            "evidence_age_minutes": 0,
+            "contributing_evidence_refs": [
+                "lotus-core://source/BenchmarkReturn/BMK_GLOBAL_BALANCED_60_40/2026-01-31"
+            ],
+            "publication_gate": "ALLOW",
+            "publication_block_reasons": [],
             **source_data_product_runtime_metadata(
                 as_of_date=date(2026, 1, 31),
                 generated_at=datetime(2026, 1, 31, 10, 0, 0, tzinfo=UTC),
@@ -432,14 +445,28 @@ async def async_test_client():
     mock_reference_coverage_service.get_risk_free = AsyncMock(
         return_value={
             "request_fingerprint": "fp-risk-free-coverage-1",
+            "coverage_report_id": "dqc_risk_free_coverage_1",
             "observed_start_date": None,
             "observed_end_date": None,
             "expected_start_date": "2026-01-01",
             "expected_end_date": "2026-01-31",
             "total_points": 0,
+            "required_count": 31,
+            "observed_count": 0,
             "missing_dates_count": 31,
             "missing_dates_sample": [],
             "quality_status_distribution": {},
+            "stale_count": 0,
+            "blocking_issue_count": 0,
+            "warning_issue_count": 0,
+            "freshness_threshold_minutes": 1440,
+            "evidence_age_minutes": None,
+            "contributing_evidence_refs": [],
+            "publication_gate": "BLOCK",
+            "publication_block_reasons": [
+                "INCOMPLETE_COVERAGE",
+                "NO_OBSERVED_EVIDENCE",
+            ],
             **source_data_product_runtime_metadata(
                 as_of_date=date(2026, 1, 31),
                 generated_at=datetime(2026, 1, 31, 10, 0, 0, tzinfo=UTC),
@@ -1766,8 +1793,11 @@ async def test_benchmark_coverage_success(async_test_client):
     assert body["observed_start_date"] == "2026-01-01"
     assert body["observed_end_date"] == "2026-01-31"
     assert body["total_points"] == 31
+    assert body["required_count"] == 31
+    assert body["observed_count"] == 31
     assert body["missing_dates_count"] == 0
     assert body["quality_status_distribution"] == {"ACCEPTED": 31}
+    assert body["publication_gate"] == "ALLOW"
     assert body["reconciliation_status"] == "UNKNOWN"
     assert body["data_quality_status"] == "UNKNOWN"
     coverage_service.get_benchmark.assert_awaited_once()
@@ -1791,7 +1821,14 @@ async def test_risk_free_coverage_success(async_test_client):
     assert body["product_name"] == "DataQualityCoverageReport"
     assert body["product_version"] == "v1"
     assert body["total_points"] == 0
+    assert body["required_count"] == 31
+    assert body["observed_count"] == 0
     assert body["missing_dates_count"] == 31
+    assert body["publication_gate"] == "BLOCK"
+    assert body["publication_block_reasons"] == [
+        "INCOMPLETE_COVERAGE",
+        "NO_OBSERVED_EVIDENCE",
+    ]
     assert body["reconciliation_status"] == "UNKNOWN"
     assert body["data_quality_status"] == "UNKNOWN"
     coverage_service.get_risk_free.assert_awaited_once()
