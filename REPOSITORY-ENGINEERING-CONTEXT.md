@@ -2976,6 +2976,12 @@ Most relevant current governance:
      service domain. Explicit quote representation, principal basis, accrued treatment, scaling,
      and FX direction must replace the legacy bond price-magnitude/cost-basis heuristic—never sit
      beside it as a hidden fallback.
+     Valuation-policy assignment history is append-only and source-version governed. The ingestion
+     writer must serialize exact tenant/legal-book/instrument scopes in stable order, no-op an exact
+     persisted source-version replay, and reject stale or divergent same-version content before
+     inserting. Never restore mutable assignment UPSERT semantics. A semantic correction returns
+     previous/accepted authority and the earliest affected valuation date for later bounded replay;
+     a metadata-only correction remains durable but must not fabricate valuation work.
      Preserve `market_prices` as the global legacy `(security_id, price_date)` projection during
      migration. Authoritative market-price history belongs in the separate append-history
      `market_price_source_facts` model with exact tenant, legal book, instrument, business date,

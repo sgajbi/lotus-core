@@ -94,10 +94,14 @@ narrow framework-free contract therefore belongs in `portfolio_common.domain.val
   supported policy/version, rejects naive observation timestamps, invalid windows, duplicate
   source versions, oversized batches, and overlapping active authorities without deriving legal
   book from booking centre or jurisdiction.
-- Added a service-owned transactional write guard that acquires exact tenant/legal-book/instrument
-  advisory locks in stable order, loads durable assignment history, ranks source corrections, and
-  rejects conflicts before one atomic upsert/commit. This closes both the existing-history and
-  concurrent-writer gaps that request-only validation would leave open.
+- Replaced the transitional assignment write guard and mutable upsert with a service-owned,
+  append-only correction writer. It acquires exact tenant/legal-book/instrument advisory locks in
+  stable order, loads durable assignment history, ranks source corrections, no-ops an exact
+  persisted replay, and rejects stale or divergent same-version content before one atomic
+  insert/commit. Semantic corrections return the previous and accepted authority plus the earliest
+  affected valuation date; metadata-only corrections remain auditable without fabricating
+  revaluation work. This closes the existing-history and concurrent-writer gaps without permitting
+  an accepted source version to be rewritten.
 - Added a position-valuation-service application port and SQLAlchemy resolver for durable assignment
   history. One indexed query ranks each source record's correction versions before applying ACTIVE
   lifecycle and inclusive effective-date filters, then the framework-independent domain rejects a
@@ -195,10 +199,12 @@ to that service's domain package.
 
 ## Compatibility
 
-The assignment slices add one reversible table, two evidence-backed indexes, one policy source-write
-HTTP/OpenAPI contract, and one internal service-local read port/adapter. Existing routes, event
-payloads, topics, deployment topology, downstream fields, and runtime valuation behavior were
-unchanged by those slices. A subsequent staged prerequisite adds nullable `tenant_id` and
+The assignment slices add one reversible append-history table, two evidence-backed indexes, one
+policy source-write HTTP/OpenAPI contract, and one internal service-local read port/adapter.
+Accepted source versions are immutable: exact replay is a no-op, while stale or divergent
+same-version content fails closed. Existing routes, event payloads, topics, deployment topology,
+downstream fields, and runtime valuation behavior were unchanged by those slices. A subsequent
+staged prerequisite adds nullable `tenant_id` and
 `legal_book_id` together to portfolio ingestion, events, and persistence. Both absent preserves
 legacy compatibility and cannot erase an established persisted scope during replay; a complete
 incoming pair replaces both dimensions atomically. Partial, blank, padded database-direct, or
