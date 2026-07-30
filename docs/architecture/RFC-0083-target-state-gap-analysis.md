@@ -153,9 +153,9 @@ date parameters should be reviewed before they become public contract precedent.
 | `IndexSeriesWindow` | index price and return series routes and tables | Strong baseline | Standardize freshness, paging, and source lineage |
 | `BenchmarkReturnSeriesWindow` | source-supplied benchmark return series route and table | Strong baseline | Standardize freshness, completeness, paging, and override lineage |
 | `RiskFreeSeriesWindow` | QCP-owned risk-free series route and table with deterministic source proof | Strong | Complete coordinated pagination and migrate coverage diagnostics |
-| `ReconciliationEvidenceBundle` | financial reconciliation routes and findings | Partial | Create a consumer-safe evidence product linked to portfolios and source scope |
-| `DataQualityCoverageReport` | coverage, readiness, support, and SLO routes | Partial | Define one governed report shape for downstream gating |
-| `IngestionEvidenceBundle` | ingestion jobs, failures, replay, DLQ, audit routes | Partial | Define evidence bundle shape across ingestion and replay services |
+| `ReconciliationEvidenceBundle` | financial reconciliation routes and findings | Strong runtime baseline | Calibrate product-specific SLOs and add a separately governed resolution command if required |
+| `DataQualityCoverageReport` | coverage, readiness, support, and SLO routes | Strong runtime baseline | Extend the governed count/age/ref/gate shape to additional coverage families when proven |
+| `IngestionEvidenceBundle` | `/ingestion/jobs/{job_id}/evidence` | Strong runtime baseline | Add durable repair-completion audit and authoritative freshness/retention duration before claiming them |
 
 ## Ingestion And Replay Capability Inventory
 
@@ -173,17 +173,11 @@ Current strengths:
 4. correlation id, trace id, idempotency key, source system, source batch, and source record fields
    appear in important ingestion and reference paths.
 
-Current gaps:
+Remaining gaps:
 
-1. there is no single named `IngestionEvidenceBundle` contract that packages source batch, validation,
-   replay, rejection, quarantine, and operator evidence for downstream and audit consumers,
-2. accepted, rejected, quarantined, partially accepted, replayed, and repaired states are not yet
-   normalized as one business vocabulary across all ingestion surfaces,
-3. source timestamp terminology still needs alignment with `observed_at` and `ingested_at`,
-4. replay and DLQ evidence is operationally rich but not yet tied consistently to source-data product
-   provenance,
-5. retention and archival expectations for raw source records, validation reports, and replay audit
-   records are not yet explicit.
+1. source timestamp terminology still needs alignment with `observed_at` and `ingested_at`,
+2. no durable bookkeeping-repair completion audit exists, so repaired state cannot be claimed,
+3. authoritative freshness SLO and records-management retention duration are not yet configured.
 
 Required follow-up slice:
 
@@ -202,18 +196,11 @@ Current strengths:
 4. coverage/readiness routes already provide a useful basis for data-quality and supportability
    signals.
 
-Current gaps:
+Remaining gaps:
 
-1. there is no single named `ReconciliationEvidenceBundle` contract that downstream consumers can use
-   to decide whether source data is reconciled, unreconciled, partial, stale, blocked, or unknown,
-2. reconciliation statuses, finding severities, break ownership, tolerance, age, and resolution state
-   need one governed vocabulary,
-3. reconciliation evidence is not yet uniformly included in source-data products where data safety
-   depends on it,
-4. data-quality coverage is present as supportability behavior but not yet formalized as a
-   `DataQualityCoverageReport` product,
-5. SLOs for freshness, completeness, reconciliation latency, and supportability are not yet tied to
-   individual source-data products.
+1. reconciliation evidence is not yet uniformly referenced by every product whose safety depends on it,
+2. product-specific SLO calibration remains incomplete,
+3. terminal resolution storage is governed, but no operator-facing transition command is published.
 
 Required follow-up slice:
 

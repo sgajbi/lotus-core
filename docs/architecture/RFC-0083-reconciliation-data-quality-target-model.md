@@ -3,9 +3,8 @@
 This document is the RFC-0083 Slice 5 target model for reconciliation evidence, break handling, and
 data-quality coverage in `lotus-core`.
 
-It does not change runtime behavior, persistence, DTOs, OpenAPI output, or downstream contracts. It
-defines the target vocabulary and supportability fields that later source-data product and runtime
-slices must use.
+It defines the vocabulary and supportability fields now used by the additive reconciliation and
+coverage runtime evidence contracts.
 
 ## Target Principle
 
@@ -32,15 +31,16 @@ Current useful building blocks:
    requested-by, dedupe key, and top blocking finding fields for reconciliation support views.
 6. readiness and coverage routes already expose useful foundations for data-quality coverage.
 
-Current gaps:
+Current runtime posture:
 
-1. there is no named `ReconciliationEvidenceBundle` source-data product contract,
-2. `COMPLETE`, `PARTIAL`, `STALE`, `UNRECONCILED`, `BREAK_OPEN`, `BLOCKED`, and `UNKNOWN` are not yet
-   one shared vocabulary across support and source-data products,
-3. break ownership, age, tolerance, and resolution state are not yet standardized in one target model,
-4. data-quality coverage exists in several diagnostic surfaces but is not yet a named
-   `DataQualityCoverageReport`,
-5. source-data products do not yet embed the same supportability fields.
+1. QCP reconciliation run/finding routes publish `ReconciliationEvidenceBundle:v1` identities,
+   normalized status, tolerance, severity counts, owner/action, age, and fail-closed publication gates,
+2. `financial_reconciliation_findings` persists owner, resolution state, terminal actor/timestamp,
+   finite tolerance/delta, and repair recommendation,
+3. coverage routes publish deterministic `DataQualityCoverageReport:v1` identities, required/observed
+   and issue counts, evidence references, age/threshold, and publication gates,
+4. run-list gates block when a paged response cannot prove the complete filtered evidence window,
+5. no operator-facing resolution-transition command is claimed by this evidence-publication slice.
 
 ## Target Status Vocabulary
 
@@ -180,10 +180,8 @@ Every source-data product that can affect safety must expose or reference:
 
 | Gap | Owner slice |
 | --- | --- |
-| Runtime `ReconciliationEvidenceBundle` DTO | Slice 6 or reconciliation runtime hardening |
-| Runtime `DataQualityCoverageReport` DTO | Slice 6 or data-quality hardening |
-| Owner/resolution/tolerance fields on all findings | Future migration or DTO slice |
-| Status mapping exposed on source-data products | Slice 6 |
+| Operator command for terminal finding resolution evidence | Future governed command slice |
+| Product-specific freshness SLO calibration | Production closure |
 | Product-level freshness SLOs | Slice 9 or production closure |
 | Cross-consumer validation in `lotus-performance`, `lotus-risk`, and `lotus-gateway` | Slice 6 onward |
 
