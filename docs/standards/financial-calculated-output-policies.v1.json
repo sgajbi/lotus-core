@@ -27,9 +27,6 @@
       "rounding": "ROUND_HALF_EVEN",
       "lineage_binding": "partial",
       "lineage_gap_callsites": [
-        "src/libs/portfolio-common/portfolio_common/domain/valuation/position_valuation.py::_convert_and_normalize",
-        "src/libs/portfolio-common/portfolio_common/domain/valuation/position_valuation.py::_normalize_optional",
-        "src/libs/portfolio-common/portfolio_common/domain/valuation/position_valuation.py::_normalize_outputs",
         "src/services/calculators/position_valuation_calculator/app/logic/valuation_logic.py::ValuationLogic.calculate_valuation_components"
       ]
     },

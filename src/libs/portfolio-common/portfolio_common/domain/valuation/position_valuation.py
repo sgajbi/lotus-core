@@ -7,7 +7,7 @@ not price securities, infer quote conventions, forecast rates, or derive derivat
 from __future__ import annotations
 
 from dataclasses import dataclass
-from decimal import Decimal
+from decimal import Decimal, localcontext
 from enum import StrEnum
 
 from ..calculation_lineage import (
@@ -270,6 +270,14 @@ class _NormalizedPositionOutputs:
         }
 
 
+@dataclass(frozen=True, slots=True)
+class _NormalizedPositionCalculation:
+    """Normalized ledger outputs with the calculation evidence that produced them."""
+
+    outputs: _NormalizedPositionOutputs
+    lineage: CalculationLineage
+
+
 def calculate_position_valuation(
     *,
     policy: PositionValuationPolicy,
@@ -279,7 +287,10 @@ def calculate_position_valuation(
 
     evidence = inputs.evidence
     _validate_source_value(policy, inputs.source_value)
-    with POSITION_VALUATION_LEDGER_OUTPUT_V1.arithmetic_context():
+    # Policy-driven scaling uses the governed working precision, while the
+    # normalized-output boundary below owns the ledger policy and its lineage.
+    with localcontext() as context:
+        context.prec = POSITION_VALUATION_INTERMEDIATE_PRECISION
         current_principal = _resolve_current_principal(policy, inputs)
         scaled_value = _scale_source_value(policy, inputs, current_principal)
         accrued_income = _resolve_accrued_income(policy, inputs)
@@ -303,7 +314,14 @@ def calculate_position_valuation(
         else:
             settlement_variation = scaled_value
 
-    normalized = _normalize_outputs(
+    source_currency = _normalize_currency(inputs.source_currency)
+    reporting_currency = _normalize_currency(inputs.reporting_currency)
+    normalized_calculation = _normalize_outputs(
+        valuation_policy=policy,
+        inputs=inputs,
+        evidence=evidence,
+        source_currency=source_currency,
+        reporting_currency=reporting_currency,
         current_principal=current_principal,
         clean_value=clean_value,
         accrued_income=accrued_income,
@@ -312,22 +330,7 @@ def calculate_position_valuation(
         settlement_variation=settlement_variation,
         fx_rate=fx_rate,
     )
-    source_currency = _normalize_currency(inputs.source_currency)
-    reporting_currency = _normalize_currency(inputs.reporting_currency)
-    output_payload = {
-        **normalized.lineage_payload(),
-        "reporting_currency": reporting_currency,
-        "source_currency": source_currency,
-        "source_to_reporting_fx_rate": fx_rate,
-    }
-    lineage = build_calculation_lineage(
-        algorithm_id=POSITION_VALUATION_ALGORITHM_ID,
-        algorithm_version=POSITION_VALUATION_ALGORITHM_VERSION,
-        intermediate_precision=POSITION_VALUATION_INTERMEDIATE_PRECISION,
-        input_payload=_position_input_payload(policy=policy, inputs=inputs, evidence=evidence),
-        output_payload=output_payload,
-        numeric_output_policy=POSITION_VALUATION_LEDGER_OUTPUT_V1.lineage_identity(),
-    )
+    normalized = normalized_calculation.outputs
     return PositionValuationResult(
         source_currency=source_currency,
         reporting_currency=reporting_currency,
@@ -343,12 +346,17 @@ def calculate_position_valuation(
         notional_exposure_reporting=normalized.notional_exposure_reporting,
         settlement_variation_local=normalized.settlement_variation_local,
         settlement_variation_reporting=normalized.settlement_variation_reporting,
-        lineage=lineage,
+        lineage=normalized_calculation.lineage,
     )
 
 
 def _normalize_outputs(
     *,
+    valuation_policy: PositionValuationPolicy,
+    inputs: PositionValuationInputs,
+    evidence: PositionValuationEvidence,
+    source_currency: str,
+    reporting_currency: str,
     current_principal: Decimal | None,
     clean_value: Decimal | None,
     accrued_income: Decimal | None,
@@ -356,21 +364,32 @@ def _normalize_outputs(
     notional_exposure: Decimal | None,
     settlement_variation: Decimal | None,
     fx_rate: Decimal,
-) -> _NormalizedPositionOutputs:
+) -> _NormalizedPositionCalculation:
     policy = POSITION_VALUATION_LEDGER_OUTPUT_V1
-    current_principal = _normalize_optional(
-        current_principal,
-        field_name="current_principal",
+    current_principal = (
+        policy.normalize(current_principal, field_name="current_principal")
+        if current_principal is not None
+        else None
     )
-    clean_value = _normalize_optional(clean_value, field_name="clean_value_local")
-    accrued_income = _normalize_optional(accrued_income, field_name="accrued_income_local")
-    notional_exposure = _normalize_optional(
-        notional_exposure,
-        field_name="notional_exposure_local",
+    clean_value = (
+        policy.normalize(clean_value, field_name="clean_value_local")
+        if clean_value is not None
+        else None
     )
-    settlement_variation = _normalize_optional(
-        settlement_variation,
-        field_name="settlement_variation_local",
+    accrued_income = (
+        policy.normalize(accrued_income, field_name="accrued_income_local")
+        if accrued_income is not None
+        else None
+    )
+    notional_exposure = (
+        policy.normalize(notional_exposure, field_name="notional_exposure_local")
+        if notional_exposure is not None
+        else None
+    )
+    settlement_variation = (
+        policy.normalize(settlement_variation, field_name="settlement_variation_local")
+        if settlement_variation is not None
+        else None
     )
     if clean_value is not None:
         total_market_value = policy.add(
@@ -379,20 +398,21 @@ def _normalize_outputs(
             field_name="total_market_value_local",
         )
     else:
-        total_market_value = _normalize_optional(
-            total_market_value,
-            field_name="total_market_value_local",
+        total_market_value = (
+            policy.normalize(total_market_value, field_name="total_market_value_local")
+            if total_market_value is not None
+            else None
         )
 
-    clean_value_reporting = _convert_and_normalize(
-        clean_value,
-        fx_rate,
-        field_name="clean_value_reporting",
+    clean_value_reporting = (
+        policy.multiply(clean_value, fx_rate, field_name="clean_value_reporting")
+        if clean_value is not None
+        else None
     )
-    accrued_income_reporting = _convert_and_normalize(
-        accrued_income,
-        fx_rate,
-        field_name="accrued_income_reporting",
+    accrued_income_reporting = (
+        policy.multiply(accrued_income, fx_rate, field_name="accrued_income_reporting")
+        if accrued_income is not None
+        else None
     )
     if clean_value_reporting is not None:
         total_market_value_reporting = policy.add(
@@ -401,53 +421,62 @@ def _normalize_outputs(
             field_name="total_market_value_reporting",
         )
     else:
-        total_market_value_reporting = _convert_and_normalize(
-            total_market_value,
-            fx_rate,
-            field_name="total_market_value_reporting",
+        total_market_value_reporting = (
+            policy.multiply(
+                total_market_value,
+                fx_rate,
+                field_name="total_market_value_reporting",
+            )
+            if total_market_value is not None
+            else None
         )
-    return _NormalizedPositionOutputs(
+    normalized = _NormalizedPositionOutputs(
         accrued_income_local=accrued_income,
         accrued_income_reporting=accrued_income_reporting,
         clean_value_local=clean_value,
         clean_value_reporting=clean_value_reporting,
         current_principal=current_principal,
         notional_exposure_local=notional_exposure,
-        notional_exposure_reporting=_convert_and_normalize(
-            notional_exposure,
-            fx_rate,
-            field_name="notional_exposure_reporting",
+        notional_exposure_reporting=(
+            policy.multiply(
+                notional_exposure,
+                fx_rate,
+                field_name="notional_exposure_reporting",
+            )
+            if notional_exposure is not None
+            else None
         ),
         settlement_variation_local=settlement_variation,
-        settlement_variation_reporting=_convert_and_normalize(
-            settlement_variation,
-            fx_rate,
-            field_name="settlement_variation_reporting",
+        settlement_variation_reporting=(
+            policy.multiply(
+                settlement_variation,
+                fx_rate,
+                field_name="settlement_variation_reporting",
+            )
+            if settlement_variation is not None
+            else None
         ),
         total_market_value_local=total_market_value,
         total_market_value_reporting=total_market_value_reporting,
     )
-
-
-def _normalize_optional(value: Decimal | None, *, field_name: str) -> Decimal | None:
-    if value is None:
-        return None
-    return POSITION_VALUATION_LEDGER_OUTPUT_V1.normalize(value, field_name=field_name)
-
-
-def _convert_and_normalize(
-    value: Decimal | None,
-    fx_rate: Decimal,
-    *,
-    field_name: str,
-) -> Decimal | None:
-    if value is None:
-        return None
-    return POSITION_VALUATION_LEDGER_OUTPUT_V1.multiply(
-        value,
-        fx_rate,
-        field_name=field_name,
+    lineage = build_calculation_lineage(
+        algorithm_id=POSITION_VALUATION_ALGORITHM_ID,
+        algorithm_version=POSITION_VALUATION_ALGORITHM_VERSION,
+        intermediate_precision=POSITION_VALUATION_INTERMEDIATE_PRECISION,
+        input_payload=_position_input_payload(
+            policy=valuation_policy,
+            inputs=inputs,
+            evidence=evidence,
+        ),
+        output_payload={
+            **normalized.lineage_payload(),
+            "reporting_currency": reporting_currency,
+            "source_currency": source_currency,
+            "source_to_reporting_fx_rate": fx_rate,
+        },
+        numeric_output_policy=policy.lineage_identity(),
     )
+    return _NormalizedPositionCalculation(outputs=normalized, lineage=lineage)
 
 
 def _position_input_payload(
