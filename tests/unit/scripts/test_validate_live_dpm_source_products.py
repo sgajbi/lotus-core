@@ -35,7 +35,7 @@ def _mandate_binding() -> dict:
         "product_name": "DiscretionaryMandateBinding",
         "supportability": {"state": "READY"},
         "mandate_type": "discretionary",
-        "discretionary_authority_status": "active",
+        "discretionary_authority_status": "ACTIVE",
         "model_portfolio_id": validator.DEFAULT_MODEL_PORTFOLIO_ID,
         "mandate_objective": (
             "Preserve and grow global balanced wealth within controlled drawdown limits."
@@ -277,6 +277,22 @@ def test_live_dpm_source_validator_accepts_ready_canonical_products() -> None:
         "dpm_market_data_coverage_ready",
         "dpm_source_readiness_ready",
     ]
+
+
+def test_live_dpm_source_validator_accepts_legacy_lowercase_authority_status() -> None:
+    mandate_binding = _mandate_binding()
+    mandate_binding["discretionary_authority_status"] = "active"
+
+    summary = _run(
+        {
+            f"/integration/portfolios/{validator.DEFAULT_PORTFOLIO_ID}/mandate-binding": (
+                200,
+                mandate_binding,
+            )
+        }
+    )
+
+    assert summary["failed"] == 0
 
 
 def test_live_dpm_source_validator_reports_missing_openapi_route() -> None:
