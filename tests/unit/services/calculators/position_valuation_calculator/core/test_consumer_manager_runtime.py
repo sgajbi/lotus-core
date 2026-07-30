@@ -57,7 +57,7 @@ class _FakeFailingConsumer(_FakeSuccessConsumer):
 def _patch_runtime(monkeypatch):
     monkeypatch.setattr(consumer_manager, "ensure_topics_exist", lambda *_: None)
     monkeypatch.setattr(consumer_manager.signal, "signal", lambda *_: None)
-    monkeypatch.setattr(consumer_manager, "get_kafka_producer", lambda: object())
+    monkeypatch.setattr(consumer_manager, "create_kafka_producer", lambda **_: object())
     monkeypatch.setattr(consumer_manager, "OutboxDispatcher", _FakeDispatcher)
     monkeypatch.setattr(consumer_manager.uvicorn, "Config", lambda *args, **kwargs: object())
     monkeypatch.setattr(consumer_manager.uvicorn, "Server", _FakeServer)

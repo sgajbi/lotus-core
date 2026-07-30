@@ -52,6 +52,22 @@ def test_combined_manager_defaults_to_final_two_consumer_composition(monkeypatch
     build_consumers.assert_called_once_with()
 
 
+def test_combined_manager_gives_dispatcher_an_exclusive_producer(monkeypatch) -> None:
+    exclusive_producer = MagicMock()
+    dispatcher = MagicMock()
+    create_producer = MagicMock(return_value=exclusive_producer)
+    dispatcher_factory = MagicMock(return_value=dispatcher)
+    monkeypatch.setattr(manager, "build_transaction_processing_consumers", lambda: ())
+    monkeypatch.setattr(manager, "create_kafka_producer", create_producer)
+    monkeypatch.setattr(manager, "OutboxDispatcher", dispatcher_factory)
+
+    runtime_manager = manager.ConsumerManager()
+
+    create_producer.assert_called_once_with(service_name=manager.OUTBOX_PRODUCER_SERVICE_NAME)
+    dispatcher_factory.assert_called_once_with(kafka_producer=exclusive_producer)
+    assert runtime_manager.dispatcher is dispatcher
+
+
 def test_combined_manager_preserves_intentionally_empty_injected_components(monkeypatch) -> None:
     build_consumers = MagicMock()
     monkeypatch.setattr(

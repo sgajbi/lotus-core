@@ -253,6 +253,18 @@ class KafkaProducer:
 _kafka_producer_instances: dict[tuple[str, str], KafkaProducer] = {}
 
 
+def create_kafka_producer(
+    *,
+    bootstrap_servers: str = KAFKA_BOOTSTRAP_SERVERS,
+    service_name: str = DEFAULT_PRODUCER_SERVICE,
+) -> KafkaProducer:
+    """Create a producer with an ownership boundary independent of shared publishers."""
+    return KafkaProducer(
+        bootstrap_servers=bootstrap_servers,
+        service_name=service_name,
+    )
+
+
 def get_kafka_producer(
     *,
     bootstrap_servers: str = KAFKA_BOOTSTRAP_SERVERS,
@@ -260,7 +272,7 @@ def get_kafka_producer(
 ) -> KafkaProducer:
     key = (bootstrap_servers, service_name)
     if key not in _kafka_producer_instances:
-        _kafka_producer_instances[key] = KafkaProducer(
+        _kafka_producer_instances[key] = create_kafka_producer(
             bootstrap_servers=bootstrap_servers,
             service_name=service_name,
         )
