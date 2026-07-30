@@ -121,10 +121,8 @@
       "scale": 10,
       "working_precision": 64,
       "rounding": "ROUND_HALF_EVEN",
-      "lineage_binding": "not-exposed",
-      "lineage_gap_callsites": [
-        "src/services/portfolio_transaction_processing_service/app/domain/cashflow/calculation.py::calculate_transaction_cashflow"
-      ]
+      "lineage_binding": "required",
+      "lineage_gap_callsites": []
     },
     "POSITION_TIMESERIES_LEDGER_OUTPUT_V1": {
       "declaration_path": "src/services/portfolio_derived_state_service/app/domain/position_timeseries/numeric_policy.py",
