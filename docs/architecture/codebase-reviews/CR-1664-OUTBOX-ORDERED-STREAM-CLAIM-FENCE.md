@@ -41,7 +41,8 @@ underlying batch thread. Kubernetes could then terminate the process before the 
   safety margin reserved for claim commit and producer publication.
 - If `flush(...)` raises with ambiguous queued records, purge both queued and in-flight records,
   drain their callbacks, and replace the underlying producer before releasing any row for retry.
-  If purge confirmation fails, retain the database claims by aborting result persistence.
+  Apply the same reset when `flush(...)` returns a nonzero queued-record count. If purge
+  confirmation fails in either path, retain the database claims by aborting result persistence.
 - Give every production dispatcher a fresh, non-cached producer while retaining the established
   `portfolio_common` producer-policy lookup identity. Keep replay, direct event, and DLQ publishers
   on their separate shared producer so dispatcher recovery cannot purge their records.
@@ -51,7 +52,8 @@ underlying batch thread. Kubernetes could then terminate the process before the 
   supervision takes the maximum of that fence and every configured consumer drain budget plus its
   grace, so dispatcher safety never shortens a supported consumer shutdown override.
 - Require the configured pod termination grace to exceed that supervision budget by a further
-  process-termination margin. Fail dispatcher construction for unsafe combinations.
+  process-termination margin. Validate the final maximum of dispatcher and consumer budgets before
+  starting worker tasks, and fail startup for unsafe combinations.
 - Increase the governed derived-state and transaction-processing pod grace from 60 to 150 seconds
   and bind `OUTBOX_DISPATCHER_TERMINATION_GRACE_SECONDS=150` in each deployment.
 - Bind `stop_grace_period` for all five dispatcher-owning services in app-local Compose to the same
@@ -84,7 +86,9 @@ timeout, and dispatcher startup rejects termination grace below 136 seconds. Ope
 Kafka delivery timeout must therefore be paired with a sufficiently large outbox claim lease and
 termination grace. These are lifecycle controls only; successful dispatch, message contracts, and
 retry semantics are unchanged. A consumer drain budget above the dispatcher fence remains
-authoritative and receives its existing one-second completion grace.
+authoritative and receives its existing one-second completion grace, but startup rejects it unless
+the configured termination grace also preserves the ten-second process margin. With 150 seconds of
+termination grace, 139 seconds is therefore the maximum valid consumer drain override.
 
 Mixed dispatcher versions are unsafe because an old process does not honor the stream-head
 barrier. Deployments must quiesce all dispatcher-owning workers, apply migration

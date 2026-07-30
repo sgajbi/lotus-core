@@ -22,6 +22,7 @@ async def test_run_kafka_worker_runtime_composes_consumers_dispatcher_and_health
     dispatcher.run = AsyncMock()
     dispatcher.stop = MagicMock()
     dispatcher.shutdown_timeout_seconds = 126
+    dispatcher.termination_grace_seconds = 150
     server = MagicMock()
     server.serve = AsyncMock()
     server_config_factory = MagicMock(return_value="server-config")

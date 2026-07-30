@@ -21,6 +21,7 @@ from portfolio_common.outbox_dispatcher import OutboxDispatcher
 from portfolio_common.runtime_providers import UuidIdGenerator
 from portfolio_common.runtime_supervision import (
     shutdown_runtime_components,
+    validate_runtime_shutdown_budget,
     wait_for_shutdown_or_task_failure,
 )
 
@@ -100,6 +101,11 @@ class PortfolioDerivedStateRuntime:
     async def run(self) -> None:
         """Run all critical components until shutdown or one component fails."""
 
+        validate_runtime_shutdown_budget(
+            consumers=self.consumers,
+            shutdown_timeout_seconds=self.dispatcher.shutdown_timeout_seconds,
+            termination_grace_seconds=self.dispatcher.termination_grace_seconds,
+        )
         ensure_topics_exist(
             [
                 KAFKA_VALUATION_SNAPSHOT_PERSISTED_TOPIC,

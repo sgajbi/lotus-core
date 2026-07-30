@@ -73,9 +73,10 @@ an old head after a reclaimed stream has advanced. If `flush(...)` raises with a
 records, the dispatcher purges queued
 and in-flight messages and replaces the underlying producer before releasing rows for retry. If
 purge confirmation fails, result persistence aborts so the claims are retained rather than
-advancing the stream on uncertain delivery. Each production dispatcher owns a fresh, non-cached
-producer; replay, direct publication, and consumer DLQ records use a separate shared producer, so
-outbox recovery cannot purge an unrelated publication.
+advancing the stream on uncertain delivery. The same purge-and-replace fence applies when
+`flush(...)` returns a nonzero queued-record count rather than raising. Each production dispatcher
+owns a fresh, non-cached producer; replay, direct publication, and consumer DLQ records use a
+separate shared producer, so outbox recovery cannot purge an unrelated publication.
 
 Graceful shutdown uses the same delivery boundary. Each dispatcher exposes a producer-specific
 supervision budget that exceeds its flush fence, and every dispatcher-owning runtime passes that
@@ -84,11 +85,13 @@ supervision budget by the governed process-termination margin or startup fails. 
 derived-state and transaction-processing deployments set both the pod grace and runtime setting to
 150 seconds; with the default 120-second Kafka delivery timeout, supervision allows 126 seconds and
 the minimum accepted termination grace is 136 seconds. Shared supervision preserves the larger of
-that dispatcher fence and each configured consumer drain budget plus its completion grace. When
-changing delivery timeout, change the claim lease and termination grace together and keep the
-manifest value aligned with the runtime setting. App-local Compose binds every dispatcher-owning
-service's `stop_grace_period` to that same override, with a 150-second default; do not rely on
-Compose's shorter default stop window. Fresh dispatcher producers retain the established
+that dispatcher fence and each configured consumer drain budget plus its completion grace, and
+worker startup rejects the combined budget unless the termination grace retains the ten-second
+process margin. With the 150-second default, the largest safe consumer drain override is 139
+seconds. When changing delivery timeout, change the claim lease and termination grace together and
+keep the manifest value aligned with the runtime setting. App-local Compose binds every
+dispatcher-owning service's `stop_grace_period` to that same override, with a 150-second default; do
+not rely on Compose's shorter default stop window. Fresh dispatcher producers retain the established
 `portfolio_common` producer-policy override key: exclusivity is an object-ownership boundary, not a
 new configuration identity.
 

@@ -12,6 +12,7 @@ from portfolio_common.http_app_bootstrap import (
 )
 from portfolio_common.runtime_supervision import (
     shutdown_runtime_components,
+    validate_runtime_shutdown_budget,
     wait_for_shutdown_or_task_failure,
 )
 
@@ -90,6 +91,11 @@ async def run_kafka_worker_runtime(
     server_factory: Callable[[Any], Any],
 ) -> None:
     """Run Kafka consumers, one outbox dispatcher, and the worker health server."""
+    validate_runtime_shutdown_budget(
+        consumers=consumers,
+        shutdown_timeout_seconds=dispatcher.shutdown_timeout_seconds,
+        termination_grace_seconds=dispatcher.termination_grace_seconds,
+    )
     consumer_topics = [str(getattr(consumer, "topic")) for consumer in consumers]
     consumer_dlq_topics: list[str] = []
     for consumer in consumers:

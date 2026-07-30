@@ -2,6 +2,7 @@ import asyncio
 import contextlib
 from collections.abc import Callable, Sequence
 
+from .runtime_settings import RuntimeConfigurationError
 from .worker_readiness import (
     mark_worker_runtime_failed,
     mark_worker_runtime_stopping,
@@ -10,6 +11,7 @@ from .worker_readiness import (
 
 DEFAULT_RUNTIME_SHUTDOWN_TIMEOUT_SECONDS = 10.0
 CONSUMER_DRAIN_GRACE_SECONDS = 1.0
+RUNTIME_TERMINATION_GRACE_SAFETY_SECONDS = 10
 
 
 async def wait_for_shutdown_or_task_failure(
@@ -142,6 +144,30 @@ def _resolve_shutdown_timeout_seconds(
         DEFAULT_RUNTIME_SHUTDOWN_TIMEOUT_SECONDS,
         consumer_shutdown_budget,
     )
+
+
+def validate_runtime_shutdown_budget(
+    *,
+    consumers: Sequence[object],
+    shutdown_timeout_seconds: float,
+    termination_grace_seconds: float,
+) -> float:
+    """Validate and return the final consumer/dispatcher supervision budget."""
+    resolved_timeout_seconds = _resolve_shutdown_timeout_seconds(
+        consumers,
+        shutdown_timeout_seconds,
+    )
+    minimum_termination_grace_seconds = (
+        resolved_timeout_seconds + RUNTIME_TERMINATION_GRACE_SAFETY_SECONDS
+    )
+    if termination_grace_seconds < minimum_termination_grace_seconds:
+        raise RuntimeConfigurationError(
+            "Invalid runtime shutdown configuration for "
+            "OUTBOX_DISPATCHER_TERMINATION_GRACE_SECONDS: expected at least "
+            f"{minimum_termination_grace_seconds:g} seconds for the combined "
+            "consumer and dispatcher supervision budget"
+        )
+    return resolved_timeout_seconds
 
 
 def _consumer_drain_timeout_seconds(consumer: object) -> float:
