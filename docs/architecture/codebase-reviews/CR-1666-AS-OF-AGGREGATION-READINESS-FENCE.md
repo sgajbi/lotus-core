@@ -39,6 +39,8 @@ job listings, load-run progress, and the canonical seed verifier.
 - Aggregation job listings retain exact-date and identity filters for drill-through.
 - Load-run progress already owns an explicit target business date.
 - Both normal polling and failure diagnostics in the canonical seed now use the same bound.
+- RFC-0082's historical downstream audit now distinguishes the newly supported bounded overview
+  from the default unbounded operator view.
 - No database row, scheduler, claim, retry, or aggregation calculation behavior changes.
 
 ## Compatibility
