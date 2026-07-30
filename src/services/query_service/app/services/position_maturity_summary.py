@@ -209,7 +209,6 @@ def portfolio_maturity_summary_response(
                 )
                 == FRESHNESS_CURRENT
             ),
-            use_content_hash_as_source_batch_fingerprint=True,
         ),
     )
 

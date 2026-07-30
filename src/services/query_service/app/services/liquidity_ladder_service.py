@@ -123,10 +123,6 @@ class PortfolioLiquidityLadderService:
                     ),
                     default=None,
                 ),
-                source_batch_fingerprint=(
-                    f"liquidity_ladder:{portfolio.portfolio_id}:{resolved_as_of_date}:"
-                    f"{range_end_date}:include_projected={str(include_projected).lower()}"
-                ),
             ),
         )
 
