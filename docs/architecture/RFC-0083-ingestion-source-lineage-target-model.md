@@ -3,8 +3,8 @@
 This document is the RFC-0083 Slice 4 target model for ingestion evidence, source lineage, partial
 rejection, replay, DLQ, and repair supportability in `lotus-core`.
 
-It does not change runtime behavior, persistence, DTOs, OpenAPI output, or downstream contracts. It
-defines the target evidence model that later ingestion and replay runtime slices must use.
+It defines the evidence model used by the additive runtime
+`GET /ingestion/jobs/{job_id}/evidence` contract.
 
 ## Target Principle
 
@@ -36,15 +36,15 @@ Current useful building blocks:
    `source_batch`, and record-level failure evidence in several places.
 6. replay fingerprints already prevent duplicate successful replay for equivalent payloads.
 
-Current gaps:
+Current runtime posture:
 
-1. there is no named `IngestionEvidenceBundle` product,
-2. accepted/rejected/quarantined/partially accepted states are not one governed vocabulary across all
-   ingress surfaces,
-3. validation report identity is not consistently tied to source batch identity,
-4. replay and DLQ evidence is operationally rich but not yet packaged as a reusable evidence contract,
-5. retention and archival posture is not yet explicit for raw source records, validation reports, or
-   repair evidence.
+1. `IngestionEvidenceBundle:v1` is served by `event_replay_service` for one durable ingestion job,
+2. the bundle composes canonical job, failure, replay-audit, and correlated consumer-DLQ evidence,
+3. source-batch identity is emitted only when retained payload evidence proves one unambiguous source
+   system and batch,
+4. completeness is explicit and downstream gating fails closed when the evidence limit is exceeded,
+5. retention class and archival posture are explicit, while retention duration stays null until an
+   authoritative records-management policy exists.
 
 ## Source Batch Identity
 
@@ -208,11 +208,11 @@ Retention rules must be explicit before production migration:
 
 | Gap | Owner slice |
 | --- | --- |
-| Runtime `IngestionEvidenceBundle` DTO | Slice 6 or ingestion runtime hardening |
+| Durable bookkeeping-repair completion audit | Future governed repair-audit slice |
 | Validation report persistence/retention fields | Future migration slice |
 | Uniform validation profile/version on all ingestion routes | Future ingestion contract slice |
 | Record-key scoped replay across every payload family | Future replay hardening |
-| Source batch fingerprint in replay and DLQ responses | Future replay contract slice |
+| Source batch fingerprint on standalone replay and DLQ responses | Future replay contract slice; the aggregate exposes it only when proven |
 | Platform retention policy alignment | Slice 9 |
 
 ## Validation

@@ -3,8 +3,9 @@
 This document is the RFC-0083 Slice 3 target model for deterministic portfolio state reconstruction in
 `lotus-core`.
 
-It does not change runtime behavior, persistence, DTOs, OpenAPI output, or downstream contracts. It
-defines the target reconstruction contract that later source-data product and runtime slices must use.
+It defines the reconstruction contract now used by runtime source-data products. The July 31, 2026
+hardening slice added an additive reconstruction-scope lineage envelope while preserving established
+product snapshot identifiers.
 
 ## Target Principle
 
@@ -35,13 +36,14 @@ Current useful building blocks:
    fingerprint metadata.
 8. Analytics time-series routes already use `snapshot_epoch` to stabilize paged reads.
 
-Current gaps:
+Current runtime posture:
 
-1. there is no named reconstruction scope model shared across portfolio state products,
-2. snapshot identity is not yet standardized across holdings, cash, transaction windows, and source
-   data products,
-3. `restatement_version` is reserved by the temporal vocabulary but not persisted or exposed
-   consistently,
+1. `ProductReconstructionScope` provides one typed, collision-safe identity model for product scopes,
+2. `TransactionLedgerWindow` exposes a non-null, pagination-invariant scope id; existing stronger
+   `PortfolioStateSnapshot` and `HoldingsAsOf` snapshot-id formats remain contract-compatible and
+   carry the common reconstruction lineage alongside them,
+3. runtime products bind `restatement_version = "current"`; persisted restatement selection remains
+   future work,
 4. `transaction_date` remains the current transaction API term; Slice 3 keeps it as current-state
    trade/event date and does not introduce a migration,
 5. booking and correction semantics need a later command-model slice before runtime behavior changes.
@@ -83,9 +85,10 @@ Rules:
 6. invalid scopes must fail before an id is produced,
 7. generated ids must not encode PII or customer-sensitive data directly.
 
-`portfolio_common.reconstruction_identity.build_portfolio_snapshot_id` implements this rule using a
-canonical JSON payload and SHA-256 digest. The helper is not yet wired into runtime DTOs; that wiring
-belongs to later source-data product implementation slices.
+`portfolio_common.reconstruction_identity.build_portfolio_snapshot_id` and
+`build_reconstruction_scope_evidence` implement these rules using canonical typed JSON payloads and
+SHA-256. Equivalent aware timestamps normalize to UTC; naive timestamps and duplicate scope keys fail
+closed.
 
 ## Output Products
 
@@ -172,7 +175,7 @@ Current Slice 3 decision:
 
 1. use `restatement_version = "current"` as the current-state identity value,
 2. do not add persisted `restatement_version` columns in this slice,
-3. do not expose `restatement_version` in runtime DTOs in this slice,
+3. expose the current-only version in runtime metadata and reconstruction lineage,
 4. require any later correction/restatement slice to make the version explicit before downstream
    consumers migrate to restatable products,
 5. never let consumers infer restatement by comparing timestamps, row counts, or payload hashes.
@@ -203,9 +206,8 @@ Current Slice 3 decision:
 | --- | --- |
 | Persisted or contract-level `restatement_version` | Slice 4 or Slice 6 |
 | `booking_date` command/read model | Future transaction booking hardening slice |
-| Runtime use of `snapshot_id` in core snapshot DTOs | Slice 6 |
-| Holdings and cash source-data product DTOs | Slice 6 |
-| Transaction ledger window source-data product | Slice 6 |
+| Persisted runtime restatement-version selection | Future correction/restatement slice |
+| Full-ledger material version beyond count and latest durable evidence timestamp | Only with measured, volume-safe evidence |
 | Reconciliation/data-quality status embedded in source products | Slice 5 and Slice 6 |
 | Endpoint consolidation from route-specific shapes to named products | Slice 8 |
 
