@@ -238,11 +238,17 @@ class ReprocessingWorker:
             security_id,
             earliest_date,
         )
-        if affected_portfolios:
-            return affected_portfolios
-        return await valuation_repo.find_portfolios_first_holding_security_after_date(
-            security_id,
-            earliest_date,
+        later_holding_portfolios = (
+            await valuation_repo.find_portfolios_first_holding_security_after_date(
+                security_id,
+                earliest_date,
+            )
+        )
+        return sorted(
+            {
+                *affected_portfolios,
+                *later_holding_portfolios,
+            }
         )
 
     @staticmethod
