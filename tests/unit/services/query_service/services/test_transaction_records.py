@@ -6,6 +6,7 @@ import pytest
 from portfolio_common.database_models import Cashflow, Transaction, TransactionCost
 from portfolio_common.reconciliation_quality import COMPLETE, PARTIAL, UNKNOWN
 
+from src.services.query_service.app.application.transaction_query import TransactionLedgerFilters
 from src.services.query_service.app.dtos.transaction_dto import TransactionRecord
 from src.services.query_service.app.services.transaction_records import (
     paginated_transaction_ledger_response,
@@ -14,6 +15,15 @@ from src.services.query_service.app.services.transaction_records import (
 )
 
 pytestmark = pytest.mark.asyncio
+
+
+def _ledger_filters(**overrides) -> TransactionLedgerFilters:
+    values = {
+        "portfolio_id": "P1",
+        "as_of_date": date(2025, 1, 15),
+    }
+    values.update(overrides)
+    return TransactionLedgerFilters(**values)
 
 
 async def test_transaction_record_from_row_preserves_costs_and_cashflow() -> None:
@@ -171,6 +181,7 @@ async def test_paginated_transaction_ledger_response_marks_complete_window() -> 
         effective_as_of_date=date(2025, 1, 15),
         end_date=date(2025, 1, 31),
         latest_evidence_timestamp=latest_evidence_timestamp,
+        ledger_filters=_ledger_filters(end_date=date(2025, 1, 31)),
     )
 
     assert response.product_name == "TransactionLedgerWindow"
@@ -184,6 +195,12 @@ async def test_paginated_transaction_ledger_response_marks_complete_window() -> 
     assert response.as_of_date == date(2025, 1, 15)
     assert response.data_quality_status == COMPLETE
     assert response.latest_evidence_timestamp == latest_evidence_timestamp
+    assert response.snapshot_id is not None
+    assert response.snapshot_id.startswith("rs_")
+    assert response.policy_version == "transaction-ledger-window-v1"
+    assert response.source_batch_fingerprint is None
+    assert response.source_lineage["reconstruction_scope_id"] == response.snapshot_id
+    assert response.source_lineage["reconstruction_restatement_version"] == "current"
     assert response.reason_codes == ["TRANSACTION_LEDGER_READY"]
     assert response.missing_instrument_reference_count == 0
     assert response.missing_instrument_security_ids == []
@@ -200,6 +217,7 @@ async def test_paginated_transaction_ledger_response_marks_partial_window() -> N
         effective_as_of_date=date(2025, 1, 15),
         end_date=None,
         latest_evidence_timestamp=None,
+        ledger_filters=_ledger_filters(),
     )
 
     assert response.data_quality_status == PARTIAL
@@ -218,6 +236,7 @@ async def test_transaction_ledger_response_marks_missing_instrument_reference_pa
         effective_as_of_date=date(2025, 1, 15),
         end_date=None,
         latest_evidence_timestamp=None,
+        ledger_filters=_ledger_filters(),
         missing_instrument_security_ids=["S2"],
     )
 
@@ -238,6 +257,7 @@ async def test_paginated_transaction_ledger_response_uses_end_date_then_today_fa
         effective_as_of_date=None,
         end_date=date(2025, 1, 31),
         latest_evidence_timestamp=None,
+        ledger_filters=_ledger_filters(as_of_date=None, end_date=date(2025, 1, 31)),
         today=lambda: date(2025, 2, 1),
     )
     today_response = paginated_transaction_ledger_response(
@@ -250,6 +270,7 @@ async def test_paginated_transaction_ledger_response_uses_end_date_then_today_fa
         effective_as_of_date=None,
         end_date=None,
         latest_evidence_timestamp=None,
+        ledger_filters=_ledger_filters(as_of_date=None),
         today=lambda: date(2025, 2, 1),
     )
 
@@ -259,3 +280,79 @@ async def test_paginated_transaction_ledger_response_uses_end_date_then_today_fa
     assert today_response.data_quality_status == UNKNOWN
     assert end_date_response.reason_codes == ["TRANSACTION_LEDGER_EMPTY"]
     assert today_response.reason_codes == ["TRANSACTION_LEDGER_EMPTY"]
+
+
+async def test_transaction_ledger_snapshot_identity_is_pagination_invariant() -> None:
+    common = {
+        "portfolio_id": "P1",
+        "reporting_currency": "SGD",
+        "total_count": 25,
+        "effective_as_of_date": date(2025, 1, 15),
+        "end_date": date(2025, 1, 31),
+        "latest_evidence_timestamp": datetime(2025, 1, 16, 9, 30, tzinfo=UTC),
+        "ledger_filters": _ledger_filters(
+            security_id="S1",
+            start_date=date(2025, 1, 1),
+            end_date=date(2025, 1, 31),
+        ),
+    }
+
+    first_page = paginated_transaction_ledger_response(
+        **common,
+        skip=0,
+        limit=10,
+        transactions=[_transaction_record("T1")],
+    )
+    later_page = paginated_transaction_ledger_response(
+        **common,
+        skip=10,
+        limit=5,
+        transactions=[_transaction_record("T11")],
+        missing_instrument_security_ids=["S1"],
+    )
+
+    assert first_page.snapshot_id == later_page.snapshot_id
+    assert first_page.source_lineage == later_page.source_lineage
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"reporting_currency": "EUR"},
+        {"ledger_filters": _ledger_filters(instrument_id="I2")},
+        {"ledger_filters": _ledger_filters(security_id="S2")},
+        {"ledger_filters": _ledger_filters(transaction_type="SELL")},
+        {"ledger_filters": _ledger_filters(component_type="FX_CONTRACT_OPEN")},
+        {"ledger_filters": _ledger_filters(linked_transaction_group_id="LTG-FX-001")},
+        {"ledger_filters": _ledger_filters(fx_contract_id="FXC-001")},
+        {"ledger_filters": _ledger_filters(swap_event_id="FXSWAP-001")},
+        {"ledger_filters": _ledger_filters(near_leg_group_id="FXSWAP-001-NEAR")},
+        {"ledger_filters": _ledger_filters(far_leg_group_id="FXSWAP-001-FAR")},
+        {"ledger_filters": _ledger_filters(start_date=date(2025, 1, 1))},
+        {"ledger_filters": _ledger_filters(end_date=date(2025, 1, 31))},
+        {"ledger_filters": _ledger_filters(as_of_date=date(2025, 1, 14))},
+        {"total_count": 26},
+        {"latest_evidence_timestamp": datetime(2025, 1, 16, 9, 31, tzinfo=UTC)},
+    ],
+)
+async def test_transaction_ledger_snapshot_identity_changes_with_scope_or_evidence(
+    overrides,
+) -> None:
+    common = {
+        "portfolio_id": "P1",
+        "reporting_currency": "SGD",
+        "total_count": 25,
+        "skip": 0,
+        "limit": 10,
+        "transactions": [_transaction_record("T1")],
+        "effective_as_of_date": date(2025, 1, 15),
+        "end_date": None,
+        "latest_evidence_timestamp": datetime(2025, 1, 16, 9, 30, tzinfo=UTC),
+        "ledger_filters": _ledger_filters(security_id="S1"),
+    }
+    changed = {**common, **overrides}
+
+    baseline = paginated_transaction_ledger_response(**common)
+    revised = paginated_transaction_ledger_response(**changed)
+
+    assert baseline.snapshot_id != revised.snapshot_id
