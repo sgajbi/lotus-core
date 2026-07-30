@@ -3468,9 +3468,57 @@ class FinancialReconciliationFinding(Base):
     expected_value = Column(JSON, nullable=True)
     observed_value = Column(JSON, nullable=True)
     detail = Column(JSON, nullable=True)
+    owner = Column(String(100), nullable=False)
+    resolution_state = Column(
+        String(20),
+        nullable=False,
+        default="OPEN",
+        server_default="OPEN",
+        index=True,
+    )
+    resolution_actor = Column(String(200), nullable=True)
+    resolved_at = Column(DateTime(timezone=True), nullable=True)
+    tolerance = Column(ExactNumeric(18, 10), nullable=True)
+    observed_delta = Column(ExactNumeric(18, 10), nullable=True)
+    repair_recommendation = Column(String(100), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     __table_args__ = (
+        CheckConstraint(
+            "btrim(owner) <> ''",
+            name="ck_fin_recon_finding_owner_nonempty",
+        ),
+        CheckConstraint(
+            "resolution_state IN ('OPEN', 'IN_PROGRESS', 'RESOLVED', 'WAIVED', 'SUPPRESSED')",
+            name="ck_fin_recon_finding_resolution_state",
+        ),
+        CheckConstraint(
+            "("
+            "resolution_state IN ('OPEN', 'IN_PROGRESS') "
+            "AND resolution_actor IS NULL AND resolved_at IS NULL"
+            ") OR ("
+            "resolution_state IN ('RESOLVED', 'WAIVED', 'SUPPRESSED') "
+            "AND resolution_actor IS NOT NULL AND btrim(resolution_actor) <> '' "
+            "AND resolved_at IS NOT NULL AND resolved_at >= created_at"
+            ")",
+            name="ck_fin_recon_finding_resolution_evidence",
+        ),
+        _finite_numeric_check_constraint(
+            "ck_fin_recon_finding_tolerance_finite",
+            "tolerance",
+        ),
+        CheckConstraint(
+            "tolerance >= 0",
+            name="ck_fin_recon_finding_tolerance_nonnegative",
+        ),
+        _finite_numeric_check_constraint(
+            "ck_fin_recon_finding_observed_delta_finite",
+            "observed_delta",
+        ),
+        CheckConstraint(
+            "btrim(repair_recommendation) <> ''",
+            name="ck_fin_recon_finding_repair_nonempty",
+        ),
         Index(
             "ix_financial_reconciliation_findings_run_severity_type_id",
             "run_id",
@@ -3484,6 +3532,14 @@ class FinancialReconciliationFinding(Base):
             "severity",
             created_at.desc(),
             id.desc(),
+        ),
+        Index(
+            "ix_fin_recon_findings_run_resolution_severity_created_id",
+            "run_id",
+            "resolution_state",
+            "severity",
+            created_at.asc(),
+            id.asc(),
         ),
     )
 

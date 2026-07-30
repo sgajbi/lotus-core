@@ -2,8 +2,8 @@
   "schema_version": "2.0.0",
   "model_path": "src/libs/portfolio-common/portfolio_common/database_models.py",
   "expected_inventory": {
-    "numeric_columns": 96,
-    "tables": 30
+    "numeric_columns": 98,
+    "tables": 31
   },
   "profiles": {
     "finite": {
@@ -133,7 +133,8 @@
     "accrued_income_offset_state": "cost-basis-state",
     "position_timeseries": "derived-timeseries",
     "portfolio_timeseries": "derived-timeseries",
-    "financial_reconciliation_runs": "reconciliation-controls"
+    "financial_reconciliation_runs": "reconciliation-controls",
+    "financial_reconciliation_findings": "reconciliation-controls"
   },
   "tables": {
     "simulation_changes": {
@@ -291,6 +292,10 @@
     },
     "financial_reconciliation_runs": {
       "tolerance": {"profile": "nullable-nonnegative-finite", "rollout_status": "orm-enforced"}
+    },
+    "financial_reconciliation_findings": {
+      "tolerance": {"profile": "nullable-nonnegative-finite", "rollout_status": "orm-enforced"},
+      "observed_delta": {"profile": "nullable-finite", "rollout_status": "orm-enforced"}
     }
   }
 }
