@@ -13,7 +13,7 @@
       "openApiVersion": "3.1.0"
     }
   ],
-  "generatedAt": "2026-07-29T05:08:51.821330+00:00",
+  "generatedAt": "2026-07-30T20:07:40.985375+00:00",
   "attributeCatalog": [
     {
       "semanticId": "lotus.accepted_count",
@@ -7442,8 +7442,8 @@
       "semanticId": "lotus.source_batch_fingerprint",
       "canonicalTerm": "source_batch_fingerprint",
       "preferredName": "source_batch_fingerprint",
-      "description": "Source-owned deterministic SHA-256 fingerprint for this response evidence. When a caller supplies a legacy source-batch label, Core still emits the canonical content hash here so downstream proof tooling can validate the response without deriving source authority itself.",
-      "example": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      "description": "Source-owned batch identity copied from authoritative ingestion evidence. This field remains null when the serving product cannot prove the upstream batch; a response content hash is not a source-batch identity.",
+      "example": "batch_20260415_0001",
       "type": "object",
       "locations": [
         "body"
