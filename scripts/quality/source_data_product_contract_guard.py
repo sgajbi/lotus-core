@@ -21,6 +21,12 @@ from portfolio_common.source_data_security import (
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 ROUTER_ROOTS = {
+    "event_replay_service": REPO_ROOT
+    / "src"
+    / "services"
+    / "event_replay_service"
+    / "app"
+    / "routers",
     "query_control_plane_service": REPO_ROOT
     / "src"
     / "services"
@@ -31,10 +37,12 @@ ROUTER_ROOTS = {
 }
 
 DTO_ROOTS = (
+    REPO_ROOT / "src" / "services" / "ingestion_service" / "app" / "DTOs",
     REPO_ROOT / "src" / "services" / "query_service" / "app" / "dtos",
     REPO_ROOT / "src" / "services" / "query_control_plane_service" / "app" / "contracts",
 )
 SOURCE_DATA_PRODUCT_SERVICE_ROOTS = (
+    REPO_ROOT / "src" / "services" / "event_replay_service" / "app" / "application",
     REPO_ROOT / "src" / "services" / "query_service" / "app" / "services",
     REPO_ROOT / "src" / "services" / "query_control_plane_service" / "app" / "application",
 )

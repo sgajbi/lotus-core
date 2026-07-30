@@ -26,6 +26,7 @@
         "GET /ingestion/idempotency/diagnostics",
         "GET /ingestion/jobs",
         "GET /ingestion/jobs/{job_id}",
+        "GET /ingestion/jobs/{job_id}/evidence",
         "GET /ingestion/jobs/{job_id}/failures",
         "GET /ingestion/jobs/{job_id}/records",
         "GET /ingestion/ops/control",

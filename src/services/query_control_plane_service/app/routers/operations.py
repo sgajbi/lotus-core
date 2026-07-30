@@ -520,7 +520,6 @@ async def get_portfolio_control_stages(
         "work. These rows are operational evidence and not direct business-calculation inputs or "
         "front-office readiness indicators."
     ),
-    openapi_extra=source_data_product_openapi_extra("IngestionEvidenceBundle"),
 )
 async def get_reprocessing_keys(
     portfolio_id: str = Path(..., description="Portfolio identifier.", examples=["PORT-OPS-001"]),
@@ -581,7 +580,6 @@ async def get_reprocessing_keys(
         "pressure. These jobs are operational evidence and not direct business-calculation inputs "
         "or front-office readiness indicators."
     ),
-    openapi_extra=source_data_product_openapi_extra("IngestionEvidenceBundle"),
 )
 async def get_reprocessing_jobs(
     portfolio_id: str = Path(..., description="Portfolio identifier.", examples=["PORT-OPS-001"]),
@@ -1185,7 +1183,6 @@ async def get_lineage(
         "When: Use to scope impacted keys before running replay, backfill, or targeted recovery. "
         "These records are operational lineage evidence and not business-calculation inputs."
     ),
-    openapi_extra=source_data_product_openapi_extra("IngestionEvidenceBundle"),
 )
 async def get_lineage_keys(
     portfolio_id: str = Path(..., description="Portfolio identifier.", examples=["PORT-OPS-001"]),

@@ -419,6 +419,7 @@
       ],
       "routes": [
         "/ingest/*",
+        "/ingestion/jobs/{job_id}/evidence",
         "/operations/ingestion/*",
         "/operations/replay/*"
       ],
