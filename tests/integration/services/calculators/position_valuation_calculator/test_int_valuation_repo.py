@@ -593,8 +593,11 @@ async def test_find_portfolios_holding_security_on_date(
     assert portfolio_ids[0] == "P1"
 
 
-async def test_price_revaluation_selects_current_epoch_until_snapshot_is_source_fresh(
-    clean_db, async_db_session: AsyncSession
+@pytest.mark.parametrize("position_quantity", [Decimal("12"), Decimal("-1000")])
+async def test_price_revaluation_selects_nonzero_current_epoch_until_snapshot_is_source_fresh(
+    clean_db,
+    async_db_session: AsyncSession,
+    position_quantity: Decimal,
 ):
     source_updated_at = datetime(2025, 8, 2, 8, 0, tzinfo=timezone.utc)
     async_db_session.add(
@@ -673,7 +676,7 @@ async def test_price_revaluation_selects_current_epoch_until_snapshot_is_source_
                 security_id="S-CURRENT-1",
                 position_date=date(2025, 8, 2),
                 epoch=1,
-                quantity=Decimal("12"),
+                quantity=position_quantity,
                 cost_basis=Decimal("12"),
             ),
         ]
@@ -694,7 +697,7 @@ async def test_price_revaluation_selects_current_epoch_until_snapshot_is_source_
             security_id="S-CURRENT-1",
             date=date(2025, 8, 2),
             epoch=1,
-            quantity=Decimal("12"),
+            quantity=position_quantity,
             cost_basis=Decimal("12"),
             updated_at=source_updated_at + timedelta(seconds=1),
         )

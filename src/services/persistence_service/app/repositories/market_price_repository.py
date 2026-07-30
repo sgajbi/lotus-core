@@ -45,7 +45,7 @@ class MarketPriceRepository:
         )
 
         stmt = select(latest_snapshot_subquery.c.portfolio_id).where(
-            latest_snapshot_subquery.c.rn == 1, latest_snapshot_subquery.c.quantity > 0
+            latest_snapshot_subquery.c.rn == 1, latest_snapshot_subquery.c.quantity != 0
         )
 
         result = await self.db.execute(stmt)
