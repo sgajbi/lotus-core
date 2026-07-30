@@ -383,7 +383,7 @@ class DailyPositionValuationReceiptRecord(Base):
             "AND assignment_version IS NULL AND assignment_content_hash IS NULL "
             "AND policy_assignment_source IS NULL AND quote_basis IS NULL "
             "AND price_fact_version IS NULL AND price_fact_content_hash IS NULL "
-            "AND market_price_source IS NULL AND calculation_lineage IS NULL"
+            "AND market_price_source IS NULL"
             ")",
             name="ck_daily_position_valuation_receipt_evidence_complete",
         ),
