@@ -313,18 +313,18 @@ async def test_portfolio_positions_response_data_adds_runtime_metadata() -> None
     assert response.as_of_date == date(2025, 1, 1)
     assert response.data_quality_status == "COMPLETE"
     assert response.latest_evidence_timestamp == evidence_timestamp
-    assert response.source_batch_fingerprint == response.content_hash
+    assert response.source_batch_fingerprint is None
     assert response.content_hash.startswith("sha256:")
     assert response.content_hash != SOURCE_METADATA_UNAVAILABLE_HASH
     assert response.source_digest == response.content_hash
     assert response.source_refs == ["lotus-core://source/HoldingsAsOf/P1/2025-01-01"]
-    assert response.source_lineage == {
-        "source_owner": "lotus-core",
-        "source_product": "HoldingsAsOf",
-        "source_product_version": "v1",
-        "degradation_status": "NONE",
-        "reconciliation_scope_hash": "sha256:" + "a" * 64,
-    }
+    assert response.source_lineage["source_owner"] == "lotus-core"
+    assert response.source_lineage["source_product"] == "HoldingsAsOf"
+    assert response.source_lineage["source_product_version"] == "v1"
+    assert response.source_lineage["degradation_status"] == "NONE"
+    assert response.source_lineage["reconciliation_scope_hash"] == "sha256:" + "a" * 64
+    assert response.source_lineage["reconstruction_scope_id"].startswith("rs_")
+    assert response.source_lineage["reconstruction_restatement_version"] == "current"
     assert response.degradation.status == "NONE"
     assert response.degradation.details == []
     assert response.restatement_version == "current"

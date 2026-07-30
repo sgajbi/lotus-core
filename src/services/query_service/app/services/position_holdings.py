@@ -9,6 +9,11 @@ from portfolio_common.reconciliation_quality import (
     UNKNOWN,
     reconciliation_bound_data_quality_status,
 )
+from portfolio_common.reconstruction_identity import (
+    CURRENT_RESTATEMENT_VERSION,
+    ProductReconstructionScope,
+    build_reconstruction_scope_evidence,
+)
 from portfolio_common.source_data_product_metadata import (
     SourceDataDegradationSummary,
     source_data_product_runtime_metadata,
@@ -526,6 +531,26 @@ def portfolio_positions_response_data(
         degradation=resolved_degradation,
     )
     snapshot_id = f"holdings_as_of:{content_hash.removeprefix('sha256:')[:24]}"
+    reconstruction_evidence = build_reconstruction_scope_evidence(
+        ProductReconstructionScope(
+            product="HoldingsAsOf",
+            portfolio_id=portfolio_id,
+            as_of_date=response_as_of_date,
+            source_data_products=(
+                "HoldingsAsOf",
+                "InstrumentReferenceBundle",
+                "MarketDataWindow",
+                "ReconciliationEvidenceBundle",
+            ),
+            restatement_version=CURRENT_RESTATEMENT_VERSION,
+            policy_version="holdings-as-of-v1",
+            qualifiers=(("reconciliation_scope_hash", reconciliation_scope_hash),),
+            material_evidence=(
+                ("content_hash", content_hash),
+                ("latest_evidence_timestamp", latest_evidence_timestamp),
+            ),
+        )
+    )
     return PortfolioPositionsResponse(
         portfolio_id=portfolio_id,
         positions=positions,
@@ -551,6 +576,7 @@ def portfolio_positions_response_data(
                 "source_product_version": "v1",
                 "degradation_status": resolved_degradation.status,
                 "reconciliation_scope_hash": reconciliation_scope_hash,
+                **reconstruction_evidence.lineage(),
             },
             source_evidence_current=(
                 reconciliation_status == COMPLETE
@@ -566,7 +592,6 @@ def portfolio_positions_response_data(
                 and latest_evidence_timestamp is not None
                 else "UNAVAILABLE"
             ),
-            use_content_hash_as_source_batch_fingerprint=True,
         ),
     )
 

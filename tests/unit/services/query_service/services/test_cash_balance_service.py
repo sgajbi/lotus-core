@@ -120,11 +120,15 @@ async def test_get_cash_balances_returns_holdings_as_of_balances_and_metadata() 
     assert response.cash_accounts[0].account_currency == "USD"
     assert response.data_quality_status == "COMPLETE"
     assert response.latest_evidence_timestamp == datetime(2026, 3, 27, 11, 30, tzinfo=UTC)
-    assert response.source_batch_fingerprint is not None
-    assert len(response.source_batch_fingerprint) == 64
+    assert response.source_batch_fingerprint is None
+    assert response.content_hash.startswith("sha256:")
     assert (
-        response.snapshot_id == f"holdings_as_of_cash_balances:{response.source_batch_fingerprint}"
+        response.snapshot_id == "holdings_as_of_cash_balances:"
+        f"{response.content_hash.removeprefix('sha256:')}"
     )
+    assert response.policy_version == "holdings-as-of-cash-balances-v1"
+    assert response.source_lineage["reconstruction_scope_id"].startswith("rs_")
+    assert response.source_lineage["reconstruction_restatement_version"] == "current"
     repo.list_latest_snapshot_rows.assert_awaited_once_with(
         portfolio_ids=["P1"],
         as_of_date=date(2026, 3, 27),
@@ -705,11 +709,13 @@ async def test_cash_balance_source_fingerprint_changes_with_source_evidence() ->
         expected_open_position_count=1,
     )
 
-    assert first_response.source_batch_fingerprint
-    assert second_response.source_batch_fingerprint
-    assert descriptor_response.source_batch_fingerprint
-    assert first_response.source_batch_fingerprint != second_response.source_batch_fingerprint
-    assert first_response.source_batch_fingerprint != descriptor_response.source_batch_fingerprint
+    assert first_response.source_batch_fingerprint is None
+    assert second_response.source_batch_fingerprint is None
+    assert descriptor_response.source_batch_fingerprint is None
+    assert first_response.content_hash != second_response.content_hash
+    assert first_response.content_hash != descriptor_response.content_hash
+    assert first_response.snapshot_id != second_response.snapshot_id
+    assert first_response.snapshot_id != descriptor_response.snapshot_id
 
 
 async def test_get_cash_balances_raises_when_portfolio_missing() -> None:
