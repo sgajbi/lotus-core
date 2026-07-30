@@ -8,9 +8,15 @@ from portfolio_common.market_reference_quality import (
     BLOCKING_QUALITY_STATUSES,
     PARTIAL_QUALITY_STATUSES,
     STALE_QUALITY_STATUSES,
-    MarketReferenceCoverageSignal,
-    classify_market_reference_coverage,
     quality_status_summary_key,
+)
+from portfolio_common.reconciliation_quality import (
+    BLOCKED,
+    COMPLETE,
+    DataQualityCoverageSignal,
+    classify_data_quality_coverage,
+    evidence_age_minutes,
+    is_evidence_stale,
 )
 from portfolio_common.request_fingerprints import request_fingerprint
 from portfolio_common.source_data_product_metadata import (
@@ -29,6 +35,9 @@ class QualityEvidence(Protocol):
 
     @property
     def quality_status(self) -> str: ...
+
+
+REFERENCE_COVERAGE_FRESHNESS_THRESHOLD_MINUTES = 24 * 60
 
 
 def build_coverage_response(
@@ -63,13 +72,27 @@ def build_coverage_response(
         observed_dates=set(observed_dates),
     )
     quality_distribution = _quality_distribution(quality_rows)
+    required_count = _expected_date_count(
+        start_date=request.window.start_date,
+        end_date=request.window.end_date,
+    )
+    observed_count = len(observed_dates)
+    stale_count, blocking_issue_count, warning_issue_count = _quality_issue_counts(
+        quality_distribution
+    )
+    age_minutes = evidence_age_minutes(
+        generated_at=generated_at,
+        evidence_timestamp=latest_evidence,
+    )
+    evidence_is_stale = is_evidence_stale(
+        evidence_age_minutes=age_minutes,
+        threshold_minutes=REFERENCE_COVERAGE_FRESHNESS_THRESHOLD_MINUTES,
+    )
     quality_status = _coverage_quality_status(
-        required_count=_expected_date_count(
-            start_date=request.window.start_date,
-            end_date=request.window.end_date,
-        ),
+        required_count=required_count,
         observed_count=len(observed_dates),
         quality_distribution=quality_distribution,
+        evidence_is_stale=evidence_is_stale,
     )
     content_hash = cast(
         str,
@@ -89,14 +112,24 @@ def build_coverage_response(
             }
         ),
     )
-    current = quality_status == "COMPLETE" and latest_evidence is not None
+    current = quality_status == COMPLETE and latest_evidence is not None
+    evidence_refs = sorted(set(source_refs))
+    publication_block_reasons = _coverage_publication_block_reasons(
+        quality_status=quality_status,
+        observed_count=observed_count,
+        required_count=required_count,
+        blocking_issue_count=blocking_issue_count,
+        warning_issue_count=warning_issue_count,
+        latest_evidence=latest_evidence,
+        evidence_is_stale=evidence_is_stale,
+    )
     metadata = source_data_product_runtime_metadata(
         generated_at=generated_at,
         as_of_date=request.window.end_date,
         data_quality_status=quality_status,
         latest_evidence_timestamp=latest_evidence,
         content_hash=content_hash,
-        source_refs=source_refs,
+        source_refs=evidence_refs,
         lineage={
             "source_owner": "lotus-core",
             "source_product": "DataQualityCoverageReport",
@@ -107,18 +140,29 @@ def build_coverage_response(
         freshness_status=(
             "CURRENT" if current else "UNAVAILABLE" if not observed_dates else "PARTIAL"
         ),
-        use_content_hash_as_source_batch_fingerprint=True,
     )
+    coverage_report_id = f"dqc_{content_hash.removeprefix('sha256:')[:32]}"
     return CoverageResponse(
         request_fingerprint=fingerprint,
+        coverage_report_id=coverage_report_id,
         observed_start_date=min(observed_dates) if observed_dates else None,
         observed_end_date=max(observed_dates) if observed_dates else None,
         expected_start_date=request.window.start_date,
         expected_end_date=request.window.end_date,
         total_points=total_points,
+        required_count=required_count,
+        observed_count=observed_count,
         missing_dates_count=missing_count,
         missing_dates_sample=missing_sample,
         quality_status_distribution=quality_distribution,
+        stale_count=stale_count,
+        blocking_issue_count=blocking_issue_count,
+        warning_issue_count=warning_issue_count,
+        freshness_threshold_minutes=REFERENCE_COVERAGE_FRESHNESS_THRESHOLD_MINUTES,
+        evidence_age_minutes=age_minutes,
+        contributing_evidence_refs=evidence_refs,
+        publication_gate="ALLOW" if not publication_block_reasons else "BLOCK",
+        publication_block_reasons=publication_block_reasons,
         **metadata,
     )
 
@@ -178,33 +222,64 @@ def _quality_distribution(rows: Sequence[QualityEvidence]) -> dict[str, int]:
 
 
 def _coverage_quality_status(
-    *, required_count: int, observed_count: int, quality_distribution: dict[str, int]
+    *,
+    required_count: int,
+    observed_count: int,
+    quality_distribution: dict[str, int],
+    evidence_is_stale: bool = False,
 ) -> str:
-    normalized = {status.upper(): count for status, count in quality_distribution.items()}
+    stale_count, blocking_count, warning_count = _quality_issue_counts(quality_distribution)
     return cast(
         str,
-        classify_market_reference_coverage(
-            MarketReferenceCoverageSignal(
+        classify_data_quality_coverage(
+            DataQualityCoverageSignal(
                 required_count=required_count,
                 observed_count=observed_count,
-                stale_count=sum(
-                    count
-                    for status, count in normalized.items()
-                    if status in STALE_QUALITY_STATUSES
-                ),
-                estimated_count=sum(
-                    count
-                    for status, count in normalized.items()
-                    if status in PARTIAL_QUALITY_STATUSES
-                ),
-                blocking_count=sum(
-                    count
-                    for status, count in normalized.items()
-                    if status in BLOCKING_QUALITY_STATUSES
-                ),
+                stale_count=stale_count or int(evidence_is_stale and observed_count > 0),
+                blocking_issue_count=blocking_count,
+                warning_issue_count=warning_count,
             )
         ),
     )
+
+
+def _quality_issue_counts(
+    quality_distribution: dict[str, int],
+) -> tuple[int, int, int]:
+    normalized = {status.upper(): count for status, count in quality_distribution.items()}
+    return (
+        sum(count for status, count in normalized.items() if status in STALE_QUALITY_STATUSES),
+        sum(count for status, count in normalized.items() if status in BLOCKING_QUALITY_STATUSES),
+        sum(count for status, count in normalized.items() if status in PARTIAL_QUALITY_STATUSES),
+    )
+
+
+def _coverage_publication_block_reasons(
+    *,
+    quality_status: str,
+    observed_count: int,
+    required_count: int,
+    blocking_issue_count: int,
+    warning_issue_count: int,
+    latest_evidence: datetime | None,
+    evidence_is_stale: bool,
+) -> list[str]:
+    reasons: list[str] = []
+    if blocking_issue_count:
+        reasons.append("BLOCKING_QUALITY_ISSUES")
+    if evidence_is_stale:
+        reasons.append("STALE_EVIDENCE")
+    if observed_count == 0:
+        reasons.append("NO_OBSERVED_COVERAGE")
+    elif observed_count < required_count:
+        reasons.append("INCOMPLETE_COVERAGE")
+    if warning_issue_count:
+        reasons.append("WARNING_QUALITY_ISSUES")
+    if latest_evidence is None:
+        reasons.append("MISSING_EVIDENCE_TIMESTAMP")
+    if quality_status not in {COMPLETE, BLOCKED} and not reasons:
+        reasons.append("NON_COMPLETE_QUALITY_STATUS")
+    return reasons
 
 
 def _missing_dates(
