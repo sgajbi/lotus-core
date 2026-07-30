@@ -3356,6 +3356,14 @@ Most relevant current governance:
      current policy or fabricate a lineage hash. Policy, algorithm, input, or output changes must
      affect identity, while identical inputs and policy remain deterministic. This evidence does
      not alter existing cashflow economics, transaction/topic identity, or public response shapes.
+229. Portfolio support aggregation health has two explicit temporal modes. Omitting
+     `as_of_date` from `/support/portfolios/{portfolio_id}/overview` retains the full durable queue
+     view for operations. Supplying it includes only aggregation jobs whose
+     `aggregation_date <= as_of_date`; portfolio readiness must use its requested date or resolved
+     latest business date, and canonical historical validation must use its governed date. Do not
+     infer a bounded queue from only the oldest open job date: a mixed current/future backlog makes
+     that heuristic unsound. Tenant and portfolio predicates, failed/stale classification, and the
+     unbounded operator view remain unchanged.
 
 ## Context Maintenance Rule
 

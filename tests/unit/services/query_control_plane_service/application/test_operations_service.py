@@ -378,6 +378,7 @@ async def test_get_support_overview(service: OperationsService, mock_ops_repo: A
         failed_window_hours=24,
         reference_now=response.generated_at_utc,
         as_of=response.generated_at_utc,
+        through_business_date=None,
     )
     mock_ops_repo.get_analytics_export_job_health_summary.assert_awaited_once_with(
         "P1",
@@ -2638,7 +2639,10 @@ async def test_get_support_overview_honors_custom_stale_threshold(
     mock_ops_repo.get_latest_reconciliation_run_for_portfolio_day.return_value = None
 
     response = await service.get_support_overview(
-        "P1", stale_threshold_minutes=30, failed_window_hours=48
+        "P1",
+        stale_threshold_minutes=30,
+        failed_window_hours=48,
+        use_latest_business_date_for_aggregation_health=True,
     )
 
     assert response.stale_threshold_minutes == 30
@@ -2663,6 +2667,7 @@ async def test_get_support_overview_honors_custom_stale_threshold(
         failed_window_hours=48,
         reference_now=response.generated_at_utc,
         as_of=response.generated_at_utc,
+        through_business_date=date(2025, 8, 30),
     )
     mock_ops_repo.get_analytics_export_job_health_summary.assert_awaited_once_with(
         "P1",
@@ -3049,6 +3054,9 @@ async def test_get_portfolio_readiness_surfaces_missing_historical_fx_as_blockin
     response = await service.get_portfolio_readiness("P1", as_of_date=date(2026, 3, 28))
 
     assert response.resolved_as_of_date == date(2026, 3, 28)
+    assert mock_ops_repo.get_aggregation_job_health_summary.await_args.kwargs[
+        "through_business_date"
+    ] == date(2026, 3, 28)
     assert response.transactions.status == "BLOCKED"
     assert response.pricing.status == "BLOCKED"
     assert response.reporting.status == "BLOCKED"

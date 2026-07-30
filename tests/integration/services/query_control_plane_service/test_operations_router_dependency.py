@@ -155,7 +155,8 @@ async def test_support_overview_success(async_test_client):
     }
 
     response = await client.get(
-        "/support/portfolios/P1/overview?stale_threshold_minutes=30&failed_window_hours=48"
+        "/support/portfolios/P1/overview"
+        "?as_of_date=2025-08-30&stale_threshold_minutes=30&failed_window_hours=48"
     )
 
     assert response.status_code == 200
@@ -205,6 +206,7 @@ async def test_support_overview_success(async_test_client):
     assert "X-Correlation-ID" in response.headers
     mock_service.get_support_overview.assert_awaited_once_with(
         portfolio_id="P1",
+        as_of_date=date(2025, 8, 30),
         stale_threshold_minutes=30,
         failed_window_hours=48,
     )
@@ -293,9 +295,20 @@ async def test_support_overview_defaults_apply(async_test_client):
     assert body["failed_window_hours"] == 24
     mock_service.get_support_overview.assert_awaited_once_with(
         portfolio_id="P1",
+        as_of_date=None,
         stale_threshold_minutes=15,
         failed_window_hours=24,
     )
+
+
+async def test_support_overview_rejects_invalid_as_of_date(async_test_client):
+    client, mock_service = async_test_client
+
+    response = await client.get("/support/portfolios/P1/overview?as_of_date=2025-02-30")
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Invalid date filter. Expected YYYY-MM-DD format."
+    mock_service.get_support_overview.assert_not_awaited()
 
 
 async def test_portfolio_readiness_success(async_test_client):

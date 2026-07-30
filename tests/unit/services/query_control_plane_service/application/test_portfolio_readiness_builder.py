@@ -171,7 +171,7 @@ def test_build_portfolio_readiness_response_marks_pending_for_backlog_and_snapsh
     }
 
 
-def test_build_portfolio_readiness_response_ignores_future_pending_aggregation_for_as_of_date():
+def test_build_portfolio_readiness_response_trusts_repository_scoped_aggregation_counts():
     response = build_portfolio_readiness_response(
         _snapshot(
             resolved_as_of_date=date(2026, 4, 10),
@@ -192,9 +192,9 @@ def test_build_portfolio_readiness_response_ignores_future_pending_aggregation_f
         )
     )
 
-    assert response.reporting.status == "READY"
-    assert "AGGREGATION_BACKLOG_OPEN" not in {reason.code for reason in response.reporting.reasons}
-    assert response.supportability.state == "ready"
+    assert response.reporting.status == "PENDING"
+    assert "AGGREGATION_BACKLOG_OPEN" in {reason.code for reason in response.reporting.reasons}
+    assert response.supportability.state == "degraded"
 
 
 def test_build_portfolio_readiness_response_marks_blocking_for_fx_and_controls():

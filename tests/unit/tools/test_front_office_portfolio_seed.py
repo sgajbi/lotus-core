@@ -1887,7 +1887,7 @@ def test_collect_front_office_readiness_diagnostics_queries_support_endpoints(mo
                 "missing_historical_fx_dependencies": {"missing_count": 0},
             },
         ),
-        "http://cp.dev/support/portfolios/P1/overview": (
+        "http://cp.dev/support/portfolios/P1/overview?as_of_date=2026-04-10": (
             200,
             {
                 "pending_valuation_jobs": 0,
@@ -2039,7 +2039,7 @@ def test_front_office_seed_verification_counts_projected_transactions(monkeypatc
     gateway_header_calls: list[dict[str, str]] = []
     positions_url = "http://query.dev/portfolios/P1/positions?as_of_date=2026-04-10"
     positions_calls = 0
-    support_overview_url = "http://cp.dev/support/portfolios/P1/overview"
+    support_overview_url = "http://cp.dev/support/portfolios/P1/overview?as_of_date=2026-04-10"
     support_overview_sequence = [
         # Each queue-health regression arrives after two terminal observations. The verifier must
         # reset the three-observation fence for aggregation backlog, stale valuation work, and

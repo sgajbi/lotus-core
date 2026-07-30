@@ -201,6 +201,7 @@ def apply_aggregation_job_scope(
     portfolio_id: str,
     status: str | None = None,
     business_date: date | None = None,
+    through_business_date: date | None = None,
     job_id: int | None = None,
     correlation_id: str | None = None,
     as_of: datetime | None = None,
@@ -208,6 +209,8 @@ def apply_aggregation_job_scope(
     stmt = stmt.where(PortfolioAggregationJob.portfolio_id == portfolio_id)
     if as_of is not None:
         stmt = stmt.where(PortfolioAggregationJob.updated_at <= as_of)
+    if through_business_date is not None:
+        stmt = stmt.where(PortfolioAggregationJob.aggregation_date <= through_business_date)
     if status:
         stmt = stmt.where(support_job_status_filter(PortfolioAggregationJob.status, status))
     stmt = apply_aggregation_attribute_scope(stmt, business_date=business_date)

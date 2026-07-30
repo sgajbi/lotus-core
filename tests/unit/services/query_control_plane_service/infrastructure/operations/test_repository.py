@@ -230,6 +230,7 @@ async def test_get_aggregation_job_health_summary(
         failed_window_hours=24,
         reference_now=reference_now,
         as_of=as_of,
+        through_business_date=date(2025, 8, 20),
     )
 
     assert value.pending_jobs == 5
@@ -247,6 +248,7 @@ async def test_get_aggregation_job_health_summary(
     assert "FILTER (WHERE" in compiled
     assert "status IN ('PENDING', 'PROCESSING')" in compiled
     assert "portfolio_aggregation_jobs.updated_at <= '2025-08-31 12:00:00+00:00'" in compiled
+    assert "portfolio_aggregation_jobs.aggregation_date <= '2025-08-20'" in compiled
     assert "status = 'FAILED'" in compiled
     assert "updated_at < '2025-08-31 11:45:00+00:00'" in compiled
     assert "updated_at >= '2025-08-30 12:00:00+00:00'" in compiled

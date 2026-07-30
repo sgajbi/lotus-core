@@ -342,6 +342,7 @@ class OperationsRepository:
         failed_window_hours: int,
         reference_now: datetime,
         as_of: Optional[datetime] = None,
+        through_business_date: Optional[date] = None,
     ) -> JobHealthSummary:
         stale_threshold, failed_since = support_job_health_thresholds(
             stale_minutes=stale_minutes,
@@ -359,6 +360,7 @@ class OperationsRepository:
             base_stmt,
             portfolio_id=portfolio_id,
             as_of=as_of,
+            through_business_date=through_business_date,
         )
         return await self._get_support_job_health_summary(
             base_stmt,
