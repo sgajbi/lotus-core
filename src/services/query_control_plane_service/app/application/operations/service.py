@@ -2,17 +2,23 @@
 
 from collections.abc import Awaitable
 from datetime import date, datetime, timezone
-from typing import TypeVar, cast
+from typing import Any, TypeVar, cast
 
 from portfolio_common.identifiers import normalize_lookup_identifier as normalize_security_id
 from portfolio_common.logging_utils import redact_sensitive_text
 from portfolio_common.monitoring import observe_outbox_recovery_attempt
 from portfolio_common.reconciliation_quality import (
+    BLOCKED,
+    BREAK_OPEN,
     COMPLETE,
+    PARTIAL,
+    STALE,
     UNKNOWN,
     ReconciliationRunSignal,
     classify_finding_status,
     classify_reconciliation_status,
+    evidence_age_minutes,
+    is_evidence_stale,
 )
 
 from ...application.operations.errors import OutboxRecoveryRejected
@@ -70,6 +76,7 @@ from .runtime_state import (
     is_analytics_export_job_stale,
     normalize_analytics_export_status,
     normalize_analytics_export_status_filter,
+    reconciliation_evidence_identity,
 )
 from .support_jobs import (
     build_support_job_record,
@@ -100,21 +107,49 @@ class OperationsService:
         as_of_dates: list[date | None],
         evidence_timestamps: list[datetime | None],
         reconciliation_status: str = UNKNOWN,
+        content_hash: str | None = None,
+        source_refs: list[str] | None = None,
+        source_evidence_current: bool | None = None,
+        freshness_status: str | None = None,
     ) -> dict[str, object]:
         return evidence_product_runtime_metadata(
             generated_at_utc=generated_at_utc,
             as_of_dates=as_of_dates,
             evidence_timestamps=evidence_timestamps,
             reconciliation_status=reconciliation_status,
+            content_hash=content_hash,
+            source_refs=source_refs,
+            source_evidence_current=source_evidence_current,
+            freshness_status=freshness_status,
         )
 
     @staticmethod
-    def _aggregate_reconciliation_run_status(runs: list[object]) -> str:
+    def _aggregate_reconciliation_run_status(
+        runs: list[object],
+        *,
+        generated_at_utc: datetime | None = None,
+        stale_threshold_minutes: int = DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
+    ) -> str:
         statuses = [
             classify_reconciliation_status(
                 ReconciliationRunSignal(
                     run_status=getattr(run, "status", None),
                     has_run=True,
+                    error_count=OperationsService._summary_count(
+                        getattr(run, "summary", None), "error_count"
+                    ),
+                    warning_count=OperationsService._summary_count(
+                        getattr(run, "summary", None), "warning_count"
+                    ),
+                    is_stale=(
+                        OperationsService._reconciliation_evidence_is_stale(
+                            evidence_timestamp=OperationsService._run_evidence_timestamp(run),
+                            generated_at_utc=generated_at_utc,
+                            stale_threshold_minutes=stale_threshold_minutes,
+                        )
+                        if generated_at_utc is not None
+                        else False
+                    ),
                 )
             )
             for run in runs
@@ -126,7 +161,10 @@ class OperationsService:
         if not findings:
             return cast(str, COMPLETE if total == 0 else UNKNOWN)
         statuses = [
-            classify_finding_status(severity=str(getattr(finding, "severity", "")))
+            classify_finding_status(
+                severity=str(getattr(finding, "severity", "")),
+                resolution_state=str(getattr(finding, "resolution_state", "OPEN")),
+            )
             for finding in findings
         ]
         return OperationsService._aggregate_statuses(statuses)
@@ -205,11 +243,88 @@ class OperationsService:
 
     @classmethod
     def _is_reconciliation_finding_blocking(cls, severity: str | None) -> bool:
-        return cls._normalize_support_job_status(severity) == "ERROR"
+        return bool(
+            classify_finding_status(
+                severity=str(severity or "UNKNOWN"),
+                resolution_state="OPEN",
+            )
+            == BLOCKED
+        )
 
     @classmethod
-    def _get_reconciliation_finding_operational_state(cls, severity: str | None) -> str:
-        return "BLOCKING" if cls._is_reconciliation_finding_blocking(severity) else "NON_BLOCKING"
+    def _get_reconciliation_finding_operational_state(
+        cls,
+        severity: str | None,
+        resolution_state: str = "OPEN",
+    ) -> str:
+        status = cast(
+            str,
+            classify_finding_status(
+                severity=str(severity or "UNKNOWN"),
+                resolution_state=resolution_state,
+            ),
+        )
+        if status == COMPLETE:
+            return "RESOLVED"
+        return "BLOCKING" if status == BLOCKED else "NON_BLOCKING"
+
+    @staticmethod
+    def _run_evidence_timestamp(run: object) -> datetime | None:
+        return cast(
+            datetime | None,
+            getattr(run, "completed_at", None)
+            or getattr(run, "updated_at", None)
+            or getattr(run, "started_at", None),
+        )
+
+    @staticmethod
+    def _reconciliation_evidence_is_stale(
+        *,
+        evidence_timestamp: datetime | None,
+        generated_at_utc: datetime | None,
+        stale_threshold_minutes: int,
+    ) -> bool:
+        if generated_at_utc is None:
+            return False
+        return bool(
+            is_evidence_stale(
+                evidence_age_minutes=evidence_age_minutes(
+                    generated_at=generated_at_utc,
+                    evidence_timestamp=evidence_timestamp,
+                ),
+                threshold_minutes=stale_threshold_minutes,
+            ),
+        )
+
+    @staticmethod
+    def _summary_count(summary: object, key: str) -> int:
+        value = getattr(summary, "get", lambda *_: 0)(key, 0) if summary is not None else 0
+        return int(value or 0)
+
+    @staticmethod
+    def _publication_block_reasons(
+        *,
+        reconciliation_status: str,
+        evidence_age: int | None,
+        stale_threshold_minutes: int,
+        has_open_blocking_findings: bool = False,
+        has_open_nonblocking_findings: bool = False,
+    ) -> list[str]:
+        reasons: list[str] = []
+        if has_open_blocking_findings or reconciliation_status == BLOCKED:
+            reasons.append("OPEN_BLOCKING_RECONCILIATION_EVIDENCE")
+        if has_open_nonblocking_findings or reconciliation_status in {BREAK_OPEN, PARTIAL}:
+            reasons.append("NON_COMPLETE_RECONCILIATION_EVIDENCE")
+        if reconciliation_status == STALE or is_evidence_stale(
+            evidence_age_minutes=evidence_age,
+            threshold_minutes=stale_threshold_minutes,
+        ):
+            reasons.append("STALE_RECONCILIATION_EVIDENCE")
+        if evidence_age is None:
+            reasons.append("MISSING_RECONCILIATION_EVIDENCE_TIMESTAMP")
+        if reconciliation_status != COMPLETE and not reasons:
+            reasons.append("UNSAFE_RECONCILIATION_STATUS")
+        return list(dict.fromkeys(reasons))
 
     @classmethod
     def _get_reprocessing_key_operational_state(
@@ -1197,6 +1312,7 @@ class OperationsService:
     ) -> ReconciliationRunListResponse:
         await self._ensure_portfolio_exists(portfolio_id)
         generated_at_utc = datetime.now(timezone.utc)
+        stale_threshold_minutes = DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES
         normalized_status = self._normalize_support_status_filter(status)
         total, runs = await self._read_count_and_page(
             self.repo.get_reconciliation_runs_count(
@@ -1222,6 +1338,93 @@ class OperationsService:
                 as_of=generated_at_utc,
             ),
         )
+        items = [
+            self._build_reconciliation_run_record(
+                run,
+                generated_at_utc=generated_at_utc,
+                stale_threshold_minutes=stale_threshold_minutes,
+            )
+            for run in runs
+        ]
+        reconciliation_status = self._aggregate_reconciliation_run_status(
+            runs,
+            generated_at_utc=generated_at_utc,
+            stale_threshold_minutes=stale_threshold_minutes,
+        )
+        evidence_timestamps = [self._run_evidence_timestamp(run) for run in runs]
+        latest_evidence_timestamp = max(
+            (timestamp for timestamp in evidence_timestamps if timestamp is not None),
+            default=None,
+        )
+        bundle_evidence_age = evidence_age_minutes(
+            generated_at=generated_at_utc,
+            evidence_timestamp=latest_evidence_timestamp,
+        )
+        publication_block_reasons = self._publication_block_reasons(
+            reconciliation_status=reconciliation_status,
+            evidence_age=bundle_evidence_age,
+            stale_threshold_minutes=stale_threshold_minutes,
+        )
+        if skip > 0 or total > len(runs):
+            publication_block_reasons = [
+                *publication_block_reasons,
+                "INCOMPLETE_RECONCILIATION_EVIDENCE_WINDOW",
+            ]
+        latest_run = max(runs, key=lambda run: run.started_at, default=None)
+        open_break_count_by_severity = {
+            severity: count
+            for severity, count in (
+                (
+                    "ERROR",
+                    sum(
+                        self._summary_count(getattr(run, "summary", None), "error_count")
+                        for run in runs
+                    ),
+                ),
+                (
+                    "WARNING",
+                    sum(
+                        self._summary_count(getattr(run, "summary", None), "warning_count")
+                        for run in runs
+                    ),
+                ),
+            )
+            if count
+        }
+        top_blocking_run_id = next(
+            (item.run_id for item in items if item.normalized_reconciliation_status == BLOCKED),
+            None,
+        )
+        evidence_payload: dict[str, object] = {
+            "product_name": "ReconciliationEvidenceBundle",
+            "product_version": "v1",
+            "projection": "runs",
+            "portfolio_id": portfolio_id,
+            "filters": {
+                "run_id": run_id,
+                "correlation_id": correlation_id,
+                "requested_by": requested_by,
+                "dedupe_key": dedupe_key,
+                "reconciliation_type": reconciliation_type,
+                "status": normalized_status,
+            },
+            "total": total,
+            "skip": skip,
+            "limit": limit,
+            "items": [
+                item.model_dump(
+                    mode="json",
+                    exclude={"evidence_age_minutes", "is_evidence_stale"},
+                )
+                for item in items
+            ],
+        }
+        reconciliation_evidence_id, content_hash = reconciliation_evidence_identity(
+            evidence_payload
+        )
+        source_refs = sorted(
+            f"lotus-core://source/FinancialReconciliationRun/{run.run_id}" for run in runs
+        )
         return ReconciliationRunListResponse(
             **self._evidence_product_runtime_metadata(
                 generated_at_utc=generated_at_utc,
@@ -1231,34 +1434,83 @@ class OperationsService:
                     or run.started_at.date()
                     for run in runs
                 ],
-                evidence_timestamps=[run.completed_at or run.started_at for run in runs],
-                reconciliation_status=self._aggregate_reconciliation_run_status(runs),
+                evidence_timestamps=evidence_timestamps,
+                reconciliation_status=reconciliation_status,
+                content_hash=content_hash,
+                source_refs=source_refs,
+                source_evidence_current=not publication_block_reasons,
+                freshness_status=(
+                    "CURRENT"
+                    if not publication_block_reasons
+                    else "STALE"
+                    if "STALE_RECONCILIATION_EVIDENCE" in publication_block_reasons
+                    else "PARTIAL"
+                ),
             ),
             portfolio_id=portfolio_id,
             generated_at_utc=generated_at_utc,
+            reconciliation_evidence_id=reconciliation_evidence_id,
+            latest_run_id=getattr(latest_run, "run_id", None),
+            open_break_count_by_severity=open_break_count_by_severity,
+            top_blocking_run_id=top_blocking_run_id,
+            stale_threshold_minutes=stale_threshold_minutes,
+            evidence_age_minutes=bundle_evidence_age,
+            publication_gate="BLOCK" if publication_block_reasons else "ALLOW",
+            publication_block_reasons=publication_block_reasons,
             total=total,
             skip=skip,
             limit=limit,
-            items=[
-                ReconciliationRunRecord(
-                    run_id=run.run_id,
-                    reconciliation_type=run.reconciliation_type,
-                    status=run.status,
-                    business_date=run.business_date,
-                    epoch=run.epoch,
-                    aggregation_revision=run.aggregation_revision,
-                    started_at=run.started_at,
-                    completed_at=run.completed_at,
-                    requested_by=run.requested_by,
-                    dedupe_key=run.dedupe_key,
-                    correlation_id=run.correlation_id,
-                    failure_reason=run.failure_reason,
-                    is_terminal_failure=self._is_terminal_failure_status(run.status),
-                    is_blocking=self._is_controls_blocking(run.status),
-                    operational_state=self._get_reconciliation_operational_state(run.status),
-                )
-                for run in runs
-            ],
+            items=items,
+        )
+
+    def _build_reconciliation_run_record(
+        self,
+        run: Any,
+        *,
+        generated_at_utc: datetime,
+        stale_threshold_minutes: int,
+    ) -> ReconciliationRunRecord:
+        evidence_timestamp = self._run_evidence_timestamp(run)
+        age_minutes = evidence_age_minutes(
+            generated_at=generated_at_utc,
+            evidence_timestamp=evidence_timestamp,
+        )
+        normalized_status = classify_reconciliation_status(
+            ReconciliationRunSignal(
+                run_status=cast(str | None, getattr(run, "status", None)),
+                has_run=True,
+                error_count=self._summary_count(getattr(run, "summary", None), "error_count"),
+                warning_count=self._summary_count(getattr(run, "summary", None), "warning_count"),
+                is_stale=is_evidence_stale(
+                    evidence_age_minutes=age_minutes,
+                    threshold_minutes=stale_threshold_minutes,
+                ),
+            )
+        )
+        return ReconciliationRunRecord(
+            run_id=run.run_id,
+            reconciliation_type=run.reconciliation_type,
+            status=run.status,
+            business_date=run.business_date,
+            epoch=run.epoch,
+            aggregation_revision=run.aggregation_revision,
+            started_at=run.started_at,
+            completed_at=run.completed_at,
+            requested_by=run.requested_by,
+            dedupe_key=run.dedupe_key,
+            correlation_id=run.correlation_id,
+            failure_reason=run.failure_reason,
+            tolerance=getattr(run, "tolerance", None),
+            summary=getattr(run, "summary", None),
+            normalized_reconciliation_status=normalized_status,
+            evidence_age_minutes=age_minutes or 0,
+            is_evidence_stale=is_evidence_stale(
+                evidence_age_minutes=age_minutes,
+                threshold_minutes=stale_threshold_minutes,
+            ),
+            is_terminal_failure=self._is_terminal_failure_status(run.status),
+            is_blocking=normalized_status == BLOCKED,
+            operational_state=self._get_reconciliation_operational_state(run.status),
         )
 
     async def get_reconciliation_findings(
@@ -1279,23 +1531,108 @@ class OperationsService:
         )
         if run is None:
             raise ValueError(f"Reconciliation run {run_id} not found for portfolio {portfolio_id}")
-        total, findings = await self._read_count_and_page(
-            self.repo.get_reconciliation_findings_count(
-                run_id=run_id,
-                finding_id=finding_id,
-                security_id=security_id,
-                transaction_id=transaction_id,
-                as_of=generated_at_utc,
+        finding_summary = await self.repo.get_reconciliation_finding_summary(
+            run_id=run_id,
+            finding_id=finding_id,
+            security_id=security_id,
+            transaction_id=transaction_id,
+            as_of=generated_at_utc,
+        )
+        findings = await self.repo.get_reconciliation_findings(
+            run_id=run_id,
+            limit=limit,
+            finding_id=finding_id,
+            security_id=security_id,
+            transaction_id=transaction_id,
+            as_of=generated_at_utc,
+        )
+        total = finding_summary.total_findings
+        stale_threshold_minutes = DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES
+        items = [
+            self._build_reconciliation_finding_record(
+                finding,
+                generated_at_utc=generated_at_utc,
+            )
+            for finding in findings
+        ]
+        run_evidence_timestamp = self._run_evidence_timestamp(run)
+        latest_evidence_timestamp = max(
+            (
+                timestamp
+                for timestamp in (
+                    finding_summary.latest_evidence_at,
+                    run_evidence_timestamp,
+                )
+                if timestamp is not None
             ),
-            self.repo.get_reconciliation_findings(
-                run_id=run_id,
-                limit=limit,
-                finding_id=finding_id,
-                security_id=security_id,
-                transaction_id=transaction_id,
-                as_of=generated_at_utc,
+            default=None,
+        )
+        bundle_evidence_age = evidence_age_minutes(
+            generated_at=generated_at_utc,
+            evidence_timestamp=latest_evidence_timestamp,
+        )
+        run_normalized_status = classify_reconciliation_status(
+            ReconciliationRunSignal(
+                run_status=getattr(run, "status", None),
+                error_count=finding_summary.blocking_findings,
+                warning_count=(finding_summary.warning_findings + finding_summary.info_findings),
+                is_stale=is_evidence_stale(
+                    evidence_age_minutes=bundle_evidence_age,
+                    threshold_minutes=stale_threshold_minutes,
+                ),
+            )
+        )
+        reconciliation_status = self._finding_summary_reconciliation_status(
+            finding_summary,
+            run_normalized_status=run_normalized_status,
+        )
+        publication_block_reasons = self._publication_block_reasons(
+            reconciliation_status=reconciliation_status,
+            evidence_age=bundle_evidence_age,
+            stale_threshold_minutes=stale_threshold_minutes,
+            has_open_blocking_findings=finding_summary.blocking_findings > 0,
+            has_open_nonblocking_findings=(
+                finding_summary.open_findings > finding_summary.blocking_findings
             ),
         )
+        open_break_count_by_severity = {
+            severity: count
+            for severity, count in (
+                ("BLOCKER", finding_summary.blocker_findings),
+                ("CRITICAL", finding_summary.critical_findings),
+                ("ERROR", finding_summary.error_findings),
+                ("WARNING", finding_summary.warning_findings),
+                ("INFO", finding_summary.info_findings),
+            )
+            if count
+        }
+        evidence_payload: dict[str, object] = {
+            "product_name": "ReconciliationEvidenceBundle",
+            "product_version": "v1",
+            "projection": "findings",
+            "portfolio_id": portfolio_id,
+            "run_id": run_id,
+            "filters": {
+                "finding_id": finding_id,
+                "security_id": security_id,
+                "transaction_id": transaction_id,
+            },
+            "run_tolerance": getattr(run, "tolerance", None),
+            "run_summary": getattr(run, "summary", None),
+            "total": total,
+            "items": [item.model_dump(mode="json", exclude={"age_days"}) for item in items],
+            "open_break_count_by_severity": open_break_count_by_severity,
+        }
+        reconciliation_evidence_id, content_hash = reconciliation_evidence_identity(
+            evidence_payload
+        )
+        source_refs = [
+            f"lotus-core://source/FinancialReconciliationRun/{run_id}",
+            *(
+                f"lotus-core://source/FinancialReconciliationFinding/{finding.finding_id}"
+                for finding in findings
+            ),
+        ]
         return ReconciliationFindingListResponse(
             **self._evidence_product_runtime_metadata(
                 generated_at_utc=generated_at_utc,
@@ -1305,32 +1642,93 @@ class OperationsService:
                     or finding.created_at.date()
                     for finding in findings
                 ],
-                evidence_timestamps=[finding.created_at for finding in findings],
-                reconciliation_status=self._aggregate_reconciliation_finding_status(
-                    findings, total
+                evidence_timestamps=[latest_evidence_timestamp],
+                reconciliation_status=reconciliation_status,
+                content_hash=content_hash,
+                source_refs=sorted(source_refs),
+                source_evidence_current=not publication_block_reasons,
+                freshness_status=(
+                    "CURRENT"
+                    if not publication_block_reasons
+                    else "STALE"
+                    if "STALE_RECONCILIATION_EVIDENCE" in publication_block_reasons
+                    else "PARTIAL"
                 ),
             ),
             run_id=run_id,
             generated_at_utc=generated_at_utc,
+            reconciliation_evidence_id=reconciliation_evidence_id,
+            run_tolerance=getattr(run, "tolerance", None),
+            run_summary=getattr(run, "summary", None),
+            open_break_count_by_severity=open_break_count_by_severity,
+            open_break_count=finding_summary.open_findings,
+            blocking_break_count=finding_summary.blocking_findings,
+            warning_break_count=(finding_summary.warning_findings + finding_summary.info_findings),
+            top_blocking_finding_id=finding_summary.top_blocking_finding_id,
+            top_blocking_finding_owner=finding_summary.top_blocking_finding_owner,
+            top_blocking_repair_recommendation=(finding_summary.top_blocking_repair_recommendation),
+            stale_threshold_minutes=stale_threshold_minutes,
+            evidence_age_minutes=bundle_evidence_age,
+            publication_gate="BLOCK" if publication_block_reasons else "ALLOW",
+            publication_block_reasons=publication_block_reasons,
             total=total,
-            items=[
-                ReconciliationFindingRecord(
-                    finding_id=finding.finding_id,
-                    finding_type=finding.finding_type,
-                    severity=finding.severity,
-                    security_id=normalize_security_id(finding.security_id),
-                    transaction_id=finding.transaction_id,
-                    business_date=finding.business_date,
-                    epoch=finding.epoch,
-                    created_at=finding.created_at,
-                    detail=finding.detail,
-                    is_blocking=self._is_reconciliation_finding_blocking(finding.severity),
-                    operational_state=self._get_reconciliation_finding_operational_state(
-                        finding.severity
-                    ),
-                )
-                for finding in findings
-            ],
+            items=items,
+        )
+
+    @staticmethod
+    def _finding_summary_reconciliation_status(
+        summary: ReconciliationFindingSummary,
+        *,
+        run_normalized_status: str,
+    ) -> str:
+        if summary.blocking_findings:
+            return cast(str, BLOCKED)
+        if summary.open_findings:
+            return cast(str, BREAK_OPEN)
+        return run_normalized_status
+
+    def _build_reconciliation_finding_record(
+        self,
+        finding: Any,
+        *,
+        generated_at_utc: datetime,
+    ) -> ReconciliationFindingRecord:
+        resolution_state = str(getattr(finding, "resolution_state", "OPEN"))
+        normalized_status = classify_finding_status(
+            severity=str(finding.severity),
+            resolution_state=resolution_state,
+        )
+        age_days = max(0, (generated_at_utc.date() - finding.created_at.date()).days)
+        return ReconciliationFindingRecord(
+            finding_id=finding.finding_id,
+            finding_type=finding.finding_type,
+            severity=finding.severity,
+            security_id=normalize_security_id(finding.security_id),
+            transaction_id=finding.transaction_id,
+            business_date=finding.business_date,
+            epoch=finding.epoch,
+            created_at=finding.created_at,
+            detail=finding.detail,
+            expected_value=getattr(finding, "expected_value", None),
+            observed_value=getattr(finding, "observed_value", None),
+            owner=getattr(finding, "owner", "FINANCIAL_CONTROL_OPERATIONS"),
+            resolution_state=resolution_state,
+            resolution_actor=getattr(finding, "resolution_actor", None),
+            resolved_at=getattr(finding, "resolved_at", None),
+            tolerance=getattr(finding, "tolerance", None),
+            observed_delta=getattr(finding, "observed_delta", None),
+            repair_recommendation=getattr(
+                finding,
+                "repair_recommendation",
+                "REVIEW_RECONCILIATION_BREAK",
+            ),
+            normalized_finding_status=normalized_status,
+            age_days=age_days,
+            is_blocking=normalized_status == BLOCKED,
+            operational_state=self._get_reconciliation_finding_operational_state(
+                finding.severity,
+                resolution_state,
+            ),
         )
 
     async def get_portfolio_control_stages(
