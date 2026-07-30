@@ -3,6 +3,7 @@
 import logging
 
 from portfolio_common.database_models import Cashflow, Portfolio, Transaction
+from portfolio_common.domain.calculation_lineage import calculation_lineage_from_payload
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -125,6 +126,11 @@ def _cashflow_values(
         "is_portfolio_flow": cashflow.is_portfolio_flow,
         "economic_event_id": cashflow.economic_event_id,
         "linked_transaction_group_id": cashflow.linked_transaction_group_id,
+        "calculation_lineage": (
+            cashflow.calculation_lineage.lineage_payload()
+            if isinstance(cashflow, CalculatedCashflow) and cashflow.calculation_lineage is not None
+            else getattr(cashflow, "calculation_lineage", None)
+        ),
     }
 
 
@@ -157,5 +163,10 @@ def _to_stored_cashflow(
             str(cashflow.linked_transaction_group_id)
             if cashflow.linked_transaction_group_id is not None
             else None
+        ),
+        calculation_lineage=(
+            cashflow.calculation_lineage
+            if isinstance(cashflow, CalculatedCashflow)
+            else calculation_lineage_from_payload(cashflow.calculation_lineage)
         ),
     )

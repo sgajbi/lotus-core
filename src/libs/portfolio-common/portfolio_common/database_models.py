@@ -2214,6 +2214,7 @@ class Cashflow(Base):
     is_portfolio_flow = Column(Boolean, server_default="f", nullable=False)
     economic_event_id = Column(String, nullable=True, index=True)
     linked_transaction_group_id = Column(String, nullable=True, index=True)
+    calculation_lineage = Column(JSON(none_as_null=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False

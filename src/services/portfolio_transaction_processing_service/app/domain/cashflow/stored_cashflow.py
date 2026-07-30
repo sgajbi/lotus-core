@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 
+from portfolio_common.domain.calculation_lineage import CalculationLineage
+
 
 @dataclass(frozen=True, slots=True)
 class StoredCashflow:
@@ -26,3 +28,4 @@ class StoredCashflow:
     is_portfolio_flow: bool
     economic_event_id: str | None = None
     linked_transaction_group_id: str | None = None
+    calculation_lineage: CalculationLineage | None = None

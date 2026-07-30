@@ -10,9 +10,8 @@ from portfolio_common.database_models import (
     DailyPositionValuationReceiptRecord,
 )
 from portfolio_common.domain.calculation_lineage import (
-    CalculationLineage,
     FinancialSourceReference,
-    NumericOutputPolicyLineage,
+    calculation_lineage_from_payload,
 )
 from portfolio_common.domain.valuation import (
     MarketPriceQuoteBasis,
@@ -157,7 +156,7 @@ def _receipt_from_record(
         price_fact_version=record.price_fact_version,
         price_fact_content_hash=record.price_fact_content_hash,
         market_price_source=_source_from_payload(record.market_price_source),
-        calculation_lineage=_lineage_from_payload(record.calculation_lineage),
+        calculation_lineage=calculation_lineage_from_payload(record.calculation_lineage),
         receipt_hash=record.receipt_hash,
     )
 
@@ -173,35 +172,6 @@ def _source_from_payload(payload: object) -> FinancialSourceReference | None:
         source_revision=_required_string(payload, "source_revision"),
         source_content_hash=_required_string(payload, "source_content_hash"),
         observed_at=datetime.fromisoformat(_required_string(payload, "observed_at")),
-    )
-
-
-def _lineage_from_payload(payload: object) -> CalculationLineage | None:
-    if payload is None:
-        return None
-    if not isinstance(payload, dict):
-        raise TypeError("valuation receipt calculation_lineage must be an object")
-    numeric_payload = payload.get("numeric_output_policy")
-    numeric_policy = None
-    if numeric_payload is not None:
-        if not isinstance(numeric_payload, dict):
-            raise TypeError("numeric_output_policy must be an object")
-        numeric_policy = NumericOutputPolicyLineage(
-            name=_required_string(numeric_payload, "name"),
-            version=_required_string(numeric_payload, "version"),
-            precision=_required_int(numeric_payload, "precision"),
-            scale=_required_int(numeric_payload, "scale"),
-            working_precision=_required_int(numeric_payload, "working_precision"),
-            rounding=_required_string(numeric_payload, "rounding"),
-        )
-    return CalculationLineage(
-        algorithm_id=_required_string(payload, "algorithm_id"),
-        algorithm_version=_required_int(payload, "algorithm_version"),
-        intermediate_precision=_required_int(payload, "intermediate_precision"),
-        input_content_hash=_required_string(payload, "input_content_hash"),
-        calculation_content_hash=_required_string(payload, "calculation_content_hash"),
-        output_content_hash=_required_string(payload, "output_content_hash"),
-        numeric_output_policy=numeric_policy,
     )
 
 
