@@ -202,6 +202,8 @@ async def test_support_overview_returns_coherent_snapshot_under_control_churn(
                 business_date=date(2025, 8, 30),
                 epoch=2,
                 detail={"message": "older finding"},
+                owner="TRANSACTION_OPERATIONS",
+                repair_recommendation="REGENERATE_CASHFLOW",
                 created_at=datetime(2025, 8, 30, 10, 50, tzinfo=timezone.utc),
             ),
             FinancialReconciliationFinding(
@@ -216,6 +218,8 @@ async def test_support_overview_returns_coherent_snapshot_under_control_churn(
                 business_date=date(2025, 8, 30),
                 epoch=2,
                 detail={"message": "late finding"},
+                owner="TRANSACTION_OPERATIONS",
+                repair_recommendation="REVIEW_RECONCILIATION_BREAK",
                 created_at=datetime(2025, 8, 30, 11, 40, tzinfo=timezone.utc),
             ),
         ]
@@ -541,6 +545,8 @@ async def test_reconciliation_findings_return_coherent_snapshot_under_finding_ch
                 business_date=date(2025, 8, 30),
                 epoch=2,
                 detail={"message": "visible finding"},
+                owner="TRANSACTION_OPERATIONS",
+                repair_recommendation="REGENERATE_CASHFLOW",
                 created_at=datetime(2025, 8, 30, 11, 10, tzinfo=timezone.utc),
             ),
             FinancialReconciliationFinding(
@@ -555,6 +561,8 @@ async def test_reconciliation_findings_return_coherent_snapshot_under_finding_ch
                 business_date=date(2025, 8, 30),
                 epoch=2,
                 detail={"message": "hidden finding"},
+                owner="TRANSACTION_OPERATIONS",
+                repair_recommendation="REVIEW_RECONCILIATION_BREAK",
                 created_at=datetime(2025, 8, 30, 12, 30, tzinfo=timezone.utc),
             ),
         ]
