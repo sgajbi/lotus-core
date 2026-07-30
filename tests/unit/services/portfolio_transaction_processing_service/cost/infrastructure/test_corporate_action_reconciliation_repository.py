@@ -97,6 +97,11 @@ async def test_save_evidence_maps_typed_records() -> None:
                 expected_value={"net_basis_delta_local_abs": "<= 0.01"},
                 observed_value={"net_basis_delta_local": "-40"},
                 detail={"reason_code": "CA_BUNDLE_A_BASIS_MISMATCH"},
+                owner="CORPORATE_ACTION_OPERATIONS",
+                resolution_state="OPEN",
+                tolerance=Decimal("0.01"),
+                observed_delta=Decimal("-40"),
+                repair_recommendation="REVIEW_CORPORATE_ACTION_BASIS_ALLOCATION",
             ),
         ),
     )
@@ -110,3 +115,7 @@ async def test_save_evidence_maps_typed_records() -> None:
     assert run_statement.compile().params["completed_at"] == completed_at
     assert finding_statement.compile().params["finding_id"] == "finding-ca-01"
     assert finding_statement.compile().params["severity"] == "ERROR"
+    assert finding_statement.compile().params["owner"] == "CORPORATE_ACTION_OPERATIONS"
+    assert finding_statement.compile().params["resolution_state"] == "OPEN"
+    assert finding_statement.compile().params["tolerance"] == Decimal("0.01")
+    assert finding_statement.compile().params["observed_delta"] == Decimal("-40")

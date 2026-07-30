@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from typing import Any
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -11,6 +12,7 @@ from src.services.ingestion_service.app.DTOs.ingestion_job_dto import (
 from src.services.ingestion_service.app.ports.ingestion_workflow_stores import (
     ReplayAuditRecord,
 )
+from src.services.ingestion_service.app.services import ingestion_job_service
 from src.services.ingestion_service.app.services.infrastructure_errors import (
     InfrastructureAuditWriteFailed,
 )
@@ -204,3 +206,39 @@ async def test_record_replay_audit_uses_store_and_preserves_typed_write_failure(
             alternate_lookup_key="consumer_dlq|topic=transactions.raw.received|event=event-001",
         )
     ]
+
+
+async def test_consumer_dlq_evidence_queries_delegate_with_bounded_filters(
+    monkeypatch,
+) -> None:
+    query = AsyncMock(return_value=[])
+    monkeypatch.setattr(ingestion_job_service, "list_consumer_dlq_event_responses", query)
+    service = IngestionJobService()
+
+    assert await service.list_consumer_dlq_events_by_correlation_id("corr-001", limit=37) == []
+    query.assert_awaited_once_with(
+        limit=37,
+        original_topic=None,
+        consumer_group=None,
+        correlation_id="corr-001",
+        session_factory=ingestion_job_service.get_async_db_session,
+    )
+
+    query.reset_mock()
+    assert await service.list_consumer_dlq_events_by_event_ids((), limit=37) == []
+    query.assert_not_awaited()
+
+    assert (
+        await service.list_consumer_dlq_events_by_event_ids(
+            ("dlq-002", "dlq-001"),
+            limit=37,
+        )
+        == []
+    )
+    query.assert_awaited_once_with(
+        limit=37,
+        original_topic=None,
+        consumer_group=None,
+        event_ids=("dlq-002", "dlq-001"),
+        session_factory=ingestion_job_service.get_async_db_session,
+    )

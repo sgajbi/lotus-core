@@ -75,6 +75,10 @@ class SqlAlchemyCorporateActionReconciliationRepository:
                         "expected_value": finding_stmt.excluded.expected_value,
                         "observed_value": finding_stmt.excluded.observed_value,
                         "detail": finding_stmt.excluded.detail,
+                        "owner": finding_stmt.excluded.owner,
+                        "tolerance": finding_stmt.excluded.tolerance,
+                        "observed_delta": finding_stmt.excluded.observed_delta,
+                        "repair_recommendation": finding_stmt.excluded.repair_recommendation,
                     },
                 )
             )
