@@ -260,7 +260,7 @@ async def test_core_snapshot_baseline_success(mock_dependencies):
     assert response.reconciliation_status == COMPLETE
     assert response.data_quality_status == COMPLETE
     assert response.latest_evidence_timestamp == datetime(2026, 2, 27, 10, 10, tzinfo=UTC)
-    assert response.source_batch_fingerprint == response.content_hash
+    assert response.source_batch_fingerprint is None
     assert response.snapshot_id == (
         f"portfolio_state_snapshot:{response.calculation_lineage.output_content_hash[:24]}"
     )
@@ -281,6 +281,8 @@ async def test_core_snapshot_baseline_success(mock_dependencies):
     assert response.source_lineage["output_content_hash"] == (
         response.calculation_lineage.output_content_hash
     )
+    assert response.source_lineage["reconstruction_scope_id"].startswith("rs_")
+    assert response.source_lineage["reconstruction_restatement_version"] == "current"
     assert response.calculation_lineage.algorithm_id == "PORTFOLIO_STATE_SNAPSHOT"
     assert response.calculation_lineage.algorithm_version == 1
     assert response.calculation_lineage.intermediate_precision == 28
