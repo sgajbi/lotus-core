@@ -31,6 +31,9 @@ closure of the complete producer-policy inventory.
 - Accrued-income segment arithmetic and legacy unscoped valuation still had calculated-output paths
   that were not bound to the named output policy, and legacy valuation receipts could not retain
   calculation evidence even when the output was non-flat.
+- PR #855 review found precision-only local contexts still inherited ambient rounding in accrued
+  income, position valuation, and their day-count inputs. It also found that a downgrade would try
+  to restore the old null-lineage constraint while new legacy rows still contained lineage.
 
 ## Resolution
 
@@ -108,6 +111,10 @@ closure of the complete producer-policy inventory.
   quote-independent zero valuations remain explicitly nullable rather than receiving invented
   historical evidence. The inventory now reports three `required`, zero `partial`, and five
   `not-exposed` policies.
+- Made every valuation-domain intermediate context specify governed precision and rounding rather
+  than inheriting process state. The migration downgrade now clears only new-only lineage from
+  `LEGACY_UNSCOPED` rows before restoring the prior constraint, making rollback data-compatible
+  while truthfully discarding evidence that the prior schema cannot represent.
 
 The later cashflow persistence slice adds one nullable JSON column and no topic or runtime-topology
 change. Exactly representable inputs, cashflow formulas, serialized Decimal amounts, transaction
@@ -173,6 +180,10 @@ identity, and public response shapes remain unchanged.
   calculated-output-policy, domain-layer, and diff guards passed. A rebuilt exact-image PostgreSQL
   persistence test passed (`1 passed in 404.20s`); the preceding stale-image constraint failure was
   classified as invalid diagnostic evidence.
+- PR #855 review fix-forward passed 74 warning-strict day-count, accrued-income,
+  position-valuation, and migration tests, including opposite ambient rounding modes and downgrade
+  operation ordering; calculated-output-policy, migration smoke, MyPy, and focused Ruff gates also
+  passed.
 
 ## Compatibility and remaining work
 

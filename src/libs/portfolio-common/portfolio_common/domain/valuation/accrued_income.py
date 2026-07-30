@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
-from decimal import Decimal, localcontext
+from decimal import Context, Decimal, localcontext
 from enum import StrEnum
 
 from ..calculation_lineage import (
@@ -26,6 +26,7 @@ class UnsupportedAccruedIncomeError(ValueError):
 
 
 ACCRUED_INCOME_INTERMEDIATE_PRECISION = ACCRUED_INCOME_LEDGER_OUTPUT_V1.working_precision
+ACCRUED_INCOME_INTERMEDIATE_ROUNDING = ACCRUED_INCOME_LEDGER_OUTPUT_V1.rounding
 ACCRUED_INCOME_ALGORITHM_ID = "SEGMENTED_GROSS_CONTRACTUAL_ACCRUAL"
 ACCRUED_INCOME_ALGORITHM_VERSION = 3
 
@@ -218,8 +219,12 @@ def _calculate_segments(
         # Segment values are calculation intermediates, not ledger outputs. Keep the
         # working precision explicit here; the public calculation normalizes once at
         # the governed output boundary and binds that policy into its lineage.
-        with localcontext() as context:
-            context.prec = ACCRUED_INCOME_INTERMEDIATE_PRECISION
+        with localcontext(
+            Context(
+                prec=ACCRUED_INCOME_INTERMEDIATE_PRECISION,
+                rounding=ACCRUED_INCOME_INTERMEDIATE_ROUNDING,
+            )
+        ):
             accrued_income = (
                 segment.signed_accrual_principal * segment.annual_effective_rate * year_fraction
             )

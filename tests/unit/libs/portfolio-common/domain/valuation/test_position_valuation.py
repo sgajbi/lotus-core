@@ -2,7 +2,7 @@
 
 from dataclasses import replace
 from datetime import UTC, datetime
-from decimal import Decimal, localcontext
+from decimal import ROUND_DOWN, ROUND_UP, Decimal, localcontext
 
 import pytest
 from portfolio_common.domain.financial.precision import (
@@ -156,9 +156,11 @@ def test_position_calculation_is_independent_of_ambient_decimal_precision() -> N
 
     with localcontext() as context:
         context.prec = 6
+        context.rounding = ROUND_DOWN
         low_precision = calculate_position_valuation(policy=policy, inputs=inputs)
     with localcontext() as context:
         context.prec = 38
+        context.rounding = ROUND_UP
         high_precision = calculate_position_valuation(policy=policy, inputs=inputs)
 
     assert high_precision == low_precision

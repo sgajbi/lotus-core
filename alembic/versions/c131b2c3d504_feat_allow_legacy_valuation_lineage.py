@@ -71,12 +71,18 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """Restore the prior legacy receipt invariant."""
+    """Restore the prior legacy receipt invariant without retaining new-only evidence."""
 
     op.drop_constraint(
         _CONSTRAINT_NAME,
         "daily_position_valuation_receipts",
         type_="check",
+    )
+    op.execute(
+        "UPDATE daily_position_valuation_receipts "
+        "SET calculation_lineage = NULL "
+        "WHERE supportability = 'LEGACY_UNSCOPED' "
+        "AND calculation_lineage IS NOT NULL"
     )
     op.create_check_constraint(
         _CONSTRAINT_NAME,
