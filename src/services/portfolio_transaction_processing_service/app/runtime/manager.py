@@ -21,7 +21,6 @@ from ..web import app as web_app
 from .consumer_composition import build_transaction_processing_consumers
 
 logger = logging.getLogger(__name__)
-OUTBOX_PRODUCER_SERVICE_NAME = "portfolio_transaction_processing_service.outbox_dispatcher"
 
 
 class ConsumerManager:
@@ -38,7 +37,7 @@ class ConsumerManager:
             dispatcher
             if dispatcher is not None
             else OutboxDispatcher(
-                kafka_producer=create_kafka_producer(service_name=OUTBOX_PRODUCER_SERVICE_NAME)
+                kafka_producer=create_kafka_producer()
             )
         )
         self.tasks: list[asyncio.Task[Any]] = []

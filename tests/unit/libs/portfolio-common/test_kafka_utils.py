@@ -303,6 +303,24 @@ def test_created_producer_has_exclusive_recovery_boundary(MockProducer):
 
 
 @patch("portfolio_common.kafka_utils.Producer")
+def test_created_producer_preserves_default_policy_override_identity(MockProducer, monkeypatch):
+    monkeypatch.setenv(
+        "LOTUS_CORE_KAFKA_PRODUCER_SERVICE_OVERRIDES_JSON",
+        '{"portfolio_common": {"delivery.timeout.ms": 45000, "request.timeout.ms": 30000}}',
+    )
+
+    first_dispatcher_producer = create_kafka_producer()
+    second_dispatcher_producer = create_kafka_producer()
+
+    assert first_dispatcher_producer is not second_dispatcher_producer
+    assert first_dispatcher_producer.service_name == "portfolio_common"
+    assert second_dispatcher_producer.service_name == "portfolio_common"
+    assert MockProducer.call_count == 2
+    for call in MockProducer.call_args_list:
+        assert call.args[0]["delivery.timeout.ms"] == 45000
+
+
+@patch("portfolio_common.kafka_utils.Producer")
 def test_kafka_producer_close_logs_undelivered_messages(MockProducer):
     mock_confluent_producer = MagicMock()
     mock_confluent_producer.flush.return_value = 2

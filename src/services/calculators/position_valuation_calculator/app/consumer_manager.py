@@ -24,7 +24,6 @@ from .web import WORKER_READINESS_SERVICE_NAME
 from .web import app as web_app
 
 logger = logging.getLogger(__name__)
-OUTBOX_PRODUCER_SERVICE_NAME = "position_valuation_calculator.outbox_dispatcher"
 
 
 class ConsumerManager:
@@ -57,7 +56,7 @@ class ConsumerManager:
         )
 
         self.dispatcher = OutboxDispatcher(
-            kafka_producer=create_kafka_producer(service_name=OUTBOX_PRODUCER_SERVICE_NAME)
+            kafka_producer=create_kafka_producer()
         )
 
         logger.info(

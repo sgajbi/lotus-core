@@ -42,8 +42,9 @@ underlying batch thread. Kubernetes could then terminate the process before the 
 - If `flush(...)` raises with ambiguous queued records, purge both queued and in-flight records,
   drain their callbacks, and replace the underlying producer before releasing any row for retry.
   If purge confirmation fails, retain the database claims by aborting result persistence.
-- Give every production dispatcher a fresh, non-cached producer. Keep replay, direct event, and DLQ
-  publishers on their separate shared producer so dispatcher recovery cannot purge their records.
+- Give every production dispatcher a fresh, non-cached producer while retaining the established
+  `portfolio_common` producer-policy lookup identity. Keep replay, direct event, and DLQ publishers
+  on their separate shared producer so dispatcher recovery cannot purge their records.
 - Guard every production `OutboxDispatcher` composition against shared-producer construction.
 - Derive a dispatcher supervision timeout from the producer-specific delivery fence plus a drain
   margin, and pass it from every dispatcher-owning runtime to shared shutdown supervision.
@@ -51,8 +52,9 @@ underlying batch thread. Kubernetes could then terminate the process before the 
   process-termination margin. Fail dispatcher construction for unsafe combinations.
 - Increase the governed derived-state and transaction-processing pod grace from 60 to 150 seconds
   and bind `OUTBOX_DISPATCHER_TERMINATION_GRACE_SECONDS=150` in each deployment.
-- Set `stop_grace_period: 150s` for all five dispatcher-owning services in app-local Compose and
-  bind the same termination-grace setting through the shared service environment.
+- Bind `stop_grace_period` for all five dispatcher-owning services in app-local Compose to the same
+  termination-grace override exposed through the shared service environment, with a 150-second
+  default.
 - Add a partial lookup index over unresolved stream order.
 
 Kafka publication remains outside the claim transaction and result writes remain claim-token
@@ -72,7 +74,9 @@ behavior or event contracts. Each dispatcher-owning service process now maintain
 Kafka producer connection for the exclusive outbox recovery boundary.
 The two governed Kubernetes deployments now allow 150 seconds for termination instead of 60.
 App-local Compose now allows the same 150 seconds for every dispatcher-owning service instead of
-its 10-second default.
+its 10-second default, and an operator override changes both the runtime budget and Compose stop
+window together. Exclusive dispatcher producers preserve the existing `portfolio_common` policy
+override key; exclusivity is an object-ownership boundary, not a new configuration identity.
 Runtime supervision waits 126 seconds for a producer using the default 120-second Kafka delivery
 timeout, and dispatcher startup rejects termination grace below 136 seconds. Operator overrides of
 Kafka delivery timeout must therefore be paired with a sufficiently large outbox claim lease and

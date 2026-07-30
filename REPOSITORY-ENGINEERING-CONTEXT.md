@@ -3328,8 +3328,11 @@ Most relevant current governance:
      must exceed that supervision budget by the governed termination margin; reject unsafe claim
      lease, supervision, or termination combinations at startup. The governed dispatcher
      deployments use a 150-second termination grace for the default 120-second producer delivery
-     timeout, and app-local Compose sets `stop_grace_period: 150s` for all five dispatcher-owning
-     services. Deployments changing this rule must quiesce every dispatcher-owning worker before
+     timeout, and app-local Compose binds `stop_grace_period` for all five dispatcher-owning
+     services to the same termination-grace override with a 150-second default. Fresh dispatcher
+     producers retain the established `portfolio_common` producer-policy lookup key; producer
+     exclusivity is an object-ownership boundary, not a new configuration identity. Deployments
+     changing this rule must quiesce every dispatcher-owning worker before
      migrating and restart only the compatible version; mixed dispatcher versions are not
      ordering-safe.
 

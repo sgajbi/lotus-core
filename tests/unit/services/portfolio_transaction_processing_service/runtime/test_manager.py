@@ -63,7 +63,7 @@ def test_combined_manager_gives_dispatcher_an_exclusive_producer(monkeypatch) ->
 
     runtime_manager = manager.ConsumerManager()
 
-    create_producer.assert_called_once_with(service_name=manager.OUTBOX_PRODUCER_SERVICE_NAME)
+    create_producer.assert_called_once_with()
     dispatcher_factory.assert_called_once_with(kafka_producer=exclusive_producer)
     assert runtime_manager.dispatcher is dispatcher
 

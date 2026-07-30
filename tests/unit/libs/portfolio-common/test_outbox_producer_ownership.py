@@ -37,3 +37,4 @@ def test_production_outbox_dispatchers_use_exclusive_producer_factory() -> None:
         assert _call_name(producer_argument) == "create_kafka_producer", source_path.relative_to(
             REPOSITORY_ROOT
         )
+        assert producer_argument.keywords == [], source_path.relative_to(REPOSITORY_ROOT)

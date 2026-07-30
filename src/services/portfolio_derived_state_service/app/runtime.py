@@ -47,7 +47,6 @@ logger = logging.getLogger(__name__)
 
 POSITION_TIMESERIES_CONSUMER_GROUP = "timeseries_generator_group_positions"
 HEALTH_PORT = 8085
-OUTBOX_PRODUCER_SERVICE_NAME = "portfolio_derived_state_service.outbox_dispatcher"
 
 
 class PortfolioDerivedStateRuntime:
@@ -79,7 +78,7 @@ class PortfolioDerivedStateRuntime:
             token_generator=id_generator,
         )
         self.dispatcher = OutboxDispatcher(
-            kafka_producer=create_kafka_producer(service_name=OUTBOX_PRODUCER_SERVICE_NAME)
+            kafka_producer=create_kafka_producer()
         )
 
     @staticmethod
