@@ -145,12 +145,11 @@ class SourceDataProductRuntimeMetadata(BaseModel):
     source_batch_fingerprint: str | None = Field(
         None,
         description=(
-            "Source-owned deterministic SHA-256 fingerprint for this response evidence. When a "
-            "caller supplies a legacy source-batch label, Core still emits the canonical content "
-            "hash here so downstream proof tooling can validate the response without deriving "
-            "source authority itself."
+            "Source-owned batch identity copied from authoritative ingestion evidence. This "
+            "field remains null when the serving product cannot prove the upstream batch; a "
+            "response content hash is not a source-batch identity."
         ),
-        examples=["sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"],
+        examples=["batch_20260415_0001"],
     )
     snapshot_id: str | None = Field(
         None,
@@ -235,7 +234,6 @@ def source_data_product_runtime_metadata(
     lineage: dict[str, str] | None = None,
     source_evidence_current: bool | None = None,
     freshness_status: str | None = None,
-    use_content_hash_as_source_batch_fingerprint: bool = False,
 ) -> dict[str, object]:
     resolved_generated_at = generated_at or datetime.now(UTC)
     normalized_source_batch_fingerprint = normalize_lineage_value(source_batch_fingerprint)
@@ -266,13 +264,7 @@ def source_data_product_runtime_metadata(
         "reconciliation_status": reconciliation_status,
         "data_quality_status": data_quality_status,
         "latest_evidence_timestamp": latest_evidence_timestamp,
-        "source_batch_fingerprint": _accepted_source_fingerprint(
-            normalized_source_batch_fingerprint,
-            content_hash=resolved_content_hash,
-            use_content_hash_as_source_batch_fingerprint=(
-                use_content_hash_as_source_batch_fingerprint
-            ),
-        ),
+        "source_batch_fingerprint": normalized_source_batch_fingerprint,
         "snapshot_id": normalize_lineage_value(snapshot_id),
         "content_hash": resolved_content_hash,
         "source_digest": source_digest or resolved_content_hash,
@@ -313,17 +305,6 @@ def _default_source_evidence_current(
     return data_quality_status.strip().upper() in {"COMPLETE", "PARTIAL"} and (
         latest_evidence_timestamp is not None
     )
-
-
-def _accepted_source_fingerprint(
-    value: str | None,
-    *,
-    content_hash: str,
-    use_content_hash_as_source_batch_fingerprint: bool,
-) -> str | None:
-    if use_content_hash_as_source_batch_fingerprint:
-        return content_hash
-    return value
 
 
 def _default_freshness_status(*, data_quality_status: str, source_evidence_current: bool) -> str:
