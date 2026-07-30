@@ -145,16 +145,15 @@ def test_source_data_product_runtime_metadata_accepts_truthful_runtime_lineage()
     assert metadata["freshness_status"] == "CURRENT"
 
 
-def test_source_data_product_runtime_metadata_can_emit_proof_compatible_fingerprint() -> None:
+def test_source_data_product_runtime_metadata_preserves_source_owned_batch_identity() -> None:
     metadata = source_data_product_runtime_metadata(
         as_of_date=date(2026, 3, 26),
         generated_at=datetime(2026, 4, 15, 1, 30, tzinfo=UTC),
         source_batch_fingerprint="legacy_source_batch",
         content_hash="sha256:" + "b" * 64,
-        use_content_hash_as_source_batch_fingerprint=True,
     )
 
-    assert metadata["source_batch_fingerprint"] == "sha256:" + "b" * 64
+    assert metadata["source_batch_fingerprint"] == "legacy_source_batch"
 
 
 def test_stable_content_hash_ignores_dictionary_order() -> None:
