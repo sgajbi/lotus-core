@@ -7,7 +7,7 @@ not price securities, infer quote conventions, forecast rates, or derive derivat
 from __future__ import annotations
 
 from dataclasses import dataclass
-from decimal import Decimal, localcontext
+from decimal import Context, Decimal, localcontext
 from enum import StrEnum
 
 from ..calculation_lineage import (
@@ -25,6 +25,7 @@ class UnsupportedValuationError(ValueError):
 POSITION_VALUATION_ALGORITHM_ID = "POSITION_VALUATION_SCALING"
 POSITION_VALUATION_ALGORITHM_VERSION = 2
 POSITION_VALUATION_INTERMEDIATE_PRECISION = POSITION_VALUATION_LEDGER_OUTPUT_V1.working_precision
+POSITION_VALUATION_INTERMEDIATE_ROUNDING = POSITION_VALUATION_LEDGER_OUTPUT_V1.rounding
 
 
 class ValuationInputBasis(StrEnum):
@@ -289,8 +290,12 @@ def calculate_position_valuation(
     _validate_source_value(policy, inputs.source_value)
     # Policy-driven scaling uses the governed working precision, while the
     # normalized-output boundary below owns the ledger policy and its lineage.
-    with localcontext() as context:
-        context.prec = POSITION_VALUATION_INTERMEDIATE_PRECISION
+    with localcontext(
+        Context(
+            prec=POSITION_VALUATION_INTERMEDIATE_PRECISION,
+            rounding=POSITION_VALUATION_INTERMEDIATE_ROUNDING,
+        )
+    ):
         current_principal = _resolve_current_principal(policy, inputs)
         scaled_value = _scale_source_value(policy, inputs, current_principal)
         accrued_income = _resolve_accrued_income(policy, inputs)

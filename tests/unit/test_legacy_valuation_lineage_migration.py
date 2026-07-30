@@ -30,6 +30,11 @@ def test_legacy_valuation_lineage_constraint_migration_is_reversible(monkeypatch
             ("create_check_constraint", name, table, condition)
         ),
     )
+    monkeypatch.setattr(
+        op,
+        "execute",
+        lambda statement: operations.append(("execute", str(statement))),
+    )
     migration: dict[str, Any] = runpy.run_path(str(MIGRATION))
 
     migration["upgrade"]()
@@ -41,10 +46,14 @@ def test_legacy_valuation_lineage_constraint_migration_is_reversible(monkeypatch
         "drop_constraint",
         "create_check_constraint",
         "drop_constraint",
+        "execute",
         "create_check_constraint",
     ]
     upgrade_condition = str(operations[1][3])
-    downgrade_condition = str(operations[3][3])
+    downgrade_cleanup = str(operations[3][1])
+    downgrade_condition = str(operations[4][3])
     assert "market_price_source IS NULL" in upgrade_condition
     assert "market_price_source IS NULL AND calculation_lineage IS NULL" not in upgrade_condition
+    assert "WHERE supportability = 'LEGACY_UNSCOPED'" in downgrade_cleanup
+    assert "SET calculation_lineage = NULL" in downgrade_cleanup
     assert "market_price_source IS NULL AND calculation_lineage IS NULL" in downgrade_condition

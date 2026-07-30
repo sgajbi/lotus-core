@@ -5,7 +5,7 @@ from __future__ import annotations
 import calendar
 from dataclasses import dataclass, field
 from datetime import date
-from decimal import Decimal, localcontext
+from decimal import ROUND_HALF_EVEN, Context, Decimal, localcontext
 from enum import StrEnum
 from types import MappingProxyType
 
@@ -304,8 +304,7 @@ def _is_last_day_of_month(value: date) -> bool:
 
 
 def _actual_actual_isda_fraction(period_start: date, period_end: date) -> Decimal:
-    with localcontext() as context:
-        context.prec = DAY_COUNT_INTERMEDIATE_PRECISION
+    with localcontext(Context(prec=DAY_COUNT_INTERMEDIATE_PRECISION, rounding=ROUND_HALF_EVEN)):
         fraction = Decimal(0)
         segment_start = period_start
         while segment_start < period_end:
@@ -325,8 +324,7 @@ def _actual_actual_icma_fraction(inputs: DayCountInputs) -> Decimal:
         raise UnsupportedDayCountError(
             "ACT/ACT.ICMA requires authoritative coupon reference periods"
         )
-    with localcontext() as context:
-        context.prec = DAY_COUNT_INTERMEDIATE_PRECISION
+    with localcontext(Context(prec=DAY_COUNT_INTERMEDIATE_PRECISION, rounding=ROUND_HALF_EVEN)):
         fraction = Decimal(0)
         covered_until = inputs.period_start
         for reference in sorted(
@@ -355,6 +353,5 @@ def _actual_actual_icma_fraction(inputs: DayCountInputs) -> Decimal:
 
 
 def _ratio(numerator: int, denominator: int) -> Decimal:
-    with localcontext() as context:
-        context.prec = DAY_COUNT_INTERMEDIATE_PRECISION
+    with localcontext(Context(prec=DAY_COUNT_INTERMEDIATE_PRECISION, rounding=ROUND_HALF_EVEN)):
         return Decimal(numerator) / Decimal(denominator)

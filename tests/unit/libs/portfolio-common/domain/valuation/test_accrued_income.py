@@ -2,7 +2,7 @@
 
 from dataclasses import replace
 from datetime import UTC, date, datetime
-from decimal import ROUND_HALF_EVEN, Decimal, localcontext
+from decimal import ROUND_DOWN, ROUND_HALF_EVEN, ROUND_UP, Decimal, localcontext
 
 import pytest
 from portfolio_common.domain.financial.precision import (
@@ -292,18 +292,31 @@ def test_rate_reset_segments_use_each_supplied_all_in_rate() -> None:
 
 
 def test_calculation_is_independent_of_ambient_decimal_precision() -> None:
-    segment = _segment(day_count_convention="ACT/365.FIXED", icma_reference_periods=())
-    expected = calculate_segmented_accrued_income((segment,))
+    segment = _segment(
+        annual_effective_rate=Decimal(
+            "0.123456789012345678901234567890123456789012345678901234567890123456789"
+        ),
+        day_count_convention="ACT/365.FIXED",
+        icma_reference_periods=(),
+    )
 
     with localcontext() as context:
         context.prec = 9
-        actual = calculate_segmented_accrued_income((segment,))
+        context.rounding = ROUND_DOWN
+        low_precision = calculate_segmented_accrued_income((segment,))
+    with localcontext() as context:
+        context.prec = 100
+        context.rounding = ROUND_UP
+        high_precision = calculate_segmented_accrued_income((segment,))
 
-    assert actual == expected
-    assert actual.lineage.algorithm_version == 3
-    assert actual.lineage.numeric_output_policy is not None
-    assert actual.lineage.numeric_output_policy.policy_id == "accrued-income-ledger-output@1.0.0"
-    assert actual.lineage.intermediate_precision == 64
+    assert high_precision == low_precision
+    assert low_precision.lineage.algorithm_version == 3
+    assert low_precision.lineage.numeric_output_policy is not None
+    assert (
+        low_precision.lineage.numeric_output_policy.policy_id
+        == "accrued-income-ledger-output@1.0.0"
+    )
+    assert low_precision.lineage.intermediate_precision == 64
 
 
 @pytest.mark.parametrize(
