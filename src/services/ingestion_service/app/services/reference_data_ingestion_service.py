@@ -21,7 +21,6 @@ from portfolio_common.database_models import (
     IndexReturnSeries,
     InstrumentEligibilityProfile,
     InstrumentLookthroughComponent,
-    InstrumentValuationPolicyAssignmentRecord,
     LiquidityReserveRequirement,
     ModelPortfolioDefinition,
     ModelPortfolioTarget,
@@ -37,8 +36,14 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..DTOs.market_price_dto import AuthoritativeMarketPriceSourceFact
+from ..DTOs.reference_data_valuation_policy_dto import (
+    InstrumentValuationPolicyAssignmentRecord as InstrumentValuationPolicyAssignmentPayload,
+)
 from .market_price_source_fact_writer import MarketPriceSourceFactWriter
-from .valuation_policy_assignment_write_guard import ValuationPolicyAssignmentWriteGuard
+from .valuation_policy_assignment_writer import (
+    ValuationPolicyAssignmentAuthorityChange,
+    ValuationPolicyAssignmentWriter,
+)
 
 
 @dataclass(frozen=True)
@@ -229,36 +234,20 @@ class ReferenceDataIngestionService:
             ],
         )
 
-    async def upsert_instrument_valuation_policy_assignments(
-        self, records: list[dict[str, Any]]
-    ) -> None:
+    async def append_instrument_valuation_policy_assignments(
+        self,
+        records: list[dict[str, Any]],
+    ) -> tuple[ValuationPolicyAssignmentAuthorityChange, ...]:
         if not records:
-            return
+            return ()
+        assignments = [
+            InstrumentValuationPolicyAssignmentPayload.model_validate(record).to_domain()
+            for record in records
+        ]
         try:
-            await ValuationPolicyAssignmentWriteGuard(self._db).validate(records)
-            await self._upsert_many(
-                model=InstrumentValuationPolicyAssignmentRecord,
-                records=records,
-                conflict_columns=[
-                    "tenant_id",
-                    "legal_book_id",
-                    "security_id",
-                    "source_system",
-                    "source_record_id",
-                    "assignment_version",
-                ],
-                update_columns=[
-                    "policy_id",
-                    "policy_version",
-                    "valid_from",
-                    "valid_to",
-                    "assignment_status",
-                    "source_revision",
-                    "observed_at",
-                    "assignment_reason",
-                ],
-            )
+            changes = await ValuationPolicyAssignmentWriter(self._db).append_many(assignments)
             await self._db.commit()
+            return changes
         except Exception:
             await self._db.rollback()
             raise

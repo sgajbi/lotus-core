@@ -92,7 +92,7 @@ async def test_assignment_write_guard_rejects_durable_overlap_and_accepts_retire
             await session.commit()
 
             ingestion = ReferenceDataIngestionService(session)
-            await ingestion.upsert_instrument_valuation_policy_assignments(
+            await ingestion.append_instrument_valuation_policy_assignments(
                 [_assignment(source_record_id="PRIMARY")]
             )
 
@@ -100,7 +100,7 @@ async def test_assignment_write_guard_rejects_durable_overlap_and_accepts_retire
                 OverlappingValuationPolicyAssignmentError,
                 match="windows overlap",
             ):
-                await ingestion.upsert_instrument_valuation_policy_assignments(
+                await ingestion.append_instrument_valuation_policy_assignments(
                     [
                         _assignment(
                             source_record_id="SECONDARY",
@@ -118,7 +118,7 @@ async def test_assignment_write_guard_rejects_durable_overlap_and_accepts_retire
                 == 1
             )
 
-            await ingestion.upsert_instrument_valuation_policy_assignments(
+            await ingestion.append_instrument_valuation_policy_assignments(
                 [
                     _assignment(
                         source_record_id="PRIMARY",
@@ -194,7 +194,7 @@ async def test_concurrent_assignment_writers_serialize_without_deadlock() -> Non
             async with sessions() as session:
                 await ReferenceDataIngestionService(
                     session
-                ).upsert_instrument_valuation_policy_assignments(
+                ).append_instrument_valuation_policy_assignments(
                     [_assignment(source_record_id=source_record_id)]
                 )
 
