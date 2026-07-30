@@ -1,9 +1,12 @@
-from datetime import date
+from datetime import UTC, date, datetime, timedelta, timezone
+from decimal import Decimal
 
 import pytest
 from portfolio_common.reconstruction_identity import (
     PortfolioReconstructionScope,
+    ProductReconstructionScope,
     build_portfolio_snapshot_id,
+    build_reconstruction_scope_evidence,
 )
 
 
@@ -34,6 +37,7 @@ def test_portfolio_snapshot_id_is_deterministic_for_same_scope() -> None:
     assert first == second
     assert first.startswith("pss_")
     assert len(first) == len("pss_") + 32
+    assert first == "pss_2cb6ac4ce2e9efe97eacb8a81ec8053d"
 
 
 def test_portfolio_snapshot_id_ignores_source_product_order_and_duplicates() -> None:
@@ -88,3 +92,132 @@ def test_portfolio_snapshot_id_rejects_invalid_scope() -> None:
 
     with pytest.raises(ValueError, match="source_data_products is required"):
         build_portfolio_snapshot_id(_scope(source_data_products=("HoldingsAsOf", " ")))
+
+
+def _product_scope(**overrides) -> ProductReconstructionScope:
+    values = {
+        "product": "TransactionLedgerWindow",
+        "portfolio_id": "PORT_001",
+        "as_of_date": date(2026, 2, 27),
+        "source_data_products": ("TransactionLedgerWindow", "InstrumentMaster"),
+        "restatement_version": "current",
+        "policy_version": "transaction-ledger-window-v1",
+        "qualifiers": (
+            ("start_date", date(2026, 1, 1)),
+            ("security_id", "SEC_001"),
+            ("include_projected", False),
+        ),
+        "material_evidence": (
+            ("total_count", 17),
+            ("latest_evidence_timestamp", datetime(2026, 2, 27, 10, 5, tzinfo=UTC)),
+        ),
+    }
+    values.update(overrides)
+    return ProductReconstructionScope(**values)
+
+
+def test_reconstruction_scope_evidence_normalizes_entry_and_source_product_order() -> None:
+    first = build_reconstruction_scope_evidence(_product_scope())
+    second = build_reconstruction_scope_evidence(
+        _product_scope(
+            source_data_products=(
+                "InstrumentMaster",
+                "TransactionLedgerWindow",
+                "InstrumentMaster",
+            ),
+            qualifiers=(
+                ("include_projected", False),
+                ("security_id", "SEC_001"),
+                ("start_date", date(2026, 1, 1)),
+            ),
+            material_evidence=(
+                ("latest_evidence_timestamp", datetime(2026, 2, 27, 10, 5, tzinfo=UTC)),
+                ("total_count", 17),
+            ),
+        )
+    )
+
+    assert first == second
+    assert first.scope_id.startswith("rs_")
+    assert first.scope_content_hash.startswith("sha256:")
+    assert first.source_data_products == ("InstrumentMaster", "TransactionLedgerWindow")
+    assert first.lineage()["reconstruction_scope_id"] == first.scope_id
+    assert first.lineage()["reconstruction_restatement_version"] == "current"
+
+
+def test_reconstruction_scope_evidence_normalizes_equivalent_instants_to_utc() -> None:
+    utc_evidence = build_reconstruction_scope_evidence(
+        _product_scope(
+            material_evidence=(
+                ("latest_evidence_timestamp", datetime(2026, 2, 27, 10, 5, tzinfo=UTC)),
+            )
+        )
+    )
+    offset_evidence = build_reconstruction_scope_evidence(
+        _product_scope(
+            material_evidence=(
+                (
+                    "latest_evidence_timestamp",
+                    datetime(
+                        2026,
+                        2,
+                        27,
+                        18,
+                        5,
+                        tzinfo=timezone(timedelta(hours=8)),
+                    ),
+                ),
+            )
+        )
+    )
+
+    assert utc_evidence == offset_evidence
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"restatement_version": "restatement_0002"},
+        {"policy_version": "transaction-ledger-window-v2"},
+        {"qualifiers": (("security_id", "SEC_002"),)},
+        {"qualifiers": (("security_id", 1),)},
+        {"material_evidence": (("total_count", 18),)},
+    ],
+)
+def test_reconstruction_scope_evidence_changes_with_material_scope(overrides) -> None:
+    baseline = build_reconstruction_scope_evidence(_product_scope())
+
+    changed = build_reconstruction_scope_evidence(_product_scope(**overrides))
+
+    assert changed.scope_id != baseline.scope_id
+    assert changed.scope_content_hash != baseline.scope_content_hash
+
+
+def test_reconstruction_scope_evidence_rejects_ambiguous_entries() -> None:
+    with pytest.raises(ValueError, match="qualifiers contains duplicate key: security_id"):
+        build_reconstruction_scope_evidence(
+            _product_scope(
+                qualifiers=(
+                    ("security_id", "SEC_001"),
+                    ("security_id", "SEC_002"),
+                )
+            )
+        )
+
+    with pytest.raises(ValueError, match="source_data_products is required"):
+        build_reconstruction_scope_evidence(_product_scope(source_data_products=()))
+
+    with pytest.raises(TypeError, match="qualifiers.unsupported"):
+        build_reconstruction_scope_evidence(
+            _product_scope(qualifiers=(("unsupported", Decimal("1.0")),))
+        )
+
+    with pytest.raises(
+        ValueError,
+        match="material_evidence.latest_evidence_timestamp datetime must be timezone-aware",
+    ):
+        build_reconstruction_scope_evidence(
+            _product_scope(
+                material_evidence=(("latest_evidence_timestamp", datetime(2026, 2, 27, 10, 5)),)
+            )
+        )
