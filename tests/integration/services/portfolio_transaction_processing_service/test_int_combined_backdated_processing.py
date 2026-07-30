@@ -200,9 +200,9 @@ async def test_backdated_transaction_rebuilds_current_epoch_without_legacy_repla
     ]
     assert {cashflow.epoch for cashflow in current_cashflows} == {state.epoch}
     assert all(cashflow.calculation_lineage is not None for cashflow in current_cashflows)
-    assert {
-        cashflow.calculation_lineage["algorithm_id"] for cashflow in current_cashflows
-    } == {"transaction-cashflow"}
+    assert {cashflow.calculation_lineage["algorithm_id"] for cashflow in current_cashflows} == {
+        "transaction-cashflow"
+    }
     assert {
         cashflow.calculation_lineage["numeric_output_policy"]["name"]
         for cashflow in current_cashflows
