@@ -171,9 +171,6 @@ class CashMovementService:
                 reconciliation_status=source_window_trust.reconciliation_status,
                 data_quality_status=source_window_trust.data_quality_status,
                 latest_evidence_timestamp=latest_evidence_timestamp,
-                source_batch_fingerprint=(
-                    f"cash_movement_summary:{portfolio_id}:{start_date}:{end_date}"
-                ),
                 snapshot_id=(
                     f"cash_movement_summary:{calculation_lineage.output_content_hash[:24]}"
                 ),
@@ -195,7 +192,6 @@ class CashMovementService:
                 },
                 source_evidence_current=source_window_trust.source_evidence_current,
                 freshness_status=source_window_trust.freshness_status,
-                use_content_hash_as_source_batch_fingerprint=True,
             ),
         )
 

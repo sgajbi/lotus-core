@@ -192,11 +192,6 @@ class CashflowProjectionService:
                 reconciliation_status=source_window_trust.reconciliation_status,
                 data_quality_status=source_window_trust.data_quality_status,
                 latest_evidence_timestamp=cashflow_evidence.latest_evidence_timestamp,
-                source_batch_fingerprint=(
-                    "cashflow_projection:"
-                    f"{portfolio_id}:{effective_as_of_date}:{query_end_date}:"
-                    f"include_projected={str(include_projected).lower()}"
-                ),
                 content_hash=content_hash,
                 snapshot_id=(f"cashflow_projection:{calculation_lineage.output_content_hash[:24]}"),
                 policy_version=CASHFLOW_PROJECTION_POLICY_VERSION,
@@ -213,7 +208,6 @@ class CashflowProjectionService:
                 },
                 source_evidence_current=source_window_trust.source_evidence_current,
                 freshness_status=source_window_trust.freshness_status,
-                use_content_hash_as_source_batch_fingerprint=True,
             ),
         )
 

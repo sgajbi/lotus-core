@@ -81,8 +81,7 @@ async def test_cash_movement_summary_preserves_source_buckets(mock_repo: AsyncMo
     assert response.data_quality_status == "COMPLETE"
     assert response.cashflow_count == 3
     assert response.latest_evidence_timestamp == datetime(2026, 3, 6, 9, 15, tzinfo=UTC)
-    assert response.source_batch_fingerprint.startswith("sha256:")
-    assert response.source_batch_fingerprint == response.content_hash
+    assert response.source_batch_fingerprint is None
     assert response.freshness_status == "CURRENT"
     assert response.reconciliation_status == "COMPLETE"
     assert response.source_window_trust.source_row_count == 3

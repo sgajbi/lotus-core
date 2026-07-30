@@ -20,7 +20,6 @@ def _source_metadata(as_of_date: date) -> dict[str, object]:
         generated_at=datetime(2026, 3, 1, 1, 5, tzinfo=UTC),
         data_quality_status="COMPLETE",
         latest_evidence_timestamp=datetime(2026, 3, 1, 1, 4, tzinfo=UTC),
-        source_batch_fingerprint=f"cashflow_projection:P1:{as_of_date}:fixture",
     )
 
 
