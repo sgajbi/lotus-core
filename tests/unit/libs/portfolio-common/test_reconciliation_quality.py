@@ -1,3 +1,5 @@
+from datetime import UTC, datetime
+
 import pytest
 from portfolio_common.reconciliation_quality import (
     BLOCKED,
@@ -13,6 +15,10 @@ from portfolio_common.reconciliation_quality import (
     classify_data_quality_coverage,
     classify_finding_status,
     classify_reconciliation_status,
+    evidence_age_minutes,
+    is_evidence_stale,
+    is_finding_open,
+    normalize_finding_resolution_state,
     reconciliation_bound_data_quality_status,
     sort_reconciliation_breaks,
 )
@@ -136,3 +142,20 @@ def test_classifiers_reject_invalid_counts_and_blank_text() -> None:
 
     with pytest.raises(ValueError, match="severity is required"):
         classify_finding_status(severity=" ", resolution_state="OPEN")
+
+
+def test_finding_resolution_and_evidence_age_helpers_fail_closed() -> None:
+    assert normalize_finding_resolution_state(" in_progress ") == "IN_PROGRESS"
+    assert is_finding_open("IN_PROGRESS") is True
+    assert is_finding_open("RESOLVED") is False
+    with pytest.raises(ValueError, match="resolution_state must be one of"):
+        normalize_finding_resolution_state("CLOSED")
+
+    generated_at = datetime(2026, 7, 31, 10, tzinfo=UTC)
+    age = evidence_age_minutes(
+        generated_at=generated_at,
+        evidence_timestamp=datetime(2026, 7, 31, 9, 44, tzinfo=UTC),
+    )
+    assert age == 16
+    assert is_evidence_stale(evidence_age_minutes=age, threshold_minutes=15) is True
+    assert is_evidence_stale(evidence_age_minutes=None, threshold_minutes=15) is False
