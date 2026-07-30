@@ -55,9 +55,7 @@ class ConsumerManager:
             for _ in range(self._settings.worker_count)
         )
 
-        self.dispatcher = OutboxDispatcher(
-            kafka_producer=create_kafka_producer()
-        )
+        self.dispatcher = OutboxDispatcher(kafka_producer=create_kafka_producer())
 
         logger.info(
             "ConsumerManager initialized with %s valuation worker consumer(s).",

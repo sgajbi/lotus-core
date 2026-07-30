@@ -77,9 +77,7 @@ class PortfolioDerivedStateRuntime:
             clock=SystemAggregationSchedulerClock(),
             token_generator=id_generator,
         )
-        self.dispatcher = OutboxDispatcher(
-            kafka_producer=create_kafka_producer()
-        )
+        self.dispatcher = OutboxDispatcher(kafka_producer=create_kafka_producer())
 
     @staticmethod
     def _position_timeseries_consumer() -> PositionTimeseriesConsumer:

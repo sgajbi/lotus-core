@@ -36,9 +36,7 @@ class ConsumerManager:
                 service_prefix="FRC",
             )
         ]
-        self.dispatcher = OutboxDispatcher(
-            kafka_producer=create_kafka_producer()
-        )
+        self.dispatcher = OutboxDispatcher(kafka_producer=create_kafka_producer())
         self.tasks: list[asyncio.Task] = []
         self._shutdown_event = asyncio.Event()
 
