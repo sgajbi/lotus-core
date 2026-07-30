@@ -6,7 +6,10 @@ from datetime import date, datetime
 from typing import cast
 
 from portfolio_common.reconciliation_quality import BLOCKED, BREAK_OPEN, COMPLETE, PARTIAL, UNKNOWN
-from portfolio_common.source_data_product_metadata import source_data_product_runtime_metadata
+from portfolio_common.source_data_product_metadata import (
+    source_data_product_runtime_metadata,
+    stable_content_hash,
+)
 
 from .policy import DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES
 from .support_jobs import is_support_job_stale
@@ -24,6 +27,10 @@ def evidence_product_runtime_metadata(
     as_of_dates: list[date | None],
     evidence_timestamps: list[datetime | None],
     reconciliation_status: str = UNKNOWN,
+    content_hash: str | None = None,
+    source_refs: list[str] | None = None,
+    source_evidence_current: bool | None = None,
+    freshness_status: str | None = None,
 ) -> dict[str, object]:
     return cast(
         dict[str, object],
@@ -32,8 +39,17 @@ def evidence_product_runtime_metadata(
             generated_at=generated_at_utc,
             reconciliation_status=reconciliation_status,
             latest_evidence_timestamp=_latest_evidence_timestamp(evidence_timestamps),
+            content_hash=content_hash,
+            source_refs=source_refs,
+            source_evidence_current=source_evidence_current,
+            freshness_status=freshness_status,
         ),
     )
+
+
+def reconciliation_evidence_identity(payload: dict[str, object]) -> tuple[str, str]:
+    content_hash = stable_content_hash(payload)
+    return f"re_{content_hash.removeprefix('sha256:')[:32]}", content_hash
 
 
 def aggregate_reconciliation_statuses(statuses: list[str]) -> str:
@@ -89,11 +105,13 @@ def is_analytics_export_job_stale(
 ) -> bool:
     normalized_status = normalize_analytics_export_status(status)
     support_status = "PROCESSING" if normalized_status == "running" else normalized_status
-    return is_support_job_stale(
-        support_status,
-        updated_at,
-        now,
-        stale_threshold_minutes,
+    return bool(
+        is_support_job_stale(
+            support_status,
+            updated_at,
+            now,
+            stale_threshold_minutes,
+        )
     )
 
 

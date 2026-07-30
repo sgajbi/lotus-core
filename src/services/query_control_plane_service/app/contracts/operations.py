@@ -1,9 +1,11 @@
 """Public contracts for Query Control Plane operational support."""
 
 from datetime import date, datetime
+from decimal import Decimal
 from typing import Any, Literal, Optional
 
 from portfolio_common.observability_contracts import PORTFOLIO_SUPPORTABILITY_METRIC_LABELS
+from portfolio_common.openapi_enrichment import exact_numeric_openapi_description
 from portfolio_common.source_data_product_metadata import (
     SourceDataProductRuntimeMetadata,
     product_name_field,
@@ -2375,6 +2377,35 @@ class ReconciliationRunRecord(BaseModel):
         description="Failure reason when the reconciliation run reaches FAILED state.",
         examples=["Tolerance exceeded for portfolio timeseries totals."],
     )
+    tolerance: Optional[Decimal] = Field(
+        None,
+        description=exact_numeric_openapi_description(
+            "Comparison tolerance applied by this reconciliation run.",
+            precision=18,
+            scale=10,
+        ),
+        examples=["0.0100000000"],
+    )
+    summary: Optional[dict[str, Any]] = Field(
+        None,
+        description="Persisted examined, finding, error, warning, and pass/fail summary.",
+    )
+    normalized_reconciliation_status: str = Field(
+        ...,
+        description="Run status mapped to the governed reconciliation evidence vocabulary.",
+        examples=["BLOCKED"],
+    )
+    evidence_age_minutes: int = Field(
+        ...,
+        ge=0,
+        description="Whole-minute age of the run's latest durable evidence.",
+        examples=[4],
+    )
+    is_evidence_stale: bool = Field(
+        ...,
+        description="Whether run evidence age exceeds the bundle freshness threshold.",
+        examples=[False],
+    )
     is_terminal_failure: bool = Field(
         ...,
         description="True when the reconciliation run is durably in FAILED terminal state.",
@@ -2405,6 +2436,48 @@ class ReconciliationRunListResponse(SourceDataProductRuntimeMetadata):
         ...,
         description="UTC timestamp when this reconciliation-run support snapshot was generated.",
         examples=["2026-03-14T10:50:00Z"],
+    )
+    reconciliation_evidence_id: str = Field(
+        ...,
+        description="Deterministic identity of this exact reconciliation evidence projection.",
+        examples=["re_0123456789abcdef0123456789abcdef"],
+    )
+    latest_run_id: Optional[str] = Field(
+        None,
+        description="Most recently started run in the returned evidence page.",
+        examples=["recon_1234567890abcdef"],
+    )
+    open_break_count_by_severity: dict[str, int] = Field(
+        default_factory=dict,
+        description="Open break counts reported by returned run summaries, keyed by severity.",
+        examples=[{"ERROR": 1, "WARNING": 2}],
+    )
+    top_blocking_run_id: Optional[str] = Field(
+        None,
+        description="Highest-priority blocking run in the returned evidence page.",
+        examples=["recon_1234567890abcdef"],
+    )
+    stale_threshold_minutes: int = Field(
+        ...,
+        ge=0,
+        description="Freshness threshold applied to reconciliation evidence.",
+        examples=[15],
+    )
+    evidence_age_minutes: Optional[int] = Field(
+        None,
+        ge=0,
+        description="Whole-minute age of the latest evidence in the bundle.",
+        examples=[4],
+    )
+    publication_gate: Literal["ALLOW", "BLOCK"] = Field(
+        ...,
+        description="Fail-closed downstream publication decision for this evidence bundle.",
+        examples=["BLOCK"],
+    )
+    publication_block_reasons: list[str] = Field(
+        default_factory=list,
+        description="Bounded reasons why downstream publication is blocked.",
+        examples=[["BLOCKING_RECONCILIATION_RUN"]],
     )
     total: int = Field(
         ..., description="Total reconciliation runs matching the filter.", examples=[8]
@@ -2483,6 +2556,68 @@ class ReconciliationFindingRecord(BaseModel):
         description="Structured detail describing the mismatch or control breach.",
         examples=[{"expected_cashflow_count": 1, "observed_cashflow_count": 0}],
     )
+    expected_value: Optional[dict[str, Any]] = Field(
+        None,
+        description="Expected control-side value used for the comparison.",
+    )
+    observed_value: Optional[dict[str, Any]] = Field(
+        None,
+        description="Observed persisted value and bounded comparison evidence.",
+    )
+    owner: str = Field(
+        ...,
+        description="Domain operations function accountable for resolving the finding.",
+        examples=["TRANSACTION_OPERATIONS"],
+    )
+    resolution_state: Literal["OPEN", "IN_PROGRESS", "RESOLVED", "WAIVED", "SUPPRESSED"] = Field(
+        ...,
+        description="Governed reconciliation-break lifecycle state.",
+        examples=["OPEN"],
+    )
+    resolution_actor: Optional[str] = Field(
+        None,
+        description="Actor that recorded the terminal resolution state.",
+        examples=["ops.control@lotus.local"],
+    )
+    resolved_at: Optional[datetime] = Field(
+        None,
+        description="UTC timestamp when terminal resolution evidence was recorded.",
+        examples=["2026-03-13T10:45:00Z"],
+    )
+    tolerance: Optional[Decimal] = Field(
+        None,
+        description=exact_numeric_openapi_description(
+            "Applied comparison tolerance when this finding is value-based.",
+            precision=18,
+            scale=10,
+        ),
+        examples=["0.0100000000"],
+    )
+    observed_delta: Optional[Decimal] = Field(
+        None,
+        description=exact_numeric_openapi_description(
+            "Signed observed-minus-expected delta for a scalar value finding.",
+            precision=18,
+            scale=10,
+        ),
+        examples=["-10.0000000000"],
+    )
+    repair_recommendation: str = Field(
+        ...,
+        description="Bounded operator action recommended for the finding class.",
+        examples=["REGENERATE_CASHFLOW"],
+    )
+    normalized_finding_status: str = Field(
+        ...,
+        description="Finding state mapped to the governed reconciliation vocabulary.",
+        examples=["BLOCKED"],
+    )
+    age_days: int = Field(
+        ...,
+        ge=0,
+        description="Whole-day age of the durable finding at response generation.",
+        examples=[2],
+    )
     is_blocking: bool = Field(
         ...,
         description=(
@@ -2491,7 +2626,7 @@ class ReconciliationFindingRecord(BaseModel):
         ),
         examples=[True, False],
     )
-    operational_state: Literal["BLOCKING", "NON_BLOCKING"] = Field(
+    operational_state: Literal["BLOCKING", "NON_BLOCKING", "RESOLVED"] = Field(
         ...,
         description="Derived operator-facing state for support triage of reconciliation findings.",
         examples=["BLOCKING"],
@@ -2512,6 +2647,84 @@ class ReconciliationFindingListResponse(SourceDataProductRuntimeMetadata):
             "UTC timestamp when this reconciliation-finding support snapshot was generated."
         ),
         examples=["2026-03-14T10:50:00Z"],
+    )
+    reconciliation_evidence_id: str = Field(
+        ...,
+        description="Deterministic identity of this exact reconciliation finding projection.",
+        examples=["re_0123456789abcdef0123456789abcdef"],
+    )
+    run_tolerance: Optional[Decimal] = Field(
+        None,
+        description=exact_numeric_openapi_description(
+            "Comparison tolerance applied by the owning reconciliation run.",
+            precision=18,
+            scale=10,
+        ),
+        examples=["0.0100000000"],
+    )
+    run_summary: Optional[dict[str, Any]] = Field(
+        None,
+        description="Persisted examined, finding, error, warning, and pass/fail run summary.",
+    )
+    open_break_count_by_severity: dict[str, int] = Field(
+        default_factory=dict,
+        description="Open finding counts by governed severity across the filtered scope.",
+        examples=[{"ERROR": 1, "WARNING": 1}],
+    )
+    open_break_count: int = Field(
+        ...,
+        ge=0,
+        description="Open or in-progress findings across the filtered scope.",
+        examples=[2],
+    )
+    blocking_break_count: int = Field(
+        ...,
+        ge=0,
+        description="Open BLOCKER, CRITICAL, or ERROR findings.",
+        examples=[1],
+    )
+    warning_break_count: int = Field(
+        ...,
+        ge=0,
+        description="Open WARNING or INFO findings.",
+        examples=[1],
+    )
+    top_blocking_finding_id: Optional[str] = Field(
+        None,
+        description="Highest-severity, oldest open blocking finding.",
+        examples=["rf_1234567890abcdef"],
+    )
+    top_blocking_finding_owner: Optional[str] = Field(
+        None,
+        description="Accountable owner for the top blocking finding.",
+        examples=["TRANSACTION_OPERATIONS"],
+    )
+    top_blocking_repair_recommendation: Optional[str] = Field(
+        None,
+        description="Recommended operator action for the top blocking finding.",
+        examples=["REGENERATE_CASHFLOW"],
+    )
+    stale_threshold_minutes: int = Field(
+        ...,
+        ge=0,
+        description="Freshness threshold applied to reconciliation evidence.",
+        examples=[15],
+    )
+    evidence_age_minutes: Optional[int] = Field(
+        None,
+        ge=0,
+        description="Whole-minute age of the latest run or finding evidence.",
+        examples=[4],
+    )
+    publication_gate: Literal["ALLOW", "BLOCK"] = Field(
+        ...,
+        description="Fail-closed downstream publication decision for this evidence bundle.",
+        examples=["BLOCK"],
+    )
+    publication_block_reasons: list[str] = Field(
+        default_factory=list,
+        description="Bounded reasons why downstream publication is blocked.",
+        examples=[["OPEN_BLOCKING_FINDING"]],
     )
     total: int = Field(..., description="Total findings returned for the run.", examples=[2])
     items: list[ReconciliationFindingRecord] = Field(
