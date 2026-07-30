@@ -1430,11 +1430,31 @@ class OperationsRepository:
         return int((await self.db.execute(stmt)).scalar_one() or 0)
 
     async def get_reconciliation_finding_summary(
-        self, run_id: str, as_of: Optional[datetime] = None
+        self,
+        run_id: str,
+        finding_id: Optional[str] = None,
+        security_id: Optional[str] = None,
+        transaction_id: Optional[str] = None,
+        as_of: Optional[datetime] = None,
     ) -> ReconciliationFindingSummary:
+        normalized_security_id = (
+            normalize_security_id(security_id) if security_id is not None else None
+        )
+        if security_id is not None and not normalized_security_id:
+            return ReconciliationFindingSummary(
+                total_findings=0,
+                blocking_findings=0,
+                top_blocking_finding_id=None,
+                top_blocking_finding_type=None,
+                top_blocking_finding_security_id=None,
+                top_blocking_finding_transaction_id=None,
+            )
         base_stmt = apply_reconciliation_finding_scope(
             reconciliation_finding_summary_base_select(),
             run_id=run_id,
+            finding_id=finding_id,
+            normalized_security_id=normalized_security_id,
+            transaction_id=transaction_id,
             as_of=as_of,
         )
         row = (await self.db.execute(reconciliation_finding_summary_select(base_stmt))).one()
