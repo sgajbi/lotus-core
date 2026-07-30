@@ -23,6 +23,8 @@ from ..domain.reconciliation_policies import (
     ReconciliationFinding,
     build_reconciliation_summary,
     position_valuation_reconciliation_findings,
+    reconciliation_finding_owner,
+    reconciliation_repair_recommendation,
     requires_authoritative_fx_rate,
     resolve_value_tolerance,
 )
@@ -817,6 +819,7 @@ class ReconciliationService:
             expected_value={k: v["position_aggregate"] for k, v in mismatches.items()},
             observed_value={k: v["portfolio_timeseries"] for k, v in mismatches.items()},
             detail=mismatches,
+            tolerance=tolerance,
         )
 
     async def run_automatic_bundle(
@@ -894,6 +897,8 @@ class ReconciliationService:
         expected_value: dict | None,
         observed_value: dict | None,
         detail: dict | None,
+        tolerance: Decimal | None = None,
+        observed_delta: Decimal | None = None,
     ) -> FinancialReconciliationFinding:
         return FinancialReconciliationFinding(
             finding_id=f"finding-{self._id_generator.new_hex()}",
@@ -909,4 +914,9 @@ class ReconciliationService:
             expected_value=expected_value,
             observed_value=observed_value,
             detail=detail,
+            owner=reconciliation_finding_owner(reconciliation_type),
+            resolution_state="OPEN",
+            tolerance=tolerance,
+            observed_delta=observed_delta,
+            repair_recommendation=reconciliation_repair_recommendation(finding_type),
         )

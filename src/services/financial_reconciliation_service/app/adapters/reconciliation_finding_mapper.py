@@ -1,6 +1,10 @@
 from portfolio_common.database_models import FinancialReconciliationFinding
 
-from ..domain.reconciliation_policies import ReconciliationFinding
+from ..domain.reconciliation_policies import (
+    ReconciliationFinding,
+    reconciliation_finding_owner,
+    reconciliation_repair_recommendation,
+)
 
 
 def reconciliation_finding_to_orm(
@@ -23,4 +27,9 @@ def reconciliation_finding_to_orm(
         expected_value=finding.expected_value,
         observed_value=finding.observed_value,
         detail=finding.detail,
+        owner=reconciliation_finding_owner(finding.reconciliation_type),
+        resolution_state="OPEN",
+        tolerance=finding.tolerance,
+        observed_delta=finding.observed_delta,
+        repair_recommendation=reconciliation_repair_recommendation(finding.finding_type),
     )

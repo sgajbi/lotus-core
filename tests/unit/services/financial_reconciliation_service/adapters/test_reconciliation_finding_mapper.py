@@ -42,3 +42,8 @@ def test_reconciliation_finding_mapper_preserves_domain_payload_fields() -> None
     assert row.expected_value == {"market_value_local": "110"}
     assert row.observed_value == {"market_value_local": "100", "delta": "-10"}
     assert row.detail == {"product_type": "EQUITY"}
+    assert row.owner == "VALUATION_OPERATIONS"
+    assert row.resolution_state == "OPEN"
+    assert row.resolution_actor is None
+    assert row.resolved_at is None
+    assert row.repair_recommendation == "REVALUE_POSITION"

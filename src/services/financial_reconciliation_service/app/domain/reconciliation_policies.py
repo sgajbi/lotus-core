@@ -28,6 +28,26 @@ RECONCILIATION_TOLERANCE_PRECISION_V1 = DecimalPrecisionPolicy(
     scale=10,
 )
 
+DEFAULT_RECONCILIATION_FINDING_OWNER = "FINANCIAL_CONTROL_OPERATIONS"
+_FINDING_OWNER_BY_RECONCILIATION_TYPE = {
+    "position_valuation": "VALUATION_OPERATIONS",
+    "timeseries_integrity": "PORTFOLIO_CONTROL_OPERATIONS",
+    "transaction_cashflow": "TRANSACTION_OPERATIONS",
+}
+_REPAIR_RECOMMENDATION_BY_FINDING_TYPE = {
+    "cashflow_rule_mismatch": "REBUILD_CASHFLOW_FROM_GOVERNED_RULE",
+    "invalid_market_price": "CORRECT_MARKET_PRICE_SOURCE",
+    "market_value_local_mismatch": "REVALUE_POSITION",
+    "missing_cashflow": "REGENERATE_CASHFLOW",
+    "missing_portfolio_timeseries": "REBUILD_DERIVED_TIMESERIES",
+    "missing_position_timeseries": "REBUILD_DERIVED_TIMESERIES",
+    "portfolio_timeseries_aggregate_mismatch": "REBUILD_PORTFOLIO_TIMESERIES",
+    "position_timeseries_completeness_gap": "REBUILD_DERIVED_TIMESERIES",
+    "unrealized_gain_loss_local_mismatch": "REVALUE_POSITION",
+    "unsupported_authoritative_valuation_receipt": ("REBUILD_VALUATION_WITH_SUPPORTED_POLICY"),
+}
+DEFAULT_REPAIR_RECOMMENDATION = "REVIEW_RECONCILIATION_BREAK"
+
 
 def resolve_value_tolerance(override: Decimal | None) -> Decimal:
     """Preserve an explicit zero override and default only an omitted control."""
@@ -53,6 +73,22 @@ class ReconciliationFinding:
     expected_value: dict[str, Any] | None
     observed_value: dict[str, Any] | None
     detail: dict[str, Any] | None
+    tolerance: Decimal | None = None
+    observed_delta: Decimal | None = None
+
+
+def reconciliation_finding_owner(reconciliation_type: str) -> str:
+    return _FINDING_OWNER_BY_RECONCILIATION_TYPE.get(
+        reconciliation_type.strip().lower(),
+        DEFAULT_RECONCILIATION_FINDING_OWNER,
+    )
+
+
+def reconciliation_repair_recommendation(finding_type: str) -> str:
+    return _REPAIR_RECOMMENDATION_BY_FINDING_TYPE.get(
+        finding_type.strip().lower(),
+        DEFAULT_REPAIR_RECOMMENDATION,
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -272,6 +308,8 @@ def position_valuation_reconciliation_findings(
                     "market_price": str(evidence.market_price),
                     "product_type": evidence.product_type,
                 },
+                tolerance=tolerance,
+                observed_delta=market_delta,
             )
         )
 
@@ -297,6 +335,8 @@ def position_valuation_reconciliation_findings(
                     "cost_basis_local": str(evidence.cost_basis_local),
                     "product_type": evidence.product_type,
                 },
+                tolerance=tolerance,
+                observed_delta=unrealized_delta,
             )
         )
     return findings
