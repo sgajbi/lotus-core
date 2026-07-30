@@ -287,6 +287,7 @@ async def test_flush_timeout_without_callbacks_is_accounted_as_retry(db_engine, 
     assert rows[1].next_attempt_at is not None
     assert all(row.claim_token is None for row in rows)
     assert all(row.claim_expires_at is None for row in rows)
+    mock_producer.reset_after_flush_failure.assert_called_once_with()
 
 
 async def test_flush_exception_replaces_producer_before_releasing_claim(db_engine, clean_db):

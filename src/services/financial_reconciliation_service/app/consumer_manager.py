@@ -16,6 +16,7 @@ from portfolio_common.kafka_utils import create_kafka_producer
 from portfolio_common.outbox_dispatcher import OutboxDispatcher
 from portfolio_common.runtime_supervision import (
     shutdown_runtime_components,
+    validate_runtime_shutdown_budget,
     wait_for_shutdown_or_task_failure,
 )
 
@@ -45,6 +46,11 @@ class ConsumerManager:
         self._shutdown_event.set()
 
     async def run(self):
+        validate_runtime_shutdown_budget(
+            consumers=self.consumers,
+            shutdown_timeout_seconds=self.dispatcher.shutdown_timeout_seconds,
+            termination_grace_seconds=self.dispatcher.termination_grace_seconds,
+        )
         required_topics = [consumer.topic for consumer in self.consumers]
         required_topics.append(KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC)
         required_topics.append(KAFKA_PORTFOLIO_DAY_RECONCILIATION_COMPLETED_TOPIC)

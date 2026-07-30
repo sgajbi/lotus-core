@@ -3,8 +3,10 @@ import logging
 from unittest.mock import patch
 
 import pytest
+from portfolio_common.runtime_settings import RuntimeConfigurationError
 from portfolio_common.runtime_supervision import (
     shutdown_runtime_components,
+    validate_runtime_shutdown_budget,
     wait_for_shutdown_or_task_failure,
 )
 from portfolio_common.worker_readiness import (
@@ -233,6 +235,41 @@ async def test_shutdown_runtime_components_preserves_larger_consumer_drain_budge
     )
 
     assert captured_timeout == [141.0]
+
+
+async def test_runtime_shutdown_budget_accepts_largest_safe_consumer_drain() -> None:
+    class _ExecutionProfile:
+        shutdown_drain_timeout_seconds = 139.0
+
+    class _FakeConsumer:
+        execution_profile = _ExecutionProfile()
+
+    assert (
+        validate_runtime_shutdown_budget(
+            consumers=[_FakeConsumer()],
+            shutdown_timeout_seconds=126.0,
+            termination_grace_seconds=150.0,
+        )
+        == 140.0
+    )
+
+
+async def test_runtime_shutdown_budget_rejects_consumer_drain_beyond_termination_grace() -> None:
+    class _ExecutionProfile:
+        shutdown_drain_timeout_seconds = 140.0
+
+    class _FakeConsumer:
+        execution_profile = _ExecutionProfile()
+
+    with pytest.raises(
+        RuntimeConfigurationError,
+        match=("OUTBOX_DISPATCHER_TERMINATION_GRACE_SECONDS: expected at least 151 seconds"),
+    ):
+        validate_runtime_shutdown_budget(
+            consumers=[_FakeConsumer()],
+            shutdown_timeout_seconds=126.0,
+            termination_grace_seconds=150.0,
+        )
 
 
 async def test_shutdown_runtime_components_cancels_stuck_tasks_after_timeout():

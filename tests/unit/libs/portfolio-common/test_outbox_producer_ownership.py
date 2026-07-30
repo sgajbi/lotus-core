@@ -38,3 +38,23 @@ def test_production_outbox_dispatchers_use_exclusive_producer_factory() -> None:
             REPOSITORY_ROOT
         )
         assert producer_argument.keywords == [], source_path.relative_to(REPOSITORY_ROOT)
+
+
+def test_production_outbox_runtimes_validate_combined_shutdown_budget() -> None:
+    validation_calls: list[tuple[Path, ast.Call]] = []
+    for source_path in SOURCE_ROOT.rglob("*.py"):
+        tree = ast.parse(source_path.read_text(encoding="utf-8"), filename=str(source_path))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call) and _call_name(node) == (
+                "validate_runtime_shutdown_budget"
+            ):
+                validation_calls.append((source_path, node))
+
+    assert len(validation_calls) == EXPECTED_RUNTIME_COMPOSITIONS
+    for source_path, call in validation_calls:
+        keyword_names = {keyword.arg for keyword in call.keywords}
+        assert keyword_names == {
+            "consumers",
+            "shutdown_timeout_seconds",
+            "termination_grace_seconds",
+        }, source_path.relative_to(REPOSITORY_ROOT)

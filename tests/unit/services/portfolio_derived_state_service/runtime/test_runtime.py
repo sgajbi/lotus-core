@@ -17,6 +17,7 @@ pytestmark = pytest.mark.asyncio
 class _FakeDispatcher:
     instances: list["_FakeDispatcher"] = []
     shutdown_timeout_seconds = 126
+    termination_grace_seconds = 150
 
     def __init__(self, kafka_producer: object) -> None:
         self.kafka_producer = kafka_producer

@@ -34,6 +34,7 @@ from portfolio_common.outbox_settings import (
     OutboxRuntimeConfigurationError,
     get_outbox_runtime_settings,
 )
+from portfolio_common.runtime_supervision import RUNTIME_TERMINATION_GRACE_SAFETY_SECONDS
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +43,6 @@ MAX_FAILURE_MESSAGE_LENGTH = 512
 DEFAULT_DELIVERY_FENCE_TIMEOUT_SECONDS = 10
 CLAIM_LEASE_SAFETY_SECONDS = 5
 SHUTDOWN_DRAIN_SAFETY_SECONDS = 5
-TERMINATION_GRACE_SAFETY_SECONDS = 10
 
 
 @dataclass(frozen=True, slots=True)
@@ -125,7 +125,7 @@ class OutboxDispatcher:
             else runtime_settings.termination_grace_seconds
         )
         minimum_termination_grace_seconds = (
-            self._shutdown_timeout_seconds + TERMINATION_GRACE_SAFETY_SECONDS
+            self._shutdown_timeout_seconds + RUNTIME_TERMINATION_GRACE_SAFETY_SECONDS
         )
         if self._termination_grace_seconds < minimum_termination_grace_seconds:
             raise OutboxRuntimeConfigurationError(
@@ -161,6 +161,11 @@ class OutboxDispatcher:
         """Return the minimum supervision budget required to fence in-flight delivery."""
 
         return self._shutdown_timeout_seconds
+
+    @property
+    def termination_grace_seconds(self) -> int:
+        """Return the orchestrator stop budget validated for this dispatcher."""
+        return self._termination_grace_seconds
 
     def stop(self):
         logger.info(
@@ -379,24 +384,6 @@ class OutboxDispatcher:
     ) -> None:
         try:
             undelivered_count = self._producer.flush(timeout=self._delivery_fence_timeout_seconds)
-            logger.debug(
-                "Outbox dispatcher flush completed.",
-                extra=operation_log_extra(
-                    event_name="outbox.dispatcher.flush_completed",
-                    operation="outbox.dispatch",
-                    status="succeeded",
-                    reason_code="producer_flush_completed",
-                    event_count=len(events_to_process),
-                    undelivered_count=undelivered_count,
-                ),
-            )
-            if undelivered_count:
-                _mark_callbackless_events_failed(
-                    events_to_process,
-                    delivery_ack,
-                    delivery_errs,
-                    reason="Kafka flush timed out before delivery callback.",
-                )
         except Exception as e:
             logger.error(
                 "Outbox dispatcher flush failed.",
@@ -416,6 +403,27 @@ class OutboxDispatcher:
                 delivery_ack,
                 delivery_errs,
                 reason=str(e),
+            )
+            return
+
+        logger.debug(
+            "Outbox dispatcher flush completed.",
+            extra=operation_log_extra(
+                event_name="outbox.dispatcher.flush_completed",
+                operation="outbox.dispatch",
+                status="succeeded",
+                reason_code="producer_flush_completed",
+                event_count=len(events_to_process),
+                undelivered_count=undelivered_count,
+            ),
+        )
+        if undelivered_count:
+            self._producer.reset_after_flush_failure()
+            _mark_callbackless_events_failed(
+                events_to_process,
+                delivery_ack,
+                delivery_errs,
+                reason="Kafka flush timed out before delivery callback.",
             )
 
     def _persist_delivery_results(
