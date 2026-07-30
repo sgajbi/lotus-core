@@ -81,8 +81,8 @@
       "authoritative_domain": "portfolio_state",
       "lifecycle_status": "active",
       "request_scope": {
-        "scope_level": "portfolio",
-        "supports_bulk": true
+        "scope_level": "ingestion_job",
+        "supports_bulk": false
       },
       "temporal_scope": {
         "primary_time_field": "as_of_date",
@@ -1493,11 +1493,9 @@
         "policy_version",
         "correlation_id"
       ],
-      "serving_plane": "query_control_plane_service",
+      "serving_plane": "event_replay_service",
       "current_routes": [
-        "/lineage/portfolios/{portfolio_id}/keys",
-        "/support/portfolios/{portfolio_id}/reprocessing-keys",
-        "/support/portfolios/{portfolio_id}/reprocessing-jobs"
+        "/ingestion/jobs/{job_id}/evidence"
       ],
       "freshness_policy": {
         "freshness_class": "daily",
@@ -1524,7 +1522,6 @@
         "successor_product": null
       },
       "identifier_refs": [
-        "portfolio_id",
         "correlation_id",
         "tenant_id"
       ],

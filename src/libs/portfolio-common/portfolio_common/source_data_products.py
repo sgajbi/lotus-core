@@ -13,6 +13,7 @@ CONTROL_PLANE_AND_POLICY = "Control-Plane And Policy"
 
 QUERY_SERVICE = "query_service"
 QUERY_CONTROL_PLANE_SERVICE = "query_control_plane_service"
+EVENT_REPLAY_SERVICE = "event_replay_service"
 
 INLINE_PAGED = "inline_paged"
 EXPORT_ELIGIBLE = "export_eligible"
@@ -765,16 +766,15 @@ SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = (
         product_name="IngestionEvidenceBundle",
         product_version="v1",
         route_family=CONTROL_PLANE_AND_POLICY,
-        serving_plane=QUERY_CONTROL_PLANE_SERVICE,
+        serving_plane=EVENT_REPLAY_SERVICE,
         owner="lotus-core",
         consumers=("lotus-gateway", "lotus-manage", "lotus-report"),
-        current_routes=(
-            "/lineage/portfolios/{portfolio_id}/keys",
-            "/support/portfolios/{portfolio_id}/reprocessing-keys",
-            "/support/portfolios/{portfolio_id}/reprocessing-jobs",
+        current_routes=("/ingestion/jobs/{job_id}/evidence",),
+        paging_mode=NOT_APPLICABLE,
+        notes=(
+            "Job-scoped source-batch, validation, replay, DLQ, quarantine, and repair evidence. "
+            "Legacy portfolio replay listings remain operational views, not this aggregate."
         ),
-        paging_mode=INLINE_PAGED,
-        notes="Source-batch, validation, replay, DLQ, quarantine, and repair evidence.",
     ),
 )
 
@@ -854,7 +854,7 @@ def validate_source_data_product_catalog(
         _require_allowed(
             product.serving_plane,
             "serving_plane",
-            {QUERY_SERVICE, QUERY_CONTROL_PLANE_SERVICE},
+            {EVENT_REPLAY_SERVICE, QUERY_SERVICE, QUERY_CONTROL_PLANE_SERVICE},
         )
         _require_allowed(
             product.paging_mode,

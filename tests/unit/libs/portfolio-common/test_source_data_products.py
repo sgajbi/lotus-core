@@ -7,6 +7,7 @@ from portfolio_common.source_data_products import (
     CONTROL_PLANE_AND_POLICY,
     DEFAULT_REQUIRED_METADATA_FIELDS,
     DPM_PLANNED_SOURCE_DATA_PRODUCT_CATALOG,
+    EVENT_REPLAY_SERVICE,
     OPERATIONAL_READ,
     QUERY_CONTROL_PLANE_SERVICE,
     SOURCE_DATA_PRODUCT_CATALOG,
@@ -73,6 +74,9 @@ def test_catalog_contains_priority_rfc_0083_products() -> None:
         "DataQualityCoverageReport",
         "IngestionEvidenceBundle",
     } <= product_names
+    ingestion_evidence = get_source_data_product("IngestionEvidenceBundle")
+    assert ingestion_evidence.serving_plane == EVENT_REPLAY_SERVICE
+    assert ingestion_evidence.current_routes == ("/ingestion/jobs/{job_id}/evidence",)
 
 
 def test_dpm_planned_source_products_are_governed_but_not_active_routes() -> None:

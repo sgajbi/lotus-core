@@ -2,6 +2,7 @@ from datetime import datetime
 from decimal import Decimal
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, status
+from portfolio_common.source_data_products import source_data_product_openapi_extra
 
 from src.services.ingestion_service.app.DTOs.ingestion_job_dto import (
     ConsumerDlqEventListResponse,
@@ -11,6 +12,7 @@ from src.services.ingestion_service.app.DTOs.ingestion_job_dto import (
     IngestionCapacityStatusResponse,
     IngestionConsumerLagResponse,
     IngestionErrorBudgetStatusResponse,
+    IngestionEvidenceBundleResponse,
     IngestionHealthSummaryResponse,
     IngestionIdempotencyDiagnosticsResponse,
     IngestionJobBookkeepingRepairResponse,
@@ -44,6 +46,7 @@ from ..application.consumer_dlq_replay_commands import (
     ConsumerDlqReplayCommand,
     ConsumerDlqReplayCommandService,
 )
+from ..application.ingestion_evidence_queries import IngestionEvidenceQueryService
 from ..application.ingestion_operations_queries import (
     IngestionOperationsNotFound,
     IngestionOperationsQueryService,
@@ -60,6 +63,7 @@ from ..application.replay_command_errors import ReplayCommandError
 from ..dependencies import (
     get_bookkeeping_repair_command_service,
     get_consumer_dlq_replay_command_service,
+    get_ingestion_evidence_query_service,
     get_ingestion_operations_query_service,
     get_ingestion_retry_command_service,
     get_ops_control_command_service,
@@ -76,6 +80,7 @@ from .ingestion_operations_examples import (
     INGESTION_CONSUMER_DLQ_EVENT_NOT_FOUND_EXAMPLE,
     INGESTION_CONSUMER_LAG_RESPONSE_EXAMPLE,
     INGESTION_ERROR_BUDGET_STATUS_RESPONSE_EXAMPLE,
+    INGESTION_EVIDENCE_BUNDLE_RESPONSE_EXAMPLE,
     INGESTION_HEALTH_SUMMARY_RESPONSE_EXAMPLE,
     INGESTION_IDEMPOTENCY_DIAGNOSTICS_RESPONSE_EXAMPLE,
     INGESTION_JOB_FAILURE_LIST_RESPONSE_EXAMPLE,
@@ -151,6 +156,46 @@ async def get_ingestion_job(
             },
         )
     return job
+
+
+@router.get(
+    "/ingestion/jobs/{job_id}/evidence",
+    response_model=IngestionEvidenceBundleResponse,
+    status_code=status.HTTP_200_OK,
+    tags=["Ingestion Operations"],
+    summary="Get governed ingestion evidence bundle",
+    description=(
+        "What: Return one stable evidence bundle for a source ingestion job.\n"
+        "How: Compose canonical job, failure, replay-audit, and correlated consumer-DLQ "
+        "records without duplicating persistence ownership. Source-batch identity is emitted "
+        "only when the retained payload proves one unambiguous source scope.\n"
+        "When: Use for audit, replay approval, remediation, and downstream ingestion gating."
+    ),
+    openapi_extra=source_data_product_openapi_extra("IngestionEvidenceBundle"),
+    responses={
+        200: {
+            "description": "Governed ingestion evidence for the requested job.",
+            "content": {
+                "application/json": {"example": INGESTION_EVIDENCE_BUNDLE_RESPONSE_EXAMPLE}
+            },
+        },
+        404: {
+            "description": "Ingestion job was not found.",
+            "content": {"application/json": {"example": INGESTION_JOB_NOT_FOUND_EXAMPLE}},
+        },
+    },
+)
+async def get_ingestion_evidence_bundle(
+    job_id: str = Path(
+        description="Ingestion job identifier.",
+        examples=["job_01J5S0J6D3BAVMK2E1V0WQ7MCC"],
+    ),
+    query_service: IngestionEvidenceQueryService = Depends(get_ingestion_evidence_query_service),
+):
+    try:
+        return await query_service.get_evidence_bundle(job_id)
+    except IngestionOperationsNotFound as exc:
+        raise _not_found_response(exc) from exc
 
 
 @router.post(

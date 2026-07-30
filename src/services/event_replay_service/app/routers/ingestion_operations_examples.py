@@ -9,6 +9,9 @@ INGESTION_JOB_RESPONSE_EXAMPLE = {
     "status": "queued",
     "accepted_count": 125,
     "idempotency_key": "ingestion-transactions-batch-20260306-001",
+    "request_payload_fingerprint": (
+        "sha256:c5b0faeb7de60bc111f109624e58d0ad6206634be5fef4d4455cdac629df4f3f"
+    ),
     "correlation_id": "ING:7f4a64b0-35f4-41bc-8f74-cb556f2ad9a3",
     "request_id": "REQ:3a63936e-bf29-41e2-9f16-faf4e561d845",
     "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
@@ -17,6 +20,106 @@ INGESTION_JOB_RESPONSE_EXAMPLE = {
     "failure_reason": None,
     "retry_count": 1,
     "last_retried_at": "2026-03-06T13:24:10.512Z",
+}
+
+INGESTION_EVIDENCE_BUNDLE_RESPONSE_EXAMPLE = {
+    "product_name": "IngestionEvidenceBundle",
+    "product_version": "v1",
+    "tenant_id": None,
+    "generated_at": "2026-07-31T04:30:00Z",
+    "as_of_date": "2026-07-31",
+    "restatement_version": "v1",
+    "reconciliation_status": "UNKNOWN",
+    "data_quality_status": "PARTIAL",
+    "latest_evidence_timestamp": "2026-07-31T04:29:59Z",
+    "evidence_bundle_id": "ingev_8e68038a37f50d0e3f693f1e2081b718",
+    "snapshot_id": "ingev_8e68038a37f50d0e3f693f1e2081b718",
+    "content_hash": ("sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"),
+    "source_digest": ("sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"),
+    "source_refs": [
+        "source-batch:custody-feed:custody-20260731-001",
+        "source-record:custody-feed:TXN-2026-000145",
+        "source-system:custody-feed",
+    ],
+    "source_lineage": {
+        "source_product": "IngestionEvidenceBundle",
+        "source_owner": "lotus-core",
+        "ingestion_job_id": "job_01J5S0J6D3BAVMK2E1V0WQ7MCC",
+    },
+    "degradation": {"status": "NONE", "reason_codes": [], "details": []},
+    "source_evidence_current": False,
+    "freshness_status": "UNAVAILABLE",
+    "policy_version": "ingestion-evidence.v1",
+    "correlation_id": "ERP:7f4a64b0-35f4-41bc-8f74-cb556f2ad9a3",
+    "ingestion_outcome": "partially_accepted",
+    "replay_posture": "replayed",
+    "repair_posture": "not_required",
+    "source_system": "custody-feed",
+    "source_batch_id": "custody-20260731-001",
+    "source_batch_fingerprint": "srcbatch_6cb56820146b8bd4145052f728805e3d",
+    "evidence_references": [
+        "consumer-dlq:cdlq_01J5VK4Y4EPMTVF1B0HF4CAHB6",
+        "ingestion-job:job_01J5S0J6D3BAVMK2E1V0WQ7MCC",
+        "ingestion-replay:replay_01J5WK1G7S3HBQ7Q3M0E3TMT0P",
+    ],
+    "evidence_complete": True,
+    "evidence_limit": 500,
+    "evidence_gate": "BLOCK",
+    "evidence_gate_reasons": ["PARTIALLY_ACCEPTED_SOURCE_BATCH"],
+    "validation": {
+        "profile_name": "transaction-ingestion",
+        "profile_version": "v1",
+        "received_count": 125,
+        "accepted_count": 124,
+        "rejected_count": 0,
+        "quarantined_count": 1,
+        "finding_count": 1,
+        "finding_references": ["consumer-dlq:cdlq_01J5VK4Y4EPMTVF1B0HF4CAHB6"],
+    },
+    "retention": {
+        "retention_class": "governed_operational_evidence",
+        "archival_posture": "policy_managed",
+        "retention_period_days": None,
+    },
+    "job": INGESTION_JOB_RESPONSE_EXAMPLE,
+    "failures": [],
+    "consumer_dlq_events": [
+        {
+            "event_id": "cdlq_01J5VK4Y4EPMTVF1B0HF4CAHB6",
+            "original_topic": "transactions.raw.received",
+            "consumer_group": "persistence-service-group",
+            "dlq_topic": "dlq.persistence_service",
+            "original_key": "TXN-2026-000145",
+            "error_reason_code": "VALIDATION_ERROR",
+            "error_reason": "portfolio_id is required",
+            "correlation_id": "ING:7f4a64b0-35f4-41bc-8f74-cb556f2ad9a3",
+            "correlation_missing_reason": None,
+            "alternate_lookup_key": None,
+            "payload_excerpt": None,
+            "observed_at": "2026-03-06T13:25:42.501Z",
+        }
+    ],
+    "replay_audits": [
+        {
+            "replay_id": "replay_01J5WK1G7S3HBQ7Q3M0E3TMT0P",
+            "recovery_path": "consumer_dlq_replay",
+            "event_id": "cdlq_01J5VK4Y4EPMTVF1B0HF4CAHB6",
+            "replay_fingerprint": (
+                "c5b0faeb7de60bc111f109624e58d0ad6206634be5fef4d4455cdac629df4f3f"
+            ),
+            "correlation_id": "ING:7f4a64b0-35f4-41bc-8f74-cb556f2ad9a3",
+            "correlation_missing_reason": None,
+            "alternate_lookup_key": None,
+            "job_id": "job_01J5S0J6D3BAVMK2E1V0WQ7MCC",
+            "endpoint": "/ingest/transactions",
+            "replay_status": "replayed",
+            "dry_run": False,
+            "replay_reason": "Replayed correlated ingestion payload.",
+            "requested_by": "ops-token",
+            "requested_at": "2026-03-06T13:27:01.019Z",
+            "completed_at": "2026-03-06T13:27:02.039Z",
+        }
+    ],
 }
 
 INGESTION_JOB_FAILURE_LIST_RESPONSE_EXAMPLE = {
