@@ -112,9 +112,10 @@ closure of the complete producer-policy inventory.
   historical evidence. The inventory now reports three `required`, zero `partial`, and five
   `not-exposed` policies.
 - Made every valuation-domain intermediate context specify governed precision and rounding rather
-  than inheriting process state. The migration downgrade now clears only new-only lineage from
-  `LEGACY_UNSCOPED` rows before restoring the prior constraint, making rollback data-compatible
-  while truthfully discarding evidence that the prior schema cannot represent.
+  than inheriting process state. The migration downgrade now removes only newly enriched
+  `LEGACY_UNSCOPED` receipts before restoring the prior constraint. Deletion preserves the
+  snapshot and avoids retaining either lineage the old schema cannot represent or a receipt hash
+  that no longer matches its content.
 
 The later cashflow persistence slice adds one nullable JSON column and no topic or runtime-topology
 change. Exactly representable inputs, cashflow formulas, serialized Decimal amounts, transaction

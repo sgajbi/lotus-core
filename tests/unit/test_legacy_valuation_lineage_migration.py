@@ -55,5 +55,6 @@ def test_legacy_valuation_lineage_constraint_migration_is_reversible(monkeypatch
     assert "market_price_source IS NULL" in upgrade_condition
     assert "market_price_source IS NULL AND calculation_lineage IS NULL" not in upgrade_condition
     assert "WHERE supportability = 'LEGACY_UNSCOPED'" in downgrade_cleanup
-    assert "SET calculation_lineage = NULL" in downgrade_cleanup
+    assert "DELETE FROM daily_position_valuation_receipts" in downgrade_cleanup
+    assert "calculation_lineage IS NOT NULL" in downgrade_cleanup
     assert "market_price_source IS NULL AND calculation_lineage IS NULL" in downgrade_condition
