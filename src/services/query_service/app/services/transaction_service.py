@@ -137,6 +137,7 @@ class TransactionService:
             effective_as_of_date=effective_as_of_date,
             end_date=end_date,
             latest_evidence_timestamp=ledger_page.latest_evidence_timestamp,
+            ledger_filters=ledger_filters,
             missing_instrument_security_ids=ledger_page.missing_instrument_security_ids,
         )
 
