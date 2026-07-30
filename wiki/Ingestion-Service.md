@@ -144,8 +144,11 @@ downstream processing and analytics.
 tenant/legal-book/instrument-scoped policy authority. It rejects unknown policy versions, duplicate
 source-version identities, invalid effective windows, and overlapping active sources. Exact-scope
 writes are transactionally serialized before the incoming batch is checked against durable
-history. The route does not infer legal book from booking centre or activate the new policy in the
-production valuation worker by itself.
+history. Assignment history is append-only: exact persisted replay is a no-op, while stale versions
+or divergent content claiming an accepted version fail closed before insertion. Semantic
+corrections expose previous/accepted authority and the earliest affected valuation date for bounded
+replay; metadata-only corrections remain auditable without creating valuation work. The route does
+not infer legal book from booking centre or activate correction-triggered revaluation by itself.
 
 `POST /ingest/authoritative-market-price-source-facts` accepts the corresponding exact-scope price
 authority. Each record declares unit-price, clean-percent-of-principal, or
