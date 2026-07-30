@@ -57,6 +57,13 @@ Primary durable outputs include:
 - `financial_reconciliation_findings`
 - control evidence surfaced through reconciliation APIs
 
+Finding rows also persist accountable owner, governed resolution state, terminal actor/timestamp
+evidence, finite tolerance and observed delta where value-based, and a bounded repair recommendation.
+QCP reconciliation routes expose deterministic evidence identities, open-break severity counts,
+evidence age, and fail-closed publication gates. The run-list gate blocks incomplete paged evidence
+windows. This release does not claim an operator command for transitioning findings into terminal
+resolution states.
+
 Run and support responses expose `aggregation_revision` so operators can join the aggregate input
 generation to its independent control calculation and published control decision.
 

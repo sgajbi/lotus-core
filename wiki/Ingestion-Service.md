@@ -13,6 +13,12 @@ backed by route tests, command-handler tests, OpenAPI guards, ingestion contract
 architecture boundary guards; unsupported downstream readiness or analytics conclusions belong in
 their owning services.
 
+Job evidence is consumed through `event_replay_service` at
+`GET /ingestion/jobs/{job_id}/evidence`. That aggregate reads, but does not duplicate ownership of,
+the canonical ingestion job, failure, replay-audit, retained-payload, and consumer-DLQ stores.
+Source-batch identity is nullable and appears only when retained payload evidence proves one
+unambiguous upstream batch.
+
 ## Reader Map
 
 | Reader | Use this page for | Evidence path |
