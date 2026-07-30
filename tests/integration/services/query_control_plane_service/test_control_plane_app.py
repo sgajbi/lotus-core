@@ -260,6 +260,13 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
         parameter for parameter in overview["parameters"] if parameter["name"] == "portfolio_id"
     )
     assert overview_portfolio["description"] == "Portfolio identifier."
+    overview_as_of_date = next(
+        parameter for parameter in overview["parameters"] if parameter["name"] == "as_of_date"
+    )
+    assert overview_as_of_date["description"] == (
+        "Optional business-date upper bound in YYYY-MM-DD format for aggregation job health. "
+        "Omit it to inspect the full portfolio queue."
+    )
     overview_stale_threshold = next(
         parameter
         for parameter in overview["parameters"]
@@ -279,7 +286,7 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert "backlog, control-stage, or replay evidence matters" in overview["description"]
     assert "/support/portfolios/{portfolio_id}/readiness" in overview["description"]
     assert "supportability evidence, not business-calculation inputs" in (overview["description"])
-    assert "400" not in overview["responses"]
+    assert "400" in overview["responses"]
 
     readiness_as_of_date = next(
         parameter for parameter in readiness["parameters"] if parameter["name"] == "as_of_date"

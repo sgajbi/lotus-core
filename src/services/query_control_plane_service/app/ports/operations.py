@@ -61,6 +61,7 @@ class OperationsSupportRepository(Protocol):
         failed_window_hours: int,
         reference_now: datetime,
         as_of: datetime | None = None,
+        through_business_date: date | None = None,
     ) -> JobHealthSummary: ...
 
     async def get_analytics_export_job_health_summary(

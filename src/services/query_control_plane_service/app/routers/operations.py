@@ -215,7 +215,10 @@ async def execute_outbox_recovery_call(
 @router.get(
     "/support/portfolios/{portfolio_id}/overview",
     response_model=SupportOverviewResponse,
-    responses={status.HTTP_404_NOT_FOUND: portfolio_not_found_response()},
+    responses={
+        status.HTTP_404_NOT_FOUND: portfolio_not_found_response(),
+        status.HTTP_400_BAD_REQUEST: invalid_date_response("as_of_date"),
+    },
     summary="Get operational support overview for a portfolio",
     description=(
         "What: Return support-oriented operational state for one portfolio.\n"
@@ -234,6 +237,14 @@ async def get_support_overview(
         description="Portfolio identifier.",
         examples=["PORT-OPS-001"],
     ),
+    as_of_date: Optional[str] = Query(
+        None,
+        description=(
+            "Optional business-date upper bound in YYYY-MM-DD format for aggregation job "
+            "health. Omit it to inspect the full portfolio queue."
+        ),
+        examples=["2026-03-28"],
+    ),
     stale_threshold_minutes: int = Query(
         DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
         ge=1,
@@ -250,9 +261,11 @@ async def get_support_overview(
     ),
     service: OperationsService = Depends(get_operations_service),
 ):
+    parsed_as_of_date = parse_optional_iso_date("as_of_date", as_of_date)
     return await execute_operations_call(
         service.get_support_overview(
             portfolio_id=portfolio_id,
+            as_of_date=parsed_as_of_date,
             stale_threshold_minutes=stale_threshold_minutes,
             failed_window_hours=failed_window_hours,
         ),

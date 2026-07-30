@@ -102,6 +102,9 @@ Use APIs before going directly to the database where possible:
 
 - support overview:
   `GET /support/portfolios/{portfolio_id}/overview`
+  Add `?as_of_date=YYYY-MM-DD` when validating a historical portfolio date so later-dated
+  aggregation work remains visible in the default full-queue view without blocking that bounded
+  readiness decision.
 - readiness:
   `GET /support/portfolios/{portfolio_id}/readiness?as_of_date=YYYY-MM-DD`
 - lineage routes:

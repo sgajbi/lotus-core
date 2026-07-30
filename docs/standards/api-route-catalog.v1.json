@@ -8514,6 +8514,11 @@
       ],
       "error_models": [
         {
+          "status_code": "400",
+          "schema": "QueryControlPlaneProblemDetails",
+          "description": "Invalid date filter."
+        },
+        {
           "status_code": "404",
           "schema": "QueryControlPlaneProblemDetails",
           "description": "Portfolio not found."
@@ -8526,7 +8531,8 @@
       ],
       "pagination": [],
       "filtering": [
-        "portfolio_id"
+        "portfolio_id",
+        "as_of_date"
       ],
       "sorting": [],
       "idempotency_behavior": "safe-read",

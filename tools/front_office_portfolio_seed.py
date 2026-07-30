@@ -2452,7 +2452,8 @@ def _collect_front_office_readiness_diagnostics(
     try:
         _, overview_payload = _request_json(
             "GET",
-            f"{query_control_plane_base_url}/support/portfolios/{portfolio_id}/overview",
+            f"{query_control_plane_base_url}/support/portfolios/"
+            f"{portfolio_id}/overview?as_of_date={as_of_date}",
         )
         diagnostics["support_overview"] = _extract_support_overview_summary(overview_payload)
     except RuntimeError as exc:
@@ -2660,7 +2661,8 @@ def _verify_front_office_portfolio(
             )
             _, support_overview = _request_json(
                 "GET",
-                f"{query_control_plane_base_url}/support/portfolios/{expected.portfolio_id}/overview",
+                f"{query_control_plane_base_url}/support/portfolios/"
+                f"{expected.portfolio_id}/overview?as_of_date={as_of_date}",
             )
             _, cashflow_projection = _request_json(
                 "GET",

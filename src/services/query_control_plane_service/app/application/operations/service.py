@@ -436,12 +436,20 @@ class OperationsService:
         portfolio_id: str,
         stale_threshold_minutes: int = DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
         failed_window_hours: int = DEFAULT_SUPPORT_FAILED_WINDOW_HOURS,
+        as_of_date: date | None = None,
+        use_latest_business_date_for_aggregation_health: bool = False,
     ) -> SupportOverviewResponse:
         generated_at_utc = datetime.now(timezone.utc)
         latest_business_date = await self._resolve_portfolio_latest_business_date(
             portfolio_id,
             generated_at_utc=generated_at_utc,
         )
+        aggregation_health_through_date = as_of_date
+        if (
+            aggregation_health_through_date is None
+            and use_latest_business_date_for_aggregation_health
+        ):
+            aggregation_health_through_date = latest_business_date
         current_epoch = await self.repo.get_current_portfolio_epoch(
             portfolio_id,
             as_of=generated_at_utc,
@@ -465,6 +473,7 @@ class OperationsService:
             failed_window_hours=failed_window_hours,
             reference_now=generated_at_utc,
             as_of=generated_at_utc,
+            through_business_date=aggregation_health_through_date,
         )
         analytics_export_job_health = await self.repo.get_analytics_export_job_health_summary(
             portfolio_id,
@@ -545,8 +554,10 @@ class OperationsService:
     ) -> PortfolioReadinessResponse:
         support_overview = await self.get_support_overview(
             portfolio_id=portfolio_id,
+            as_of_date=as_of_date,
             stale_threshold_minutes=stale_threshold_minutes,
             failed_window_hours=failed_window_hours,
+            use_latest_business_date_for_aggregation_health=True,
         )
         generated_at_utc = support_overview.generated_at_utc
         resolved_as_of_date = (

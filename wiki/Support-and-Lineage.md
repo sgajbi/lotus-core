@@ -29,7 +29,7 @@ evidence plane for portfolio processing.
 | Area | Current implementation-backed behavior | Primary audience |
 | --- | --- | --- |
 | Portfolio readiness | Publishes source-owned readiness buckets for holdings, pricing, transactions, reporting, blocking reasons, latest booked transaction date, latest current-epoch snapshot date, control posture, missing historical FX prerequisites, and RFC-0108 supportability posture. | Relationship managers, operations, support, Gateway, Workbench |
-| Support overview | Summarizes portfolio-day operational posture, queue pressure, stale or failed jobs, replay state, controls status, and publish allowance. | Operations, production support |
+| Support overview | Summarizes portfolio-day operational posture, queue pressure, stale or failed jobs, replay state, controls status, and publish allowance. Its optional `as_of_date` bounds aggregation-job health at or before that business date; omitting it retains the full-queue operator view. | Operations, production support |
 | Lineage | Exposes portfolio and portfolio-security artifact identity, current epoch, watermarks, and adjacent processing evidence without requiring direct table inspection. | Operations, engineering support |
 | Reprocessing evidence | Lists replay keys and jobs so stale or blocked derived state can be diagnosed before downstream services are blamed. | Operations, engineering support |
 | Reconciliation evidence | Exposes reconciliation runs and findings so blocked controls can be explained with durable source evidence. | Operations, client-service escalation |
@@ -103,6 +103,8 @@ as internal-only diagnostics.
 Start with:
 
 - `GET /support/portfolios/{portfolio_id}/overview`
+- `GET /support/portfolios/{portfolio_id}/overview?as_of_date=YYYY-MM-DD` for a bounded historical
+  readiness decision
 - `GET /support/portfolios/{portfolio_id}/readiness`
 
 Readiness supportability also emits `lotus_core_portfolio_supportability_total` with only
