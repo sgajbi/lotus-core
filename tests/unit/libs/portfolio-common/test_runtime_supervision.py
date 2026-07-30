@@ -204,6 +204,37 @@ async def test_shutdown_runtime_components_uses_consumer_drain_budget_by_default
     assert captured_timeout == [31.0]
 
 
+async def test_shutdown_runtime_components_preserves_larger_consumer_drain_budget(
+    monkeypatch,
+):
+    captured_timeout: list[float] = []
+
+    class _ExecutionProfile:
+        shutdown_drain_timeout_seconds = 140.0
+
+    class _FakeConsumer:
+        execution_profile = _ExecutionProfile()
+
+        def shutdown(self) -> None:
+            return None
+
+    async def _capture_gather_timeout(tasks, shutdown_timeout_seconds):
+        captured_timeout.append(shutdown_timeout_seconds)
+
+    monkeypatch.setattr(
+        "portfolio_common.runtime_supervision._gather_runtime_tasks",
+        _capture_gather_timeout,
+    )
+
+    await shutdown_runtime_components(
+        tasks=[asyncio.create_task(asyncio.sleep(0))],
+        consumers=[_FakeConsumer()],
+        shutdown_timeout_seconds=126.0,
+    )
+
+    assert captured_timeout == [141.0]
+
+
 async def test_shutdown_runtime_components_cancels_stuck_tasks_after_timeout():
     cancelled = asyncio.Event()
 

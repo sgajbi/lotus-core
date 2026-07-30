@@ -47,7 +47,9 @@ underlying batch thread. Kubernetes could then terminate the process before the 
   on their separate shared producer so dispatcher recovery cannot purge their records.
 - Guard every production `OutboxDispatcher` composition against shared-producer construction.
 - Derive a dispatcher supervision timeout from the producer-specific delivery fence plus a drain
-  margin, and pass it from every dispatcher-owning runtime to shared shutdown supervision.
+  margin, and pass it from every dispatcher-owning runtime to shared shutdown supervision. Shared
+  supervision takes the maximum of that fence and every configured consumer drain budget plus its
+  grace, so dispatcher safety never shortens a supported consumer shutdown override.
 - Require the configured pod termination grace to exceed that supervision budget by a further
   process-termination margin. Fail dispatcher construction for unsafe combinations.
 - Increase the governed derived-state and transaction-processing pod grace from 60 to 150 seconds
@@ -81,7 +83,8 @@ Runtime supervision waits 126 seconds for a producer using the default 120-secon
 timeout, and dispatcher startup rejects termination grace below 136 seconds. Operator overrides of
 Kafka delivery timeout must therefore be paired with a sufficiently large outbox claim lease and
 termination grace. These are lifecycle controls only; successful dispatch, message contracts, and
-retry semantics are unchanged.
+retry semantics are unchanged. A consumer drain budget above the dispatcher fence remains
+authoritative and receives its existing one-second completion grace.
 
 Mixed dispatcher versions are unsafe because an old process does not honor the stream-head
 barrier. Deployments must quiesce all dispatcher-owning workers, apply migration
