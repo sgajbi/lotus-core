@@ -107,8 +107,9 @@ For `PortfolioTimeseriesInput` and `PositionTimeseriesInput`, a positive positio
 authoritative restatement lineage rather than stale evidence. A complete window selected through
 the current-position-epoch fence reports `valuation_status=restated` where applicable while
 remaining `data_quality_status=COMPLETE`, `source_evidence_current=true`, and
-`freshness_status=CURRENT`. Position completeness is measured against the canonical business-date
-window. Missing dates, every continuation page (including the final page), and genuinely
+`freshness_status=CURRENT`. Portfolio and position completeness count only observations on the
+canonical business-date window; a noncanonical observation cannot compensate for a missing
+expected date. Missing dates, every continuation page (including the final page), and genuinely
 non-current rows remain degraded. For unpaginated position windows, `missing_dates_count` reports
 the canonical business-date gap; paginated responses do not treat dates outside the page as
 missing.

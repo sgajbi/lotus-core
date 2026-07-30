@@ -429,12 +429,19 @@ async def test_get_portfolio_timeseries_tracks_missing_business_dates_and_report
                 close_date=None,
             )
         ),
-        get_fx_rates_map=AsyncMock(return_value={date(2025, 1, 2): Decimal("1.5")}),
+        get_fx_rates_map=AsyncMock(
+            return_value={
+                date(2025, 1, 2): Decimal("1.5"),
+                date(2025, 1, 3): Decimal("1.5"),
+            }
+        ),
         get_latest_portfolio_timeseries_date=AsyncMock(return_value=date(2025, 1, 2)),
         get_latest_position_timeseries_date=AsyncMock(return_value=date(2025, 1, 2)),
         get_position_snapshot_epoch=AsyncMock(return_value=1),
         list_business_dates=AsyncMock(return_value=[date(2025, 1, 1), date(2025, 1, 2)]),
-        list_position_observation_dates=AsyncMock(return_value=[date(2025, 1, 2)]),
+        list_position_observation_dates=AsyncMock(
+            return_value=[date(2025, 1, 2), date(2025, 1, 3)]
+        ),
         list_position_timeseries_rows_unpaged=AsyncMock(
             return_value=[
                 SimpleNamespace(
@@ -446,7 +453,17 @@ async def test_get_portfolio_timeseries_tracks_missing_business_dates_and_report
                     epoch=1,
                     position_currency="EUR",
                     asset_class="Equity",
-                )
+                ),
+                SimpleNamespace(
+                    security_id="SEC_EUR",
+                    valuation_date=date(2025, 1, 3),
+                    bod_market_value=Decimal("110"),
+                    eod_market_value=Decimal("115"),
+                    bod_cashflow_position=Decimal("0"),
+                    epoch=1,
+                    position_currency="EUR",
+                    asset_class="Equity",
+                ),
             ]
         ),
         list_latest_position_timeseries_before=AsyncMock(return_value=[]),
@@ -479,6 +496,7 @@ async def test_get_portfolio_timeseries_tracks_missing_business_dates_and_report
     assert response.observations[0].cash_flows[0].flow_scope == "external"
     assert response.observations[0].cash_flow_currency == "USD"
     assert response.diagnostics.missing_dates_count == 1
+    assert response.diagnostics.returned_observation_dates_count == 2
     assert response.diagnostics.stale_points_count == 0
     assert response.data_quality_status == "PARTIAL"
     assert response.source_evidence_current is False

@@ -85,7 +85,8 @@ derived-state and transaction-processing deployments set both the pod grace and 
 150 seconds; with the default 120-second Kafka delivery timeout, supervision allows 126 seconds and
 the minimum accepted termination grace is 136 seconds. When changing delivery timeout, change the
 claim lease and termination grace together and keep the manifest value aligned with the runtime
-setting.
+setting. App-local Compose also sets `stop_grace_period: 150s` for every dispatcher-owning service;
+do not rely on Compose's shorter default stop window.
 
 This gives `lotus-core` a durable database-backed publish queue rather than relying on in-memory
 best effort after a write succeeds.

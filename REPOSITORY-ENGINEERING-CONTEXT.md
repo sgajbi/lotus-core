@@ -3300,8 +3300,9 @@ Most relevant current governance:
      Query-control-plane analytics inputs must preserve `valuation_status=restated` while treating
      rows selected through the exact `PositionTimeseries.epoch == PositionState.epoch` fence as
      current. Fully observed, unpaginated final/restated windows are `COMPLETE` with
-     `source_evidence_current=true`; position coverage is measured against canonical business
-     dates, and missing dates or any continuation page (including the final page) remain `PARTIAL`.
+     `source_evidence_current=true`; portfolio and position coverage count only observations on
+     canonical business dates, so noncanonical observations cannot compensate for missing expected
+     dates. Missing dates or any continuation page (including the final page) remain `PARTIAL`.
      Unpaginated position diagnostics report the canonical business-date gap in
      `missing_dates_count`; paginated responses must not classify dates outside the returned page
      as missing.
@@ -3327,7 +3328,8 @@ Most relevant current governance:
      must exceed that supervision budget by the governed termination margin; reject unsafe claim
      lease, supervision, or termination combinations at startup. The governed dispatcher
      deployments use a 150-second termination grace for the default 120-second producer delivery
-     timeout. Deployments changing this rule must quiesce every dispatcher-owning worker before
+     timeout, and app-local Compose sets `stop_grace_period: 150s` for all five dispatcher-owning
+     services. Deployments changing this rule must quiesce every dispatcher-owning worker before
      migrating and restart only the compatible version; mixed dispatcher versions are not
      ordering-safe.
 

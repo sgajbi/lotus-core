@@ -31,6 +31,9 @@ scheduler timing.
   window is complete only when its observed dates cover the canonical business-date window.
   Its `missing_dates_count` reports that canonical gap; paginated responses do not misclassify
   dates outside the returned page as missing.
+- Count only observations on expected canonical business dates toward portfolio completeness. A
+  noncanonical observation cannot compensate for a missing expected date even when raw counts are
+  equal.
 - Retain the complete quality-status distribution so consumers can distinguish original from
   restated values.
 - Make E2E acceptance require exact economics plus current evidence while accepting either legal
@@ -50,4 +53,6 @@ Downstream consumers still receive `valuation_status=restated` and the quality d
 - Focused analytics unit proof after correction: `86 passed in 2.21s`.
 - Post-correction exact-source E2E: `4 passed in 61.10s`.
 - Review fix-forward proof covers incomplete position windows and final continuation pages.
+- Portfolio calendar-substitution proof covers an equal raw observation count containing one
+  noncanonical date and retains `PARTIAL` / non-current evidence.
 - Final protected CI and exact-main evidence are recorded on issue #490.
