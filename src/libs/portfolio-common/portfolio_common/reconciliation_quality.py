@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 
 COMPLETE = "COMPLETE"
 PARTIAL = "PARTIAL"
@@ -25,6 +26,9 @@ _RUN_STATUS_CLASSIFICATION_BY_STATUS = {
 
 BLOCKING_FINDING_SEVERITIES = {"ERROR", "CRITICAL", "BLOCKER"}
 NON_BLOCKING_FINDING_SEVERITIES = {"WARNING", "INFO"}
+OPEN_FINDING_RESOLUTION_STATES = {"OPEN", "IN_PROGRESS"}
+CLOSED_FINDING_RESOLUTION_STATES = {"RESOLVED", "WAIVED", "SUPPRESSED"}
+FINDING_RESOLUTION_STATES = OPEN_FINDING_RESOLUTION_STATES | CLOSED_FINDING_RESOLUTION_STATES
 
 
 @dataclass(frozen=True)
@@ -95,8 +99,8 @@ def _has_blocking_run_status(*, status: str, error_count: int) -> bool:
 
 
 def classify_finding_status(*, severity: str, resolution_state: str = "OPEN") -> str:
-    normalized_resolution = _normalize_required_text(resolution_state, "resolution_state")
-    if normalized_resolution in {"RESOLVED", "WAIVED", "SUPPRESSED"}:
+    normalized_resolution = normalize_finding_resolution_state(resolution_state)
+    if normalized_resolution in CLOSED_FINDING_RESOLUTION_STATES:
         return COMPLETE
     normalized_severity = _normalize_required_text(severity, "severity")
     if normalized_severity in BLOCKING_FINDING_SEVERITIES:
@@ -104,6 +108,44 @@ def classify_finding_status(*, severity: str, resolution_state: str = "OPEN") ->
     if normalized_severity in NON_BLOCKING_FINDING_SEVERITIES:
         return BREAK_OPEN
     return UNKNOWN
+
+
+def normalize_finding_resolution_state(resolution_state: str) -> str:
+    normalized = _normalize_required_text(resolution_state, "resolution_state")
+    if normalized not in FINDING_RESOLUTION_STATES:
+        supported = ", ".join(sorted(FINDING_RESOLUTION_STATES))
+        raise ValueError(f"resolution_state must be one of: {supported}")
+    return normalized
+
+
+def is_finding_open(resolution_state: str) -> bool:
+    return normalize_finding_resolution_state(resolution_state) in OPEN_FINDING_RESOLUTION_STATES
+
+
+def evidence_age_minutes(
+    *,
+    generated_at: datetime,
+    evidence_timestamp: datetime | None,
+) -> int | None:
+    """Return a bounded whole-minute age without allowing future evidence to be negative."""
+
+    if evidence_timestamp is None:
+        return None
+    try:
+        elapsed_seconds = (generated_at - evidence_timestamp).total_seconds()
+    except TypeError as exc:
+        raise ValueError(
+            "generated_at and evidence_timestamp must share timezone awareness"
+        ) from exc
+    return max(0, int(elapsed_seconds // 60))
+
+
+def is_evidence_stale(*, evidence_age_minutes: int | None, threshold_minutes: int) -> bool:
+    _require_non_negative(threshold_minutes, "threshold_minutes")
+    if evidence_age_minutes is None:
+        return False
+    _require_non_negative(evidence_age_minutes, "evidence_age_minutes")
+    return evidence_age_minutes > threshold_minutes
 
 
 def classify_data_quality_coverage(signal: DataQualityCoverageSignal) -> str:
