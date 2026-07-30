@@ -77,12 +77,29 @@ def reprocessing_job_portfolio_scope_exists(
     )
     latest_history = latest_history.correlate(ReprocessingJob).subquery()
 
-    return (
+    open_on_date = (
         select(1)
         .select_from(latest_history)
         .where(latest_history.c.rn == 1, latest_history.c.quantity != 0)
         .exists()
     )
+    later_holding = select(1).select_from(PositionHistory)
+    later_holding = apply_current_position_history_scope(
+        later_holding,
+        portfolio_id=portfolio_id,
+        position_history_security_id=position_history_security_id,
+        position_state_security_id=position_state_security_id,
+        normalized_security_id=reprocessing_security_id_expr,
+    )
+    later_holding = (
+        later_holding.where(
+            PositionHistory.position_date > impacted_date_expr,
+            PositionHistory.quantity != 0,
+        )
+        .correlate(ReprocessingJob)
+        .exists()
+    )
+    return or_(open_on_date, later_holding)
 
 
 def reprocessing_job_portfolio_security_exists(
