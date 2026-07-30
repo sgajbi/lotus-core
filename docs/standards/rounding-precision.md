@@ -24,6 +24,22 @@ This repository adopts the platform-wide mandatory standard defined in `lotus-pl
   named financial semantics across core, performance, risk, manage, report, and gateway services.
 - Intermediate precision preservation: domain logic keeps unquantized `Decimal` until output-edge serialization.
 
+## Calculated-Output Lineage
+
+- Owner-specific calculated outputs use the versioned policies inventoried in
+  `financial-calculated-output-policies.v1.json`; a storage type alone is not a calculation policy.
+- A lineage-bound calculation records its algorithm/version, working precision, complete numeric
+  output-policy identity, and deterministic hashes of the financial inputs, calculation, and
+  normalized output.
+- Canonical cashflow calculation executes `cashflow-ledger-output@1.0.0` and persists that lineage
+  with each newly materialized cashflow row. The policy uses 64-digit intermediate precision and
+  one final `NUMERIC(18,10)` half-even normalization.
+- The cashflow lineage column is nullable for compatibility with rows created before migration
+  `c130b2c3d503`. Null legacy lineage is an explicit absence of evidence; consumers must not infer
+  a policy version or synthesize hashes from the stored amount.
+- Changes to a policy version, source-input identity, calculation method, or normalized output must
+  change the corresponding lineage identity. Identical inputs and policy must remain deterministic.
+
 ## Monetary Float Guard
 
 - CI runs python scripts/quality/check_monetary_float_usage.py.

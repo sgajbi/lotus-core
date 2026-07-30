@@ -3337,6 +3337,15 @@ Most relevant current governance:
      changing this rule must quiesce every dispatcher-owning worker before
      migrating and restart only the compatible version; mixed dispatcher versions are not
      ordering-safe.
+228. Canonical cashflow calculation binds `cashflow-ledger-output@1.0.0` to deterministic
+     financial input, calculation, and normalized-output hashes at the transaction-processing
+     domain boundary. Persist that complete typed lineage on newly materialized `cashflows` rows
+     through the cashflow repository; do not recompute it in infrastructure or infer it later from
+     the stored amount. Migration `c130b2c3d503` is additive and nullable so legacy rows remain
+     readable. A null legacy value is explicit missing evidence, not permission to assume the
+     current policy or fabricate a lineage hash. Policy, algorithm, input, or output changes must
+     affect identity, while identical inputs and policy remain deterministic. This evidence does
+     not alter existing cashflow economics, transaction/topic identity, or public response shapes.
 
 ## Context Maintenance Rule
 
