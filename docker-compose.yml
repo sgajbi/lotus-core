@@ -19,7 +19,7 @@ x-shared-python-env: &shared_python_env
   OUTBOX_DISPATCHER_BATCH_SIZE: ${OUTBOX_DISPATCHER_BATCH_SIZE:-1000}
   OUTBOX_DISPATCHER_TERMINATION_GRACE_SECONDS: ${OUTBOX_DISPATCHER_TERMINATION_GRACE_SECONDS:-150}
 
-x-outbox-stop-grace-period: &outbox_stop_grace_period 150s
+x-outbox-stop-grace-period: &outbox_stop_grace_period ${OUTBOX_DISPATCHER_TERMINATION_GRACE_SECONDS:-150}s
 
 services:
   zookeeper:

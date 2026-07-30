@@ -23,7 +23,6 @@ from .consumers.reconciliation_requested_consumer import ReconciliationRequested
 from .main import app as web_app
 
 logger = logging.getLogger(__name__)
-OUTBOX_PRODUCER_SERVICE_NAME = "financial_reconciliation_service.outbox_dispatcher"
 
 
 class ConsumerManager:
@@ -38,7 +37,7 @@ class ConsumerManager:
             )
         ]
         self.dispatcher = OutboxDispatcher(
-            kafka_producer=create_kafka_producer(service_name=OUTBOX_PRODUCER_SERVICE_NAME)
+            kafka_producer=create_kafka_producer()
         )
         self.tasks: list[asyncio.Task] = []
         self._shutdown_event = asyncio.Event()
