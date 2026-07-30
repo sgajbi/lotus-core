@@ -15,7 +15,11 @@ from portfolio_common.reconciliation_quality import (
     STALE,
     reconciliation_bound_data_quality_status,
 )
-from portfolio_common.reconstruction_identity import CURRENT_RESTATEMENT_VERSION
+from portfolio_common.reconstruction_identity import (
+    CURRENT_RESTATEMENT_VERSION,
+    ProductReconstructionScope,
+    build_reconstruction_scope_evidence,
+)
 from portfolio_common.runtime_providers import Clock
 from portfolio_common.source_data_product_metadata import (
     source_data_product_runtime_metadata,
@@ -370,6 +374,41 @@ class CoreSnapshotService:
             "lotus-core://source/PortfolioStateSnapshot/"
             f"{portfolio_id}/{request.as_of_date.isoformat()}"
         )
+        reconstruction_evidence = build_reconstruction_scope_evidence(
+            ProductReconstructionScope(
+                product="PortfolioStateSnapshot",
+                portfolio_id=portfolio_id,
+                as_of_date=request.as_of_date,
+                source_data_products=(
+                    "PortfolioStateSnapshot",
+                    "HoldingsAsOf",
+                    "ReconciliationEvidenceBundle",
+                ),
+                restatement_version=CURRENT_RESTATEMENT_VERSION,
+                policy_version=governance.policy_provenance.policy_version,
+                qualifiers=(
+                    ("request_fingerprint", request_fingerprint_value),
+                    ("snapshot_mode", request.snapshot_mode.value),
+                    ("reporting_currency", currency_context.reporting_currency),
+                ),
+                material_evidence=(
+                    ("source_content_hash", baseline.source_content_hash),
+                    (
+                        "reconciliation_scope_content_hash",
+                        baseline.reconciliation.scope_content_hash,
+                    ),
+                    (
+                        "reconciliation_control_content_hash",
+                        baseline.reconciliation.control_content_hash,
+                    ),
+                    (
+                        "calculation_output_content_hash",
+                        calculation_lineage.output_content_hash,
+                    ),
+                    ("response_content_hash", content_hash),
+                ),
+            )
+        )
         return CoreSnapshotResponse(
             portfolio_id=portfolio_id,
             snapshot_mode=request.snapshot_mode,
@@ -423,6 +462,7 @@ class CoreSnapshotService:
                     "output_content_hash": calculation_lineage.output_content_hash,
                     "algorithm_id": calculation_lineage.algorithm_id,
                     "algorithm_version": str(calculation_lineage.algorithm_version),
+                    **reconstruction_evidence.lineage(),
                 },
                 source_evidence_current=source_evidence_current,
                 freshness_status=(
@@ -432,7 +472,6 @@ class CoreSnapshotService:
                     if baseline.reconciliation.status == STALE
                     else "UNAVAILABLE"
                 ),
-                use_content_hash_as_source_batch_fingerprint=True,
             ),
         )
 
