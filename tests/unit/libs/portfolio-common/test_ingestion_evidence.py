@@ -7,10 +7,13 @@ from portfolio_common.ingestion_evidence import (
     PARTIALLY_ACCEPTED,
     QUARANTINED,
     REJECTED,
+    IngestionEvidenceBundleIdentityScope,
     IngestionOutcomeCounts,
     SourceBatchIdentityScope,
+    build_ingestion_evidence_bundle_id,
     build_source_batch_fingerprint,
     classify_ingestion_outcome,
+    derive_source_batch_evidence,
 )
 
 
@@ -124,3 +127,120 @@ def test_classify_ingestion_outcome(counts, expected) -> None:
 def test_classify_ingestion_outcome_rejects_negative_counts() -> None:
     with pytest.raises(ValueError, match="accepted_count must be non-negative"):
         classify_ingestion_outcome(IngestionOutcomeCounts(accepted_count=-1))
+
+
+def test_source_batch_evidence_is_derived_only_from_unambiguous_source_payload() -> None:
+    evidence = derive_source_batch_evidence(
+        {
+            "transactions": [
+                {
+                    "transaction_id": "TXN-002",
+                    "source_system": "custody-feed",
+                    "source_batch_id": "batch-001",
+                },
+                {
+                    "transaction_id": "TXN-001",
+                    "source_system": "custody-feed",
+                    "source_batch_id": "batch-001",
+                },
+            ]
+        },
+        payload_kind="transaction",
+    )
+
+    assert evidence is not None
+    assert evidence.source_system == "custody-feed"
+    assert evidence.source_batch_id == "batch-001"
+    assert evidence.source_record_keys == ("TXN-001", "TXN-002")
+    assert evidence.source_batch_fingerprint.startswith("srcbatch_")
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"transactions": [{"transaction_id": "TXN-001"}]},
+        {
+            "transactions": [
+                {
+                    "source_system": "custody-feed",
+                    "source_batch_id": "batch-001",
+                },
+                {
+                    "source_system": "custody-feed",
+                    "source_batch_id": "batch-002",
+                },
+            ]
+        },
+        {
+            "transactions": [
+                {
+                    "source_system": "custody-feed",
+                    "source_batch_id": "batch-001",
+                },
+                {
+                    "source_system": "transfer-agent",
+                    "source_batch_id": "batch-001",
+                },
+            ]
+        },
+        {
+            "transactions": [
+                {
+                    "source_system": "custody-feed",
+                    "source_batch_id": "batch-001",
+                },
+                {
+                    "source_system": "custody-feed",
+                },
+            ]
+        },
+    ],
+)
+def test_source_batch_evidence_remains_absent_without_single_source_authority(payload) -> None:
+    assert derive_source_batch_evidence(payload, payload_kind="transaction") is None
+
+
+def test_evidence_bundle_identity_is_order_insensitive_and_state_sensitive() -> None:
+    first = build_ingestion_evidence_bundle_id(
+        IngestionEvidenceBundleIdentityScope(
+            job_id="job-001",
+            endpoint="/ingest/transactions",
+            entity_type="transaction",
+            accepted_count=2,
+            job_state="queued|1",
+            request_payload_fingerprint="sha256:payload",
+            failure_ids=("failure-002", "failure-001"),
+            replay_ids=("replay-001",),
+            consumer_dlq_event_ids=("dlq-002", "dlq-001"),
+        )
+    )
+    reordered = build_ingestion_evidence_bundle_id(
+        IngestionEvidenceBundleIdentityScope(
+            job_id="job-001",
+            endpoint="/ingest/transactions",
+            entity_type="transaction",
+            accepted_count=2,
+            job_state="queued|1",
+            request_payload_fingerprint="sha256:payload",
+            failure_ids=("failure-001", "failure-002", "failure-001"),
+            replay_ids=("replay-001",),
+            consumer_dlq_event_ids=("dlq-001", "dlq-002"),
+        )
+    )
+    changed_state = build_ingestion_evidence_bundle_id(
+        IngestionEvidenceBundleIdentityScope(
+            job_id="job-001",
+            endpoint="/ingest/transactions",
+            entity_type="transaction",
+            accepted_count=2,
+            job_state="queued|2",
+            request_payload_fingerprint="sha256:payload",
+            failure_ids=("failure-001", "failure-002"),
+            replay_ids=("replay-001",),
+            consumer_dlq_event_ids=("dlq-001", "dlq-002"),
+        )
+    )
+
+    assert first == reordered
+    assert first.startswith("ingev_")
+    assert changed_state != first

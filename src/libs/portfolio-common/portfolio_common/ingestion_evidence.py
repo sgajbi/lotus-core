@@ -6,8 +6,10 @@ import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from hashlib import sha256
+from typing import Any
 
 SOURCE_BATCH_ID_PREFIX = "srcbatch"
+INGESTION_EVIDENCE_BUNDLE_ID_PREFIX = "ingev"
 
 ACCEPTED = "accepted"
 PARTIALLY_ACCEPTED = "partially_accepted"
@@ -37,6 +39,27 @@ class IngestionOutcomeCounts:
     quarantined_count: int = 0
 
 
+@dataclass(frozen=True)
+class SourceBatchEvidence:
+    source_system: str
+    source_batch_id: str
+    source_record_keys: tuple[str, ...]
+    source_batch_fingerprint: str
+
+
+@dataclass(frozen=True)
+class IngestionEvidenceBundleIdentityScope:
+    job_id: str
+    endpoint: str
+    entity_type: str
+    accepted_count: int
+    job_state: str
+    request_payload_fingerprint: str | None = None
+    failure_ids: tuple[str, ...] = ()
+    replay_ids: tuple[str, ...] = ()
+    consumer_dlq_event_ids: tuple[str, ...] = ()
+
+
 def build_source_batch_fingerprint(scope: SourceBatchIdentityScope) -> str:
     """Build a stable fingerprint for the upstream source batch, not the ingestion attempt."""
 
@@ -45,6 +68,79 @@ def build_source_batch_fingerprint(scope: SourceBatchIdentityScope) -> str:
         json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
     ).hexdigest()
     return f"{SOURCE_BATCH_ID_PREFIX}_{digest[:32]}"
+
+
+def derive_source_batch_evidence(
+    request_payload: dict[str, Any] | None,
+    *,
+    payload_kind: str,
+) -> SourceBatchEvidence | None:
+    """Derive source-owned batch evidence only from one unambiguous payload scope."""
+
+    if request_payload is None:
+        return None
+    observations = tuple(_source_observations(request_payload))
+    if not observations or any(
+        observation["source_system"] is None or observation["source_batch_id"] is None
+        for observation in observations
+    ):
+        return None
+    batch_scopes = {
+        (observation["source_system"], observation["source_batch_id"])
+        for observation in observations
+        if observation["source_system"] is not None and observation["source_batch_id"] is not None
+    }
+    if len(batch_scopes) != 1:
+        return None
+    source_system, source_batch_id = next(iter(batch_scopes))
+    source_record_keys = tuple(
+        sorted(
+            {
+                source_record_key
+                for observation in observations
+                if (source_record_key := observation["source_record_key"]) is not None
+            }
+        )
+    )
+    fingerprint = build_source_batch_fingerprint(
+        SourceBatchIdentityScope(
+            source_system=source_system,
+            source_batch_id=source_batch_id,
+            payload_kind=payload_kind,
+            source_record_keys=source_record_keys,
+        )
+    )
+    return SourceBatchEvidence(
+        source_system=source_system,
+        source_batch_id=source_batch_id,
+        source_record_keys=source_record_keys,
+        source_batch_fingerprint=fingerprint,
+    )
+
+
+def build_ingestion_evidence_bundle_id(
+    scope: IngestionEvidenceBundleIdentityScope,
+) -> str:
+    """Build a stable identity for the exact durable evidence composition."""
+
+    payload = {
+        "consumer_dlq_event_ids": _canonical_identifiers(
+            scope.consumer_dlq_event_ids,
+            "consumer_dlq_event_ids",
+        ),
+        "accepted_count": _non_negative(scope.accepted_count, "accepted_count"),
+        "endpoint": _clean_text(scope.endpoint, "endpoint"),
+        "entity_type": _clean_text(scope.entity_type, "entity_type"),
+        "failure_ids": _canonical_identifiers(scope.failure_ids, "failure_ids"),
+        "job_id": _clean_text(scope.job_id, "job_id"),
+        "job_state": _clean_text(scope.job_state, "job_state"),
+        "request_payload_fingerprint": _optional_clean_text(scope.request_payload_fingerprint),
+        "replay_ids": _canonical_identifiers(scope.replay_ids, "replay_ids"),
+    }
+    digest = sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    return f"{INGESTION_EVIDENCE_BUNDLE_ID_PREFIX}_{digest[:32]}"
 
 
 def classify_ingestion_outcome(counts: IngestionOutcomeCounts) -> str:
@@ -135,3 +231,41 @@ def _clean_text(value: str, field_name: str) -> str:
 def _require_non_negative(value: int, field_name: str) -> None:
     if value < 0:
         raise ValueError(f"{field_name} must be non-negative")
+
+
+def _non_negative(value: int, field_name: str) -> int:
+    _require_non_negative(value, field_name)
+    return value
+
+
+def _source_observations(value: Any):
+    if isinstance(value, dict):
+        source_system = _optional_clean_text(
+            value.get("source_system") or value.get("source_vendor")
+        )
+        source_batch_id = _optional_clean_text(value.get("source_batch_id"))
+        source_record_key = _optional_clean_text(
+            value.get("source_record_id") or value.get("transaction_id") or value.get("record_key")
+        )
+        if source_system is not None or source_batch_id is not None:
+            yield {
+                "source_system": source_system,
+                "source_batch_id": source_batch_id,
+                "source_record_key": source_record_key,
+            }
+        for nested_value in value.values():
+            yield from _source_observations(nested_value)
+    elif isinstance(value, list):
+        for nested_value in value:
+            yield from _source_observations(nested_value)
+
+
+def _optional_clean_text(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    cleaned = value.strip()
+    return cleaned or None
+
+
+def _canonical_identifiers(values: tuple[str, ...], field_name: str) -> list[str]:
+    return sorted({_clean_text(value, field_name) for value in values})
