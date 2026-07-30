@@ -129,15 +129,18 @@ def _resolve_shutdown_timeout_seconds(
     consumers: Sequence[object],
     configured_timeout_seconds: float | None,
 ) -> float:
-    if configured_timeout_seconds is not None:
-        return configured_timeout_seconds
     consumer_drain_timeout = max(
         (_consumer_drain_timeout_seconds(consumer) for consumer in consumers),
         default=0.0,
     )
+    consumer_shutdown_budget = (
+        consumer_drain_timeout + CONSUMER_DRAIN_GRACE_SECONDS if consumer_drain_timeout > 0 else 0.0
+    )
+    if configured_timeout_seconds is not None:
+        return max(configured_timeout_seconds, consumer_shutdown_budget)
     return max(
         DEFAULT_RUNTIME_SHUTDOWN_TIMEOUT_SECONDS,
-        consumer_drain_timeout + CONSUMER_DRAIN_GRACE_SECONDS,
+        consumer_shutdown_budget,
     )
 
 
