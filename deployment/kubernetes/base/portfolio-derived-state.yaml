@@ -41,7 +41,7 @@ spec:
     spec:
       serviceAccountName: portfolio-derived-state
       automountServiceAccountToken: false
-      terminationGracePeriodSeconds: 60
+      terminationGracePeriodSeconds: 150
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
@@ -76,6 +76,8 @@ spec:
                 configMapKeyRef:
                   name: lotus-core-runtime
                   key: kafka-bootstrap-servers
+            - name: OUTBOX_DISPATCHER_TERMINATION_GRACE_SECONDS
+              value: "150"
             - name: PORTFOLIO_AGGREGATION_WORKER_COUNT
               valueFrom:
                 configMapKeyRef:

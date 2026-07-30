@@ -51,6 +51,7 @@ class OutboxRuntimeSettings:
     poll_interval_seconds: int
     batch_size: int
     claim_lease_seconds: int
+    termination_grace_seconds: int
     max_retries: int
     retry_max_elapsed_seconds: int
     retry_initial_delay_seconds: int
@@ -66,6 +67,7 @@ def get_outbox_runtime_settings(
     poll_interval_default: int = 5,
     batch_size_default: int = 50,
     claim_lease_default: int = 130,
+    termination_grace_default: int = 150,
     max_retries_default: int = 3,
     retry_max_elapsed_default: int = 0,
     retry_initial_delay_default: int = 5,
@@ -95,6 +97,10 @@ def get_outbox_runtime_settings(
         claim_lease_seconds=_env_positive_int(
             "OUTBOX_DISPATCHER_CLAIM_LEASE_SECONDS",
             claim_lease_default,
+        ),
+        termination_grace_seconds=_env_positive_int(
+            "OUTBOX_DISPATCHER_TERMINATION_GRACE_SECONDS",
+            termination_grace_default,
         ),
         max_retries=_env_positive_int("OUTBOX_DISPATCHER_MAX_RETRIES", max_retries_default),
         retry_max_elapsed_seconds=_env_non_negative_int(

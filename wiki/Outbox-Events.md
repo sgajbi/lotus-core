@@ -75,6 +75,16 @@ advancing the stream on uncertain delivery. Each production dispatcher owns a fr
 producer; replay, direct publication, and consumer DLQ records use a separate shared producer, so
 outbox recovery cannot purge an unrelated publication.
 
+Graceful shutdown uses the same delivery boundary. Each dispatcher exposes a producer-specific
+supervision budget that exceeds its flush fence, and every dispatcher-owning runtime passes that
+budget to shared shutdown supervision. `OUTBOX_DISPATCHER_TERMINATION_GRACE_SECONDS` must exceed the
+supervision budget by the governed process-termination margin or startup fails. The governed
+derived-state and transaction-processing deployments set both the pod grace and runtime setting to
+150 seconds; with the default 120-second Kafka delivery timeout, supervision allows 126 seconds and
+the minimum accepted termination grace is 136 seconds. When changing delivery timeout, change the
+claim lease and termination grace together and keep the manifest value aligned with the runtime
+setting.
+
 This gives `lotus-core` a durable database-backed publish queue rather than relying on in-memory
 best effort after a write succeeds.
 
@@ -193,6 +203,9 @@ Use this page together with:
   not ordering-safe
 - construct production dispatchers only with an exclusive producer; never reuse the cached
   replay/direct/DLQ producer across the outbox recovery boundary
+- keep dispatcher supervision above the Kafka delivery fence and pod termination grace above the
+  supervision budget; never increase producer delivery timeout without increasing both the outbox
+  claim lease and termination grace
 
 ## Related references
 

@@ -3320,9 +3320,14 @@ Most relevant current governance:
      affected claim; if purge confirmation fails, abort result persistence so delivery uncertainty
      cannot advance the stream. Every production dispatcher must own a fresh, non-cached producer;
      replay, direct publication, and consumer DLQ paths retain a separate shared producer so
-     dispatcher purge/replacement cannot discard unrelated records. Deployments changing this rule
-     must quiesce every dispatcher-owning worker before migrating and restart only the compatible
-     version; mixed dispatcher versions are not ordering-safe.
+     dispatcher purge/replacement cannot discard unrelated records. Runtime supervision must wait
+     longer than the producer-specific delivery fence, and the configured pod termination grace
+     must exceed that supervision budget by the governed termination margin; reject unsafe claim
+     lease, supervision, or termination combinations at startup. The governed dispatcher
+     deployments use a 150-second termination grace for the default 120-second producer delivery
+     timeout. Deployments changing this rule must quiesce every dispatcher-owning worker before
+     migrating and restart only the compatible version; mixed dispatcher versions are not
+     ordering-safe.
 
 ## Context Maintenance Rule
 

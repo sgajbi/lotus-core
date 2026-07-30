@@ -138,6 +138,7 @@ class PortfolioDerivedStateRuntime:
             consumers=self.consumers,
             stop_callbacks=[self.scheduler.stop, self.dispatcher.stop],
             server=server,
+            shutdown_timeout_seconds=self.dispatcher.shutdown_timeout_seconds,
         )
         if runtime_error is not None:
             raise runtime_error

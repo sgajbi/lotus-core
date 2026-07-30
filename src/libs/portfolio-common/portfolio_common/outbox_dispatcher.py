@@ -41,6 +41,8 @@ TERMINAL_FAILURE_STATUS = "FAILED"
 MAX_FAILURE_MESSAGE_LENGTH = 512
 DEFAULT_DELIVERY_FENCE_TIMEOUT_SECONDS = 10
 CLAIM_LEASE_SAFETY_SECONDS = 5
+SHUTDOWN_DRAIN_SAFETY_SECONDS = 5
+TERMINATION_GRACE_SAFETY_SECONDS = 10
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,6 +78,7 @@ class OutboxDispatcher:
         db_session_factory: Optional[sessionmaker] = None,
         max_retries: Optional[int] = None,
         claim_lease_seconds: Optional[int] = None,
+        termination_grace_seconds: Optional[int] = None,
         retry_max_elapsed_seconds: Optional[int] = None,
         retry_initial_delay_seconds: Optional[int] = None,
         retry_max_delay_seconds: Optional[int] = None,
@@ -113,6 +116,24 @@ class OutboxDispatcher:
                 f"{minimum_claim_lease_seconds} seconds so an expired publisher "
                 "cannot deliver after its stream lease is reclaimed"
             )
+        self._shutdown_timeout_seconds = (
+            self._delivery_fence_timeout_seconds + SHUTDOWN_DRAIN_SAFETY_SECONDS
+        )
+        self._termination_grace_seconds = (
+            max(1, int(termination_grace_seconds))
+            if termination_grace_seconds is not None
+            else runtime_settings.termination_grace_seconds
+        )
+        minimum_termination_grace_seconds = (
+            self._shutdown_timeout_seconds + TERMINATION_GRACE_SAFETY_SECONDS
+        )
+        if self._termination_grace_seconds < minimum_termination_grace_seconds:
+            raise OutboxRuntimeConfigurationError(
+                "Invalid outbox runtime configuration for "
+                "OUTBOX_DISPATCHER_TERMINATION_GRACE_SECONDS: expected at least "
+                f"{minimum_termination_grace_seconds} seconds so runtime supervision "
+                "can fence Kafka delivery before the pod is terminated"
+            )
         self._retry_max_elapsed_seconds = (
             max(0, int(retry_max_elapsed_seconds))
             if retry_max_elapsed_seconds is not None
@@ -134,6 +155,12 @@ class OutboxDispatcher:
             else runtime_settings.retry_jitter_seconds
         )
         self._retry_random = SystemRandom()
+
+    @property
+    def shutdown_timeout_seconds(self) -> int:
+        """Return the minimum supervision budget required to fence in-flight delivery."""
+
+        return self._shutdown_timeout_seconds
 
     def stop(self):
         logger.info(
