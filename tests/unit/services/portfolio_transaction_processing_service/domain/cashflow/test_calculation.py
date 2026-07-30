@@ -113,6 +113,48 @@ def test_calculated_cashflow_is_independent_of_ambient_decimal_precision(
     assert high_precision.amount == Decimal("-1234567.1234567891")
 
 
+def test_calculated_cashflow_binds_inputs_calculation_output_and_numeric_policy(
+    base_transaction_event: TransactionEvent,
+) -> None:
+    rule = CashflowRule(
+        classification=CashflowClassification.INVESTMENT_OUTFLOW,
+        timing=CashflowTiming.BOD,
+        is_position_flow=True,
+        is_portfolio_flow=False,
+    )
+
+    first = _calculate(base_transaction_event, rule)
+    repeated = _calculate(base_transaction_event.model_copy(deep=True), rule)
+    changed_fee = _calculate(
+        base_transaction_event.model_copy(update={"trade_fee": Decimal("5.51")}),
+        rule,
+    )
+
+    assert first.calculation_lineage is not None
+    assert repeated.calculation_lineage == first.calculation_lineage
+    assert first.calculation_lineage.algorithm_id == "transaction-cashflow"
+    assert first.calculation_lineage.algorithm_version == 1
+    assert first.calculation_lineage.intermediate_precision == 64
+    assert first.calculation_lineage.numeric_output_policy is not None
+    assert (
+        first.calculation_lineage.numeric_output_policy.policy_id == "cashflow-ledger-output@1.0.0"
+    )
+    assert changed_fee.calculation_lineage is not None
+    assert (
+        changed_fee.calculation_lineage.input_content_hash
+        != first.calculation_lineage.input_content_hash
+    )
+    assert (
+        changed_fee.calculation_lineage.calculation_content_hash
+        != first.calculation_lineage.calculation_content_hash
+    )
+    assert (
+        changed_fee.calculation_lineage.output_content_hash
+        != first.calculation_lineage.output_content_hash
+    )
+    assert changed_fee.amount == Decimal("-1005.51")
+
+
 def test_calculate_buy_transaction_normalizes_transaction_type(
     base_transaction_event: TransactionEvent,
 ):

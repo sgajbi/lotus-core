@@ -7,6 +7,10 @@ from datetime import date
 from decimal import Decimal
 from enum import Enum
 
+from portfolio_common.domain.calculation_lineage import (
+    CalculationLineage,
+    build_calculation_lineage,
+)
 from portfolio_common.domain.transaction.fee_components import (
     TRANSACTION_FEE_COMPONENT_FIELDS,
     resolve_transaction_trade_fee,
@@ -108,6 +112,7 @@ class CalculatedCashflow:
     economic_event_id: str | None
     linked_transaction_group_id: str | None
     epoch: int
+    calculation_lineage: CalculationLineage | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -145,25 +150,116 @@ def calculate_transaction_cashflow(
             calculation_context,
         )
     level = _resolve_cashflow_level(transaction, rule)
+    cashflow_date = _resolve_cashflow_date(transaction, rule, transaction_type)
+    amount = CASHFLOW_LEDGER_OUTPUT_V1.normalize(
+        economics.amount,
+        field_name="cashflows.amount",
+    )
+    classification = _normalize_classification(rule.classification)
+    timing = _normalize_code(rule.timing)
+    normalized_epoch = epoch or 0
+    calculation_lineage = build_calculation_lineage(
+        algorithm_id="transaction-cashflow",
+        algorithm_version=1,
+        intermediate_precision=CASHFLOW_LEDGER_OUTPUT_V1.working_precision,
+        input_payload=_cashflow_lineage_input(
+            transaction=transaction,
+            rule=rule,
+            transaction_type=transaction_type,
+            calculation_context=calculation_context,
+            epoch=normalized_epoch,
+        ),
+        output_payload={
+            "amount": amount,
+            "calculation_type": economics.calculation_type,
+            "cashflow_date": cashflow_date,
+            "classification": classification,
+            "currency": economics.currency,
+            "economic_event_id": transaction.economic_event_id,
+            "epoch": normalized_epoch,
+            "is_portfolio_flow": level.is_portfolio_flow,
+            "is_position_flow": level.is_position_flow,
+            "linked_transaction_group_id": transaction.linked_transaction_group_id,
+            "portfolio_id": transaction.portfolio_id,
+            "security_id": transaction.security_id,
+            "timing": timing,
+            "transaction_id": transaction.transaction_id,
+        },
+        numeric_output_policy=CASHFLOW_LEDGER_OUTPUT_V1.lineage_identity(),
+    )
     return CalculatedCashflow(
         transaction_id=transaction.transaction_id,
         portfolio_id=transaction.portfolio_id,
         security_id=transaction.security_id,
-        cashflow_date=_resolve_cashflow_date(transaction, rule, transaction_type),
-        amount=CASHFLOW_LEDGER_OUTPUT_V1.normalize(
-            economics.amount,
-            field_name="cashflows.amount",
-        ),
+        cashflow_date=cashflow_date,
+        amount=amount,
         currency=economics.currency,
-        classification=_normalize_classification(rule.classification),
-        timing=_normalize_code(rule.timing),
+        classification=classification,
+        timing=timing,
         calculation_type=economics.calculation_type,
         is_position_flow=level.is_position_flow,
         is_portfolio_flow=level.is_portfolio_flow,
         economic_event_id=transaction.economic_event_id,
         linked_transaction_group_id=transaction.linked_transaction_group_id,
-        epoch=epoch or 0,
+        epoch=normalized_epoch,
+        calculation_lineage=calculation_lineage,
     )
+
+
+def _cashflow_lineage_input(
+    *,
+    transaction: BookedTransaction,
+    rule: CashflowRule,
+    transaction_type: str,
+    calculation_context: CashflowCalculationContext,
+    epoch: int,
+) -> dict[str, object]:
+    """Return every source and policy value that can change cashflow economics."""
+
+    return {
+        "calculation_context": calculation_context,
+        "epoch": epoch,
+        "rule": {
+            "classification": _normalize_classification(rule.classification),
+            "is_portfolio_flow": rule.is_portfolio_flow,
+            "is_position_flow": rule.is_position_flow,
+            "timing": _normalize_code(rule.timing),
+        },
+        "transaction": {
+            "component_type": transaction.component_type,
+            "currency": transaction.currency,
+            "economic_event_id": transaction.economic_event_id,
+            "fee_components": {
+                field: getattr(transaction, field) for field in TRANSACTION_FEE_COMPONENT_FIELDS
+            },
+            "gross_transaction_amount": transaction.gross_transaction_amount,
+            "has_synthetic_flow": transaction.has_synthetic_flow,
+            "interest_direction": transaction.interest_direction,
+            "linked_transaction_group_id": transaction.linked_transaction_group_id,
+            "movement_direction": transaction.movement_direction,
+            "net_interest_amount": transaction.net_interest_amount,
+            "other_interest_deductions_amount": transaction.other_interest_deductions_amount,
+            "originating_transaction_id": transaction.originating_transaction_id,
+            "originating_transaction_type": transaction.originating_transaction_type,
+            "portfolio_id": transaction.portfolio_id,
+            "quantity": transaction.quantity,
+            "security_id": transaction.security_id,
+            "settlement_date": (
+                transaction.settlement_date.isoformat()
+                if transaction.settlement_date is not None
+                else None
+            ),
+            "synthetic_flow_amount_local": transaction.synthetic_flow_amount_local,
+            "synthetic_flow_classification": transaction.synthetic_flow_classification,
+            "synthetic_flow_currency": transaction.synthetic_flow_currency,
+            "synthetic_flow_effective_date": transaction.synthetic_flow_effective_date,
+            "trade_fee": _resolve_cashflow_trade_fee(transaction),
+            "transaction_date": transaction.transaction_date.isoformat(),
+            "transaction_id": transaction.transaction_id,
+            "transaction_type": transaction_type,
+            "withholding_tax_amount": transaction.withholding_tax_amount,
+        },
+    }
 
 
 def _normalize_code(value: object, default: str = "") -> str:
