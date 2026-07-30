@@ -180,10 +180,3 @@ def _required_string(payload: Mapping[str, object], key: str) -> str:
     if not isinstance(value, str):
         raise TypeError(f"{key} must be a string")
     return value
-
-
-def _required_int(payload: Mapping[str, object], key: str) -> int:
-    value = payload.get(key)
-    if not isinstance(value, int) or isinstance(value, bool):
-        raise TypeError(f"{key} must be an integer")
-    return value
