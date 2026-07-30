@@ -408,6 +408,36 @@ class IngestionJobService:
             session_factory=get_async_db_session,
         )
 
+    async def list_consumer_dlq_events_by_correlation_id(
+        self,
+        correlation_id: str,
+        *,
+        limit: int = 500,
+    ) -> list[ConsumerDlqEventResponse]:
+        return await list_consumer_dlq_event_responses(
+            limit=limit,
+            original_topic=None,
+            consumer_group=None,
+            correlation_id=correlation_id,
+            session_factory=get_async_db_session,
+        )
+
+    async def list_consumer_dlq_events_by_event_ids(
+        self,
+        event_ids: tuple[str, ...],
+        *,
+        limit: int = 500,
+    ) -> list[ConsumerDlqEventResponse]:
+        if not event_ids:
+            return []
+        return await list_consumer_dlq_event_responses(
+            limit=limit,
+            original_topic=None,
+            consumer_group=None,
+            event_ids=event_ids,
+            session_factory=get_async_db_session,
+        )
+
     async def find_successful_replay_audit_by_fingerprint(
         self,
         replay_fingerprint: str,

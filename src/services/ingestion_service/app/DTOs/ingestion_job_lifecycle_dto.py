@@ -1,9 +1,31 @@
 from datetime import datetime
 from typing import Any, Literal
 
+from portfolio_common.source_data_product_metadata import (
+    SourceDataProductRuntimeMetadata,
+    product_name_field,
+    product_version_field,
+)
 from pydantic import BaseModel, Field
 
+from .ingestion_job_replay_dto import ConsumerDlqEventResponse, IngestionReplayAuditResponse
+
 IngestionJobStatus = Literal["accepted", "queued", "failed"]
+IngestionOutcome = Literal[
+    "accepted",
+    "partially_accepted",
+    "rejected",
+    "quarantined",
+    "empty",
+]
+IngestionReplayPosture = Literal[
+    "not_requested",
+    "dry_run_only",
+    "replayed",
+    "replay_failed",
+    "replay_bookkeeping_failed",
+]
+IngestionRepairPosture = Literal["not_required", "required", "repaired", "unknown"]
 
 
 class IngestionJobResponse(BaseModel):
@@ -32,6 +54,14 @@ class IngestionJobResponse(BaseModel):
         default=None,
         description="Client idempotency key if supplied for the request.",
         examples=["ingestion-transactions-batch-20260228-001"],
+    )
+    request_payload_fingerprint: str | None = Field(
+        default=None,
+        description=(
+            "Deterministic fingerprint of the source-safe retained request payload; "
+            "null when no replay payload was retained."
+        ),
+        examples=["sha256:c5b0faeb7de60bc111f109624e58d0ad6206634be5fef4d4455cdac629df4f3f"],
     )
     correlation_id: str = Field(
         description="Correlation identifier for cross-service traceability.",
@@ -185,6 +215,158 @@ class IngestionJobFailureListResponse(BaseModel):
         ge=0,
         description="Number of failure events returned in this response.",
         examples=[1],
+    )
+
+
+class IngestionEvidenceValidationSummary(BaseModel):
+    profile_name: str | None = Field(
+        default=None,
+        description=(
+            "Source-declared validation profile, when one unambiguous value is retained "
+            "in the ingestion payload."
+        ),
+        examples=["transaction-ingestion"],
+    )
+    profile_version: str | None = Field(
+        default=None,
+        description=(
+            "Source-declared validation profile or schema version, when retained in the "
+            "ingestion payload."
+        ),
+        examples=["v1"],
+    )
+    received_count: int = Field(
+        ge=0,
+        description="Number of records represented by the retained ingestion evidence.",
+        examples=[125],
+    )
+    accepted_count: int = Field(
+        ge=0,
+        description="Records without durable rejection or quarantine evidence.",
+        examples=[123],
+    )
+    rejected_count: int = Field(
+        ge=0,
+        description="Records with durable ingestion failure evidence outside quarantine.",
+        examples=[1],
+    )
+    quarantined_count: int = Field(
+        ge=0,
+        description="Records represented by correlated consumer dead-letter evidence.",
+        examples=[1],
+    )
+    finding_count: int = Field(
+        ge=0,
+        description="Number of durable validation findings referenced by this bundle.",
+        examples=[2],
+    )
+    finding_references: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Stable failure or consumer-DLQ references carrying validation findings; "
+            "details remain in the embedded canonical DTOs."
+        ),
+        examples=[["ingestion-failure:fail_01J5S27", "consumer-dlq:cdlq_01J5VK4"]],
+    )
+
+
+class IngestionEvidenceRetentionPosture(BaseModel):
+    retention_class: str = Field(
+        description="Governed evidence-retention classification selected by runtime policy.",
+        examples=["governed_operational_evidence"],
+    )
+    archival_posture: str = Field(
+        description="Governed archival classification selected by runtime policy.",
+        examples=["policy_managed"],
+    )
+    retention_period_days: int | None = Field(
+        default=None,
+        ge=1,
+        description=(
+            "Authoritative retention duration when configured; null means this service "
+            "has no legal or records-management duration authority."
+        ),
+        examples=[2555],
+    )
+
+
+class IngestionEvidenceBundleResponse(SourceDataProductRuntimeMetadata):
+    product_name: Literal["IngestionEvidenceBundle"] = product_name_field("IngestionEvidenceBundle")
+    product_version: Literal["v1"] = product_version_field()
+    evidence_bundle_id: str = Field(
+        description="Deterministic identifier for the exact durable evidence composition.",
+        examples=["ingev_8e68038a37f50d0e3f693f1e2081b718"],
+    )
+    ingestion_outcome: IngestionOutcome = Field(
+        description="Governed source-batch ingestion outcome classification.",
+        examples=["partially_accepted"],
+    )
+    replay_posture: IngestionReplayPosture = Field(
+        description="Current replay posture derived from durable replay audit rows.",
+        examples=["replayed"],
+    )
+    repair_posture: IngestionRepairPosture = Field(
+        description="Current bookkeeping-repair posture derived from job and failure evidence.",
+        examples=["repaired"],
+    )
+    source_system: str | None = Field(
+        default=None,
+        description="Unambiguous source-owned system retained in the request payload.",
+        examples=["custody-feed"],
+    )
+    source_batch_id: str | None = Field(
+        default=None,
+        description="Unambiguous source-owned batch identifier retained in the request payload.",
+        examples=["custody-20260731-001"],
+    )
+    evidence_references: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Stable job, failure, consumer-DLQ, and replay-audit references included in "
+            "this bundle."
+        ),
+    )
+    evidence_complete: bool = Field(
+        description=(
+            "True when all correlated failure, replay, and consumer-DLQ rows fit within "
+            "the governed response evidence limit."
+        ),
+        examples=[True],
+    )
+    evidence_limit: int = Field(
+        ge=1,
+        description="Maximum rows retained per correlated evidence family in this response.",
+        examples=[500],
+    )
+    evidence_gate: Literal["ALLOW", "BLOCK", "REVIEW_REQUIRED"] = Field(
+        description=(
+            "Fail-closed consumer posture derived from outcome, recovery, and completeness."
+        ),
+        examples=["BLOCK"],
+    )
+    evidence_gate_reasons: list[str] = Field(
+        default_factory=list,
+        description="Bounded reasons for a blocked or review-required evidence posture.",
+        examples=[["PARTIALLY_ACCEPTED_SOURCE_BATCH"]],
+    )
+    validation: IngestionEvidenceValidationSummary = Field(
+        description="Validation counts, findings, and source-declared profile evidence."
+    )
+    retention: IngestionEvidenceRetentionPosture = Field(
+        description="Governed retention and archival classification without inferred legal terms."
+    )
+    job: IngestionJobResponse = Field(description="Canonical ingestion job lifecycle evidence.")
+    failures: list[IngestionJobFailureResponse] = Field(
+        default_factory=list,
+        description="Canonical ingestion job failure evidence.",
+    )
+    consumer_dlq_events: list[ConsumerDlqEventResponse] = Field(
+        default_factory=list,
+        description="Consumer dead-letter evidence correlated to the ingestion job.",
+    )
+    replay_audits: list[IngestionReplayAuditResponse] = Field(
+        default_factory=list,
+        description="Replay audit evidence associated with the ingestion job.",
     )
 
 

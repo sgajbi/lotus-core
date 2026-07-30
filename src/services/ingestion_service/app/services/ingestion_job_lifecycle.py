@@ -65,6 +65,7 @@ def to_job_response(job: DBIngestionJob) -> IngestionJobResponse:
         status=job.status,  # type: ignore[arg-type]
         accepted_count=job.accepted_count,
         idempotency_key=job.idempotency_key,
+        request_payload_fingerprint=getattr(job, "request_payload_fingerprint", None),
         correlation_id=job.correlation_id,
         request_id=job.request_id,
         trace_id=job.trace_id,

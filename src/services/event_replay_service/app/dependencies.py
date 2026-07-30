@@ -13,6 +13,7 @@ from src.services.ingestion_service.app.services.ingestion_service import Ingest
 
 from .application.bookkeeping_repair_commands import BookkeepingRepairCommandService
 from .application.consumer_dlq_replay_commands import ConsumerDlqReplayCommandService
+from .application.ingestion_evidence_queries import IngestionEvidenceQueryService
 from .application.ingestion_operations_queries import IngestionOperationsQueryService
 from .application.ingestion_retry_commands import IngestionRetryCommandService
 from .application.ops_control_commands import OpsControlCommandService
@@ -70,3 +71,9 @@ def get_ingestion_operations_query_service(
     ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
 ) -> IngestionOperationsQueryService:
     return IngestionOperationsQueryService(ingestion_job_service=ingestion_job_service)
+
+
+def get_ingestion_evidence_query_service(
+    ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
+) -> IngestionEvidenceQueryService:
+    return IngestionEvidenceQueryService(ingestion_job_service=ingestion_job_service)

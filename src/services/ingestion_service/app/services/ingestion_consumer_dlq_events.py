@@ -51,6 +51,8 @@ async def list_consumer_dlq_event_responses(
     original_topic: str | None,
     consumer_group: str | None,
     session_factory,
+    correlation_id: str | None = None,
+    event_ids: tuple[str, ...] | None = None,
 ) -> list[ConsumerDlqEventResponse]:
     async for db in session_factory():
         stmt = select(DBConsumerDlqEvent)
@@ -58,6 +60,10 @@ async def list_consumer_dlq_event_responses(
             stmt = stmt.where(DBConsumerDlqEvent.original_topic == original_topic)
         if consumer_group:
             stmt = stmt.where(DBConsumerDlqEvent.consumer_group == consumer_group)
+        if correlation_id:
+            stmt = stmt.where(DBConsumerDlqEvent.correlation_id == correlation_id)
+        if event_ids:
+            stmt = stmt.where(DBConsumerDlqEvent.event_id.in_(event_ids))
         rows = (
             await db.scalars(stmt.order_by(desc(DBConsumerDlqEvent.observed_at)).limit(limit))
         ).all()
