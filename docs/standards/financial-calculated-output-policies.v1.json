@@ -12,10 +12,8 @@
       "scale": 10,
       "working_precision": 64,
       "rounding": "ROUND_HALF_EVEN",
-      "lineage_binding": "partial",
-      "lineage_gap_callsites": [
-        "src/libs/portfolio-common/portfolio_common/domain/valuation/accrued_income.py::_calculate_segments"
-      ]
+      "lineage_binding": "required",
+      "lineage_gap_callsites": []
     },
     "POSITION_VALUATION_LEDGER_OUTPUT_V1": {
       "declaration_path": "src/libs/portfolio-common/portfolio_common/domain/valuation/numeric_policy.py",

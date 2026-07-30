@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
-from decimal import Decimal
+from decimal import Decimal, localcontext
 from enum import StrEnum
 
 from ..calculation_lineage import (
@@ -215,7 +215,11 @@ def _calculate_segments(
                 icma_reference_periods=segment.icma_reference_periods,
             ),
         )
-        with ACCRUED_INCOME_LEDGER_OUTPUT_V1.arithmetic_context():
+        # Segment values are calculation intermediates, not ledger outputs. Keep the
+        # working precision explicit here; the public calculation normalizes once at
+        # the governed output boundary and binds that policy into its lineage.
+        with localcontext() as context:
+            context.prec = ACCRUED_INCOME_INTERMEDIATE_PRECISION
             accrued_income = (
                 segment.signed_accrual_principal * segment.annual_effective_rate * year_fraction
             )
