@@ -291,6 +291,7 @@ class OperationsSupportRepository(Protocol):
         self,
         run_id: str,
         as_of: datetime | None = None,
+        **filters: Any,
     ) -> ReconciliationFindingSummary: ...
 
     async def get_portfolio_control_stages_count(

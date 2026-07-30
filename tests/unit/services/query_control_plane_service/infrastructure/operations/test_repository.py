@@ -1825,7 +1825,7 @@ async def test_get_reconciliation_findings_query(
     assert "financial_reconciliation_findings.finding_id = 'rf_123'" in compiled
     assert "trim(financial_reconciliation_findings.security_id) = 'SEC-US-IBM'" in compiled
     assert "financial_reconciliation_findings.transaction_id = 'txn_0001'" in compiled
-    assert "CASE WHEN (financial_reconciliation_findings.severity = 'ERROR') THEN 0" in compiled
+    assert "upper(trim(financial_reconciliation_findings.severity)) = 'BLOCKER'" in compiled
     assert "financial_reconciliation_findings.created_at DESC" in compiled
     assert "LIMIT 20" in compiled
 
@@ -1883,11 +1883,21 @@ async def test_get_reconciliation_finding_summary(
     result = MagicMock()
     result.one.return_value = MagicMock(
         total_findings=4,
+        open_findings=3,
         blocking_findings=2,
+        blocker_findings=1,
+        critical_findings=0,
+        error_findings=1,
+        warning_findings=1,
+        info_findings=0,
+        latest_evidence_at=datetime(2026, 3, 14, 10, 45, tzinfo=timezone.utc),
         finding_id="rf_1234567890abcdef",
         finding_type="missing_cashflow",
         security_id=" SEC-US-IBM ",
         transaction_id="txn_0001",
+        owner="TRANSACTION_OPERATIONS",
+        repair_recommendation="REGENERATE_CASHFLOW",
+        created_at=datetime(2026, 3, 13, 10, 18, tzinfo=timezone.utc),
     )
     mock_db_session.execute = AsyncMock(return_value=result)
 
@@ -1906,9 +1916,10 @@ async def test_get_reconciliation_finding_summary(
     assert "FILTER (WHERE" in compiled
     assert "financial_reconciliation_findings.severity AS severity" in compiled
     assert "upper(trim(financial_reconciliation_findings.severity)) AS severity" not in compiled
-    assert "severity = 'ERROR'" in compiled
+    assert "resolution_state IN ('OPEN', 'IN_PROGRESS')" in compiled
+    assert "'BLOCKER', 'CRITICAL', 'ERROR'" in compiled
     assert "order by" in compiled.lower()
-    assert "created_at desc" in compiled.lower()
+    assert "created_at asc" in compiled.lower()
 
 
 async def test_get_portfolio_control_stages_count_with_filters(

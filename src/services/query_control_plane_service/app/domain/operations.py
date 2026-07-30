@@ -48,6 +48,16 @@ class ReconciliationFindingSummary:
     top_blocking_finding_type: Optional[str]
     top_blocking_finding_security_id: Optional[str]
     top_blocking_finding_transaction_id: Optional[str]
+    open_findings: int = 0
+    blocker_findings: int = 0
+    critical_findings: int = 0
+    error_findings: int = 0
+    warning_findings: int = 0
+    info_findings: int = 0
+    latest_evidence_at: Optional[datetime] = None
+    top_blocking_finding_owner: Optional[str] = None
+    top_blocking_repair_recommendation: Optional[str] = None
+    top_blocking_finding_created_at: Optional[datetime] = None
 
 
 @dataclass(frozen=True)
