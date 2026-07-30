@@ -137,6 +137,45 @@ def build_response(read_scope):
     assert "request_scope_fingerprint" in errors[0]
 
 
+def test_evaluate_source_batch_fingerprint_semantics_rejects_content_hash_override(
+    tmp_path: Path,
+) -> None:
+    nested_service = tmp_path / "nested" / "assembly.py"
+    nested_service.parent.mkdir()
+    nested_service.write_text(
+        """
+def build_response(content_hash):
+    return source_data_product_runtime_metadata(
+        content_hash=content_hash,
+        use_content_hash_as_source_batch_fingerprint=True,
+    )
+""",
+        encoding="utf-8",
+    )
+
+    errors = guard.evaluate_source_batch_fingerprint_semantics((tmp_path,))
+
+    assert len(errors) == 1
+    assert "relabels response content as upstream source-batch authority" in errors[0]
+
+
+def test_evaluate_source_batch_fingerprint_semantics_rejects_content_hash_expression(
+    tmp_path: Path,
+) -> None:
+    _write_service_file(
+        tmp_path,
+        """
+def build_response(content_hash):
+    return source_data_product_runtime_metadata(source_batch_fingerprint=content_hash)
+""",
+    )
+
+    errors = guard.evaluate_source_batch_fingerprint_semantics((tmp_path,))
+
+    assert len(errors) == 1
+    assert "content_hash" in errors[0]
+
+
 def test_evaluate_source_data_product_bindings_rejects_missing_catalog_route_metadata() -> None:
     catalog = (_product("PortfolioTimeseriesInput", "/integration/example"),)
     routes = [_route(QUERY_SERVICE, "/integration/example", None)]
