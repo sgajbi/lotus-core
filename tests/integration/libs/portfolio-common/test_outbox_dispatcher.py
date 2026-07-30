@@ -205,6 +205,52 @@ def test_dispatcher_commits_claim_before_publish_and_clears_it_on_success(db_eng
     assert processed_at is not None
 
 
+@pytest.mark.lifecycle
+def test_dispatcher_starts_delivery_lease_after_stream_head_selection(
+    db_engine,
+    clean_db,
+    monkeypatch,
+):
+    """Head-selection latency must not consume the Kafka delivery safety margin."""
+
+    test_session_factory = sessionmaker(autocommit=False, autoflush=False, bind=db_engine)
+    selection_started_at = datetime(2026, 7, 30, 1, 0, tzinfo=timezone.utc)
+    selection_completed_at = selection_started_at + timedelta(seconds=20)
+
+    with test_session_factory() as session:
+        with session.begin():
+            session.add(
+                OutboxEvent(
+                    aggregate_type="ClaimBoundaryTest",
+                    aggregate_id=f"post-selection-lease-{uuid.uuid4()}",
+                    status="PENDING",
+                    event_type="TestEvent",
+                    payload="{}",
+                    topic="claim-boundary.topic",
+                )
+            )
+
+    class _ControlledDateTime(datetime):
+        instants = iter((selection_started_at, selection_completed_at))
+
+        @classmethod
+        def now(cls, tz=None):
+            instant = next(cls.instants)
+            return instant if tz is not None else instant.replace(tzinfo=None)
+
+    monkeypatch.setattr(outbox_dispatcher_module, "datetime", _ControlledDateTime)
+    dispatcher = OutboxDispatcher(
+        kafka_producer=MagicMock(spec=KafkaProducer),
+        db_session_factory=test_session_factory,
+        claim_lease_seconds=30,
+    )
+
+    claimed_events = dispatcher._claim_pending_events()
+
+    assert len(claimed_events) == 1
+    assert claimed_events[0].claim_expires_at == selection_completed_at + timedelta(seconds=30)
+
+
 def test_dispatcher_reclaims_expired_claim(db_engine, clean_db, smart_mock_kafka_producer):
     """
     GIVEN a pending outbox event with an expired claim lease

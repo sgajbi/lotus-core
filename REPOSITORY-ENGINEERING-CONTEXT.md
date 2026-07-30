@@ -3315,7 +3315,9 @@ Most relevant current governance:
      a batch and drain productive batches immediately. Keep Kafka I/O outside row-lock
      transactions and retain claim-token-fenced result writes. The flush fence must cover the
      producer's configured Kafka delivery timeout, and the claim lease must exceed that fence by
-     the governed safety margin; reject unsafe overrides at startup. A flush exception must purge
+     the governed safety margin; start that lease after stream-head selection so query latency
+     cannot consume the publication margin, and reject unsafe overrides at startup. A flush
+     exception must purge
      queued and in-flight messages and replace the underlying producer before releasing any
      affected claim; if purge confirmation fails, abort result persistence so delivery uncertainty
      cannot advance the stream. Every production dispatcher must own a fresh, non-cached producer;

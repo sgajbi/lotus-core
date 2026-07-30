@@ -66,9 +66,11 @@ overtaking.
 
 The dispatcher flush fence follows the producer's configured Kafka `delivery.timeout.ms`, and the
 claim lease must exceed that fence by the governed safety margin. The default lease is 130 seconds
-for the default 120-second producer delivery timeout. Startup fails when an override is too short,
-so a publisher cannot outlive its database lease and deliver an old head after a reclaimed stream
-has advanced. If `flush(...)` raises with ambiguous queued records, the dispatcher purges queued
+for the default 120-second producer delivery timeout. The lease begins after stream-head selection,
+so query latency cannot consume the margin reserved for commit and producer publication. Startup
+fails when an override is too short, so a publisher cannot outlive its database lease and deliver
+an old head after a reclaimed stream has advanced. If `flush(...)` raises with ambiguous queued
+records, the dispatcher purges queued
 and in-flight messages and replaces the underlying producer before releasing rows for retry. If
 purge confirmation fails, result persistence aborts so the claims are retained rather than
 advancing the stream on uncertain delivery. Each production dispatcher owns a fresh, non-cached
