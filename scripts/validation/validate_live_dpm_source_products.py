@@ -310,7 +310,7 @@ def _probe_mandate_binding(
         and body_dict.get("product_name") == "DiscretionaryMandateBinding"
         and _supportability_state(body_dict) == "READY"
         and body_dict.get("mandate_type") == "discretionary"
-        and body_dict.get("discretionary_authority_status") == "active"
+        and str(body_dict.get("discretionary_authority_status", "")).strip().upper() == "ACTIVE"
         and body_dict.get("model_portfolio_id") == model_portfolio_id
         and bool(body_dict.get("mandate_objective"))
         and bool(body_dict.get("review_cadence"))
@@ -325,6 +325,7 @@ def _probe_mandate_binding(
             "product_name": body_dict.get("product_name"),
             "supportability_state": _supportability_state(body_dict),
             "mandate_type": body_dict.get("mandate_type"),
+            "discretionary_authority_status": body_dict.get("discretionary_authority_status"),
             "model_portfolio_id": body_dict.get("model_portfolio_id"),
             "mandate_objective_present": bool(body_dict.get("mandate_objective")),
             "review_cadence": body_dict.get("review_cadence"),
