@@ -10,6 +10,7 @@ from portfolio_common.domain.calculation_lineage import (
     FinancialSourceReference,
     NumericOutputPolicyLineage,
     build_calculation_lineage,
+    calculation_lineage_from_payload,
     canonical_content_hash,
 )
 
@@ -127,6 +128,48 @@ def test_numeric_output_policy_is_bound_to_calculation_and_downstream_lineage() 
         "version": "1.0.0",
         "working_precision": 64,
     }
+
+
+def test_persisted_lineage_payload_rehydrates_without_identity_loss() -> None:
+    lineage = _lineage(numeric_output_policy=OUTPUT_POLICY)
+
+    assert calculation_lineage_from_payload(lineage.lineage_payload()) == lineage
+    assert calculation_lineage_from_payload(None) is None
+
+
+@pytest.mark.parametrize(
+    ("payload", "message"),
+    [
+        ([], "payload must be an object"),
+        (
+            {
+                **_lineage().lineage_payload(),
+                "numeric_output_policy": [],
+            },
+            "numeric_output_policy must be an object",
+        ),
+        (
+            {
+                **_lineage().lineage_payload(),
+                "algorithm_version": True,
+            },
+            "algorithm_version must be an integer",
+        ),
+        (
+            {
+                **_lineage().lineage_payload(),
+                "algorithm_id": 1,
+            },
+            "algorithm_id must be a string",
+        ),
+    ],
+)
+def test_persisted_lineage_payload_fails_closed_on_invalid_shapes(
+    payload: object,
+    message: str,
+) -> None:
+    with pytest.raises(TypeError, match=message):
+        calculation_lineage_from_payload(payload)
 
 
 @pytest.mark.parametrize(

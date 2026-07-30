@@ -199,6 +199,18 @@ async def test_backdated_transaction_rebuilds_current_epoch_without_legacy_repla
         "BUY-COMBINED-LATER-01",
     ]
     assert {cashflow.epoch for cashflow in current_cashflows} == {state.epoch}
+    assert all(cashflow.calculation_lineage is not None for cashflow in current_cashflows)
+    assert {
+        cashflow.calculation_lineage["algorithm_id"] for cashflow in current_cashflows
+    } == {"transaction-cashflow"}
+    assert {
+        cashflow.calculation_lineage["numeric_output_policy"]["name"]
+        for cashflow in current_cashflows
+    } == {"cashflow-ledger-output"}
+    assert {
+        cashflow.calculation_lineage["numeric_output_policy"]["version"]
+        for cashflow in current_cashflows
+    } == {"1.0.0"}
     assert [stage.transaction_id for stage in current_pipeline_stages] == [
         "BUY-COMBINED-EARLIER-01",
         "BUY-COMBINED-LATER-01",

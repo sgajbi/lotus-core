@@ -4,9 +4,11 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from portfolio_common.database_models import Cashflow
+from portfolio_common.domain.calculation_lineage import build_calculation_lineage
 
 from src.services.portfolio_transaction_processing_service.app.domain.cashflow import (
     CalculatedCashflow,
+    numeric_policy,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure.cashflow import (
     SqlAlchemyCashflowRepository,
@@ -117,6 +119,14 @@ async def test_create_persists_domain_result_successfully() -> None:
     insert_result = MagicMock()
     insert_result.scalar_one_or_none.return_value = 19
     db_session.execute.return_value = insert_result
+    lineage = build_calculation_lineage(
+        algorithm_id="transaction-cashflow",
+        algorithm_version=1,
+        intermediate_precision=64,
+        input_payload={"gross_transaction_amount": Decimal("1000")},
+        output_payload={"amount": Decimal("995")},
+        numeric_output_policy=numeric_policy.CASHFLOW_LEDGER_OUTPUT_V1.lineage_identity(),
+    )
     calculated = CalculatedCashflow(
         transaction_id="TXN-DOMAIN-002",
         portfolio_id="PORT-001",
@@ -132,6 +142,7 @@ async def test_create_persists_domain_result_successfully() -> None:
         economic_event_id=None,
         linked_transaction_group_id=None,
         epoch=5,
+        calculation_lineage=lineage,
     )
 
     saved = await SqlAlchemyCashflowRepository(db_session).create(calculated)
@@ -139,6 +150,9 @@ async def test_create_persists_domain_result_successfully() -> None:
     assert saved.cashflow_id == 19
     assert saved.transaction_id == "TXN-DOMAIN-002"
     assert saved.amount == Decimal("995")
+    assert saved.calculation_lineage == lineage
+    statement = db_session.execute.await_args.args[0]
+    assert statement.compile().params["calculation_lineage"] == lineage.lineage_payload()
     db_session.execute.assert_awaited_once()
 
 

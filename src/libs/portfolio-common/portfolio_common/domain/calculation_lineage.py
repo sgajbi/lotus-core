@@ -185,6 +185,51 @@ def build_calculation_lineage(
     )
 
 
+def calculation_lineage_from_payload(payload: object) -> CalculationLineage | None:
+    """Rehydrate persisted calculation lineage through one strict shared boundary."""
+
+    if payload is None:
+        return None
+    if not isinstance(payload, Mapping):
+        raise TypeError("calculation lineage payload must be an object")
+    numeric_payload = payload.get("numeric_output_policy")
+    numeric_policy = None
+    if numeric_payload is not None:
+        if not isinstance(numeric_payload, Mapping):
+            raise TypeError("numeric_output_policy must be an object")
+        numeric_policy = NumericOutputPolicyLineage(
+            name=_required_payload_string(numeric_payload, "name"),
+            version=_required_payload_string(numeric_payload, "version"),
+            precision=_required_payload_int(numeric_payload, "precision"),
+            scale=_required_payload_int(numeric_payload, "scale"),
+            working_precision=_required_payload_int(numeric_payload, "working_precision"),
+            rounding=_required_payload_string(numeric_payload, "rounding"),
+        )
+    return CalculationLineage(
+        algorithm_id=_required_payload_string(payload, "algorithm_id"),
+        algorithm_version=_required_payload_int(payload, "algorithm_version"),
+        intermediate_precision=_required_payload_int(payload, "intermediate_precision"),
+        input_content_hash=_required_payload_string(payload, "input_content_hash"),
+        calculation_content_hash=_required_payload_string(payload, "calculation_content_hash"),
+        output_content_hash=_required_payload_string(payload, "output_content_hash"),
+        numeric_output_policy=numeric_policy,
+    )
+
+
+def _required_payload_string(payload: Mapping[str, object], key: str) -> str:
+    value = payload.get(key)
+    if not isinstance(value, str):
+        raise TypeError(f"{key} must be a string")
+    return value
+
+
+def _required_payload_int(payload: Mapping[str, object], key: str) -> int:
+    value = payload.get(key)
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise TypeError(f"{key} must be an integer")
+    return value
+
+
 def canonical_content_hash(payload: Mapping[str, object]) -> str:
     """Hash a supported financial payload without float or key-order ambiguity."""
 
