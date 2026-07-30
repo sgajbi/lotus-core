@@ -24,6 +24,10 @@ closure of persisted lineage exposure or the complete producer-policy inventory.
   exact financial inputs, calculation identity, or normalized-output identity on its durable row.
 - Valuation receipts and cashflow persistence needed the same strict lineage rehydration boundary;
   keeping separate implementations would allow their accepted payload shapes to drift.
+- PR review proved the first cashflow lineage implementation re-summed fee components outside the
+  governed Decimal context and represented only the effective FX cash component type. Identical
+  economics could therefore acquire ambient-context-dependent hashes, while different booked FX
+  product families could lose their distinct source identity.
 
 ## Resolution
 
@@ -86,6 +90,10 @@ closure of persisted lineage exposure or the complete producer-policy inventory.
   remain null; no current-policy identity is inferred for historical evidence.
 - Centralized strict persisted-lineage rehydration in `portfolio_common` and removed the duplicate
   valuation-receipt implementation.
+- Resolve the lineage fee total inside the same 64-digit arithmetic context as cashflow economics,
+  then carry that exact value into the input hash without a second ambient-context calculation.
+  Record both the booked transaction family and the effective processing component type so
+  `FX_SPOT`, `FX_FORWARD`, and `FX_SWAP` cash components retain distinct source lineage.
 - Wired the guard into `make lint`. Accrued income and position valuation are truthfully `partial`:
   their public calculation callables bind lineage, while internal arithmetic helpers and the legacy
   `valuation_logic.py` consumer do not independently emit it. Six policies are `not-exposed`. Every
@@ -148,6 +156,8 @@ identity, and public response shapes remain unchanged.
   lineage. The final slice passed 158 focused warning-strict tests, migration smoke at single head
   `c130b2c3d503`, MyPy across 240 source files, Ruff, the calculated-output guard, and a rebuilt
   real-PostgreSQL backdated-rebuild proof (`1 passed in 375.02s`).
+- PR review fix-forward adds ambient-precision determinism with component fees and booked-versus-
+  effective FX transaction identity proof; 88 warning-strict cashflow calculation tests passed.
 
 ## Compatibility and remaining work
 
