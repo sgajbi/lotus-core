@@ -8,9 +8,9 @@ from typing import Any
 
 import yaml
 from portfolio_common.kafka_producer_policy import DEFAULT_DELIVERY_TIMEOUT_MS
-from portfolio_common.outbox_dispatcher import (
-    SHUTDOWN_DRAIN_SAFETY_SECONDS,
-    TERMINATION_GRACE_SAFETY_SECONDS,
+from portfolio_common.outbox_dispatcher import SHUTDOWN_DRAIN_SAFETY_SECONDS
+from portfolio_common.runtime_supervision import (
+    RUNTIME_TERMINATION_GRACE_SAFETY_SECONDS as TERMINATION_GRACE_SAFETY_SECONDS,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
