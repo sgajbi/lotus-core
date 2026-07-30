@@ -2095,6 +2095,8 @@ async def test_get_reprocessing_jobs_query_uses_reference_now(
     assert "from_currency" in compiled
     assert "to_currency" in compiled
     assert "position_history.position_date <=" in compiled.lower()
+    assert "position_history.position_date >" in compiled.lower()
+    assert "position_history.quantity != 0" in compiled.lower()
     assert "CAST(reprocessing_jobs.payload['earliest_impacted_date'] AS DATE)" in compiled
     assert (
         "pg_input_is_valid(reprocessing_jobs.payload['earliest_impacted_date'], 'date')" in compiled
@@ -2149,6 +2151,8 @@ async def test_get_reprocessing_jobs_count_uses_date_aware_scope(
     assert "from position_history join position_state on" in compiled.lower()
     assert "position_history.portfolio_id = 'P1'" in compiled
     assert "position_history.position_date <=" in compiled.lower()
+    assert "position_history.position_date >" in compiled.lower()
+    assert "position_history.quantity != 0" in compiled.lower()
     assert "CAST(reprocessing_jobs.payload['earliest_impacted_date'] AS DATE)" in compiled
     assert (
         "pg_input_is_valid(reprocessing_jobs.payload['earliest_impacted_date'], 'date')" in compiled
