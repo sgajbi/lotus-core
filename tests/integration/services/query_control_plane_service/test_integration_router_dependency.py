@@ -438,7 +438,11 @@ async def async_test_client():
             "publication_block_reasons": [],
             **source_data_product_runtime_metadata(
                 as_of_date=date(2026, 1, 31),
+                data_quality_status="COMPLETE",
                 generated_at=datetime(2026, 1, 31, 10, 0, 0, tzinfo=UTC),
+                latest_evidence_timestamp=datetime(2026, 1, 31, 10, 0, 0, tzinfo=UTC),
+                source_evidence_current=True,
+                freshness_status="CURRENT",
             ),
         }
     )
@@ -464,8 +468,8 @@ async def async_test_client():
             "contributing_evidence_refs": [],
             "publication_gate": "BLOCK",
             "publication_block_reasons": [
-                "INCOMPLETE_COVERAGE",
-                "NO_OBSERVED_EVIDENCE",
+                "NO_OBSERVED_COVERAGE",
+                "MISSING_EVIDENCE_TIMESTAMP",
             ],
             **source_data_product_runtime_metadata(
                 as_of_date=date(2026, 1, 31),
@@ -1799,7 +1803,7 @@ async def test_benchmark_coverage_success(async_test_client):
     assert body["quality_status_distribution"] == {"ACCEPTED": 31}
     assert body["publication_gate"] == "ALLOW"
     assert body["reconciliation_status"] == "UNKNOWN"
-    assert body["data_quality_status"] == "UNKNOWN"
+    assert body["data_quality_status"] == "COMPLETE"
     coverage_service.get_benchmark.assert_awaited_once()
     coverage_call = coverage_service.get_benchmark.await_args.kwargs
     assert coverage_call["benchmark_id"] == "BMK_GLOBAL_BALANCED_60_40"
@@ -1826,8 +1830,8 @@ async def test_risk_free_coverage_success(async_test_client):
     assert body["missing_dates_count"] == 31
     assert body["publication_gate"] == "BLOCK"
     assert body["publication_block_reasons"] == [
-        "INCOMPLETE_COVERAGE",
-        "NO_OBSERVED_EVIDENCE",
+        "NO_OBSERVED_COVERAGE",
+        "MISSING_EVIDENCE_TIMESTAMP",
     ]
     assert body["reconciliation_status"] == "UNKNOWN"
     assert body["data_quality_status"] == "UNKNOWN"
