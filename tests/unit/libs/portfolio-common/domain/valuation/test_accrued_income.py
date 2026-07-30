@@ -303,6 +303,7 @@ def test_calculation_is_independent_of_ambient_decimal_precision() -> None:
     assert actual.lineage.algorithm_version == 3
     assert actual.lineage.numeric_output_policy is not None
     assert actual.lineage.numeric_output_policy.policy_id == "accrued-income-ledger-output@1.0.0"
+    assert actual.lineage.intermediate_precision == 64
 
 
 @pytest.mark.parametrize(
