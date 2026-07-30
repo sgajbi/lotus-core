@@ -91,7 +91,9 @@ def test_calculated_cashflow_is_independent_of_ambient_decimal_precision(
     event = base_transaction_event.model_copy(
         update={
             "gross_transaction_amount": Decimal("1234567.1234567890"),
-            "trade_fee": Decimal("0.0000000001"),
+            "trade_fee": Decimal("99"),
+            "brokerage": Decimal("0.1234567890"),
+            "stamp_duty": Decimal("0.0000000001"),
         }
     )
     rule = CashflowRule(
@@ -110,7 +112,7 @@ def test_calculated_cashflow_is_independent_of_ambient_decimal_precision(
         getcontext().prec = original_precision
 
     assert low_precision == high_precision
-    assert high_precision.amount == Decimal("-1234567.1234567891")
+    assert high_precision.amount == Decimal("-1234567.2469135781")
 
 
 def test_calculated_cashflow_binds_inputs_calculation_output_and_numeric_policy(
@@ -153,6 +155,48 @@ def test_calculated_cashflow_binds_inputs_calculation_output_and_numeric_policy(
         != first.calculation_lineage.output_content_hash
     )
     assert changed_fee.amount == Decimal("-1005.51")
+
+
+def test_fx_component_lineage_distinguishes_booked_transaction_family(
+    base_transaction_event: TransactionEvent,
+) -> None:
+    rule = CashflowRule(
+        classification=CashflowClassification.FX_BUY,
+        timing=CashflowTiming.EOD,
+        is_position_flow=True,
+        is_portfolio_flow=False,
+    )
+    component = {
+        "component_type": "FX_CASH_SETTLEMENT_BUY",
+        "gross_transaction_amount": Decimal("13450"),
+        "trade_fee": Decimal("0"),
+        "currency": "SGD",
+    }
+
+    spot = _calculate(
+        base_transaction_event.model_copy(update={**component, "transaction_type": "FX_SPOT"}),
+        rule,
+    )
+    forward = _calculate(
+        base_transaction_event.model_copy(update={**component, "transaction_type": "FX_FORWARD"}),
+        rule,
+    )
+
+    assert spot.amount == forward.amount == Decimal("13450")
+    assert spot.calculation_lineage is not None
+    assert forward.calculation_lineage is not None
+    assert (
+        spot.calculation_lineage.input_content_hash
+        != forward.calculation_lineage.input_content_hash
+    )
+    assert (
+        spot.calculation_lineage.calculation_content_hash
+        != forward.calculation_lineage.calculation_content_hash
+    )
+    assert (
+        spot.calculation_lineage.output_content_hash
+        != forward.calculation_lineage.output_content_hash
+    )
 
 
 def test_calculate_buy_transaction_normalizes_transaction_type(

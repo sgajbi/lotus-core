@@ -149,6 +149,7 @@ def calculate_transaction_cashflow(
             transaction_type,
             calculation_context,
         )
+        resolved_trade_fee = _resolve_cashflow_trade_fee(transaction)
     level = _resolve_cashflow_level(transaction, rule)
     cashflow_date = _resolve_cashflow_date(transaction, rule, transaction_type)
     amount = CASHFLOW_LEDGER_OUTPUT_V1.normalize(
@@ -168,6 +169,7 @@ def calculate_transaction_cashflow(
             transaction_type=transaction_type,
             calculation_context=calculation_context,
             epoch=normalized_epoch,
+            resolved_trade_fee=resolved_trade_fee,
         ),
         output_payload={
             "amount": amount,
@@ -213,6 +215,7 @@ def _cashflow_lineage_input(
     transaction_type: str,
     calculation_context: CashflowCalculationContext,
     epoch: int,
+    resolved_trade_fee: Decimal,
 ) -> dict[str, object]:
     """Return every source and policy value that can change cashflow economics."""
 
@@ -253,10 +256,11 @@ def _cashflow_lineage_input(
             "synthetic_flow_classification": transaction.synthetic_flow_classification,
             "synthetic_flow_currency": transaction.synthetic_flow_currency,
             "synthetic_flow_effective_date": transaction.synthetic_flow_effective_date,
-            "trade_fee": _resolve_cashflow_trade_fee(transaction),
+            "booked_transaction_type": transaction.transaction_type,
+            "resolved_trade_fee": resolved_trade_fee,
             "transaction_date": transaction.transaction_date.isoformat(),
             "transaction_id": transaction.transaction_id,
-            "transaction_type": transaction_type,
+            "effective_processing_transaction_type": transaction_type,
             "withholding_tax_amount": transaction.withholding_tax_amount,
         },
     }
