@@ -79,8 +79,7 @@ def downgrade() -> None:
         type_="check",
     )
     op.execute(
-        "UPDATE daily_position_valuation_receipts "
-        "SET calculation_lineage = NULL "
+        "DELETE FROM daily_position_valuation_receipts "
         "WHERE supportability = 'LEGACY_UNSCOPED' "
         "AND calculation_lineage IS NOT NULL"
     )
