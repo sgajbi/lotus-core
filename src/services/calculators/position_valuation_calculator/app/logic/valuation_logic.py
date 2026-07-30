@@ -4,6 +4,10 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Optional, Tuple
 
+from portfolio_common.domain.calculation_lineage import (
+    CalculationLineage,
+    build_calculation_lineage,
+)
 from portfolio_common.domain.decimal_amount import required_decimal
 from portfolio_common.domain.market_data.fx_rate import coerce_positive_fx_rate_or_none
 from portfolio_common.domain.market_data.market_price import (
@@ -18,6 +22,9 @@ from portfolio_common.domain.valuation.numeric_policy import (
 
 logger = logging.getLogger(__name__)
 
+LEGACY_VALUATION_ALGORITHM_ID = "legacy-unscoped-position-valuation"
+LEGACY_VALUATION_ALGORITHM_VERSION = 1
+
 
 @dataclass(frozen=True, slots=True)
 class ValuationComponents:
@@ -28,6 +35,7 @@ class ValuationComponents:
     unrealized_price_base: Decimal
     unrealized_price_local: Decimal
     unrealized_fx_base: Decimal
+    calculation_lineage: CalculationLineage
 
     def as_legacy_tuple(self) -> Tuple[Decimal, Decimal, Decimal, Decimal]:
         return (
@@ -134,8 +142,10 @@ class ValuationLogic:
         instrument_currency = ValuationLogic._normalize_currency_code(instrument_currency)
         portfolio_currency = ValuationLogic._normalize_currency_code(portfolio_currency)
 
+        price_alignment_fx_rate: Decimal | None = None
+        portfolio_fx_rate = Decimal(1)
         if quantity.is_zero():
-            return ValuationComponents(
+            components = ValuationComponents(
                 market_value_base=Decimal(0),
                 market_value_local=Decimal(0),
                 unrealized_total_base=Decimal(0),
@@ -143,7 +153,34 @@ class ValuationLogic:
                 unrealized_price_base=Decimal(0),
                 unrealized_price_local=Decimal(0),
                 unrealized_fx_base=Decimal(0),
+                calculation_lineage=build_calculation_lineage(
+                    algorithm_id=LEGACY_VALUATION_ALGORITHM_ID,
+                    algorithm_version=LEGACY_VALUATION_ALGORITHM_VERSION,
+                    intermediate_precision=POSITION_VALUATION_LEDGER_OUTPUT_V1.working_precision,
+                    input_payload={
+                        "cost_basis_base": cost_basis_base,
+                        "cost_basis_local": cost_basis_local,
+                        "instrument_currency": instrument_currency,
+                        "market_price": normalized_market_price,
+                        "portfolio_currency": portfolio_currency,
+                        "price_currency": price_currency,
+                        "product_type": product_type,
+                        "quantity": quantity,
+                        "zero_position_short_circuit": True,
+                    },
+                    output_payload=_valuation_output_payload(
+                        market_value_base=Decimal(0),
+                        market_value_local=Decimal(0),
+                        unrealized_total_base=Decimal(0),
+                        unrealized_total_local=Decimal(0),
+                        unrealized_price_base=Decimal(0),
+                        unrealized_price_local=Decimal(0),
+                        unrealized_fx_base=Decimal(0),
+                    ),
+                    numeric_output_policy=POSITION_VALUATION_LEDGER_OUTPUT_V1.lineage_identity(),
+                ),
             )
+            return components
 
         with POSITION_VALUATION_LEDGER_OUTPUT_V1.arithmetic_context():
             # 1. Determine the price in the instrument's currency.
@@ -156,6 +193,7 @@ class ValuationLogic:
                 )
                 if normalized_price_fx_rate is None:
                     return None
+                price_alignment_fx_rate = normalized_price_fx_rate
                 valuation_price_local = normalized_market_price * normalized_price_fx_rate
 
             valuation_price_local = resolve_valuation_unit_price(
@@ -177,6 +215,7 @@ class ValuationLogic:
                 )
                 if normalized_portfolio_fx_rate is None:
                     return None
+                portfolio_fx_rate = normalized_portfolio_fx_rate
                 current_instrument_to_portfolio_rate = normalized_portfolio_fx_rate
                 raw_market_value_base = raw_market_value_local * normalized_portfolio_fx_rate
 
@@ -214,6 +253,35 @@ class ValuationLogic:
             unrealized_fx_pnl_base,
             field_name="unrealized_price_gain_loss",
         )
+        calculation_lineage = build_calculation_lineage(
+            algorithm_id=LEGACY_VALUATION_ALGORITHM_ID,
+            algorithm_version=LEGACY_VALUATION_ALGORITHM_VERSION,
+            intermediate_precision=policy.working_precision,
+            input_payload={
+                "cost_basis_base": cost_basis_base,
+                "cost_basis_local": cost_basis_local,
+                "instrument_currency": instrument_currency,
+                "instrument_to_portfolio_fx_rate": portfolio_fx_rate,
+                "market_price": normalized_market_price,
+                "portfolio_currency": portfolio_currency,
+                "price_currency": price_currency,
+                "price_to_instrument_fx_rate": price_alignment_fx_rate,
+                "product_type": product_type,
+                "quantity": quantity,
+                "resolved_valuation_unit_price": valuation_price_local,
+                "zero_position_short_circuit": False,
+            },
+            output_payload=_valuation_output_payload(
+                market_value_base=market_value_base,
+                market_value_local=market_value_local,
+                unrealized_total_base=unrealized_pnl_base,
+                unrealized_total_local=unrealized_pnl_local,
+                unrealized_price_base=unrealized_price_pnl_base,
+                unrealized_price_local=unrealized_pnl_local,
+                unrealized_fx_base=unrealized_fx_pnl_base,
+            ),
+            numeric_output_policy=policy.lineage_identity(),
+        )
         return ValuationComponents(
             market_value_base=market_value_base,
             market_value_local=market_value_local,
@@ -222,4 +290,26 @@ class ValuationLogic:
             unrealized_price_base=unrealized_price_pnl_base,
             unrealized_price_local=unrealized_pnl_local,
             unrealized_fx_base=unrealized_fx_pnl_base,
+            calculation_lineage=calculation_lineage,
         )
+
+
+def _valuation_output_payload(
+    *,
+    market_value_base: Decimal,
+    market_value_local: Decimal,
+    unrealized_total_base: Decimal,
+    unrealized_total_local: Decimal,
+    unrealized_price_base: Decimal,
+    unrealized_price_local: Decimal,
+    unrealized_fx_base: Decimal,
+) -> dict[str, Decimal]:
+    return {
+        "market_value_base": market_value_base,
+        "market_value_local": market_value_local,
+        "unrealized_fx_base": unrealized_fx_base,
+        "unrealized_price_base": unrealized_price_base,
+        "unrealized_price_local": unrealized_price_local,
+        "unrealized_total_base": unrealized_total_base,
+        "unrealized_total_local": unrealized_total_local,
+    }

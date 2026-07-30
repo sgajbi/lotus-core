@@ -1,5 +1,5 @@
 # tests/unit/services/calculators/position-valuation-calculator/logic/test_valuation_logic.py
-from decimal import Decimal
+from decimal import Decimal, localcontext
 
 import pytest
 from portfolio_common.domain.financial.precision import BOUNDED_18_10_EXACT
@@ -428,7 +428,66 @@ def test_calculated_valuation_outputs_are_persistable_and_preserve_pnl_identity(
     assert components.market_value_base == Decimal("1.1234567891")
     for field_name in components.__dataclass_fields__:
         value = getattr(components, field_name)
-        assert BOUNDED_18_10_EXACT.require_exact(value, field_name=field_name) == value
+        if isinstance(value, Decimal):
+            assert BOUNDED_18_10_EXACT.require_exact(value, field_name=field_name) == value
+    assert components.calculation_lineage.algorithm_id == "legacy-unscoped-position-valuation"
+    assert components.calculation_lineage.numeric_output_policy is not None
+    assert (
+        components.calculation_lineage.numeric_output_policy.policy_id
+        == "position-valuation-ledger-output@1.0.0"
+    )
     assert components.unrealized_total_base == (
         components.unrealized_price_base + components.unrealized_fx_base
     )
+
+
+def test_legacy_valuation_lineage_is_deterministic_and_input_sensitive() -> None:
+    arguments = {
+        "quantity": Decimal("100"),
+        "market_price": Decimal("12"),
+        "cost_basis_base": Decimal("1500"),
+        "cost_basis_local": Decimal("1000"),
+        "price_currency": "EUR",
+        "instrument_currency": "EUR",
+        "portfolio_currency": "SGD",
+        "instrument_to_portfolio_fx_rate": Decimal("1.6"),
+    }
+
+    baseline = ValuationLogic.calculate_valuation_components(**arguments)
+    repeated = ValuationLogic.calculate_valuation_components(**arguments)
+    corrected = ValuationLogic.calculate_valuation_components(
+        **{**arguments, "market_price": Decimal("12.01")}
+    )
+
+    assert baseline is not None
+    assert repeated is not None
+    assert corrected is not None
+    assert repeated.calculation_lineage == baseline.calculation_lineage
+    assert (
+        corrected.calculation_lineage.input_content_hash
+        != baseline.calculation_lineage.input_content_hash
+    )
+    assert (
+        corrected.calculation_lineage.output_content_hash
+        != baseline.calculation_lineage.output_content_hash
+    )
+
+
+def test_legacy_valuation_lineage_is_independent_of_ambient_decimal_precision() -> None:
+    arguments = {
+        "quantity": Decimal("3"),
+        "market_price": Decimal("0.33333333335"),
+        "cost_basis_base": Decimal("0.1000000000"),
+        "cost_basis_local": Decimal("0.1000000000"),
+        "price_currency": "EUR",
+        "instrument_currency": "EUR",
+        "portfolio_currency": "USD",
+        "instrument_to_portfolio_fx_rate": Decimal("1.1234567890"),
+    }
+    expected = ValuationLogic.calculate_valuation_components(**arguments)
+
+    with localcontext() as context:
+        context.prec = 7
+        actual = ValuationLogic.calculate_valuation_components(**arguments)
+
+    assert actual == expected
