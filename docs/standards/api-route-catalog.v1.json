@@ -1029,6 +1029,57 @@
     {
       "service_app": "event_replay_service",
       "method": "GET",
+      "path": "/ingestion/jobs/{job_id}/evidence",
+      "route_key": "GET /ingestion/jobs/{job_id}/evidence",
+      "operation_id": "get_ingestion_evidence_bundle_ingestion_jobs__job_id__evidence_get",
+      "summary": "Get governed ingestion evidence bundle",
+      "tags": [
+        "Ingestion Operations"
+      ],
+      "route_family": "Control-Plane And Policy",
+      "api_version": "unversioned-current",
+      "api_status": "active",
+      "owner": "event_replay_service",
+      "auth_requirement": "governed-enterprise-readiness",
+      "audit_requirement": "audit-required",
+      "request_schema": null,
+      "response_schemas": [
+        {
+          "status_code": "200",
+          "schema": "IngestionEvidenceBundleResponse",
+          "description": "Governed ingestion evidence for the requested job."
+        }
+      ],
+      "error_models": [
+        {
+          "status_code": "404",
+          "schema": "none",
+          "description": "Ingestion job was not found."
+        },
+        {
+          "status_code": "422",
+          "schema": "HTTPValidationError",
+          "description": "Validation Error"
+        }
+      ],
+      "pagination": [],
+      "filtering": [],
+      "sorting": [],
+      "idempotency_behavior": "safe-read",
+      "downstream_consumers": [
+        "lotus-gateway",
+        "lotus-manage",
+        "lotus-report"
+      ],
+      "deprecated_alias_metadata": {
+        "is_deprecated": false,
+        "sunset": null,
+        "compatibility": "not_applicable"
+      }
+    },
+    {
+      "service_app": "event_replay_service",
+      "method": "GET",
       "path": "/ingestion/jobs/{job_id}/failures",
       "route_key": "GET /ingestion/jobs/{job_id}/failures",
       "operation_id": "list_ingestion_job_failures_ingestion_jobs__job_id__failures_get",
@@ -7570,8 +7621,8 @@
       "idempotency_behavior": "safe-read",
       "downstream_consumers": [
         "lotus-gateway",
-        "lotus-manage",
-        "lotus-report"
+        "lotus-workbench",
+        "operations"
       ],
       "deprecated_alias_metadata": {
         "is_deprecated": false,
@@ -8768,8 +8819,8 @@
       "idempotency_behavior": "safe-read",
       "downstream_consumers": [
         "lotus-gateway",
-        "lotus-manage",
-        "lotus-report"
+        "lotus-workbench",
+        "operations"
       ],
       "deprecated_alias_metadata": {
         "is_deprecated": false,
@@ -8830,8 +8881,8 @@
       "idempotency_behavior": "safe-read",
       "downstream_consumers": [
         "lotus-gateway",
-        "lotus-manage",
-        "lotus-report"
+        "lotus-workbench",
+        "operations"
       ],
       "deprecated_alias_metadata": {
         "is_deprecated": false,
