@@ -122,9 +122,16 @@ inception calculations must exclude cash-in-lieu because its economics are capit
 
 Primary durable outputs include:
 
-- persisted `Cashflow` rows
+- persisted `Cashflow` rows, including optional typed calculation lineage
 - `cashflows.calculated` completion events
 - semantic event-processing evidence used to prevent duplicate cross-topic publication
+
+Every newly calculated canonical cashflow binds `cashflow-ledger-output@1.0.0` to deterministic
+input, calculation, and output hashes and persists the lineage on the cashflow row. The input
+identity includes the booked transaction, fee components and resolved fee, rule/context/epoch, and
+linkage fields; the output identity covers the complete normalized cashflow result. Rows created
+before migration `c130b2c3d503` may retain null lineage. Null means evidence is unavailable and must
+not be reconstructed by assuming the current policy.
 
 These outputs feed:
 
@@ -156,6 +163,8 @@ That is why cashflow normalization is part of the core system-of-record contract
 - cashflow calculator owns normalized cashflow materialization inside core
 - combined transaction processing resolves position recovery epochs before cashflow staging; an
   inline backdated rebuild rematerializes the deduplicated cashflow timeline in the new epoch
+- cashflow lineage is additive evidence: it does not change amount, sign, classification, date,
+  transaction identity, topic identity, or the legacy-row replay policy
 - downstream performance and risk analytics may consume this state, but they do not redefine it
 - `PortfolioCashflowProjection:v1` has an implementation-backed methodology for daily operational
   net cashflow and cumulative cashflow across a bounded one-year operational horizon; it does not
