@@ -170,9 +170,11 @@ async def test_direct_pair_query_excludes_inverse_unrelated_and_closed_positions
     assert keys == []
 
 
-async def test_direct_pair_query_returns_open_matching_position_epoch(
+@pytest.mark.parametrize("position_quantity", [Decimal("10"), Decimal("-10")])
+async def test_direct_pair_query_returns_nonzero_matching_position_epoch(
     clean_db,
     async_db_session: AsyncSession,
+    position_quantity: Decimal,
 ) -> None:
     async_db_session.add_all(
         [
@@ -187,7 +189,7 @@ async def test_direct_pair_query_returns_open_matching_position_epoch(
         portfolio_id="P-SGD",
         security_id="USD-BOND",
         transaction_id="TX-MATCH",
-        quantity=Decimal("10"),
+        quantity=position_quantity,
     )
     await async_db_session.flush()
     repository = fx_revaluation_repository.SqlAlchemyFxRevaluationRepository(async_db_session)
@@ -278,9 +280,11 @@ async def test_immediate_fx_revaluation_uses_source_snapshot_freshness(
     ]
 
 
-async def test_replay_impact_includes_position_first_opened_after_correction(
+@pytest.mark.parametrize("position_quantity", [Decimal("10"), Decimal("-10")])
+async def test_replay_impact_includes_nonzero_position_first_opened_after_correction(
     clean_db,
     async_db_session: AsyncSession,
+    position_quantity: Decimal,
 ) -> None:
     async_db_session.add_all(
         [
@@ -306,7 +310,7 @@ async def test_replay_impact_includes_position_first_opened_after_correction(
             transaction_id="TX-LATER",
             position_date=date(2026, 4, 12),
             epoch=0,
-            quantity=Decimal("10"),
+            quantity=position_quantity,
             cost_basis=Decimal("1000"),
             cost_basis_local=Decimal("1000"),
         )

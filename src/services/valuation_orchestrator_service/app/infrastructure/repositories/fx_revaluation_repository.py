@@ -186,7 +186,7 @@ class SqlAlchemyFxRevaluationRepository:
             )
             .where(
                 PositionHistory.position_date > earliest_impacted_date,
-                PositionHistory.quantity > 0,
+                PositionHistory.quantity != 0,
                 func.upper(func.trim(Instrument.currency)) == pair.from_currency,
                 func.upper(func.trim(Portfolio.base_currency)) == pair.to_currency,
             )
@@ -246,7 +246,7 @@ def _latest_open_position_scope(*, pair: DirectCurrencyPair, effective_date: dat
 
 
 def _open_position_keys_statement(latest_history):
-    """Select positive current-epoch keys from one ranked position scope."""
+    """Select non-zero current-epoch keys from one ranked position scope."""
 
     return (
         select(
@@ -256,7 +256,7 @@ def _open_position_keys_statement(latest_history):
         )
         .where(
             latest_history.c.row_number == 1,
-            latest_history.c.quantity > 0,
+            latest_history.c.quantity != 0,
         )
         .order_by(
             latest_history.c.portfolio_id.asc(),

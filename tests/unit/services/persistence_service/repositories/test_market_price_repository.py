@@ -1,5 +1,6 @@
+from datetime import date
 from decimal import Decimal
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from portfolio_common.events import MarketPriceEvent
@@ -8,6 +9,25 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.services.persistence_service.app.repositories.market_price_repository import (
     MarketPriceRepository,
 )
+
+
+@pytest.mark.asyncio
+async def test_open_position_price_propagation_uses_nonzero_quantity() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    result = MagicMock()
+    result.scalars.return_value.all.return_value = []
+    db.execute.return_value = result
+    repo = MarketPriceRepository(db)
+
+    await repo.find_portfolios_with_open_position_before_date(
+        "SEC_TEST_PRICE",
+        date(2026, 5, 28),
+    )
+
+    statement = db.execute.await_args.args[0]
+    compiled = str(statement.compile(compile_kwargs={"literal_binds": True}))
+    assert "anon_1.quantity != 0" in compiled
+    assert "anon_1.quantity > 0" not in compiled
 
 
 @pytest.mark.asyncio

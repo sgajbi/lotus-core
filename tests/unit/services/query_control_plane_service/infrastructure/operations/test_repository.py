@@ -2100,7 +2100,7 @@ async def test_get_reprocessing_jobs_query_uses_reference_now(
         "pg_input_is_valid(reprocessing_jobs.payload['earliest_impacted_date'], 'date')" in compiled
     )
     assert "IS NOT true" in compiled
-    assert "anon_1.quantity > 0" in compiled
+    assert "anon_1.quantity != 0" in compiled
     assert "CASE WHEN (reprocessing_jobs.status = 'FAILED')" in compiled
     assert "upper(trim(reprocessing_jobs.status))" not in compiled
     assert "reprocessing_jobs.updated_at < '2025-08-31 11:45:00+00:00'" in compiled
@@ -2154,7 +2154,7 @@ async def test_get_reprocessing_jobs_count_uses_date_aware_scope(
         "pg_input_is_valid(reprocessing_jobs.payload['earliest_impacted_date'], 'date')" in compiled
     )
     assert "IS NOT true" in compiled
-    assert "anon_1.quantity > 0" in compiled
+    assert "anon_1.quantity != 0" in compiled
     assert "reprocessing_jobs.status = 'PROCESSING'" in compiled
     assert "trim(reprocessing_jobs.payload['security_id']) = 'SEC-US-IBM'" in compiled
     assert "upper(trim(instruments.currency))" in compiled

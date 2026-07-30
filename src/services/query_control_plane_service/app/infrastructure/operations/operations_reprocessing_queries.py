@@ -80,7 +80,7 @@ def reprocessing_job_portfolio_scope_exists(
     return (
         select(1)
         .select_from(latest_history)
-        .where(latest_history.c.rn == 1, latest_history.c.quantity > 0)
+        .where(latest_history.c.rn == 1, latest_history.c.quantity != 0)
         .exists()
     )
 
@@ -161,7 +161,7 @@ def fx_revaluation_job_portfolio_scope_exists(
     open_on_date = (
         select(1)
         .select_from(latest_history)
-        .where(latest_history.c.row_number == 1, latest_history.c.quantity > 0)
+        .where(latest_history.c.row_number == 1, latest_history.c.quantity != 0)
         .exists()
     )
     first_held_later = (
@@ -173,7 +173,7 @@ def fx_revaluation_job_portfolio_scope_exists(
         .where(
             pair_scope,
             PositionHistory.position_date > impacted_date_expr,
-            PositionHistory.quantity > 0,
+            PositionHistory.quantity != 0,
         )
         .correlate(ReprocessingJob)
         .exists()

@@ -118,7 +118,7 @@ class ValuationRepositoryBase:
             )
             .where(
                 latest_history_subquery.c.rn == 1,
-                latest_history_subquery.c.quantity > 0,
+                latest_history_subquery.c.quantity != 0,
                 or_(
                     DailyPositionSnapshot.id.is_(None),
                     DailyPositionSnapshot.updated_at < MarketPrice.updated_at,
@@ -162,7 +162,7 @@ class ValuationRepositoryBase:
         )
 
         stmt = select(latest_history_subquery.c.portfolio_id).where(
-            latest_history_subquery.c.rn == 1, latest_history_subquery.c.quantity > 0
+            latest_history_subquery.c.rn == 1, latest_history_subquery.c.quantity != 0
         )
 
         result = await self.db.execute(stmt)
@@ -194,7 +194,7 @@ class ValuationRepositoryBase:
             .where(
                 PositionHistory.security_id == security_id,
                 PositionHistory.position_date > a_date,
-                PositionHistory.quantity > 0,
+                PositionHistory.quantity != 0,
             )
             .order_by(PositionHistory.portfolio_id.asc())
         )
@@ -756,7 +756,7 @@ class ValuationRepositoryBase:
 
         stmt = select(
             ranked_snapshots_subq.c.portfolio_id, ranked_snapshots_subq.c.security_id
-        ).where(ranked_snapshots_subq.c.rn == 1, ranked_snapshots_subq.c.quantity > 0)
+        ).where(ranked_snapshots_subq.c.rn == 1, ranked_snapshots_subq.c.quantity != 0)
 
         result = await self.db.execute(stmt)
         open_positions = result.mappings().all()
