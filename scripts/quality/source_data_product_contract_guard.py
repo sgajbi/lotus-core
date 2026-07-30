@@ -40,8 +40,11 @@ SOURCE_DATA_PRODUCT_SERVICE_ROOTS = (
 )
 ROUTE_METHODS = {"delete", "get", "patch", "post", "put"}
 REQUEST_SCOPED_SOURCE_BATCH_NAMES = {
+    "content_hash",
+    "output_content_hash",
     "request_fingerprint",
     "request_scope_fingerprint",
+    "source_digest",
     "snapshot_fingerprint",
 }
 REQUIRED_TRUST_CERTIFIED_RESPONSE_FIELDS = {
@@ -135,7 +138,7 @@ def evaluate_source_batch_fingerprint_semantics(
 ) -> list[str]:
     errors: list[str] = []
     for service_root in service_roots:
-        for service_file in sorted(service_root.glob("*.py")):
+        for service_file in sorted(service_root.rglob("*.py")):
             tree = ast.parse(service_file.read_text(encoding="utf-8"))
             try:
                 source_label = service_file.relative_to(REPO_ROOT).as_posix()
@@ -145,6 +148,19 @@ def evaluate_source_batch_fingerprint_semantics(
                 if not isinstance(node, ast.Call):
                     continue
                 for keyword in node.keywords:
+                    if (
+                        keyword.arg == "use_content_hash_as_source_batch_fingerprint"
+                        and isinstance(keyword.value, ast.Constant)
+                        and keyword.value.value is True
+                    ):
+                        errors.append(
+                            f"{source_label}:{keyword.value.lineno} "
+                            "use_content_hash_as_source_batch_fingerprint=True relabels "
+                            "response content as upstream source-batch authority; remove the "
+                            "override and leave source_batch_fingerprint null until genuine "
+                            "source-batch lineage is available"
+                        )
+                        continue
                     if keyword.arg != "source_batch_fingerprint":
                         continue
                     request_scoped_expression = _request_scoped_source_batch_expression(
