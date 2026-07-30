@@ -37,6 +37,8 @@ underlying batch thread. Kubernetes could then terminate the process before the 
 - Fence the producer through its configured Kafka `delivery.timeout.ms` before treating a flush as
   complete. Require the claim lease to exceed that fence by a safety margin, preventing an expired
   publisher from delivering an old stream head after a reclaimed head has released the tail.
+- Start the delivery lease after stream-head selection so database query latency cannot consume the
+  safety margin reserved for claim commit and producer publication.
 - If `flush(...)` raises with ambiguous queued records, purge both queued and in-flight records,
   drain their callbacks, and replace the underlying producer before releasing any row for retry.
   If purge confirmation fails, retain the database claims by aborting result persistence.
@@ -92,5 +94,7 @@ barrier. Deployments must quiesce all dispatcher-owning workers, apply migration
 - Shutdown-fence proof covers runtime budget propagation, fail-closed termination-grace validation,
   and manifest equality between the pod grace and runtime configuration for both governed
   dispatcher deployments.
+- Lease-origin proof deterministically advances the dispatcher clock during head selection and
+  verifies the durable lease begins from the post-selection instant.
 - Final focused, migration, protected CI, exact-main, and operational evidence is recorded on
   issue #795.

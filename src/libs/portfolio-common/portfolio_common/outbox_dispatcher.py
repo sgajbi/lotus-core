@@ -260,7 +260,6 @@ class OutboxDispatcher:
     def _claim_pending_events(self) -> list[_ClaimedOutboxEvent]:
         claim_token = uuid4().hex
         now = datetime.now(timezone.utc)
-        claim_expires_at = now + timedelta(seconds=self._claim_lease_seconds)
 
         with self._session_factory() as db:
             with db.begin():
@@ -312,6 +311,11 @@ class OutboxDispatcher:
                 if not events_to_claim:
                     return []
 
+                # Start the delivery lease only after head selection. Query latency must not
+                # consume the safety margin reserved for commit and producer publication.
+                claim_expires_at = datetime.now(timezone.utc) + timedelta(
+                    seconds=self._claim_lease_seconds
+                )
                 claimed_events: list[_ClaimedOutboxEvent] = []
                 for event in events_to_claim:
                     event.claim_token = claim_token
