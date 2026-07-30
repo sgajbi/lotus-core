@@ -298,7 +298,6 @@ async def async_test_client():
                 data_quality_status="COMPLETE",
                 latest_evidence_timestamp=datetime(2026, 1, 31, 8, 0, 0, tzinfo=UTC),
                 content_hash="sha256:benchmark-definition",
-                use_content_hash_as_source_batch_fingerprint=True,
             ),
         }
     )
@@ -350,7 +349,6 @@ async def async_test_client():
                 data_quality_status="COMPLETE",
                 latest_evidence_timestamp=datetime(2026, 1, 31, 8, 0, 0, tzinfo=UTC),
                 content_hash="sha256:benchmark-catalog",
-                use_content_hash_as_source_batch_fingerprint=True,
             ),
         }
     )
@@ -391,7 +389,6 @@ async def async_test_client():
                 data_quality_status="COMPLETE",
                 latest_evidence_timestamp=datetime(2026, 1, 31, 8, 0, 0, tzinfo=UTC),
                 content_hash="sha256:index-catalog",
-                use_content_hash_as_source_batch_fingerprint=True,
             ),
         }
     )
@@ -500,7 +497,6 @@ async def async_test_client():
                 data_quality_status="COMPLETE",
                 latest_evidence_timestamp=datetime(2026, 3, 31, 9, 0, 0, tzinfo=UTC),
                 content_hash="sha256:benchmark-composition",
-                use_content_hash_as_source_batch_fingerprint=True,
             ),
         }
     )

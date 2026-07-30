@@ -73,7 +73,8 @@ def test_complete_eligibility_batch_is_ready_current_and_deterministic() -> None
     assert first.source_evidence_current is True
     assert first.freshness_status == "CURRENT"
     assert first.content_hash == second.content_hash
-    assert first.source_batch_fingerprint == first.content_hash == first.source_digest
+    assert first.source_batch_fingerprint is None
+    assert first.source_digest == first.content_hash
 
 
 def test_response_preserves_request_order_and_represents_missing_security() -> None:

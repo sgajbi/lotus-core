@@ -122,7 +122,6 @@ def _membership_response(
                 freshness_status=freshness_status,
                 snapshot_id=(f"pm_book_membership:{content_hash.removeprefix('sha256:')[:24]}"),
                 content_hash=content_hash,
-                use_content_hash_as_source_batch_fingerprint=True,
             ),
         ),
     )

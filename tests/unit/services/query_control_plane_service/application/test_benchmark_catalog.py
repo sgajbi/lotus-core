@@ -80,7 +80,8 @@ def test_complete_catalog_is_current_and_deterministic() -> None:
     assert response.records[0].total_component_weight == Decimal("1.0000000000")
     assert response.source_evidence_current is True
     assert response.freshness_status == "CURRENT"
-    assert response.source_batch_fingerprint == response.content_hash == response.source_digest
+    assert response.source_batch_fingerprint is None
+    assert response.source_digest == response.content_hash
 
 
 def test_partial_record_degrades_catalog() -> None:

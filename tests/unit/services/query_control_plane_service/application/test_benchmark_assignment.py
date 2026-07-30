@@ -57,7 +57,8 @@ def test_response_exposes_current_deterministic_source_proof() -> None:
     assert response.latest_evidence_timestamp == EVIDENCE_AT
     assert response.source_evidence_current is True
     assert response.freshness_status == "CURRENT"
-    assert response.source_batch_fingerprint == response.content_hash == response.source_digest
+    assert response.source_batch_fingerprint is None
+    assert response.source_digest == response.content_hash
     assert response.source_refs == [
         "lotus-core://source/BenchmarkAssignment/PB_SG_GLOBAL_BAL_001/2026-04-10"
     ]

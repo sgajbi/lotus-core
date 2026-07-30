@@ -33,7 +33,6 @@ def transaction_economics_runtime_metadata(
         content_hash=content_hash,
         source_refs=[f"lotus-core://source/{product_name}/{portfolio_id}/{as_of_date.isoformat()}"],
         lineage={"source_product": product_name, "source_owner": "lotus-core", **lineage},
-        use_content_hash_as_source_batch_fingerprint=True,
     )
     metadata.pop("as_of_date")
     return cast(dict[str, object], metadata)

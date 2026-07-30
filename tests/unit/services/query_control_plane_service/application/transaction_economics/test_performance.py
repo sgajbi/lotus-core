@@ -314,7 +314,7 @@ def test_performance_component_economics_response_reports_coverage_and_lineage()
     assert response.lineage["source_table"] == "transactions,cashflows,transaction_costs"
     assert response.content_hash.startswith("sha256:")
     assert response.source_digest == response.content_hash
-    assert response.source_batch_fingerprint == response.content_hash
+    assert response.source_batch_fingerprint is None
     assert response.source_evidence_current is True
     assert response.freshness_status == "CURRENT"
     assert regenerated_response.generated_at != response.generated_at

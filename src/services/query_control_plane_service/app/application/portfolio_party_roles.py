@@ -117,7 +117,6 @@ def _response(
                 latest_evidence_timestamp=latest_evidence_timestamp,
                 snapshot_id=(f"portfolio_party_roles:{content_hash.removeprefix('sha256:')[:24]}"),
                 content_hash=content_hash,
-                use_content_hash_as_source_batch_fingerprint=True,
             ),
         ),
     )

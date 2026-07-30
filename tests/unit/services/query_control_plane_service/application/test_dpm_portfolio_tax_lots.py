@@ -82,7 +82,8 @@ def test_complete_tax_lot_page_is_ready_current_and_hashed() -> None:
     assert response.data_quality_status == "COMPLETE"
     assert response.source_evidence_current is True
     assert response.freshness_status == "CURRENT"
-    assert response.source_batch_fingerprint == response.content_hash == response.source_digest
+    assert response.source_batch_fingerprint is None
+    assert response.source_digest == response.content_hash
     assert response.lots[0].tax_lot_status == "OPEN"
     assert response.lots[0].source_lineage["calculation_policy_id"] == "average_cost"
 

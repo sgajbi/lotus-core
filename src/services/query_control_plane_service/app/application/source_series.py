@@ -106,7 +106,6 @@ def build_source_series_metadata(
         },
         source_evidence_current=current,
         freshness_status="CURRENT" if current else "UNAVAILABLE" if not rows else "PARTIAL",
-        use_content_hash_as_source_batch_fingerprint=True,
     )
     return {
         "request_fingerprint": request_fingerprint,

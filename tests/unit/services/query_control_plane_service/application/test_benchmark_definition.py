@@ -92,7 +92,8 @@ def test_unit_weight_definition_is_complete_current_and_deterministic() -> None:
     assert response.source_evidence_current is True
     assert response.freshness_status == "CURRENT"
     assert response.latest_evidence_timestamp == EVIDENCE_AT
-    assert response.source_batch_fingerprint == response.content_hash == response.source_digest
+    assert response.source_batch_fingerprint is None
+    assert response.source_digest == response.content_hash
     assert [component.index_id for component in response.components] == [
         "IDX_GLOBAL_EQUITY",
         "IDX_GLOBAL_BOND",

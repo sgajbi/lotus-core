@@ -80,7 +80,8 @@ def test_complete_price_window_is_current_and_content_hash_is_deterministic() ->
     assert first.record_count == 2
     assert first.source_evidence_current is True
     assert first.freshness_status == "CURRENT"
-    assert first.source_batch_fingerprint == first.content_hash == first.source_digest
+    assert first.source_batch_fingerprint is None
+    assert first.source_digest == first.content_hash
     assert first.content_hash == second.content_hash
     assert first.generated_at != second.generated_at
 

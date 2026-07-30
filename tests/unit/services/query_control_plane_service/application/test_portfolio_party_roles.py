@@ -86,7 +86,7 @@ async def test_party_role_service_preserves_governed_filters_and_lineage() -> No
     assert response.assignments[0].party_id == "PARTY_PM_SG_001"
     assert response.lineage["legacy_advisor_inference"] == "disabled"
     assert response.latest_evidence_timestamp == datetime(2026, 7, 17, 9, 2, tzinfo=UTC)
-    assert response.source_batch_fingerprint == response.content_hash
+    assert response.source_batch_fingerprint is None
     assert response.source_digest == response.content_hash
 
 
@@ -113,7 +113,7 @@ async def test_party_role_identity_changes_with_returned_row_and_trust_correctio
 
     assert len({response.snapshot_id for response in responses}) == 3
     assert len({response.content_hash for response in responses}) == 3
-    assert len({response.source_batch_fingerprint for response in responses}) == 3
+    assert all(response.source_batch_fingerprint is None for response in responses)
     assert responses[0].data_quality_status == "COMPLETE"
     assert responses[2].data_quality_status == "PARTIAL"
 

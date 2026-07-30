@@ -85,7 +85,8 @@ async def test_model_targets_are_ready_with_current_deterministic_source_proof()
     assert first.source_evidence_current is True
     assert first.freshness_status == "CURRENT"
     assert first.content_hash.startswith("sha256:")
-    assert first.source_batch_fingerprint == first.content_hash == first.source_digest
+    assert first.source_batch_fingerprint is None
+    assert first.source_digest == first.content_hash
     assert first.content_hash == second.content_hash
     assert first.source_refs == ["lotus-core://source/DpmModelPortfolioTarget/MODEL_1/2026-04-10"]
 

@@ -105,7 +105,6 @@ def build_classification_taxonomy_response(
         },
         source_evidence_current=current,
         freshness_status="CURRENT" if current else quality_status,
-        use_content_hash_as_source_batch_fingerprint=True,
     )
     return ClassificationTaxonomyResponse(
         records=[_to_contract(record) for record in records],

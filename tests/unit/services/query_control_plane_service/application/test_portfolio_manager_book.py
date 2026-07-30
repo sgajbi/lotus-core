@@ -183,7 +183,8 @@ async def test_membership_identity_changes_when_authoritative_role_replaces_lega
     assert legacy.members[0].portfolio_id == authoritative.members[0].portfolio_id
     assert legacy.snapshot_id != authoritative.snapshot_id
     assert legacy.content_hash != authoritative.content_hash
-    assert legacy.source_batch_fingerprint != authoritative.source_batch_fingerprint
+    assert legacy.source_batch_fingerprint is None
+    assert authoritative.source_batch_fingerprint is None
     assert legacy.source_digest != authoritative.source_digest
 
 

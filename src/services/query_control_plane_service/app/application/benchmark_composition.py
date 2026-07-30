@@ -130,7 +130,6 @@ def build_benchmark_composition_response(
         },
         source_evidence_current=quality_complete,
         freshness_status="CURRENT" if quality_complete else "PARTIAL",
-        use_content_hash_as_source_batch_fingerprint=True,
     )
     return BenchmarkCompositionWindowResponse(
         benchmark_id=benchmark_id,

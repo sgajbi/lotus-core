@@ -61,7 +61,8 @@ def test_complete_window_is_current_and_hash_is_deterministic() -> None:
 
     assert first.completeness_status == "COMPLETE"
     assert first.source_evidence_current is True
-    assert first.source_batch_fingerprint == first.content_hash == first.source_digest
+    assert first.source_batch_fingerprint is None
+    assert first.source_digest == first.content_hash
     assert first.content_hash == second.content_hash
     assert first.points[0].day_count_convention == "act_360"
 

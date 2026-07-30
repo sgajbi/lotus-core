@@ -152,7 +152,7 @@ def test_response_exposes_current_deterministic_source_proof() -> None:
     assert response.generated_at == GENERATED_AT
     assert response.content_hash.startswith("sha256:")
     assert response.source_digest == response.content_hash
-    assert response.source_batch_fingerprint == response.content_hash
+    assert response.source_batch_fingerprint is None
     assert response.source_lineage["source_product"] == "MarketDataWindow"
     assert any("IndexSeriesWindow/IDX_1" in ref for ref in response.source_refs)
     assert response.page.request_scope_fingerprint == "request-1"

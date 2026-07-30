@@ -75,7 +75,8 @@ def test_all_ready_families_produce_current_deterministic_aggregate_proof() -> N
     assert first.source_evidence_current is True
     assert first.freshness_status == "CURRENT"
     assert first.content_hash == second.content_hash
-    assert first.source_batch_fingerprint == first.content_hash == first.source_digest
+    assert first.source_batch_fingerprint is None
+    assert first.source_digest == first.content_hash
 
 
 @pytest.mark.parametrize(
