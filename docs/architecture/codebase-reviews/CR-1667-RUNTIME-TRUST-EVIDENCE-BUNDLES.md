@@ -52,7 +52,7 @@ explicit non-goals of the three evidence-publication issues, not hidden completi
 
 ## Validation Evidence
 
-1. combined focused runtime/contract cohort: `329 passed`,
+1. combined focused runtime/contract cohort: `330 passed`,
 2. reconstruction integration cohort: `138 passed`,
 3. reviewed incomplete-page regression: `6 passed`,
 4. Ruff check and format: passed for changed Python,
