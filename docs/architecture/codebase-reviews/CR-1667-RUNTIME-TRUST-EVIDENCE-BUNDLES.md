@@ -19,7 +19,9 @@ The review also searched the same source-batch defect pattern across Query Servi
    canonical ingestion-job aggregate,
 4. reconciliation findings lacked durable owner, resolution, tolerance/delta, and repair evidence,
 5. reconciliation run-list publication posture could appear safe when only a partial page had been
-   examined.
+   examined,
+6. the corporate-action reconciliation writer did not populate the new required ownership and
+   repair fields, which caused fail-closed persistence once the migration was applied.
 
 ## Resolution
 
@@ -38,6 +40,10 @@ The review also searched the same source-batch defect pattern across Query Servi
 5. QCP publishes deterministic `ReconciliationEvidenceBundle:v1` and
    `DataQualityCoverageReport:v1` evidence with counts, age/threshold, source references, and
    fail-closed publication posture. Incomplete reconciliation run pages block.
+6. Every in-scope reconciliation finding writer now supplies domain-owned lifecycle evidence.
+   Corporate-action findings are owned by `CORPORATE_ACTION_OPERATIONS`, carry an explicit
+   finding-specific repair recommendation, and preserve an existing resolution lifecycle during
+   idempotent evidence refresh.
 
 ## Compatibility And Boundaries
 
@@ -62,6 +68,9 @@ explicit non-goals of the three evidence-publication issues, not hidden completi
 8. financial numeric persistence guard: `98` Numeric columns across `31` tables, all `98`
    ORM-enforced,
 9. `git diff --check`: passed.
+10. warning/unit gate: `6241 passed`, `12 deselected`, zero warnings,
+11. operations contract: `295 passed`,
+12. exact-source migrated corporate-action persistence regression: `1 passed`.
 
 Full pre-merge and GitHub CI evidence belongs on the PR and linked issues.
 

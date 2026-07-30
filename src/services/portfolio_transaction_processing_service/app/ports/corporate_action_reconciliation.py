@@ -53,6 +53,11 @@ class CorporateActionReconciliationFindingEvidence:
     expected_value: dict[str, object]
     observed_value: dict[str, object]
     detail: dict[str, object]
+    owner: str
+    resolution_state: str
+    tolerance: Decimal | None
+    observed_delta: Decimal | None
+    repair_recommendation: str
 
 
 @dataclass(frozen=True, slots=True)

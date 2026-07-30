@@ -264,6 +264,13 @@ def test_reconciliation_control_contract_exposes_blocking_finding_state() -> Non
         lambda: ReconciliationFindingListResponse(
             run_id="recon_123",
             generated_at_utc=datetime(2026, 4, 10, 10, tzinfo=UTC),
+            reconciliation_evidence_id="re_123",
+            open_break_count=1,
+            blocking_break_count=1,
+            warning_break_count=0,
+            stale_threshold_minutes=15,
+            publication_gate="BLOCK",
+            publication_block_reasons=["OPEN_BLOCKING_FINDING"],
             total=1,
             items=[
                 ReconciliationFindingRecord(
@@ -276,6 +283,11 @@ def test_reconciliation_control_contract_exposes_blocking_finding_state() -> Non
                     epoch=3,
                     created_at=datetime(2026, 4, 10, 9, tzinfo=UTC),
                     detail={"expected_cashflow_count": 1, "observed_cashflow_count": 0},
+                    owner="TRANSACTION_OPERATIONS",
+                    resolution_state="OPEN",
+                    repair_recommendation="REGENERATE_CASHFLOW",
+                    normalized_finding_status="BLOCKED",
+                    age_days=0,
                     is_blocking=True,
                     operational_state="BLOCKING",
                 )
@@ -292,6 +304,15 @@ def test_reconciliation_control_contract_exposes_blocking_finding_state() -> Non
     assert response.data_quality_status == PARTIAL
     assert response.items[0].is_blocking is True
     assert response.items[0].operational_state == "BLOCKING"
+    assert response.items[0].owner == "TRANSACTION_OPERATIONS"
+    assert response.items[0].resolution_state == "OPEN"
+    assert response.items[0].repair_recommendation == "REGENERATE_CASHFLOW"
+    assert response.items[0].normalized_finding_status == "BLOCKED"
+    assert response.items[0].age_days == 0
+    assert response.open_break_count == 1
+    assert response.blocking_break_count == 1
+    assert response.publication_gate == "BLOCK"
+    assert response.publication_block_reasons == ["OPEN_BLOCKING_FINDING"]
     assert response.freshness_status == "CURRENT"
     assert response.correlation_id == CORRELATION_ID
 

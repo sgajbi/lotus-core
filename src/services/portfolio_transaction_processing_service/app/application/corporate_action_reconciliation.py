@@ -29,6 +29,7 @@ from ..ports.corporate_action_reconciliation import (
 
 CORPORATE_ACTION_RECONCILIATION_TYPE = "corporate_action_bundle_a"
 CORPORATE_ACTION_RECONCILIATION_REQUEST_OWNER = "cost-calculator"
+CORPORATE_ACTION_FINDING_OWNER = "CORPORATE_ACTION_OPERATIONS"
 
 
 class CorporateActionReconciliationFindingType(StrEnum):
@@ -47,6 +48,22 @@ class CorporateActionReconciliationReasonCode(StrEnum):
     INSUFFICIENT_CASH_BASIS = "CA_BUNDLE_A_INSUFFICIENT_CASH_BASIS"
     INSUFFICIENT_LEGS = "CA_BUNDLE_A_INSUFFICIENT_LEGS"
     MISSING_DEPENDENCY = "CA_BUNDLE_A_MISSING_DEPENDENCY"
+
+
+_REPAIR_RECOMMENDATIONS = {
+    CorporateActionReconciliationFindingType.BASIS_MISMATCH: (
+        "REVIEW_CORPORATE_ACTION_BASIS_ALLOCATION"
+    ),
+    CorporateActionReconciliationFindingType.INSUFFICIENT_CASH_BASIS: (
+        "COMPLETE_CASH_CONSIDERATION_BASIS"
+    ),
+    CorporateActionReconciliationFindingType.INSUFFICIENT_LEGS: (
+        "COMPLETE_CORPORATE_ACTION_LEG_LINKAGE"
+    ),
+    CorporateActionReconciliationFindingType.MISSING_DEPENDENCY: (
+        "RESTORE_CORPORATE_ACTION_DEPENDENCY"
+    ),
+}
 
 
 class CorporateActionReconciliationCoordinator:
@@ -377,4 +394,13 @@ def _finding(
         expected_value=expected_value,
         observed_value=observed_value,
         detail=detail,
+        owner=CORPORATE_ACTION_FINDING_OWNER,
+        resolution_state="OPEN",
+        tolerance=reconciliation.basis_tolerance,
+        observed_delta=(
+            reconciliation.net_basis_delta_local
+            if finding_type is CorporateActionReconciliationFindingType.BASIS_MISMATCH
+            else None
+        ),
+        repair_recommendation=_REPAIR_RECOMMENDATIONS[finding_type],
     )

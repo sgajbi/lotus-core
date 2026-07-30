@@ -7,6 +7,9 @@ import pytest
 from src.services.event_replay_service.app.application.ingestion_evidence_queries import (
     IngestionEvidenceQueryService,
 )
+from src.services.event_replay_service.app.application.ingestion_operations_queries import (
+    IngestionOperationsNotFound,
+)
 from src.services.event_replay_service.app.main import app
 from src.services.ingestion_service.app.DTOs.ingestion_job_dto import (
     ConsumerDlqEventResponse,
@@ -352,6 +355,20 @@ async def test_get_bundle_links_dlq_by_replay_event_when_message_correlation_was
 
     assert bundle.consumer_dlq_events == [dlq_event]
     assert "consumer-dlq:dlq-001" in bundle.evidence_references
+
+
+@pytest.mark.asyncio
+async def test_get_bundle_rejects_unknown_job_before_fetching_related_evidence() -> None:
+    ingestion_job_service = MagicMock()
+    ingestion_job_service.get_job = AsyncMock(return_value=None)
+
+    with pytest.raises(IngestionOperationsNotFound) as exc_info:
+        await IngestionEvidenceQueryService(
+            ingestion_job_service=ingestion_job_service
+        ).get_evidence_bundle("missing-job")
+
+    assert exc_info.value.code == "INGESTION_JOB_NOT_FOUND"
+    ingestion_job_service.list_failures.assert_not_called()
 
 
 def test_openapi_exposes_stable_ingestion_evidence_bundle_contract() -> None:

@@ -176,6 +176,15 @@ def test_reconciliation_status_maps_to_closed_finding_vocabulary(
     assert evidence.findings[0].finding_type == expected_type
     assert evidence.findings[0].severity == "ERROR"
     assert evidence.findings[0].detail["reason_code"] == expected_reason
+    assert evidence.findings[0].owner == "CORPORATE_ACTION_OPERATIONS"
+    assert evidence.findings[0].resolution_state == "OPEN"
+    assert evidence.findings[0].tolerance == Decimal("0.01")
+    assert evidence.findings[0].repair_recommendation
+    assert evidence.findings[0].observed_delta == (
+        Decimal("-40")
+        if expected_type is CorporateActionReconciliationFindingType.BASIS_MISMATCH
+        else None
+    )
 
 
 def test_missing_dependency_adds_an_independent_error_finding() -> None:
@@ -200,6 +209,7 @@ def test_missing_dependency_adds_an_independent_error_finding() -> None:
     assert evidence.findings[0].observed_value == {
         "missing_dependency_reference_ids": ["CA-OUT-MISSING"]
     }
+    assert evidence.findings[0].repair_recommendation == ("RESTORE_CORPORATE_ACTION_DEPENDENCY")
 
 
 def test_evidence_identity_is_stable_across_reprocessing_time() -> None:

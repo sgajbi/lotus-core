@@ -35,6 +35,14 @@ class _FakeScalars:
         return self._rows
 
 
+class _EmptySessionAsyncIterator:
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        raise StopAsyncIteration
+
+
 def _event(**overrides):
     values = {
         "event_id": "dlq-1",
@@ -76,6 +84,19 @@ async def test_to_consumer_dlq_event_response_derives_missing_correlation_lineag
         "consumer_dlq|topic=valuation.jobs|group=valuation-service-group|"
         "dlq=valuation.jobs.dlq|key=unkeyed|event=dlq-missing-corr"
     )
+
+
+async def test_to_consumer_dlq_event_response_preserves_persisted_fallback_lineage() -> None:
+    response = to_consumer_dlq_event_response(
+        _event(
+            correlation_id=None,
+            correlation_missing_reason="upstream_header_absent",
+            alternate_lookup_key="custody-feed|batch-001|record-007",
+        )
+    )
+
+    assert response.correlation_missing_reason == "upstream_header_absent"
+    assert response.alternate_lookup_key == "custody-feed|batch-001|record-007"
 
 
 async def test_list_consumer_dlq_event_responses_maps_rows() -> None:
@@ -142,3 +163,24 @@ async def test_get_consumer_dlq_event_response_returns_none_when_missing() -> No
     )
 
     assert result is None
+
+
+async def test_dlq_queries_return_empty_when_session_factory_yields_no_session() -> None:
+    session_factory = _EmptySessionAsyncIterator
+
+    assert (
+        await list_consumer_dlq_event_responses(
+            limit=50,
+            original_topic=None,
+            consumer_group=None,
+            session_factory=session_factory,
+        )
+        == []
+    )
+    assert (
+        await get_consumer_dlq_event_response(
+            event_id="missing",
+            session_factory=session_factory,
+        )
+        is None
+    )

@@ -1197,6 +1197,14 @@ async def test_reconciliation_runs_success(async_test_client):
         ),
         "portfolio_id": "P1",
         "generated_at_utc": "2026-03-14T10:50:00Z",
+        "reconciliation_evidence_id": "re_runs_001",
+        "latest_run_id": "recon_1234567890abcdef",
+        "open_break_count_by_severity": {"ERROR": 1},
+        "top_blocking_run_id": "recon_1234567890abcdef",
+        "stale_threshold_minutes": 15,
+        "evidence_age_minutes": 1475,
+        "publication_gate": "BLOCK",
+        "publication_block_reasons": ["BLOCKING_RECONCILIATION_RUN"],
         "total": 1,
         "skip": 0,
         "limit": 100,
@@ -1213,6 +1221,9 @@ async def test_reconciliation_runs_success(async_test_client):
                 "dedupe_key": "recon:transaction_cashflow:PF-001:2026-03-13:3",
                 "correlation_id": "corr-recon-20260313-001",
                 "failure_reason": "Tolerance exceeded for portfolio totals.",
+                "normalized_reconciliation_status": "BLOCKED",
+                "evidence_age_minutes": 1475,
+                "is_evidence_stale": True,
                 "is_terminal_failure": True,
                 "is_blocking": True,
                 "operational_state": "BLOCKING",
@@ -1244,6 +1255,9 @@ async def test_reconciliation_runs_success(async_test_client):
     assert response.json()["items"][0]["is_terminal_failure"] is True
     assert response.json()["items"][0]["is_blocking"] is True
     assert response.json()["items"][0]["operational_state"] == "BLOCKING"
+    assert response.json()["reconciliation_evidence_id"] == "re_runs_001"
+    assert response.json()["publication_gate"] == "BLOCK"
+    assert response.json()["items"][0]["normalized_reconciliation_status"] == "BLOCKED"
     mock_service.get_reconciliation_runs.assert_awaited_once_with(
         portfolio_id="P1",
         skip=0,
@@ -1287,6 +1301,18 @@ async def test_reconciliation_findings_success(async_test_client):
         ),
         "run_id": "recon_1234567890abcdef",
         "generated_at_utc": "2026-03-14T10:50:00Z",
+        "reconciliation_evidence_id": "re_findings_001",
+        "open_break_count_by_severity": {"ERROR": 1},
+        "open_break_count": 1,
+        "blocking_break_count": 1,
+        "warning_break_count": 0,
+        "top_blocking_finding_id": "rf_1234567890abcdef",
+        "top_blocking_finding_owner": "TRANSACTION_OPERATIONS",
+        "top_blocking_repair_recommendation": "REGENERATE_CASHFLOW",
+        "stale_threshold_minutes": 15,
+        "evidence_age_minutes": 1475,
+        "publication_gate": "BLOCK",
+        "publication_block_reasons": ["OPEN_BLOCKING_FINDING"],
         "total": 1,
         "items": [
             {
@@ -1299,6 +1325,11 @@ async def test_reconciliation_findings_success(async_test_client):
                 "epoch": 3,
                 "created_at": "2026-03-13T10:15:09Z",
                 "detail": {"expected_cashflow_count": 1, "observed_cashflow_count": 0},
+                "owner": "TRANSACTION_OPERATIONS",
+                "resolution_state": "OPEN",
+                "repair_recommendation": "REGENERATE_CASHFLOW",
+                "normalized_finding_status": "BLOCKED",
+                "age_days": 1,
                 "is_blocking": True,
                 "operational_state": "BLOCKING",
             }
@@ -1320,6 +1351,9 @@ async def test_reconciliation_findings_success(async_test_client):
     assert response.json()["items"][0]["finding_id"] == "rf_1234567890abcdef"
     assert response.json()["items"][0]["is_blocking"] is True
     assert response.json()["items"][0]["operational_state"] == "BLOCKING"
+    assert response.json()["reconciliation_evidence_id"] == "re_findings_001"
+    assert response.json()["publication_gate"] == "BLOCK"
+    assert response.json()["items"][0]["owner"] == "TRANSACTION_OPERATIONS"
     mock_service.get_reconciliation_findings.assert_awaited_once_with(
         portfolio_id="P1",
         run_id="recon_1234567890abcdef",
