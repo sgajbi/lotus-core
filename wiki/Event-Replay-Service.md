@@ -21,6 +21,15 @@ The current runtime centers on:
 
 This makes the service an operational control plane, not a write-ingress surface.
 
+## Governed Ingestion Evidence
+
+`GET /ingestion/jobs/{job_id}/evidence` publishes `IngestionEvidenceBundle:v1`. The response includes
+deterministic bundle/content identity, canonical job/failure/replay/DLQ evidence, validation counts
+and finding references, retention classification, evidence completeness, and a fail-closed consumer
+gate. Generic processing DLQs are not classified as quarantine, and retry state is never presented as
+completed bookkeeping repair without a durable completion fact. Freshness remains `UNAVAILABLE`
+until an authoritative ingestion-evidence freshness SLO exists.
+
 ## Runtime role
 
 For replay and remediation workflows, the service:
