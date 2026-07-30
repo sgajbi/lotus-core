@@ -739,9 +739,10 @@ class AnalyticsTimeseriesService:
             expected_business_dates=expected_business_dates,
             observed_dates=observed_dates,
         )
+        observed_business_dates = set(expected_business_dates).intersection(observed_dates)
         data_quality_status = timeseries_data_quality_status(
             required_count=len(expected_business_dates),
-            observed_count=len(observed_dates),
+            observed_count=len(observed_business_dates),
             stale_count=diagnostics.stale_points_count,
             warning_issue_count=(
                 1 if request.page.page_token is not None or next_page_token is not None else 0

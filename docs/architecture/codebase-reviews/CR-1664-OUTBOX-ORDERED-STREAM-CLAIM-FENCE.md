@@ -51,6 +51,8 @@ underlying batch thread. Kubernetes could then terminate the process before the 
   process-termination margin. Fail dispatcher construction for unsafe combinations.
 - Increase the governed derived-state and transaction-processing pod grace from 60 to 150 seconds
   and bind `OUTBOX_DISPATCHER_TERMINATION_GRACE_SECONDS=150` in each deployment.
+- Set `stop_grace_period: 150s` for all five dispatcher-owning services in app-local Compose and
+  bind the same termination-grace setting through the shared service environment.
 - Add a partial lookup index over unresolved stream order.
 
 Kafka publication remains outside the claim transaction and result writes remain claim-token
@@ -69,6 +71,8 @@ producer before rows become retryable; this changes only failure recovery, not s
 behavior or event contracts. Each dispatcher-owning service process now maintains one additional
 Kafka producer connection for the exclusive outbox recovery boundary.
 The two governed Kubernetes deployments now allow 150 seconds for termination instead of 60.
+App-local Compose now allows the same 150 seconds for every dispatcher-owning service instead of
+its 10-second default.
 Runtime supervision waits 126 seconds for a producer using the default 120-second Kafka delivery
 timeout, and dispatcher startup rejects termination grace below 136 seconds. Operator overrides of
 Kafka delivery timeout must therefore be paired with a sufficiently large outbox claim lease and

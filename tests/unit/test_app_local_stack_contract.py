@@ -58,6 +58,9 @@ def test_app_local_stack_declares_measured_outbox_capacity_profile() -> None:
     assert shared_environment["OUTBOX_DISPATCHER_BATCH_SIZE"] == (
         "${OUTBOX_DISPATCHER_BATCH_SIZE:-1000}"
     )
+    assert shared_environment["OUTBOX_DISPATCHER_TERMINATION_GRACE_SECONDS"] == (
+        "${OUTBOX_DISPATCHER_TERMINATION_GRACE_SECONDS:-150}"
+    )
 
     for service_name in (
         "persistence_service",
@@ -73,6 +76,10 @@ def test_app_local_stack_declares_measured_outbox_capacity_profile() -> None:
         assert service_environment["OUTBOX_DISPATCHER_BATCH_SIZE"] == (
             "${OUTBOX_DISPATCHER_BATCH_SIZE:-1000}"
         )
+        assert service_environment["OUTBOX_DISPATCHER_TERMINATION_GRACE_SECONDS"] == (
+            "${OUTBOX_DISPATCHER_TERMINATION_GRACE_SECONDS:-150}"
+        )
+        assert compose["services"][service_name]["stop_grace_period"] == "150s"
 
 
 def test_app_local_stack_runs_financial_reconciliation_worker_runtime() -> None:
