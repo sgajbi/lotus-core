@@ -52,6 +52,18 @@ runtime topology are unchanged.
 ## Evidence
 
 - Focused repository, application, router/OpenAPI, readiness-builder, and canonical-seed tests:
-  `316 passed`.
-- Final focused gates, protected CI, canonical runtime evidence, exact-main validation, and wiki
-  publication will be recorded on GitHub issue #856.
+  `316 passed in 8.46s`.
+- Repository-native typecheck completed with no issues in 240 source files. Scoped Ruff lint and
+  format, API route catalog, API vocabulary parity, wiki, front-door, architecture-document,
+  RFC-ledger, supported-feature, incident-playbook, and diff checks passed.
+- Remote Feature Lane run `30564091988` passed at signed source commit
+  `270d468e5f0da2a1a5bf7db286fe9984e179acd5`.
+- Branch-qualified canonical runtime proof
+  `output/task-runs/20260730T170344227316Z-3c7afe5deff8-canonical-front-office-seed-proof.json`
+  passed at the same signed source commit. It recorded three stable terminal observations,
+  positions data quality `COMPLETE`, 11 of 11 positions valued, all four readiness domains
+  `READY`, zero blocking reasons, zero pending or failed valuation and aggregation jobs in the
+  governed view, zero deadlocks/blocked sessions/lock waiters, no fatal runtime signatures, a
+  clean source before and after execution, and empty generated-project resources after teardown.
+- Exact-main validation and wiki publication remain post-merge evidence and will be recorded on
+  GitHub issue #856.
