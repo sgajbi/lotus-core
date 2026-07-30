@@ -1641,28 +1641,6 @@ async def test_get_valuation_jobs_forwards_job_id_filter(
     )
 
     assert response.total == 0
-    mock_ops_repo.get_reconciliation_runs_count.assert_awaited_once_with(
-        portfolio_id="P1",
-        run_id=None,
-        correlation_id="corr-recon-20260313-001",
-        requested_by=None,
-        dedupe_key=None,
-        reconciliation_type=None,
-        status="FAILED",
-        as_of=response.generated_at_utc,
-    )
-    mock_ops_repo.get_reconciliation_runs.assert_awaited_once_with(
-        portfolio_id="P1",
-        skip=0,
-        limit=20,
-        run_id=None,
-        correlation_id="corr-recon-20260313-001",
-        requested_by=None,
-        dedupe_key=None,
-        reconciliation_type=None,
-        status="FAILED",
-        as_of=response.generated_at_utc,
-    )
     mock_ops_repo.get_valuation_jobs_count.assert_awaited_once_with(
         portfolio_id="P1",
         status="PENDING",
@@ -2078,6 +2056,28 @@ async def test_get_reconciliation_runs_forwards_correlation_filter(
     )
 
     assert response.total == 0
+    mock_ops_repo.get_reconciliation_runs_count.assert_awaited_once_with(
+        portfolio_id="P1",
+        run_id=None,
+        correlation_id="corr-recon-20260313-001",
+        requested_by=None,
+        dedupe_key=None,
+        reconciliation_type=None,
+        status="FAILED",
+        as_of=response.generated_at_utc,
+    )
+    mock_ops_repo.get_reconciliation_runs.assert_awaited_once_with(
+        portfolio_id="P1",
+        skip=0,
+        limit=20,
+        run_id=None,
+        correlation_id="corr-recon-20260313-001",
+        requested_by=None,
+        dedupe_key=None,
+        reconciliation_type=None,
+        status="FAILED",
+        as_of=response.generated_at_utc,
+    )
 
 
 async def test_get_reconciliation_runs_blocks_usage_for_incomplete_page(
