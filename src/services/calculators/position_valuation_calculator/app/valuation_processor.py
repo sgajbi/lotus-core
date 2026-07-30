@@ -458,7 +458,8 @@ class ValuationJobProcessor:
                 snapshot=snapshot,
                 job_failure_reason=None,
                 receipt=build_legacy_valuation_receipt(
-                    snapshot_identity=_snapshot_identity(snapshot)
+                    snapshot_identity=_snapshot_identity(snapshot),
+                    calculation_lineage=valuation_result.calculation_lineage,
                 ),
             )
 

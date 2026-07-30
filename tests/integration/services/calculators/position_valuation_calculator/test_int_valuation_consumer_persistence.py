@@ -189,7 +189,12 @@ async def test_valuation_message_persists_snapshot_outbox_and_idempotency(
     assert receipt.supportability == "LEGACY_UNSCOPED"
     assert receipt.policy_assignment_source is None
     assert receipt.market_price_source is None
-    assert receipt.calculation_lineage is None
+    assert receipt.calculation_lineage is not None
+    assert receipt.calculation_lineage["algorithm_id"] == "legacy-unscoped-position-valuation"
+    assert (
+        receipt.calculation_lineage["numeric_output_policy"]["name"]
+        == "position-valuation-ledger-output"
+    )
     assert len(outbox_rows) == 1
     assert outbox_rows[0].correlation_id == "corr-val-int-01"
     assert len(processed_rows) == 1

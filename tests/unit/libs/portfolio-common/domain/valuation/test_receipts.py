@@ -19,6 +19,9 @@ from portfolio_common.domain.valuation import (
     build_legacy_valuation_receipt,
     canonical_content_hash,
 )
+from portfolio_common.domain.valuation.numeric_policy import (
+    POSITION_VALUATION_LEDGER_OUTPUT_V1,
+)
 
 
 def _source(record_id: str) -> FinancialSourceReference:
@@ -60,6 +63,17 @@ def _lineage():
         intermediate_precision=64,
         input_payload={"price": Decimal("99.25")},
         output_payload={"market_value": Decimal("992500")},
+    )
+
+
+def _legacy_lineage():
+    return build_calculation_lineage(
+        algorithm_id="legacy-unscoped-position-valuation",
+        algorithm_version=1,
+        intermediate_precision=64,
+        input_payload={"price": Decimal("99.25")},
+        output_payload={"market_value": Decimal("992500")},
+        numeric_output_policy=POSITION_VALUATION_LEDGER_OUTPUT_V1.lineage_identity(),
     )
 
 
@@ -108,6 +122,24 @@ def test_legacy_receipt_cannot_claim_authoritative_evidence() -> None:
 
     with pytest.raises(ValueError, match="cannot claim authoritative"):
         replace(receipt, policy_id="UNIT_PRICE_MARKET_VALUE")
+
+
+def test_legacy_receipt_preserves_calculation_lineage_without_claiming_source_authority() -> None:
+    receipt = build_legacy_valuation_receipt(
+        snapshot_identity=_identity(),
+        calculation_lineage=_legacy_lineage(),
+    )
+
+    assert receipt.supportability is ValuationReceiptSupportability.LEGACY_UNSCOPED
+    assert receipt.policy_id is None
+    assert receipt.market_price_source is None
+    assert receipt.calculation_lineage == _legacy_lineage()
+
+    with pytest.raises(ValueError, match="numeric output policy"):
+        build_legacy_valuation_receipt(
+            snapshot_identity=_identity(),
+            calculation_lineage=_lineage(),
+        )
 
 
 def test_receipt_rejects_tampered_hash_and_duplicate_reasons() -> None:

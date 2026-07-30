@@ -150,10 +150,16 @@ class ValuationCalculationReceipt:
             self.price_fact_version,
             self.price_fact_content_hash,
             self.market_price_source,
-            self.calculation_lineage,
         )
         if any(value is not None for value in authoritative_values):
             raise ValueError("legacy valuation receipt cannot claim authoritative evidence")
+        if (
+            self.calculation_lineage is not None
+            and self.calculation_lineage.numeric_output_policy is None
+        ):
+            raise ValueError(
+                "legacy valuation calculation lineage must identify its numeric output policy"
+            )
 
     def content_payload(self) -> dict[str, object]:
         """Return canonical receipt content excluding its self-authenticating hash."""
@@ -230,8 +236,9 @@ def build_authoritative_valuation_receipt(
 def build_legacy_valuation_receipt(
     *,
     snapshot_identity: ValuationSnapshotIdentity,
+    calculation_lineage: CalculationLineage | None = None,
 ) -> ValuationCalculationReceipt:
-    """Build explicit evidence for the bounded unscoped compatibility route."""
+    """Build bounded unscoped evidence without claiming source authority."""
 
     supportability = ValuationReceiptSupportability.LEGACY_UNSCOPED
     supportability_reasons = ("PORTFOLIO_VALUATION_SCOPE_UNASSIGNED",)
@@ -249,7 +256,7 @@ def build_legacy_valuation_receipt(
             price_fact_version=None,
             price_fact_content_hash=None,
             market_price_source=None,
-            calculation_lineage=None,
+            calculation_lineage=calculation_lineage,
         )
     )
     return ValuationCalculationReceipt(
@@ -265,7 +272,7 @@ def build_legacy_valuation_receipt(
         price_fact_version=None,
         price_fact_content_hash=None,
         market_price_source=None,
-        calculation_lineage=None,
+        calculation_lineage=calculation_lineage,
         receipt_hash=receipt_hash,
     )
 

@@ -358,6 +358,11 @@ def test_daily_position_valuation_receipt_enforces_complete_one_to_one_evidence(
         "ck_daily_position_valuation_receipt_hash",
     } <= constraints.keys()
     assert table.columns.snapshot_id.unique is True
+    evidence_constraint = str(
+        constraints["ck_daily_position_valuation_receipt_evidence_complete"].sqltext
+    )
+    assert "market_price_source IS NULL" in evidence_constraint
+    assert "market_price_source IS NULL AND calculation_lineage IS NULL" not in evidence_constraint
     for field_name in (
         "policy_assignment_source",
         "market_price_source",
