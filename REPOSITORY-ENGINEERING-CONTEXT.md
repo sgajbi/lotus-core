@@ -3322,6 +3322,13 @@ Most relevant current governance:
      `REPROCESS_REQUESTED` work even when the superseded claim exhausted its attempts; the new
      source revision has not yet been attempted. Do not substitute correlation identity, debounce,
      timeout increases, or Kafka arrival order for this database-backed source fence.
+     At claim time, derive the effective target epoch from the maximum epoch among every security's
+     latest authoritative snapshot on or before the portfolio day. A position-timeseries change can
+     advance the collective portfolio epoch without restaging a carry-forward day that was created
+     by another security, such as a coupon-bearing weekend. Atomically promote that pending job and
+     its source revision before leasing it, while still requiring every authoritative snapshot to
+     have equally fresh position-timeseries materialization. Never hide such work from readiness or
+     mark it complete merely because its originally staged per-security epoch is now stale.
 226. A positive position epoch is recovery/restatement lineage, not a stale-evidence flag.
      Query-control-plane analytics inputs must preserve `valuation_status=restated` while treating
      rows selected through the exact `PositionTimeseries.epoch == PositionState.epoch` fence as
