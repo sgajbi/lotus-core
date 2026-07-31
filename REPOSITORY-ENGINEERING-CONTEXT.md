@@ -3398,6 +3398,14 @@ Most relevant current governance:
      infer a bounded queue from only the oldest open job date: a mixed current/future backlog makes
      that heuristic unsound. Tenant and portfolio predicates, failed/stale classification, and the
      unbounded operator view remain unchanged.
+230. Position-timeseries calculation is security-owned, but aggregation queue staging,
+     restaging, and portfolio-output invalidation are portfolio-owned mutations. Preserve
+     cross-security calculation parallelism and acquire the normalized portfolio-scoped,
+     transaction advisory fence only before that shared mutation tail. A SQLAlchemy database
+     failure in this consumer is transient infrastructure evidence: convert it to the shared
+     retryable consumer contract so ordered Kafka redelivery retains the source offset. Do not
+     send a valid domain event to the terminal DLQ or commit its offset because of a deadlock or
+     other `DBAPIError`. Keep validation failures on the established terminal path.
 
 ## Context Maintenance Rule
 
