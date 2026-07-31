@@ -363,6 +363,63 @@ async def test_stage_aggregation_jobs_rearms_completed_day_for_late_material_inp
     assert "REPROCESS_REQUESTED" in compiled_stmt or "REPROCESS_REQUESTED" in compiled_values
 
 
+async def test_carry_forward_restage_is_bounded_and_preserves_active_work(
+    repository: TimeseriesGenerationRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    mock_db_session.execute.return_value.rowcount = 2
+
+    count = await repository.restage_aggregation_jobs_in_carry_forward_interval(
+        "PORT_TS_POS_01",
+        start_date=date(2025, 8, 12),
+        end_date_exclusive=date(2025, 8, 16),
+        excluded_dates=[date(2025, 8, 12), date(2025, 8, 14)],
+        target_epoch=4,
+        correlation_id="  corr-carry-forward  ",
+    )
+
+    executed_stmt = mock_db_session.execute.await_args.args[0]
+    compiled_stmt = str(
+        executed_stmt.compile(
+            dialect=postgresql.dialect(),
+            compile_kwargs={"literal_binds": True},
+        )
+    )
+
+    assert count == 2
+    assert "UPDATE portfolio_aggregation_jobs SET" in compiled_stmt
+    assert "portfolio_aggregation_jobs.portfolio_id = 'PORT_TS_POS_01'" in compiled_stmt
+    assert "portfolio_aggregation_jobs.aggregation_date >= '2025-08-12'" in compiled_stmt
+    assert "portfolio_aggregation_jobs.aggregation_date < '2025-08-16'" in compiled_stmt
+    assert "portfolio_aggregation_jobs.status IN" in compiled_stmt
+    assert all(
+        status in compiled_stmt for status in ("PENDING", "PROCESSING", "COMPLETE", "FAILED")
+    )
+    assert "portfolio_aggregation_jobs.aggregation_date NOT IN" in compiled_stmt
+    assert "greatest(portfolio_aggregation_jobs.target_epoch, 4)" in compiled_stmt
+    assert "portfolio_aggregation_jobs.source_revision + 1" in compiled_stmt
+    assert "REPROCESS_REQUESTED" in compiled_stmt
+    assert "corr-carry-forward" in compiled_stmt
+    assert "  corr-carry-forward  " not in compiled_stmt
+
+
+async def test_carry_forward_restage_skips_empty_interval(
+    repository: TimeseriesGenerationRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    count = await repository.restage_aggregation_jobs_in_carry_forward_interval(
+        "PORT_TS_POS_01",
+        start_date=date(2025, 8, 12),
+        end_date_exclusive=date(2025, 8, 12),
+        excluded_dates=[],
+        target_epoch=4,
+        correlation_id=None,
+    )
+
+    assert count == 0
+    mock_db_session.execute.assert_not_awaited()
+
+
 async def test_aggregation_staging_metrics_distinguish_material_outcomes(monkeypatch) -> None:
     observations: list[tuple[str, str, str, int]] = []
     monkeypatch.setattr(

@@ -22,7 +22,7 @@ from portfolio_common.infrastructure.persistence.timeseries_upsert_statements im
 )
 from portfolio_common.monitoring import observe_control_queue_outcome
 from portfolio_common.utils import async_timed
-from sqlalchemy import case, delete, func, or_, select
+from sqlalchemy import case, delete, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from ..domain.position_timeseries.models import (
@@ -399,6 +399,98 @@ class TimeseriesGenerationRepository(TimeseriesMarketDataReader):
                 "target_epoch": target_epoch,
             },
         )
+
+    async def restage_aggregation_jobs_in_carry_forward_interval(
+        self,
+        portfolio_id: str,
+        *,
+        start_date: date,
+        end_date_exclusive: date | None,
+        excluded_dates: list[date],
+        target_epoch: int,
+        correlation_id: str | None,
+    ) -> int:
+        """Restage existing jobs whose portfolio day carries changed position state."""
+
+        if target_epoch < 0:
+            raise ValueError("Aggregation target epoch cannot be negative.")
+        normalized_excluded_dates = sorted(set(excluded_dates))
+        predicates = [
+            PortfolioAggregationJob.portfolio_id == portfolio_id,
+            PortfolioAggregationJob.aggregation_date >= start_date,
+            PortfolioAggregationJob.status.in_(("PENDING", "PROCESSING", "COMPLETE", "FAILED")),
+        ]
+        if end_date_exclusive is not None:
+            if end_date_exclusive <= start_date:
+                return 0
+            predicates.append(PortfolioAggregationJob.aggregation_date < end_date_exclusive)
+        if normalized_excluded_dates:
+            predicates.append(
+                PortfolioAggregationJob.aggregation_date.not_in(normalized_excluded_dates)
+            )
+
+        interval_correlation = durable_correlation_diagnostics(
+            correlation_id=correlation_id,
+            record_family="aggregation_carry_forward_interval",
+            portfolio_id=portfolio_id,
+            start_date=start_date,
+            end_date_exclusive=end_date_exclusive,
+        ).correlation_id
+        values: dict[str, Any] = {
+            "target_epoch": func.greatest(
+                PortfolioAggregationJob.target_epoch,
+                target_epoch,
+            ),
+            "source_revision": PortfolioAggregationJob.source_revision + 1,
+            "status": case(
+                (
+                    PortfolioAggregationJob.status == "PROCESSING",
+                    PortfolioAggregationJob.status,
+                ),
+                else_="PENDING",
+            ),
+            "failure_reason": case(
+                (
+                    PortfolioAggregationJob.status == "PROCESSING",
+                    "REPROCESS_REQUESTED",
+                ),
+                else_=None,
+            ),
+            "updated_at": func.now(),
+        }
+        if interval_correlation is not None:
+            values.update(
+                {
+                    "correlation_id": interval_correlation,
+                    "correlation_missing_reason": None,
+                    "alternate_lookup_key": None,
+                }
+            )
+
+        result = await self.db.execute(
+            update(PortfolioAggregationJob).where(*predicates).values(**values)
+        )
+        restaged_count = int(result.rowcount or 0)
+        observe_control_queue_outcome(
+            "aggregation",
+            "carry_forward_staging",
+            "restaged",
+            restaged_count,
+        )
+        logger.debug(
+            "Restaged portfolio aggregation jobs in a carry-forward interval.",
+            extra={
+                "portfolio_id": portfolio_id,
+                "aggregation_date_from": start_date.isoformat(),
+                "aggregation_date_to_exclusive": (
+                    end_date_exclusive.isoformat() if end_date_exclusive else None
+                ),
+                "excluded_materialized_day_count": len(normalized_excluded_dates),
+                "target_epoch": target_epoch,
+                "restaged_job_count": restaged_count,
+            },
+        )
+        return restaged_count
 
 
 def _observe_aggregation_staging_outcomes(

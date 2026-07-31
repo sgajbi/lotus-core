@@ -95,6 +95,19 @@ class PositionTimeseriesRepository(Protocol):
         correlation_id: str | None,
     ) -> None: ...
 
+    async def restage_aggregation_jobs_in_carry_forward_interval(
+        self,
+        portfolio_id: str,
+        *,
+        start_date: date,
+        end_date_exclusive: date | None,
+        excluded_dates: list[date],
+        target_epoch: int,
+        correlation_id: str | None,
+    ) -> int:
+        """Restage existing portfolio days affected by carried position state."""
+        ...
+
 
 class PositionTimeseriesRepositoryProvider(Protocol):
     """Run one application operation inside a durable transaction boundary."""
