@@ -13,6 +13,9 @@ latest-by-correlation compatibility rule while retaining its bounded-query impro
 4. replay posture used a global timestamp maximum instead of deterministic per-event history.
 5. a later `duplicate_blocked` row erased older equivalent success, while truncated history could
    overclaim recovery.
+6. late exact-head review found booked-transaction replay dropped the owner, replay
+   deduplication was job-global rather than event-scoped, and an unknown owner could be published
+   before the evidence foreign key rejected it.
 
 ## Correction
 
@@ -32,13 +35,19 @@ latest-by-correlation compatibility rule while retaining its bounded-query impro
    `duplicate_blocked` preserves proven success; later failure, bookkeeping failure, dry-run-only
    history, missing proof, or truncated evidence remains unresolved.
 6. Retained immutable DLQ and replay-audit rows in the evidence response.
+7. Preserved owner headers through booked-transaction replay, made consumer-DLQ fingerprints
+   event-scoped, and resolved candidate owners before Kafka DLQ publication. Unknown or stale
+   owners now produce ownerless fail-closed evidence rather than a foreign-key-driven republish
+   loop.
 
 ## Compatibility
 
-Route paths, request shapes, status codes, replay fingerprints, and immutable evidence history are
-unchanged. `ConsumerDlqEventResponse.ingestion_job_id` is additive. Existing legacy rows retain
-single-job compatibility through unique-only backfill/fallback; ambiguous correlation reuse now
-fails closed instead of selecting an unrelated latest job.
+Route paths, request shapes, status codes, and immutable evidence history are unchanged.
+`ConsumerDlqEventResponse.ingestion_job_id` is additive. Consumer-DLQ replay fingerprints now
+include event identity, an intentional downstream-safe behavior correction that lets every event
+owned by one job obtain independent recovery proof. Existing legacy rows retain single-job
+compatibility through unique-only backfill/fallback; ambiguous correlation reuse now fails closed
+instead of selecting an unrelated latest job.
 
 No runtime service split, topic change, partition change, or supported-feature posture change was
 needed. Event-replay application policy owns recovery semantics; ingestion stores and shared event
@@ -57,10 +66,11 @@ infrastructure own persistence and propagation.
 6. Scoped Ruff and `git diff --check` passed.
 7. Late P1 review proof added business-date ownership scoping and rollout-safe unresolved-outbox
    ownership; focused command/migration contracts passed before the protected exact-head rerun.
+8. Final exact-head P1 review proof added booked-transaction owner propagation, event-scoped
+   duplicate recovery, and pre-publication stale-owner rejection; 107 focused tests passed.
 
 ## Delivery Status
 
-Implementation is fixed locally in signed commits `e1501db2a`, `74c42f7bd`, `45457066e`, and
-`0d812f97b`. Protected PR CI,
+Implementation is fixed locally in signed commits through `2d0eb6a27`. Protected PR CI,
 exact-main validation, wiki publication/parity, GitHub evidence updates, and verified issue closure
 remain required before completion.

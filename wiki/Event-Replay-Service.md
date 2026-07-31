@@ -80,13 +80,19 @@ When adding or changing ingestion operations behavior:
 Consumer DLQ replay resolves the propagated durable ingestion-job owner first, never a latest job
 selected by correlation. For legacy ownerless rows, the dedicated bounded correlation lookup may
 return a job only when exactly one replayable job matches. Ambiguous correlation reuse remains
-unmapped and fail closed; generic operator listing pages are never replay joins.
+unmapped and fail closed; generic operator listing pages are never replay joins. Booked-transaction
+replay carries that owner onto the canonical republished transaction. Consumer DLQ publication
+validates a candidate owner before Kafka delivery and omits unknown or stale owners from both
+transport and durable evidence, preventing a foreign-key failure from triggering duplicate DLQ
+publication.
 
 Replay recovery is derived per DLQ event from ordered durable audit history. A `replayed` row proves
 recovery. A later `duplicate_blocked` row preserves that recovery only when the same event,
 recovery path, and fingerprint has older durable `replayed` proof. Later failure,
 `replayed_bookkeeping_failed`, dry-run-only history, and truncated audit history do not clear the
-original processing failure. Immutable DLQ and audit rows remain visible after recovery.
+original processing failure. Consumer-DLQ replay fingerprints include event identity so recovery
+of one event cannot suppress a sibling event owned by the same ingestion job. Immutable DLQ and
+audit rows remain visible after recovery.
 
 Replay success bookkeeping must use the atomic retry-plus-queued ingestion job transition. Do not
 reintroduce separate retry-count and queued-status mutations for retry or consumer-DLQ replay

@@ -65,6 +65,10 @@ The ownership migration backfills still-dispatchable `PENDING` and `FAILED` rows
 correlation maps to exactly one ingestion job; ambiguous legacy rows remain ownerless and fail
 closed.
 `correlation_id` remains useful for operator tracing but must not be used for evidence membership.
+Direct and replay publishers preserve the same owner header. Consumer DLQ publication validates a
+candidate owner against durable ingestion jobs before Kafka delivery; unknown or stale values are
+removed from the DLQ payload and headers and the evidence row remains ownerless, avoiding
+foreign-key-driven duplicate delivery.
 
 Multiple dispatcher instances preserve that order through a database-visible stream-head rule. For
 each `(topic, partition_key)`, only the oldest unresolved row by `(created_at, id)` is claimable.
