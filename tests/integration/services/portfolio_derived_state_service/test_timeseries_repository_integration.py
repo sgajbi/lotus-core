@@ -17,7 +17,7 @@ from portfolio_common.database_models import (
     PositionTimeseries,
     Transaction,
 )
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
@@ -187,6 +187,16 @@ async def test_newer_snapshot_refreshes_position_and_rearms_portfolio_day_once(
                 updated_at=original_materialized_at,
             )
         )
+        carry_forward_date = valuation_date + timedelta(days=1)
+        session.add(
+            PortfolioAggregationJob(
+                portfolio_id=portfolio_id,
+                aggregation_date=carry_forward_date,
+                status="COMPLETE",
+                target_epoch=0,
+                source_revision=2,
+            )
+        )
         session.commit()
         snapshot_id = snapshot.id
 
@@ -223,6 +233,16 @@ async def test_newer_snapshot_refreshes_position_and_rearms_portfolio_day_once(
     assert first_result.current_day_changed is True
     assert first_materialized_at > original_materialized_at
     assert aggregation_job.status == "PENDING"
+    carry_forward_job = await async_db_session.scalar(
+        select(PortfolioAggregationJob).where(
+            PortfolioAggregationJob.portfolio_id == portfolio_id,
+            PortfolioAggregationJob.aggregation_date == carry_forward_date,
+        )
+    )
+    assert carry_forward_job is not None
+    assert carry_forward_job.status == "PENDING"
+    assert carry_forward_job.target_epoch == 0
+    assert carry_forward_job.source_revision == 3
     await async_db_session.rollback()
 
     duplicate_result = await materializer.execute(command)
@@ -238,6 +258,233 @@ async def test_newer_snapshot_refreshes_position_and_rearms_portfolio_day_once(
     assert duplicate_series is not None
     assert duplicate_result.current_day_changed is False
     assert duplicate_series.updated_at == first_materialized_at
+    duplicate_carry_forward_job = await async_db_session.scalar(
+        select(PortfolioAggregationJob).where(
+            PortfolioAggregationJob.portfolio_id == portfolio_id,
+            PortfolioAggregationJob.aggregation_date == carry_forward_date,
+        )
+    )
+    assert duplicate_carry_forward_job is not None
+    assert duplicate_carry_forward_job.source_revision == 3
+
+
+async def test_materialization_restages_carry_forward_days_before_convergence(
+    db_engine,
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    portfolio_id = "TERMINAL_CARRY_FORWARD_PORT"
+    security_id = "TERMINAL_CARRY_FORWARD_SEC"
+    changed_day = date(2026, 7, 10)
+    complete_carry_day = date(2026, 7, 11)
+    failed_carry_day = date(2026, 7, 12)
+    pending_carry_day = date(2026, 7, 13)
+    processing_carry_day = date(2026, 7, 14)
+    convergence_day = date(2026, 7, 15)
+    lease_expiry = datetime.now(UTC) + timedelta(minutes=5)
+
+    with Session(db_engine) as session:
+        session.add(
+            Portfolio(
+                portfolio_id=portfolio_id,
+                base_currency="USD",
+                open_date=date(2024, 1, 1),
+                risk_exposure="a",
+                investment_time_horizon="b",
+                portfolio_type="c",
+                booking_center_code="d",
+                client_id="e",
+                status="ACTIVE",
+            )
+        )
+        session.add(
+            Instrument(
+                security_id=security_id,
+                name="Carry-forward instrument",
+                isin="TERMINAL_CARRY_FORWARD_ISIN",
+                currency="USD",
+                product_type="Equity",
+            )
+        )
+        session.flush()
+        changed_snapshot = _snapshot(portfolio_id, security_id, changed_day, epoch=2)
+        convergence_snapshot = _snapshot(portfolio_id, security_id, convergence_day, epoch=2)
+        session.add_all([changed_snapshot, convergence_snapshot])
+        session.add(
+            PositionTimeseries(
+                portfolio_id=portfolio_id,
+                security_id=security_id,
+                date=convergence_day,
+                epoch=2,
+                bod_market_value=Decimal("100"),
+                bod_cashflow_position=Decimal("0"),
+                eod_cashflow_position=Decimal("0"),
+                bod_cashflow_portfolio=Decimal("0"),
+                eod_cashflow_portfolio=Decimal("0"),
+                eod_market_value=Decimal("100"),
+                fees=Decimal("0"),
+                quantity=Decimal("10"),
+                cost=Decimal("10"),
+            )
+        )
+        session.add_all(
+            [
+                PortfolioAggregationJob(
+                    portfolio_id=portfolio_id,
+                    aggregation_date=changed_day,
+                    status="COMPLETE",
+                    target_epoch=0,
+                    source_revision=1,
+                ),
+                PortfolioAggregationJob(
+                    portfolio_id=portfolio_id,
+                    aggregation_date=complete_carry_day,
+                    status="COMPLETE",
+                    target_epoch=0,
+                    source_revision=3,
+                ),
+                PortfolioAggregationJob(
+                    portfolio_id=portfolio_id,
+                    aggregation_date=failed_carry_day,
+                    status="FAILED",
+                    failure_reason="POISON_EVENT",
+                    target_epoch=1,
+                    source_revision=4,
+                ),
+                PortfolioAggregationJob(
+                    portfolio_id=portfolio_id,
+                    aggregation_date=pending_carry_day,
+                    status="PENDING",
+                    target_epoch=0,
+                    source_revision=5,
+                ),
+                PortfolioAggregationJob(
+                    portfolio_id=portfolio_id,
+                    aggregation_date=processing_carry_day,
+                    status="PROCESSING",
+                    target_epoch=1,
+                    source_revision=6,
+                    lease_owner="existing-owner",
+                    lease_token="existing-token",
+                    lease_expires_at=lease_expiry,
+                ),
+                PortfolioAggregationJob(
+                    portfolio_id=portfolio_id,
+                    aggregation_date=convergence_day,
+                    status="COMPLETE",
+                    target_epoch=0,
+                    source_revision=7,
+                ),
+            ]
+        )
+        noise_start = date(2018, 1, 1)
+        session.execute(
+            PortfolioAggregationJob.__table__.insert(),
+            [
+                {
+                    "portfolio_id": "TERMINAL_CARRY_FORWARD_PLAN_NOISE",
+                    "aggregation_date": noise_start + timedelta(days=offset),
+                    "status": "COMPLETE",
+                    "target_epoch": 0,
+                    "source_revision": 1,
+                }
+                for offset in range(2_000)
+            ],
+        )
+        session.commit()
+        snapshot_id = changed_snapshot.id
+
+    materializer = MaterializePositionTimeseries(
+        repository_provider=_SessionPositionTimeseriesRepositoryProvider(async_db_session)
+    )
+    result = await materializer.execute(
+        MaterializePositionTimeseriesCommand(
+            snapshot_id=snapshot_id,
+            portfolio_id=portfolio_id,
+            security_id=security_id,
+            valuation_date=changed_day,
+            epoch=2,
+            correlation_id="corr-terminal-carry-forward",
+        )
+    )
+    rows = (
+        (
+            await async_db_session.execute(
+                select(PortfolioAggregationJob)
+                .where(PortfolioAggregationJob.portfolio_id == portfolio_id)
+                .order_by(PortfolioAggregationJob.aggregation_date)
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    assert result.current_day_changed is True
+    assert result.dependent_days_changed == 0
+    assert [
+        (row.aggregation_date, row.status, row.target_epoch, row.source_revision) for row in rows
+    ] == [
+        (changed_day, "PENDING", 2, 2),
+        (complete_carry_day, "PENDING", 2, 4),
+        (failed_carry_day, "PENDING", 2, 5),
+        (pending_carry_day, "PENDING", 2, 6),
+        (processing_carry_day, "PROCESSING", 2, 7),
+        (convergence_day, "COMPLETE", 0, 7),
+    ]
+    assert rows[2].failure_reason is None
+    assert rows[4].lease_owner == "existing-owner"
+    assert rows[4].lease_token == "existing-token"
+    assert rows[4].lease_expires_at == lease_expiry
+    assert rows[4].failure_reason == "REPROCESS_REQUESTED"
+
+    await async_db_session.execute(text("ANALYZE portfolio_aggregation_jobs"))
+    plan = await async_db_session.scalar(
+        text(
+            """
+            EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)
+            UPDATE portfolio_aggregation_jobs
+               SET target_epoch = greatest(target_epoch, :target_epoch),
+                   source_revision = source_revision + 1,
+                   status = 'PENDING',
+                   failure_reason = NULL,
+                   updated_at = now()
+             WHERE portfolio_id = :portfolio_id
+               AND aggregation_date >= :start_date
+               AND aggregation_date < :end_date_exclusive
+               AND status IN ('PENDING', 'PROCESSING', 'COMPLETE', 'FAILED')
+            """
+        ),
+        {
+            "portfolio_id": "TERMINAL_CARRY_FORWARD_PLAN_NOISE",
+            "start_date": noise_start + timedelta(days=500),
+            "end_date_exclusive": noise_start + timedelta(days=530),
+            "target_epoch": 2,
+        },
+    )
+    assert _index_names(plan) & {
+        "_portfolio_date_uc",
+        "ix_portfolio_aggregation_jobs_aggregation_date",
+    }
+    assert "Seq Scan" not in _node_types(plan)
+    await async_db_session.rollback()
+
+
+def _index_names(value) -> set[str]:
+    if isinstance(value, dict):
+        names = {value["Index Name"]} if "Index Name" in value else set()
+        return names | set().union(*(_index_names(item) for item in value.values()), set())
+    if isinstance(value, list):
+        return set().union(*(_index_names(item) for item in value), set())
+    return set()
+
+
+def _node_types(value) -> set[str]:
+    if isinstance(value, dict):
+        names = {value["Node Type"]} if "Node Type" in value else set()
+        return names | set().union(*(_node_types(item) for item in value.values()), set())
+    if isinstance(value, list):
+        return set().union(*(_node_types(item) for item in value), set())
+    return set()
 
 
 @pytest.fixture(scope="function")

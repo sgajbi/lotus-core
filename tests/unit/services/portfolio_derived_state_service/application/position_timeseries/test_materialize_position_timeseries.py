@@ -44,6 +44,7 @@ class InMemoryPositionTimeseriesRepository:
         self.invalidated_dates: list[date] = []
         self.staged_dates: list[date] = []
         self.staged_epochs: list[int] = []
+        self.restaged_intervals: list[dict[str, object]] = []
 
     async def get_position_snapshot(
         self, snapshot_id: int, *, fallback_epoch: int
@@ -135,6 +136,28 @@ class InMemoryPositionTimeseriesRepository:
         self.staged_dates.extend(aggregation_dates)
         self.staged_epochs.extend([target_epoch] * len(aggregation_dates))
 
+    async def restage_aggregation_jobs_in_carry_forward_interval(
+        self,
+        portfolio_id: str,
+        *,
+        start_date: date,
+        end_date_exclusive: date | None,
+        excluded_dates: list[date],
+        target_epoch: int,
+        correlation_id: str | None,
+    ) -> int:
+        self.restaged_intervals.append(
+            {
+                "portfolio_id": portfolio_id,
+                "start_date": start_date,
+                "end_date_exclusive": end_date_exclusive,
+                "excluded_dates": excluded_dates,
+                "target_epoch": target_epoch,
+                "correlation_id": correlation_id,
+            }
+        )
+        return 0
+
 
 class InMemoryRepositoryProvider:
     """Execute one application operation against the supplied repository."""
@@ -208,6 +231,16 @@ async def test_materialization_persists_changed_day_and_stages_aggregation() -> 
     assert [record.date for record in repository.upserted] == [date(2026, 4, 10)]
     assert repository.staged_dates == [date(2026, 4, 10)]
     assert repository.staged_epochs == [3]
+    assert repository.restaged_intervals == [
+        {
+            "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+            "start_date": date(2026, 4, 10),
+            "end_date_exclusive": None,
+            "excluded_dates": [date(2026, 4, 10)],
+            "target_epoch": 3,
+            "correlation_id": "corr-derived-001",
+        }
+    ]
     assert provider.transaction_count == 1
 
 
@@ -222,6 +255,7 @@ async def test_materialization_is_a_noop_when_snapshot_is_missing() -> None:
     assert result.dependent_days_changed == 0
     assert repository.upserted == []
     assert repository.staged_dates == []
+    assert repository.restaged_intervals == []
     assert provider.transaction_count == 1
 
 
@@ -255,8 +289,45 @@ async def test_unavailable_valuation_invalidates_current_and_dependent_materiali
     assert repository.existing_by_date == {date(2026, 4, 12): later_timeseries}
     assert repository.staged_dates == [date(2026, 4, 10), date(2026, 4, 11)]
     assert repository.staged_epochs == [3, 3]
+    assert repository.restaged_intervals == [
+        {
+            "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+            "start_date": date(2026, 4, 10),
+            "end_date_exclusive": date(2026, 4, 12),
+            "excluded_dates": [date(2026, 4, 10), date(2026, 4, 11)],
+            "target_epoch": 3,
+            "correlation_id": "corr-derived-001",
+        }
+    ]
     assert repository.upserted == []
     assert provider.transaction_count == 1
+
+
+async def test_unavailable_valuation_restages_open_ended_carry_forward_scope() -> None:
+    failed_snapshot = replace(
+        _snapshot(),
+        market_value_local=None,
+        valuation_status="FAILED",
+    )
+    repository = InMemoryPositionTimeseriesRepository(failed_snapshot)
+
+    result = await MaterializePositionTimeseries(
+        repository_provider=InMemoryRepositoryProvider(repository)
+    ).execute(_command())
+
+    assert result.current_day_changed is False
+    assert repository.invalidated_dates == []
+    assert repository.staged_dates == [failed_snapshot.date]
+    assert repository.restaged_intervals == [
+        {
+            "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+            "start_date": failed_snapshot.date,
+            "end_date_exclusive": None,
+            "excluded_dates": [failed_snapshot.date],
+            "target_epoch": 3,
+            "correlation_id": "corr-derived-001",
+        }
+    ]
 
 
 async def test_materialization_rejects_trigger_identity_mismatch_without_effects() -> None:
@@ -278,6 +349,7 @@ async def test_materialization_rejects_trigger_identity_mismatch_without_effects
 
     assert repository.upserted == []
     assert repository.staged_dates == []
+    assert repository.restaged_intervals == []
     assert provider.transaction_count == 1
 
 
@@ -389,6 +461,14 @@ async def test_backdated_materialization_stops_when_future_state_converges() -> 
         date(2026, 4, 11),
     ]
     assert repository.staged_dates == [date(2026, 4, 10), date(2026, 4, 11)]
+    assert repository.restaged_intervals[-1] == {
+        "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+        "start_date": date(2026, 4, 10),
+        "end_date_exclusive": date(2026, 4, 12),
+        "excluded_dates": [date(2026, 4, 10), date(2026, 4, 11)],
+        "target_epoch": 3,
+        "correlation_id": "corr-derived-001",
+    }
 
 
 @pytest.mark.parametrize(
@@ -429,3 +509,6 @@ async def test_backdated_materialization_bounds_each_command_without_false_cap_w
         date(2026, 4, 13),
         date(2026, 4, 14),
     ]
+    assert repository.restaged_intervals[-1]["end_date_exclusive"] == (
+        date(2026, 4, 15) if expected_truncated else None
+    )

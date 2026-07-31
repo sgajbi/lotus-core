@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from datetime import date
 from typing import Final, cast
 
@@ -37,6 +38,13 @@ MAX_DEPENDENT_PROPAGATION_BATCHES = (
 MAX_DEPENDENT_PROPAGATION_ROWS_PER_COMMAND = DEPENDENT_POSITION_TIMESERIES_PROPAGATION_ROW_CAP
 _UNSET_PRELOAD: Final = object()
 _MATERIALIZABLE_VALUATION_STATUSES = frozenset({"VALUED_CURRENT", "VALUED_STALE"})
+
+
+@dataclass(frozen=True)
+class _DependentPropagation:
+    changed_dates: tuple[date, ...]
+    truncated: bool
+    carry_forward_end_exclusive: date | None
 
 
 class MaterializePositionTimeseries:
@@ -101,25 +109,35 @@ class MaterializePositionTimeseries:
             previous_snapshot=previous_snapshot,
             epoch=current_snapshot.epoch,
         )
-        if current_day_changed:
-            await repository.stage_aggregation_jobs(
-                current_snapshot.portfolio_id,
-                [current_snapshot.date],
-                current_snapshot.epoch,
-                command.correlation_id,
-            )
-
-        dependent_days_changed, propagation_truncated = await self._propagate_dependent_days(
+        dependent_propagation = await self._propagate_dependent_days(
             repository,
             current_snapshot=current_snapshot,
             epoch=current_snapshot.epoch,
-            correlation_id=command.correlation_id,
         )
+        changed_dates = [
+            *([current_snapshot.date] if current_day_changed else []),
+            *dependent_propagation.changed_dates,
+        ]
+        await repository.stage_aggregation_jobs(
+            current_snapshot.portfolio_id,
+            changed_dates,
+            current_snapshot.epoch,
+            command.correlation_id,
+        )
+        if changed_dates:
+            await repository.restage_aggregation_jobs_in_carry_forward_interval(
+                current_snapshot.portfolio_id,
+                start_date=changed_dates[0],
+                end_date_exclusive=dependent_propagation.carry_forward_end_exclusive,
+                excluded_dates=changed_dates,
+                target_epoch=current_snapshot.epoch,
+                correlation_id=command.correlation_id,
+            )
         return PositionTimeseriesMaterializationResult(
             snapshot_found=True,
             current_day_changed=current_day_changed,
-            dependent_days_changed=dependent_days_changed,
-            dependent_propagation_truncated=propagation_truncated,
+            dependent_days_changed=len(dependent_propagation.changed_dates),
+            dependent_propagation_truncated=dependent_propagation.truncated,
         )
 
     @staticmethod
@@ -134,11 +152,11 @@ class MaterializePositionTimeseries:
             current_snapshot.security_id,
             current_snapshot.date,
             current_snapshot.epoch,
-            1,
+            2,
         )
         affected_dates = [
             current_snapshot.date,
-            *(snapshot.date for snapshot in future_snapshots),
+            *(snapshot.date for snapshot in future_snapshots[:1]),
         ]
         invalidated_dates = await repository.invalidate_numeric_materializations(
             current_snapshot.portfolio_id,
@@ -147,11 +165,25 @@ class MaterializePositionTimeseries:
             current_snapshot.epoch,
         )
         ordered_invalidated_dates = sorted(invalidated_dates)
+        explicitly_staged_dates = sorted(
+            {
+                current_snapshot.date,
+                *ordered_invalidated_dates,
+            }
+        )
         await repository.stage_aggregation_jobs(
             current_snapshot.portfolio_id,
-            ordered_invalidated_dates,
+            explicitly_staged_dates,
             current_snapshot.epoch,
             correlation_id,
+        )
+        await repository.restage_aggregation_jobs_in_carry_forward_interval(
+            current_snapshot.portfolio_id,
+            start_date=current_snapshot.date,
+            end_date_exclusive=(future_snapshots[1].date if len(future_snapshots) > 1 else None),
+            excluded_dates=explicitly_staged_dates,
+            target_epoch=current_snapshot.epoch,
+            correlation_id=correlation_id,
         )
         current_day_changed = current_snapshot.date in invalidated_dates
         return PositionTimeseriesMaterializationResult(
@@ -267,12 +299,12 @@ class MaterializePositionTimeseries:
         *,
         current_snapshot: PositionSnapshotRecord,
         epoch: int,
-        correlation_id: str | None,
-    ) -> tuple[int, bool]:
+    ) -> _DependentPropagation:
         previous_snapshot = current_snapshot
         changed_dates: list[date] = []
         has_more_future_snapshots = False
         stop_propagation = False
+        carry_forward_end_exclusive: date | None = None
 
         for _ in range(MAX_DEPENDENT_PROPAGATION_BATCHES):
             next_snapshots = await repository.get_next_snapshots_after(
@@ -314,6 +346,7 @@ class MaterializePositionTimeseries:
                 if not changed:
                     stop_propagation = True
                     has_more_future_snapshots = False
+                    carry_forward_end_exclusive = next_snapshot.date
                     break
 
                 changed_dates.append(next_snapshot.date)
@@ -322,13 +355,8 @@ class MaterializePositionTimeseries:
             if stop_propagation or not has_more_future_snapshots:
                 break
 
-        await repository.stage_aggregation_jobs(
-            current_snapshot.portfolio_id,
-            changed_dates,
-            epoch,
-            correlation_id,
-        )
         if has_more_future_snapshots:
+            carry_forward_end_exclusive = next_snapshots[MAX_DEPENDENT_PROPAGATION_ROWS].date
             logger.warning(
                 "Dependent position-timeseries propagation reached its command limit.",
                 extra={
@@ -337,4 +365,8 @@ class MaterializePositionTimeseries:
                     "row_limit": MAX_DEPENDENT_PROPAGATION_ROWS_PER_COMMAND,
                 },
             )
-        return len(changed_dates), has_more_future_snapshots
+        return _DependentPropagation(
+            changed_dates=tuple(changed_dates),
+            truncated=has_more_future_snapshots,
+            carry_forward_end_exclusive=carry_forward_end_exclusive,
+        )
