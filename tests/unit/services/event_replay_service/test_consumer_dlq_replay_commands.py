@@ -87,13 +87,9 @@ async def test_consumer_dlq_replay_uses_durable_owner_without_correlation_lookup
     )
     ingestion_job_service.get_unique_replayable_job_by_correlation_id = AsyncMock()
     ingestion_job_service.get_job_replay_context = AsyncMock(return_value=context)
-    ingestion_job_service.find_successful_replay_audit_by_fingerprint = AsyncMock(
-        return_value=None
-    )
+    ingestion_job_service.find_successful_replay_audit_by_fingerprint = AsyncMock(return_value=None)
     ingestion_job_service.assert_retry_allowed_for_records = AsyncMock()
-    ingestion_job_service.record_consumer_dlq_replay_audit = AsyncMock(
-        return_value="audit-001"
-    )
+    ingestion_job_service.record_consumer_dlq_replay_audit = AsyncMock(return_value="audit-001")
 
     response = await _consumer_service(
         ingestion_job_service=ingestion_job_service

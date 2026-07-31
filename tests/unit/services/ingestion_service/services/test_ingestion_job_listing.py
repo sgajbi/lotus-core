@@ -61,9 +61,7 @@ def test_build_ingestion_job_list_statement_applies_filters_and_cursor():
 
 
 def test_build_unique_replayable_correlation_lookup_statement_is_index_shaped():
-    statement = build_unique_replayable_correlation_lookup_statement(
-        correlation_id="corr-001"
-    )
+    statement = build_unique_replayable_correlation_lookup_statement(correlation_id="corr-001")
 
     compiled = statement.compile()
     compiled_sql = str(compiled)

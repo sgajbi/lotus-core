@@ -54,9 +54,7 @@ def test_ingestion_dlq_job_ownership_migration_is_bounded_and_reversible(
     monkeypatch.setattr(
         op,
         "drop_constraint",
-        lambda name, table, **kwargs: operations.append(
-            ("drop_constraint", name, table, kwargs)
-        ),
+        lambda name, table, **kwargs: operations.append(("drop_constraint", name, table, kwargs)),
     )
     monkeypatch.setattr(
         op,

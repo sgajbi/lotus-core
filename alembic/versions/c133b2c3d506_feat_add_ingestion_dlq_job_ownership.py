@@ -57,9 +57,7 @@ def upgrade() -> None:
         ["job_id"],
         postgresql_not_valid=True,
     )
-    op.execute(
-        f'ALTER TABLE "{_DLQ_TABLE}" VALIDATE CONSTRAINT "{_DLQ_JOB_FK}"'
-    )
+    op.execute(f'ALTER TABLE "{_DLQ_TABLE}" VALIDATE CONSTRAINT "{_DLQ_JOB_FK}"')
     op.create_index(
         _DLQ_JOB_INDEX,
         _DLQ_TABLE,

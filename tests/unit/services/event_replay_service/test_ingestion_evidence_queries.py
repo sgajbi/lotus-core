@@ -311,9 +311,7 @@ async def test_get_bundle_correlates_existing_stores_without_parallel_persistenc
     ingestion_job_service.get_job = AsyncMock(return_value=job)
     ingestion_job_service.list_failures = AsyncMock(return_value=[failure])
     ingestion_job_service.list_replay_audits = AsyncMock(return_value=[replay])
-    ingestion_job_service.list_consumer_dlq_events_by_job_id = AsyncMock(
-        return_value=[dlq_event]
-    )
+    ingestion_job_service.list_consumer_dlq_events_by_job_id = AsyncMock(return_value=[dlq_event])
     ingestion_job_service.list_consumer_dlq_events_by_event_ids = AsyncMock(
         return_value=[dlq_event]
     )
