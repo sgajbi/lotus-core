@@ -551,7 +551,8 @@ async def test_get_transaction_ledger_input_evidence_applies_complete_scope_filt
     assert "transaction_ledger_cost_evidence" in compiled_query
     assert "transaction_ledger_cashflow_evidence" in compiled_query
     assert "transaction_ledger_fx_evidence" in compiled_query
-    assert "jsonb_agg" in compiled_query.lower()
+    assert "string_agg" in compiled_query.lower()
+    assert "jsonb_build_array" in compiled_query.lower()
     assert "sha256" in compiled_query.lower()
     assert "transactions.portfolio_id = 'P1'" in compiled_query
     assert "trim(transactions.security_id) = 'S1'" in compiled_query

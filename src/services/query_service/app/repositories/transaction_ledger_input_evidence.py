@@ -26,8 +26,13 @@ def _ordered_jsonb_digest(*, values: tuple[Any, ...], order_by: tuple[Any, ...])
     """Return one fixed-width digest without returning source rows to the application."""
 
     payload = func.jsonb_build_array(*values)
-    ordered_payloads = func.jsonb_agg(aggregate_order_by(payload, *order_by))
-    canonical_bytes = func.convert_to(cast(ordered_payloads, Text), literal("UTF8"))
+    row_bytes = func.convert_to(cast(payload, Text), literal("UTF8"))
+    row_digest = func.encode(func.sha256(row_bytes), literal("hex"))
+    ordered_row_digests = func.string_agg(
+        row_digest,
+        aggregate_order_by(literal(""), *order_by),
+    )
+    canonical_bytes = func.convert_to(ordered_row_digests, literal("UTF8"))
     return func.encode(func.sha256(canonical_bytes), literal("hex"))
 
 
