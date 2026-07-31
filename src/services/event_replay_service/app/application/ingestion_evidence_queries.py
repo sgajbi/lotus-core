@@ -84,9 +84,15 @@ class IngestionEvidenceQueryService:
             if replay_event_ids
             else []
         )
+        replay_correlated_dlq_events = [
+            event
+            for event in replay_correlated_dlq_events
+            if getattr(event, "ingestion_job_id", None) in {None, job_id}
+        ]
         merged_dlq_events = _merge_consumer_dlq_events(
             consumer_dlq_events,
             replay_correlated_dlq_events,
+            job_id=job_id,
         )
         request_payload = replay_context.request_payload if replay_context is not None else None
         evidence_complete = all(
@@ -113,8 +119,16 @@ class IngestionEvidenceQueryService:
         return self.bundle_builder.build(**kwargs)
 
 
-def _merge_consumer_dlq_events(*event_groups: list[Any]) -> list[Any]:
-    by_event_id = {event.event_id: event for event_group in event_groups for event in event_group}
+def _merge_consumer_dlq_events(
+    *event_groups: list[Any],
+    job_id: str,
+) -> list[Any]:
+    by_event_id = {
+        event.event_id: event
+        for event_group in event_groups
+        for event in event_group
+        if getattr(event, "ingestion_job_id", None) in {None, job_id}
+    }
     return sorted(
         by_event_id.values(),
         key=lambda event: (event.observed_at, event.event_id),
