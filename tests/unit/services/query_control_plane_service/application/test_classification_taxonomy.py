@@ -105,3 +105,18 @@ async def test_stale_taxonomy_is_not_reported_as_current() -> None:
     assert response.data_quality_status == "STALE"
     assert response.freshness_status == "STALE"
     assert response.source_evidence_current is False
+
+
+@pytest.mark.asyncio
+async def test_unrecognized_taxonomy_quality_is_not_reported_as_complete() -> None:
+    reader = AsyncMock()
+    reader.list_effective.return_value = [
+        _record(dimension_value="equity", quality_status="vendor_verified")
+    ]
+    response = await ClassificationTaxonomyService(
+        reader=reader,
+        clock=lambda: datetime(2026, 4, 10, 10, tzinfo=UTC),
+    ).get(request=ClassificationTaxonomyRequest(as_of_date=AS_OF_DATE))
+
+    assert response.data_quality_status == "UNKNOWN"
+    assert response.source_evidence_current is False

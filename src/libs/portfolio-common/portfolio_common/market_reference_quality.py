@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
@@ -19,6 +20,12 @@ ACCEPTED_QUALITY_STATUSES = {"ACCEPTED"}
 PARTIAL_QUALITY_STATUSES = {"ESTIMATED", "PROVISIONAL", "WARNING"}
 STALE_QUALITY_STATUSES = {"STALE"}
 BLOCKING_QUALITY_STATUSES = {"REJECTED", "QUARANTINED", "INVALID", "BLOCKED"}
+GOVERNED_QUALITY_STATUSES = (
+    ACCEPTED_QUALITY_STATUSES
+    | PARTIAL_QUALITY_STATUSES
+    | STALE_QUALITY_STATUSES
+    | BLOCKING_QUALITY_STATUSES
+)
 _PRE_OBSERVATION_POINT_CLASSIFICATION_BY_STATUS = {
     **dict.fromkeys(BLOCKING_QUALITY_STATUSES, BLOCKED),
     **dict.fromkeys(STALE_QUALITY_STATUSES, STALE),
@@ -52,6 +59,17 @@ class MarketReferenceCoverageSignal:
     stale_count: int = 0
     estimated_count: int = 0
     blocking_count: int = 0
+    unknown_count: int = 0
+
+
+@dataclass(frozen=True)
+class MarketReferenceQualityCounts:
+    """Governed status-family counts for market and reference evidence."""
+
+    stale_count: int = 0
+    estimated_count: int = 0
+    blocking_count: int = 0
+    unknown_count: int = 0
 
 
 def resolve_observed_at(signal: SourceObservationSignal) -> datetime | None:
@@ -108,7 +126,8 @@ def _classify_market_reference_point_status(
 
 def classify_market_reference_coverage(signal: MarketReferenceCoverageSignal) -> str:
     _require_non_negative(signal.estimated_count, "estimated_count")
-    return classify_data_quality_coverage(
+    _require_non_negative(signal.unknown_count, "unknown_count")
+    classified = classify_data_quality_coverage(
         DataQualityCoverageSignal(
             required_count=signal.required_count,
             observed_count=signal.observed_count,
@@ -116,6 +135,50 @@ def classify_market_reference_coverage(signal: MarketReferenceCoverageSignal) ->
             blocking_issue_count=signal.blocking_count,
             warning_issue_count=signal.estimated_count,
         )
+    )
+    if classified in {BLOCKED, STALE}:
+        return classified
+    if signal.unknown_count > 0:
+        return UNKNOWN
+    return classified
+
+
+def count_market_reference_quality_statuses(
+    statuses: Iterable[str | None],
+) -> MarketReferenceQualityCounts:
+    """Count governed status families and retain every unrecognized value."""
+
+    distribution: dict[str | None, int] = {}
+    for status in statuses:
+        distribution[status] = distribution.get(status, 0) + 1
+    return count_market_reference_quality_distribution(distribution)
+
+
+def count_market_reference_quality_distribution(
+    distribution: Mapping[str | None, int],
+) -> MarketReferenceQualityCounts:
+    """Classify an already-bounded status distribution without expanding row counts."""
+
+    stale_count = 0
+    estimated_count = 0
+    blocking_count = 0
+    unknown_count = 0
+    for status, count in distribution.items():
+        _require_non_negative(count, "quality status count")
+        normalized = normalize_quality_status(status)
+        if normalized in STALE_QUALITY_STATUSES:
+            stale_count += count
+        elif normalized in PARTIAL_QUALITY_STATUSES:
+            estimated_count += count
+        elif normalized in BLOCKING_QUALITY_STATUSES:
+            blocking_count += count
+        elif normalized not in GOVERNED_QUALITY_STATUSES:
+            unknown_count += count
+    return MarketReferenceQualityCounts(
+        stale_count=stale_count,
+        estimated_count=estimated_count,
+        blocking_count=blocking_count,
+        unknown_count=unknown_count,
     )
 
 

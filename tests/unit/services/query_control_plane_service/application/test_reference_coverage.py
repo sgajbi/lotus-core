@@ -183,6 +183,42 @@ async def test_risk_free_coverage_propagates_stale_quality() -> None:
     assert response.publication_gate == "BLOCK"
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("quality_status", ["vendor_verified", "", "  "])
+async def test_risk_free_coverage_blocks_unrecognized_quality_status(
+    quality_status: str,
+) -> None:
+    service, _ = _service(
+        risk_free=[
+            replace(_risk_free(date(2026, 1, 1)), quality_status=quality_status),
+            _risk_free(date(2026, 1, 2)),
+        ]
+    )
+
+    response = await service.get_risk_free(currency="USD", request=_request())
+
+    assert response.data_quality_status == "UNKNOWN"
+    assert response.publication_gate == "BLOCK"
+    assert "UNRECOGNIZED_QUALITY_STATUS" in response.publication_block_reasons
+
+
+@pytest.mark.asyncio
+async def test_benchmark_coverage_blocks_unrecognized_component_price_quality() -> None:
+    prices = [
+        _price(index_id, series_date)
+        for series_date in (date(2026, 1, 1), date(2026, 1, 2))
+        for index_id in ("IDX_1", "IDX_2")
+    ]
+    prices[0] = replace(prices[0], quality_status="vendor_verified")
+    service, _ = _service(prices=prices)
+
+    response = await service.get_benchmark(benchmark_id="BMK_1", request=_request())
+
+    assert response.data_quality_status == "UNKNOWN"
+    assert response.publication_gate == "BLOCK"
+    assert "UNRECOGNIZED_QUALITY_STATUS" in response.publication_block_reasons
+
+
 def _component(index_id: str) -> BenchmarkComponentEvidence:
     return BenchmarkComponentEvidence(
         benchmark_id="BMK_1",

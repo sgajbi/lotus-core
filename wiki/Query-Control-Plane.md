@@ -114,6 +114,10 @@ non-current rows remain degraded. For unpaginated position windows, `missing_dat
 the canonical business-date gap; paginated responses do not treat dates outside the page as
 missing.
 
+Benchmark, index, risk-free, classification-taxonomy, and model-target evidence use the shared
+market/reference quality vocabulary. Blank or vendor-specific status values are unrecognized,
+produce `data_quality_status=UNKNOWN`, and cannot pass a publication or readiness gate.
+
 These outputs feed:
 
 - `lotus-gateway`

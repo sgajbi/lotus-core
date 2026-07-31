@@ -5,16 +5,15 @@ from datetime import date, datetime, timedelta
 from typing import Any, Protocol, cast
 
 from portfolio_common.market_reference_quality import (
-    BLOCKING_QUALITY_STATUSES,
-    PARTIAL_QUALITY_STATUSES,
-    STALE_QUALITY_STATUSES,
+    MarketReferenceCoverageSignal,
+    MarketReferenceQualityCounts,
+    classify_market_reference_coverage,
+    count_market_reference_quality_distribution,
     quality_status_summary_key,
 )
 from portfolio_common.reconciliation_quality import (
     BLOCKED,
     COMPLETE,
-    DataQualityCoverageSignal,
-    classify_data_quality_coverage,
     evidence_age_minutes,
     is_evidence_stale,
 )
@@ -77,9 +76,10 @@ def build_coverage_response(
         end_date=request.window.end_date,
     )
     observed_count = len(observed_dates)
-    stale_count, blocking_issue_count, warning_issue_count = _quality_issue_counts(
-        quality_distribution
-    )
+    quality_counts = _quality_issue_counts(quality_distribution)
+    stale_count = quality_counts.stale_count
+    blocking_issue_count = quality_counts.blocking_count
+    warning_issue_count = quality_counts.estimated_count
     age_minutes = evidence_age_minutes(
         generated_at=generated_at,
         evidence_timestamp=latest_evidence,
@@ -120,6 +120,7 @@ def build_coverage_response(
         required_count=required_count,
         blocking_issue_count=blocking_issue_count,
         warning_issue_count=warning_issue_count,
+        unknown_issue_count=quality_counts.unknown_count,
         latest_evidence=latest_evidence,
         evidence_is_stale=evidence_is_stale,
     )
@@ -228,16 +229,18 @@ def _coverage_quality_status(
     quality_distribution: dict[str, int],
     evidence_is_stale: bool = False,
 ) -> str:
-    stale_count, blocking_count, warning_count = _quality_issue_counts(quality_distribution)
+    quality_counts = _quality_issue_counts(quality_distribution)
     return cast(
         str,
-        classify_data_quality_coverage(
-            DataQualityCoverageSignal(
+        classify_market_reference_coverage(
+            MarketReferenceCoverageSignal(
                 required_count=required_count,
                 observed_count=observed_count,
-                stale_count=stale_count or int(evidence_is_stale and observed_count > 0),
-                blocking_issue_count=blocking_count,
-                warning_issue_count=warning_count,
+                stale_count=quality_counts.stale_count
+                or int(evidence_is_stale and observed_count > 0),
+                estimated_count=quality_counts.estimated_count,
+                blocking_count=quality_counts.blocking_count,
+                unknown_count=quality_counts.unknown_count,
             )
         ),
     )
@@ -245,13 +248,8 @@ def _coverage_quality_status(
 
 def _quality_issue_counts(
     quality_distribution: dict[str, int],
-) -> tuple[int, int, int]:
-    normalized = {status.upper(): count for status, count in quality_distribution.items()}
-    return (
-        sum(count for status, count in normalized.items() if status in STALE_QUALITY_STATUSES),
-        sum(count for status, count in normalized.items() if status in BLOCKING_QUALITY_STATUSES),
-        sum(count for status, count in normalized.items() if status in PARTIAL_QUALITY_STATUSES),
-    )
+) -> MarketReferenceQualityCounts:
+    return count_market_reference_quality_distribution(quality_distribution)
 
 
 def _coverage_publication_block_reasons(
@@ -261,6 +259,7 @@ def _coverage_publication_block_reasons(
     required_count: int,
     blocking_issue_count: int,
     warning_issue_count: int,
+    unknown_issue_count: int,
     latest_evidence: datetime | None,
     evidence_is_stale: bool,
 ) -> list[str]:
@@ -275,6 +274,8 @@ def _coverage_publication_block_reasons(
         reasons.append("INCOMPLETE_COVERAGE")
     if warning_issue_count:
         reasons.append("WARNING_QUALITY_ISSUES")
+    if unknown_issue_count:
+        reasons.append("UNRECOGNIZED_QUALITY_STATUS")
     if latest_evidence is None:
         reasons.append("MISSING_EVIDENCE_TIMESTAMP")
     if quality_status not in {COMPLETE, BLOCKED} and not reasons:
