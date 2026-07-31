@@ -3413,7 +3413,8 @@ Most relevant current governance:
      task without masking the original failure. When proving PostgreSQL advisory-lock
      serialization, require server-visible `pg_locks` wait evidence for the exact contender backend
      before releasing the holder; a client-side attempt signal or elapsed delay is not proof that
-     the lock request blocked. Reuse
+     the lock request blocked. Apply the same remaining deadline to observer connection checkout and
+     each observation query while continuing to supervise the contender task. Reuse
      `tests.test_support.async_task_coordination` for this pattern; ordinary barriers whose complete
      participant set is already under one bounded gather do not need an extra supervisor.
 
