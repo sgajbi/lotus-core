@@ -1,5 +1,6 @@
 """SQLAlchemy persistence for position timeseries generation."""
 
+import hashlib
 import logging
 from datetime import date, datetime
 from decimal import Decimal
@@ -32,6 +33,8 @@ from ..domain.position_timeseries.models import (
 )
 
 logger = logging.getLogger(__name__)
+
+_PORTFOLIO_AGGREGATION_MUTATION_LOCK_NAMESPACE = "lotus-core:portfolio-aggregation-mutation:v1"
 
 
 class TimeseriesGenerationRepository(TimeseriesMarketDataReader):
@@ -107,6 +110,16 @@ class TimeseriesGenerationRepository(TimeseriesMarketDataReader):
         except Exception as exc:
             logger.error("Failed to stage upsert for position time series: %s", exc, exc_info=True)
             raise
+
+    async def acquire_portfolio_aggregation_mutation_fence(
+        self,
+        portfolio_id: str,
+    ) -> None:
+        """Fence cross-security writes to portfolio-owned derived state until commit."""
+
+        normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
+        lock_key = _portfolio_aggregation_mutation_lock_key(normalized_portfolio_id)
+        await self.db.execute(select(func.pg_advisory_xact_lock(lock_key)))
 
     async def invalidate_numeric_materializations(
         self,
@@ -557,6 +570,14 @@ def _observe_aggregation_staging_outcomes(
             outcomes["rearmed"] += 1
     for outcome, count in outcomes.items():
         observe_control_queue_outcome("aggregation", "staging", outcome, count)
+
+
+def _portfolio_aggregation_mutation_lock_key(portfolio_id: str) -> int:
+    """Return one stable signed PostgreSQL advisory-lock key for a portfolio."""
+
+    identity = f"{_PORTFOLIO_AGGREGATION_MUTATION_LOCK_NAMESPACE}:{portfolio_id}"
+    digest = hashlib.sha256(identity.encode("utf-8")).digest()
+    return int.from_bytes(digest[:8], byteorder="big", signed=True)
 
 
 def to_position_snapshot_record(

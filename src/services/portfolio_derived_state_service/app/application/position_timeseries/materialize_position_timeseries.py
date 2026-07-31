@@ -118,6 +118,10 @@ class MaterializePositionTimeseries:
             *([current_snapshot.date] if current_day_changed else []),
             *dependent_propagation.changed_dates,
         ]
+        if changed_dates:
+            await repository.acquire_portfolio_aggregation_mutation_fence(
+                current_snapshot.portfolio_id
+            )
         await repository.stage_aggregation_jobs(
             current_snapshot.portfolio_id,
             changed_dates,
@@ -154,6 +158,7 @@ class MaterializePositionTimeseries:
             current_snapshot.epoch,
             2,
         )
+        await repository.acquire_portfolio_aggregation_mutation_fence(current_snapshot.portfolio_id)
         affected_dates = [
             current_snapshot.date,
             *(snapshot.date for snapshot in future_snapshots[:1]),

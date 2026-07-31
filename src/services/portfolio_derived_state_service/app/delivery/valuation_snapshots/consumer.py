@@ -7,10 +7,11 @@ import logging
 
 from confluent_kafka import Message
 from portfolio_common.events import DailyPositionSnapshotPersistedEvent
+from portfolio_common.exceptions import RetryableConsumerError
 from portfolio_common.kafka_consumer import BaseConsumer
 from portfolio_common.kafka_consumer_execution import KafkaConsumerExecutionProfile
 from pydantic import ValidationError
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import DBAPIError, IntegrityError
 from tenacity import before_log, retry, retry_if_exception_type, stop_after_attempt, wait_fixed
 
 from ...application.position_timeseries import MaterializePositionTimeseries
@@ -55,7 +56,12 @@ class PositionTimeseriesConsumer(BaseConsumer):
             retry=retry_if_exception_type(IntegrityError),
             reraise=True,
         )
-        await retry_config(self._process_message_with_retry)(msg)
+        try:
+            await retry_config(self._process_message_with_retry)(msg)
+        except DBAPIError as exc:
+            raise RetryableConsumerError(
+                "Position-timeseries database transaction failed and requires ordered redelivery."
+            ) from exc
 
     async def _process_message_with_retry(self, msg: Message) -> None:
         try:

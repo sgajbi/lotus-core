@@ -46,6 +46,13 @@ class PositionTimeseriesRepository(Protocol):
         record: PositionTimeseriesRecord,
     ) -> None: ...
 
+    async def acquire_portfolio_aggregation_mutation_fence(
+        self,
+        portfolio_id: str,
+    ) -> None:
+        """Serialize shared portfolio-aggregation effects within this transaction."""
+        ...
+
     async def invalidate_numeric_materializations(
         self,
         portfolio_id: str,

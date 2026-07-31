@@ -6,8 +6,9 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from portfolio_common.events import DailyPositionSnapshotPersistedEvent
+from portfolio_common.exceptions import RetryableConsumerError
 from pydantic import ValidationError
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import DBAPIError, IntegrityError
 
 from src.services.portfolio_derived_state_service.app.application.position_timeseries import (
     MaterializePositionTimeseries,
@@ -154,6 +155,26 @@ async def test_process_message_rethrows_integrity_race_for_retry(
     with pytest.raises(IntegrityError):
         await consumer._process_message_with_retry(message)
 
+    consumer._send_to_dlq_async.assert_not_awaited()
+
+
+async def test_process_message_classifies_database_failure_for_ordered_redelivery(
+    consumer: PositionTimeseriesConsumer,
+    use_case: AsyncMock,
+    event: DailyPositionSnapshotPersistedEvent,
+) -> None:
+    failure = DBAPIError(
+        "UPDATE portfolio_aggregation_jobs",
+        {},
+        Exception("deadlock detected"),
+    )
+    use_case.execute.side_effect = failure
+    message = _message(event.model_dump_json().encode("utf-8"))
+
+    with pytest.raises(RetryableConsumerError, match="ordered redelivery") as raised:
+        await consumer.process_message(message)
+
+    assert raised.value.__cause__ is failure
     consumer._send_to_dlq_async.assert_not_awaited()
 
 
