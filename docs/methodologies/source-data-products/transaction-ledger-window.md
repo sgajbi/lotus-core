@@ -145,6 +145,10 @@ complete ledger. `skip`, `limit`, sort order, and returned page rows are deliber
 Updates to unrelated portfolios, superseded cashflow epochs, unused FX pairs, or FX rows outside
 the selected as-of rule therefore do not change the identity.
 
+Before JSONB row construction, every `timestamptz` value is formatted as fixed-width UTC ISO text
+with microseconds and a `Z` suffix, and every `date` value is formatted as `YYYY-MM-DD`. Digest
+identity is therefore independent of the PostgreSQL connection's `TimeZone` and `DateStyle`.
+
 Evidence selection and reporting conversion use the same normalized-pair ordering:
 `rate_date DESC, id DESC`. The `id` tie-breaker is required for legacy case variants that the
 raw-string uniqueness constraint can hold on the same date; the selected conversion row and the row
@@ -202,6 +206,7 @@ request or to the next request, never to only the page or only its reconstructio
 | Row-level `transaction_costs` exist | Returned as `costs[]`; this endpoint does not aggregate them into cost curves. |
 | Row-level linked `cashflow` exists | Returned as `cashflow`; this endpoint does not aggregate it into operational cashflow methodology. |
 | Product transaction reaches cost processing before instrument master data is available | Cost consumer defers processing as a retryable reference-data dependency; it does not write calculated costs or emit processed transaction evidence. |
+| PostgreSQL session `TimeZone` or `DateStyle` differs across readers | Temporal evidence is canonicalized to UTC/ISO before hashing; the reconstruction scope id is unchanged for identical persisted rows. |
 
 ## Configuration Options
 
