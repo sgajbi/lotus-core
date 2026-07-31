@@ -1,5 +1,6 @@
 """Prove derived-state repository behavior against PostgreSQL."""
 
+import asyncio
 from collections.abc import Awaitable, Callable
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
@@ -18,7 +19,7 @@ from portfolio_common.database_models import (
     Transaction,
 )
 from sqlalchemy import select, text
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import Session
 
 from src.services.portfolio_derived_state_service.app.application.position_timeseries import (
@@ -66,6 +67,46 @@ def _lease(identity: str) -> AggregationJobLease:
         token=f"integration-lease-{identity}",
         expires_at=datetime.now(UTC) + timedelta(minutes=5),
     )
+
+
+@pytest.mark.lifecycle
+async def test_portfolio_aggregation_mutation_fence_serializes_same_portfolio(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    """Hold shared portfolio effects behind one cross-session transaction fence."""
+
+    del clean_db
+    session_factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
+    first_acquired = asyncio.Event()
+    release_first = asyncio.Event()
+    second_acquired = asyncio.Event()
+
+    async def hold_first_fence() -> None:
+        async with session_factory() as session, session.begin():
+            await TimeseriesGenerationRepository(
+                session
+            ).acquire_portfolio_aggregation_mutation_fence("PORT-AGG-FENCE-001")
+            first_acquired.set()
+            await release_first.wait()
+
+    async def await_second_fence() -> None:
+        await first_acquired.wait()
+        async with session_factory() as session, session.begin():
+            await TimeseriesGenerationRepository(
+                session
+            ).acquire_portfolio_aggregation_mutation_fence("PORT-AGG-FENCE-001")
+            second_acquired.set()
+
+    first_task = asyncio.create_task(hold_first_fence())
+    await first_acquired.wait()
+    second_task = asyncio.create_task(await_second_fence())
+    await asyncio.sleep(0.1)
+    assert second_acquired.is_set() is False
+
+    release_first.set()
+    await asyncio.wait_for(asyncio.gather(first_task, second_task), timeout=5)
+    assert second_acquired.is_set() is True
 
 
 def _snapshot(

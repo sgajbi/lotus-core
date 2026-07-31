@@ -46,6 +46,7 @@ class InMemoryPositionTimeseriesRepository:
         self.staged_dates: list[date] = []
         self.staged_epochs: list[int] = []
         self.restaged_intervals: list[dict[str, object]] = []
+        self.aggregation_mutation_sequence: list[str] = []
 
     async def get_position_snapshot(
         self, snapshot_id: int, *, fallback_epoch: int
@@ -77,6 +78,12 @@ class InMemoryPositionTimeseriesRepository:
         self.upserted.append(record)
         self.existing_by_date[record.date] = record
 
+    async def acquire_portfolio_aggregation_mutation_fence(
+        self,
+        portfolio_id: str,
+    ) -> None:
+        self.aggregation_mutation_sequence.append(f"fence:{portfolio_id}")
+
     async def invalidate_numeric_materializations(
         self,
         portfolio_id: str,
@@ -84,6 +91,7 @@ class InMemoryPositionTimeseriesRepository:
         dates: list[date],
         epoch: int,
     ) -> set[date]:
+        self.aggregation_mutation_sequence.append("invalidate_numeric")
         del portfolio_id, security_id, epoch
         invalidated = {a_date for a_date in dates if a_date in self.existing_by_date}
         for a_date in invalidated:
@@ -106,6 +114,7 @@ class InMemoryPositionTimeseriesRepository:
         excluded_dates: list[date],
         epoch: int,
     ) -> int:
+        self.aggregation_mutation_sequence.append("invalidate_portfolio_interval")
         self.invalidated_portfolio_intervals.append(
             {
                 "portfolio_id": portfolio_id,
@@ -153,6 +162,7 @@ class InMemoryPositionTimeseriesRepository:
         target_epoch: int,
         correlation_id: str | None,
     ) -> None:
+        self.aggregation_mutation_sequence.append("stage_jobs")
         del portfolio_id, correlation_id
         self.staged_dates.extend(aggregation_dates)
         self.staged_epochs.extend([target_epoch] * len(aggregation_dates))
@@ -167,6 +177,7 @@ class InMemoryPositionTimeseriesRepository:
         target_epoch: int,
         correlation_id: str | None,
     ) -> int:
+        self.aggregation_mutation_sequence.append("restage_carry_forward")
         self.restaged_intervals.append(
             {
                 "portfolio_id": portfolio_id,
@@ -263,6 +274,11 @@ async def test_materialization_persists_changed_day_and_stages_aggregation() -> 
         }
     ]
     assert repository.invalidated_portfolio_intervals == []
+    assert repository.aggregation_mutation_sequence == [
+        "fence:PB_SG_GLOBAL_BAL_001",
+        "stage_jobs",
+        "restage_carry_forward",
+    ]
     assert provider.transaction_count == 1
 
 
@@ -331,6 +347,13 @@ async def test_unavailable_valuation_invalidates_current_and_dependent_materiali
         }
     ]
     assert repository.upserted == []
+    assert repository.aggregation_mutation_sequence == [
+        "fence:PB_SG_GLOBAL_BAL_001",
+        "invalidate_numeric",
+        "stage_jobs",
+        "invalidate_portfolio_interval",
+        "restage_carry_forward",
+    ]
     assert provider.transaction_count == 1
 
 

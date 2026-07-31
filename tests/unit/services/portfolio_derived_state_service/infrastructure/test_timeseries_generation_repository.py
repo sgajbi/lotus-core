@@ -411,6 +411,32 @@ async def test_stage_aggregation_jobs_rearms_completed_day_for_late_material_inp
     assert "REPROCESS_REQUESTED" in compiled_stmt or "REPROCESS_REQUESTED" in compiled_values
 
 
+async def test_portfolio_aggregation_mutation_fence_uses_stable_transaction_lock(
+    repository: TimeseriesGenerationRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    await repository.acquire_portfolio_aggregation_mutation_fence(" PORT_TS_POS_01 ")
+
+    executed_stmt = mock_db_session.execute.await_args.args[0]
+    compiled_stmt = str(
+        executed_stmt.compile(
+            dialect=postgresql.dialect(),
+            compile_kwargs={"literal_binds": True},
+        )
+    )
+    expected_key = timeseries_generation_repository._portfolio_aggregation_mutation_lock_key(
+        "PORT_TS_POS_01"
+    )
+
+    assert f"pg_advisory_xact_lock({expected_key})" in compiled_stmt
+    assert expected_key == (
+        timeseries_generation_repository._portfolio_aggregation_mutation_lock_key("PORT_TS_POS_01")
+    )
+    assert expected_key != (
+        timeseries_generation_repository._portfolio_aggregation_mutation_lock_key("PORT_TS_POS_02")
+    )
+
+
 async def test_carry_forward_restage_is_bounded_and_preserves_active_work(
     repository: TimeseriesGenerationRepository,
     mock_db_session: AsyncMock,
