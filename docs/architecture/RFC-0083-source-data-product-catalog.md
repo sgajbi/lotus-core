@@ -512,6 +512,12 @@ source/update evidence where available. They continue to leave source-batch fing
 deterministic snapshot ids, and policy fields null until reference source-batch lineage and
 snapshot identity are joined into those contracts.
 
+Market/reference runtime projections preserve unsafe quality states instead of collapsing them into
+structural `PARTIAL`: blocking quality remains `BLOCKED`, stale quality remains `STALE`, and blank or
+unrecognized quality remains `UNKNOWN`. Freshness is derived from the resolved quality posture:
+complete timestamped evidence is `CURRENT`, stale evidence is `STALE`, unknown evidence is
+`UNKNOWN`, structural partial evidence is `PARTIAL`, and absent evidence is `UNAVAILABLE`.
+
 `DataQualityCoverageReport` additionally derives `data_quality_status` from observed coverage,
 missing dates, and stale quality-status counts using `reconciliation_quality.py`. Full observed
 coverage is `COMPLETE`, missing coverage is `PARTIAL`, stale observed coverage is `STALE`, and empty
@@ -539,7 +545,9 @@ Empty evidence listings fall back to the response generation date for `as_of_dat
 remain null until those controls are joined to the evidence response path.
 `ReconciliationEvidenceBundle` additionally derives `reconciliation_status` from returned run
 statuses and finding severities using `reconciliation_quality.py`, with blocking evidence taking
-precedence over partial or complete evidence.
+precedence over stale, unknown, unreconciled, open-break, partial, or complete evidence. Stale
+evidence precedes unknown and incomplete states, and finding state is reduced with run state so a
+non-blocking open finding cannot hide a stale run.
 
 The source-data product contract guard statically checks both sides of the binding:
 
