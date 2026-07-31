@@ -113,6 +113,7 @@ async def wait_for_postgres_advisory_lock_wait(
             )
 
         observation_task = asyncio.create_task(observe_wait())
+        contender_completed = False
         try:
             done, _ = await asyncio.wait(
                 {task, observation_task},
@@ -120,6 +121,7 @@ async def wait_for_postgres_advisory_lock_wait(
                 return_when=asyncio.FIRST_COMPLETED,
             )
             if task in done:
+                contender_completed = True
                 await task
                 raise RuntimeError(
                     "task completed without entering a PostgreSQL advisory-lock wait"
@@ -133,19 +135,22 @@ async def wait_for_postgres_advisory_lock_wait(
         finally:
             if not observation_task.done():
                 observation_task.cancel()
-            cleanup_remaining = max(
-                deadline - asyncio.get_running_loop().time(),
-                0,
-            )
-            if cleanup_remaining > 0 and not observation_task.done():
-                await asyncio.wait(
-                    {observation_task},
-                    timeout=cleanup_remaining,
-                )
-            if observation_task.done():
-                await asyncio.gather(observation_task, return_exceptions=True)
-            else:
+            if contender_completed and not observation_task.done():
                 observation_task.add_done_callback(_consume_task_outcome)
+            else:
+                cleanup_remaining = max(
+                    deadline - asyncio.get_running_loop().time(),
+                    0,
+                )
+                if cleanup_remaining > 0 and not observation_task.done():
+                    await asyncio.wait(
+                        {observation_task},
+                        timeout=cleanup_remaining,
+                    )
+                if observation_task.done():
+                    await asyncio.gather(observation_task, return_exceptions=True)
+                else:
+                    observation_task.add_done_callback(_consume_task_outcome)
 
         remaining = deadline - asyncio.get_running_loop().time()
         if remaining <= 0:

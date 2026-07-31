@@ -188,9 +188,18 @@ async def test_advisory_lock_wait_does_not_block_on_stalled_cancellation_cleanup
 
 
 async def test_advisory_lock_wait_propagates_contender_failure_during_observation() -> None:
-    async def stalled_query() -> bool:
-        await asyncio.Event().wait()
-        return False
+    release_cleanup = asyncio.Event()
+    cleanup_finished = asyncio.Event()
+
+    async def cancellation_stalled_query() -> bool:
+        try:
+            await asyncio.Event().wait()
+            raise AssertionError("unreachable stalled query completion")
+        except asyncio.CancelledError:
+            await release_cleanup.wait()
+            raise
+        finally:
+            cleanup_finished.set()
 
     async def failed_contender() -> None:
         await asyncio.sleep(0)
@@ -198,10 +207,16 @@ async def test_advisory_lock_wait_propagates_contender_failure_during_observatio
 
     task = asyncio.create_task(failed_contender())
     with pytest.raises(ConnectionError, match="contender connection failed"):
-        await wait_for_postgres_advisory_lock_wait(
-            task,
-            _ObserverSessionFactory(stalled_query),
-            backend_pid=1729,
-            timeout=1,
+        await asyncio.wait_for(
+            wait_for_postgres_advisory_lock_wait(
+                task,
+                _ObserverSessionFactory(cancellation_stalled_query),
+                backend_pid=1729,
+                timeout=1,
+            ),
+            timeout=0.1,
         )
+
+    release_cleanup.set()
+    await asyncio.wait_for(cleanup_finished.wait(), timeout=0.1)
     await cancel_pending_tasks(task)

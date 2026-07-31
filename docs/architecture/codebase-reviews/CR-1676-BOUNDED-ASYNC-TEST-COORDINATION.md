@@ -27,7 +27,8 @@ observer then requires `pg_locks` to expose an ungranted advisory lock for that 
 the first transaction is released. The tests subsequently prove acquisition and clean completion.
 Observer connection checkout, every query, and cancellation observation share the same remaining
 deadline while the contender task remains supervised. Cleanup that ignores cancellation is detached
-with its eventual outcome consumed rather than extending the caller's deadline. The shared pending
+with its eventual outcome consumed rather than extending the caller's deadline; when the contender
+has already failed, observer cleanup is detached immediately so it cannot delay propagation. The shared pending
 task cleanup helper applies the same rule under its own explicit bound, so SQLAlchemy/asyncpg
 transaction cleanup cannot turn an assertion failure into a job-timeout hang. The adjacent
 cost-basis FIFO concurrency proof now uses the same supervised signals, exact-backend `pg_locks`

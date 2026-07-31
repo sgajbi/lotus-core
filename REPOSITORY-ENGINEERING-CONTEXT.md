@@ -3416,7 +3416,8 @@ Most relevant current governance:
      the lock request blocked. Apply the same remaining deadline to observer connection checkout and
      each observation query while continuing to supervise the contender task. Cancellation cleanup
      must not extend that deadline; consume the eventual outcome of a driver cleanup that does not
-     finish inside the remaining bound. Pending producer-task cancellation must likewise use a
+     finish inside the remaining bound, and detach it immediately when an already-completed
+     contender must propagate its failure. Pending producer-task cancellation must likewise use a
      bounded wait and consume the eventual outcome of cancellation-resistant driver cleanup. Reuse
      `tests.test_support.async_task_coordination` for this pattern; ordinary barriers whose complete
      participant set is already under one bounded gather do not need an extra supervisor.
