@@ -6,11 +6,9 @@ from datetime import datetime
 from typing import cast
 
 from portfolio_common.market_reference_quality import (
-    BLOCKING_QUALITY_STATUSES,
-    PARTIAL_QUALITY_STATUSES,
-    STALE_QUALITY_STATUSES,
     MarketReferenceCoverageSignal,
     classify_market_reference_coverage,
+    count_market_reference_quality_statuses,
 )
 from portfolio_common.request_fingerprints import request_fingerprint
 from portfolio_common.source_data_product_metadata import (
@@ -135,20 +133,19 @@ def _to_contract(record: ClassificationTaxonomyEvidence) -> ClassificationTaxono
 def _data_quality_status(records: list[ClassificationTaxonomyEvidence]) -> str:
     if not records:
         return "UNKNOWN"
-    statuses = [record.quality_status.strip().upper() for record in records]
+    quality_counts = count_market_reference_quality_statuses(
+        record.quality_status for record in records
+    )
     return cast(
         str,
         classify_market_reference_coverage(
             MarketReferenceCoverageSignal(
                 required_count=len(records),
-                observed_count=len(statuses),
-                stale_count=_status_count(statuses, STALE_QUALITY_STATUSES),
-                estimated_count=_status_count(statuses, PARTIAL_QUALITY_STATUSES),
-                blocking_count=_status_count(statuses, BLOCKING_QUALITY_STATUSES),
+                observed_count=len(records),
+                stale_count=quality_counts.stale_count,
+                estimated_count=quality_counts.estimated_count,
+                blocking_count=quality_counts.blocking_count,
+                unknown_count=quality_counts.unknown_count,
             )
         ),
     )
-
-
-def _status_count(statuses: list[str], status_family: set[str]) -> int:
-    return sum(status in status_family for status in statuses)

@@ -91,6 +91,12 @@ approved.
 This keeps the API vocabulary moving toward the source-lineage target model without breaking
 existing source adapters or database consumers.
 
+Market and reference source products classify `quality_status` through the shared
+`portfolio_common.market_reference_quality` policy. Accepted, partial, stale, and blocking
+vocabularies are explicit; blank or vendor-specific values outside those vocabularies are
+`UNKNOWN`. Complete coverage containing an unrecognized value must fail closed and must not publish
+with an allow gate.
+
 ## Validation Report Contract
 
 Target validation reports must include:

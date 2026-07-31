@@ -6,11 +6,9 @@ from datetime import UTC, datetime
 from decimal import Decimal
 
 from portfolio_common.market_reference_quality import (
-    BLOCKING_QUALITY_STATUSES,
-    PARTIAL_QUALITY_STATUSES,
-    STALE_QUALITY_STATUSES,
     MarketReferenceCoverageSignal,
     classify_market_reference_coverage,
+    count_market_reference_quality_statuses,
 )
 
 from ...contracts.model_portfolio_targets import (
@@ -71,7 +69,12 @@ def build_model_portfolio_target_response(
 
     targets = [_target_row(row) for row in evidence]
     total_weight = sum((target.target_weight for target in targets), Decimal("0"))
-    supportability = _supportability(target_count=len(targets), total_weight=total_weight)
+    data_quality_status = _data_quality_status(evidence, required_count=len(targets))
+    supportability = _supportability(
+        target_count=len(targets),
+        total_weight=total_weight,
+        data_quality_status=data_quality_status,
+    )
     lineage = {
         "source_system": definition.source_system or "unknown",
         "source_record_id": definition.source_record_id or "unknown",
@@ -101,7 +104,7 @@ def build_model_portfolio_target_response(
             as_of_date=request.as_of_date,
             generated_at=generated_at,
             tenant_id=request.tenant_id,
-            data_quality_status=_data_quality_status(evidence, required_count=len(targets)),
+            data_quality_status=data_quality_status,
             latest_evidence_timestamp=_latest_evidence_timestamp(definition, *evidence),
             content_payload=content_payload,
             lineage=lineage,
@@ -121,11 +124,18 @@ def _target_row(evidence: ModelPortfolioTargetEvidence) -> ModelPortfolioTargetR
     )
 
 
-def _supportability(*, target_count: int, total_weight: Decimal) -> ModelPortfolioSupportability:
+def _supportability(
+    *,
+    target_count: int,
+    total_weight: Decimal,
+    data_quality_status: str,
+) -> ModelPortfolioSupportability:
     if target_count == 0:
         state, reason = "INCOMPLETE", "MODEL_TARGETS_EMPTY"
     elif total_weight != Decimal("1.0000000000"):
         state, reason = "DEGRADED", "MODEL_TARGET_WEIGHTS_NOT_ONE"
+    elif data_quality_status != "COMPLETE":
+        state, reason = "DEGRADED", "MODEL_TARGET_QUALITY_NOT_COMPLETE"
     else:
         state, reason = "READY", "MODEL_TARGETS_READY"
     return ModelPortfolioSupportability(
@@ -141,15 +151,16 @@ def _data_quality_status(
 ) -> str:
     if required_count <= 0:
         return "UNKNOWN"
-    statuses = [row.quality_status.strip().upper() for row in evidence]
+    quality_counts = count_market_reference_quality_statuses(row.quality_status for row in evidence)
     return str(
         classify_market_reference_coverage(
             MarketReferenceCoverageSignal(
                 required_count=required_count,
-                observed_count=len(statuses),
-                stale_count=sum(status in STALE_QUALITY_STATUSES for status in statuses),
-                estimated_count=sum(status in PARTIAL_QUALITY_STATUSES for status in statuses),
-                blocking_count=sum(status in BLOCKING_QUALITY_STATUSES for status in statuses),
+                observed_count=len(evidence),
+                stale_count=quality_counts.stale_count,
+                estimated_count=quality_counts.estimated_count,
+                blocking_count=quality_counts.blocking_count,
+                unknown_count=quality_counts.unknown_count,
             )
         )
     )

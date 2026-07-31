@@ -129,6 +129,7 @@ Overall state precedence is fail-closed:
 | Mandate binding missing or invalid | `UNAVAILABLE` | `MANDATE_BINDING_UNAVAILABLE` | Overall `UNAVAILABLE`. |
 | Model portfolio cannot be resolved | `UNAVAILABLE` | `MODEL_PORTFOLIO_ID_UNAVAILABLE` | Overall `UNAVAILABLE`. |
 | Model targets missing or invalid | `UNAVAILABLE` | `MODEL_TARGETS_UNAVAILABLE` | Overall `UNAVAILABLE`. |
+| Model targets have non-`COMPLETE` source quality | `DEGRADED` | `MODEL_TARGET_QUALITY_NOT_COMPLETE` | Overall `DEGRADED` unless a stronger unavailable or incomplete condition exists. |
 | Evaluated instrument universe is empty | `UNAVAILABLE` | `DPM_INSTRUMENT_UNIVERSE_EMPTY` | Overall `UNAVAILABLE`. |
 | Eligibility source unavailable | `UNAVAILABLE` | `INSTRUMENT_ELIGIBILITY_UNAVAILABLE` | Overall `UNAVAILABLE`. |
 | Tax-lot source unavailable | `UNAVAILABLE` | `PORTFOLIO_TAX_LOTS_UNAVAILABLE` | Overall `UNAVAILABLE`. |

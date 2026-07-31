@@ -12,6 +12,7 @@ from portfolio_common.market_reference_quality import (
     SourceObservationSignal,
     classify_market_reference_coverage,
     classify_market_reference_point,
+    count_market_reference_quality_statuses,
     normalize_quality_status,
     quality_status_summary_key,
     resolve_observed_at,
@@ -116,6 +117,19 @@ def test_classify_market_reference_point(signal, expected) -> None:
             MarketReferenceCoverageSignal(required_count=10, observed_count=10, blocking_count=1),
             BLOCKED,
         ),
+        (
+            MarketReferenceCoverageSignal(required_count=10, observed_count=10, unknown_count=1),
+            UNKNOWN,
+        ),
+        (
+            MarketReferenceCoverageSignal(
+                required_count=10,
+                observed_count=10,
+                stale_count=1,
+                unknown_count=1,
+            ),
+            STALE,
+        ),
         (MarketReferenceCoverageSignal(required_count=10, observed_count=0), UNRECONCILED),
         (MarketReferenceCoverageSignal(required_count=0, observed_count=0), UNKNOWN),
     ],
@@ -128,6 +142,24 @@ def test_classify_market_reference_coverage_rejects_negative_estimated_count() -
     with pytest.raises(ValueError, match="estimated_count must be non-negative"):
         classify_market_reference_coverage(
             MarketReferenceCoverageSignal(required_count=1, observed_count=1, estimated_count=-1)
+        )
+
+
+def test_count_market_reference_quality_statuses_fails_closed_for_unrecognized_values() -> None:
+    counts = count_market_reference_quality_statuses(
+        (" accepted ", "PROVISIONAL", "stale", "REJECTED", "vendor_verified", None, "")
+    )
+
+    assert counts.stale_count == 1
+    assert counts.estimated_count == 1
+    assert counts.blocking_count == 1
+    assert counts.unknown_count == 3
+
+
+def test_classify_market_reference_coverage_rejects_negative_unknown_count() -> None:
+    with pytest.raises(ValueError, match="unknown_count must be non-negative"):
+        classify_market_reference_coverage(
+            MarketReferenceCoverageSignal(required_count=1, observed_count=1, unknown_count=-1)
         )
 
 

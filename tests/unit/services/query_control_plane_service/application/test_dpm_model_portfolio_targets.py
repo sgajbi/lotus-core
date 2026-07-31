@@ -1,5 +1,6 @@
 """Application policy tests for DPM model portfolio targets."""
 
+from dataclasses import replace
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from unittest.mock import AsyncMock
@@ -127,6 +128,26 @@ async def test_model_target_weight_mismatch_is_degraded() -> None:
     assert response is not None
     assert response.supportability.state == "DEGRADED"
     assert response.supportability.reason == "MODEL_TARGET_WEIGHTS_NOT_ONE"
+
+
+@pytest.mark.asyncio
+async def test_unrecognized_model_target_quality_is_not_ready() -> None:
+    target = replace(
+        _target("EQ_1", "1.0000000000"),
+        quality_status="vendor_verified",
+    )
+    response = await model_portfolio_targets.ModelPortfolioTargetService(
+        reader=_reader(target),
+        clock=lambda: GENERATED_AT,
+    ).resolve(
+        model_portfolio_id="MODEL_1",
+        request=ModelPortfolioTargetRequest(as_of_date=date(2026, 4, 10)),
+    )
+
+    assert response is not None
+    assert response.data_quality_status == "UNKNOWN"
+    assert response.supportability.state == "DEGRADED"
+    assert response.supportability.reason == "MODEL_TARGET_QUALITY_NOT_COMPLETE"
 
 
 @pytest.mark.asyncio
