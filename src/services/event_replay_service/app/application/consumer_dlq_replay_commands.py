@@ -185,7 +185,6 @@ class ConsumerDlqReplayCommandService:
             endpoint=context.endpoint if context else None,
             payload=context.request_payload if context else None,
             idempotency_key=context.idempotency_key if context else None,
-            include_event_id=False,
         )
 
     async def _consumer_dlq_missing_payload_result(
