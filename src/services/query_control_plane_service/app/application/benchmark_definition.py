@@ -6,6 +6,10 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Literal
 
+from portfolio_common.market_reference_quality import (
+    classify_market_reference_product_quality,
+    market_reference_freshness_status,
+)
 from portfolio_common.source_data_product_metadata import (
     source_data_product_runtime_metadata,
     stable_content_hash,
@@ -110,13 +114,15 @@ def build_benchmark_definition_response(
             "latest_evidence_timestamp": latest_evidence,
         }
     )
-    quality_complete = completeness_status == "COMPLETE" and _accepted_quality(
-        definition, components
+    resolved_quality = classify_market_reference_product_quality(
+        (definition.quality_status, *(component.quality_status for component in components)),
+        evidence_complete=completeness_status == "COMPLETE",
     )
+    quality_complete = resolved_quality == "COMPLETE"
     metadata = source_data_product_runtime_metadata(
         generated_at=generated_at,
         as_of_date=request.as_of_date,
-        data_quality_status="COMPLETE" if quality_complete else "PARTIAL",
+        data_quality_status=resolved_quality,
         latest_evidence_timestamp=latest_evidence,
         content_hash=content_hash,
         source_refs=[
@@ -131,7 +137,11 @@ def build_benchmark_definition_response(
             "source_record_id": definition.source_record_id,
         },
         source_evidence_current=quality_complete,
-        freshness_status="CURRENT" if quality_complete else "PARTIAL",
+        freshness_status=market_reference_freshness_status(
+            data_quality_status=resolved_quality,
+            has_evidence=True,
+            has_timestamp=latest_evidence is not None,
+        ),
     )
     return BenchmarkDefinitionResponse(
         benchmark_id=definition.benchmark_id,
@@ -175,13 +185,3 @@ def _completeness(*, component_count: int, total_weight: Decimal) -> tuple[Compl
     if total_weight != UNIT_WEIGHT:
         return "PARTIAL", "BENCHMARK_COMPONENT_WEIGHTS_NOT_ONE"
     return "COMPLETE", "BENCHMARK_DEFINITION_COMPLETE"
-
-
-def _accepted_quality(
-    definition: BenchmarkDefinitionEvidence,
-    components: list[BenchmarkComponentEvidence],
-) -> bool:
-    accepted = {"ACCEPTED", "COMPLETE"}
-    return definition.quality_status.strip().upper() in accepted and all(
-        component.quality_status.strip().upper() in accepted for component in components
-    )

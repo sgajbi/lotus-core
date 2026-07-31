@@ -5,6 +5,10 @@ from dataclasses import asdict
 from datetime import date, datetime
 from typing import Any, Literal, Protocol, cast
 
+from portfolio_common.market_reference_quality import (
+    classify_market_reference_product_quality,
+    market_reference_freshness_status,
+)
 from portfolio_common.request_fingerprints import series_request_fingerprint
 from portfolio_common.source_data_product_metadata import (
     source_data_product_runtime_metadata,
@@ -86,13 +90,19 @@ def build_source_series_metadata(
             "latest_evidence_timestamp": latest_evidence,
         }
     )
-    current = completeness == "COMPLETE" and latest_evidence is not None
+    resolved_quality = (
+        "EMPTY"
+        if not rows
+        else classify_market_reference_product_quality(
+            (row.quality_status for row in rows),
+            evidence_complete=completeness == "COMPLETE",
+        )
+    )
+    current = resolved_quality == "COMPLETE" and latest_evidence is not None
     runtime = source_data_product_runtime_metadata(
         generated_at=generated_at,
         as_of_date=request.as_of_date,
-        data_quality_status=(
-            "COMPLETE" if completeness == "COMPLETE" else "EMPTY" if not rows else "PARTIAL"
-        ),
+        data_quality_status=resolved_quality,
         latest_evidence_timestamp=latest_evidence,
         content_hash=content_hash,
         source_refs=[
@@ -105,7 +115,11 @@ def build_source_series_metadata(
             "series_kind": series_kind,
         },
         source_evidence_current=current,
-        freshness_status="CURRENT" if current else "UNAVAILABLE" if not rows else "PARTIAL",
+        freshness_status=market_reference_freshness_status(
+            data_quality_status=resolved_quality,
+            has_evidence=bool(rows),
+            has_timestamp=latest_evidence is not None,
+        ),
     )
     return {
         "request_fingerprint": request_fingerprint,

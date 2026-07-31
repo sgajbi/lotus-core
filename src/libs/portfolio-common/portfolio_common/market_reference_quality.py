@@ -143,6 +143,28 @@ def classify_market_reference_coverage(signal: MarketReferenceCoverageSignal) ->
     return classified
 
 
+def classify_market_reference_product_quality(
+    statuses: Iterable[str | None],
+    *,
+    evidence_complete: bool,
+) -> str:
+    """Classify product evidence without laundering unsafe quality as partial."""
+
+    resolved_statuses = tuple(statuses)
+    if not resolved_statuses:
+        return UNKNOWN
+    counts = count_market_reference_quality_statuses(resolved_statuses)
+    if counts.blocking_count:
+        return BLOCKED
+    if counts.stale_count:
+        return STALE
+    if counts.unknown_count:
+        return UNKNOWN
+    if counts.estimated_count or not evidence_complete:
+        return PARTIAL
+    return COMPLETE
+
+
 def market_reference_freshness_status(
     *,
     data_quality_status: str,

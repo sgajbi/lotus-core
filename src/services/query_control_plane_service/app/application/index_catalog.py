@@ -5,6 +5,10 @@ from dataclasses import asdict
 from datetime import datetime
 from typing import Literal
 
+from portfolio_common.market_reference_quality import (
+    classify_market_reference_product_quality,
+    market_reference_freshness_status,
+)
 from portfolio_common.source_data_product_metadata import (
     source_data_product_runtime_metadata,
     stable_content_hash,
@@ -54,7 +58,15 @@ def build_index_catalog_response(
     records = [_record(definition) for definition in definitions]
     completeness = _completeness(definitions)
     latest_evidence = _latest_evidence(definitions)
-    quality_complete = completeness == "COMPLETE"
+    resolved_quality = (
+        "EMPTY"
+        if not records
+        else classify_market_reference_product_quality(
+            (definition.quality_status for definition in definitions),
+            evidence_complete=completeness == "COMPLETE",
+        )
+    )
+    quality_complete = resolved_quality == "COMPLETE"
     content_hash = stable_content_hash(
         {
             "product_name": "IndexDefinition",
@@ -68,9 +80,7 @@ def build_index_catalog_response(
     metadata = source_data_product_runtime_metadata(
         generated_at=generated_at,
         as_of_date=request.as_of_date,
-        data_quality_status=(
-            "COMPLETE" if quality_complete else "EMPTY" if not records else "PARTIAL"
-        ),
+        data_quality_status=resolved_quality,
         latest_evidence_timestamp=latest_evidence,
         content_hash=content_hash,
         source_refs=[
@@ -82,11 +92,11 @@ def build_index_catalog_response(
             "catalog_scope": "effective_definitions",
         },
         source_evidence_current=quality_complete,
-        freshness_status="CURRENT"
-        if quality_complete
-        else "UNAVAILABLE"
-        if not records
-        else "PARTIAL",
+        freshness_status=market_reference_freshness_status(
+            data_quality_status=resolved_quality,
+            has_evidence=bool(records),
+            has_timestamp=latest_evidence is not None,
+        ),
     )
     return IndexCatalogResponse(
         records=records,

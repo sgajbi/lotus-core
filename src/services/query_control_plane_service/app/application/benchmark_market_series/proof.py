@@ -4,6 +4,7 @@ from dataclasses import asdict
 from datetime import UTC, datetime
 from typing import cast
 
+from portfolio_common.market_reference_quality import classify_market_reference_product_quality
 from portfolio_common.source_data_product_metadata import stable_content_hash
 
 from ...contracts.benchmark_market_series import BenchmarkMarketSeriesRequest
@@ -15,8 +16,6 @@ from ...domain.benchmark_return_series import BenchmarkReturnEvidence
 from ...domain.index_series import IndexPriceEvidence, IndexReturnEvidence
 from ...domain.market_fx import FxRateEvidence
 from .policy import BenchmarkMarketSeriesFxContext
-
-ACCEPTED_QUALITY_STATUSES = frozenset({"ACCEPTED", "COMPLETE"})
 
 
 def data_quality_status(
@@ -52,10 +51,10 @@ def data_quality_status(
         fx_rates=fx_rates,
         fx_context=fx_context,
     )
-    accepted = bool(quality_statuses) and all(
-        status.strip().upper() in ACCEPTED_QUALITY_STATUSES for status in quality_statuses
+    return classify_market_reference_product_quality(
+        quality_statuses,
+        evidence_complete=evidence_complete and not has_more,
     )
-    return "COMPLETE" if evidence_complete and accepted and not has_more else "PARTIAL"
 
 
 def latest_evidence_timestamp(

@@ -68,7 +68,8 @@ def test_non_accepted_record_degrades_catalog() -> None:
     response = _build([_definition(quality_status="stale")])
 
     assert response.completeness_status == "PARTIAL"
-    assert response.data_quality_status == "PARTIAL"
+    assert response.data_quality_status == "STALE"
+    assert response.freshness_status == "STALE"
     assert response.source_evidence_current is False
 
 

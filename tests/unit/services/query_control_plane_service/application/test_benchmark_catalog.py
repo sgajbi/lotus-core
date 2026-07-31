@@ -22,7 +22,11 @@ EVIDENCE_AT = datetime(2026, 4, 10, 10, tzinfo=UTC)
 REQUEST = BenchmarkCatalogRequest(as_of_date=date(2026, 4, 10))
 
 
-def _definition(benchmark_id: str = "BMK_1") -> BenchmarkDefinitionEvidence:
+def _definition(
+    benchmark_id: str = "BMK_1",
+    *,
+    quality_status: str = "accepted",
+) -> BenchmarkDefinitionEvidence:
     return BenchmarkDefinitionEvidence(
         benchmark_id=benchmark_id,
         benchmark_name="Global Balanced",
@@ -40,7 +44,7 @@ def _definition(benchmark_id: str = "BMK_1") -> BenchmarkDefinitionEvidence:
         source_timestamp=datetime(2026, 4, 10, 9, tzinfo=UTC),
         source_vendor="provider",
         source_record_id=f"definition:{benchmark_id}",
-        quality_status="accepted",
+        quality_status=quality_status,
         created_at=datetime(2026, 4, 10, 8, tzinfo=UTC),
         updated_at=EVIDENCE_AT,
     )
@@ -89,6 +93,25 @@ def test_partial_record_degrades_catalog() -> None:
 
     assert response.completeness_status == "PARTIAL"
     assert response.records[0].completeness_reason == "BENCHMARK_COMPONENT_WEIGHTS_NOT_ONE"
+    assert response.source_evidence_current is False
+
+
+def test_stale_definition_preserves_quality_and_freshness_posture() -> None:
+    response = build_benchmark_catalog_response(
+        request=REQUEST,
+        definitions=[_definition(quality_status="stale")],
+        components_by_benchmark={
+            "BMK_1": [
+                _component("IDX_EQ", "0.6000000000"),
+                _component("IDX_FI", "0.4000000000"),
+            ]
+        },
+        generated_at=GENERATED_AT,
+    )
+
+    assert response.completeness_status == "COMPLETE"
+    assert response.data_quality_status == "STALE"
+    assert response.freshness_status == "STALE"
     assert response.source_evidence_current is False
 
 

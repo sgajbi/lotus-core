@@ -125,7 +125,8 @@ def test_non_accepted_source_quality_prevents_current_evidence() -> None:
     )
 
     assert response.completeness_status == "COMPLETE"
-    assert response.data_quality_status == "PARTIAL"
+    assert response.data_quality_status == "STALE"
+    assert response.freshness_status == "STALE"
     assert response.source_evidence_current is False
 
 

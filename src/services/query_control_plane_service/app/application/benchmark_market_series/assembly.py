@@ -2,6 +2,7 @@
 
 from datetime import datetime
 
+from portfolio_common.market_reference_quality import market_reference_freshness_status
 from portfolio_common.reference_data_paging import ReferencePageMetadata
 from portfolio_common.source_data_product_metadata import source_data_product_runtime_metadata
 
@@ -118,8 +119,10 @@ def build_benchmark_market_series_response(
             "contract_version": "rfc_062_v1",
         },
         source_evidence_current=current,
-        freshness_status=(
-            "CURRENT" if current else "UNAVAILABLE" if resolved_quality == "EMPTY" else "PARTIAL"
+        freshness_status=market_reference_freshness_status(
+            data_quality_status=resolved_quality,
+            has_evidence=resolved_quality != "EMPTY",
+            has_timestamp=latest_evidence is not None,
         ),
     )
     return BenchmarkMarketSeriesResponse(

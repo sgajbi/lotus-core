@@ -96,7 +96,8 @@ def test_partial_return_window_is_not_claimed_current() -> None:
 
     assert response.completeness_status == "PARTIAL"
     assert response.record_count == 1
-    assert response.data_quality_status == "PARTIAL"
+    assert response.data_quality_status == "STALE"
+    assert response.freshness_status == "STALE"
     assert response.source_evidence_current is False
     assert response.request_fingerprint
 
