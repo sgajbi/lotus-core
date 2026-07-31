@@ -38,6 +38,7 @@ from src.services.portfolio_derived_state_service.app.ports.position_timeseries 
 )
 from tests.test_support.async_task_coordination import (
     cancel_pending_tasks,
+    wait_for_postgres_advisory_lock_wait,
     wait_for_task_signal,
 )
 
@@ -86,6 +87,7 @@ async def test_portfolio_aggregation_mutation_fence_serializes_same_portfolio(
     release_first = asyncio.Event()
     second_attempted = asyncio.Event()
     second_acquired = asyncio.Event()
+    second_backend_pid: int | None = None
 
     async def hold_first_fence() -> None:
         async with session_factory() as session, session.begin():
@@ -96,8 +98,10 @@ async def test_portfolio_aggregation_mutation_fence_serializes_same_portfolio(
             await release_first.wait()
 
     async def await_second_fence() -> None:
+        nonlocal second_backend_pid
         await first_acquired.wait()
         async with session_factory() as session, session.begin():
+            second_backend_pid = await session.scalar(text("SELECT pg_backend_pid()"))
             second_attempted.set()
             await TimeseriesGenerationRepository(
                 session
@@ -110,6 +114,13 @@ async def test_portfolio_aggregation_mutation_fence_serializes_same_portfolio(
         await wait_for_task_signal(first_task, first_acquired, timeout=2)
         second_task = asyncio.create_task(await_second_fence())
         await wait_for_task_signal(second_task, second_attempted, timeout=2)
+        assert second_backend_pid is not None
+        await wait_for_postgres_advisory_lock_wait(
+            second_task,
+            session_factory,
+            backend_pid=second_backend_pid,
+            timeout=2,
+        )
         assert second_acquired.is_set() is False
 
         release_first.set()

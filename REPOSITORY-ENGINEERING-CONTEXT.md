@@ -3410,8 +3410,10 @@ Most relevant current governance:
      producer task and signal together when connection, transaction, or lock work can fail before
      signaling. Propagate an early producer exception immediately, bound a genuinely stuck wait,
      release owned synchronization primitives in `finally`, and cancel plus await every pending
-     task without masking the original failure. Prefer an explicit attempt signal and the real
-     database serialization/result assertion over sleep-based lock inference. Reuse
+     task without masking the original failure. When proving PostgreSQL advisory-lock
+     serialization, require server-visible `pg_locks` wait evidence for the exact contender backend
+     before releasing the holder; a client-side attempt signal or elapsed delay is not proof that
+     the lock request blocked. Reuse
      `tests.test_support.async_task_coordination` for this pattern; ordinary barriers whose complete
      participant set is already under one bounded gather do not need an extra supervisor.
 
