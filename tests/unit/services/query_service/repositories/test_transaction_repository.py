@@ -580,6 +580,9 @@ async def test_get_transaction_ledger_input_evidence_applies_complete_scope_filt
     assert "transaction_ledger_fx_evidence" in compiled_query
     assert "string_agg" in compiled_query.lower()
     assert "jsonb_build_array" in compiled_query.lower()
+    assert "timezone('UTC', transactions.transaction_date)" in compiled_query
+    assert 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"' in compiled_query
+    assert "to_char(transaction_ledger_ranked_fx_rates.rate_date, 'YYYY-MM-DD')" in compiled_query
     assert "sha256" in compiled_query.lower()
     assert "transactions.portfolio_id = 'P1'" in compiled_query
     assert "trim(transactions.security_id) = 'S1'" in compiled_query
