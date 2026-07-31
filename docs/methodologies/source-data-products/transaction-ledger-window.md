@@ -98,6 +98,10 @@ this product.
 | `X_trade` | reporting FX rate for trade/local fields | Latest FX rate from `trade_currency` to reporting currency on or before `A`, falling back to `currency` when `trade_currency` is absent. |
 | `FX_local` | `realized_fx_pnl_local` | Upstream-supplied row-level realized FX P&L in the transaction row currency. |
 | `FX_report` | `realized_fx_pnl_local_reporting_currency` | Optional reporting-currency restatement of `FX_local`; this is not portfolio-level FX attribution. |
+| `H_txn` | transaction evidence digest | SHA-256 digest of the ordered, material persisted fields for every transaction in `M`. |
+| `H_cost` | cost evidence digest | SHA-256 digest of the ordered transaction-cost rows owned by transactions in `M`. |
+| `H_cash` | selected cashflow evidence digest | SHA-256 digest of the latest cashflow per transaction in `M`, selected by `epoch DESC, id DESC`. |
+| `H_fx` | selected FX evidence digest | SHA-256 digest of the latest applicable reporting FX row per distinct source currency, selected on or before `A`. Same-currency conversion contributes no persisted FX row. |
 
 ## Methodology and Formulas
 
@@ -130,6 +134,17 @@ For explicit realized FX P&L local evidence:
 The raw amount remains unchanged. The product does not derive cross-row measures from the returned
 page.
 
+The reconstruction identity binds the complete filtered input scope, not the returned page:
+
+`scope_id = SHA-256(P, A, F, N, latest_material_evidence_at, H_txn, H_cost, H_cash, H_fx, current)`
+
+Each input-family digest is reduced in PostgreSQL in deterministic row order. PostgreSQL hashes
+each canonical material row first and then hashes the ordered fixed-width row digests, so the
+application receives one bounded value per family rather than assembling or transferring the
+complete ledger. `skip`, `limit`, sort order, and returned page rows are deliberately excluded.
+Updates to unrelated portfolios, superseded cashflow epochs, unused FX pairs, or FX rows outside
+the selected as-of rule therefore do not change the identity.
+
 ## Step-by-Step Computation
 
 1. Verify the portfolio exists.
@@ -139,21 +154,25 @@ page.
 3. Build the transaction ledger filter set from portfolio, instrument/security, transaction type,
    FX component, linked group, FX contract, swap event, near-leg, far-leg, start date, end date,
    and effective as-of date.
-4. Count all matching rows for `total`.
-5. Query the requested page with eager row-level `cashflow` and `transaction_costs` evidence.
-6. Sort by the requested allowed field and direction; when no allowed field is supplied, sort by
+4. In one database statement, count all matching rows and reduce the complete matching
+   transaction, owned cost, selected latest-cashflow, and selected reporting-FX inputs into
+   deterministic fixed-width evidence digests and a latest material evidence timestamp.
+5. Derive the page-invariant reconstruction scope identity from the filter scope and those
+   material-input digests.
+6. Query the requested page with eager row-level `cashflow` and `transaction_costs` evidence.
+7. Sort by the requested allowed field and direction; when no allowed field is supplied, sort by
    `transaction_date` descending.
-7. Resolve distinct returned row security ids against `instruments.security_id` and retain any
+8. Resolve distinct returned row security ids against `instruments.security_id` and retain any
    missing ids as `missing_instrument_security_ids`.
-8. Convert each row into `TransactionRecord`, preserving row-level cost records and linked cashflow
+9. Convert each row into `TransactionRecord`, preserving row-level cost records and linked cashflow
    records when present.
-9. If `reporting_currency` is supplied and `A` exists, populate supported
+10. If `reporting_currency` is supplied and `A` exists, populate supported
    `*_reporting_currency` fields using the latest FX rate on or before `A`; book-currency fields
    use `currency`, and trade/local fields use `trade_currency` when available, including explicit
    row-level `realized_*_pnl_local` fields.
-10. Compute `data_quality_status` and `reason_codes` from `total`, returned row count, `skip`, and
+11. Compute `data_quality_status` and `reason_codes` from `total`, returned row count, `skip`, and
     missing instrument-reference evidence.
-11. Return source-data runtime metadata including product identity, version, effective as-of date,
+12. Return source-data runtime metadata including product identity, version, effective as-of date,
     latest evidence timestamp, reconciliation status, restatement version, data-quality status, and
     bounded supportability reason fields.
 
@@ -200,7 +219,8 @@ page.
 | `reason_codes[]` | `TRANSACTION_LEDGER_READY`, `TRANSACTION_LEDGER_EMPTY`, `TRANSACTION_LEDGER_PAGE_PARTIAL`, or `TRANSACTION_LEDGER_INSTRUMENT_REFERENCE_MISSING`. |
 | `missing_instrument_reference_count` | Count of returned security ids without governed instrument master support. |
 | `missing_instrument_security_ids[]` | Returned security ids that do not resolve to `instruments.security_id`. |
-| `latest_evidence_timestamp` | Latest durable transaction `updated_at` timestamp for the filtered ledger window. |
+| `latest_evidence_timestamp` | Latest selected durable `updated_at` timestamp across matching transactions, their costs, their selected latest cashflows, and applicable selected FX rates. |
+| `source_lineage.reconstruction.scope_id` | Page-invariant identity of the complete filtered material-input scope; changes when selected transaction, cost, cashflow, or reporting-FX economics change. |
 
 ## Worked Example
 
