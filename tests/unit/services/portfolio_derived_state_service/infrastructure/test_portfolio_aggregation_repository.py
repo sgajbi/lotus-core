@@ -123,9 +123,9 @@ async def test_claim_eligible_jobs_completeness_gate_stays_correlated(
         "daily_position_snapshots.date <= portfolio_aggregation_jobs.aggregation_date"
         in compiled_query
     )
-    assert (
-        "daily_position_snapshots.epoch <= portfolio_aggregation_jobs.target_epoch"
-        in compiled_query
+    assert "max(daily_position_snapshots.epoch)" in compiled_query
+    assert "daily_position_snapshots.epoch <= portfolio_aggregation_jobs.target_epoch" not in (
+        compiled_query
     )
     assert ".updated_at >= daily_position_snapshots_" in compiled_query
     assert "position_timeseries_" in compiled_query
@@ -166,7 +166,7 @@ async def test_claim_eligible_jobs_increments_attempt_count(
     repository: PortfolioAggregationRepository, mock_db_session: AsyncMock
 ):
     eligible_result = MagicMock()
-    eligible_result.fetchall.return_value = [(1,)]
+    eligible_result.fetchall.return_value = [(1, 3, True)]
     claimed_result = MagicMock()
     claimed_result.scalars.return_value.all.return_value = [
         MagicMock(
@@ -194,6 +194,10 @@ async def test_claim_eligible_jobs_increments_attempt_count(
     assert "UPDATE portfolio_aggregation_jobs" in compiled_query
     assert "SET status='PROCESSING'" in compiled_query
     assert "attempt_count=(portfolio_aggregation_jobs.attempt_count + 1)" in compiled_query
+    assert "target_epoch=greatest(portfolio_aggregation_jobs.target_epoch" in compiled_query
+    assert "CASE portfolio_aggregation_jobs.id WHEN 1 THEN 3" in compiled_query
+    assert "CASE portfolio_aggregation_jobs.id WHEN 1 THEN true" in compiled_query
+    assert "source_revision=CASE WHEN" in compiled_query
     assert claimed_jobs[0].aggregation_revision == 4
 
 
@@ -201,7 +205,7 @@ async def test_claim_eligible_jobs_returns_claimed_jobs_in_claim_order(
     repository: PortfolioAggregationRepository, mock_db_session: AsyncMock
 ):
     eligible_result = MagicMock()
-    eligible_result.fetchall.return_value = [(1,), (2,), (3,)]
+    eligible_result.fetchall.return_value = [(1, 3, False), (2, 3, False), (3, 3, False)]
     claimed_result = MagicMock()
     claimed_result.scalars.return_value.all.return_value = [
         MagicMock(
@@ -496,7 +500,7 @@ async def test_claim_eligible_jobs_persists_and_returns_lease_identity(
         expires_at=datetime(2026, 7, 15, 8, 30, tzinfo=timezone.utc),
     )
     eligible_result = MagicMock()
-    eligible_result.fetchall.return_value = [(7,)]
+    eligible_result.fetchall.return_value = [(7, 4, False)]
     claimed_result = MagicMock()
     claimed_result.scalars.return_value.all.return_value = [
         MagicMock(
