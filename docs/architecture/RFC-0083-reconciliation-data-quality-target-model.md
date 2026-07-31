@@ -81,10 +81,10 @@ Target `ReconciliationEvidenceBundle` fields:
 5. epoch or snapshot identity when applicable,
 6. reconciliation status from the target vocabulary,
 7. latest run id, run status, started/completed timestamps, requested by, correlation id, dedupe key,
-8. run summary: examined count, finding count, error count, warning count,
+8. immutable completion-time run summary: examined count, finding count, error count, warning count,
 9. blocking flag and publish/release decision,
 10. top blocking finding reference,
-11. open break count by severity,
+11. current open and blocking break counts by severity, derived from finding lifecycle state,
 12. stale threshold and evidence age,
 13. generated-at timestamp.
 
@@ -124,6 +124,13 @@ Resolution states:
 
 Resolved, waived, and suppressed breaks must not block publication, but they must remain auditable
 where source-data product safety depends on prior exceptions.
+
+Run summaries remain immutable historical occurrence evidence. Current publication status, per-run
+normalized status, open counts, blocking counts, and top finding are derived from the finding rows'
+effective lifecycle state at the response `generated_at` snapshot. A terminal state contributes
+only when its `resolved_at` is at or before that snapshot; a later concurrent resolution remains
+open in that response and becomes closed on a subsequent snapshot. Run pages obtain these summaries
+with one bounded set-based query rather than one query per run.
 
 ## Data-Quality Coverage Report
 

@@ -548,6 +548,10 @@ statuses and finding severities using `reconciliation_quality.py`, with blocking
 precedence over stale, unknown, unreconciled, open-break, partial, or complete evidence. Stale
 evidence precedes unknown and incomplete states, and finding state is reduced with run state so a
 non-blocking open finding cannot hide a stale run.
+Persisted run `summary` remains completion-time history; current open and blocking counts, top
+finding, gate, evidence timestamp, and evidence identity are derived from lifecycle-aware finding
+summaries at the response snapshot. Resolved, waived, and suppressed findings remain auditable but
+do not remain open merely because the immutable run summary recorded them.
 
 The source-data product contract guard statically checks both sides of the binding:
 

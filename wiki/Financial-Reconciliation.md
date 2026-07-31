@@ -64,6 +64,11 @@ evidence age, and fail-closed publication gates. The run-list gate blocks incomp
 windows. This release does not claim an operator command for transitioning findings into terminal
 resolution states.
 
+The persisted run `summary` is immutable completion-time history. Operator-facing current counts,
+per-run status, top blocking finding, and publication gate come from finding lifecycle state at the
+response timestamp. `RESOLVED`, `WAIVED`, and `SUPPRESSED` findings remain auditable without staying
+open; a resolution committed after the response timestamp appears only in the next snapshot.
+
 When multiple trust states contribute to one response, Core applies the shared precedence
 `BLOCKED > STALE > UNKNOWN > UNRECONCILED > BREAK_OPEN > PARTIAL > COMPLETE`. Blank or unrecognized
 states fail closed as `UNKNOWN`. Run and finding evidence are reduced together, so a warning cannot
