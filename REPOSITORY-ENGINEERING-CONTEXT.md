@@ -3329,6 +3329,17 @@ Most relevant current governance:
      its source revision before leasing it, while still requiring every authoritative snapshot to
      have equally fresh position-timeseries materialization. Never hide such work from readiness or
      mark it complete merely because its originally staged per-security epoch is now stale.
+     Position materialization also owns bounded carry-forward restaging for already-existing
+     portfolio aggregation dates that are not snapshot dates for the changed security. Define the
+     interval from the earliest materially changed or unavailable snapshot through the first
+     converged or not-yet-processed snapshot, exclusive; when no later snapshot bounds the domain
+     effect, update only existing rows for that portfolio after the start date. Exact materialized
+     dates continue through the idempotent insert/upsert path and must be excluded from the interval
+     update so source revision advances once. Advance `target_epoch` monotonically and increment
+     `source_revision` for affected `PENDING`, `PROCESSING`, `COMPLETE`, and `FAILED` rows. Rearm
+     terminal rows, preserve a processing lease with `REPROCESS_REQUESTED`, and rely on the existing
+     claim-owned terminal fence to reject superseded completion. Keep this repair set-based and
+     portfolio/date-indexed; never move it into an unbounded historical scan in the hot claim loop.
 226. A positive position epoch is recovery/restatement lineage, not a stale-evidence flag.
      Query-control-plane analytics inputs must preserve `valuation_status=restated` while treating
      rows selected through the exact `PositionTimeseries.epoch == PositionState.epoch` fence as
