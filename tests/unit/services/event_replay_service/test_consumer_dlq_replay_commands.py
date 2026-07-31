@@ -289,6 +289,39 @@ async def test_consumer_dlq_replay_candidate_returns_replayable_context() -> Non
 
 
 @pytest.mark.asyncio
+async def test_consumer_dlq_replay_fingerprint_is_scoped_to_event() -> None:
+    context = SimpleNamespace(
+        endpoint="/ingest/transactions",
+        request_payload={"transactions": [{"transaction_id": "T1"}]},
+        idempotency_key="idem-001",
+    )
+    ingestion_job_service = MagicMock()
+    ingestion_job_service.get_unique_replayable_job_by_correlation_id = AsyncMock(
+        return_value=SimpleNamespace(job_id="job-001", correlation_id="corr-001", status="failed")
+    )
+    ingestion_job_service.get_job_replay_context = AsyncMock(return_value=context)
+    ingestion_job_service.record_consumer_dlq_replay_audit = AsyncMock()
+    service = _consumer_service(ingestion_job_service=ingestion_job_service)
+
+    first = await service._consumer_dlq_replay_candidate_or_result(
+        event_id="dlq-001",
+        correlation_id="corr-001",
+        dry_run=False,
+        requested_by="ops",
+    )
+    second = await service._consumer_dlq_replay_candidate_or_result(
+        event_id="dlq-002",
+        correlation_id="corr-001",
+        dry_run=False,
+        requested_by="ops",
+    )
+
+    assert not isinstance(first, ConsumerDlqReplayResult)
+    assert not isinstance(second, ConsumerDlqReplayResult)
+    assert first.replay_fingerprint != second.replay_fingerprint
+
+
+@pytest.mark.asyncio
 async def test_consumer_dlq_replay_success_audit_failure_is_not_bookkeeping_success() -> None:
     context = SimpleNamespace(endpoint="/ingest/transactions")
     ingestion_job_service = MagicMock()
