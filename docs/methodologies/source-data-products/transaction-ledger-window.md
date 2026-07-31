@@ -101,7 +101,7 @@ this product.
 | `H_txn` | transaction evidence digest | SHA-256 digest of the ordered, material persisted fields for every transaction in `M`. |
 | `H_cost` | cost evidence digest | SHA-256 digest of the ordered transaction-cost rows owned by transactions in `M`. |
 | `H_cash` | selected cashflow evidence digest | SHA-256 digest of the latest cashflow per transaction in `M`, selected by `epoch DESC, id DESC`. |
-| `H_fx` | selected FX evidence digest | SHA-256 digest of the latest applicable reporting FX row per distinct source currency, selected on or before `A`. Same-currency conversion contributes no persisted FX row. |
+| `H_fx` | selected FX evidence digest | SHA-256 digest of the latest applicable reporting FX row per distinct normalized source currency, selected on or before `A` by `rate_date DESC, id DESC`. Same-currency conversion contributes no persisted FX row. |
 
 ## Methodology and Formulas
 
@@ -144,6 +144,11 @@ application receives one bounded value per family rather than assembling or tran
 complete ledger. `skip`, `limit`, sort order, and returned page rows are deliberately excluded.
 Updates to unrelated portfolios, superseded cashflow epochs, unused FX pairs, or FX rows outside
 the selected as-of rule therefore do not change the identity.
+
+Evidence selection and reporting conversion use the same normalized-pair ordering:
+`rate_date DESC, id DESC`. The `id` tie-breaker is required for legacy case variants that the
+raw-string uniqueness constraint can hold on the same date; the selected conversion row and the row
+bound into `H_fx` cannot diverge.
 
 Before the first repository read, the request establishes one PostgreSQL
 `REPEATABLE READ, READ ONLY` transaction snapshot. Portfolio/as-of resolution, material-input

@@ -30,6 +30,10 @@ change the response economics without invalidating the existing scope identity.
    old evidence with corrected page or FX values. The request now establishes
    `REPEATABLE READ, READ ONLY` before its first repository query, covering portfolio/as-of
    resolution, evidence, page rows, instrument checks, and conversion reads.
+8. A corrected-head P2 review found that normalized legacy FX-pair variants on one date could make
+   evidence select highest `id` while conversion selected an unspecified peer. Conversion now uses
+   the identical `rate_date DESC, id DESC` rule. A repository-wide same-pattern review aligned all
+   latest-FX readers and made dated FX series/window ordering deterministic by `(rate_date, id)`.
 
 ## Compatibility
 
@@ -43,7 +47,11 @@ as opaque.
 
 The adjacent `HoldingsAsOf`, cash-balance, and `PortfolioStateSnapshot` identity builders already
 bind full content/source/calculation evidence and do not share the owning-row/count-only defect.
-No additional same-pattern source change was required.
+The corrected-head FX review exposed the same missing `id` tie-breaker in reporting, reconciliation,
+valuation, and timeseries latest-FX readers; these were aligned in scope. Query Service, Query
+Control Plane, and transaction-processing FX series/window readers now order by date and id so
+same-date legacy variants have stable output order and map reduction. A source scan found no
+remaining `FxRate` ordering that uses `rate_date` alone.
 
 ## Validation
 
@@ -59,6 +67,9 @@ No additional same-pattern source change was required.
 6. A two-session PostgreSQL regression committed a transaction and FX correction after the evidence
    statement but before the page read. The in-flight response retained one internally consistent
    pre-correction snapshot; the next request observed both corrections and a new scope id.
+7. A PostgreSQL legacy-variant regression proved same-date `USD/SGD` and `usd/sgd` rows resolve to
+   the same highest-id row for evidence and conversion: changing the unselected row changed neither,
+   while changing the selected row changed both the digest and returned rate.
 
 ## Durable-Truth Decision
 
