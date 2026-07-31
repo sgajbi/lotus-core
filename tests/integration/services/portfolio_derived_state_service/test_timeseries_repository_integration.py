@@ -108,6 +108,19 @@ def _position_ts(
     )
 
 
+def _portfolio_ts(portfolio_id: str, a_date: date, *, epoch: int = 0) -> PortfolioTimeseries:
+    return PortfolioTimeseries(
+        portfolio_id=portfolio_id,
+        date=a_date,
+        epoch=epoch,
+        bod_market_value=Decimal("100"),
+        bod_cashflow=Decimal("0"),
+        eod_cashflow=Decimal("0"),
+        eod_market_value=Decimal("100"),
+        fees=Decimal("0"),
+    )
+
+
 def _transaction(
     transaction_id: str,
     portfolio_id: str,
@@ -266,6 +279,140 @@ async def test_newer_snapshot_refreshes_position_and_rearms_portfolio_day_once(
     )
     assert duplicate_carry_forward_job is not None
     assert duplicate_carry_forward_job.source_revision == 3
+
+
+async def test_unavailable_valuation_invalidates_stale_carry_forward_portfolio_rows(
+    db_engine,
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    portfolio_id = "UNAVAILABLE_CARRY_FORWARD_PORT"
+    security_id = "UNAVAILABLE_CARRY_FORWARD_SEC"
+    unavailable_day = date(2026, 7, 10)
+    first_future_day = date(2026, 7, 11)
+    carry_forward_day = date(2026, 7, 12)
+    convergence_day = date(2026, 7, 13)
+
+    with Session(db_engine) as session:
+        session.add(
+            Portfolio(
+                portfolio_id=portfolio_id,
+                base_currency="USD",
+                open_date=date(2024, 1, 1),
+                risk_exposure="a",
+                investment_time_horizon="b",
+                portfolio_type="c",
+                booking_center_code="d",
+                client_id="e",
+                status="ACTIVE",
+            )
+        )
+        session.add(
+            Instrument(
+                security_id=security_id,
+                name="Unavailable carry-forward instrument",
+                isin="UNAVAILABLE_CARRY_FORWARD_ISIN",
+                currency="USD",
+                product_type="Equity",
+            )
+        )
+        session.flush()
+        unavailable_snapshot = _snapshot(portfolio_id, security_id, unavailable_day, epoch=3)
+        unavailable_snapshot.market_value_local = None
+        unavailable_snapshot.valuation_status = "FAILED"
+        session.add_all(
+            [
+                unavailable_snapshot,
+                _snapshot(portfolio_id, security_id, first_future_day, epoch=3),
+                _snapshot(portfolio_id, security_id, convergence_day, epoch=3),
+            ]
+        )
+        session.add_all(
+            [
+                _position_ts(portfolio_id, security_id, unavailable_day, epoch=3),
+                _position_ts(portfolio_id, security_id, first_future_day, epoch=3),
+            ]
+        )
+        session.add_all(
+            [
+                _portfolio_ts(portfolio_id, unavailable_day, epoch=3),
+                _portfolio_ts(portfolio_id, first_future_day, epoch=3),
+                _portfolio_ts(portfolio_id, carry_forward_day, epoch=2),
+                _portfolio_ts(portfolio_id, carry_forward_day, epoch=3),
+                _portfolio_ts(portfolio_id, convergence_day, epoch=3),
+            ]
+        )
+        session.add_all(
+            [
+                PortfolioAggregationJob(
+                    portfolio_id=portfolio_id,
+                    aggregation_date=a_date,
+                    status="COMPLETE",
+                    target_epoch=3,
+                    source_revision=1,
+                )
+                for a_date in (
+                    unavailable_day,
+                    first_future_day,
+                    carry_forward_day,
+                    convergence_day,
+                )
+            ]
+        )
+        session.commit()
+        snapshot_id = unavailable_snapshot.id
+
+    result = await MaterializePositionTimeseries(
+        repository_provider=_SessionPositionTimeseriesRepositoryProvider(async_db_session)
+    ).execute(
+        MaterializePositionTimeseriesCommand(
+            snapshot_id=snapshot_id,
+            portfolio_id=portfolio_id,
+            security_id=security_id,
+            valuation_date=unavailable_day,
+            epoch=3,
+            correlation_id="corr-unavailable-carry-forward",
+        )
+    )
+
+    portfolio_rows = (
+        (
+            await async_db_session.execute(
+                select(PortfolioTimeseries)
+                .where(PortfolioTimeseries.portfolio_id == portfolio_id)
+                .order_by(PortfolioTimeseries.date, PortfolioTimeseries.epoch)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    aggregation_rows = (
+        (
+            await async_db_session.execute(
+                select(PortfolioAggregationJob)
+                .where(PortfolioAggregationJob.portfolio_id == portfolio_id)
+                .order_by(PortfolioAggregationJob.aggregation_date)
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    assert result.current_day_changed is True
+    assert result.dependent_days_changed == 1
+    assert [(row.date, row.epoch) for row in portfolio_rows] == [
+        (carry_forward_day, 2),
+        (convergence_day, 3),
+    ]
+    assert [
+        (row.aggregation_date, row.status, row.source_revision) for row in aggregation_rows
+    ] == [
+        (unavailable_day, "PENDING", 2),
+        (first_future_day, "PENDING", 2),
+        (carry_forward_day, "PENDING", 2),
+        (convergence_day, "COMPLETE", 1),
+    ]
+    await async_db_session.rollback()
 
 
 async def test_materialization_restages_carry_forward_days_before_convergence(

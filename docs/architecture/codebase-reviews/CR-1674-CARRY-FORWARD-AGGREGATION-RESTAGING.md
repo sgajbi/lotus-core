@@ -46,7 +46,11 @@ Unavailable valuation follows the same fail-closed rule. The current date and di
 next snapshot remain the explicit invalidation set, while existing portfolio jobs are restaged up
 to the next unaffected snapshot boundary. With no later boundary, the domain interval is
 open-ended but the operation remains limited to already-existing rows for one portfolio after the
-changed date.
+changed date. PR review identified that queue restaging alone could leave previously aggregated
+portfolio values readable when missing position materialization prevented recomputation. The
+unavailable path therefore also performs one set-based deletion of same-epoch portfolio outputs
+inside the carry-forward interval. It excludes the explicit dates already invalidated, preserves
+prior-epoch history, and stops before the convergence boundary.
 
 ## Same-Pattern Review
 
@@ -58,6 +62,7 @@ The review covered:
 - dependent-day convergence and command truncation;
 - `PENDING`, leased `PROCESSING`, `COMPLETE`, and `FAILED` rows;
 - exact-date double revision, correlation diagnostics, and active lease preservation;
+- fail-closed portfolio-output invalidation, epoch isolation, and convergence-boundary retention;
 - all callers of aggregation staging and all derived-state repository status transitions.
 
 No second materialization path or duplicate carry-forward repair implementation remains.
@@ -81,7 +86,9 @@ bounded source fencing, same-pattern proof, issue evidence, and exact-main closu
 
 ## Validation
 
-- warning-strict application and repository unit tests: `32 passed`;
+- warning-strict application and repository unit tests: `34 passed` after the review correction;
+- PostgreSQL unavailable-valuation regression: stale same-epoch carry-forward output removed,
+  prior-epoch history and the convergence boundary preserved, and affected work rearmed;
 - PostgreSQL same-epoch, higher-epoch, mixed-status, lease-preservation, convergence-boundary, and
   representative query-plan tests: `2 passed`;
 - complete affected PostgreSQL repository module: `9 passed`;

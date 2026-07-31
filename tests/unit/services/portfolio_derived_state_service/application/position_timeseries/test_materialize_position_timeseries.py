@@ -42,6 +42,7 @@ class InMemoryPositionTimeseriesRepository:
         self.cashflows_by_date: dict[date, list[PositionCashflowRecord]] = {}
         self.upserted: list[PositionTimeseriesRecord] = []
         self.invalidated_dates: list[date] = []
+        self.invalidated_portfolio_intervals: list[dict[str, object]] = []
         self.staged_dates: list[date] = []
         self.staged_epochs: list[int] = []
         self.restaged_intervals: list[dict[str, object]] = []
@@ -95,6 +96,26 @@ class InMemoryPositionTimeseriesRepository:
     ) -> list[PositionCashflowRecord]:
         del portfolio_id, security_id, epoch
         return self.cashflows_by_date.get(a_date, [])
+
+    async def invalidate_portfolio_materializations_in_carry_forward_interval(
+        self,
+        portfolio_id: str,
+        *,
+        start_date: date,
+        end_date_exclusive: date | None,
+        excluded_dates: list[date],
+        epoch: int,
+    ) -> int:
+        self.invalidated_portfolio_intervals.append(
+            {
+                "portfolio_id": portfolio_id,
+                "start_date": start_date,
+                "end_date_exclusive": end_date_exclusive,
+                "excluded_dates": excluded_dates,
+                "epoch": epoch,
+            }
+        )
+        return 0
 
     async def get_last_snapshot_before(
         self, *, portfolio_id: str, security_id: str, a_date: date, epoch: int
@@ -241,6 +262,7 @@ async def test_materialization_persists_changed_day_and_stages_aggregation() -> 
             "correlation_id": "corr-derived-001",
         }
     ]
+    assert repository.invalidated_portfolio_intervals == []
     assert provider.transaction_count == 1
 
 
@@ -299,6 +321,15 @@ async def test_unavailable_valuation_invalidates_current_and_dependent_materiali
             "correlation_id": "corr-derived-001",
         }
     ]
+    assert repository.invalidated_portfolio_intervals == [
+        {
+            "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+            "start_date": failed_snapshot.date,
+            "end_date_exclusive": date(2026, 4, 12),
+            "excluded_dates": [date(2026, 4, 10), date(2026, 4, 11)],
+            "epoch": 3,
+        }
+    ]
     assert repository.upserted == []
     assert provider.transaction_count == 1
 
@@ -326,6 +357,15 @@ async def test_unavailable_valuation_restages_open_ended_carry_forward_scope() -
             "excluded_dates": [failed_snapshot.date],
             "target_epoch": 3,
             "correlation_id": "corr-derived-001",
+        }
+    ]
+    assert repository.invalidated_portfolio_intervals == [
+        {
+            "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+            "start_date": failed_snapshot.date,
+            "end_date_exclusive": None,
+            "excluded_dates": [failed_snapshot.date],
+            "epoch": 3,
         }
     ]
 
