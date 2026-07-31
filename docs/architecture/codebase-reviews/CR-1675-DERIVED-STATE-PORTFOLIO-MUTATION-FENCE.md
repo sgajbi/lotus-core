@@ -57,5 +57,7 @@ database proof, transient-failure recovery, same-pattern review, and exact-main 
 - focused real-PostgreSQL two-session lock proof: passed;
 - targeted Ruff lint and format: passed;
 - configured MyPy across `240` source files: passed;
-- broader repository-native, protected PR, canonical runtime, and exact-main proof: pending before
-  verified issue closure.
+- PR #874 rebase-merged at exact main `23fd3f7251f72e9b16369bb65781393b20babe0a`;
+- exact-main Main Releasability run `30659725118`: passed;
+- #873 is verified closed; #795 remains open for its broader capacity, recovery, poison,
+  duplicate/concurrency, correction, and restatement acceptance matrix.
