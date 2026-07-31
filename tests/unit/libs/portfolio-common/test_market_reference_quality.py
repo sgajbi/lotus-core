@@ -13,6 +13,7 @@ from portfolio_common.market_reference_quality import (
     classify_market_reference_coverage,
     classify_market_reference_point,
     count_market_reference_quality_statuses,
+    market_reference_freshness_status,
     normalize_quality_status,
     quality_status_summary_key,
     resolve_observed_at,
@@ -143,6 +144,34 @@ def test_classify_market_reference_coverage_rejects_negative_estimated_count() -
         classify_market_reference_coverage(
             MarketReferenceCoverageSignal(required_count=1, observed_count=1, estimated_count=-1)
         )
+
+
+@pytest.mark.parametrize(
+    ("data_quality_status", "has_evidence", "has_timestamp", "expected"),
+    [
+        (COMPLETE, True, True, "CURRENT"),
+        (COMPLETE, True, False, PARTIAL),
+        (STALE, True, True, STALE),
+        (UNKNOWN, True, True, UNKNOWN),
+        ("vendor_verified", True, True, UNKNOWN),
+        (BLOCKED, True, True, PARTIAL),
+        (COMPLETE, False, False, "UNAVAILABLE"),
+    ],
+)
+def test_market_reference_freshness_status_preserves_governed_quality(
+    data_quality_status: str,
+    has_evidence: bool,
+    has_timestamp: bool,
+    expected: str,
+) -> None:
+    assert (
+        market_reference_freshness_status(
+            data_quality_status=data_quality_status,
+            has_evidence=has_evidence,
+            has_timestamp=has_timestamp,
+        )
+        == expected
+    )
 
 
 def test_count_market_reference_quality_statuses_fails_closed_for_unrecognized_values() -> None:

@@ -181,10 +181,12 @@ async def test_risk_free_coverage_propagates_stale_quality() -> None:
     response = await service.get_risk_free(currency="USD", request=_request())
 
     assert response.data_quality_status == "STALE"
+    assert response.freshness_status == "STALE"
     assert response.quality_status_distribution == {"accepted": 1, "stale": 1}
     assert response.source_evidence_current is False
     assert response.stale_count == 1
     assert response.publication_gate == "BLOCK"
+    assert "STALE_EVIDENCE" in response.publication_block_reasons
 
 
 @pytest.mark.asyncio

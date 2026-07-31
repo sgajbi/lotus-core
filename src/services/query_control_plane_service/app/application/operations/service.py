@@ -15,6 +15,7 @@ from portfolio_common.reconciliation_quality import (
     STALE,
     UNKNOWN,
     ReconciliationRunSignal,
+    aggregate_reconciliation_statuses,
     classify_finding_status,
     classify_reconciliation_status,
     evidence_age_minutes,
@@ -70,7 +71,6 @@ from .portfolio_readiness import (
     build_portfolio_readiness_response,
 )
 from .runtime_state import (
-    aggregate_reconciliation_statuses,
     analytics_export_operational_state,
     evidence_product_runtime_metadata,
     is_analytics_export_job_stale,
@@ -1681,11 +1681,16 @@ class OperationsService:
         *,
         run_normalized_status: str,
     ) -> str:
-        if summary.blocking_findings:
-            return cast(str, BLOCKED)
-        if summary.open_findings:
-            return cast(str, BREAK_OPEN)
-        return run_normalized_status
+        finding_status = (
+            BLOCKED
+            if summary.blocking_findings
+            else BREAK_OPEN
+            if summary.open_findings
+            else COMPLETE
+        )
+        return aggregate_reconciliation_statuses(
+            [run_normalized_status, finding_status]
+        )
 
     def _build_reconciliation_finding_record(
         self,

@@ -9,11 +9,13 @@ from portfolio_common.market_reference_quality import (
     MarketReferenceQualityCounts,
     classify_market_reference_coverage,
     count_market_reference_quality_distribution,
+    market_reference_freshness_status,
     quality_status_summary_key,
 )
 from portfolio_common.reconciliation_quality import (
     BLOCKED,
     COMPLETE,
+    STALE,
     evidence_age_minutes,
     is_evidence_stale,
 )
@@ -138,8 +140,10 @@ def build_coverage_response(
             identifier_key: identifier_value,
         },
         source_evidence_current=current,
-        freshness_status=(
-            "CURRENT" if current else "UNAVAILABLE" if not observed_dates else "PARTIAL"
+        freshness_status=market_reference_freshness_status(
+            data_quality_status=quality_status,
+            has_evidence=bool(observed_dates),
+            has_timestamp=latest_evidence is not None,
         ),
     )
     coverage_report_id = f"dqc_{content_hash.removeprefix('sha256:')[:32]}"
@@ -266,7 +270,7 @@ def _coverage_publication_block_reasons(
     reasons: list[str] = []
     if blocking_issue_count:
         reasons.append("BLOCKING_QUALITY_ISSUES")
-    if evidence_is_stale:
+    if evidence_is_stale or quality_status == STALE:
         reasons.append("STALE_EVIDENCE")
     if observed_count == 0:
         reasons.append("NO_OBSERVED_COVERAGE")

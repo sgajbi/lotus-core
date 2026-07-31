@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -29,6 +30,16 @@ NON_BLOCKING_FINDING_SEVERITIES = {"WARNING", "INFO"}
 OPEN_FINDING_RESOLUTION_STATES = {"OPEN", "IN_PROGRESS"}
 CLOSED_FINDING_RESOLUTION_STATES = {"RESOLVED", "WAIVED", "SUPPRESSED"}
 FINDING_RESOLUTION_STATES = OPEN_FINDING_RESOLUTION_STATES | CLOSED_FINDING_RESOLUTION_STATES
+
+_AGGREGATE_STATUS_PRECEDENCE = (
+    BLOCKED,
+    STALE,
+    UNKNOWN,
+    UNRECONCILED,
+    BREAK_OPEN,
+    PARTIAL,
+    COMPLETE,
+)
 
 
 @dataclass(frozen=True)
@@ -179,6 +190,28 @@ def reconciliation_bound_data_quality_status(
     if source_status == COMPLETE and control_status == COMPLETE:
         return COMPLETE
     return UNKNOWN
+
+
+def aggregate_reconciliation_statuses(
+    statuses: Iterable[str | None],
+    *,
+    empty_status: str = UNKNOWN,
+) -> str:
+    """Return the strongest governed trust status without losing stale evidence."""
+
+    normalized_statuses = {_normalize_status(status) or UNKNOWN for status in statuses}
+    if not normalized_statuses:
+        normalized_empty_status = _normalize_status(empty_status) or UNKNOWN
+        return (
+            normalized_empty_status
+            if normalized_empty_status in _AGGREGATE_STATUS_PRECEDENCE
+            else UNKNOWN
+        )
+    if normalized_statuses - set(_AGGREGATE_STATUS_PRECEDENCE):
+        normalized_statuses.add(UNKNOWN)
+    return next(
+        status for status in _AGGREGATE_STATUS_PRECEDENCE if status in normalized_statuses
+    )
 
 
 def _validate_data_quality_coverage_signal(signal: DataQualityCoverageSignal) -> None:

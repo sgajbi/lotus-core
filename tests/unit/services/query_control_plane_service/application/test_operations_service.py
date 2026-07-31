@@ -1,10 +1,18 @@
+from dataclasses import replace
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from unittest.mock import AsyncMock, patch
 
 import pytest
 from portfolio_common.observability_contracts import PORTFOLIO_SUPPORTABILITY_METRIC_LABELS
-from portfolio_common.reconciliation_quality import BLOCKED, BREAK_OPEN, COMPLETE, PARTIAL, UNKNOWN
+from portfolio_common.reconciliation_quality import (
+    BLOCKED,
+    BREAK_OPEN,
+    COMPLETE,
+    PARTIAL,
+    STALE,
+    UNKNOWN,
+)
 from prometheus_client import REGISTRY, generate_latest
 
 from src.services.query_control_plane_service.app.application.operations import (
@@ -581,6 +589,7 @@ async def test_operations_service_operational_state_helpers_cover_terminal_and_s
     stale_at = now - timedelta(minutes=30)
     assert OperationsService._aggregate_statuses([]) == UNKNOWN
     assert OperationsService._aggregate_statuses([COMPLETE, BLOCKED]) == BLOCKED
+    assert OperationsService._aggregate_statuses([COMPLETE, "STALE"]) == "STALE"
     assert OperationsService._aggregate_statuses([COMPLETE, BREAK_OPEN]) == BREAK_OPEN
     assert OperationsService._aggregate_statuses([COMPLETE, PARTIAL]) == PARTIAL
     assert OperationsService._aggregate_statuses([COMPLETE, COMPLETE]) == COMPLETE
@@ -2242,6 +2251,40 @@ async def test_reconciliation_evidence_status_aggregation_branches():
     assert (
         OperationsService._aggregate_reconciliation_finding_status(
             [finding("INFO"), finding("ERROR")], total=2
+        )
+        == BLOCKED
+    )
+
+
+async def test_finding_summary_cannot_overwrite_stale_or_blocked_run_status() -> None:
+    warning_summary = ReconciliationFindingSummary(
+        total_findings=1,
+        open_findings=1,
+        blocking_findings=0,
+        warning_findings=1,
+        top_blocking_finding_id=None,
+        top_blocking_finding_type=None,
+        top_blocking_finding_security_id=None,
+        top_blocking_finding_transaction_id=None,
+    )
+    blocking_summary = replace(
+        warning_summary,
+        blocking_findings=1,
+        error_findings=1,
+        warning_findings=0,
+    )
+
+    assert (
+        OperationsService._finding_summary_reconciliation_status(
+            warning_summary,
+            run_normalized_status=STALE,
+        )
+        == STALE
+    )
+    assert (
+        OperationsService._finding_summary_reconciliation_status(
+            blocking_summary,
+            run_normalized_status=STALE,
         )
         == BLOCKED
     )

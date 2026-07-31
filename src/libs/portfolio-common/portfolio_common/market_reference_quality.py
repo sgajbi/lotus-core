@@ -143,6 +143,30 @@ def classify_market_reference_coverage(signal: MarketReferenceCoverageSignal) ->
     return classified
 
 
+def market_reference_freshness_status(
+    *,
+    data_quality_status: str,
+    has_evidence: bool,
+    has_timestamp: bool,
+) -> str:
+    """Project governed reference quality into coherent runtime freshness."""
+
+    if not has_evidence:
+        return "UNAVAILABLE"
+    normalized_status = _normalize_optional_text(data_quality_status)
+    if normalized_status == STALE:
+        return STALE
+    if normalized_status == UNKNOWN or normalized_status not in {
+        BLOCKED,
+        COMPLETE,
+        PARTIAL,
+    }:
+        return UNKNOWN
+    if normalized_status == COMPLETE and has_timestamp:
+        return "CURRENT"
+    return PARTIAL
+
+
 def count_market_reference_quality_statuses(
     statuses: Iterable[str | None],
 ) -> MarketReferenceQualityCounts:
