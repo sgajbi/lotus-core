@@ -177,10 +177,20 @@ class MaterializePositionTimeseries:
             current_snapshot.epoch,
             correlation_id,
         )
+        carry_forward_end_exclusive = (
+            future_snapshots[1].date if len(future_snapshots) > 1 else None
+        )
+        await repository.invalidate_portfolio_materializations_in_carry_forward_interval(
+            current_snapshot.portfolio_id,
+            start_date=current_snapshot.date,
+            end_date_exclusive=carry_forward_end_exclusive,
+            excluded_dates=explicitly_staged_dates,
+            epoch=current_snapshot.epoch,
+        )
         await repository.restage_aggregation_jobs_in_carry_forward_interval(
             current_snapshot.portfolio_id,
             start_date=current_snapshot.date,
-            end_date_exclusive=(future_snapshots[1].date if len(future_snapshots) > 1 else None),
+            end_date_exclusive=carry_forward_end_exclusive,
             excluded_dates=explicitly_staged_dates,
             target_epoch=current_snapshot.epoch,
             correlation_id=correlation_id,

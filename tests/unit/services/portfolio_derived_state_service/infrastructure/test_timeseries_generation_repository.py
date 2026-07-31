@@ -159,6 +159,54 @@ async def test_invalidation_skips_empty_date_set(
     mock_db_session.execute.assert_not_awaited()
 
 
+async def test_unavailable_carry_forward_invalidation_is_bounded_and_epoch_scoped(
+    repository: TimeseriesGenerationRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    mock_db_session.execute.return_value.rowcount = 2
+
+    invalidated_count = (
+        await repository.invalidate_portfolio_materializations_in_carry_forward_interval(
+            "PORT_TS_POS_01",
+            start_date=date(2025, 8, 12),
+            end_date_exclusive=date(2025, 8, 16),
+            excluded_dates=[date(2025, 8, 12), date(2025, 8, 13), date(2025, 8, 13)],
+            epoch=4,
+        )
+    )
+
+    statement = mock_db_session.execute.await_args.args[0]
+    compiled = str(
+        statement.compile(
+            dialect=postgresql.dialect(),
+            compile_kwargs={"literal_binds": True},
+        )
+    )
+    assert invalidated_count == 2
+    assert "DELETE FROM portfolio_timeseries" in compiled
+    assert "portfolio_timeseries.portfolio_id = 'PORT_TS_POS_01'" in compiled
+    assert "portfolio_timeseries.date >= '2025-08-12'" in compiled
+    assert "portfolio_timeseries.date < '2025-08-16'" in compiled
+    assert "portfolio_timeseries.date NOT IN ('2025-08-12', '2025-08-13')" in compiled
+    assert "portfolio_timeseries.epoch = 4" in compiled
+
+
+async def test_unavailable_carry_forward_invalidation_skips_empty_interval(
+    repository: TimeseriesGenerationRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    count = await repository.invalidate_portfolio_materializations_in_carry_forward_interval(
+        "PORT_TS_POS_01",
+        start_date=date(2025, 8, 12),
+        end_date_exclusive=date(2025, 8, 12),
+        excluded_dates=[],
+        epoch=4,
+    )
+
+    assert count == 0
+    mock_db_session.execute.assert_not_awaited()
+
+
 async def test_get_position_timeseries_for_dates_returns_immutable_records(
     repository: TimeseriesGenerationRepository, mock_db_session: AsyncMock
 ):

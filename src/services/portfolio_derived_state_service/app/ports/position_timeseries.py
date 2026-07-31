@@ -54,6 +54,18 @@ class PositionTimeseriesRepository(Protocol):
         epoch: int,
     ) -> set[date]: ...
 
+    async def invalidate_portfolio_materializations_in_carry_forward_interval(
+        self,
+        portfolio_id: str,
+        *,
+        start_date: date,
+        end_date_exclusive: date | None,
+        excluded_dates: list[date],
+        epoch: int,
+    ) -> int:
+        """Remove stale portfolio outputs across an unavailable position interval."""
+        ...
+
     async def get_all_cashflows_for_security_date(
         self,
         portfolio_id: str,

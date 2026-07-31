@@ -155,6 +155,50 @@ class TimeseriesGenerationRepository(TimeseriesMarketDataReader):
         )
         return invalidated_dates
 
+    async def invalidate_portfolio_materializations_in_carry_forward_interval(
+        self,
+        portfolio_id: str,
+        *,
+        start_date: date,
+        end_date_exclusive: date | None,
+        excluded_dates: list[date],
+        epoch: int,
+    ) -> int:
+        """Fail closed for portfolio outputs that depend on unavailable position state."""
+
+        if epoch < 0:
+            raise ValueError("Portfolio timeseries epoch cannot be negative.")
+        if end_date_exclusive is not None and end_date_exclusive <= start_date:
+            return 0
+
+        normalized_excluded_dates = sorted(set(excluded_dates))
+        predicates = [
+            PortfolioTimeseries.portfolio_id == portfolio_id,
+            PortfolioTimeseries.date >= start_date,
+            PortfolioTimeseries.epoch == epoch,
+        ]
+        if end_date_exclusive is not None:
+            predicates.append(PortfolioTimeseries.date < end_date_exclusive)
+        if normalized_excluded_dates:
+            predicates.append(PortfolioTimeseries.date.not_in(normalized_excluded_dates))
+
+        result = await self.db.execute(delete(PortfolioTimeseries).where(*predicates))
+        invalidated_count = int(result.rowcount or 0)
+        logger.warning(
+            "Invalidated portfolio time-series in an unavailable valuation interval.",
+            extra={
+                "portfolio_id": portfolio_id,
+                "portfolio_date_from": start_date.isoformat(),
+                "portfolio_date_to_exclusive": (
+                    end_date_exclusive.isoformat() if end_date_exclusive else None
+                ),
+                "excluded_materialized_day_count": len(normalized_excluded_dates),
+                "invalidated_day_count": invalidated_count,
+                "epoch": epoch,
+            },
+        )
+        return invalidated_count
+
     @async_timed(repository="TimeseriesRepository", method="get_all_cashflows_for_security_date")
     async def get_all_cashflows_for_security_date(
         self, portfolio_id: str, security_id: str, a_date: date, epoch: int
