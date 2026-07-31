@@ -51,15 +51,24 @@ async def wait_for_task_signal(
         await asyncio.gather(signal_task, return_exceptions=True)
 
 
-async def cancel_pending_tasks(*tasks: Awaitable[object] | None) -> None:
-    """Cancel and await unfinished tasks without masking the original test failure."""
+async def cancel_pending_tasks(
+    *tasks: Awaitable[object] | None,
+    timeout: float = 1,
+) -> None:
+    """Cancel unfinished tasks without allowing cleanup to hang the test job."""
 
     concrete_tasks = [task for task in tasks if isinstance(task, asyncio.Task)]
     for task in concrete_tasks:
         if not task.done():
             task.cancel()
-    if concrete_tasks:
-        await asyncio.gather(*concrete_tasks, return_exceptions=True)
+    if not concrete_tasks:
+        return
+
+    done, pending = await asyncio.wait(concrete_tasks, timeout=timeout)
+    if done:
+        await asyncio.gather(*done, return_exceptions=True)
+    for task in pending:
+        task.add_done_callback(_consume_task_outcome)
 
 
 async def wait_for_postgres_advisory_lock_wait(

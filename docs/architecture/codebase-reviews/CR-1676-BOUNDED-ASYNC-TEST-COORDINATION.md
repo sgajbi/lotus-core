@@ -27,7 +27,9 @@ observer then requires `pg_locks` to expose an ungranted advisory lock for that 
 the first transaction is released. The tests subsequently prove acquisition and clean completion.
 Observer connection checkout, every query, and cancellation observation share the same remaining
 deadline while the contender task remains supervised. Cleanup that ignores cancellation is detached
-with its eventual outcome consumed rather than extending the caller's deadline. The adjacent
+with its eventual outcome consumed rather than extending the caller's deadline. The shared pending
+task cleanup helper applies the same rule under its own explicit bound, so SQLAlchemy/asyncpg
+transaction cleanup cannot turn an assertion failure into a job-timeout hang. The adjacent
 cost-basis FIFO concurrency proof now uses the same supervised signals, exact-backend `pg_locks`
 evidence, and `finally` cleanup for its buy, sell, and replay tasks. These tests no longer infer
 serialization from a sleep or from client-side call ordering.
@@ -51,7 +53,7 @@ same-pattern review, so central context and skills are also unchanged.
 
 ## Validation
 
-- warning-strict task-coordination unit tests: `9 passed`;
+- warning-strict task-coordination unit tests: `10 passed`;
 - real PostgreSQL derived-state, position-history, and cost-basis concurrency tests: `3 passed`;
 - targeted Ruff lint and format: passed;
 - targeted configured MyPy: passed;

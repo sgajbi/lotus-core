@@ -104,6 +104,29 @@ async def test_wait_for_task_signal_times_out_and_cleanup_cancels_producer() -> 
     assert task.cancelled()
 
 
+async def test_cancel_pending_tasks_bounds_cancellation_resistant_cleanup() -> None:
+    release_cleanup = asyncio.Event()
+    cleanup_finished = asyncio.Event()
+
+    async def cancellation_resistant_task() -> None:
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            await release_cleanup.wait()
+            raise
+        finally:
+            cleanup_finished.set()
+
+    task = asyncio.create_task(cancellation_resistant_task())
+    await asyncio.sleep(0)
+    await asyncio.wait_for(cancel_pending_tasks(task, timeout=0.01), timeout=0.1)
+    assert task.done() is False
+
+    release_cleanup.set()
+    await asyncio.wait_for(cleanup_finished.wait(), timeout=0.1)
+    await asyncio.gather(task, return_exceptions=True)
+
+
 async def test_advisory_lock_wait_returns_on_server_visible_wait() -> None:
     task = asyncio.create_task(asyncio.Event().wait())
     try:
