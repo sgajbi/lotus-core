@@ -49,6 +49,28 @@ def upgrade() -> None:
           AND dlq.ingestion_job_id IS NULL
         """
     )
+    # Pending and failed rows can still publish after deployment. Preserve ownership only
+    # when their correlation maps to one job; ambiguous legacy rows remain fail-closed.
+    op.execute(
+        """
+        WITH unique_owners AS (
+            SELECT outbox.id AS outbox_id, min(job.job_id) AS ingestion_job_id
+            FROM outbox_events AS outbox
+            JOIN ingestion_jobs AS job
+              ON job.correlation_id = outbox.correlation_id
+            WHERE outbox.status IN ('PENDING', 'FAILED')
+              AND outbox.correlation_id IS NOT NULL
+              AND btrim(outbox.correlation_id) <> ''
+            GROUP BY outbox.id
+            HAVING count(*) = 1
+        )
+        UPDATE outbox_events AS outbox
+        SET ingestion_job_id = owner.ingestion_job_id
+        FROM unique_owners AS owner
+        WHERE outbox.id = owner.outbox_id
+          AND outbox.ingestion_job_id IS NULL
+        """
+    )
     op.create_foreign_key(
         _DLQ_JOB_FK,
         _DLQ_TABLE,

@@ -75,14 +75,18 @@ def test_ingestion_dlq_job_ownership_migration_is_bounded_and_reversible(
     backfill = operations[2][1]
     assert "GROUP BY dlq.id" in backfill
     assert "HAVING count(*) = 1" in backfill
-    assert operations[3][-1] == {"postgresql_not_valid": True}
-    assert "VALIDATE CONSTRAINT" in operations[4][1]
-    assert operations[5][0:3] == (
+    outbox_backfill = operations[3][1]
+    assert "GROUP BY outbox.id" in outbox_backfill
+    assert "outbox.status IN ('PENDING', 'FAILED')" in outbox_backfill
+    assert "HAVING count(*) = 1" in outbox_backfill
+    assert operations[4][-1] == {"postgresql_not_valid": True}
+    assert "VALIDATE CONSTRAINT" in operations[5][1]
+    assert operations[6][0:3] == (
         "create_index",
         "ix_consumer_dlq_events_job_observed_id",
         "consumer_dlq_events",
     )
-    assert operations[6][0:3] == (
+    assert operations[7][0:3] == (
         "create_index",
         "ix_consumer_dlq_replay_audit_job_requested_id",
         "consumer_dlq_replay_audit",

@@ -103,6 +103,31 @@ def test_migration_backfills_only_unique_correlation_owner_and_enforces_fk(
                 ),
                 {"event_id": event_id, "correlation_id": correlation_id},
             )
+        for aggregate_id, status, correlation_id in (
+            ("outbox-pending-unique", "PENDING", "corr-unique"),
+            ("outbox-failed-unique", "FAILED", "corr-unique"),
+            ("outbox-pending-shared", "PENDING", "corr-shared"),
+            ("outbox-processed-unique", "PROCESSED", "corr-unique"),
+        ):
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO outbox_events (
+                        aggregate_type, aggregate_id, partition_key, event_type,
+                        payload, topic, status, correlation_id, retry_count, created_at
+                    ) VALUES (
+                        'transaction', :aggregate_id, :aggregate_id, 'TransactionPersisted',
+                        CAST('{}' AS json), 'transactions.persisted', :status, :correlation_id,
+                        0, now()
+                    )
+                    """
+                ),
+                {
+                    "aggregate_id": aggregate_id,
+                    "status": status,
+                    "correlation_id": correlation_id,
+                },
+            )
 
         migration["upgrade"]()
         owners = dict(
@@ -119,6 +144,23 @@ def test_migration_backfills_only_unique_correlation_owner_and_enforces_fk(
         assert owners == {
             "dlq-unique": "job-unique",
             "dlq-shared": None,
+        }
+        outbox_owners = dict(
+            connection.execute(
+                text(
+                    """
+                    SELECT aggregate_id, ingestion_job_id
+                    FROM outbox_events
+                    WHERE aggregate_id LIKE 'outbox-%'
+                    """
+                )
+            ).all()
+        )
+        assert outbox_owners == {
+            "outbox-pending-unique": "job-unique",
+            "outbox-failed-unique": "job-unique",
+            "outbox-pending-shared": None,
+            "outbox-processed-unique": None,
         }
 
         savepoint = connection.begin_nested()
