@@ -1,5 +1,5 @@
 import asyncio
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -29,7 +29,8 @@ from portfolio_common.timeseries_constants import (
     DEPENDENT_POSITION_TIMESERIES_PROPAGATION_ROW_CAP,
 )
 from portfolio_common.valuation_runtime_settings import get_valuation_runtime_settings
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import update
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import sessionmaker
 
 from src.services.query_control_plane_service.app.application.operations import (
@@ -494,6 +495,231 @@ async def test_reconciliation_runs_return_coherent_snapshot_under_run_churn(
     assert response.items[0].correlation_id == "corr-recon-run-old"
     assert response.items[0].failure_reason is None
     assert response.items[0].operational_state == "COMPLETED"
+
+
+async def test_reconciliation_run_gate_tracks_current_finding_lifecycle(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    async_db_session.add(
+        Portfolio(
+            portfolio_id="P6",
+            base_currency="USD",
+            open_date=date(2025, 1, 1),
+            risk_exposure="MODERATE",
+            investment_time_horizon="MEDIUM_TERM",
+            portfolio_type="DISCRETIONARY",
+            booking_center_code="SG",
+            client_id="CLIENT-P6",
+            is_leverage_allowed=False,
+            status="ACTIVE",
+        )
+    )
+    async_db_session.add(
+        FinancialReconciliationRun(
+            run_id="recon-lifecycle-current",
+            reconciliation_type="transaction_cashflow",
+            portfolio_id="P6",
+            business_date=date(2025, 8, 30),
+            epoch=2,
+            status="COMPLETED",
+            requested_by="pipeline_orchestrator_service",
+            dedupe_key="recon:transaction_cashflow:P6:2025-08-30:2",
+            correlation_id="corr-recon-lifecycle-current",
+            summary={"error_count": 2, "warning_count": 1},
+            started_at=datetime(2025, 8, 30, 11, 45, tzinfo=timezone.utc),
+            completed_at=datetime(2025, 8, 30, 11, 50, tzinfo=timezone.utc),
+            created_at=datetime(2025, 8, 30, 11, 45, tzinfo=timezone.utc),
+            updated_at=datetime(2025, 8, 30, 11, 50, tzinfo=timezone.utc),
+        )
+    )
+    await async_db_session.commit()
+    async_db_session.add_all(
+        [
+            FinancialReconciliationFinding(
+                finding_id=f"finding-closed-{resolution_state.lower()}",
+                run_id="recon-lifecycle-current",
+                reconciliation_type="transaction_cashflow",
+                finding_type="historical_break",
+                severity=severity,
+                portfolio_id="P6",
+                business_date=date(2025, 8, 30),
+                epoch=2,
+                detail={"message": "historical finding"},
+                owner="TRANSACTION_OPERATIONS",
+                resolution_state=resolution_state,
+                resolution_actor="operator@lotus.local",
+                resolved_at=datetime(2025, 8, 30, 11, 55, tzinfo=timezone.utc),
+                repair_recommendation="REVIEW_RECONCILIATION_BREAK",
+                created_at=datetime(2025, 8, 30, 11, 40, tzinfo=timezone.utc),
+            )
+            for resolution_state, severity in (
+                ("RESOLVED", "ERROR"),
+                ("WAIVED", "WARNING"),
+                ("SUPPRESSED", "INFO"),
+            )
+        ]
+    )
+    await async_db_session.commit()
+    service = OperationsService(OperationsRepository(async_db_session))
+
+    with patch.object(operations_service_module, "datetime", _FixedDateTime):
+        closed_response = await service.get_reconciliation_runs("P6", skip=0, limit=10)
+
+    assert closed_response.publication_gate == "ALLOW"
+    assert closed_response.reconciliation_status == "COMPLETE"
+    assert closed_response.open_break_count_by_severity == {}
+    assert closed_response.items[0].summary == {"error_count": 2, "warning_count": 1}
+    assert closed_response.items[0].open_break_count == 0
+
+    async_db_session.add(
+        FinancialReconciliationFinding(
+            finding_id="finding-current-error",
+            run_id="recon-lifecycle-current",
+            reconciliation_type="transaction_cashflow",
+            finding_type="current_break",
+            severity="ERROR",
+            portfolio_id="P6",
+            business_date=date(2025, 8, 30),
+            epoch=2,
+            detail={"message": "current finding"},
+            owner="TRANSACTION_OPERATIONS",
+            resolution_state="OPEN",
+            repair_recommendation="REVIEW_RECONCILIATION_BREAK",
+            created_at=datetime(2025, 8, 30, 11, 58, tzinfo=timezone.utc),
+        )
+    )
+    await async_db_session.commit()
+
+    with patch.object(operations_service_module, "datetime", _FixedDateTime):
+        open_response = await service.get_reconciliation_runs("P6", skip=0, limit=10)
+
+    assert open_response.publication_gate == "BLOCK"
+    assert open_response.reconciliation_status == "BLOCKED"
+    assert open_response.open_break_count_by_severity == {"ERROR": 1}
+    assert open_response.items[0].summary == {"error_count": 2, "warning_count": 1}
+    assert open_response.items[0].open_break_count == 1
+    assert open_response.items[0].blocking_break_count == 1
+    assert open_response.items[0].top_blocking_finding_id == "finding-current-error"
+    assert open_response.reconciliation_evidence_id != closed_response.reconciliation_evidence_id
+
+
+async def test_reconciliation_run_gate_is_coherent_during_concurrent_resolution(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    async_db_session.add(
+        Portfolio(
+            portfolio_id="P7",
+            base_currency="USD",
+            open_date=date(2025, 1, 1),
+            risk_exposure="MODERATE",
+            investment_time_horizon="MEDIUM_TERM",
+            portfolio_type="DISCRETIONARY",
+            booking_center_code="SG",
+            client_id="CLIENT-P7",
+            is_leverage_allowed=False,
+            status="ACTIVE",
+        )
+    )
+    async_db_session.add(
+        FinancialReconciliationRun(
+            run_id="recon-concurrent-resolution",
+            reconciliation_type="transaction_cashflow",
+            portfolio_id="P7",
+            business_date=date(2025, 8, 30),
+            epoch=2,
+            status="COMPLETED",
+            requested_by="pipeline_orchestrator_service",
+            dedupe_key="recon:transaction_cashflow:P7:2025-08-30:2",
+            correlation_id="corr-recon-concurrent-resolution",
+            summary={"error_count": 1, "warning_count": 0},
+            started_at=datetime(2025, 8, 30, 11, 45, tzinfo=timezone.utc),
+            completed_at=datetime(2025, 8, 30, 11, 50, tzinfo=timezone.utc),
+            created_at=datetime(2025, 8, 30, 11, 45, tzinfo=timezone.utc),
+            updated_at=datetime(2025, 8, 30, 11, 50, tzinfo=timezone.utc),
+        )
+    )
+    await async_db_session.commit()
+    async_db_session.add(
+        FinancialReconciliationFinding(
+            finding_id="finding-concurrent-resolution",
+            run_id="recon-concurrent-resolution",
+            reconciliation_type="transaction_cashflow",
+            finding_type="current_break",
+            severity="ERROR",
+            portfolio_id="P7",
+            business_date=date(2025, 8, 30),
+            epoch=2,
+            detail={"message": "current finding"},
+            owner="TRANSACTION_OPERATIONS",
+            resolution_state="OPEN",
+            repair_recommendation="REVIEW_RECONCILIATION_BREAK",
+            created_at=datetime(2025, 8, 30, 11, 55, tzinfo=timezone.utc),
+        )
+    )
+    await async_db_session.commit()
+    second_session_factory = async_sessionmaker(
+        bind=async_db_session.bind,
+        expire_on_commit=False,
+    )
+
+    class ResolvingOperationsRepository(OperationsRepository):
+        resolved = False
+
+        async def get_reconciliation_finding_summaries(self, run_ids, as_of=None):
+            if not self.resolved:
+                async with second_session_factory() as second_session:
+                    await second_session.execute(
+                        update(FinancialReconciliationFinding)
+                        .where(
+                            FinancialReconciliationFinding.finding_id
+                            == "finding-concurrent-resolution"
+                        )
+                        .values(
+                            resolution_state="RESOLVED",
+                            resolution_actor="operator@lotus.local",
+                            resolved_at=FIXED_GENERATED_AT + timedelta(seconds=1),
+                        )
+                    )
+                    await second_session.commit()
+                self.resolved = True
+            return await super().get_reconciliation_finding_summaries(
+                run_ids,
+                as_of=as_of,
+            )
+
+    service = OperationsService(ResolvingOperationsRepository(async_db_session))
+
+    with patch.object(operations_service_module, "datetime", _FixedDateTime):
+        snapshot_response = await service.get_reconciliation_runs("P7", skip=0, limit=10)
+
+    assert snapshot_response.generated_at_utc == FIXED_GENERATED_AT
+    assert snapshot_response.reconciliation_status == "BLOCKED"
+    assert snapshot_response.publication_gate == "BLOCK"
+    assert snapshot_response.items[0].open_break_count == 1
+
+    class _AfterResolutionDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            after_resolution = FIXED_GENERATED_AT + timedelta(seconds=2)
+            if tz is None:
+                return after_resolution.replace(tzinfo=None)
+            return after_resolution.astimezone(tz)
+
+    with patch.object(
+        operations_service_module,
+        "datetime",
+        _AfterResolutionDateTime,
+    ):
+        resolved_response = await service.get_reconciliation_runs("P7", skip=0, limit=10)
+
+    assert resolved_response.reconciliation_status == "COMPLETE"
+    assert resolved_response.publication_gate == "ALLOW"
+    assert resolved_response.items[0].open_break_count == 0
+    assert (
+        resolved_response.reconciliation_evidence_id != snapshot_response.reconciliation_evidence_id
+    )
 
 
 async def test_reconciliation_findings_return_coherent_snapshot_under_finding_churn(
