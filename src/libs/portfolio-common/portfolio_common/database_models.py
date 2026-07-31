@@ -2638,6 +2638,7 @@ class OutboxEvent(Base):
     topic = Column(String, nullable=False)
     status = Column(String, default="PENDING", nullable=False, index=True)
     correlation_id = Column(String, nullable=True)
+    ingestion_job_id = Column(String, nullable=True)
     correlation_missing_reason = Column(String, nullable=True)
     alternate_lookup_key = Column(String, nullable=True)
     retry_count = Column(Integer, default=0, nullable=False)
@@ -3021,6 +3022,11 @@ class ConsumerDlqEvent(Base):
     )
     error_reason = Column(Text, nullable=False)
     correlation_id = Column(String, nullable=True)
+    ingestion_job_id = Column(
+        String,
+        ForeignKey("ingestion_jobs.job_id"),
+        nullable=True,
+    )
     correlation_missing_reason = Column(String, nullable=True)
     alternate_lookup_key = Column(String, nullable=True)
     payload_excerpt = Column(Text, nullable=True)
@@ -3034,6 +3040,12 @@ class ConsumerDlqEvent(Base):
             observed_at.desc(),
         ),
         Index("ix_consumer_dlq_events_alternate_lookup_key", "alternate_lookup_key"),
+        Index(
+            "ix_consumer_dlq_events_job_observed_id",
+            "ingestion_job_id",
+            observed_at.desc(),
+            id.desc(),
+        ),
     )
 
 
@@ -3072,6 +3084,12 @@ class ConsumerDlqReplayAudit(Base):
             requested_at.desc(),
         ),
         Index("ix_consumer_dlq_replay_audit_alternate_lookup_key", "alternate_lookup_key"),
+        Index(
+            "ix_consumer_dlq_replay_audit_job_requested_id",
+            "job_id",
+            requested_at.desc(),
+            id.desc(),
+        ),
     )
 
 

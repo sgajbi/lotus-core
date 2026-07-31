@@ -38,6 +38,7 @@ def to_consumer_dlq_event_response(event: DBConsumerDlqEvent) -> ConsumerDlqEven
         error_reason_code=event.error_reason_code,
         error_reason=event.error_reason,
         correlation_id=event.correlation_id,
+        ingestion_job_id=getattr(event, "ingestion_job_id", None),
         correlation_missing_reason=_missing_correlation_reason(event),
         alternate_lookup_key=_alternate_lookup_key(event),
         payload_excerpt=event.payload_excerpt,
@@ -52,6 +53,7 @@ async def list_consumer_dlq_event_responses(
     consumer_group: str | None,
     session_factory,
     correlation_id: str | None = None,
+    ingestion_job_id: str | None = None,
     event_ids: tuple[str, ...] | None = None,
 ) -> list[ConsumerDlqEventResponse]:
     async for db in session_factory():
@@ -62,10 +64,17 @@ async def list_consumer_dlq_event_responses(
             stmt = stmt.where(DBConsumerDlqEvent.consumer_group == consumer_group)
         if correlation_id:
             stmt = stmt.where(DBConsumerDlqEvent.correlation_id == correlation_id)
+        if ingestion_job_id:
+            stmt = stmt.where(DBConsumerDlqEvent.ingestion_job_id == ingestion_job_id)
         if event_ids:
             stmt = stmt.where(DBConsumerDlqEvent.event_id.in_(event_ids))
         rows = (
-            await db.scalars(stmt.order_by(desc(DBConsumerDlqEvent.observed_at)).limit(limit))
+            await db.scalars(
+                stmt.order_by(
+                    desc(DBConsumerDlqEvent.observed_at),
+                    desc(DBConsumerDlqEvent.id),
+                ).limit(limit)
+            )
         ).all()
         return [to_consumer_dlq_event_response(row) for row in rows]
     return []

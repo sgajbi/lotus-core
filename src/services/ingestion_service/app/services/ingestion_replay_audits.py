@@ -59,7 +59,10 @@ async def list_replay_audit_responses(
             stmt = stmt.where(DBConsumerDlqReplayAudit.job_id == job_id)
         rows = (
             await db.scalars(
-                stmt.order_by(desc(DBConsumerDlqReplayAudit.requested_at)).limit(limit)
+                stmt.order_by(
+                    desc(DBConsumerDlqReplayAudit.requested_at),
+                    desc(DBConsumerDlqReplayAudit.id),
+                ).limit(limit)
             )
         ).all()
         return [to_replay_audit_response(row) for row in rows]
@@ -96,7 +99,12 @@ async def find_successful_replay_audit_by_fingerprint_response(
         )
         if recovery_path is not None:
             stmt = stmt.where(DBConsumerDlqReplayAudit.recovery_path == recovery_path)
-        row = await db.scalar(stmt.order_by(desc(DBConsumerDlqReplayAudit.requested_at)).limit(1))
+        row = await db.scalar(
+            stmt.order_by(
+                desc(DBConsumerDlqReplayAudit.requested_at),
+                desc(DBConsumerDlqReplayAudit.id),
+            ).limit(1)
+        )
         if row is None:
             return None
         return {"replay_id": row.replay_id, "replay_status": row.replay_status}

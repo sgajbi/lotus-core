@@ -39,6 +39,14 @@ class ConsumerDlqEventResponse(BaseModel):
         description="Correlation identifier associated with the failed message.",
         examples=["ING:7f4a64b0-35f4-41bc-8f74-cb556f2ad9a3"],
     )
+    ingestion_job_id: str | None = Field(
+        default=None,
+        description=(
+            "Durable ingestion-job owner propagated with the event; correlation_id remains "
+            "observability metadata and is not used for evidence membership."
+        ),
+        examples=["job_01J5S0J6D3BAVMK2E1V0WQ7MCC"],
+    )
     correlation_missing_reason: str | None = Field(
         default=None,
         description=(

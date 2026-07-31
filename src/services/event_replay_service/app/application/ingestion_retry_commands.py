@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
+from portfolio_common.ingestion_lineage import ingestion_job_scope
+
 from src.services.ingestion_service.app.DTOs.ingestion_job_dto import IngestionRetryRequest
 from src.services.ingestion_service.app.services.ingestion_job_service import IngestionJobService
 
@@ -283,6 +285,7 @@ class IngestionRetryCommandService:
     ) -> None:
         try:
             await _replay_job_payload(
+                job_id=job_id,
                 endpoint=context.endpoint,
                 payload=replay_payload,
                 idempotency_key=context.idempotency_key,
@@ -517,16 +520,18 @@ class IngestionRetryCommandService:
 
 async def _replay_job_payload(
     *,
+    job_id: str,
     endpoint: str,
     payload: dict[str, Any],
     idempotency_key: str | None,
     replay_payload_dispatcher: ReplayPayloadDispatcher,
 ) -> None:
-    await replay_payload_dispatcher.replay_payload(
-        endpoint=endpoint,
-        payload=payload,
-        idempotency_key=idempotency_key,
-    )
+    with ingestion_job_scope(job_id):
+        await replay_payload_dispatcher.replay_payload(
+            endpoint=endpoint,
+            payload=payload,
+            idempotency_key=idempotency_key,
+        )
 
 
 def ingestion_job_retry_problem_detail(

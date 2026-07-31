@@ -26,6 +26,11 @@ from .config import (
 from .database_models import ConsumerDlqEvent
 from .db import get_async_db_session
 from .exceptions import RetryableConsumerError
+from .ingestion_lineage import (
+    INGESTION_JOB_ID_HEADER,
+    ingestion_job_id_var,
+    normalize_ingestion_job_id,
+)
 from .kafka_consumer_execution import (
     KafkaConsumerExecutionProfile,
     load_kafka_consumer_execution_profile,
@@ -382,6 +387,15 @@ class BaseConsumer(ABC):
                     return normalize_traceparent(_decode_optional_utf8(value) if value else None)
         return None
 
+    def _get_message_header_ingestion_job_id(self, msg: Message) -> Optional[str]:
+        if msg.headers():
+            for key, value in msg.headers():
+                if key == INGESTION_JOB_ID_HEADER:
+                    return normalize_ingestion_job_id(
+                        _decode_optional_utf8(value) if value else None
+                    )
+        return None
+
     @contextmanager
     def _message_correlation_context(
         self,
@@ -397,6 +411,7 @@ class BaseConsumer(ABC):
         current = correlation_id_var.get()
         token = None
         traceparent_token = None
+        ingestion_job_token = None
         resolved = self._resolve_context_correlation_id(
             msg,
             current,
@@ -409,10 +424,16 @@ class BaseConsumer(ABC):
             traceparent = self._get_message_header_traceparent(msg)
             if traceparent is not None:
                 traceparent_token = traceparent_var.set(traceparent)
+        if normalize_ingestion_job_id(ingestion_job_id_var.get()) is None:
+            ingestion_job_id = self._get_message_header_ingestion_job_id(msg)
+            if ingestion_job_id is not None:
+                ingestion_job_token = ingestion_job_id_var.set(ingestion_job_id)
 
         try:
             yield resolved
         finally:
+            if ingestion_job_token is not None:
+                ingestion_job_id_var.reset(ingestion_job_token)
             if traceparent_token is not None:
                 traceparent_var.reset(traceparent_token)
             if token is not None:
@@ -473,12 +494,14 @@ class BaseConsumer(ABC):
             message_correlation_id = normalize_lineage_value(
                 self._get_message_header_correlation_id(msg)
             )
+            ingestion_job_id = normalize_ingestion_job_id(ingestion_job_id_var.get())
             error_reason_code = classify_dlq_reason_code(error)
             dlq_payload = self._build_dlq_payload(
                 msg,
                 error,
                 error_reason_code=error_reason_code,
                 correlation_id=correlation_id,
+                ingestion_job_id=ingestion_job_id,
                 traceparent=traceparent,
             )
             dlq_headers = self._build_dlq_headers(
@@ -493,6 +516,7 @@ class BaseConsumer(ABC):
                 error=error,
                 error_reason_code=error_reason_code,
                 correlation_id=message_correlation_id,
+                ingestion_job_id=ingestion_job_id,
             )
             self._record_consumer_event("dlq_published", error_reason_code)
             self._log_consumer_event(
@@ -525,9 +549,11 @@ class BaseConsumer(ABC):
         error_reason_code: str,
         correlation_id: str | None,
         traceparent: str | None,
+        ingestion_job_id: str | None = None,
     ) -> dict[str, object]:
         return {
             "correlation_id": correlation_id,
+            "ingestion_job_id": ingestion_job_id,
             "traceparent": traceparent,
             "original_topic": msg.topic(),
             "original_key": self._message_key_text(msg),
@@ -605,6 +631,7 @@ class BaseConsumer(ABC):
         error: Exception,
         error_reason_code: str,
         correlation_id: str | None,
+        ingestion_job_id: str | None = None,
     ) -> None:
         payload_excerpt = None
         try:
@@ -621,6 +648,7 @@ class BaseConsumer(ABC):
             error_reason_code=error_reason_code,
             error_reason=_source_safe_error_reason(error),
             correlation_id=correlation_id,
+            ingestion_job_id=ingestion_job_id,
             correlation_missing_reason=(
                 None if correlation_id else "message_correlation_id_absent"
             ),
@@ -928,6 +956,7 @@ class BaseConsumer(ABC):
     ) -> None:
         token = None
         traceparent_token = None
+        ingestion_job_token = None
         start_time = time.monotonic()
         processed_successfully = False
         processing_outcome = "success"
@@ -938,6 +967,9 @@ class BaseConsumer(ABC):
             traceparent = self._get_message_header_traceparent(msg)
             if traceparent:
                 traceparent_token = traceparent_var.set(traceparent)
+            ingestion_job_id = self._get_message_header_ingestion_job_id(msg)
+            if ingestion_job_id:
+                ingestion_job_token = ingestion_job_id_var.set(ingestion_job_id)
 
             while True:
                 self._record_consumer_event("processing_attempt", "message_polled")
@@ -977,6 +1009,8 @@ class BaseConsumer(ABC):
                 correlation_id_var.reset(token)
             if traceparent_token:
                 traceparent_var.reset(traceparent_token)
+            if ingestion_job_token:
+                ingestion_job_id_var.reset(ingestion_job_token)
 
     def _should_skip_polled_message(self, msg: Message) -> bool:
         error = msg.error()

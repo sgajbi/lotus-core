@@ -4,6 +4,8 @@ import logging
 from dataclasses import asdict, dataclass
 from typing import Any
 
+from portfolio_common.ingestion_lineage import ingestion_job_scope
+
 from src.services.ingestion_service.app.services.ingestion_job_service import IngestionJobService
 
 from .replay_command_errors import ReplayCommandError
@@ -60,7 +62,8 @@ class ConsumerDlqReplayCommandService:
         command: ConsumerDlqReplayCommand,
     ) -> ConsumerDlqReplayResult:
         event = await self._required_consumer_dlq_event(event_id)
-        if not event.correlation_id:
+        ingestion_job_id = getattr(event, "ingestion_job_id", None)
+        if not event.correlation_id and not ingestion_job_id:
             correlation_missing_reason = self._consumer_dlq_correlation_missing_reason(event)
             alternate_lookup_key = self._consumer_dlq_alternate_lookup_key(event)
             return await self._consumer_dlq_not_replayable_result(
@@ -82,6 +85,7 @@ class ConsumerDlqReplayCommandService:
         replay_candidate = await self._consumer_dlq_replay_candidate_or_result(
             event_id=event_id,
             correlation_id=event.correlation_id,
+            ingestion_job_id=ingestion_job_id,
             dry_run=command.dry_run,
             requested_by=command.requested_by,
         )
@@ -170,7 +174,7 @@ class ConsumerDlqReplayCommandService:
         self,
         *,
         event_id: str,
-        correlation_id: str,
+        correlation_id: str | None,
         replay_job_id: str,
         context: Any | None,
     ) -> str:
@@ -188,7 +192,7 @@ class ConsumerDlqReplayCommandService:
         self,
         *,
         event_id: str,
-        correlation_id: str,
+        correlation_id: str | None,
         replay_job_id: str,
         context: Any | None,
         replay_fingerprint: str,
@@ -212,12 +216,14 @@ class ConsumerDlqReplayCommandService:
         self,
         *,
         event_id: str,
-        correlation_id: str,
+        correlation_id: str | None,
         dry_run: bool,
         requested_by: str | None,
+        ingestion_job_id: str | None = None,
     ) -> ConsumerDlqReplayCandidate | ConsumerDlqReplayResult:
         replay_job = await self._correlated_consumer_dlq_replay_job(
             correlation_id=correlation_id,
+            ingestion_job_id=ingestion_job_id,
         )
         if replay_job is None:
             return await self._consumer_dlq_not_replayable_result(
@@ -259,9 +265,17 @@ class ConsumerDlqReplayCommandService:
     async def _correlated_consumer_dlq_replay_job(
         self,
         *,
-        correlation_id: str,
+        correlation_id: str | None,
+        ingestion_job_id: str | None,
     ) -> Any | None:
-        return await self.ingestion_job_service.get_latest_replayable_job_by_correlation_id(
+        if ingestion_job_id is not None:
+            replay_job = await self.ingestion_job_service.get_job(ingestion_job_id)
+            if replay_job is None or replay_job.status not in {"failed", "queued", "accepted"}:
+                return None
+            return replay_job
+        if correlation_id is None:
+            return None
+        return await self.ingestion_job_service.get_unique_replayable_job_by_correlation_id(
             correlation_id
         )
 
@@ -347,7 +361,7 @@ class ConsumerDlqReplayCommandService:
         self,
         *,
         event_id: str,
-        correlation_id: str,
+        correlation_id: str | None,
         job_id: str,
         context: Any,
         replay_fingerprint: str,
@@ -384,18 +398,19 @@ class ConsumerDlqReplayCommandService:
         self,
         *,
         event_id: str,
-        correlation_id: str,
+        correlation_id: str | None,
         job_id: str,
         context: Any,
         replay_fingerprint: str,
         requested_by: str | None,
     ) -> None:
         try:
-            await self.replay_payload_dispatcher.replay_payload(
-                endpoint=context.endpoint,
-                payload=context.request_payload,
-                idempotency_key=context.idempotency_key,
-            )
+            with ingestion_job_scope(job_id):
+                await self.replay_payload_dispatcher.replay_payload(
+                    endpoint=context.endpoint,
+                    payload=context.request_payload,
+                    idempotency_key=context.idempotency_key,
+                )
         except Exception as exc:
             replay_audit_id = await self._record_mandatory_replay_audit(
                 event_id=event_id,
@@ -421,7 +436,7 @@ class ConsumerDlqReplayCommandService:
         self,
         *,
         event_id: str,
-        correlation_id: str,
+        correlation_id: str | None,
         job_id: str,
         context: Any,
         replay_fingerprint: str,

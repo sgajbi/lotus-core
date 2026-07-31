@@ -1651,6 +1651,34 @@ async def test_record_consumer_dlq_event_redacts_payload_excerpt(
     }
 
 
+async def test_record_consumer_dlq_event_persists_durable_ingestion_job_owner(
+    test_consumer: ConcreteTestConsumer,
+):
+    mock_msg = create_mock_message("key-owned", {"safe": "visible"})
+    mock_db = MagicMock()
+    transaction = MagicMock()
+    transaction.__aenter__ = AsyncMock(return_value=None)
+    transaction.__aexit__ = AsyncMock(return_value=None)
+    added_events = []
+
+    async def get_session_gen():
+        yield mock_db
+
+    mock_db.begin.return_value = transaction
+    mock_db.add.side_effect = added_events.append
+
+    with patch("portfolio_common.kafka_consumer.get_async_db_session", new=get_session_gen):
+        await test_consumer._record_consumer_dlq_event(
+            msg=mock_msg,
+            error=ValueError("persistence timeout"),
+            error_reason_code="PERSISTENCE_TIMEOUT",
+            correlation_id="corr-owned",
+            ingestion_job_id="job-owned",
+        )
+
+    assert added_events[0].ingestion_job_id == "job-owned"
+
+
 async def test_record_consumer_dlq_event_persists_missing_correlation_diagnostics(
     test_consumer: ConcreteTestConsumer,
 ):

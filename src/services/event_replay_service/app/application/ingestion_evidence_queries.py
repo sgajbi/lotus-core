@@ -26,9 +26,9 @@ class IngestionEvidenceReader(Protocol):
         replay_fingerprint: str | None,
     ) -> list[Any]: ...
 
-    async def list_consumer_dlq_events_by_correlation_id(
+    async def list_consumer_dlq_events_by_job_id(
         self,
-        correlation_id: str,
+        job_id: str,
         *,
         limit: int,
     ) -> list[Any]: ...
@@ -69,8 +69,8 @@ class IngestionEvidenceQueryService:
                 replay_status=None,
                 replay_fingerprint=None,
             ),
-            self.ingestion_job_service.list_consumer_dlq_events_by_correlation_id(
-                job.correlation_id,
+            self.ingestion_job_service.list_consumer_dlq_events_by_job_id(
+                job_id,
                 limit=_EVIDENCE_FETCH_LIMIT,
             ),
             self.ingestion_job_service.get_job_replay_context(job_id),

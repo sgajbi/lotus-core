@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 
 import pytest
 from portfolio_common.event_publisher import KafkaEventPublisher
+from portfolio_common.ingestion_lineage import ingestion_job_scope
 from portfolio_common.kafka_utils import KafkaProducer
 from portfolio_common.logging_utils import correlation_id_var, traceparent_var
 
@@ -428,6 +429,29 @@ async def test_publish_with_correlation_id(
     call_args = mock_kafka_producer.publish_message.call_args.kwargs
     headers = dict(call_args["headers"])
     assert headers["correlation_id"] == b"test-corr-id-123"
+
+
+async def test_publish_with_durable_ingestion_job_owner(
+    ingestion_service: IngestionService,
+    mock_kafka_producer: MagicMock,
+):
+    portfolio = Portfolio(
+        portfolio_id="P1",
+        base_currency="USD",
+        open_date=date(2025, 1, 1),
+        risk_exposure="a",
+        investment_time_horizon="b",
+        portfolio_type="c",
+        booking_center_code="d",
+        client_id="e",
+        status="f",
+    )
+
+    with ingestion_job_scope("job-001"):
+        await ingestion_service.publish_portfolios([portfolio])
+
+    headers = dict(mock_kafka_producer.publish_message.call_args.kwargs["headers"])
+    assert headers["ingestion_job_id"] == b"job-001"
 
 
 async def test_publish_with_traceparent_header(
