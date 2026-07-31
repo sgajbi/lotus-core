@@ -6,7 +6,8 @@ from datetime import datetime
 
 from portfolio_common.database_models import FinancialReconciliationFinding
 from portfolio_common.identifiers import normalize_lookup_identifier as normalize_security_id
-from sqlalchemy import case, func, select, true
+from portfolio_common.reconciliation_quality import CLOSED_FINDING_RESOLUTION_STATES
+from sqlalchemy import and_, case, func, select, true
 
 from ...domain.operations import ReconciliationFindingSummary
 from .operations_position_scope_queries import security_id_expr
@@ -46,12 +47,15 @@ def reconciliation_finding_severity_rank():
     )
 
 
-def reconciliation_finding_summary_base_select():
+def reconciliation_finding_summary_base_select(*, as_of: datetime | None = None):
+    effective_resolution_state = _effective_resolution_state(as_of=as_of)
+    effective_resolved_at = _effective_resolved_at(as_of=as_of)
     return select(
+        FinancialReconciliationFinding.run_id.label("run_id"),
         FinancialReconciliationFinding.severity.label("severity"),
-        FinancialReconciliationFinding.resolution_state.label("resolution_state"),
+        effective_resolution_state.label("resolution_state"),
         FinancialReconciliationFinding.created_at.label("created_at"),
-        FinancialReconciliationFinding.resolved_at.label("resolved_at"),
+        effective_resolved_at.label("resolved_at"),
         FinancialReconciliationFinding.id.label("id"),
         FinancialReconciliationFinding.finding_id.label("finding_id"),
         FinancialReconciliationFinding.finding_type.label("finding_type"),
@@ -59,6 +63,34 @@ def reconciliation_finding_summary_base_select():
         FinancialReconciliationFinding.transaction_id.label("transaction_id"),
         FinancialReconciliationFinding.owner.label("owner"),
         FinancialReconciliationFinding.repair_recommendation.label("repair_recommendation"),
+    )
+
+
+def _effective_resolution_state(*, as_of: datetime | None):
+    if as_of is None:
+        return FinancialReconciliationFinding.resolution_state
+    resolved_by_as_of = and_(
+        FinancialReconciliationFinding.resolution_state.in_(
+            tuple(sorted(CLOSED_FINDING_RESOLUTION_STATES))
+        ),
+        FinancialReconciliationFinding.resolved_at.is_not(None),
+        FinancialReconciliationFinding.resolved_at <= as_of,
+    )
+    return case(
+        (resolved_by_as_of, FinancialReconciliationFinding.resolution_state),
+        else_="OPEN",
+    )
+
+
+def _effective_resolved_at(*, as_of: datetime | None):
+    if as_of is None:
+        return FinancialReconciliationFinding.resolved_at
+    return case(
+        (
+            FinancialReconciliationFinding.resolved_at <= as_of,
+            FinancialReconciliationFinding.resolved_at,
+        ),
+        else_=None,
     )
 
 
@@ -132,6 +164,92 @@ def reconciliation_finding_summary_select(base_stmt):
         )
         .select_from(aggregate_subq)
         .outerjoin(top_blocking_subq, true())
+    )
+
+
+def reconciliation_finding_summaries_select(base_stmt):
+    """Build one grouped summary row per selected reconciliation run."""
+
+    base_subq = base_stmt.subquery()
+    normalized_severity = func.upper(func.trim(base_subq.c.severity))
+    is_open = base_subq.c.resolution_state.in_(("OPEN", "IN_PROGRESS"))
+    is_blocking = is_open & normalized_severity.in_(("BLOCKER", "CRITICAL", "ERROR"))
+    aggregate_subq = (
+        select(
+            base_subq.c.run_id,
+            func.count().label("total_findings"),
+            func.count().filter(is_open).label("open_findings"),
+            func.count().filter(is_blocking).label("blocking_findings"),
+            func.count()
+            .filter(is_open & (normalized_severity == "BLOCKER"))
+            .label("blocker_findings"),
+            func.count()
+            .filter(is_open & (normalized_severity == "CRITICAL"))
+            .label("critical_findings"),
+            func.count().filter(is_open & (normalized_severity == "ERROR")).label("error_findings"),
+            func.count()
+            .filter(is_open & (normalized_severity == "WARNING"))
+            .label("warning_findings"),
+            func.count().filter(is_open & (normalized_severity == "INFO")).label("info_findings"),
+            func.max(func.coalesce(base_subq.c.resolved_at, base_subq.c.created_at)).label(
+                "latest_evidence_at"
+            ),
+        )
+        .select_from(base_subq)
+        .group_by(base_subq.c.run_id)
+        .subquery()
+    )
+    severity_rank = case(
+        (normalized_severity == "BLOCKER", 0),
+        (normalized_severity == "CRITICAL", 1),
+        (normalized_severity == "ERROR", 2),
+        else_=9,
+    )
+    top_blocking_candidates = (
+        select(
+            base_subq.c.run_id,
+            base_subq.c.finding_id,
+            base_subq.c.finding_type,
+            base_subq.c.security_id,
+            base_subq.c.transaction_id,
+            base_subq.c.owner,
+            base_subq.c.repair_recommendation,
+            base_subq.c.created_at,
+            func.row_number()
+            .over(
+                partition_by=base_subq.c.run_id,
+                order_by=(severity_rank, base_subq.c.created_at.asc(), base_subq.c.id.asc()),
+            )
+            .label("priority"),
+        )
+        .where(is_blocking)
+        .subquery()
+    )
+    top_blocking_subq = (
+        select(top_blocking_candidates).where(top_blocking_candidates.c.priority == 1).subquery()
+    )
+    return (
+        select(
+            aggregate_subq.c.run_id,
+            aggregate_subq.c.total_findings,
+            aggregate_subq.c.open_findings,
+            aggregate_subq.c.blocking_findings,
+            aggregate_subq.c.blocker_findings,
+            aggregate_subq.c.critical_findings,
+            aggregate_subq.c.error_findings,
+            aggregate_subq.c.warning_findings,
+            aggregate_subq.c.info_findings,
+            aggregate_subq.c.latest_evidence_at,
+            top_blocking_subq.c.finding_id,
+            top_blocking_subq.c.finding_type,
+            top_blocking_subq.c.security_id,
+            top_blocking_subq.c.transaction_id,
+            top_blocking_subq.c.owner,
+            top_blocking_subq.c.repair_recommendation,
+            top_blocking_subq.c.created_at,
+        )
+        .select_from(aggregate_subq)
+        .outerjoin(top_blocking_subq, top_blocking_subq.c.run_id == aggregate_subq.c.run_id)
     )
 
 

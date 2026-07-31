@@ -1221,6 +1221,10 @@ async def test_reconciliation_runs_success(async_test_client):
                 "dedupe_key": "recon:transaction_cashflow:PF-001:2026-03-13:3",
                 "correlation_id": "corr-recon-20260313-001",
                 "failure_reason": "Tolerance exceeded for portfolio totals.",
+                "open_break_count": 1,
+                "blocking_break_count": 1,
+                "open_break_count_by_severity": {"ERROR": 1},
+                "top_blocking_finding_id": "rf_1234567890abcdef",
                 "normalized_reconciliation_status": "BLOCKED",
                 "evidence_age_minutes": 1475,
                 "is_evidence_stale": True,
@@ -1255,6 +1259,10 @@ async def test_reconciliation_runs_success(async_test_client):
     assert response.json()["items"][0]["is_terminal_failure"] is True
     assert response.json()["items"][0]["is_blocking"] is True
     assert response.json()["items"][0]["operational_state"] == "BLOCKING"
+    assert response.json()["items"][0]["open_break_count"] == 1
+    assert response.json()["items"][0]["blocking_break_count"] == 1
+    assert response.json()["items"][0]["open_break_count_by_severity"] == {"ERROR": 1}
+    assert response.json()["items"][0]["top_blocking_finding_id"] == "rf_1234567890abcdef"
     assert response.json()["reconciliation_evidence_id"] == "re_runs_001"
     assert response.json()["publication_gate"] == "BLOCK"
     assert response.json()["items"][0]["normalized_reconciliation_status"] == "BLOCKED"

@@ -1,5 +1,6 @@
 """SQLAlchemy adapter for Query Control Plane operational support."""
 
+from collections.abc import Sequence
 from datetime import date, datetime, timedelta, timezone
 from typing import Optional, cast
 
@@ -84,6 +85,7 @@ from .operations_position_scope_queries import (
 from .operations_reconciliation_finding_queries import (
     apply_reconciliation_finding_scope,
     reconciliation_finding_severity_rank,
+    reconciliation_finding_summaries_select,
     reconciliation_finding_summary_base_select,
     reconciliation_finding_summary_from_row,
     reconciliation_finding_summary_select,
@@ -1450,7 +1452,7 @@ class OperationsRepository:
                 top_blocking_finding_transaction_id=None,
             )
         base_stmt = apply_reconciliation_finding_scope(
-            reconciliation_finding_summary_base_select(),
+            reconciliation_finding_summary_base_select(as_of=as_of),
             run_id=run_id,
             finding_id=finding_id,
             normalized_security_id=normalized_security_id,
@@ -1459,6 +1461,22 @@ class OperationsRepository:
         )
         row = (await self.db.execute(reconciliation_finding_summary_select(base_stmt))).one()
         return reconciliation_finding_summary_from_row(row)
+
+    async def get_reconciliation_finding_summaries(
+        self,
+        run_ids: Sequence[str],
+        as_of: Optional[datetime] = None,
+    ) -> dict[str, ReconciliationFindingSummary]:
+        resolved_run_ids = tuple(dict.fromkeys(run_ids))
+        if not resolved_run_ids:
+            return {}
+        base_stmt = reconciliation_finding_summary_base_select(as_of=as_of).where(
+            FinancialReconciliationFinding.run_id.in_(resolved_run_ids)
+        )
+        if as_of is not None:
+            base_stmt = base_stmt.where(FinancialReconciliationFinding.created_at <= as_of)
+        rows = (await self.db.execute(reconciliation_finding_summaries_select(base_stmt))).all()
+        return {row.run_id: reconciliation_finding_summary_from_row(row) for row in rows}
 
     async def get_portfolio_control_stages_count(
         self,
