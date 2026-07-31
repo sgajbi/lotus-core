@@ -4,6 +4,8 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
+from portfolio_common.ingestion_lineage import ingestion_job_scope
+
 from ..application.ingestion_bookkeeping_outcome import (
     INGESTION_JOB_BOOKKEEPING_FAILED_CODE,
     build_ingestion_bookkeeping_failure_detail,
@@ -222,10 +224,11 @@ class BusinessDateIngestionCommandHandler:
         job_id: str,
     ) -> None:
         try:
-            await self.ingestion_service.publish_business_dates(
-                command.request.business_dates,
-                idempotency_key=command.idempotency_key,
-            )
+            with ingestion_job_scope(job_id):
+                await self.ingestion_service.publish_business_dates(
+                    command.request.business_dates,
+                    idempotency_key=command.idempotency_key,
+                )
         except IngestionPublishError as exc:
             correlation_id, request_id, trace_id = get_request_lineage()
             detail = build_ingestion_publish_failure_detail(

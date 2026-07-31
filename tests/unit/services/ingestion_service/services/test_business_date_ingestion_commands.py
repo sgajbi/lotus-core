@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from portfolio_common.ingestion_lineage import ingestion_job_id_var
 
 from src.services.ingestion_service.app.DTOs.business_date_dto import (
     BusinessDateIngestionRequest,
@@ -111,6 +112,12 @@ def _handler(
 
 async def test_business_date_command_publishes_and_marks_job_queued() -> None:
     ingestion_service = _IngestionService()
+    observed_job_ids: list[str | None] = []
+
+    async def record_job_ownership(*_args, **_kwargs) -> None:
+        observed_job_ids.append(ingestion_job_id_var.get())
+
+    ingestion_service.publish_business_dates.side_effect = record_job_ownership
     job_service = _JobService()
     policy = _Policy()
     handler = _handler(
@@ -137,6 +144,8 @@ async def test_business_date_command_publishes_and_marks_job_queued() -> None:
     assert create_kwargs["entity_type"] == "business_date"
     assert create_kwargs["idempotency_key"] == "idem-business-dates"
     ingestion_service.publish_business_dates.assert_awaited_once()
+    assert observed_job_ids == ["job-business-date"]
+    assert ingestion_job_id_var.get() is None
     job_service.mark_queued.assert_awaited_once_with("job-business-date")
 
 
