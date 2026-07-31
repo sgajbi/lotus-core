@@ -1,6 +1,7 @@
 """SQLAlchemy persistence for portfolio aggregation data and job queues."""
 
 import logging
+from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, cast
@@ -19,7 +20,7 @@ from portfolio_common.infrastructure.persistence.timeseries_upsert_statements im
     build_portfolio_timeseries_upsert_statement,
 )
 from portfolio_common.utils import async_timed
-from sqlalchemy import and_, func, or_, select, update
+from sqlalchemy import and_, case, func, or_, select, update
 from sqlalchemy.orm import aliased
 
 from ..domain.aggregation_jobs.models import (
@@ -38,6 +39,13 @@ from ..domain.position_timeseries.models import PositionTimeseriesRecord
 logger = logging.getLogger(__name__)
 
 AGGREGATION_REPROCESS_REQUESTED = "REPROCESS_REQUESTED"
+
+
+@dataclass(frozen=True)
+class _EligibleAggregationJobTarget:
+    job_id: int
+    target_epoch: int
+    source_advanced: bool
 
 
 class PortfolioAggregationRepository(TimeseriesMarketDataReader):
@@ -226,11 +234,20 @@ class PortfolioAggregationRepository(TimeseriesMarketDataReader):
         rows = cast(list[PositionTimeseries], result.scalars().all())
         return [_position_timeseries_record(row) for row in rows]
 
-    async def _find_eligible_job_ids(self, batch_size: int) -> list[int]:
+    async def _find_eligible_job_targets(
+        self,
+        batch_size: int,
+    ) -> list[_EligibleAggregationJobTarget]:
         job = PortfolioAggregationJob
         snapshot = DailyPositionSnapshot
         position_timeseries = PositionTimeseries
         authoritative_scope = _authoritative_snapshot_scope(job, snapshot)
+        authoritative_target_epoch = _authoritative_target_epoch(
+            job,
+            snapshot,
+            authoritative_scope,
+        )
+        source_advanced = authoritative_target_epoch > job.target_epoch
         completeness_ready = (
             _authoritative_snapshot_exists(job, snapshot, authoritative_scope)
             & ~_missing_position_timeseries_exists(
@@ -239,33 +256,63 @@ class PortfolioAggregationRepository(TimeseriesMarketDataReader):
                 position_timeseries,
                 authoritative_scope,
             )
-            & ~_unmaterialized_authoritative_snapshot_exists(job.target_epoch)
+            & ~_unmaterialized_authoritative_snapshot_exists(authoritative_target_epoch)
         )
         result_proxy = await self.db.execute(
-            select(job.id)
+            select(job.id, authoritative_target_epoch, source_advanced)
             .where(job.status == "PENDING", completeness_ready)
             .order_by(job.portfolio_id, job.aggregation_date, job.id)
             .limit(batch_size)
             .with_for_update(skip_locked=True)
         )
-        return [int(row[0]) for row in result_proxy.fetchall()]
+        return [
+            _EligibleAggregationJobTarget(
+                job_id=int(row[0]),
+                target_epoch=int(row[1]),
+                source_advanced=bool(row[2]),
+            )
+            for row in result_proxy.fetchall()
+        ]
 
     async def _claim_eligible_job_rows(
         self,
-        eligible_ids: list[int],
+        eligible_targets: list[_EligibleAggregationJobTarget],
         *,
         lease: AggregationJobLease,
     ) -> list[PortfolioAggregationJob]:
-        if not eligible_ids:
+        if not eligible_targets:
             return []
         job = PortfolioAggregationJob
+        target_epoch_by_job = {target.job_id: target.target_epoch for target in eligible_targets}
+        source_advanced_by_job = {
+            target.job_id: target.source_advanced for target in eligible_targets
+        }
+        selected_target_epoch = case(
+            target_epoch_by_job,
+            value=job.id,
+            else_=job.target_epoch,
+        )
+        selected_source_advanced = case(
+            source_advanced_by_job,
+            value=job.id,
+            else_=False,
+        )
+        promoted_target_epoch = func.greatest(
+            job.target_epoch,
+            selected_target_epoch,
+        )
         result = await self.db.execute(
             update(job)
-            .where(job.id.in_(eligible_ids))
+            .where(job.id.in_(target_epoch_by_job))
             .values(
                 status="PROCESSING",
                 updated_at=func.now(),
                 attempt_count=job.attempt_count + 1,
+                target_epoch=promoted_target_epoch,
+                source_revision=case(
+                    (selected_source_advanced, job.source_revision + 1),
+                    else_=job.source_revision,
+                ),
                 lease_owner=lease.owner,
                 lease_token=lease.token,
                 lease_expires_at=lease.expires_at,
@@ -291,8 +338,8 @@ class PortfolioAggregationRepository(TimeseriesMarketDataReader):
     ) -> list[ClaimedAggregationJob]:
         """Claim one ready batch with durable, fenced lease ownership."""
 
-        eligible_ids = await self._find_eligible_job_ids(batch_size)
-        claimed_rows = await self._claim_eligible_job_rows(eligible_ids, lease=lease)
+        eligible_targets = await self._find_eligible_job_targets(batch_size)
+        claimed_rows = await self._claim_eligible_job_rows(eligible_targets, lease=lease)
         if claimed_rows:
             logger.info("Found and leased %s eligible aggregation jobs.", len(claimed_rows))
         return [_claimed_aggregation_job(row) for row in claimed_rows]
@@ -449,8 +496,18 @@ def _authoritative_snapshot_scope(job_model, snapshot_model):
     return (
         snapshot_model.portfolio_id == job_model.portfolio_id,
         snapshot_model.date <= job_model.aggregation_date,
-        snapshot_model.epoch <= job_model.target_epoch,
         ~newer_snapshot_exists,
+    )
+
+
+def _authoritative_target_epoch(job_model, snapshot_model, authoritative_scope):
+    """Return the latest fully scoped source epoch that one portfolio day must aggregate."""
+
+    return (
+        select(func.max(snapshot_model.epoch))
+        .where(*authoritative_scope)
+        .correlate(job_model)
+        .scalar_subquery()
     )
 
 

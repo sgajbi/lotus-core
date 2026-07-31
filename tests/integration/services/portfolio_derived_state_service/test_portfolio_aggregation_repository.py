@@ -106,6 +106,58 @@ async def _seed_aggregation_fence_scope(
     await session.commit()
 
 
+async def _add_materialized_position_scope(
+    session: AsyncSession,
+    *,
+    portfolio_id: str,
+    security_id: str,
+    snapshot_date: date,
+    epoch: int,
+) -> None:
+    session.add(
+        Instrument(
+            security_id=security_id,
+            name="Advanced Epoch Aggregation Instrument",
+            isin=f"US-{security_id}",
+            asset_class="EQUITY",
+            product_type="COMMON_STOCK",
+            currency="USD",
+        )
+    )
+    await session.flush()
+    session.add_all(
+        [
+            DailyPositionSnapshot(
+                portfolio_id=portfolio_id,
+                security_id=security_id,
+                date=snapshot_date,
+                epoch=epoch,
+                quantity=Decimal("2"),
+                cost_basis=Decimal("2"),
+                cost_basis_local=Decimal("2"),
+                market_value=Decimal("3"),
+                market_value_local=Decimal("3"),
+                valuation_status="VALUED_CURRENT",
+            ),
+            PositionTimeseries(
+                portfolio_id=portfolio_id,
+                security_id=security_id,
+                date=snapshot_date,
+                epoch=epoch,
+                bod_market_value=Decimal("2"),
+                bod_cashflow_position=Decimal("0"),
+                eod_cashflow_position=Decimal("0"),
+                bod_cashflow_portfolio=Decimal("0"),
+                eod_cashflow_portfolio=Decimal("0"),
+                eod_market_value=Decimal("3"),
+                fees=Decimal("0"),
+                quantity=Decimal("2"),
+                cost=Decimal("2"),
+            ),
+        ]
+    )
+
+
 @pytest.fixture(scope="function")
 def setup_stale_aggregation_job_data(db_engine, clean_db):
     """Seed expired, current, and pending aggregation lease states."""
@@ -541,6 +593,127 @@ async def test_newer_epoch_supersedes_claim_and_rearms_same_portfolio_day(
     assert third_claim.id == first_claim.id
     assert third_claim.target_epoch == 1
     assert third_claim.source_revision == 3
+
+
+@pytest.mark.lifecycle
+async def test_claim_promotes_carry_forward_day_to_authoritative_portfolio_epoch(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    """Claim a non-business-day job after another security advances the portfolio epoch."""
+
+    portfolio_id = "P-AGG-CARRY-FORWARD-EPOCH"
+    carried_security_id = "SEC-AGG-CARRIED"
+    advanced_security_id = "SEC-AGG-ADVANCED"
+    aggregation_date = date(2026, 3, 8)
+    advanced_snapshot_date = date(2026, 3, 6)
+    await _seed_aggregation_fence_scope(
+        async_db_session,
+        portfolio_id=portfolio_id,
+        security_id=carried_security_id,
+        aggregation_date=aggregation_date,
+    )
+    await _add_materialized_position_scope(
+        async_db_session,
+        portfolio_id=portfolio_id,
+        security_id=advanced_security_id,
+        snapshot_date=advanced_snapshot_date,
+        epoch=1,
+    )
+    await async_db_session.commit()
+
+    repository = PortfolioAggregationRepository(async_db_session)
+    claim = (
+        await repository.claim_eligible_jobs(
+            batch_size=1,
+            lease=AggregationJobLease(
+                owner="aggregation-runtime-carry-forward",
+                token="lease-token-carry-forward",
+                expires_at=datetime.now(UTC) + timedelta(minutes=5),
+            ),
+        )
+    )[0]
+
+    assert claim.target_epoch == 1
+    assert claim.source_revision == 2
+    disposition = await repository.complete_or_requeue_job(
+        job_id=claim.id,
+        lease_token=claim.lease.token,
+        target_epoch=claim.target_epoch,
+        source_revision=claim.source_revision,
+    )
+    assert disposition is AggregationJobCompletionDisposition.COMPLETE
+
+
+@pytest.mark.lifecycle
+async def test_claimed_target_is_fenced_when_source_advances_between_claim_statements(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    """Keep the selected target stable and requeue when source commits before lease update."""
+
+    portfolio_id = "P-AGG-CLAIM-SNAPSHOT-FENCE"
+    aggregation_date = date(2026, 3, 8)
+    await _seed_aggregation_fence_scope(
+        async_db_session,
+        portfolio_id=portfolio_id,
+        security_id="SEC-AGG-CLAIM-SNAPSHOT-CARRIED",
+        aggregation_date=aggregation_date,
+    )
+    session_factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
+
+    async with session_factory() as claim_session:
+        repository = PortfolioAggregationRepository(claim_session)
+        selected_targets = await repository._find_eligible_job_targets(batch_size=1)
+        assert selected_targets[0].target_epoch == 0
+        assert selected_targets[0].source_advanced is False
+
+        async with session_factory() as source_session:
+            await _add_materialized_position_scope(
+                source_session,
+                portfolio_id=portfolio_id,
+                security_id="SEC-AGG-CLAIM-SNAPSHOT-ADVANCED",
+                snapshot_date=date(2026, 3, 6),
+                epoch=1,
+            )
+            await source_session.commit()
+
+        first_lease = AggregationJobLease(
+            owner="aggregation-runtime-snapshot-fence-first",
+            token="lease-token-snapshot-fence-first",
+            expires_at=datetime.now(UTC) + timedelta(minutes=5),
+        )
+        first_claim = (
+            await repository._claim_eligible_job_rows(
+                selected_targets,
+                lease=first_lease,
+            )
+        )[0]
+        await claim_session.commit()
+        assert first_claim.target_epoch == 0
+        assert first_claim.source_revision == 1
+
+        disposition = await repository.complete_or_requeue_job(
+            job_id=first_claim.id,
+            lease_token=first_lease.token,
+            target_epoch=first_claim.target_epoch,
+            source_revision=first_claim.source_revision,
+        )
+        await claim_session.commit()
+        assert disposition is AggregationJobCompletionDisposition.REQUEUED
+
+        second_claim = (
+            await repository.claim_eligible_jobs(
+                batch_size=1,
+                lease=AggregationJobLease(
+                    owner="aggregation-runtime-snapshot-fence-second",
+                    token="lease-token-snapshot-fence-second",
+                    expires_at=datetime.now(UTC) + timedelta(minutes=5),
+                ),
+            )
+        )[0]
+        assert second_claim.target_epoch == 1
+        assert second_claim.source_revision == 2
 
 
 @pytest.mark.lifecycle
