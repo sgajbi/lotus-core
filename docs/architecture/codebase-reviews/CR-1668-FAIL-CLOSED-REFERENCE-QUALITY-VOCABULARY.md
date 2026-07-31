@@ -17,8 +17,10 @@ fail closed: blocking and stale evidence outrank unknown evidence, and unknown e
 partial or complete evidence.
 
 Query Control Plane coverage emits `UNRECOGNIZED_QUALITY_STATUS` and blocks publication.
-Classification taxonomy consumes the same policy. DPM model targets cannot be ready unless their
-source quality is complete.
+Benchmark coverage evaluates component-definition quality and timestamps alongside prices and
+returns, so every contributing record participates in the publication decision. Classification
+taxonomy consumes the same policy. DPM model targets evaluate both the governing model definition
+and its targets and cannot be ready unless all contributing source quality is complete.
 
 ## Compatibility
 
@@ -30,8 +32,9 @@ topology are unchanged.
 
 - shared market/reference classifier and normalization tests;
 - benchmark and risk-free publication-gate regressions;
+- benchmark-component quality and latest-evidence timestamp regressions;
 - classification-taxonomy regression;
-- DPM model-target quality/readiness regression;
+- DPM model-definition and target quality/readiness regressions;
 - Ruff format and lint;
 - repository-native contract, architecture, documentation, and wiki gates before merge.
 

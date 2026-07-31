@@ -18,7 +18,7 @@ best-execution certification, venue-routing model, or OMS acknowledgement.
 | Mode | Request shape | Behavior |
 | --- | --- | --- |
 | Mandate-driven readiness | `portfolio_id`, `as_of_date`, optional `tenant_id`, optional `mandate_id` | Resolves the discretionary mandate binding and carries the resolved mandate/model identifiers into readiness lineage. |
-| Model-target readiness | `model_portfolio_id` supplied or resolved from the mandate | Resolves approved model target instruments and contributes them to the evaluated DPM universe. |
+| Model-target readiness | `model_portfolio_id` supplied or resolved from the mandate | Resolves the approved model definition and target instruments, requires complete quality for both, and contributes the targets to the evaluated DPM universe. |
 | Caller-augmented readiness | `instrument_ids` supplied | Unions caller-known held instruments with resolved model target instruments before eligibility, tax-lot, and market-data checks. |
 | FX-aware readiness | `currency_pairs`, optional `valuation_currency`, `max_staleness_days` supplied | Delegates market-price and FX freshness to `MarketDataCoverageWindow:v1`. |
 

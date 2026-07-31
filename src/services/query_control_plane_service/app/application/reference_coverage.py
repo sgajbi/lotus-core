@@ -5,6 +5,9 @@ from dataclasses import asdict
 from datetime import datetime
 
 from ..contracts.reference_coverage import CoverageRequest, CoverageResponse
+from ..domain.benchmark_definition import BenchmarkComponentEvidence
+from ..domain.benchmark_return_series import BenchmarkReturnEvidence
+from ..domain.index_series import IndexPriceEvidence
 from ..ports.benchmark_definition import BenchmarkDefinitionReader
 from ..ports.benchmark_return_series import BenchmarkReturnSeriesReader
 from ..ports.index_series import IndexSeriesReader
@@ -72,7 +75,7 @@ class ReferenceCoverageService:
             start_date=request.window.start_date,
             end_date=request.window.end_date,
         )
-        quality_rows: list[QualityEvidence] = [*prices, *benchmark_returns]
+        quality_rows: list[QualityEvidence] = [*components, *prices, *benchmark_returns]
         return build_coverage_response(
             coverage_kind="benchmark_coverage",
             identifier_key="benchmark_id",
@@ -81,7 +84,11 @@ class ReferenceCoverageService:
             observed_dates=observed_dates,
             total_points=len(prices) + len(benchmark_returns),
             quality_rows=quality_rows,
-            latest_evidence=latest_evidence_timestamp(prices, benchmark_returns),
+            latest_evidence=_latest_benchmark_evidence_timestamp(
+                components=components,
+                prices=prices,
+                benchmark_returns=benchmark_returns,
+            ),
             content_records={
                 "components": [asdict(row) for row in components],
                 "index_prices": [asdict(row) for row in prices],
@@ -127,3 +134,26 @@ class ReferenceCoverageService:
             ],
             generated_at=self._clock(),
         )
+
+
+def _latest_benchmark_evidence_timestamp(
+    *,
+    components: list[BenchmarkComponentEvidence],
+    prices: list[IndexPriceEvidence],
+    benchmark_returns: list[BenchmarkReturnEvidence],
+) -> datetime | None:
+    """Return the latest timestamp across every source record used by coverage."""
+
+    timestamps = [
+        timestamp
+        for component in components
+        for timestamp in (
+            component.source_timestamp,
+            component.updated_at,
+            component.created_at,
+        )
+        if timestamp is not None
+    ]
+    if series_timestamp := latest_evidence_timestamp(prices, benchmark_returns):
+        timestamps.append(series_timestamp)
+    return max(timestamps) if timestamps else None

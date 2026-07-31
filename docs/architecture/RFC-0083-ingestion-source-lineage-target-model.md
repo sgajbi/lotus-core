@@ -95,7 +95,9 @@ Market and reference source products classify `quality_status` through the share
 `portfolio_common.market_reference_quality` policy. Accepted, partial, stale, and blocking
 vocabularies are explicit; blank or vendor-specific values outside those vocabularies are
 `UNKNOWN`. Complete coverage containing an unrecognized value must fail closed and must not publish
-with an allow gate.
+with an allow gate. Quality decisions include every contributing source record, including benchmark
+components as well as their prices and returns, and model-portfolio definitions as well as their
+targets.
 
 ## Validation Report Contract
 
