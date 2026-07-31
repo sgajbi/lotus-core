@@ -2,10 +2,32 @@
 
 ## Scope
 
-Issue cluster: GitHub issue #700.
+Issue cluster: GitHub issues #700, #862, and #863.
 
 This slice removes the consumer-DLQ replay dependency on generic ingestion-job list paging and
 adds a dedicated indexed lookup for correlated replayable ingestion jobs.
+
+## 2026-07-31 Ownership And Recovery Correction
+
+The original #700 implementation removed an unbounded operator-list scan, but its
+latest-by-correlation rule still conflated trace identity with durable workflow ownership. Issues
+#862 and #863 supersede that rule:
+
+1. job-backed ingestion and replay publish `ingestion_job_id`;
+2. consumer context, outbox persistence/dispatch, and DLQ persistence preserve that owner;
+3. evidence bundles query DLQ rows by indexed `ingestion_job_id`, with exact replay-event linking
+   retained for missing original correlation;
+4. legacy ownerless rows use the bounded correlation lookup only when exactly one replayable job
+   matches; ambiguous reuse remains unmapped and fail closed;
+5. replay audit reads are ordered by `(requested_at DESC, id DESC)` and folded independently per
+   DLQ event;
+6. `replayed` clears that event, while later equivalent `duplicate_blocked` preserves recovery only
+   with older durable success. Later failure, bookkeeping failure, dry-run-only history, or
+   truncated evidence remains unresolved.
+
+Migration `c133b2c3d506` backfills legacy DLQ ownership only for correlation identifiers that map to
+exactly one ingestion job, adds the DLQ ownership foreign key and covering index, retains ownership
+on outbox rows, and adds deterministic job-scoped replay-audit ordering support.
 
 ## Objective
 
@@ -13,7 +35,7 @@ Reduce runtime complexity and recovery fragility by making consumer-DLQ replay r
 correlated ingestion job through a purpose-built query instead of scanning the newest 500 operator
 list rows in memory.
 
-## Changes
+## Original #700 Changes
 
 1. Added `load_latest_replayable_job_by_correlation_id(...)` and a query builder that filters by
    correlation id and replayable statuses, then orders by descending database id for deterministic
@@ -31,11 +53,20 @@ Operator/API response contracts are unchanged. Route paths, status codes, respon
 audit fields, replay fingerprints, missing-correlation handling, missing-payload handling, dry-run
 behavior, and publish behavior are unchanged.
 
-The intentional behavior improvement is that a valid correlated DLQ event can resolve its
-ingestion job regardless of unrelated ingestion-job volume. If duplicate correlation ids exist, the
-latest replayable row by database id is selected deterministically.
+The original improvement allowed a valid correlated DLQ event to resolve its ingestion job
+regardless of unrelated ingestion-job volume. The 2026-07-31 correction intentionally removes
+latest-row selection: durable owner identity wins, while ambiguous legacy correlation fails closed.
 
 ## Validation Evidence
+
+2026-07-31 correction evidence:
+
+1. 217 focused unit tests passed across recovery policy, ownership propagation, replay commands,
+   evidence queries, stores, publishers, consumers, outbox, and migration contracts.
+2. PostgreSQL migration round-trip passed, proving unique-correlation backfill,
+   ambiguous-correlation isolation, foreign-key enforcement, covering indexes, downgrade, and
+   reapply.
+3. `make migration-smoke` passed with single head `c133b2c3d506`.
 
 Focused local validation:
 
@@ -70,5 +101,6 @@ reductions.
 
 ## Remaining Work
 
-Continue with issue #701 to protect ingestion job lifecycle transitions with expected-state
-guards. This slice intentionally does not change lifecycle state-machine semantics.
+No actionable #862/#863 defect remains locally. Protected PR CI, exact-main validation, wiki
+publication, issue evidence, and verified closure remain delivery steps rather than implementation
+gaps. Lifecycle transition compare-and-set work remains independently governed by its own issue.

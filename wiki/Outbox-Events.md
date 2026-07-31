@@ -33,6 +33,7 @@ The outbox row records:
 - event type
 - topic
 - correlation id
+- ingestion job id, when the event belongs to a governed ingestion job
 - JSON payload
 - publish status and retry state
 
@@ -56,6 +57,11 @@ status based on delivery acknowledgement.
 ordered transport stream. Keeping them separate prevents database record identity, dates, epochs,
 or retry identifiers from accidentally changing Kafka ordering. The dispatcher always publishes
 with the stored partition key.
+
+`ingestion_job_id` is durable workflow ownership, not trace metadata. The shared repository captures
+it from ingestion message context, the outbox row retains it across retries, and dispatch republishes
+it as a Kafka header so downstream DLQ evidence remains bound to the originating ingestion job.
+`correlation_id` remains useful for operator tracing but must not be used for evidence membership.
 
 Multiple dispatcher instances preserve that order through a database-visible stream-head rule. For
 each `(topic, partition_key)`, only the oldest unresolved row by `(created_at, id)` is claimable.

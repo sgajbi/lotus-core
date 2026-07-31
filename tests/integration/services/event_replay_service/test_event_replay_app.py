@@ -574,6 +574,9 @@ async def test_openapi_describes_event_replay_shared_schema_depth(async_test_cli
     assert retry_request["properties"]["dry_run"]["description"] == (
         "When true, validates retry scope without publishing messages."
     )
+    assert "not used for evidence membership" in consumer_dlq_event["properties"][
+        "ingestion_job_id"
+    ]["description"]
     assert replay_audit_list["properties"]["audits"]["description"] == (
         "Replay audit rows matching the requested filters and time window."
     )

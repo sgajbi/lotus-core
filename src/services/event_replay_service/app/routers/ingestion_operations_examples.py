@@ -93,6 +93,7 @@ INGESTION_EVIDENCE_BUNDLE_RESPONSE_EXAMPLE = {
             "error_reason_code": "VALIDATION_ERROR",
             "error_reason": "portfolio_id is required",
             "correlation_id": "ING:7f4a64b0-35f4-41bc-8f74-cb556f2ad9a3",
+            "ingestion_job_id": "job_01J5S0J6D3BAVMK2E1V0WQ7MCC",
             "correlation_missing_reason": None,
             "alternate_lookup_key": None,
             "payload_excerpt": None,
@@ -108,6 +109,7 @@ INGESTION_EVIDENCE_BUNDLE_RESPONSE_EXAMPLE = {
                 "c5b0faeb7de60bc111f109624e58d0ad6206634be5fef4d4455cdac629df4f3f"
             ),
             "correlation_id": "ING:7f4a64b0-35f4-41bc-8f74-cb556f2ad9a3",
+            "ingestion_job_id": "job_01J5S0J6D3BAVMK2E1V0WQ7MCC",
             "correlation_missing_reason": None,
             "alternate_lookup_key": None,
             "job_id": "job_01J5S0J6D3BAVMK2E1V0WQ7MCC",
@@ -393,6 +395,7 @@ CONSUMER_DLQ_EVENT_LIST_RESPONSE_EXAMPLE = {
             "error_reason_code": "DEPENDENCY_TIMEOUT",
             "error_reason": "TimeoutError: valuation dependency exceeded 5s SLA",
             "correlation_id": "ING:e59dd219-3902-4f38-8f8d-7c6cb1456672",
+            "ingestion_job_id": "job_01J5S0N7E4CBWNQ3F2W1XR8NDD",
             "correlation_missing_reason": None,
             "alternate_lookup_key": None,
             "payload_excerpt": '{"bundle_id":"BUNDLE-2026-000014"}',
