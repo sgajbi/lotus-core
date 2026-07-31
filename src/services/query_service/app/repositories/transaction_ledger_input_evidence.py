@@ -7,16 +7,32 @@ from datetime import date
 from typing import Any
 
 from portfolio_common.database_models import Cashflow, FxRate, Transaction, TransactionCost
+from sqlalchemy import Date as SqlDate
+from sqlalchemy import DateTime as SqlDateTime
 from sqlalchemy import String, Text, cast, func, literal, select, true, union
 from sqlalchemy.dialects.postgresql import aggregate_order_by
 
 from .currency_query_expressions import currency_code_sql_expr
 
+_UTC_TIMESTAMP_FORMAT = 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'
+_ISO_DATE_FORMAT = "YYYY-MM-DD"
+
+
+def _canonical_evidence_value(value: Any, column_type: Any) -> Any:
+    """Remove PostgreSQL session formatting from temporal evidence values."""
+
+    if isinstance(column_type, SqlDateTime):
+        timestamp_value = func.timezone(literal("UTC"), value) if column_type.timezone else value
+        return func.to_char(timestamp_value, literal(_UTC_TIMESTAMP_FORMAT))
+    if isinstance(column_type, SqlDate):
+        return func.to_char(value, literal(_ISO_DATE_FORMAT))
+    return value
+
 
 def _model_values(model: Any, *, exclude: Iterable[str] = ()) -> tuple[Any, ...]:
     excluded = frozenset(exclude)
     return tuple(
-        getattr(model, column.name)
+        _canonical_evidence_value(getattr(model, column.name), column.type)
         for column in model.__table__.columns
         if column.name not in excluded
     )
@@ -93,7 +109,10 @@ def _selected_cashflow_aggregate(matching_transactions: Any) -> Any:
         .subquery("transaction_ledger_ranked_cashflows")
     )
     cashflow_values = tuple(
-        ranked_cashflows.c[column.name]
+        _canonical_evidence_value(
+            ranked_cashflows.c[column.name],
+            column.type,
+        )
         for column in Cashflow.__table__.columns
         if column.name != "id"
     )
@@ -163,7 +182,12 @@ def _selected_fx_rate_aggregate(
         .subquery("transaction_ledger_ranked_fx_rates")
     )
     fx_values = tuple(
-        ranked_fx_rates.c[column.name] for column in FxRate.__table__.columns if column.name != "id"
+        _canonical_evidence_value(
+            ranked_fx_rates.c[column.name],
+            column.type,
+        )
+        for column in FxRate.__table__.columns
+        if column.name != "id"
     )
     return (
         select(

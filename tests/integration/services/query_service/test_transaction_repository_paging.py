@@ -9,7 +9,7 @@ from portfolio_common.database_models import (
     Transaction,
     TransactionCost,
 )
-from sqlalchemy import event, update
+from sqlalchemy import event, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
@@ -488,7 +488,7 @@ async def test_transaction_ledger_page_and_identity_share_one_repeatable_snapsho
     assert corrected_response.snapshot_id != snapshot_response.snapshot_id
 
 
-async def test_transaction_ledger_fx_evidence_matches_normalized_conversion_selector(
+async def test_transaction_ledger_evidence_is_session_invariant_and_matches_fx_selector(
     clean_db,
     db_engine,
     async_db_session: AsyncSession,
@@ -519,6 +519,28 @@ async def test_transaction_ledger_fx_evidence_matches_normalized_conversion_sele
                     trade_currency="USD",
                     currency="USD",
                     transaction_date=datetime(2026, 1, 3, tzinfo=UTC),
+                    costs=[
+                        TransactionCost(
+                            transaction_id="TX-FX-SELECTOR",
+                            fee_type="BROKERAGE",
+                            amount=Decimal("2"),
+                            currency="USD",
+                        )
+                    ],
+                ),
+                Cashflow(
+                    transaction_id="TX-FX-SELECTOR",
+                    portfolio_id="PORT-FX-SELECTOR",
+                    security_id="SEC-FX-SELECTOR",
+                    cashflow_date=date(2026, 1, 3),
+                    epoch=1,
+                    amount=Decimal("-1002"),
+                    currency="USD",
+                    classification="TRADE_SETTLEMENT",
+                    timing="SETTLED",
+                    calculation_type="TRANSACTION_DERIVED",
+                    is_position_flow=True,
+                    is_portfolio_flow=False,
                 ),
                 FxRate(
                     from_currency="USD",
@@ -550,6 +572,20 @@ async def test_transaction_ledger_fx_evidence_matches_normalized_conversion_sele
         )
 
     baseline = await read_evidence()
+    await async_db_session.execute(text("SET LOCAL TIME ZONE 'America/New_York'"))
+    await async_db_session.execute(text("SET LOCAL DateStyle TO 'SQL, DMY'"))
+    alternate_session_format = await read_evidence()
+    assert (
+        alternate_session_format.transaction_digest,
+        alternate_session_format.transaction_cost_digest,
+        alternate_session_format.selected_cashflow_digest,
+        alternate_session_format.selected_fx_rate_digest,
+    ) == (
+        baseline.transaction_digest,
+        baseline.transaction_cost_digest,
+        baseline.selected_cashflow_digest,
+        baseline.selected_fx_rate_digest,
+    )
     assert await repository.get_latest_fx_rate(
         from_currency="USD",
         to_currency="SGD",
