@@ -52,7 +52,6 @@ async def list_consumer_dlq_event_responses(
     original_topic: str | None,
     consumer_group: str | None,
     session_factory,
-    correlation_id: str | None = None,
     ingestion_job_id: str | None = None,
     event_ids: tuple[str, ...] | None = None,
 ) -> list[ConsumerDlqEventResponse]:
@@ -62,8 +61,6 @@ async def list_consumer_dlq_event_responses(
             stmt = stmt.where(DBConsumerDlqEvent.original_topic == original_topic)
         if consumer_group:
             stmt = stmt.where(DBConsumerDlqEvent.consumer_group == consumer_group)
-        if correlation_id:
-            stmt = stmt.where(DBConsumerDlqEvent.correlation_id == correlation_id)
         if ingestion_job_id:
             stmt = stmt.where(DBConsumerDlqEvent.ingestion_job_id == ingestion_job_id)
         if event_ids:

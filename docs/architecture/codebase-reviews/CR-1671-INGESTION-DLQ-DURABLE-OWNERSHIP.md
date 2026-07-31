@@ -22,7 +22,7 @@ latest-by-correlation compatibility rule while retaining its bounded-query impro
    key, indexed `(ingestion_job_id, observed_at DESC, id DESC)` reads, and indexed deterministic
    replay-audit ordering.
 3. Replaced evidence correlation membership with bounded job-owner membership plus exact replay
-   event linking.
+   event linking, and removed the now-dead DLQ-by-correlation service/query compatibility seam.
 4. Replaced latest-correlation replay selection with owner-first selection and a unique-only
    bounded legacy fallback.
 5. Added a pure per-event recovery policy. `replayed` proves recovery; later equivalent

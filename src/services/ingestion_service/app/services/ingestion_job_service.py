@@ -408,20 +408,6 @@ class IngestionJobService:
             session_factory=get_async_db_session,
         )
 
-    async def list_consumer_dlq_events_by_correlation_id(
-        self,
-        correlation_id: str,
-        *,
-        limit: int = 500,
-    ) -> list[ConsumerDlqEventResponse]:
-        return await list_consumer_dlq_event_responses(
-            limit=limit,
-            original_topic=None,
-            consumer_group=None,
-            correlation_id=correlation_id,
-            session_factory=get_async_db_session,
-        )
-
     async def list_consumer_dlq_events_by_job_id(
         self,
         job_id: str,
