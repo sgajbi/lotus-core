@@ -64,6 +64,11 @@ evidence age, and fail-closed publication gates. The run-list gate blocks incomp
 windows. This release does not claim an operator command for transitioning findings into terminal
 resolution states.
 
+When multiple trust states contribute to one response, Core applies the shared precedence
+`BLOCKED > STALE > UNKNOWN > UNRECONCILED > BREAK_OPEN > PARTIAL > COMPLETE`. Blank or unrecognized
+states fail closed as `UNKNOWN`. Run and finding evidence are reduced together, so a warning cannot
+hide a stale run and a stale-only page remains visibly `STALE`.
+
 Run and support responses expose `aggregation_revision` so operators can join the aggregate input
 generation to its independent control calculation and published control decision.
 

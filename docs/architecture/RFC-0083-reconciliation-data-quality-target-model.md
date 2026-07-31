@@ -64,6 +64,12 @@ Target statuses:
 Runtime and source-data products may keep existing lifecycle statuses, but they must expose or map to
 this target status vocabulary when downstream consumers need safety decisions.
 
+Mixed reconciliation evidence uses one fail-closed precedence:
+`BLOCKED > STALE > UNKNOWN > UNRECONCILED > BREAK_OPEN > PARTIAL > COMPLETE`. Unrecognized or blank
+states enter the reducer as `UNKNOWN`; callers may choose `UNKNOWN` or `UNRECONCILED` only for an
+empty evidence set. Finding state is reduced with run state rather than overwriting it, so an open
+warning cannot hide stale or blocked run evidence.
+
 ## Reconciliation Evidence Bundle
 
 Target `ReconciliationEvidenceBundle` fields:
@@ -145,6 +151,12 @@ Coverage classification:
 4. partial observed data or warnings produce `PARTIAL`,
 5. full observed data with no issues produces `COMPLETE`,
 6. insufficient scope produces `UNKNOWN`.
+
+Coverage runtime metadata must preserve that classification across projection boundaries. In
+particular, stale row quality or stale evidence age produces `freshness_status=STALE` and the
+machine-readable `STALE_EVIDENCE` publication block reason. Unrecognized quality produces
+`freshness_status=UNKNOWN`; structural incompleteness remains `PARTIAL`; absent evidence remains
+`UNAVAILABLE`.
 
 ## Source-Data Product Supportability Fields
 

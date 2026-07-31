@@ -20,6 +20,12 @@ The shared source-product catalog and runtime metadata contract are owned by
 Serving applications own their route DTOs and workflows; they must not duplicate hashing,
 lineage, freshness, or product-identity semantics in service-local helper modules.
 
+Market/reference source products also derive runtime quality and freshness from the shared
+`market_reference_quality` policy. Blocking, stale, and unknown row quality remains visible across
+definition, catalog, constituent, series, market-window, and coverage projections; it is not
+collapsed into structural `PARTIAL`. Stale coverage carries both `freshness_status=STALE` and the
+`STALE_EVIDENCE` publication reason.
+
 `PortfolioStateSnapshot:v1` fails closed when an exact financial-reconciliation control is missing,
 running, failed, unknown, or older than its selected position evidence. A response is current only
 when reconciliation is complete, data quality is complete or partial, and timestamp evidence exists.
