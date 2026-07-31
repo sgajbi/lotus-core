@@ -87,9 +87,11 @@ class _ObservedLockPositionHistoryRepository(SqlAlchemyPositionHistoryRepository
         db: AsyncSession,
         *,
         lock_attempted: asyncio.Event,
+        lock_acquired: asyncio.Event,
     ) -> None:
         super().__init__(db)
         self._lock_attempted = lock_attempted
+        self._lock_acquired = lock_acquired
 
     async def acquire_replay_lock(
         self,
@@ -104,6 +106,7 @@ class _ObservedLockPositionHistoryRepository(SqlAlchemyPositionHistoryRepository
             security_id=security_id,
             epoch=epoch,
         )
+        self._lock_acquired.set()
 
 
 async def _calculate_position(
@@ -181,6 +184,7 @@ async def test_same_key_recalculations_serialize_and_leave_exact_position_histor
     first_lock_acquired = asyncio.Event()
     release_first_lock = asyncio.Event()
     second_lock_attempted = asyncio.Event()
+    second_lock_acquired = asyncio.Event()
 
     first_task = asyncio.create_task(
         _calculate_position(
@@ -203,19 +207,19 @@ async def test_same_key_recalculations_serialize_and_leave_exact_position_histor
                 repository_factory=lambda session: _ObservedLockPositionHistoryRepository(
                     session,
                     lock_attempted=second_lock_attempted,
+                    lock_acquired=second_lock_acquired,
                 ),
             )
         )
         await wait_for_task_signal(second_task, second_lock_attempted, timeout=2)
-        await asyncio.sleep(0.1)
-
-        assert second_task.done() is False
+        assert second_lock_acquired.is_set() is False
 
         release_first_lock.set()
         first_result, second_result = await asyncio.wait_for(
             asyncio.gather(first_task, second_task),
             timeout=5,
         )
+        assert second_lock_acquired.is_set() is True
     finally:
         release_first_lock.set()
         await cancel_pending_tasks(first_task, second_task)
