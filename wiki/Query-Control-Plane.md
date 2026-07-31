@@ -116,7 +116,9 @@ missing.
 
 Benchmark, index, risk-free, classification-taxonomy, and model-target evidence use the shared
 market/reference quality vocabulary. Blank or vendor-specific status values are unrecognized,
-produce `data_quality_status=UNKNOWN`, and cannot pass a publication or readiness gate.
+produce `data_quality_status=UNKNOWN`, and cannot pass a publication or readiness gate. Benchmark
+coverage includes component definitions, prices, and returns in the decision; model readiness
+includes the governing model definition and every target.
 
 These outputs feed:
 

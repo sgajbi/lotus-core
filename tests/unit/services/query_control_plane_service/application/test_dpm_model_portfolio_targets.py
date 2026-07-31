@@ -151,6 +151,31 @@ async def test_unrecognized_model_target_quality_is_not_ready() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("quality_status", ["vendor_verified", "BLOCKED", " "])
+async def test_non_complete_model_definition_quality_is_not_ready(
+    quality_status: str,
+) -> None:
+    reader = _reader(_target("EQ_1", "1.0000000000"))
+    reader.resolve_model_portfolio_definition.return_value = replace(
+        _definition(),
+        quality_status=quality_status,
+    )
+
+    response = await model_portfolio_targets.ModelPortfolioTargetService(
+        reader=reader,
+        clock=lambda: GENERATED_AT,
+    ).resolve(
+        model_portfolio_id="MODEL_1",
+        request=ModelPortfolioTargetRequest(as_of_date=date(2026, 4, 10)),
+    )
+
+    assert response is not None
+    assert response.data_quality_status in {"UNKNOWN", "BLOCKED"}
+    assert response.supportability.state == "DEGRADED"
+    assert response.supportability.reason == "MODEL_TARGET_QUALITY_NOT_COMPLETE"
+
+
+@pytest.mark.asyncio
 async def test_missing_model_definition_returns_not_found_without_target_query() -> None:
     reader = AsyncMock()
     reader.resolve_model_portfolio_definition.return_value = None

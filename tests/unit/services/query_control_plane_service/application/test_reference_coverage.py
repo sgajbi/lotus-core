@@ -34,10 +34,13 @@ GENERATED_AT = datetime(2026, 1, 2, 9, tzinfo=UTC)
 
 
 class BenchmarkReader:
+    def __init__(self, rows: list[BenchmarkComponentEvidence] | None = None):
+        self.rows = rows if rows is not None else [_component("IDX_1"), _component("IDX_2")]
+
     async def list_components_overlapping_window(
         self, **_: object
     ) -> list[BenchmarkComponentEvidence]:
-        return [_component("IDX_1"), _component("IDX_2")]
+        return self.rows
 
 
 class IndexReader:
@@ -65,6 +68,7 @@ class RiskFreeReader:
 
 def _service(
     *,
+    components: list[BenchmarkComponentEvidence] | None = None,
     prices: list[IndexPriceEvidence] | None = None,
     risk_free: list[RiskFreeRateEvidence] | None = None,
     generated_at: datetime = GENERATED_AT,
@@ -72,7 +76,7 @@ def _service(
     risk_free_reader = RiskFreeReader(risk_free or [])
     return (
         ReferenceCoverageService(
-            benchmark_reader=cast(BenchmarkDefinitionReader, BenchmarkReader()),
+            benchmark_reader=cast(BenchmarkDefinitionReader, BenchmarkReader(components)),
             index_series_reader=cast(
                 IndexSeriesReader,
                 IndexReader(
@@ -215,6 +219,37 @@ async def test_benchmark_coverage_blocks_unrecognized_component_price_quality() 
     response = await service.get_benchmark(benchmark_id="BMK_1", request=_request())
 
     assert response.data_quality_status == "UNKNOWN"
+    assert response.publication_gate == "BLOCK"
+    assert "UNRECOGNIZED_QUALITY_STATUS" in response.publication_block_reasons
+
+
+@pytest.mark.asyncio
+async def test_benchmark_coverage_blocks_unrecognized_component_quality() -> None:
+    components = [
+        replace(_component("IDX_1"), quality_status="vendor_verified"),
+        replace(
+            _component("IDX_2"),
+            source_timestamp=datetime(2026, 1, 2, 8, 30, tzinfo=UTC),
+            created_at=datetime(2026, 1, 2, 8, 30, tzinfo=UTC),
+            updated_at=datetime(2026, 1, 2, 8, 30, tzinfo=UTC),
+        ),
+    ]
+    prices = [
+        _price(index_id, series_date)
+        for series_date in (date(2026, 1, 1), date(2026, 1, 2))
+        for index_id in ("IDX_1", "IDX_2")
+    ]
+    service, _ = _service(components=components, prices=prices)
+
+    response = await service.get_benchmark(benchmark_id="BMK_1", request=_request())
+
+    assert response.data_quality_status == "UNKNOWN"
+    assert response.quality_status_distribution == {
+        "accepted": 7,
+        "vendor_verified": 1,
+    }
+    assert response.latest_evidence_timestamp == datetime(2026, 1, 2, 8, 30, tzinfo=UTC)
+    assert response.evidence_age_minutes == 30
     assert response.publication_gate == "BLOCK"
     assert "UNRECOGNIZED_QUALITY_STATUS" in response.publication_block_reasons
 

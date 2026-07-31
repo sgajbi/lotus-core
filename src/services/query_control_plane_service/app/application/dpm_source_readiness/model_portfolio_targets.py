@@ -69,7 +69,10 @@ def build_model_portfolio_target_response(
 
     targets = [_target_row(row) for row in evidence]
     total_weight = sum((target.target_weight for target in targets), Decimal("0"))
-    data_quality_status = _data_quality_status(evidence, required_count=len(targets))
+    data_quality_status = _data_quality_status(
+        definition=definition,
+        evidence=evidence,
+    )
     supportability = _supportability(
         target_count=len(targets),
         total_weight=total_weight,
@@ -147,16 +150,20 @@ def _supportability(
 
 
 def _data_quality_status(
-    evidence: list[ModelPortfolioTargetEvidence], *, required_count: int
+    *,
+    definition: ModelPortfolioDefinitionEvidence,
+    evidence: list[ModelPortfolioTargetEvidence],
 ) -> str:
-    if required_count <= 0:
+    if not evidence:
         return "UNKNOWN"
-    quality_counts = count_market_reference_quality_statuses(row.quality_status for row in evidence)
+    quality_counts = count_market_reference_quality_statuses(
+        [definition.quality_status, *(row.quality_status for row in evidence)]
+    )
     return str(
         classify_market_reference_coverage(
             MarketReferenceCoverageSignal(
-                required_count=required_count,
-                observed_count=len(evidence),
+                required_count=len(evidence) + 1,
+                observed_count=len(evidence) + 1,
                 stale_count=quality_counts.stale_count,
                 estimated_count=quality_counts.estimated_count,
                 blocking_count=quality_counts.blocking_count,
