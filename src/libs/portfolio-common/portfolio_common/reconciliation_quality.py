@@ -209,9 +209,7 @@ def aggregate_reconciliation_statuses(
         )
     if normalized_statuses - set(_AGGREGATE_STATUS_PRECEDENCE):
         normalized_statuses.add(UNKNOWN)
-    return next(
-        status for status in _AGGREGATE_STATUS_PRECEDENCE if status in normalized_statuses
-    )
+    return next(status for status in _AGGREGATE_STATUS_PRECEDENCE if status in normalized_statuses)
 
 
 def _validate_data_quality_coverage_signal(signal: DataQualityCoverageSignal) -> None:
