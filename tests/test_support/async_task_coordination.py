@@ -4,6 +4,9 @@ import asyncio
 from collections.abc import Awaitable
 from typing import TypeVar
 
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
 T = TypeVar("T")
 
 
@@ -50,3 +53,51 @@ async def cancel_pending_tasks(*tasks: Awaitable[object] | None) -> None:
             task.cancel()
     if concrete_tasks:
         await asyncio.gather(*concrete_tasks, return_exceptions=True)
+
+
+async def wait_for_postgres_advisory_lock_wait(
+    task: asyncio.Task[T],
+    session_factory: async_sessionmaker[AsyncSession],
+    *,
+    backend_pid: int,
+    timeout: float,
+) -> None:
+    """Wait until PostgreSQL exposes ``task`` as waiting for an advisory lock.
+
+    Database state, rather than elapsed time or client call ordering, proves that
+    the request reached PostgreSQL and could not acquire its advisory lock. The
+    producer task remains supervised so an early database failure is propagated.
+    """
+
+    deadline = asyncio.get_running_loop().time() + timeout
+    async with session_factory() as observer_session:
+        while True:
+            if task.done():
+                await task
+                raise RuntimeError(
+                    "task completed without entering a PostgreSQL advisory-lock wait"
+                )
+
+            waiting = await observer_session.scalar(
+                text(
+                    """
+                    SELECT EXISTS (
+                        SELECT 1
+                        FROM pg_locks
+                        WHERE pid = :backend_pid
+                          AND locktype = 'advisory'
+                          AND NOT granted
+                    )
+                    """
+                ),
+                {"backend_pid": backend_pid},
+            )
+            if waiting:
+                return
+
+            remaining = deadline - asyncio.get_running_loop().time()
+            if remaining <= 0:
+                raise TimeoutError(
+                    f"task did not enter a PostgreSQL advisory-lock wait within {timeout} seconds"
+                )
+            await asyncio.sleep(min(0.01, remaining))

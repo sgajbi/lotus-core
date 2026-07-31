@@ -10,7 +10,7 @@ from unittest.mock import Mock
 import pytest
 from portfolio_common.database_models import PositionHistory, PositionState
 from portfolio_common.position_state_repository import PositionStateRepository
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.services.portfolio_transaction_processing_service.app.application.position_history import (
@@ -31,6 +31,7 @@ from src.services.portfolio_transaction_processing_service.app.ports.position_hi
 )
 from tests.test_support.async_task_coordination import (
     cancel_pending_tasks,
+    wait_for_postgres_advisory_lock_wait,
     wait_for_task_signal,
 )
 from tests.test_support.transaction_processing import (
@@ -88,10 +89,12 @@ class _ObservedLockPositionHistoryRepository(SqlAlchemyPositionHistoryRepository
         *,
         lock_attempted: asyncio.Event,
         lock_acquired: asyncio.Event,
+        backend_pid: list[int],
     ) -> None:
         super().__init__(db)
         self._lock_attempted = lock_attempted
         self._lock_acquired = lock_acquired
+        self._backend_pid = backend_pid
 
     async def acquire_replay_lock(
         self,
@@ -100,6 +103,7 @@ class _ObservedLockPositionHistoryRepository(SqlAlchemyPositionHistoryRepository
         security_id: str,
         epoch: int,
     ) -> None:
+        self._backend_pid.append(await self._session.scalar(text("SELECT pg_backend_pid()")))
         self._lock_attempted.set()
         await super().acquire_replay_lock(
             portfolio_id=portfolio_id,
@@ -185,6 +189,7 @@ async def test_same_key_recalculations_serialize_and_leave_exact_position_histor
     release_first_lock = asyncio.Event()
     second_lock_attempted = asyncio.Event()
     second_lock_acquired = asyncio.Event()
+    second_backend_pid: list[int] = []
 
     first_task = asyncio.create_task(
         _calculate_position(
@@ -208,10 +213,18 @@ async def test_same_key_recalculations_serialize_and_leave_exact_position_histor
                     session,
                     lock_attempted=second_lock_attempted,
                     lock_acquired=second_lock_acquired,
+                    backend_pid=second_backend_pid,
                 ),
             )
         )
         await wait_for_task_signal(second_task, second_lock_attempted, timeout=2)
+        assert len(second_backend_pid) == 1
+        await wait_for_postgres_advisory_lock_wait(
+            second_task,
+            session_factory,
+            backend_pid=second_backend_pid[0],
+            timeout=2,
+        )
         assert second_lock_acquired.is_set() is False
 
         release_first_lock.set()
