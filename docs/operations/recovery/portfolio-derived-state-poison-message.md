@@ -14,6 +14,13 @@ The shared Kafka consumer boundary owns the terminal sequence:
 
 Service delivery adapters must not publish directly to DLQ or commit terminal source offsets.
 
+Database deadlocks and other SQLAlchemy `DBAPIError` failures are transient infrastructure
+failures, not poison messages. The position-timeseries adapter converts them to the shared
+retryable consumer contract so Kafka redelivers in key order without a source-offset commit. If a
+syntactically and semantically valid valuation event appears in the terminal DLQ with database
+failure evidence, treat that as a consumer-classification defect; do not replay it until the
+classification or underlying database contention has been corrected.
+
 ## Command
 
 ```bash
