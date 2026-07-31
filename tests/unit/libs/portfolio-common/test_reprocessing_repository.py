@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from portfolio_common.config import KAFKA_TRANSACTIONS_PERSISTED_TOPIC
 from portfolio_common.database_models import Transaction as DBTransaction
+from portfolio_common.ingestion_lineage import ingestion_job_id_var
 from portfolio_common.kafka_utils import KafkaProducer
 from portfolio_common.logging_utils import correlation_id_var
 from portfolio_common.reprocessing_repository import (
@@ -417,5 +418,27 @@ async def test_reprocess_transactions_can_run_through_reader_and_publisher_ports
     assert publisher.messages[0].payload["transaction_id"] == "TXN_A"
     assert publisher.messages[0].headers == [
         ("correlation_id", b"corr-explicit"),
+        ("lotus-transaction-processing-intent", b"repair"),
+    ]
+
+
+async def test_reprocess_transactions_propagates_context_ingestion_job_owner():
+    reader = FakeReplayReader([_replay_transaction("TXN_A", portfolio_id="PORT-1")])
+    publisher = FakeReplayPublisher()
+    repository = ReprocessingRepository.from_ports(reader=reader, publisher=publisher)
+
+    token = ingestion_job_id_var.set(" job-replay-001 ")
+    try:
+        count = await repository.reprocess_transactions_by_ids(
+            ["TXN_A"],
+            correlation_id="corr-replay-001",
+        )
+    finally:
+        ingestion_job_id_var.reset(token)
+
+    assert count == 1
+    assert publisher.messages[0].headers == [
+        ("correlation_id", b"corr-replay-001"),
+        ("ingestion_job_id", b"job-replay-001"),
         ("lotus-transaction-processing-intent", b"repair"),
     ]

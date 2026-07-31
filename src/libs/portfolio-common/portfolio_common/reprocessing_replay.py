@@ -7,6 +7,7 @@ from typing import Any, Protocol
 from .config import KAFKA_TRANSACTIONS_PERSISTED_TOPIC
 from .domain.eventing import transaction_partition_key
 from .events import TransactionEvent
+from .ingestion_lineage import INGESTION_JOB_ID_HEADER, normalize_ingestion_job_id
 from .logging_utils import normalize_lineage_value
 
 TRANSACTION_PROCESSING_INTENT_HEADER = "lotus-transaction-processing-intent"
@@ -41,13 +42,18 @@ class TransactionReplayPublisher(Protocol):
 @dataclass(frozen=True, slots=True)
 class ReplayCorrelationMetadata:
     correlation_id: str | None = None
+    ingestion_job_id: str | None = None
 
     @property
     def headers(self) -> list[tuple[str, bytes]]:
+        headers: list[tuple[str, bytes]] = []
         correlation_id = normalize_lineage_value(self.correlation_id)
-        if not correlation_id:
-            return []
-        return [("correlation_id", correlation_id.encode("utf-8"))]
+        if correlation_id:
+            headers.append(("correlation_id", correlation_id.encode("utf-8")))
+        ingestion_job_id = normalize_ingestion_job_id(self.ingestion_job_id)
+        if ingestion_job_id:
+            headers.append((INGESTION_JOB_ID_HEADER, ingestion_job_id.encode("utf-8")))
+        return headers
 
 
 @dataclass(frozen=True, slots=True)
