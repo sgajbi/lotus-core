@@ -202,7 +202,7 @@ async def test_get_fx_rate_uses_normalized_functional_index_predicates(
     assert "upper(trim(fx_rates.from_currency)) = 'usd'" in compiled_query
     assert "upper(trim(fx_rates.to_currency)) = 'eur'" in compiled_query
     assert "fx_rates.rate_date <= '2025-01-10'" in compiled_query
-    assert "order by fx_rates.rate_date desc" in compiled_query
+    assert "order by fx_rates.rate_date desc, fx_rates.id desc" in compiled_query
 
 
 async def test_upsert_position_timeseries(

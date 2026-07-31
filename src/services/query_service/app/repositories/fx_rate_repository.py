@@ -47,7 +47,7 @@ class FxRateRepository:
         if end_date:
             stmt = stmt.filter(FxRate.rate_date <= end_date)
 
-        results = await self.db.execute(stmt.order_by(FxRate.rate_date.asc()))
+        results = await self.db.execute(stmt.order_by(FxRate.rate_date.asc(), FxRate.id.asc()))
         fx_rates = results.scalars().all()
         logger.info(
             "Found %s FX rates for '%s-%s' with given filters.",

@@ -56,4 +56,4 @@ async def test_get_fx_rates_normalizes_currency_and_ignores_invalid_rates() -> N
     assert "upper(trim(fx_rates.to_currency)) = 'USD'" in sql
     assert "fx_rates.rate_date >= '2026-01-01'" in sql
     assert "fx_rates.rate_date <= '2026-01-04'" in sql
-    assert "fx_rates.rate_date ASC" in sql
+    assert "fx_rates.rate_date ASC, fx_rates.id ASC" in sql

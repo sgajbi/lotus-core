@@ -62,7 +62,7 @@ class TimeseriesMarketDataReader:
                 to_currency_expr == normalized_to_currency,
                 FxRate.rate_date <= a_date,
             )
-            .order_by(FxRate.rate_date.desc())
+            .order_by(FxRate.rate_date.desc(), FxRate.id.desc())
         )
         row = result.scalars().first()
         if row is None:

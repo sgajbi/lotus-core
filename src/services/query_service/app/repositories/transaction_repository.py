@@ -210,7 +210,7 @@ class TransactionRepository:
                 to_currency_expr == normalized_to_currency,
                 FxRate.rate_date <= as_of_date,
             )
-            .order_by(FxRate.rate_date.desc())
+            .order_by(FxRate.rate_date.desc(), FxRate.id.desc())
             .limit(1)
         )
         return cast(Decimal | None, (await self.db.execute(stmt)).scalar_one_or_none())

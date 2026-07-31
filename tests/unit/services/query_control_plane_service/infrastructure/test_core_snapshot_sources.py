@@ -104,6 +104,7 @@ async def test_maps_portfolio_instrument_price_and_fx_records() -> None:
     assert "trim(instruments.security_id) IN ('SEC_1')" in instrument_sql
     assert "upper(trim(fx_rates.from_currency)) = 'USD'" in fx_sql
     assert "upper(trim(fx_rates.to_currency)) = 'SGD'" in fx_sql
+    assert "ORDER BY fx_rates.rate_date ASC, fx_rates.id ASC" in fx_sql
 
 
 @pytest.mark.asyncio

@@ -212,7 +212,7 @@ async def test_fetch_latest_fx_rate_normalizes_currency_codes_and_uses_functiona
     assert "upper(trim(fx_rates.from_currency)) = 'eur'" in compiled_query
     assert "upper(trim(fx_rates.to_currency)) = 'usd'" in compiled_query
     assert "fx_rates.rate_date <= '2026-05-28'" in compiled_query
-    assert "order by fx_rates.rate_date desc" in compiled_query
+    assert "order by fx_rates.rate_date desc, fx_rates.id desc" in compiled_query
     assert "limit 1" in compiled_query
 
 

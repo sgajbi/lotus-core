@@ -365,7 +365,7 @@ async def test_get_fx_rate_normalizes_currency_codes_and_uses_functional_index_p
     assert "upper(trim(fx_rates.from_currency)) = 'EUR'" in compiled_query
     assert "upper(trim(fx_rates.to_currency)) = 'USD'" in compiled_query
     assert "fx_rates.rate_date <= '2026-03-27'" in compiled_query
-    assert "ORDER BY fx_rates.rate_date DESC" in compiled_query
+    assert "ORDER BY fx_rates.rate_date DESC, fx_rates.id DESC" in compiled_query
 
 
 async def test_get_instrument_trims_security_id_before_query(
