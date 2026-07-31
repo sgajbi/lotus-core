@@ -2,14 +2,20 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Literal
-
-from src.services.ingestion_service.app.DTOs.ingestion_job_dto import (
-    ConsumerDlqEventResponse,
-    IngestionReplayAuditResponse,
-)
+from typing import Literal, Protocol
 
 RecoveryState = Literal["not_requested", "dry_run_only", "recovered", "unresolved"]
+
+
+class ConsumerDlqEvidence(Protocol):
+    event_id: str
+
+
+class ReplayAuditEvidence(Protocol):
+    recovery_path: str
+    event_id: str
+    replay_fingerprint: str
+    replay_status: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -20,13 +26,13 @@ class ConsumerDlqRecovery:
 
 def derive_consumer_dlq_recovery(
     *,
-    events: Iterable[ConsumerDlqEventResponse],
-    replay_audits: Iterable[IngestionReplayAuditResponse],
+    events: Iterable[ConsumerDlqEvidence],
+    replay_audits: Iterable[ReplayAuditEvidence],
     evidence_complete: bool,
 ) -> tuple[ConsumerDlqRecovery, ...]:
     """Fold newest-first durable audit rows into a recovery state for each DLQ event."""
 
-    audits_by_event: dict[str, list[IngestionReplayAuditResponse]] = {}
+    audits_by_event: dict[str, list[ReplayAuditEvidence]] = {}
     for audit in replay_audits:
         if audit.recovery_path != "consumer_dlq_replay":
             continue
@@ -45,7 +51,7 @@ def derive_consumer_dlq_recovery(
 
 
 def _derive_complete_event_recovery(
-    audits: list[IngestionReplayAuditResponse],
+    audits: list[ReplayAuditEvidence],
 ) -> RecoveryState:
     if not audits:
         return "not_requested"
