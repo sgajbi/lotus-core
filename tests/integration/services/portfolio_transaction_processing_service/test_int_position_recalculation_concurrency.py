@@ -29,6 +29,10 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure.po
 from src.services.portfolio_transaction_processing_service.app.ports.position_history import (
     PositionHistoryObserver,
 )
+from tests.test_support.async_task_coordination import (
+    cancel_pending_tasks,
+    wait_for_task_signal,
+)
 from tests.test_support.transaction_processing import (
     booked_transaction_event,
     canonical_transaction_record,
@@ -189,27 +193,32 @@ async def test_same_key_recalculations_serialize_and_leave_exact_position_histor
             ),
         )
     )
-    await asyncio.wait_for(first_lock_acquired.wait(), timeout=2)
-    second_task = asyncio.create_task(
-        _calculate_position(
-            session_factory=session_factory,
-            event=second_event,
-            repository_factory=lambda session: _ObservedLockPositionHistoryRepository(
-                session,
-                lock_attempted=second_lock_attempted,
-            ),
+    second_task: asyncio.Task | None = None
+    try:
+        await wait_for_task_signal(first_task, first_lock_acquired, timeout=2)
+        second_task = asyncio.create_task(
+            _calculate_position(
+                session_factory=session_factory,
+                event=second_event,
+                repository_factory=lambda session: _ObservedLockPositionHistoryRepository(
+                    session,
+                    lock_attempted=second_lock_attempted,
+                ),
+            )
         )
-    )
-    await asyncio.wait_for(second_lock_attempted.wait(), timeout=2)
-    await asyncio.sleep(0.1)
+        await wait_for_task_signal(second_task, second_lock_attempted, timeout=2)
+        await asyncio.sleep(0.1)
 
-    assert second_task.done() is False
+        assert second_task.done() is False
 
-    release_first_lock.set()
-    first_result, second_result = await asyncio.wait_for(
-        asyncio.gather(first_task, second_task),
-        timeout=5,
-    )
+        release_first_lock.set()
+        first_result, second_result = await asyncio.wait_for(
+            asyncio.gather(first_task, second_task),
+            timeout=5,
+        )
+    finally:
+        release_first_lock.set()
+        await cancel_pending_tasks(first_task, second_task)
 
     assert first_result.position_record_count == 2
     assert second_result.position_record_count == 1

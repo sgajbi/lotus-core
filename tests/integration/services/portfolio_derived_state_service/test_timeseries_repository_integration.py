@@ -36,6 +36,10 @@ from src.services.portfolio_derived_state_service.app.infrastructure import (
 from src.services.portfolio_derived_state_service.app.ports.position_timeseries import (
     PositionTimeseriesRepository,
 )
+from tests.test_support.async_task_coordination import (
+    cancel_pending_tasks,
+    wait_for_task_signal,
+)
 
 TimeseriesGenerationRepository = timeseries_generation_repository.TimeseriesGenerationRepository
 
@@ -80,6 +84,7 @@ async def test_portfolio_aggregation_mutation_fence_serializes_same_portfolio(
     session_factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
     first_acquired = asyncio.Event()
     release_first = asyncio.Event()
+    second_attempted = asyncio.Event()
     second_acquired = asyncio.Event()
 
     async def hold_first_fence() -> None:
@@ -93,20 +98,29 @@ async def test_portfolio_aggregation_mutation_fence_serializes_same_portfolio(
     async def await_second_fence() -> None:
         await first_acquired.wait()
         async with session_factory() as session, session.begin():
+            second_attempted.set()
             await TimeseriesGenerationRepository(
                 session
             ).acquire_portfolio_aggregation_mutation_fence("PORT-AGG-FENCE-001")
             second_acquired.set()
 
     first_task = asyncio.create_task(hold_first_fence())
-    await first_acquired.wait()
-    second_task = asyncio.create_task(await_second_fence())
-    await asyncio.sleep(0.1)
-    assert second_acquired.is_set() is False
+    second_task: asyncio.Task[None] | None = None
+    try:
+        await wait_for_task_signal(first_task, first_acquired, timeout=2)
+        second_task = asyncio.create_task(await_second_fence())
+        await wait_for_task_signal(second_task, second_attempted, timeout=2)
+        assert second_acquired.is_set() is False
 
-    release_first.set()
-    await asyncio.wait_for(asyncio.gather(first_task, second_task), timeout=5)
-    assert second_acquired.is_set() is True
+        release_first.set()
+        await asyncio.wait_for(
+            asyncio.gather(first_task, second_task),
+            timeout=5,
+        )
+        assert second_acquired.is_set() is True
+    finally:
+        release_first.set()
+        await cancel_pending_tasks(first_task, second_task)
 
 
 def _snapshot(
