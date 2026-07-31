@@ -185,5 +185,15 @@ behavior corrections.
 - [Architecture](Architecture)
 - [Cost Processing](Cost-Calculator)
 - [Cashflow Calculator](Cashflow-Calculator)
+
+### Deterministic transaction-ledger reconstruction
+
+`TransactionLedgerWindow:v1` keeps its public response schema but binds its reconstruction scope
+identity to the complete filtered material input set: transaction rows, owned transaction costs,
+the latest cashflow selected per transaction, and applicable reporting-currency FX rows. The
+database reduces each family to an ordered fixed-width digest; pagination and unrelated or
+superseded rows do not alter the identity. A selected economics-input correction does alter it,
+preventing stale page/cache reuse without transferring the complete ledger solely to construct
+evidence.
 - [Position Processing](Position-Calculator)
 - [Validation and CI](Validation-and-CI)

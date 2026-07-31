@@ -142,6 +142,18 @@ Minimum target fields:
 10. source system, source batch, and source record lineage where available,
 11. `restatement_version`.
 
+Current deterministic identity rule:
+
+1. the scope identity binds the complete filtered transaction set, every owned transaction-cost
+   row, the latest cashflow selected per transaction, and each selected reporting-currency FX row,
+2. every family is reduced to a deterministic fixed-width SHA-256 digest inside PostgreSQL,
+3. `skip`, `limit`, sort order, and returned page contents do not participate, so all pages of the
+   same complete filtered scope share one identity,
+4. unrelated portfolios, superseded cashflow epochs, and unselected FX pairs/dates do not
+   participate,
+5. public response schemas remain unchanged; the corrected behavior is that a material derived
+   input change now changes the existing reconstruction scope id.
+
 ## Lineage Requirements
 
 Holdings lineage must be able to answer:
@@ -168,6 +180,11 @@ Transaction lineage must be able to answer:
 3. which calculation policy produced costs, FX, and realized gain/loss fields,
 4. which linked legs belong to the same economic event,
 5. whether a future correction or restatement superseded the row.
+
+The current `TransactionLedgerWindow` scope identity proves that the selected material input set
+has not changed; it is not a substitute for row-level provenance. The response continues to carry
+row lineage where available, while the scope digest provides cache/reconstruction invalidation
+across transaction, cost, latest-cashflow, and selected reporting-FX evidence.
 
 ## Restatement Decision Record
 
