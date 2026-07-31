@@ -16,6 +16,7 @@ from uuid import uuid4
 
 from confluent_kafka import Consumer, Message, TopicPartition
 from pydantic import ValidationError
+from sqlalchemy import select
 
 from .config import (
     KAFKA_CONSUMER_DLQ_FAILURE_MAX_ATTEMPTS,
@@ -23,7 +24,7 @@ from .config import (
     KAFKA_CONSUMER_RETRYABLE_FAILURE_MAX_ELAPSED_SECONDS,
     get_kafka_consumer_runtime_overrides,
 )
-from .database_models import ConsumerDlqEvent
+from .database_models import ConsumerDlqEvent, IngestionJob
 from .db import get_async_db_session
 from .exceptions import RetryableConsumerError
 from .ingestion_lineage import (
@@ -494,7 +495,9 @@ class BaseConsumer(ABC):
             message_correlation_id = normalize_lineage_value(
                 self._get_message_header_correlation_id(msg)
             )
-            ingestion_job_id = normalize_ingestion_job_id(ingestion_job_id_var.get())
+            ingestion_job_id = await self._resolve_persistable_ingestion_job_id(
+                normalize_ingestion_job_id(ingestion_job_id_var.get())
+            )
             error_reason_code = classify_dlq_reason_code(error)
             dlq_payload = self._build_dlq_payload(
                 msg,
@@ -507,6 +510,7 @@ class BaseConsumer(ABC):
             dlq_headers = self._build_dlq_headers(
                 msg,
                 correlation_id=correlation_id,
+                ingestion_job_id=ingestion_job_id,
                 traceparent=traceparent,
             )
             self._publish_dlq_message(msg, payload=dlq_payload, headers=dlq_headers)
@@ -569,19 +573,44 @@ class BaseConsumer(ABC):
         msg: Message,
         *,
         correlation_id: str | None,
+        ingestion_job_id: str | None = None,
         traceparent: str | None = None,
     ) -> list[tuple[str, bytes]]:
         dlq_headers = [
             _redacted_dlq_header(header)
             for header in msg.headers() or []
-            if header[0].strip().lower() != "traceparent"
+            if header[0].strip().lower() not in {"traceparent", INGESTION_JOB_ID_HEADER}
         ]
         if correlation_id:
             dlq_headers.append(("correlation_id", correlation_id.encode("utf-8")))
+        if ingestion_job_id:
+            dlq_headers.append((INGESTION_JOB_ID_HEADER, ingestion_job_id.encode("utf-8")))
         normalized_traceparent = normalize_traceparent(traceparent)
         if normalized_traceparent:
             dlq_headers.append(("traceparent", normalized_traceparent.encode("utf-8")))
         return dlq_headers
+
+    async def _resolve_persistable_ingestion_job_id(
+        self,
+        ingestion_job_id: str | None,
+    ) -> str | None:
+        if ingestion_job_id is None:
+            return None
+        async for db in get_async_db_session():
+            result = await db.execute(
+                select(IngestionJob.job_id).where(IngestionJob.job_id == ingestion_job_id)
+            )
+            if result.scalar_one_or_none() is not None:
+                return ingestion_job_id
+            self._log_consumer_event(
+                logging.WARNING,
+                "Kafka message references an unknown ingestion job; DLQ ownership omitted.",
+                event_name="kafka.consumer.ingestion_job_owner_unknown",
+                status="degraded",
+                reason_code="ingestion_job_owner_unknown",
+            )
+            return None
+        raise RuntimeError("Database session unavailable while resolving DLQ ingestion owner.")
 
     def _publish_dlq_message(
         self,
