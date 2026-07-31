@@ -196,6 +196,7 @@ superseded rows do not alter the identity. A selected economics-input correction
 preventing stale page/cache reuse without transferring the complete ledger solely to construct
 evidence. Evidence, page rows, instrument checks, and reporting-FX conversion execute within one
 repeatable, read-only PostgreSQL snapshot, so a concurrent correction cannot split one response
-across old and new committed states.
+across old and new committed states. Evidence and conversion also share the deterministic
+`rate_date DESC, id DESC` selector for normalized legacy FX-pair variants.
 - [Position Processing](Position-Calculator)
 - [Validation and CI](Validation-and-CI)

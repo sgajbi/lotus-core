@@ -154,7 +154,9 @@ Current deterministic identity rule:
 5. one repeatable, read-only PostgreSQL snapshot covers portfolio/as-of resolution, identity
    evidence, page rows, instrument support, and FX conversion so concurrent corrections cannot
    split the evidence and returned economics across committed states,
-6. public response schemas remain unchanged; the corrected behavior is that a material derived
+6. normalized legacy FX variants use the same deterministic `rate_date DESC, id DESC` selector for
+   evidence and conversion,
+7. public response schemas remain unchanged; the corrected behavior is that a material derived
    input change now changes the existing reconstruction scope id.
 
 ## Lineage Requirements
