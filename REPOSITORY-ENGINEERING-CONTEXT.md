@@ -3406,6 +3406,14 @@ Most relevant current governance:
      retryable consumer contract so ordered Kafka redelivery retains the source offset. Do not
      send a valid domain event to the terminal DLQ or commit its offset because of a deadlock or
      other `DBAPIError`. Keep validation failures on the established terminal path.
+231. Database concurrency tests that wait for a task-published `asyncio.Event` must supervise the
+     producer task and signal together when connection, transaction, or lock work can fail before
+     signaling. Propagate an early producer exception immediately, bound a genuinely stuck wait,
+     release owned synchronization primitives in `finally`, and cancel plus await every pending
+     task without masking the original failure. Prefer an explicit attempt signal and the real
+     database serialization/result assertion over sleep-based lock inference. Reuse
+     `tests.test_support.async_task_coordination` for this pattern; ordinary barriers whose complete
+     participant set is already under one bounded gather do not need an extra supervisor.
 
 ## Context Maintenance Rule
 
