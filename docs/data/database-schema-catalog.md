@@ -1146,6 +1146,7 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
   - `topic` (String): Domain attribute used by the owning module.
   - `status` (String): Current lifecycle status for the record/work item.
   - `correlation_id` (String): Trace/correlation id used across logs and events.
+  - `ingestion_job_id` (String): Durable ingestion-job owner propagated to Kafka; nullable for non-ingestion and legacy events.
   - `retry_count` (Integer): Domain attribute used by the owning module.
   - `last_attempted_at` (DateTime): Business/event date or timestamp used for ordering, as-of queries, or lifecycle tracking.
   - `next_attempt_at` (DateTime): Earliest retry-eligible timestamp; a future head blocks only its stream.
@@ -1280,7 +1281,7 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
 
 - **Purpose**: Dead-letter event archive.
 - **Description**: Captured failed-consumer events with reason and context.
-- **Relationships**: No explicit foreign-key relationships declared.
+- **Relationships**: `ingestion_job_id` -> `ingestion_jobs.job_id`
 - **Usage (modules/features)**: `src/services/ingestion_service/app/services/ingestion_job_service.py`, `src/services/event_replay_service/app/routers/ingestion_operations.py`, `src/services/ingestion_service/app/DTOs/ingestion_job_dto.py`, `src/libs/portfolio-common/portfolio_common/kafka_consumer.py`
 - **Typical access patterns**: As-of/date-range reads, idempotent upserts for event processing, status-filtered job polling where applicable.
 - **Column definitions**:
@@ -1292,6 +1293,7 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
   - `original_key` (String): Domain attribute used by the owning module.
   - `error_reason` (Text): Human-readable reason for failure/exception status.
   - `correlation_id` (String): Trace/correlation id used across logs and events.
+  - `ingestion_job_id` (String) (FK `ingestion_jobs.job_id`): Durable evidence owner; correlation metadata is not an ownership key.
   - `correlation_missing_reason` (String): Explicit reason correlation_id is absent for replay and support diagnostics.
   - `alternate_lookup_key` (String): Durable alternate support lookup key when correlation_id is absent.
   - `payload_excerpt` (Text): Domain attribute used by the owning module.

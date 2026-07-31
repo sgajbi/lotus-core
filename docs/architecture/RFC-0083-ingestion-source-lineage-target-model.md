@@ -176,6 +176,12 @@ Replay status vocabulary:
 `replayed_bookkeeping_failed` must remain distinct from `failed` because the payload may already have
 reached Kafka and a blind retry could duplicate work.
 
+Consumer-DLQ evidence membership is owned by durable `ingestion_job_id`; `correlation_id` remains
+trace evidence and cannot authorize aggregate membership. Recovery is folded per DLQ event from
+newest-first durable replay outcomes. `replayed` proves recovery, and `duplicate_blocked` preserves
+it only when the same fingerprint has older durable success. Later failure, bookkeeping failure,
+dry-run-only history, or incomplete evidence remains unresolved without deleting immutable history.
+
 ## Retention And Repair Posture
 
 Target retention classes:

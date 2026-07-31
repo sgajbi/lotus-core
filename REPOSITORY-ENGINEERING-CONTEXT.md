@@ -240,10 +240,12 @@ Current repository posture:
     totals, or large example catalogs in the router. Add application service tests first when
     extending ingestion operations, and add router-support guard tests when moving API
     documentation data.
-    Consumer-DLQ replay correlation joins must use purpose-built ingestion job service lookups,
-    not generic operator listing pages. Use the latest replayable correlation lookup for recovery
-    paths so replay correctness does not depend on unrelated job volume, page size, or incidental
-    list ordering.
+    Consumer-DLQ ownership and evidence membership must use the durable `ingestion_job_id`
+    propagated through direct publish, consumer context, outbox rows, Kafka headers, DLQ
+    persistence, and replay. `correlation_id` is observability evidence, not an ownership key.
+    Legacy ownerless rows may use the bounded replayable-correlation lookup only when exactly one
+    job matches; ambiguous reuse must remain unmapped and fail closed. Evidence bundles query DLQ
+    rows by indexed job ownership and may additionally link exact replay event ids.
 28. Reference-data ingestion source-observation lineage now has a shared DTO contract for
     benchmark, index, risk-free, and classification families. The canonical API-facing fields are
     `source_system`, `source_record_id`, `observed_at`, and `quality_status`; legacy
@@ -260,6 +262,12 @@ Current repository posture:
     `INGESTION_REPLAY_AUDIT_WRITE_FAILED` with recovery path, event/job identity, replay status, and
     deterministic fingerprint so operators can restore audit persistence and retry through the
     governed endpoint.
+    Ingestion evidence recovery is folded independently for each consumer-DLQ event from
+    newest-first replay audits ordered by `(requested_at DESC, id DESC)`. `replayed` proves
+    recovery. A later `duplicate_blocked` preserves recovery only when an older equivalent
+    fingerprint has durable `replayed` proof. Later failure, `replayed_bookkeeping_failed`,
+    dry-run-only history, or truncated evidence remains fail closed. Job-retry audit rows never
+    clear consumer-DLQ failures.
 31. Direct ingestion-router Kafka publish dependency failures use the shared
     `routers.publish_errors` mapper. Preserve the `INGESTION_PUBLISH_FAILED` application code, but
     return HTTP 503 with `Retry-After`, dependency=`kafka`, retryability, correlation lineage,

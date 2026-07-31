@@ -107,6 +107,12 @@ publication preserves it in payload and headers, and DLQ replay republishes it w
 message. Existing `correlation_id` remains the Lotus operator correlation key and is not replaced by
 trace context.
 
+Governed ingestion traffic also carries `ingestion_job_id` as durable workflow ownership. Direct
+ingestion and replay publish it, consumer context preserves it, outbox rows retain and republish it,
+and consumer-DLQ rows persist it with an indexed foreign key. Unlike `correlation_id`, this field may
+control ingestion evidence membership. Legacy rows without it may fall back to correlation only
+when a bounded lookup proves exactly one replayable job; ambiguity fails closed.
+
 ## Supportability Surfaces
 
 Supportability surfaces are operator/control-plane surfaces, not business read products.

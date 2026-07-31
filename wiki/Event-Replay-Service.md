@@ -26,9 +26,11 @@ This makes the service an operational control plane, not a write-ingress surface
 `GET /ingestion/jobs/{job_id}/evidence` publishes `IngestionEvidenceBundle:v1`. The response includes
 deterministic bundle/content identity, canonical job/failure/replay/DLQ evidence, validation counts
 and finding references, retention classification, evidence completeness, and a fail-closed consumer
-gate. Generic processing DLQs are not classified as quarantine, and retry state is never presented as
-completed bookkeeping repair without a durable completion fact. Freshness remains `UNAVAILABLE`
-until an authoritative ingestion-evidence freshness SLO exists.
+gate. DLQ membership uses durable ingestion-job ownership rather than correlation metadata.
+Generic processing DLQs are not classified as quarantine. Successfully replayed events stop
+contributing unresolved processing failures, while later failure, bookkeeping failure, dry-run-only
+history, or incomplete audit evidence remains fail closed. Freshness remains `UNAVAILABLE` until an
+authoritative ingestion-evidence freshness SLO exists.
 
 ## Runtime role
 
@@ -36,7 +38,8 @@ For replay and remediation workflows, the service:
 
 1. reads canonical ingestion-job and operational state
 2. exposes health, backlog, and saturation signals for operators and automation
-3. lets operators inspect redacted consumer DLQ evidence with topic, group, and correlation context
+3. lets operators inspect redacted consumer DLQ evidence with topic, group, durable ingestion-job
+   ownership, and correlation context
 4. replays canonical ingestion payloads through governed recovery routes
 5. records durable replay audit rows and failure posture for later review
 
@@ -74,10 +77,16 @@ When adding or changing ingestion operations behavior:
 5. preserve existing route paths, status codes, response fields, audit fields, and problem-detail
    codes unless an intentional behavior change is tested and documented.
 
-Consumer DLQ replay must resolve correlated ingestion jobs through the dedicated ingestion-job
-correlation lookup, not through generic operator listing pages. The lookup filters to replayable job
-statuses and selects the newest matching row deterministically, so recovery behavior is not capped
-by unrelated ingestion volume.
+Consumer DLQ replay resolves the propagated durable ingestion-job owner first, never a latest job
+selected by correlation. For legacy ownerless rows, the dedicated bounded correlation lookup may
+return a job only when exactly one replayable job matches. Ambiguous correlation reuse remains
+unmapped and fail closed; generic operator listing pages are never replay joins.
+
+Replay recovery is derived per DLQ event from ordered durable audit history. A `replayed` row proves
+recovery. A later `duplicate_blocked` row preserves that recovery only when the same event,
+recovery path, and fingerprint has older durable `replayed` proof. Later failure,
+`replayed_bookkeeping_failed`, dry-run-only history, and truncated audit history do not clear the
+original processing failure. Immutable DLQ and audit rows remain visible after recovery.
 
 Replay success bookkeeping must use the atomic retry-plus-queued ingestion job transition. Do not
 reintroduce separate retry-count and queued-status mutations for retry or consumer-DLQ replay
