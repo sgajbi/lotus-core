@@ -223,6 +223,18 @@ def test_processing_dlq_is_not_misclassified_as_quarantine_and_blocks_gate() -> 
     assert "CORRELATED_PROCESSING_FAILURE" in bundle.evidence_gate_reasons
 
 
+def test_successfully_replayed_processing_dlq_no_longer_blocks_gate() -> None:
+    bundle = _build_bundle(
+        job=_job(),
+        dlq_events=[_dlq(reason_code="PERSISTENCE_TIMEOUT")],
+        replay_audits=[_replay()],
+    )
+
+    assert bundle.replay_posture == "replayed"
+    assert bundle.evidence_gate == "ALLOW"
+    assert "CORRELATED_PROCESSING_FAILURE" not in bundle.evidence_gate_reasons
+
+
 def test_truncated_evidence_is_explicit_and_cannot_pass_gate() -> None:
     bundle = IngestionEvidenceQueryService(ingestion_job_service=MagicMock())._build_bundle(
         job=_job(),
