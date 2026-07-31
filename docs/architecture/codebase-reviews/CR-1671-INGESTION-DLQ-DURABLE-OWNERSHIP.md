@@ -48,10 +48,13 @@ infrastructure own persistence and propagation.
 2. 1 PostgreSQL round-trip test passed in 49.15 seconds, proving unique/ambiguous backfill isolation,
    foreign-key enforcement, indexes, rollback, and reapply.
 3. `make migration-smoke` passed with single Alembic head `c133b2c3d506`.
-4. Scoped Ruff and `git diff --check` passed.
+4. Event-runtime, OpenAPI, architecture, and MyPy gates passed; MyPy checked 240 source files.
+5. Wiki/docs gates, strict wiki quality, and pre-merge unpublished-source parity check passed.
+6. Scoped Ruff and `git diff --check` passed.
 
 ## Delivery Status
 
-Implementation is fixed locally in signed commits `e1501db2a` and `74c42f7bd`. Protected PR CI,
+Implementation is fixed locally in signed commits `e1501db2a`, `74c42f7bd`, `45457066e`, and
+`0d812f97b`. Protected PR CI,
 exact-main validation, wiki publication/parity, GitHub evidence updates, and verified issue closure
 remain required before completion.
