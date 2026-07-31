@@ -11,7 +11,10 @@ from portfolio_common.reconstruction_identity import (
 )
 from portfolio_common.source_data_product_metadata import source_data_product_runtime_metadata
 
-from ..application.transaction_query import TransactionLedgerFilters
+from ..application.transaction_query import (
+    TransactionLedgerFilters,
+    TransactionLedgerInputEvidence,
+)
 from ..dtos.transaction_dto import PaginatedTransactionResponse, TransactionRecord
 from .transaction_metadata import ledger_data_quality_status, ledger_reason_codes
 from .transaction_reporting_currency import apply_transaction_reporting_currency_fields
@@ -65,6 +68,7 @@ def paginated_transaction_ledger_response(
     end_date: date | None,
     latest_evidence_timestamp: datetime | None,
     ledger_filters: TransactionLedgerFilters,
+    input_evidence: TransactionLedgerInputEvidence,
     missing_instrument_security_ids: list[str] | None = None,
     today: Callable[[], date] = date.today,
 ) -> PaginatedTransactionResponse:
@@ -77,6 +81,7 @@ def paginated_transaction_ledger_response(
         total_count=total_count,
         latest_evidence_timestamp=latest_evidence_timestamp,
         ledger_filters=ledger_filters,
+        input_evidence=input_evidence,
     )
     return PaginatedTransactionResponse(
         portfolio_id=portfolio_id,
@@ -128,11 +133,18 @@ def transaction_ledger_reconstruction_evidence(
     total_count: int,
     latest_evidence_timestamp: datetime | None,
     ledger_filters: TransactionLedgerFilters,
+    input_evidence: TransactionLedgerInputEvidence,
 ) -> ReconstructionScopeEvidence:
     """Bind the complete unpaginated ledger scope to deterministic runtime evidence."""
 
     if ledger_filters.portfolio_id != portfolio_id:
         raise ValueError("ledger_filters.portfolio_id must match portfolio_id")
+    if input_evidence.transaction_count != total_count:
+        raise ValueError("input_evidence.transaction_count must match total_count")
+    if input_evidence.latest_evidence_timestamp != latest_evidence_timestamp:
+        raise ValueError(
+            "input_evidence.latest_evidence_timestamp must match latest_evidence_timestamp"
+        )
     return build_reconstruction_scope_evidence(
         ProductReconstructionScope(
             product="TransactionLedgerWindow",
@@ -162,6 +174,10 @@ def transaction_ledger_reconstruction_evidence(
             material_evidence=(
                 ("matching_transaction_count", total_count),
                 ("latest_evidence_timestamp", latest_evidence_timestamp),
+                ("transaction_digest", input_evidence.transaction_digest),
+                ("transaction_cost_digest", input_evidence.transaction_cost_digest),
+                ("selected_cashflow_digest", input_evidence.selected_cashflow_digest),
+                ("selected_fx_rate_digest", input_evidence.selected_fx_rate_digest),
             ),
         )
     )

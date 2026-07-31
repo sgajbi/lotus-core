@@ -6,7 +6,10 @@ import pytest
 from portfolio_common.database_models import Cashflow, Transaction, TransactionCost
 from portfolio_common.reconciliation_quality import COMPLETE, PARTIAL, UNKNOWN
 
-from src.services.query_service.app.application.transaction_query import TransactionLedgerFilters
+from src.services.query_service.app.application.transaction_query import (
+    TransactionLedgerFilters,
+    TransactionLedgerInputEvidence,
+)
 from src.services.query_service.app.dtos.transaction_dto import TransactionRecord
 from src.services.query_service.app.services.transaction_records import (
     paginated_transaction_ledger_response,
@@ -24,6 +27,25 @@ def _ledger_filters(**overrides) -> TransactionLedgerFilters:
     }
     values.update(overrides)
     return TransactionLedgerFilters(**values)
+
+
+def _input_evidence(
+    *,
+    transaction_count: int,
+    latest_evidence_timestamp: datetime | None,
+    transaction_digest: str | None = "transaction-digest",
+    transaction_cost_digest: str | None = "cost-digest",
+    selected_cashflow_digest: str | None = "cashflow-digest",
+    selected_fx_rate_digest: str | None = "fx-digest",
+) -> TransactionLedgerInputEvidence:
+    return TransactionLedgerInputEvidence(
+        transaction_count=transaction_count,
+        latest_evidence_timestamp=latest_evidence_timestamp,
+        transaction_digest=transaction_digest,
+        transaction_cost_digest=transaction_cost_digest,
+        selected_cashflow_digest=selected_cashflow_digest,
+        selected_fx_rate_digest=selected_fx_rate_digest,
+    )
 
 
 async def test_transaction_record_from_row_preserves_costs_and_cashflow() -> None:
@@ -182,6 +204,10 @@ async def test_paginated_transaction_ledger_response_marks_complete_window() -> 
         end_date=date(2025, 1, 31),
         latest_evidence_timestamp=latest_evidence_timestamp,
         ledger_filters=_ledger_filters(end_date=date(2025, 1, 31)),
+        input_evidence=_input_evidence(
+            transaction_count=2,
+            latest_evidence_timestamp=latest_evidence_timestamp,
+        ),
     )
 
     assert response.product_name == "TransactionLedgerWindow"
@@ -218,6 +244,10 @@ async def test_paginated_transaction_ledger_response_marks_partial_window() -> N
         end_date=None,
         latest_evidence_timestamp=None,
         ledger_filters=_ledger_filters(),
+        input_evidence=_input_evidence(
+            transaction_count=25,
+            latest_evidence_timestamp=None,
+        ),
     )
 
     assert response.data_quality_status == PARTIAL
@@ -237,6 +267,10 @@ async def test_transaction_ledger_response_marks_missing_instrument_reference_pa
         end_date=None,
         latest_evidence_timestamp=None,
         ledger_filters=_ledger_filters(),
+        input_evidence=_input_evidence(
+            transaction_count=2,
+            latest_evidence_timestamp=None,
+        ),
         missing_instrument_security_ids=["S2"],
     )
 
@@ -258,6 +292,14 @@ async def test_paginated_transaction_ledger_response_uses_end_date_then_today_fa
         end_date=date(2025, 1, 31),
         latest_evidence_timestamp=None,
         ledger_filters=_ledger_filters(as_of_date=None, end_date=date(2025, 1, 31)),
+        input_evidence=_input_evidence(
+            transaction_count=0,
+            latest_evidence_timestamp=None,
+            transaction_digest=None,
+            transaction_cost_digest=None,
+            selected_cashflow_digest=None,
+            selected_fx_rate_digest=None,
+        ),
         today=lambda: date(2025, 2, 1),
     )
     today_response = paginated_transaction_ledger_response(
@@ -271,6 +313,14 @@ async def test_paginated_transaction_ledger_response_uses_end_date_then_today_fa
         end_date=None,
         latest_evidence_timestamp=None,
         ledger_filters=_ledger_filters(as_of_date=None),
+        input_evidence=_input_evidence(
+            transaction_count=0,
+            latest_evidence_timestamp=None,
+            transaction_digest=None,
+            transaction_cost_digest=None,
+            selected_cashflow_digest=None,
+            selected_fx_rate_digest=None,
+        ),
         today=lambda: date(2025, 2, 1),
     )
 
@@ -290,6 +340,10 @@ async def test_transaction_ledger_snapshot_identity_is_pagination_invariant() ->
         "effective_as_of_date": date(2025, 1, 15),
         "end_date": date(2025, 1, 31),
         "latest_evidence_timestamp": datetime(2025, 1, 16, 9, 30, tzinfo=UTC),
+        "input_evidence": _input_evidence(
+            transaction_count=25,
+            latest_evidence_timestamp=datetime(2025, 1, 16, 9, 30, tzinfo=UTC),
+        ),
         "ledger_filters": _ledger_filters(
             security_id="S1",
             start_date=date(2025, 1, 1),
@@ -331,8 +385,48 @@ async def test_transaction_ledger_snapshot_identity_is_pagination_invariant() ->
         {"ledger_filters": _ledger_filters(start_date=date(2025, 1, 1))},
         {"ledger_filters": _ledger_filters(end_date=date(2025, 1, 31))},
         {"ledger_filters": _ledger_filters(as_of_date=date(2025, 1, 14))},
-        {"total_count": 26},
-        {"latest_evidence_timestamp": datetime(2025, 1, 16, 9, 31, tzinfo=UTC)},
+        {
+            "total_count": 26,
+            "input_evidence": _input_evidence(
+                transaction_count=26,
+                latest_evidence_timestamp=datetime(2025, 1, 16, 9, 30, tzinfo=UTC),
+            ),
+        },
+        {
+            "latest_evidence_timestamp": datetime(2025, 1, 16, 9, 31, tzinfo=UTC),
+            "input_evidence": _input_evidence(
+                transaction_count=25,
+                latest_evidence_timestamp=datetime(2025, 1, 16, 9, 31, tzinfo=UTC),
+            ),
+        },
+        {
+            "input_evidence": _input_evidence(
+                transaction_count=25,
+                latest_evidence_timestamp=datetime(2025, 1, 16, 9, 30, tzinfo=UTC),
+                transaction_digest="changed-transaction-digest",
+            ),
+        },
+        {
+            "input_evidence": _input_evidence(
+                transaction_count=25,
+                latest_evidence_timestamp=datetime(2025, 1, 16, 9, 30, tzinfo=UTC),
+                transaction_cost_digest="changed-cost-digest",
+            ),
+        },
+        {
+            "input_evidence": _input_evidence(
+                transaction_count=25,
+                latest_evidence_timestamp=datetime(2025, 1, 16, 9, 30, tzinfo=UTC),
+                selected_cashflow_digest="changed-cashflow-digest",
+            ),
+        },
+        {
+            "input_evidence": _input_evidence(
+                transaction_count=25,
+                latest_evidence_timestamp=datetime(2025, 1, 16, 9, 30, tzinfo=UTC),
+                selected_fx_rate_digest="changed-fx-digest",
+            ),
+        },
     ],
 )
 async def test_transaction_ledger_snapshot_identity_changes_with_scope_or_evidence(
@@ -348,6 +442,10 @@ async def test_transaction_ledger_snapshot_identity_changes_with_scope_or_eviden
         "effective_as_of_date": date(2025, 1, 15),
         "end_date": None,
         "latest_evidence_timestamp": datetime(2025, 1, 16, 9, 30, tzinfo=UTC),
+        "input_evidence": _input_evidence(
+            transaction_count=25,
+            latest_evidence_timestamp=datetime(2025, 1, 16, 9, 30, tzinfo=UTC),
+        ),
         "ledger_filters": _ledger_filters(security_id="S1"),
     }
     changed = {**common, **overrides}

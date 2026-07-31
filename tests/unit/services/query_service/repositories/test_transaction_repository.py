@@ -505,15 +505,29 @@ async def test_get_transactions_count_with_fx_filters(
     assert "transactions.swap_event_id = 'FXSWAP-001'" in compiled_query
 
 
-async def test_get_latest_evidence_timestamp_applies_transaction_window_filters(
+async def test_get_transaction_ledger_input_evidence_applies_complete_scope_filters(
     repository: TransactionRepository, mock_db_session: AsyncMock
 ):
-    updated_at = datetime(2025, 2, 3, 14, 45, tzinfo=UTC)
+    transaction_updated_at = datetime(2025, 2, 3, 14, 45, tzinfo=UTC)
+    cost_updated_at = datetime(2025, 2, 3, 15, 0, tzinfo=UTC)
+    cashflow_updated_at = datetime(2025, 2, 3, 15, 15, tzinfo=UTC)
+    fx_updated_at = datetime(2025, 2, 3, 15, 30, tzinfo=UTC)
+    row = MagicMock(
+        transaction_count=4,
+        transaction_latest_at=transaction_updated_at,
+        transaction_digest="tx-digest",
+        transaction_cost_latest_at=cost_updated_at,
+        transaction_cost_digest="cost-digest",
+        selected_cashflow_latest_at=cashflow_updated_at,
+        selected_cashflow_digest="cashflow-digest",
+        selected_fx_rate_latest_at=fx_updated_at,
+        selected_fx_rate_digest="fx-digest",
+    )
     mock_result = MagicMock()
-    mock_result.scalar_one_or_none.return_value = updated_at
+    mock_result.one.return_value = row
     mock_db_session.execute = AsyncMock(return_value=mock_result)
 
-    result = await repository.get_latest_evidence_timestamp(
+    result = await repository.get_transaction_ledger_input_evidence(
         filters=_filters(
             security_id=" S1 ",
             transaction_type="FX_FORWARD",
@@ -521,12 +535,24 @@ async def test_get_latest_evidence_timestamp_applies_transaction_window_filters(
             end_date=date(2025, 1, 31),
             as_of_date=date(2025, 1, 15),
         ),
+        reporting_currency="SGD",
+        as_of_date=date(2025, 1, 15),
     )
 
-    assert result == updated_at
+    assert result.transaction_count == 4
+    assert result.latest_evidence_timestamp == fx_updated_at
+    assert result.transaction_digest == "tx-digest"
+    assert result.transaction_cost_digest == "cost-digest"
+    assert result.selected_cashflow_digest == "cashflow-digest"
+    assert result.selected_fx_rate_digest == "fx-digest"
     executed_stmt = mock_db_session.execute.call_args[0][0]
     compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
-    assert "max(transactions.updated_at)" in compiled_query.lower()
+    assert "transaction_ledger_transaction_evidence" in compiled_query
+    assert "transaction_ledger_cost_evidence" in compiled_query
+    assert "transaction_ledger_cashflow_evidence" in compiled_query
+    assert "transaction_ledger_fx_evidence" in compiled_query
+    assert "jsonb_agg" in compiled_query.lower()
+    assert "sha256" in compiled_query.lower()
     assert "transactions.portfolio_id = 'P1'" in compiled_query
     assert "trim(transactions.security_id) = 'S1'" in compiled_query
     assert "transactions.transaction_type = 'FX_FORWARD'" in compiled_query

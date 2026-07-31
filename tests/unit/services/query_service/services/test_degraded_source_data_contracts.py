@@ -28,7 +28,10 @@ from src.services.query_control_plane_service.app.domain.dpm_source_readiness im
     InstrumentEligibilityEvidence,
     MarketPriceEvidence,
 )
-from src.services.query_service.app.application.transaction_query import TransactionLedgerFilters
+from src.services.query_service.app.application.transaction_query import (
+    TransactionLedgerFilters,
+    TransactionLedgerInputEvidence,
+)
 from src.services.query_service.app.dtos.cashflow_projection_dto import (
     CashflowProjectionResponse,
 )
@@ -110,6 +113,14 @@ def test_transactions_contract_reports_partial_page_and_missing_reference() -> N
             ledger_filters=TransactionLedgerFilters(
                 portfolio_id="PB1",
                 as_of_date=date(2026, 4, 10),
+            ),
+            input_evidence=TransactionLedgerInputEvidence(
+                transaction_count=3,
+                latest_evidence_timestamp=datetime(2026, 4, 10, 8, tzinfo=UTC),
+                transaction_digest="transaction-digest",
+                transaction_cost_digest="cost-digest",
+                selected_cashflow_digest="cashflow-digest",
+                selected_fx_rate_digest="fx-digest",
             ),
             missing_instrument_security_ids=["UNKNOWN_SEC"],
         )

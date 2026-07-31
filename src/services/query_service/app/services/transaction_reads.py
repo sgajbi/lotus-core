@@ -4,6 +4,7 @@ from typing import Any
 
 from ..application.transaction_query import (
     TransactionLedgerFilters,
+    TransactionLedgerInputEvidence,
     transaction_ledger_query_spec,
 )
 from .transaction_metadata import (
@@ -19,6 +20,7 @@ class TransactionLedgerPage:
     rows: list[Any]
     latest_evidence_timestamp: datetime | None
     missing_instrument_security_ids: list[str]
+    input_evidence: TransactionLedgerInputEvidence
 
 
 @dataclass(frozen=True)
@@ -36,19 +38,26 @@ async def read_transaction_ledger_page(
     limit: int,
     sort_by: str | None,
     sort_order: str | None,
+    reporting_currency: str | None,
 ) -> TransactionLedgerPage:
     query_spec = transaction_ledger_query_spec(
         filters=ledger_filters,
         sort_by=sort_by,
         sort_order=sort_order,
     )
-    total_count = await repository.get_transactions_count(filters=query_spec.filters)
+    input_evidence = await repository.get_transaction_ledger_input_evidence(
+        filters=query_spec.filters,
+        reporting_currency=reporting_currency,
+        as_of_date=query_spec.filters.as_of_date,
+    )
+    total_count = input_evidence.transaction_count
     if total_count == 0:
         return TransactionLedgerPage(
             total_count=0,
             rows=[],
-            latest_evidence_timestamp=None,
+            latest_evidence_timestamp=input_evidence.latest_evidence_timestamp,
             missing_instrument_security_ids=[],
+            input_evidence=input_evidence,
         )
 
     rows = await repository.get_transactions(
@@ -56,13 +65,6 @@ async def read_transaction_ledger_page(
         limit=limit,
         query_spec=query_spec,
     )
-
-    if skip > 0 or limit < total_count or len(rows) != total_count:
-        latest_evidence_timestamp = await repository.get_latest_evidence_timestamp(
-            filters=query_spec.filters
-        )
-    else:
-        latest_evidence_timestamp = latest_transaction_evidence_timestamp(rows)
 
     known_instrument_security_ids = await repository.list_known_instrument_security_ids(
         transaction_security_ids(rows)
@@ -75,8 +77,9 @@ async def read_transaction_ledger_page(
     return TransactionLedgerPage(
         total_count=total_count,
         rows=rows,
-        latest_evidence_timestamp=latest_evidence_timestamp,
+        latest_evidence_timestamp=input_evidence.latest_evidence_timestamp,
         missing_instrument_security_ids=missing_instrument_security_ids,
+        input_evidence=input_evidence,
     )
 
 
