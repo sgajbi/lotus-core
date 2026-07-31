@@ -450,7 +450,7 @@ async def test_get_latest_fx_rate_queries_latest_available_rate(
     assert "upper(trim(fx_rates.from_currency)) = 'USD'" in compiled_query
     assert "upper(trim(fx_rates.to_currency)) = 'SGD'" in compiled_query
     assert "fx_rates.rate_date <= '2026-04-30'" in compiled_query
-    assert "ORDER BY fx_rates.rate_date DESC" in compiled_query
+    assert "ORDER BY fx_rates.rate_date DESC, fx_rates.id DESC" in compiled_query
 
 
 async def test_list_known_instrument_security_ids_queries_instrument_master(

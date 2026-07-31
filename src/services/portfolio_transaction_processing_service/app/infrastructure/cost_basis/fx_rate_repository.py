@@ -55,7 +55,7 @@ class SqlAlchemyCostBasisFxRateRepository:
                     FxRate.rate_date == prior_rate_date,
                 ),
             )
-            .order_by(FxRate.rate_date.asc())
+            .order_by(FxRate.rate_date.asc(), FxRate.id.asc())
         )
         rows = (await self._session.execute(statement)).scalars().all()
         return [EffectiveFxRate(effective_date=row.rate_date, rate=row.rate) for row in rows]

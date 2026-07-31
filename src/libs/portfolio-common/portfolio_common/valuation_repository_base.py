@@ -582,7 +582,7 @@ class ValuationRepositoryBase:
                 to_currency_expr == normalized_to_currency,
                 FxRate.rate_date <= a_date,
             )
-            .order_by(FxRate.rate_date.desc())
+            .order_by(FxRate.rate_date.desc(), FxRate.id.desc())
         )
         result = await self.db.execute(stmt)
         return result.scalars().first()

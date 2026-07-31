@@ -148,6 +148,7 @@ async def test_analytics_timeseries_repository_methods() -> None:
     fx_sql = str(fx_stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "upper(trim(fx_rates.from_currency)) = 'EUR'" in fx_sql
     assert "upper(trim(fx_rates.to_currency)) = 'USD'" in fx_sql
+    assert "ORDER BY fx_rates.rate_date ASC, fx_rates.id ASC" in fx_sql
 
     position_snapshot_epoch = await repo.get_position_snapshot_epoch(
         portfolio_id="P1",

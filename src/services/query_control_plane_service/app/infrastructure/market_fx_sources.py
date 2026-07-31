@@ -35,7 +35,7 @@ class SqlAlchemyMarketFxRateReader:
                 FxRate.rate_date >= start_date,
                 FxRate.rate_date <= end_date,
             )
-            .order_by(FxRate.rate_date.asc())
+            .order_by(FxRate.rate_date.asc(), FxRate.id.asc())
         )
         rows = (await self._session.execute(statement)).scalars().all()
         return [_to_evidence(row) for row in rows]

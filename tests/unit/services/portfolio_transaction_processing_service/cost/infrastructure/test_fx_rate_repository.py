@@ -57,7 +57,7 @@ async def test_get_fx_rate_window_fetches_one_seed_plus_bounded_effective_window
     assert "fx_rates.rate_date >= '2026-04-05'" in compiled_query
     assert "max(fx_rates_1.rate_date)" in compiled_query
     assert "fx_rates_1.rate_date < '2026-04-05'" in compiled_query
-    assert "order by fx_rates.rate_date asc" in compiled_query
+    assert "order by fx_rates.rate_date asc, fx_rates.id asc" in compiled_query
 
 
 async def test_get_fx_rate_window_rejects_reversed_date_bounds() -> None:

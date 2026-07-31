@@ -41,4 +41,4 @@ async def test_fx_query_normalizes_pair_and_returns_typed_ordered_evidence() -> 
     sql = str(session.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
     assert "upper(trim(fx_rates.from_currency)) = 'USD'" in sql
     assert "upper(trim(fx_rates.to_currency)) = 'SGD'" in sql
-    assert "ORDER BY fx_rates.rate_date ASC" in sql
+    assert "ORDER BY fx_rates.rate_date ASC, fx_rates.id ASC" in sql

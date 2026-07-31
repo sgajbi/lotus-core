@@ -667,7 +667,7 @@ class AnalyticsTimeseriesRepository:
                 FxRate.rate_date >= start_date,
                 FxRate.rate_date <= end_date,
             )
-            .order_by(FxRate.rate_date.asc())
+            .order_by(FxRate.rate_date.asc(), FxRate.id.asc())
         )
         result = await self.db.execute(stmt)
         rates: dict[date, Decimal] = {}

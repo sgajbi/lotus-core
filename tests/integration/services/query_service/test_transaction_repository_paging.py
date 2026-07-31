@@ -486,3 +486,100 @@ async def test_transaction_ledger_page_and_identity_share_one_repeatable_snapsho
         0
     ].gross_transaction_amount_reporting_currency == Decimal("2720")
     assert corrected_response.snapshot_id != snapshot_response.snapshot_id
+
+
+async def test_transaction_ledger_fx_evidence_matches_normalized_conversion_selector(
+    clean_db,
+    db_engine,
+    async_db_session: AsyncSession,
+) -> None:
+    with Session(db_engine) as session:
+        session.add_all(
+            [
+                Portfolio(
+                    portfolio_id="PORT-FX-SELECTOR",
+                    base_currency="USD",
+                    open_date=date(2024, 1, 1),
+                    risk_exposure="BALANCED",
+                    investment_time_horizon="LONG_TERM",
+                    portfolio_type="ADVISORY",
+                    booking_center_code="SG",
+                    client_id="CLIENT-FX-SELECTOR",
+                    status="ACTIVE",
+                ),
+                Transaction(
+                    transaction_id="TX-FX-SELECTOR",
+                    portfolio_id="PORT-FX-SELECTOR",
+                    instrument_id="INST-FX-SELECTOR",
+                    security_id="SEC-FX-SELECTOR",
+                    transaction_type="BUY",
+                    quantity=Decimal("10"),
+                    price=Decimal("100"),
+                    gross_transaction_amount=Decimal("1000"),
+                    trade_currency="USD",
+                    currency="USD",
+                    transaction_date=datetime(2026, 1, 3, tzinfo=UTC),
+                ),
+                FxRate(
+                    from_currency="USD",
+                    to_currency="SGD",
+                    rate_date=date(2026, 1, 31),
+                    rate=Decimal("1.35"),
+                ),
+                FxRate(
+                    from_currency="usd",
+                    to_currency="sgd",
+                    rate_date=date(2026, 1, 31),
+                    rate=Decimal("1.36"),
+                ),
+            ]
+        )
+        session.commit()
+
+    repository = TransactionRepository(async_db_session)
+    filters = TransactionLedgerFilters(
+        portfolio_id="PORT-FX-SELECTOR",
+        as_of_date=date(2026, 1, 31),
+    )
+
+    async def read_evidence():
+        return await repository.get_transaction_ledger_input_evidence(
+            filters=filters,
+            reporting_currency="SGD",
+            as_of_date=date(2026, 1, 31),
+        )
+
+    baseline = await read_evidence()
+    assert await repository.get_latest_fx_rate(
+        from_currency="USD",
+        to_currency="SGD",
+        as_of_date=date(2026, 1, 31),
+    ) == Decimal("1.36")
+
+    await async_db_session.execute(
+        update(FxRate)
+        .where(FxRate.from_currency == "USD", FxRate.to_currency == "SGD")
+        .values(rate=Decimal("1.37"))
+    )
+    await async_db_session.commit()
+    unselected_change = await read_evidence()
+    assert unselected_change.selected_fx_rate_digest == baseline.selected_fx_rate_digest
+    assert await repository.get_latest_fx_rate(
+        from_currency="USD",
+        to_currency="SGD",
+        as_of_date=date(2026, 1, 31),
+    ) == Decimal("1.36")
+
+    await async_db_session.execute(
+        update(FxRate)
+        .where(FxRate.from_currency == "usd", FxRate.to_currency == "sgd")
+        .values(rate=Decimal("1.38"))
+    )
+    await async_db_session.commit()
+    selected_change = await read_evidence()
+    assert selected_change.selected_fx_rate_digest != baseline.selected_fx_rate_digest
+    assert await repository.get_latest_fx_rate(
+        from_currency="USD",
+        to_currency="SGD",
+        as_of_date=date(2026, 1, 31),
+    ) == Decimal("1.38")

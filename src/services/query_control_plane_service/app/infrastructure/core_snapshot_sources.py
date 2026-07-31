@@ -246,7 +246,7 @@ class SqlAlchemyCoreSnapshotSourceReader:
                 FxRate.rate_date >= start_date,
                 FxRate.rate_date <= end_date,
             )
-            .order_by(FxRate.rate_date.asc())
+            .order_by(FxRate.rate_date.asc(), FxRate.id.asc())
         )
         return [
             CoreSnapshotFxRate(rate_date=row.rate_date, rate=row.rate)
