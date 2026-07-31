@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock
 import pytest
 from portfolio_common.database_models import CostBasisProcessingState, PositionLotState
 from sqlalchemy import event as sqlalchemy_event
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.services.portfolio_transaction_processing_service.app.application.cost_basis_processing import (  # noqa: E501
@@ -36,6 +36,11 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure.tr
 )
 from src.services.portfolio_transaction_processing_service.app.ports import (
     CostProcessingEffectStagingPort,
+)
+from tests.test_support.async_task_coordination import (
+    cancel_pending_tasks,
+    wait_for_postgres_advisory_lock_wait,
+    wait_for_task_signal,
 )
 from tests.test_support.transaction_processing import (
     booked_transaction_event,
@@ -83,15 +88,18 @@ class _ObservedProcessingStateRepository(SqlAlchemyCostBasisProcessingStateRepos
         db: AsyncSession,
         *,
         lock_attempted: asyncio.Event,
+        backend_pid: list[int],
     ) -> None:
         super().__init__(db)
         self._lock_attempted = lock_attempted
+        self._backend_pid = backend_pid
 
     async def acquire_cost_basis_processing_lock(
         self,
         portfolio_id: str,
         security_id: str,
     ) -> None:
+        self._backend_pid.append(await self._session.scalar(text("SELECT pg_backend_pid()")))
         self._lock_attempted.set()
         await super().acquire_cost_basis_processing_lock(portfolio_id, security_id)
 
@@ -167,6 +175,8 @@ async def test_same_key_buy_sell_and_replay_serialize_to_deterministic_fifo_lot_
     release_buy_history = asyncio.Event()
     sell_lock_attempted = asyncio.Event()
     replay_lock_attempted = asyncio.Event()
+    sell_backend_pid: list[int] = []
+    replay_backend_pid: list[int] = []
 
     buy_task = asyncio.create_task(
         _stage_cost_calculation(
@@ -179,47 +189,63 @@ async def test_same_key_buy_sell_and_replay_serialize_to_deterministic_fifo_lot_
             ),
         )
     )
-    await asyncio.wait_for(buy_history_read.wait(), timeout=2)
+    sell_task: asyncio.Task[None] | None = None
+    replay_task: asyncio.Task[None] | None = None
+    try:
+        await wait_for_task_signal(buy_task, buy_history_read, timeout=2)
 
-    async with session_factory() as insert_session, insert_session.begin():
-        insert_session.add(canonical_transaction_record(sell))
+        async with session_factory() as insert_session, insert_session.begin():
+            insert_session.add(canonical_transaction_record(sell))
 
-    sell_task = asyncio.create_task(
-        _stage_cost_calculation(
-            session_factory=session_factory,
-            event=sell,
-            repository_factory=SqlAlchemyCostBasisTransactionRepository,
-            processing_state_factory=lambda session: _ObservedProcessingStateRepository(
-                session,
-                lock_attempted=sell_lock_attempted,
-            ),
+        sell_task = asyncio.create_task(
+            _stage_cost_calculation(
+                session_factory=session_factory,
+                event=sell,
+                repository_factory=SqlAlchemyCostBasisTransactionRepository,
+                processing_state_factory=lambda session: _ObservedProcessingStateRepository(
+                    session,
+                    lock_attempted=sell_lock_attempted,
+                    backend_pid=sell_backend_pid,
+                ),
+            )
         )
-    )
-    replay_task = asyncio.create_task(
-        _stage_cost_calculation(
-            session_factory=session_factory,
-            event=sell,
-            repository_factory=SqlAlchemyCostBasisTransactionRepository,
-            processing_state_factory=lambda session: _ObservedProcessingStateRepository(
-                session,
-                lock_attempted=replay_lock_attempted,
-            ),
+        replay_task = asyncio.create_task(
+            _stage_cost_calculation(
+                session_factory=session_factory,
+                event=sell,
+                repository_factory=SqlAlchemyCostBasisTransactionRepository,
+                processing_state_factory=lambda session: _ObservedProcessingStateRepository(
+                    session,
+                    lock_attempted=replay_lock_attempted,
+                    backend_pid=replay_backend_pid,
+                ),
+            )
         )
-    )
-    await asyncio.wait_for(
-        asyncio.gather(sell_lock_attempted.wait(), replay_lock_attempted.wait()),
-        timeout=2,
-    )
-    await asyncio.sleep(0.1)
+        await wait_for_task_signal(sell_task, sell_lock_attempted, timeout=2)
+        await wait_for_task_signal(replay_task, replay_lock_attempted, timeout=2)
+        assert len(sell_backend_pid) == 1
+        assert len(replay_backend_pid) == 1
+        await wait_for_postgres_advisory_lock_wait(
+            sell_task,
+            session_factory,
+            backend_pid=sell_backend_pid[0],
+            timeout=2,
+        )
+        await wait_for_postgres_advisory_lock_wait(
+            replay_task,
+            session_factory,
+            backend_pid=replay_backend_pid[0],
+            timeout=2,
+        )
 
-    assert sell_task.done() is False
-    assert replay_task.done() is False
-
-    release_buy_history.set()
-    await asyncio.wait_for(
-        asyncio.gather(buy_task, sell_task, replay_task),
-        timeout=8,
-    )
+        release_buy_history.set()
+        await asyncio.wait_for(
+            asyncio.gather(buy_task, sell_task, replay_task),
+            timeout=8,
+        )
+    finally:
+        release_buy_history.set()
+        await cancel_pending_tasks(buy_task, sell_task, replay_task)
 
     async with session_factory() as verification_session:
         lots = list(

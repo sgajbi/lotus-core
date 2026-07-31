@@ -25,13 +25,17 @@ Both affected PostgreSQL tests use the helper and release their held lock/fence 
 second session publishes its PostgreSQL backend PID before calling the repository. A bounded
 observer then requires `pg_locks` to expose an ungranted advisory lock for that exact backend before
 the first transaction is released. The tests subsequently prove acquisition and clean completion.
-Observer connection checkout and every query share the same remaining deadline while the contender
-task remains supervised, so an observer stall cannot escape the requested bound. The tests no
-longer infer serialization from a sleep or from client-side call ordering.
+Observer connection checkout, every query, and cancellation observation share the same remaining
+deadline while the contender task remains supervised. Cleanup that ignores cancellation is detached
+with its eventual outcome consumed rather than extending the caller's deadline. The adjacent
+cost-basis FIFO concurrency proof now uses the same supervised signals, exact-backend `pg_locks`
+evidence, and `finally` cleanup for its buy, sell, and replay tasks. These tests no longer infer
+serialization from a sleep or from client-side call ordering.
 
 ## Same-Pattern Review
 
-The scan covered integration-test `asyncio.Event.wait()` calls. Other barrier-style tests either
+The scan covered integration-test `asyncio.Event.wait()` calls, including the cost-basis lock proof
+identified during PR review. Other barrier-style tests either
 publish their signal before fallible database work or place the complete participant set under one
 bounded `gather`/`Barrier`; they do not have the producerless event-wait defect. The two corrected
 tests were the in-scope cases where fallible connection or lock work preceded the awaited signal.
@@ -47,8 +51,8 @@ same-pattern review, so central context and skills are also unchanged.
 
 ## Validation
 
-- warning-strict task-coordination unit tests: `5 passed`;
-- real PostgreSQL advisory-fence and position-recalculation concurrency tests: `2 passed`;
+- warning-strict task-coordination unit tests: `9 passed`;
+- real PostgreSQL derived-state, position-history, and cost-basis concurrency tests: `3 passed`;
 - targeted Ruff lint and format: passed;
 - targeted configured MyPy: passed;
-- architecture documentation, docs/wiki, and diff-hygiene gates: pending before commit.
+- architecture documentation, docs/wiki, and diff-hygiene gates: passed.

@@ -3414,7 +3414,9 @@ Most relevant current governance:
      serialization, require server-visible `pg_locks` wait evidence for the exact contender backend
      before releasing the holder; a client-side attempt signal or elapsed delay is not proof that
      the lock request blocked. Apply the same remaining deadline to observer connection checkout and
-     each observation query while continuing to supervise the contender task. Reuse
+     each observation query while continuing to supervise the contender task. Cancellation cleanup
+     must not extend that deadline; consume the eventual outcome of a driver cleanup that does not
+     finish inside the remaining bound. Reuse
      `tests.test_support.async_task_coordination` for this pattern; ordinary barriers whose complete
      participant set is already under one bounded gather do not need an extra supervisor.
 

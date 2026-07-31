@@ -10,6 +10,13 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 T = TypeVar("T")
 
 
+def _consume_task_outcome(task: asyncio.Task[object]) -> None:
+    """Retrieve a detached cleanup task's eventual outcome without raising it."""
+
+    if not task.cancelled():
+        task.exception()
+
+
 async def wait_for_task_signal(
     task: asyncio.Task[T],
     signal: asyncio.Event,
@@ -117,7 +124,19 @@ async def wait_for_postgres_advisory_lock_wait(
         finally:
             if not observation_task.done():
                 observation_task.cancel()
-            await asyncio.gather(observation_task, return_exceptions=True)
+            cleanup_remaining = max(
+                deadline - asyncio.get_running_loop().time(),
+                0,
+            )
+            if cleanup_remaining > 0 and not observation_task.done():
+                await asyncio.wait(
+                    {observation_task},
+                    timeout=cleanup_remaining,
+                )
+            if observation_task.done():
+                await asyncio.gather(observation_task, return_exceptions=True)
+            else:
+                observation_task.add_done_callback(_consume_task_outcome)
 
         remaining = deadline - asyncio.get_running_loop().time()
         if remaining <= 0:
