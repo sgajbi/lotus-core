@@ -197,6 +197,8 @@ preventing stale page/cache reuse without transferring the complete ledger solel
 evidence. Evidence, page rows, instrument checks, and reporting-FX conversion execute within one
 repeatable, read-only PostgreSQL snapshot, so a concurrent correction cannot split one response
 across old and new committed states. Evidence and conversion also share the deterministic
-`rate_date DESC, id DESC` selector for normalized legacy FX-pair variants.
+`rate_date DESC, id DESC` selector for normalized legacy FX-pair variants. Date and timestamp
+inputs are normalized to fixed UTC/ISO text before hashing, so connection `TimeZone` or `DateStyle`
+cannot alter an otherwise identical reconstruction identity.
 - [Position Processing](Position-Calculator)
 - [Validation and CI](Validation-and-CI)

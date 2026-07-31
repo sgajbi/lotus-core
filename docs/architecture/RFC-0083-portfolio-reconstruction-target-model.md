@@ -156,7 +156,9 @@ Current deterministic identity rule:
    split the evidence and returned economics across committed states,
 6. normalized legacy FX variants use the same deterministic `rate_date DESC, id DESC` selector for
    evidence and conversion,
-7. public response schemas remain unchanged; the corrected behavior is that a material derived
+7. timestamp/date evidence is canonicalized to fixed UTC/ISO text before hashing, independent of
+   PostgreSQL session `TimeZone` and `DateStyle`,
+8. public response schemas remain unchanged; the corrected behavior is that a material derived
    input change now changes the existing reconstruction scope id.
 
 ## Lineage Requirements

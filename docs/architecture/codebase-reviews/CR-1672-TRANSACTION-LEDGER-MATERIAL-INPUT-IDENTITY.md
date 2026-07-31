@@ -34,6 +34,9 @@ change the response economics without invalidating the existing scope identity.
    evidence select highest `id` while conversion selected an unspecified peer. Conversion now uses
    the identical `rate_date DESC, id DESC` rule. A repository-wide same-pattern review aligned all
    latest-FX readers and made dated FX series/window ordering deterministic by `(rate_date, id)`.
+9. A second corrected-head P2 review found PostgreSQL could serialize temporal values differently
+   under connection `TimeZone` or `DateStyle`. Every persisted `timestamptz` and `date` input is now
+   converted to fixed UTC/ISO text before JSONB row hashing.
 
 ## Compatibility
 
@@ -60,9 +63,9 @@ remaining `FxRate` ordering that uses `rate_date` alone.
 3. Real PostgreSQL material-input isolation proof passed, covering transaction, cost, latest
    cashflow, selected FX, unrelated portfolio/FX, superseded cashflow, and one-statement shape.
 4. A repository-owned 100,000-transaction capacity proof, with 100,000 owned costs and 100,000
-   selected cashflows, passed in 112.55 seconds end to end; the material-input evidence statement
-   itself completed in 2.502 seconds and returned only four fixed-width digests plus count/time
-   metadata.
+   selected cashflows, passed on the final temporally canonicalized query in 112.10 seconds end to
+   end; the material-input evidence statement itself completed in 2.937 seconds and returned only
+   four fixed-width digests plus count/time metadata.
 5. Scoped Ruff lint/format and MyPy passed before documentation closure.
 6. A two-session PostgreSQL regression committed a transaction and FX correction after the evidence
    statement but before the page read. The in-flight response retained one internally consistent
@@ -70,6 +73,8 @@ remaining `FxRate` ordering that uses `rate_date` alone.
 7. A PostgreSQL legacy-variant regression proved same-date `USD/SGD` and `usd/sgd` rows resolve to
    the same highest-id row for evidence and conversion: changing the unselected row changed neither,
    while changing the selected row changed both the digest and returned rate.
+8. The same PostgreSQL regression changes the evidence connection to `America/New_York` and
+   `SQL, DMY`; all transaction, cost, cashflow, and FX digests remain identical.
 
 ## Durable-Truth Decision
 
