@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 
 from .transaction_sorting import normalize_transaction_sort
 
@@ -21,6 +21,18 @@ class TransactionLedgerFilters:
     start_date: date | None = None
     end_date: date | None = None
     as_of_date: date | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class TransactionLedgerInputEvidence:
+    """Page-independent evidence for every material ledger input family."""
+
+    transaction_count: int
+    latest_evidence_timestamp: datetime | None
+    transaction_digest: str | None
+    transaction_cost_digest: str | None
+    selected_cashflow_digest: str | None
+    selected_fx_rate_digest: str | None
 
 
 @dataclass(frozen=True, slots=True)

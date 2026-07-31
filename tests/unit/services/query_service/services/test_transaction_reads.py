@@ -6,6 +6,7 @@ from portfolio_common.database_models import Transaction
 
 from src.services.query_service.app.application.transaction_query import (
     TransactionLedgerFilters,
+    TransactionLedgerInputEvidence,
     transaction_ledger_query_spec,
 )
 from src.services.query_service.app.services.transaction_reads import (
@@ -25,9 +26,23 @@ def _ledger_filters() -> TransactionLedgerFilters:
     )
 
 
+def _input_evidence(
+    transaction_count: int,
+    latest_evidence_timestamp: datetime | None = None,
+) -> TransactionLedgerInputEvidence:
+    return TransactionLedgerInputEvidence(
+        transaction_count=transaction_count,
+        latest_evidence_timestamp=latest_evidence_timestamp,
+        transaction_digest="transaction-digest" if transaction_count else None,
+        transaction_cost_digest="cost-digest" if transaction_count else None,
+        selected_cashflow_digest="cashflow-digest" if transaction_count else None,
+        selected_fx_rate_digest=None,
+    )
+
+
 async def test_read_transaction_ledger_page_skips_page_read_for_empty_window() -> None:
     repository = AsyncMock()
-    repository.get_transactions_count.return_value = 0
+    repository.get_transaction_ledger_input_evidence.return_value = _input_evidence(0)
 
     page = await read_transaction_ledger_page(
         repository=repository,
@@ -36,18 +51,22 @@ async def test_read_transaction_ledger_page_skips_page_read_for_empty_window() -
         limit=10,
         sort_by="transaction_date",
         sort_order="desc",
+        reporting_currency=None,
     )
 
     assert page.total_count == 0
     assert page.rows == []
     assert page.latest_evidence_timestamp is None
     repository.get_transactions.assert_not_awaited()
-    repository.get_latest_evidence_timestamp.assert_not_awaited()
+    repository.get_transaction_ledger_input_evidence.assert_awaited_once()
 
 
 async def test_read_transaction_ledger_page_uses_page_rows_for_complete_window_evidence() -> None:
     repository = AsyncMock()
-    repository.get_transactions_count.return_value = 2
+    repository.get_transaction_ledger_input_evidence.return_value = _input_evidence(
+        2,
+        datetime(2025, 1, 16, 9, 0, tzinfo=UTC),
+    )
     repository.get_transactions.return_value = [
         Transaction(
             transaction_id="T1",
@@ -66,24 +85,27 @@ async def test_read_transaction_ledger_page_uses_page_rows_for_complete_window_e
         limit=10,
         sort_by="transaction_date",
         sort_order="desc",
+        reporting_currency=None,
     )
 
     assert page.total_count == 2
     assert [row.transaction_id for row in page.rows] == ["T1", "T2"]
     assert page.latest_evidence_timestamp == datetime(2025, 1, 16, 9, 0, tzinfo=UTC)
-    repository.get_latest_evidence_timestamp.assert_not_awaited()
+    assert page.input_evidence.transaction_digest == "transaction-digest"
 
 
 async def test_read_transaction_ledger_page_reads_global_evidence_for_partial_window() -> None:
     repository = AsyncMock()
-    repository.get_transactions_count.return_value = 25
+    repository.get_transaction_ledger_input_evidence.return_value = _input_evidence(
+        25,
+        datetime(2025, 1, 20, 9, 0, tzinfo=UTC),
+    )
     repository.get_transactions.return_value = [
         Transaction(
             transaction_id="T1",
             updated_at=datetime(2025, 1, 15, 9, 0, tzinfo=UTC),
         )
     ]
-    repository.get_latest_evidence_timestamp.return_value = datetime(2025, 1, 20, 9, 0, tzinfo=UTC)
     ledger_filters = _ledger_filters()
     expected_query_spec = transaction_ledger_query_spec(
         filters=ledger_filters,
@@ -98,6 +120,7 @@ async def test_read_transaction_ledger_page_reads_global_evidence_for_partial_wi
         limit=10,
         sort_by="transaction_date",
         sort_order="desc",
+        reporting_currency=None,
     )
 
     assert page.total_count == 25
@@ -107,19 +130,25 @@ async def test_read_transaction_ledger_page_reads_global_evidence_for_partial_wi
         limit=10,
         query_spec=expected_query_spec,
     )
-    repository.get_latest_evidence_timestamp.assert_awaited_once_with(filters=ledger_filters)
+    repository.get_transaction_ledger_input_evidence.assert_awaited_once_with(
+        filters=ledger_filters,
+        reporting_currency=None,
+        as_of_date=None,
+    )
 
 
 async def test_read_transaction_ledger_page_reads_global_evidence_for_short_page() -> None:
     repository = AsyncMock()
-    repository.get_transactions_count.return_value = 2
+    repository.get_transaction_ledger_input_evidence.return_value = _input_evidence(
+        2,
+        datetime(2025, 1, 20, 9, 0, tzinfo=UTC),
+    )
     repository.get_transactions.return_value = [
         Transaction(
             transaction_id="T1",
             updated_at=datetime(2025, 1, 15, 9, 0, tzinfo=UTC),
         )
     ]
-    repository.get_latest_evidence_timestamp.return_value = datetime(2025, 1, 20, 9, 0, tzinfo=UTC)
     ledger_filters = _ledger_filters()
 
     page = await read_transaction_ledger_page(
@@ -129,11 +158,12 @@ async def test_read_transaction_ledger_page_reads_global_evidence_for_short_page
         limit=10,
         sort_by=None,
         sort_order="desc",
+        reporting_currency=None,
     )
 
     assert page.total_count == 2
     assert page.latest_evidence_timestamp == datetime(2025, 1, 20, 9, 0, tzinfo=UTC)
-    repository.get_latest_evidence_timestamp.assert_awaited_once_with(filters=ledger_filters)
+    repository.get_transaction_ledger_input_evidence.assert_awaited_once()
 
 
 async def test_read_realized_tax_evidence_reads_count_and_tax_rows_sequentially() -> None:

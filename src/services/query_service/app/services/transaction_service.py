@@ -117,6 +117,7 @@ class TransactionService:
             limit=limit,
             sort_by=sort_by,
             sort_order=sort_order,
+            reporting_currency=reporting_currency,
         )
         resolved_reporting_currency = reporting_currency
 
@@ -138,6 +139,7 @@ class TransactionService:
             end_date=end_date,
             latest_evidence_timestamp=ledger_page.latest_evidence_timestamp,
             ledger_filters=ledger_filters,
+            input_evidence=ledger_page.input_evidence,
             missing_instrument_security_ids=ledger_page.missing_instrument_security_ids,
         )
 

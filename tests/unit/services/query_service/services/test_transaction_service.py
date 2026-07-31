@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_service.app.application.transaction_query import (
     TransactionLedgerFilters,
+    TransactionLedgerInputEvidence,
     transaction_ledger_query_spec,
 )
 from src.services.query_service.app.dtos.transaction_dto import TransactionRecord
@@ -19,6 +20,20 @@ from src.services.query_service.app.services.transaction_reads import RealizedTa
 from src.services.query_service.app.services.transaction_service import TransactionService
 
 pytestmark = pytest.mark.asyncio
+
+
+def _input_evidence(
+    transaction_count: int,
+    latest_evidence_timestamp: datetime | None = None,
+) -> TransactionLedgerInputEvidence:
+    return TransactionLedgerInputEvidence(
+        transaction_count=transaction_count,
+        latest_evidence_timestamp=latest_evidence_timestamp,
+        transaction_digest="transaction-digest" if transaction_count else None,
+        transaction_cost_digest="cost-digest" if transaction_count else None,
+        selected_cashflow_digest="cashflow-digest" if transaction_count else None,
+        selected_fx_rate_digest=None,
+    )
 
 
 @pytest.fixture
@@ -68,7 +83,10 @@ def mock_transaction_repo() -> AsyncMock:
         ),
     ]
     repo.get_transactions_count.return_value = 25
-    repo.get_latest_evidence_timestamp.return_value = datetime(2025, 1, 16, 9, 30, tzinfo=UTC)
+    repo.get_transaction_ledger_input_evidence.return_value = _input_evidence(
+        25,
+        datetime(2025, 1, 16, 9, 30, tzinfo=UTC),
+    )
     repo.list_known_instrument_security_ids.return_value = {"S1", "S2"}
     repo.get_latest_business_date.return_value = date(2025, 1, 15)
     repo.get_portfolio_base_currency.return_value = "USD"
@@ -155,8 +173,10 @@ async def test_get_transactions(mock_transaction_repo: AsyncMock):
             end_date=params["end_date"],
             as_of_date=date(2025, 1, 15),
         )
-        mock_transaction_repo.get_transactions_count.assert_awaited_once_with(
+        mock_transaction_repo.get_transaction_ledger_input_evidence.assert_awaited_once_with(
             filters=expected_filters,
+            reporting_currency=None,
+            as_of_date=date(2025, 1, 15),
         )
         mock_transaction_repo.get_transactions.assert_awaited_once_with(
             query_spec=transaction_ledger_query_spec(
@@ -167,10 +187,6 @@ async def test_get_transactions(mock_transaction_repo: AsyncMock):
             skip=params["skip"],
             limit=params["limit"],
         )
-        mock_transaction_repo.get_latest_evidence_timestamp.assert_awaited_once_with(
-            filters=expected_filters,
-        )
-
         assert response_dto.total == 25
         assert response_dto.skip == 5
         assert response_dto.limit == 10
@@ -208,7 +224,10 @@ async def test_get_transactions(mock_transaction_repo: AsyncMock):
 async def test_get_transactions_classifies_complete_window(
     mock_transaction_repo: AsyncMock,
 ) -> None:
-    mock_transaction_repo.get_transactions_count.return_value = 2
+    mock_transaction_repo.get_transaction_ledger_input_evidence.return_value = _input_evidence(
+        2,
+        datetime(2025, 1, 16, 9, 30, tzinfo=UTC),
+    )
 
     with patch(
         "src.services.query_service.app.services.transaction_service.TransactionRepository",
@@ -221,13 +240,16 @@ async def test_get_transactions_classifies_complete_window(
     assert response_dto.data_quality_status == COMPLETE
     assert response_dto.reason_codes == ["TRANSACTION_LEDGER_READY"]
     assert response_dto.latest_evidence_timestamp == datetime(2025, 1, 16, 9, 30, tzinfo=UTC)
-    mock_transaction_repo.get_latest_evidence_timestamp.assert_not_awaited()
+    mock_transaction_repo.get_transaction_ledger_input_evidence.assert_awaited_once()
 
 
 async def test_get_transactions_marks_unknown_instrument_reference_partial(
     mock_transaction_repo: AsyncMock,
 ) -> None:
-    mock_transaction_repo.get_transactions_count.return_value = 2
+    mock_transaction_repo.get_transaction_ledger_input_evidence.return_value = _input_evidence(
+        2,
+        datetime(2025, 1, 16, 9, 30, tzinfo=UTC),
+    )
     mock_transaction_repo.list_known_instrument_security_ids.return_value = {"S1"}
 
     with patch(
@@ -248,8 +270,7 @@ async def test_get_transactions_classifies_empty_window_as_unknown(
     mock_transaction_repo: AsyncMock,
 ) -> None:
     mock_transaction_repo.get_transactions.return_value = []
-    mock_transaction_repo.get_transactions_count.return_value = 0
-    mock_transaction_repo.get_latest_evidence_timestamp.return_value = None
+    mock_transaction_repo.get_transaction_ledger_input_evidence.return_value = _input_evidence(0)
 
     with patch(
         "src.services.query_service.app.services.transaction_service.TransactionRepository",
@@ -263,7 +284,7 @@ async def test_get_transactions_classifies_empty_window_as_unknown(
     assert response_dto.reason_codes == ["TRANSACTION_LEDGER_EMPTY"]
     assert response_dto.latest_evidence_timestamp is None
     mock_transaction_repo.get_transactions.assert_not_awaited()
-    mock_transaction_repo.get_latest_evidence_timestamp.assert_not_awaited()
+    mock_transaction_repo.get_transaction_ledger_input_evidence.assert_awaited_once()
     mock_transaction_repo.list_known_instrument_security_ids.assert_not_awaited()
 
 
@@ -298,7 +319,10 @@ async def test_get_transactions_maps_cashflow_dto_correctly(mock_transaction_rep
         ),
     )
     mock_transaction_repo.get_transactions.return_value = [mock_db_transaction]
-    mock_transaction_repo.get_transactions_count.return_value = 1
+    mock_transaction_repo.get_transaction_ledger_input_evidence.return_value = _input_evidence(
+        1,
+        datetime(2025, 1, 16, 9, 30, tzinfo=UTC),
+    )
 
     with patch(
         "src.services.query_service.app.services.transaction_service.TransactionRepository",
@@ -375,18 +399,17 @@ async def test_get_transactions_include_projected_skips_business_date_default(
 
         mock_transaction_repo.get_latest_business_date.assert_not_awaited()
         projected_filters = TransactionLedgerFilters(portfolio_id="P1")
-        mock_transaction_repo.get_transactions_count.assert_awaited_once_with(
+        mock_transaction_repo.get_transaction_ledger_input_evidence.assert_awaited_once_with(
             filters=projected_filters,
-        )
-        mock_transaction_repo.get_latest_evidence_timestamp.assert_awaited_once_with(
-            filters=projected_filters,
+            reporting_currency=None,
+            as_of_date=None,
         )
 
 
 async def test_get_transactions_reads_portfolio_exists_and_default_date_sequentially() -> None:
     repo = AsyncMock(spec=TransactionRepository)
     call_order: list[str] = []
-    repo.get_transactions_count.return_value = 0
+    repo.get_transaction_ledger_input_evidence.return_value = _input_evidence(0)
 
     async def portfolio_exists(portfolio_id: str) -> bool:
         call_order.append("portfolio")
@@ -411,7 +434,7 @@ async def test_get_transactions_reads_portfolio_exists_and_default_date_sequenti
     assert response.as_of_date == date(2025, 1, 15)
     assert call_order == ["portfolio", "date"]
     repo.get_transactions.assert_not_awaited()
-    repo.get_latest_evidence_timestamp.assert_not_awaited()
+    repo.get_transaction_ledger_input_evidence.assert_awaited_once()
 
 
 async def test_get_transactions_explicit_date_skips_default_date_lookup(
@@ -431,7 +454,7 @@ async def test_get_transactions_explicit_date_skips_default_date_lookup(
 
     assert response.as_of_date == date(2025, 1, 14)
     mock_transaction_repo.get_latest_business_date.assert_not_awaited()
-    mock_transaction_repo.get_transactions_count.assert_awaited_once()
+    mock_transaction_repo.get_transaction_ledger_input_evidence.assert_awaited_once()
 
 
 async def test_get_transactions_partial_page_reads_page_and_evidence_sequentially(
@@ -440,18 +463,16 @@ async def test_get_transactions_partial_page_reads_page_and_evidence_sequentiall
     call_order: list[str] = []
     page_rows = mock_transaction_repo.get_transactions.return_value[:1]
     latest_evidence_timestamp = datetime(2025, 1, 20, 9, 30, tzinfo=UTC)
-    mock_transaction_repo.get_transactions_count.return_value = 2
+    mock_transaction_repo.get_transaction_ledger_input_evidence.return_value = _input_evidence(
+        2,
+        latest_evidence_timestamp,
+    )
 
     async def get_transactions(**_: object) -> list[Transaction]:
         call_order.append("page")
         return page_rows
 
-    async def get_latest_evidence_timestamp(**_: object) -> datetime:
-        call_order.append("evidence")
-        return latest_evidence_timestamp
-
     mock_transaction_repo.get_transactions.side_effect = get_transactions
-    mock_transaction_repo.get_latest_evidence_timestamp.side_effect = get_latest_evidence_timestamp
 
     with patch(
         "src.services.query_service.app.services.transaction_service.TransactionRepository",
@@ -463,9 +484,9 @@ async def test_get_transactions_partial_page_reads_page_and_evidence_sequentiall
     assert response.total == 2
     assert response.transactions[0].transaction_id == "T1"
     assert response.latest_evidence_timestamp == latest_evidence_timestamp
-    assert call_order == ["page", "evidence"]
+    assert call_order == ["page"]
     mock_transaction_repo.get_transactions.assert_awaited_once()
-    mock_transaction_repo.get_latest_evidence_timestamp.assert_awaited_once()
+    mock_transaction_repo.get_transaction_ledger_input_evidence.assert_awaited_once()
 
 
 async def test_get_transactions_applies_reporting_currency_restated_fields(

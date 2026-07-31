@@ -1,7 +1,7 @@
 # services/query-service/app/repositories/transaction_repository.py
 import logging
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date
 from decimal import Decimal
 from types import MappingProxyType
 from typing import Any, List, Mapping, Optional, cast
@@ -27,10 +27,15 @@ from sqlalchemy import asc, desc, func, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased, contains_eager
 
-from ..application.transaction_query import TransactionLedgerFilters, TransactionLedgerQuerySpec
+from ..application.transaction_query import (
+    TransactionLedgerFilters,
+    TransactionLedgerInputEvidence,
+    TransactionLedgerQuerySpec,
+)
 from .currency_query_expressions import currency_code_sql_expr
 from .date_filters import start_of_day, start_of_next_day
 from .identifier_normalization import normalize_security_id
+from .transaction_ledger_input_evidence import transaction_ledger_input_evidence_statement
 
 logger = logging.getLogger(__name__)
 
@@ -335,19 +340,48 @@ class TransactionRepository:
         count = (await self.db.execute(stmt)).scalar() or 0
         return count
 
-    async def get_latest_evidence_timestamp(
+    async def get_transaction_ledger_input_evidence(
         self,
         *,
         filters: TransactionLedgerFilters,
-    ) -> Optional[datetime]:
-        """
-        Returns the latest durable transaction evidence timestamp for the filtered ledger window.
-        """
-        stmt = self._apply_filters(
-            select(func.max(Transaction.updated_at)),
+        reporting_currency: str | None,
+        as_of_date: date | None,
+    ) -> TransactionLedgerInputEvidence:
+        """Return page-independent, fixed-width evidence for ledger reconstruction."""
+
+        matching_transactions = self._apply_filters(
+            select(
+                Transaction.id.label("transaction_pk"),
+                Transaction.transaction_id,
+                Transaction.currency,
+                Transaction.trade_currency,
+            ),
             filters=filters,
+        ).cte("matching_ledger_transactions")
+        statement = transaction_ledger_input_evidence_statement(
+            matching_transactions=matching_transactions,
+            reporting_currency=reporting_currency,
+            as_of_date=as_of_date,
         )
-        return cast(Optional[datetime], (await self.db.execute(stmt)).scalar_one_or_none())
+        row = (await self.db.execute(statement)).one()
+        evidence_timestamps = (
+            row.transaction_latest_at,
+            row.transaction_cost_latest_at,
+            row.selected_cashflow_latest_at,
+            row.selected_fx_rate_latest_at,
+        )
+        latest_evidence_timestamp = max(
+            (timestamp for timestamp in evidence_timestamps if timestamp is not None),
+            default=None,
+        )
+        return TransactionLedgerInputEvidence(
+            transaction_count=int(row.transaction_count or 0),
+            latest_evidence_timestamp=latest_evidence_timestamp,
+            transaction_digest=row.transaction_digest,
+            transaction_cost_digest=row.transaction_cost_digest,
+            selected_cashflow_digest=row.selected_cashflow_digest,
+            selected_fx_rate_digest=row.selected_fx_rate_digest,
+        )
 
     async def list_realized_tax_evidence_transactions(
         self,
