@@ -16,11 +16,13 @@ latest-by-correlation compatibility rule while retaining its bounded-query impro
 
 ## Correction
 
-1. Added message-scoped `ingestion_job_id` ownership across ingestion/replay publish, Kafka
-   consumers, outbox persistence/dispatch, and consumer-DLQ persistence.
-2. Added migration `c133b2c3d506` with unique-only legacy backfill, a nullable DLQ ownership foreign
-   key, indexed `(ingestion_job_id, observed_at DESC, id DESC)` reads, and indexed deterministic
-   replay-audit ordering.
+1. Added message-scoped `ingestion_job_id` ownership across every job-backed ingestion/replay
+   publish path, including business dates, plus Kafka consumers, outbox persistence/dispatch, and
+   consumer-DLQ persistence.
+2. Added migration `c133b2c3d506` with unique-only legacy DLQ backfill and unique-only backfill of
+   still-dispatchable `PENDING`/`FAILED` outbox rows, a nullable DLQ ownership foreign key, indexed
+   `(ingestion_job_id, observed_at DESC, id DESC)` reads, and indexed deterministic replay-audit
+   ordering.
 3. Replaced evidence correlation membership with bounded job-owner membership plus exact replay
    event linking. The fallback accepts only ownerless legacy events or events owned by the requested
    job, and the now-dead DLQ-by-correlation service/query compatibility seam was removed.
@@ -46,12 +48,15 @@ infrastructure own persistence and propagation.
 
 1. 217 focused unit tests passed across policy, replay, evidence, stores, publishers, consumers,
    outbox, and migration shape.
-2. 1 PostgreSQL round-trip test passed in 49.15 seconds, proving unique/ambiguous backfill isolation,
-   foreign-key enforcement, indexes, rollback, and reapply.
+2. 1 PostgreSQL round-trip test passed in 53.20 seconds, proving unique/ambiguous DLQ and unresolved
+   outbox backfill isolation, processed-outbox exclusion, foreign-key enforcement, indexes,
+   rollback, and reapply.
 3. `make migration-smoke` passed with single Alembic head `c133b2c3d506`.
 4. Event-runtime, OpenAPI, architecture, and MyPy gates passed; MyPy checked 240 source files.
 5. Wiki/docs gates, strict wiki quality, and pre-merge unpublished-source parity check passed.
 6. Scoped Ruff and `git diff --check` passed.
+7. Late P1 review proof added business-date ownership scoping and rollout-safe unresolved-outbox
+   ownership; focused command/migration contracts passed before the protected exact-head rerun.
 
 ## Delivery Status
 

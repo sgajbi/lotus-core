@@ -61,6 +61,9 @@ with the stored partition key.
 `ingestion_job_id` is durable workflow ownership, not trace metadata. The shared repository captures
 it from ingestion message context, the outbox row retains it across retries, and dispatch republishes
 it as a Kafka header so downstream DLQ evidence remains bound to the originating ingestion job.
+The ownership migration backfills still-dispatchable `PENDING` and `FAILED` rows only when their
+correlation maps to exactly one ingestion job; ambiguous legacy rows remain ownerless and fail
+closed.
 `correlation_id` remains useful for operator tracing but must not be used for evidence membership.
 
 Multiple dispatcher instances preserve that order through a database-visible stream-head rule. For

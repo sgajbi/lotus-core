@@ -242,7 +242,10 @@ Current repository posture:
     documentation data.
     Consumer-DLQ ownership and evidence membership must use the durable `ingestion_job_id`
     propagated through direct publish, consumer context, outbox rows, Kafka headers, DLQ
-    persistence, and replay. `correlation_id` is observability evidence, not an ownership key.
+    persistence, and replay. Every job-backed publish path, including business-date ingestion, must
+    scope that owner before emitting records. `correlation_id` is observability evidence, not an
+    ownership key. During ownership rollout, uniquely attributable `PENDING` and `FAILED` outbox
+    rows must be backfilled before dispatch; ambiguous legacy rows remain ownerless and fail closed.
     Legacy ownerless rows may use the bounded replayable-correlation lookup only when exactly one
     job matches; ambiguous reuse must remain unmapped and fail closed. Evidence bundles query DLQ
     rows by indexed job ownership and may additionally link exact replay event ids.
