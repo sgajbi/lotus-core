@@ -151,7 +151,10 @@ Current deterministic identity rule:
    same complete filtered scope share one identity,
 4. unrelated portfolios, superseded cashflow epochs, and unselected FX pairs/dates do not
    participate,
-5. public response schemas remain unchanged; the corrected behavior is that a material derived
+5. one repeatable, read-only PostgreSQL snapshot covers portfolio/as-of resolution, identity
+   evidence, page rows, instrument support, and FX conversion so concurrent corrections cannot
+   split the evidence and returned economics across committed states,
+6. public response schemas remain unchanged; the corrected behavior is that a material derived
    input change now changes the existing reconstruction scope id.
 
 ## Lineage Requirements

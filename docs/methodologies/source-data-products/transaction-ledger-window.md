@@ -145,34 +145,41 @@ complete ledger. `skip`, `limit`, sort order, and returned page rows are deliber
 Updates to unrelated portfolios, superseded cashflow epochs, unused FX pairs, or FX rows outside
 the selected as-of rule therefore do not change the identity.
 
+Before the first repository read, the request establishes one PostgreSQL
+`REPEATABLE READ, READ ONLY` transaction snapshot. Portfolio/as-of resolution, material-input
+evidence, page rows, instrument-reference checks, and reporting-FX conversion all use that snapshot.
+A correction committed while a request is in flight is therefore visible either to the complete
+request or to the next request, never to only the page or only its reconstruction evidence.
+
 ## Step-by-Step Computation
 
-1. Verify the portfolio exists.
-2. Resolve the effective `A`: use request `as_of_date` when supplied; otherwise, if
+1. Establish one repeatable, read-only database snapshot before any source read.
+2. Verify the portfolio exists inside that snapshot.
+3. Resolve the effective `A`: use request `as_of_date` when supplied; otherwise, if
    `include_projected=false`, use the latest business date for the default business calendar or
    the current application date when no business date exists; otherwise leave `A` unset.
-3. Build the transaction ledger filter set from portfolio, instrument/security, transaction type,
+4. Build the transaction ledger filter set from portfolio, instrument/security, transaction type,
    FX component, linked group, FX contract, swap event, near-leg, far-leg, start date, end date,
    and effective as-of date.
-4. In one database statement, count all matching rows and reduce the complete matching
+5. In one database statement, count all matching rows and reduce the complete matching
    transaction, owned cost, selected latest-cashflow, and selected reporting-FX inputs into
    deterministic fixed-width evidence digests and a latest material evidence timestamp.
-5. Derive the page-invariant reconstruction scope identity from the filter scope and those
+6. Derive the page-invariant reconstruction scope identity from the filter scope and those
    material-input digests.
-6. Query the requested page with eager row-level `cashflow` and `transaction_costs` evidence.
-7. Sort by the requested allowed field and direction; when no allowed field is supplied, sort by
+7. Query the requested page with eager row-level `cashflow` and `transaction_costs` evidence.
+8. Sort by the requested allowed field and direction; when no allowed field is supplied, sort by
    `transaction_date` descending.
-8. Resolve distinct returned row security ids against `instruments.security_id` and retain any
+9. Resolve distinct returned row security ids against `instruments.security_id` and retain any
    missing ids as `missing_instrument_security_ids`.
-9. Convert each row into `TransactionRecord`, preserving row-level cost records and linked cashflow
+10. Convert each row into `TransactionRecord`, preserving row-level cost records and linked cashflow
    records when present.
-10. If `reporting_currency` is supplied and `A` exists, populate supported
+11. If `reporting_currency` is supplied and `A` exists, populate supported
    `*_reporting_currency` fields using the latest FX rate on or before `A`; book-currency fields
    use `currency`, and trade/local fields use `trade_currency` when available, including explicit
    row-level `realized_*_pnl_local` fields.
-11. Compute `data_quality_status` and `reason_codes` from `total`, returned row count, `skip`, and
+12. Compute `data_quality_status` and `reason_codes` from `total`, returned row count, `skip`, and
     missing instrument-reference evidence.
-12. Return source-data runtime metadata including product identity, version, effective as-of date,
+13. Return source-data runtime metadata including product identity, version, effective as-of date,
     latest evidence timestamp, reconciliation status, restatement version, data-quality status, and
     bounded supportability reason fields.
 

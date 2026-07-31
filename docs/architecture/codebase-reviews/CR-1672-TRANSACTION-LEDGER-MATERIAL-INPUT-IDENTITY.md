@@ -26,6 +26,10 @@ change the response economics without invalidating the existing scope identity.
    unselected FX evidence from identity.
 6. Removed the obsolete transaction-only latest-evidence repository read and reused the evidence
    count, avoiding a second complete-scope read.
+7. A P1 review identified that multiple statements under default `READ COMMITTED` could still mix
+   old evidence with corrected page or FX values. The request now establishes
+   `REPEATABLE READ, READ ONLY` before its first repository query, covering portfolio/as-of
+   resolution, evidence, page rows, instrument checks, and conversion reads.
 
 ## Compatibility
 
@@ -52,6 +56,9 @@ No additional same-pattern source change was required.
    itself completed in 2.502 seconds and returned only four fixed-width digests plus count/time
    metadata.
 5. Scoped Ruff lint/format and MyPy passed before documentation closure.
+6. A two-session PostgreSQL regression committed a transaction and FX correction after the evidence
+   statement but before the page read. The in-flight response retained one internally consistent
+   pre-correction snapshot; the next request observed both corrections and a new scope id.
 
 ## Durable-Truth Decision
 
