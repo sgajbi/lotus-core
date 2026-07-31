@@ -41,11 +41,7 @@ def derive_consumer_dlq_recovery(
     recovery: list[ConsumerDlqRecovery] = []
     for event in events:
         event_audits = audits_by_event.get(event.event_id, [])
-        state = (
-            _derive_complete_event_recovery(event_audits)
-            if evidence_complete
-            else "unresolved"
-        )
+        state = _derive_complete_event_recovery(event_audits) if evidence_complete else "unresolved"
         recovery.append(ConsumerDlqRecovery(event_id=event.event_id, state=state))
     return tuple(recovery)
 
@@ -67,8 +63,7 @@ def _derive_complete_event_recovery(
         return "unresolved"
 
     equivalent_prior_success = any(
-        audit.replay_status == "replayed"
-        and audit.replay_fingerprint == latest.replay_fingerprint
+        audit.replay_status == "replayed" and audit.replay_fingerprint == latest.replay_fingerprint
         for audit in non_dry_run_audits[1:]
     )
     return "recovered" if equivalent_prior_success else "unresolved"

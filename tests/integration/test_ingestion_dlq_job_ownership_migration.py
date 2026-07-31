@@ -32,12 +32,8 @@ def _bind_operations(migration: dict[str, Any], connection) -> Operations:
 def _normalize_to_previous_revision(operations: Operations, connection) -> None:
     inspector = inspect(connection)
     dlq_indexes = {row["name"] for row in inspector.get_indexes("consumer_dlq_events")}
-    replay_indexes = {
-        row["name"] for row in inspector.get_indexes("consumer_dlq_replay_audit")
-    }
-    dlq_foreign_keys = {
-        row["name"] for row in inspector.get_foreign_keys("consumer_dlq_events")
-    }
+    replay_indexes = {row["name"] for row in inspector.get_indexes("consumer_dlq_replay_audit")}
+    dlq_foreign_keys = {row["name"] for row in inspector.get_foreign_keys("consumer_dlq_events")}
     if "ix_consumer_dlq_replay_audit_job_requested_id" in replay_indexes:
         operations.drop_index(
             "ix_consumer_dlq_replay_audit_job_requested_id",
@@ -142,8 +138,7 @@ def test_migration_backfills_only_unique_correlation_owner_and_enforces_fk(
             row["name"] for row in inspect(connection).get_indexes("consumer_dlq_events")
         }
         replay_indexes = {
-            row["name"]
-            for row in inspect(connection).get_indexes("consumer_dlq_replay_audit")
+            row["name"] for row in inspect(connection).get_indexes("consumer_dlq_replay_audit")
         }
         assert "ix_consumer_dlq_events_job_observed_id" in dlq_indexes
         assert "ix_consumer_dlq_replay_audit_job_requested_id" in replay_indexes
