@@ -80,6 +80,7 @@ def _portfolio_supportability_metric_lines() -> list[str]:
 def mock_ops_repo() -> AsyncMock:
     repo = AsyncMock()
     repo.portfolio_exists.return_value = True
+    repo.get_reconciliation_finding_summaries.return_value = {}
     return repo
 
 
@@ -2125,6 +2126,83 @@ async def test_get_reconciliation_runs_blocks_usage_for_incomplete_page(
     assert response.publication_block_reasons == ["INCOMPLETE_RECONCILIATION_EVIDENCE_WINDOW"]
 
 
+async def test_reconciliation_run_gate_uses_current_findings_and_preserves_history(
+    service: OperationsService,
+    mock_ops_repo: AsyncMock,
+) -> None:
+    evidence_at = datetime.now(timezone.utc)
+    historical_summary = {"error_count": 2, "warning_count": 1}
+    run = type(
+        "ReconciliationRunStub",
+        (),
+        {
+            "run_id": "recon_lifecycle_001",
+            "reconciliation_type": "transaction_cashflow",
+            "status": "COMPLETED",
+            "business_date": evidence_at.date(),
+            "epoch": 1,
+            "aggregation_revision": 1,
+            "started_at": evidence_at,
+            "completed_at": evidence_at,
+            "requested_by": "pipeline_orchestrator_service",
+            "dedupe_key": "recon:lifecycle:001",
+            "correlation_id": "corr-lifecycle-001",
+            "failure_reason": None,
+            "tolerance": Decimal("0.0100000000"),
+            "summary": historical_summary,
+        },
+    )()
+    mock_ops_repo.get_reconciliation_runs_count.return_value = 1
+    mock_ops_repo.get_reconciliation_runs.return_value = [run]
+    closed_summary = ReconciliationFindingSummary(
+        total_findings=3,
+        open_findings=0,
+        blocking_findings=0,
+        latest_evidence_at=evidence_at,
+        top_blocking_finding_id=None,
+        top_blocking_finding_type=None,
+        top_blocking_finding_security_id=None,
+        top_blocking_finding_transaction_id=None,
+    )
+    mock_ops_repo.get_reconciliation_finding_summaries.return_value = {run.run_id: closed_summary}
+
+    closed_response = await service.get_reconciliation_runs("P1", skip=0, limit=20)
+
+    assert closed_response.reconciliation_status == COMPLETE
+    assert closed_response.publication_gate == "ALLOW"
+    assert closed_response.open_break_count_by_severity == {}
+    assert closed_response.items[0].summary == historical_summary
+    assert closed_response.items[0].open_break_count == 0
+    assert closed_response.items[0].blocking_break_count == 0
+    assert closed_response.items[0].open_break_count_by_severity == {}
+
+    open_summary = replace(
+        closed_summary,
+        open_findings=1,
+        blocking_findings=1,
+        error_findings=1,
+        top_blocking_finding_id="rf_open_001",
+    )
+    mock_ops_repo.get_reconciliation_finding_summaries.return_value = {run.run_id: open_summary}
+
+    open_response = await service.get_reconciliation_runs("P1", skip=0, limit=20)
+
+    assert open_response.reconciliation_status == BLOCKED
+    assert open_response.publication_gate == "BLOCK"
+    assert open_response.open_break_count_by_severity == {"ERROR": 1}
+    assert open_response.top_blocking_run_id == run.run_id
+    assert open_response.items[0].summary == historical_summary
+    assert open_response.items[0].open_break_count == 1
+    assert open_response.items[0].blocking_break_count == 1
+    assert open_response.items[0].open_break_count_by_severity == {"ERROR": 1}
+    assert open_response.items[0].top_blocking_finding_id == "rf_open_001"
+    assert open_response.reconciliation_evidence_id != closed_response.reconciliation_evidence_id
+    mock_ops_repo.get_reconciliation_finding_summaries.assert_awaited_with(
+        [run.run_id],
+        as_of=open_response.generated_at_utc,
+    )
+
+
 async def test_get_reconciliation_runs_forwards_requester_and_dedupe_filters(
     service: OperationsService, mock_ops_repo: AsyncMock
 ):
@@ -2424,6 +2502,47 @@ async def test_get_reconciliation_findings(service: OperationsService, mock_ops_
     assert response.top_blocking_finding_id == "rf_1234567890abcdef"
     assert response.publication_gate == "BLOCK"
     assert response.reconciliation_evidence_id.startswith("re_")
+
+
+async def test_finding_projection_masks_resolution_committed_after_snapshot(
+    service: OperationsService,
+) -> None:
+    generated_at = datetime(2026, 3, 13, 10, 30, tzinfo=timezone.utc)
+    finding = type(
+        "ReconciliationFindingStub",
+        (),
+        {
+            "finding_id": "rf_temporal_001",
+            "finding_type": "missing_cashflow",
+            "severity": "ERROR",
+            "security_id": "SEC-US-IBM",
+            "transaction_id": "TXN-001",
+            "business_date": date(2026, 3, 13),
+            "epoch": 1,
+            "created_at": generated_at - timedelta(minutes=5),
+            "detail": {},
+            "expected_value": None,
+            "observed_value": None,
+            "owner": "TRANSACTION_OPERATIONS",
+            "resolution_state": "RESOLVED",
+            "resolution_actor": "operator@lotus.local",
+            "resolved_at": generated_at + timedelta(seconds=1),
+            "tolerance": None,
+            "observed_delta": None,
+            "repair_recommendation": "REGENERATE_CASHFLOW",
+        },
+    )()
+
+    record = service._build_reconciliation_finding_record(
+        finding,
+        generated_at_utc=generated_at,
+    )
+
+    assert record.resolution_state == "OPEN"
+    assert record.resolution_actor is None
+    assert record.resolved_at is None
+    assert record.normalized_finding_status == BLOCKED
+    assert record.is_blocking is True
 
 
 async def test_get_reconciliation_findings_raises_when_run_missing(

@@ -2388,7 +2388,32 @@ class ReconciliationRunRecord(BaseModel):
     )
     summary: Optional[dict[str, Any]] = Field(
         None,
-        description="Persisted examined, finding, error, warning, and pass/fail summary.",
+        description=(
+            "Immutable completion-time examined, finding, error, warning, and pass/fail summary. "
+            "Current open-break posture is reported by the lifecycle fields on this record."
+        ),
+    )
+    open_break_count: int = Field(
+        ...,
+        ge=0,
+        description="Current open finding count derived from finding lifecycle state.",
+        examples=[2],
+    )
+    blocking_break_count: int = Field(
+        ...,
+        ge=0,
+        description="Current open blocking finding count.",
+        examples=[1],
+    )
+    open_break_count_by_severity: dict[str, int] = Field(
+        ...,
+        description="Current open finding counts keyed by governed severity.",
+        examples=[{"ERROR": 1, "WARNING": 1}],
+    )
+    top_blocking_finding_id: Optional[str] = Field(
+        None,
+        description="Highest-priority current blocking finding for this run.",
+        examples=["rf_1234567890abcdef"],
     )
     normalized_reconciliation_status: str = Field(
         ...,
@@ -2449,7 +2474,10 @@ class ReconciliationRunListResponse(SourceDataProductRuntimeMetadata):
     )
     open_break_count_by_severity: dict[str, int] = Field(
         default_factory=dict,
-        description="Open break counts reported by returned run summaries, keyed by severity.",
+        description=(
+            "Current open break counts derived from finding lifecycle state across returned runs, "
+            "keyed by severity."
+        ),
         examples=[{"ERROR": 1, "WARNING": 2}],
     )
     top_blocking_run_id: Optional[str] = Field(

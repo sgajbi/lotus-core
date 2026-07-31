@@ -1338,20 +1338,43 @@ class OperationsService:
                 as_of=generated_at_utc,
             ),
         )
+        finding_summaries = await self.repo.get_reconciliation_finding_summaries(
+            [run.run_id for run in runs],
+            as_of=generated_at_utc,
+        )
+        current_finding_summaries = {
+            run.run_id: finding_summaries.get(
+                run.run_id,
+                self._empty_reconciliation_finding_summary(),
+            )
+            for run in runs
+        }
         items = [
             self._build_reconciliation_run_record(
                 run,
+                finding_summary=current_finding_summaries[run.run_id],
                 generated_at_utc=generated_at_utc,
                 stale_threshold_minutes=stale_threshold_minutes,
             )
             for run in runs
         ]
-        reconciliation_status = self._aggregate_reconciliation_run_status(
-            runs,
-            generated_at_utc=generated_at_utc,
-            stale_threshold_minutes=stale_threshold_minutes,
+        reconciliation_status = self._aggregate_statuses(
+            [item.normalized_reconciliation_status for item in items]
         )
-        evidence_timestamps = [self._run_evidence_timestamp(run) for run in runs]
+        evidence_timestamps = [
+            max(
+                (
+                    timestamp
+                    for timestamp in (
+                        self._run_evidence_timestamp(run),
+                        current_finding_summaries[run.run_id].latest_evidence_at,
+                    )
+                    if timestamp is not None
+                ),
+                default=None,
+            )
+            for run in runs
+        ]
         latest_evidence_timestamp = max(
             (timestamp for timestamp in evidence_timestamps if timestamp is not None),
             default=None,
@@ -1373,23 +1396,15 @@ class OperationsService:
         latest_run = max(runs, key=lambda run: run.started_at, default=None)
         open_break_count_by_severity = {
             severity: count
-            for severity, count in (
-                (
-                    "ERROR",
-                    sum(
-                        self._summary_count(getattr(run, "summary", None), "error_count")
-                        for run in runs
-                    ),
-                ),
-                (
-                    "WARNING",
-                    sum(
-                        self._summary_count(getattr(run, "summary", None), "warning_count")
-                        for run in runs
-                    ),
-                ),
+            for severity in ("BLOCKER", "CRITICAL", "ERROR", "WARNING", "INFO")
+            if (
+                count := sum(
+                    self._finding_severity_counts(current_finding_summaries[run.run_id]).get(
+                        severity, 0
+                    )
+                    for run in runs
+                )
             )
-            if count
         }
         top_blocking_run_id = next(
             (item.run_id for item in items if item.normalized_reconciliation_status == BLOCKED),
@@ -1467,25 +1482,38 @@ class OperationsService:
         self,
         run: Any,
         *,
+        finding_summary: ReconciliationFindingSummary,
         generated_at_utc: datetime,
         stale_threshold_minutes: int,
     ) -> ReconciliationRunRecord:
-        evidence_timestamp = self._run_evidence_timestamp(run)
+        evidence_timestamp = max(
+            (
+                timestamp
+                for timestamp in (
+                    self._run_evidence_timestamp(run),
+                    finding_summary.latest_evidence_at,
+                )
+                if timestamp is not None
+            ),
+            default=None,
+        )
         age_minutes = evidence_age_minutes(
             generated_at=generated_at_utc,
             evidence_timestamp=evidence_timestamp,
         )
-        normalized_status = classify_reconciliation_status(
+        run_normalized_status = classify_reconciliation_status(
             ReconciliationRunSignal(
                 run_status=cast(str | None, getattr(run, "status", None)),
                 has_run=True,
-                error_count=self._summary_count(getattr(run, "summary", None), "error_count"),
-                warning_count=self._summary_count(getattr(run, "summary", None), "warning_count"),
                 is_stale=is_evidence_stale(
                     evidence_age_minutes=age_minutes,
                     threshold_minutes=stale_threshold_minutes,
                 ),
             )
+        )
+        normalized_status = self._finding_summary_reconciliation_status(
+            finding_summary,
+            run_normalized_status=run_normalized_status,
         )
         return ReconciliationRunRecord(
             run_id=run.run_id,
@@ -1502,6 +1530,10 @@ class OperationsService:
             failure_reason=run.failure_reason,
             tolerance=getattr(run, "tolerance", None),
             summary=getattr(run, "summary", None),
+            open_break_count=finding_summary.open_findings,
+            blocking_break_count=finding_summary.blocking_findings,
+            open_break_count_by_severity=self._finding_severity_counts(finding_summary),
+            top_blocking_finding_id=finding_summary.top_blocking_finding_id,
             normalized_reconciliation_status=normalized_status,
             evidence_age_minutes=age_minutes or 0,
             is_evidence_stale=is_evidence_stale(
@@ -1512,6 +1544,33 @@ class OperationsService:
             is_blocking=normalized_status == BLOCKED,
             operational_state=self._get_reconciliation_operational_state(run.status),
         )
+
+    @staticmethod
+    def _empty_reconciliation_finding_summary() -> ReconciliationFindingSummary:
+        return ReconciliationFindingSummary(
+            total_findings=0,
+            blocking_findings=0,
+            top_blocking_finding_id=None,
+            top_blocking_finding_type=None,
+            top_blocking_finding_security_id=None,
+            top_blocking_finding_transaction_id=None,
+        )
+
+    @staticmethod
+    def _finding_severity_counts(
+        summary: ReconciliationFindingSummary,
+    ) -> dict[str, int]:
+        return {
+            severity: count
+            for severity, count in (
+                ("BLOCKER", summary.blocker_findings),
+                ("CRITICAL", summary.critical_findings),
+                ("ERROR", summary.error_findings),
+                ("WARNING", summary.warning_findings),
+                ("INFO", summary.info_findings),
+            )
+            if count
+        }
 
     async def get_reconciliation_findings(
         self,
@@ -1688,9 +1747,7 @@ class OperationsService:
             if summary.open_findings
             else COMPLETE
         )
-        return aggregate_reconciliation_statuses(
-            [run_normalized_status, finding_status]
-        )
+        return aggregate_reconciliation_statuses([run_normalized_status, finding_status])
 
     def _build_reconciliation_finding_record(
         self,
@@ -1699,6 +1756,12 @@ class OperationsService:
         generated_at_utc: datetime,
     ) -> ReconciliationFindingRecord:
         resolution_state = str(getattr(finding, "resolution_state", "OPEN"))
+        resolution_actor = getattr(finding, "resolution_actor", None)
+        resolved_at = getattr(finding, "resolved_at", None)
+        if resolved_at is not None and resolved_at > generated_at_utc:
+            resolution_state = "OPEN"
+            resolution_actor = None
+            resolved_at = None
         normalized_status = classify_finding_status(
             severity=str(finding.severity),
             resolution_state=resolution_state,
@@ -1718,8 +1781,8 @@ class OperationsService:
             observed_value=getattr(finding, "observed_value", None),
             owner=getattr(finding, "owner", "FINANCIAL_CONTROL_OPERATIONS"),
             resolution_state=resolution_state,
-            resolution_actor=getattr(finding, "resolution_actor", None),
-            resolved_at=getattr(finding, "resolved_at", None),
+            resolution_actor=resolution_actor,
+            resolved_at=resolved_at,
             tolerance=getattr(finding, "tolerance", None),
             observed_delta=getattr(finding, "observed_delta", None),
             repair_recommendation=getattr(

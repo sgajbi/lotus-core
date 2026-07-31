@@ -1321,6 +1321,67 @@ async def test_get_reconciliation_finding_summary_honors_as_of(
     stmt = mock_db_session.execute.await_args.args[0]
     compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "financial_reconciliation_findings.created_at <= '2025-08-30 11:00:00+00:00'" in compiled
+    assert (
+        "financial_reconciliation_findings.resolved_at <= '2025-08-30 11:00:00+00:00'" in compiled
+    )
+    assert "ELSE 'OPEN'" in compiled
+
+
+async def test_get_reconciliation_finding_summaries_is_grouped_and_as_of_coherent(
+    repository: OperationsRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    row = MagicMock(
+        run_id="run-1",
+        total_findings=3,
+        open_findings=1,
+        blocking_findings=1,
+        blocker_findings=0,
+        critical_findings=0,
+        error_findings=1,
+        warning_findings=0,
+        info_findings=0,
+        latest_evidence_at=datetime(2025, 8, 30, 10, 55, tzinfo=timezone.utc),
+        finding_id="finding-1",
+        finding_type="valuation_mismatch",
+        security_id="SEC-1",
+        transaction_id="txn-1",
+        owner="VALUATION_OPERATIONS",
+        repair_recommendation="REVALUE_POSITION",
+        created_at=datetime(2025, 8, 30, 10, 0, tzinfo=timezone.utc),
+    )
+    result = MagicMock()
+    result.all.return_value = [row]
+    mock_db_session.execute = AsyncMock(return_value=result)
+    as_of = datetime(2025, 8, 30, 11, 0, tzinfo=timezone.utc)
+
+    value = await repository.get_reconciliation_finding_summaries(
+        ["run-1", "run-2", "run-1"],
+        as_of=as_of,
+    )
+
+    assert list(value) == ["run-1"]
+    assert value["run-1"].open_findings == 1
+    assert value["run-1"].top_blocking_finding_id == "finding-1"
+    stmt = mock_db_session.execute.await_args.args[0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "financial_reconciliation_findings.run_id IN ('run-1', 'run-2')" in compiled
+    assert "GROUP BY" in compiled
+    assert "row_number() OVER (PARTITION BY" in compiled
+    assert (
+        "financial_reconciliation_findings.resolved_at <= '2025-08-30 11:00:00+00:00'" in compiled
+    )
+    assert "created_at ASC" in compiled
+    assert "id ASC" in compiled
+    mock_db_session.execute.assert_awaited_once()
+
+
+async def test_get_reconciliation_finding_summaries_skips_empty_membership(
+    repository: OperationsRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    assert await repository.get_reconciliation_finding_summaries([]) == {}
+    mock_db_session.execute.assert_not_awaited()
 
 
 async def test_get_lineage_keys_query_with_filters(

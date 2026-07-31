@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import date, datetime
 from typing import Any, Protocol
 
@@ -293,6 +294,12 @@ class OperationsSupportRepository(Protocol):
         as_of: datetime | None = None,
         **filters: Any,
     ) -> ReconciliationFindingSummary: ...
+
+    async def get_reconciliation_finding_summaries(
+        self,
+        run_ids: Sequence[str],
+        as_of: datetime | None = None,
+    ) -> dict[str, ReconciliationFindingSummary]: ...
 
     async def get_portfolio_control_stages_count(
         self,
