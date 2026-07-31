@@ -21,6 +21,7 @@ from src.services.query_service.app.repositories.transaction_repository import T
 from src.services.query_service.app.services.transaction_records import (
     transaction_ledger_reconstruction_evidence,
 )
+from src.services.query_service.app.services.transaction_service import TransactionService
 
 pytestmark = pytest.mark.asyncio
 
@@ -376,3 +377,112 @@ async def test_transaction_ledger_identity_binds_only_selected_material_inputs(
     changed_fx = await read_evidence()
     assert changed_fx.selected_fx_rate_digest != changed_cashflow.selected_fx_rate_digest
     assert scope_id(changed_fx) != scope_id(changed_cashflow)
+
+
+async def test_transaction_ledger_page_and_identity_share_one_repeatable_snapshot(
+    clean_db,
+    db_engine,
+    async_db_session: AsyncSession,
+) -> None:
+    with Session(db_engine) as session:
+        session.add_all(
+            [
+                Portfolio(
+                    portfolio_id="PORT-SNAPSHOT",
+                    base_currency="USD",
+                    open_date=date(2024, 1, 1),
+                    risk_exposure="BALANCED",
+                    investment_time_horizon="LONG_TERM",
+                    portfolio_type="ADVISORY",
+                    booking_center_code="SG",
+                    client_id="CLIENT-SNAPSHOT",
+                    status="ACTIVE",
+                ),
+                Transaction(
+                    transaction_id="TX-SNAPSHOT",
+                    portfolio_id="PORT-SNAPSHOT",
+                    instrument_id="INST-SNAPSHOT",
+                    security_id="SEC-SNAPSHOT",
+                    transaction_type="BUY",
+                    quantity=Decimal("10"),
+                    price=Decimal("100"),
+                    gross_transaction_amount=Decimal("1000"),
+                    trade_currency="USD",
+                    currency="USD",
+                    transaction_date=datetime(2026, 1, 3, tzinfo=UTC),
+                ),
+                FxRate(
+                    from_currency="USD",
+                    to_currency="SGD",
+                    rate_date=date(2026, 1, 31),
+                    rate=Decimal("1.35"),
+                ),
+            ]
+        )
+        session.commit()
+
+    correction_committed = False
+    sync_engine = async_db_session.bind.sync_engine
+
+    def commit_correction_after_evidence(
+        _connection,
+        _cursor,
+        statement: str,
+        _parameters,
+        _context,
+        _executemany: bool,
+    ) -> None:
+        nonlocal correction_committed
+        if correction_committed or "transaction_ledger_transaction_evidence" not in statement:
+            return
+        correction_committed = True
+        with Session(db_engine) as correction_session:
+            correction_session.execute(
+                update(Transaction)
+                .where(Transaction.transaction_id == "TX-SNAPSHOT")
+                .values(
+                    price=Decimal("200"),
+                    gross_transaction_amount=Decimal("2000"),
+                )
+            )
+            correction_session.execute(
+                update(FxRate)
+                .where(FxRate.from_currency == "USD", FxRate.to_currency == "SGD")
+                .values(rate=Decimal("1.36"))
+            )
+            correction_session.commit()
+
+    event.listen(sync_engine, "after_cursor_execute", commit_correction_after_evidence)
+    try:
+        snapshot_response = await TransactionService(async_db_session).get_transactions(
+            portfolio_id="PORT-SNAPSHOT",
+            skip=0,
+            limit=10,
+            as_of_date=date(2026, 1, 31),
+            reporting_currency="SGD",
+        )
+    finally:
+        event.remove(sync_engine, "after_cursor_execute", commit_correction_after_evidence)
+
+    assert correction_committed is True
+    assert snapshot_response.transactions[0].price == Decimal("100")
+    assert snapshot_response.transactions[0].gross_transaction_amount == Decimal("1000")
+    assert snapshot_response.transactions[0].gross_transaction_amount_reporting_currency == Decimal(
+        "1350"
+    )
+
+    await async_db_session.rollback()
+    corrected_response = await TransactionService(async_db_session).get_transactions(
+        portfolio_id="PORT-SNAPSHOT",
+        skip=0,
+        limit=10,
+        as_of_date=date(2026, 1, 31),
+        reporting_currency="SGD",
+    )
+
+    assert corrected_response.transactions[0].price == Decimal("200")
+    assert corrected_response.transactions[0].gross_transaction_amount == Decimal("2000")
+    assert corrected_response.transactions[
+        0
+    ].gross_transaction_amount_reporting_currency == Decimal("2720")
+    assert corrected_response.snapshot_id != snapshot_response.snapshot_id

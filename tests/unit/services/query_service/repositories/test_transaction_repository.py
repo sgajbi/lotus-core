@@ -201,6 +201,33 @@ async def test_get_transactions_with_as_of_date_filter(
     assert "transactions.transaction_date < '2025-01-16 00:00:00'" in compiled_query
 
 
+async def test_establish_transaction_ledger_read_snapshot_is_repeatable_and_read_only(
+    repository: TransactionRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    mock_db_session.in_transaction.return_value = False
+
+    await repository.establish_transaction_ledger_read_snapshot()
+
+    statement = mock_db_session.execute.await_args.args[0]
+    assert str(statement) == "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY"
+
+
+async def test_establish_transaction_ledger_read_snapshot_rejects_an_existing_transaction(
+    repository: TransactionRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    mock_db_session.in_transaction.return_value = True
+
+    with pytest.raises(
+        RuntimeError,
+        match="must be established before the first database read",
+    ):
+        await repository.establish_transaction_ledger_read_snapshot()
+
+    mock_db_session.execute.assert_not_awaited()
+
+
 async def test_get_transactions_pages_transactions_before_loading_cost_collection(
     repository: TransactionRepository, mock_db_session: AsyncMock
 ):
