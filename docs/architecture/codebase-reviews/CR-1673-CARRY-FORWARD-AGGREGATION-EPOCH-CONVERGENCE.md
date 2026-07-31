@@ -73,6 +73,20 @@ and runtime topology are unchanged.
 ## Validation
 
 - aggregation repository unit, integration, and generator repository suites: `52 passed`
-- corrected isolated canonical proof: pending
+- strict MyPy: no issues in `240` source files
+- touched Ruff lint/format, diff hygiene, and repository docs/wiki guards: passed
+- independent final review: no P0/P1 findings for the bounded pending-job correction
+- corrected isolated canonical proof: passed at signed head `befc8313dc96011b83d90b64e177297796aee243`
+  - artifact: `output/task-runs/20260731T125019655820Z-678d097cf3f2-canonical-front-office-seed-proof.json`
+  - SHA-256: `70ce52b19f14b75b9d10ff733855bd7dc601b093fb54341e768dec1f5ba0c771`
+  - stable observations: `3`
+  - transactions: `31`; positions: `11/11` valued; data quality: `COMPLETE`
+  - holdings, pricing, transactions, reporting: all `READY`; blocking reasons: `0`
+  - aggregation jobs: `285 COMPLETE`, `0 PENDING`, `0 PROCESSING`, `0 FAILED`
+  - valuation and outbox queues: zero open/failed work
+  - during-seed contention peak: active `3`, blocked `0`, lock waiters `0`, deadlocks `0`
+  - terminal sampling peak: active `10`, blocked `6`, lock waiters `6`; final stable observation
+    returned active/blocked/waiters/deadlocks `0/0/0/0`
+  - generated containers, networks, and volumes after teardown: `0/0/0`
 - governed Workbench canonical validation: pending
 - protected PR and exact-main evidence: pending
