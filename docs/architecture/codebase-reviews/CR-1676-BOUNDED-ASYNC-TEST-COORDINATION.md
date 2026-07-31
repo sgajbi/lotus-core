@@ -25,7 +25,9 @@ Both affected PostgreSQL tests use the helper and release their held lock/fence 
 second session publishes its PostgreSQL backend PID before calling the repository. A bounded
 observer then requires `pg_locks` to expose an ungranted advisory lock for that exact backend before
 the first transaction is released. The tests subsequently prove acquisition and clean completion.
-They no longer infer serialization from a sleep or from client-side call ordering.
+Observer connection checkout and every query share the same remaining deadline while the contender
+task remains supervised, so an observer stall cannot escape the requested bound. The tests no
+longer infer serialization from a sleep or from client-side call ordering.
 
 ## Same-Pattern Review
 

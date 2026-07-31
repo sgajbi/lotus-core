@@ -69,35 +69,59 @@ async def wait_for_postgres_advisory_lock_wait(
     producer task remains supervised so an early database failure is propagated.
     """
 
+    async def observe_wait() -> bool:
+        async with session_factory() as observer_session:
+            return bool(
+                await observer_session.scalar(
+                    text(
+                        """
+                        SELECT EXISTS (
+                            SELECT 1
+                            FROM pg_locks
+                            WHERE pid = :backend_pid
+                              AND locktype = 'advisory'
+                              AND NOT granted
+                        )
+                        """
+                    ),
+                    {"backend_pid": backend_pid},
+                )
+            )
+
     deadline = asyncio.get_running_loop().time() + timeout
-    async with session_factory() as observer_session:
-        while True:
-            if task.done():
+    while True:
+        remaining = deadline - asyncio.get_running_loop().time()
+        if remaining <= 0:
+            raise TimeoutError(
+                f"task did not enter a PostgreSQL advisory-lock wait within {timeout} seconds"
+            )
+
+        observation_task = asyncio.create_task(observe_wait())
+        try:
+            done, _ = await asyncio.wait(
+                {task, observation_task},
+                timeout=remaining,
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            if task in done:
                 await task
                 raise RuntimeError(
                     "task completed without entering a PostgreSQL advisory-lock wait"
                 )
-
-            waiting = await observer_session.scalar(
-                text(
-                    """
-                    SELECT EXISTS (
-                        SELECT 1
-                        FROM pg_locks
-                        WHERE pid = :backend_pid
-                          AND locktype = 'advisory'
-                          AND NOT granted
-                    )
-                    """
-                ),
-                {"backend_pid": backend_pid},
-            )
-            if waiting:
-                return
-
-            remaining = deadline - asyncio.get_running_loop().time()
-            if remaining <= 0:
+            if observation_task not in done:
                 raise TimeoutError(
-                    f"task did not enter a PostgreSQL advisory-lock wait within {timeout} seconds"
+                    f"PostgreSQL advisory-lock observation exceeded the {timeout}-second wait bound"
                 )
-            await asyncio.sleep(min(0.01, remaining))
+            if observation_task.result():
+                return
+        finally:
+            if not observation_task.done():
+                observation_task.cancel()
+            await asyncio.gather(observation_task, return_exceptions=True)
+
+        remaining = deadline - asyncio.get_running_loop().time()
+        if remaining <= 0:
+            raise TimeoutError(
+                f"task did not enter a PostgreSQL advisory-lock wait within {timeout} seconds"
+            )
+        await asyncio.sleep(min(0.01, remaining))

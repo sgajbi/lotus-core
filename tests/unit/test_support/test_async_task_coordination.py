@@ -6,10 +6,36 @@ import pytest
 
 from tests.test_support.async_task_coordination import (
     cancel_pending_tasks,
+    wait_for_postgres_advisory_lock_wait,
     wait_for_task_signal,
 )
 
 pytestmark = pytest.mark.asyncio
+
+
+class _ObserverSession:
+    def __init__(self, scalar_result) -> None:
+        self._scalar_result = scalar_result
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, traceback) -> None:
+        return None
+
+    async def scalar(self, statement, parameters):
+        del statement, parameters
+        if callable(self._scalar_result):
+            return await self._scalar_result()
+        return self._scalar_result
+
+
+class _ObserverSessionFactory:
+    def __init__(self, scalar_result) -> None:
+        self._scalar_result = scalar_result
+
+    def __call__(self) -> _ObserverSession:
+        return _ObserverSession(self._scalar_result)
 
 
 async def test_wait_for_task_signal_returns_after_signal() -> None:
@@ -76,3 +102,52 @@ async def test_wait_for_task_signal_times_out_and_cleanup_cancels_producer() -> 
 
     await cancel_pending_tasks(task)
     assert task.cancelled()
+
+
+async def test_advisory_lock_wait_returns_on_server_visible_wait() -> None:
+    task = asyncio.create_task(asyncio.Event().wait())
+    try:
+        await wait_for_postgres_advisory_lock_wait(
+            task,
+            _ObserverSessionFactory(True),
+            backend_pid=1729,
+            timeout=1,
+        )
+    finally:
+        await cancel_pending_tasks(task)
+
+
+async def test_advisory_lock_wait_bounds_stalled_observer_query() -> None:
+    async def stalled_query() -> bool:
+        await asyncio.Event().wait()
+        return False
+
+    task = asyncio.create_task(asyncio.Event().wait())
+    with pytest.raises(TimeoutError, match="observation exceeded"):
+        await wait_for_postgres_advisory_lock_wait(
+            task,
+            _ObserverSessionFactory(stalled_query),
+            backend_pid=1729,
+            timeout=0.01,
+        )
+    await cancel_pending_tasks(task)
+
+
+async def test_advisory_lock_wait_propagates_contender_failure_during_observation() -> None:
+    async def stalled_query() -> bool:
+        await asyncio.Event().wait()
+        return False
+
+    async def failed_contender() -> None:
+        await asyncio.sleep(0)
+        raise ConnectionError("contender connection failed")
+
+    task = asyncio.create_task(failed_contender())
+    with pytest.raises(ConnectionError, match="contender connection failed"):
+        await wait_for_postgres_advisory_lock_wait(
+            task,
+            _ObserverSessionFactory(stalled_query),
+            backend_pid=1729,
+            timeout=1,
+        )
+    await cancel_pending_tasks(task)
