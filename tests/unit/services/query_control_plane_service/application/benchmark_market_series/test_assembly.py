@@ -185,6 +185,16 @@ def test_non_terminal_page_is_truthfully_partial() -> None:
     assert response.page.next_page_token == "next"
 
 
+def test_stale_component_evidence_preserves_quality_and_freshness_posture() -> None:
+    response = _response(
+        components=[replace(_component(), quality_status="STALE")],
+    )
+
+    assert response.data_quality_status == "STALE"
+    assert response.freshness_status == "STALE"
+    assert response.source_evidence_current is False
+
+
 def test_latest_evidence_normalizes_legacy_naive_utc_timestamp() -> None:
     legacy_timestamp = datetime(2026, 1, 31, 10, 0)
     price = replace(

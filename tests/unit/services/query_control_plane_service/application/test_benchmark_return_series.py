@@ -78,7 +78,8 @@ def test_stale_partial_window_is_not_current() -> None:
     )
 
     assert response.completeness_status == "PARTIAL"
-    assert response.data_quality_status == "PARTIAL"
+    assert response.data_quality_status == "STALE"
+    assert response.freshness_status == "STALE"
     assert response.source_evidence_current is False
 
 

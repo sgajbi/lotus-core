@@ -6,6 +6,10 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Literal
 
+from portfolio_common.market_reference_quality import (
+    classify_market_reference_product_quality,
+    market_reference_freshness_status,
+)
 from portfolio_common.source_data_product_metadata import (
     source_data_product_runtime_metadata,
     stable_content_hash,
@@ -66,7 +70,18 @@ def build_benchmark_catalog_response(
     completeness = _catalog_completeness(records)
     evidence = [component for rows in components_by_benchmark.values() for component in rows]
     latest_evidence = _latest_evidence(definitions, evidence)
-    quality_complete = completeness == "COMPLETE" and _accepted_quality(definitions, evidence)
+    resolved_quality = (
+        "EMPTY"
+        if not records
+        else classify_market_reference_product_quality(
+            (
+                *(definition.quality_status for definition in definitions),
+                *(component.quality_status for component in evidence),
+            ),
+            evidence_complete=completeness == "COMPLETE",
+        )
+    )
+    quality_complete = resolved_quality == "COMPLETE"
     content_hash = stable_content_hash(
         {
             "product_name": "BenchmarkDefinition",
@@ -84,9 +99,7 @@ def build_benchmark_catalog_response(
     metadata = source_data_product_runtime_metadata(
         generated_at=generated_at,
         as_of_date=request.as_of_date,
-        data_quality_status=(
-            "COMPLETE" if quality_complete else "EMPTY" if not records else "PARTIAL"
-        ),
+        data_quality_status=resolved_quality,
         latest_evidence_timestamp=latest_evidence,
         content_hash=content_hash,
         source_refs=[
@@ -98,11 +111,11 @@ def build_benchmark_catalog_response(
             "catalog_scope": "effective_definitions",
         },
         source_evidence_current=quality_complete,
-        freshness_status="CURRENT"
-        if quality_complete
-        else "UNAVAILABLE"
-        if not records
-        else "PARTIAL",
+        freshness_status=market_reference_freshness_status(
+            data_quality_status=resolved_quality,
+            has_evidence=bool(records),
+            has_timestamp=latest_evidence is not None,
+        ),
     )
     return BenchmarkCatalogResponse(
         records=records,
@@ -185,12 +198,3 @@ def _latest_evidence(
         if timestamp is not None
     )
     return max(timestamps) if timestamps else None
-
-
-def _accepted_quality(
-    definitions: list[BenchmarkDefinitionEvidence], components: list[BenchmarkComponentEvidence]
-) -> bool:
-    accepted = {"ACCEPTED", "COMPLETE"}
-    return all(row.quality_status.strip().upper() in accepted for row in definitions) and all(
-        row.quality_status.strip().upper() in accepted for row in components
-    )

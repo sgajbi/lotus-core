@@ -6,6 +6,10 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 
+from portfolio_common.market_reference_quality import (
+    classify_market_reference_product_quality,
+    market_reference_freshness_status,
+)
 from portfolio_common.source_data_product_metadata import (
     source_data_product_runtime_metadata,
     stable_content_hash,
@@ -94,9 +98,14 @@ def build_benchmark_composition_response(
     )
     completeness_status, completeness_reason = _completeness(incomplete_starts)
     latest_evidence = _latest_evidence(definitions, segments)
-    quality_complete = completeness_status == "COMPLETE" and _accepted_quality(
-        definitions, segments
+    resolved_quality = classify_market_reference_product_quality(
+        (
+            *(definition.quality_status for definition in definitions),
+            *(segment.quality_status for segment in segments),
+        ),
+        evidence_complete=completeness_status == "COMPLETE",
     )
+    quality_complete = resolved_quality == "COMPLETE"
     content_hash = stable_content_hash(
         {
             "product_name": "BenchmarkConstituentWindow",
@@ -114,7 +123,7 @@ def build_benchmark_composition_response(
     metadata = source_data_product_runtime_metadata(
         generated_at=generated_at,
         as_of_date=request.window.end_date,
-        data_quality_status="COMPLETE" if quality_complete else "PARTIAL",
+        data_quality_status=resolved_quality,
         latest_evidence_timestamp=latest_evidence,
         content_hash=content_hash,
         source_refs=[
@@ -129,7 +138,11 @@ def build_benchmark_composition_response(
             "contract_version": "rfc_062_v1",
         },
         source_evidence_current=quality_complete,
-        freshness_status="CURRENT" if quality_complete else "PARTIAL",
+        freshness_status=market_reference_freshness_status(
+            data_quality_status=resolved_quality,
+            has_evidence=True,
+            has_timestamp=latest_evidence is not None,
+        ),
     )
     return BenchmarkCompositionWindowResponse(
         benchmark_id=benchmark_id,
@@ -213,16 +226,6 @@ def _latest_evidence(
         if timestamp is not None
     )
     return max(timestamps) if timestamps else None
-
-
-def _accepted_quality(
-    definitions: list[BenchmarkDefinitionEvidence],
-    components: list[BenchmarkComponentEvidence],
-) -> bool:
-    accepted = {"ACCEPTED", "COMPLETE"}
-    return all(row.quality_status.strip().upper() in accepted for row in definitions) and all(
-        row.quality_status.strip().upper() in accepted for row in components
-    )
 
 
 def _segment_response(

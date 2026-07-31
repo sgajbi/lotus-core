@@ -24,7 +24,11 @@ REQUEST = BenchmarkCompositionWindowRequest(
 )
 
 
-def _definition(*, currency: str = "USD") -> BenchmarkDefinitionEvidence:
+def _definition(
+    *,
+    currency: str = "USD",
+    quality_status: str = "accepted",
+) -> BenchmarkDefinitionEvidence:
     return BenchmarkDefinitionEvidence(
         benchmark_id="BMK_GLOBAL_BALANCED",
         benchmark_name="Global Balanced",
@@ -42,7 +46,7 @@ def _definition(*, currency: str = "USD") -> BenchmarkDefinitionEvidence:
         source_timestamp=datetime(2026, 4, 10, 9, tzinfo=UTC),
         source_vendor="provider",
         source_record_id="definition:1",
-        quality_status="accepted",
+        quality_status=quality_status,
         created_at=datetime(2026, 4, 10, 8, tzinfo=UTC),
         updated_at=EVIDENCE_AT,
     )
@@ -126,6 +130,18 @@ def test_incomplete_rebalance_period_is_reported_and_not_current() -> None:
     assert response.completeness_reason == "BENCHMARK_COMPOSITION_WEIGHTS_INCOMPLETE"
     assert response.incomplete_period_starts == [date(2026, 2, 1)]
     assert response.data_quality_status == "PARTIAL"
+    assert response.source_evidence_current is False
+
+
+def test_stale_definition_preserves_quality_and_freshness_posture() -> None:
+    response = _build(
+        _complete_components(),
+        definitions=[_definition(quality_status="stale")],
+    )
+
+    assert response.completeness_status == "COMPLETE"
+    assert response.data_quality_status == "STALE"
+    assert response.freshness_status == "STALE"
     assert response.source_evidence_current is False
 
 

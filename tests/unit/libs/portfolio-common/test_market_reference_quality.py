@@ -12,6 +12,7 @@ from portfolio_common.market_reference_quality import (
     SourceObservationSignal,
     classify_market_reference_coverage,
     classify_market_reference_point,
+    classify_market_reference_product_quality,
     count_market_reference_quality_statuses,
     market_reference_freshness_status,
     normalize_quality_status,
@@ -144,6 +145,32 @@ def test_classify_market_reference_coverage_rejects_negative_estimated_count() -
         classify_market_reference_coverage(
             MarketReferenceCoverageSignal(required_count=1, observed_count=1, estimated_count=-1)
         )
+
+
+@pytest.mark.parametrize(
+    ("statuses", "evidence_complete", "expected"),
+    [
+        (["ACCEPTED"], True, COMPLETE),
+        (["ACCEPTED"], False, PARTIAL),
+        (["ACCEPTED", "PROVISIONAL"], True, PARTIAL),
+        (["ACCEPTED", "STALE"], True, STALE),
+        (["ACCEPTED", "REJECTED"], True, BLOCKED),
+        (["ACCEPTED", "vendor_verified"], True, UNKNOWN),
+        ([], True, UNKNOWN),
+    ],
+)
+def test_classify_market_reference_product_quality_preserves_unsafe_states(
+    statuses: list[str],
+    evidence_complete: bool,
+    expected: str,
+) -> None:
+    assert (
+        classify_market_reference_product_quality(
+            statuses,
+            evidence_complete=evidence_complete,
+        )
+        == expected
+    )
 
 
 @pytest.mark.parametrize(
