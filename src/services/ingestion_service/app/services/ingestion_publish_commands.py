@@ -4,6 +4,8 @@ import logging
 from dataclasses import dataclass, replace
 from typing import Any, Awaitable, Callable, Sequence, cast
 
+from portfolio_common.ingestion_lineage import ingestion_job_scope
+
 from ..application import (
     ResolveTransactionReprocessingTargets,
     TransactionReprocessingTargetNotFound,
@@ -470,7 +472,8 @@ class IngestionPublishCommandHandler:
         publisher: BatchPublisher,
     ) -> None:
         try:
-            await publisher(command.records, command.idempotency_key)
+            with ingestion_job_scope(job_id):
+                await publisher(command.records, command.idempotency_key)
         except IngestionPublishError as exc:
             detail = self._publish_failure_detail(exc=exc, job_id=job_id)
             await self.ingestion_job_service.mark_failed(
@@ -493,13 +496,14 @@ class IngestionPublishCommandHandler:
         job_id: str,
     ) -> dict[str, int]:
         try:
-            return cast(
-                dict[str, int],
-                await self.ingestion_service.publish_portfolio_bundle(
-                    command.request,
-                    idempotency_key=command.idempotency_key,
-                ),
-            )
+            with ingestion_job_scope(job_id):
+                return cast(
+                    dict[str, int],
+                    await self.ingestion_service.publish_portfolio_bundle(
+                        command.request,
+                        idempotency_key=command.idempotency_key,
+                    ),
+                )
         except IngestionPublishError as exc:
             detail = self._publish_failure_detail(exc=exc, job_id=job_id)
             await self.ingestion_job_service.mark_failed(

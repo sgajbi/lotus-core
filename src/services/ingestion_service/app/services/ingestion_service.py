@@ -21,6 +21,11 @@ from portfolio_common.event_publisher import (
     EventPublisher,
     EventPublishRequest,
 )
+from portfolio_common.ingestion_lineage import (
+    INGESTION_JOB_ID_HEADER,
+    ingestion_job_id_var,
+    normalize_ingestion_job_id,
+)
 from portfolio_common.logging_utils import (
     correlation_id_var,
     normalize_lineage_value,
@@ -72,6 +77,9 @@ class IngestionService:
             headers.append(("correlation_id", corr_id.encode("utf-8")))
         if traceparent:
             headers.append(("traceparent", traceparent.encode("utf-8")))
+        ingestion_job_id = normalize_ingestion_job_id(ingestion_job_id_var.get())
+        if ingestion_job_id:
+            headers.append((INGESTION_JOB_ID_HEADER, ingestion_job_id.encode("utf-8")))
         if idempotency_key:
             headers.append(("idempotency_key", idempotency_key.encode("utf-8")))
         return headers or None

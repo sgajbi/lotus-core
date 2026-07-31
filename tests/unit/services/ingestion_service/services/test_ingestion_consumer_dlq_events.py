@@ -53,6 +53,7 @@ def _event(**overrides):
         "error_reason_code": "VALIDATION_ERROR",
         "error_reason": "invalid payload",
         "correlation_id": "corr-1",
+        "ingestion_job_id": "job-1",
         "payload_excerpt": '{"portfolio_id":"portfolio-1"}',
         "observed_at": datetime(2026, 6, 17, 1, 2, 3, tzinfo=UTC),
     }
@@ -68,6 +69,7 @@ async def test_to_consumer_dlq_event_response_preserves_operator_fields() -> Non
     assert response.consumer_group == "valuation-service-group"
     assert response.error_reason_code == "VALIDATION_ERROR"
     assert response.correlation_id == "corr-1"
+    assert response.ingestion_job_id == "job-1"
     assert response.correlation_missing_reason is None
     assert response.alternate_lookup_key is None
     assert response.payload_excerpt == '{"portfolio_id":"portfolio-1"}'
@@ -131,6 +133,27 @@ async def test_list_consumer_dlq_event_responses_filters_by_job_correlation() ->
     )
 
     assert "consumer_dlq_events.correlation_id =" in str(statements[0])
+
+
+async def test_list_consumer_dlq_event_responses_filters_by_durable_job_owner() -> None:
+    statements = []
+
+    class _FakeSession:
+        async def scalars(self, stmt):
+            statements.append(stmt)
+            return _FakeScalars([])
+
+    await list_consumer_dlq_event_responses(
+        limit=50,
+        original_topic=None,
+        consumer_group=None,
+        ingestion_job_id="job-1",
+        session_factory=lambda: _SingleSessionAsyncIterator(_FakeSession()),
+    )
+
+    compiled = str(statements[0])
+    assert "consumer_dlq_events.ingestion_job_id =" in compiled
+    assert "consumer_dlq_events.observed_at DESC, consumer_dlq_events.id DESC" in compiled
 
 
 async def test_list_consumer_dlq_event_responses_filters_replay_event_ids() -> None:

@@ -13,6 +13,7 @@ from sqlalchemy.orm import aliased, sessionmaker
 
 from portfolio_common.database_models import OutboxEvent
 from portfolio_common.db import SessionLocal
+from portfolio_common.ingestion_lineage import INGESTION_JOB_ID_HEADER
 from portfolio_common.kafka_utils import KafkaProducer
 from portfolio_common.logging_utils import (
     normalize_traceparent,
@@ -60,6 +61,7 @@ class _ClaimedOutboxEvent:
     created_at: datetime
     claim_token: str
     claim_expires_at: datetime
+    ingestion_job_id: str | None = None
 
 
 class OutboxDispatcher:
@@ -335,6 +337,7 @@ class OutboxDispatcher:
                             payload=event.payload,
                             topic=event.topic,
                             correlation_id=event.correlation_id,
+                            ingestion_job_id=event.ingestion_job_id,
                             traceparent=_payload_traceparent(event.payload),
                             retry_count=event.retry_count,
                             created_at=_as_utc(event.created_at),
@@ -807,6 +810,8 @@ def _event_headers(event: _ClaimedOutboxEvent) -> list[tuple[str, bytes]]:
     headers: list[tuple[str, bytes]] = []
     if event.correlation_id:
         headers.append(("correlation_id", event.correlation_id.encode("utf-8")))
+    if event.ingestion_job_id:
+        headers.append((INGESTION_JOB_ID_HEADER, event.ingestion_job_id.encode("utf-8")))
     traceparent = normalize_traceparent(event.traceparent)
     if traceparent:
         headers.append(("traceparent", traceparent.encode("utf-8")))

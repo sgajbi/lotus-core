@@ -342,7 +342,7 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
                 submitted_at=record.submitted_at,
             )
 
-        async def get_latest_replayable_job_by_correlation_id(
+        async def get_unique_replayable_job_by_correlation_id(
             self,
             correlation_id: str,
         ) -> IngestionIdempotencyReplay | None:
@@ -352,13 +352,9 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
                 if job.correlation_id == correlation_id
                 and job.status in {"failed", "queued", "accepted"}
             ]
-            if not replayable_jobs:
+            if len(replayable_jobs) != 1:
                 return None
-            return sorted(
-                replayable_jobs,
-                key=lambda job: (job.submitted_at, job.job_id),
-                reverse=True,
-            )[0]
+            return replayable_jobs[0]
 
         async def list_jobs(
             self,

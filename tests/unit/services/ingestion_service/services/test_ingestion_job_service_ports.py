@@ -225,6 +225,16 @@ async def test_consumer_dlq_evidence_queries_delegate_with_bounded_filters(
     )
 
     query.reset_mock()
+    assert await service.list_consumer_dlq_events_by_job_id("job-001", limit=41) == []
+    query.assert_awaited_once_with(
+        limit=41,
+        original_topic=None,
+        consumer_group=None,
+        ingestion_job_id="job-001",
+        session_factory=ingestion_job_service.get_async_db_session,
+    )
+
+    query.reset_mock()
     assert await service.list_consumer_dlq_events_by_event_ids((), limit=37) == []
     query.assert_not_awaited()
 

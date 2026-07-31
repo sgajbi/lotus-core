@@ -311,7 +311,7 @@ async def test_get_bundle_correlates_existing_stores_without_parallel_persistenc
     ingestion_job_service.get_job = AsyncMock(return_value=job)
     ingestion_job_service.list_failures = AsyncMock(return_value=[failure])
     ingestion_job_service.list_replay_audits = AsyncMock(return_value=[replay])
-    ingestion_job_service.list_consumer_dlq_events_by_correlation_id = AsyncMock(
+    ingestion_job_service.list_consumer_dlq_events_by_job_id = AsyncMock(
         return_value=[dlq_event]
     )
     ingestion_job_service.list_consumer_dlq_events_by_event_ids = AsyncMock(
@@ -329,8 +329,8 @@ async def test_get_bundle_correlates_existing_stores_without_parallel_persistenc
     assert bundle.failures == [failure]
     assert bundle.consumer_dlq_events == [dlq_event]
     assert bundle.replay_audits == [replay]
-    ingestion_job_service.list_consumer_dlq_events_by_correlation_id.assert_awaited_once_with(
-        "corr-001",
+    ingestion_job_service.list_consumer_dlq_events_by_job_id.assert_awaited_once_with(
+        "job-001",
         limit=501,
     )
     ingestion_job_service.list_replay_audits.assert_awaited_once_with(
@@ -355,7 +355,7 @@ async def test_get_bundle_links_dlq_by_replay_event_when_message_correlation_was
     ingestion_job_service.get_job = AsyncMock(return_value=job)
     ingestion_job_service.list_failures = AsyncMock(return_value=[])
     ingestion_job_service.list_replay_audits = AsyncMock(return_value=[replay])
-    ingestion_job_service.list_consumer_dlq_events_by_correlation_id = AsyncMock(return_value=[])
+    ingestion_job_service.list_consumer_dlq_events_by_job_id = AsyncMock(return_value=[])
     ingestion_job_service.list_consumer_dlq_events_by_event_ids = AsyncMock(
         return_value=[dlq_event]
     )

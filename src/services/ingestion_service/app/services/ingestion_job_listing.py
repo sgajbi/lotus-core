@@ -51,13 +51,13 @@ def build_cursor_lookup_statement(*, cursor: str) -> Any:
     return select(DBIngestionJob).where(DBIngestionJob.job_id == cursor).limit(1)
 
 
-def build_replayable_correlation_lookup_statement(*, correlation_id: str) -> Any:
+def build_unique_replayable_correlation_lookup_statement(*, correlation_id: str) -> Any:
     return (
         select(DBIngestionJob)
         .where(DBIngestionJob.correlation_id == correlation_id)
         .where(DBIngestionJob.status.in_(REPLAYABLE_INGESTION_JOB_STATUSES))
         .order_by(desc(DBIngestionJob.id))
-        .limit(1)
+        .limit(2)
     )
 
 
@@ -95,14 +95,20 @@ async def load_job_list_response(
     return ([], None)
 
 
-async def load_latest_replayable_job_by_correlation_id(
+async def load_unique_replayable_job_by_correlation_id(
     *,
     correlation_id: str,
     session_factory,
 ) -> IngestionJobResponse | None:
     async for db in session_factory():
-        row = await db.scalar(
-            build_replayable_correlation_lookup_statement(correlation_id=correlation_id)
+        rows = list(
+            (
+                await db.scalars(
+                    build_unique_replayable_correlation_lookup_statement(
+                        correlation_id=correlation_id
+                    )
+                )
+            ).all()
         )
-        return to_job_response(row) if row is not None else None
+        return to_job_response(rows[0]) if len(rows) == 1 else None
     return None

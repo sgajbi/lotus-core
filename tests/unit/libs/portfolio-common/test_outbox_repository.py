@@ -5,6 +5,7 @@ import pytest
 from portfolio_common.database_models import OutboxEvent
 from portfolio_common.domain.eventing import portfolio_security_partition_key
 from portfolio_common.events import CashflowCalculatedEvent
+from portfolio_common.ingestion_lineage import ingestion_job_scope
 from portfolio_common.logging_utils import traceparent_var
 from portfolio_common.outbox_repository import EVENT_SCHEMA_VERSION, OutboxRepository
 
@@ -158,6 +159,22 @@ async def test_create_outbox_event_captures_traceparent_context(
         traceparent_var.reset(token)
 
     assert event.payload["traceparent"] == TRACEPARENT
+
+
+async def test_create_outbox_event_captures_durable_ingestion_job_owner(
+    repository: OutboxRepository,
+) -> None:
+    with ingestion_job_scope("job-001"):
+        event = await repository.create_outbox_event(
+            aggregate_type="portfolio",
+            aggregate_id="P1",
+            event_type="evt",
+            payload={"x": 1},
+            topic="topic-1",
+            correlation_id="corr-123",
+        )
+
+    assert event.ingestion_job_id == "job-001"
 
 
 async def test_create_outbox_event_rejects_conflicting_payload_traceparent(

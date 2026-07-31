@@ -69,7 +69,7 @@ from .ingestion_job_lifecycle import (
 from .ingestion_job_listing import (
     IngestionJobListFilters,
     load_job_list_response,
-    load_latest_replayable_job_by_correlation_id,
+    load_unique_replayable_job_by_correlation_id,
 )
 from .ingestion_operating_band import (
     build_operating_band_policy,
@@ -255,11 +255,11 @@ class IngestionJobService:
             session_factory=get_async_db_session,
         )
 
-    async def get_latest_replayable_job_by_correlation_id(
+    async def get_unique_replayable_job_by_correlation_id(
         self,
         correlation_id: str,
     ) -> IngestionJobResponse | None:
-        return await load_latest_replayable_job_by_correlation_id(
+        return await load_unique_replayable_job_by_correlation_id(
             correlation_id=correlation_id,
             session_factory=get_async_db_session,
         )
@@ -419,6 +419,20 @@ class IngestionJobService:
             original_topic=None,
             consumer_group=None,
             correlation_id=correlation_id,
+            session_factory=get_async_db_session,
+        )
+
+    async def list_consumer_dlq_events_by_job_id(
+        self,
+        job_id: str,
+        *,
+        limit: int = 500,
+    ) -> list[ConsumerDlqEventResponse]:
+        return await list_consumer_dlq_event_responses(
+            limit=limit,
+            original_topic=None,
+            consumer_group=None,
+            ingestion_job_id=job_id,
             session_factory=get_async_db_session,
         )
 

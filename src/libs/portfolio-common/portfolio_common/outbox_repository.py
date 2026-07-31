@@ -8,6 +8,10 @@ from portfolio_common.database_models import OutboxEvent
 from portfolio_common.domain.eventing import EventPartitionKey
 from portfolio_common.durable_correlation import durable_correlation_diagnostics
 from portfolio_common.events import GOVERNED_EVENT_SCHEMA_VERSION
+from portfolio_common.ingestion_lineage import (
+    ingestion_job_id_var,
+    normalize_ingestion_job_id,
+)
 from portfolio_common.logging_utils import (
     normalize_lineage_value,
     normalize_traceparent,
@@ -82,6 +86,7 @@ class OutboxRepository:
             ),
             topic=topic,
             correlation_id=correlation_id,
+            ingestion_job_id=normalize_ingestion_job_id(ingestion_job_id_var.get()),
             correlation_missing_reason=diagnostics.correlation_missing_reason,
             alternate_lookup_key=diagnostics.alternate_lookup_key,
             created_at=datetime.now(timezone.utc),
