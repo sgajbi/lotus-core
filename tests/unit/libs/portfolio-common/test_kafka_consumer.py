@@ -5,6 +5,7 @@ from unittest.mock import ANY, AsyncMock, MagicMock, call, patch
 
 import pytest
 from portfolio_common.events import TransactionEvent
+from portfolio_common.ingestion_lineage import ingestion_job_id_var
 from portfolio_common.kafka_consumer import (
     BaseConsumer,
     DlqPublicationBudgetExhausted,
@@ -1404,6 +1405,45 @@ async def test_dlq_payload_is_correct(
     headers_dict = dict(call_args["headers"])
     assert headers_dict["correlation_id"] == correlation_id.encode("utf-8")
     test_consumer._record_consumer_dlq_event.assert_awaited_once()
+
+
+async def test_dlq_unknown_ingestion_owner_is_omitted_before_publish(
+    test_consumer: ConcreteTestConsumer,
+    mock_kafka_producer: MagicMock,
+) -> None:
+    mock_msg = create_mock_message(
+        "key-unknown-owner",
+        {"data": "value"},
+        headers=[("ingestion_job_id", b"job-stale")],
+    )
+    test_consumer._record_consumer_dlq_event = AsyncMock()
+    db = AsyncMock()
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = None
+    db.execute.return_value = result
+
+    async def get_session_gen():
+        yield db
+
+    token = ingestion_job_id_var.set("job-stale")
+    try:
+        with patch(
+            "portfolio_common.kafka_consumer.get_async_db_session",
+            new=get_session_gen,
+        ):
+            published = await test_consumer._send_to_dlq_async(
+                mock_msg,
+                ValueError("invalid payload"),
+            )
+    finally:
+        ingestion_job_id_var.reset(token)
+
+    assert published is True
+    payload = mock_kafka_producer.publish_message.call_args.kwargs["value"]
+    headers = dict(mock_kafka_producer.publish_message.call_args.kwargs["headers"])
+    assert payload["ingestion_job_id"] is None
+    assert "ingestion_job_id" not in headers
+    assert test_consumer._record_consumer_dlq_event.await_args.kwargs["ingestion_job_id"] is None
 
 
 async def test_dlq_payload_preserves_bounded_application_reason_code(
