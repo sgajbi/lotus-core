@@ -194,6 +194,8 @@ the latest cashflow selected per transaction, and applicable reporting-currency 
 database reduces each family to an ordered fixed-width digest; pagination and unrelated or
 superseded rows do not alter the identity. A selected economics-input correction does alter it,
 preventing stale page/cache reuse without transferring the complete ledger solely to construct
-evidence.
+evidence. Evidence, page rows, instrument checks, and reporting-FX conversion execute within one
+repeatable, read-only PostgreSQL snapshot, so a concurrent correction cannot split one response
+across old and new committed states.
 - [Position Processing](Position-Calculator)
 - [Validation and CI](Validation-and-CI)
