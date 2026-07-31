@@ -368,6 +368,29 @@ async def test_get_bundle_links_dlq_by_replay_event_when_message_correlation_was
 
 
 @pytest.mark.asyncio
+async def test_get_bundle_rejects_replay_event_owned_by_another_job() -> None:
+    job = _job()
+    foreign_dlq_event = _dlq().model_copy(update={"ingestion_job_id": "job-002"})
+    replay = _replay()
+    ingestion_job_service = MagicMock()
+    ingestion_job_service.get_job = AsyncMock(return_value=job)
+    ingestion_job_service.list_failures = AsyncMock(return_value=[])
+    ingestion_job_service.list_replay_audits = AsyncMock(return_value=[replay])
+    ingestion_job_service.list_consumer_dlq_events_by_job_id = AsyncMock(return_value=[])
+    ingestion_job_service.list_consumer_dlq_events_by_event_ids = AsyncMock(
+        return_value=[foreign_dlq_event]
+    )
+    ingestion_job_service.get_job_replay_context = AsyncMock(return_value=None)
+
+    bundle = await IngestionEvidenceQueryService(
+        ingestion_job_service=ingestion_job_service
+    ).get_evidence_bundle("job-001")
+
+    assert bundle.consumer_dlq_events == []
+    assert "consumer-dlq:dlq-001" not in bundle.evidence_references
+
+
+@pytest.mark.asyncio
 async def test_get_bundle_rejects_unknown_job_before_fetching_related_evidence() -> None:
     ingestion_job_service = MagicMock()
     ingestion_job_service.get_job = AsyncMock(return_value=None)
