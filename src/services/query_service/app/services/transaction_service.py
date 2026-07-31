@@ -87,6 +87,7 @@ class TransactionService:
             ),
         )
 
+        await self.repo.establish_transaction_ledger_read_snapshot()
         await ensure_portfolio_exists(repository=self.repo, portfolio_id=portfolio_id)
         effective_as_of_date = await transaction_ledger_effective_as_of_date(
             repository=self.repo,

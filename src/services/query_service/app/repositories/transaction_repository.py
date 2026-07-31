@@ -23,7 +23,7 @@ from portfolio_common.infrastructure.transaction_cost_snapshot import (
 )
 from portfolio_common.logging_utils import operation_log_extra
 from portfolio_common.utils import async_timed
-from sqlalchemy import asc, desc, func, select, true
+from sqlalchemy import asc, desc, func, select, text, true
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased, contains_eager
 
@@ -155,6 +155,15 @@ class TransactionRepository:
 
     def __init__(self, db: AsyncSession):
         self.db = db
+
+    async def establish_transaction_ledger_read_snapshot(self) -> None:
+        """Make every material ledger read in this request share one database snapshot."""
+
+        if self.db.in_transaction():
+            raise RuntimeError(
+                "Transaction ledger snapshot must be established before the first database read."
+            )
+        await self.db.execute(text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY"))
 
     @staticmethod
     def _realized_tax_evidence_predicate():

@@ -158,6 +158,7 @@ async def test_get_transactions(mock_transaction_repo: AsyncMock):
         response_dto = await service.get_transactions(**params)
 
         # ASSERT
+        mock_transaction_repo.establish_transaction_ledger_read_snapshot.assert_awaited_once_with()
         expected_filters = TransactionLedgerFilters(
             portfolio_id=params["portfolio_id"],
             instrument_id=params["instrument_id"],
