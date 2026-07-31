@@ -30,6 +30,8 @@ from src.services.ingestion_service.app.DTOs.ingestion_job_dto import (
     IngestionReplayAuditResponse,
 )
 
+from ..application.replay_recovery_policy import derive_consumer_dlq_recovery
+
 _EVIDENCE_LIMIT = 500
 _DEFAULT_RETENTION_CLASS = "governed_operational_evidence"
 _DEFAULT_ARCHIVAL_POSTURE = "policy_managed"
@@ -95,6 +97,11 @@ class IngestionEvidenceBundleBuilder:
         )
         outcome = classify_ingestion_outcome(counts)
         replay_posture = _replay_posture(replay_audits)
+        consumer_dlq_recovery = derive_consumer_dlq_recovery(
+            events=consumer_dlq_events,
+            replay_audits=replay_audits,
+            evidence_complete=evidence_complete,
+        )
         repair_posture = _repair_posture(job=job, failures=failures)
         evidence_gate, evidence_gate_reasons = _evidence_gate(
             job_status=job.status,
@@ -103,6 +110,11 @@ class IngestionEvidenceBundleBuilder:
             repair_posture=repair_posture,
             evidence_complete=evidence_complete,
             consumer_dlq_events=consumer_dlq_events,
+            unresolved_consumer_dlq_event_ids={
+                recovery.event_id
+                for recovery in consumer_dlq_recovery
+                if recovery.state != "recovered"
+            },
         )
         validation = IngestionEvidenceValidationSummary(
             profile_name=_unambiguous_payload_value(
@@ -239,13 +251,26 @@ def _replay_posture(audits: Iterable[IngestionReplayAuditResponse]) -> ReplayPos
     audit_rows = list(audits)
     if not audit_rows:
         return "not_requested"
-    latest_status = max(audit_rows, key=lambda audit: audit.requested_at).replay_status
+    latest_status = audit_rows[0].replay_status
     if latest_status == "replayed_bookkeeping_failed":
         return "replay_bookkeeping_failed"
     if latest_status == "replayed":
         return "replayed"
-    if latest_status in {"failed", "not_replayable", "duplicate_blocked"}:
+    if latest_status in {"failed", "not_replayable"}:
         return "replay_failed"
+    if latest_status == "duplicate_blocked":
+        latest = audit_rows[0]
+        return (
+            "replayed"
+            if any(
+                audit.replay_status == "replayed"
+                and audit.recovery_path == latest.recovery_path
+                and audit.event_id == latest.event_id
+                and audit.replay_fingerprint == latest.replay_fingerprint
+                for audit in audit_rows[1:]
+            )
+            else "replay_failed"
+        )
     if latest_status == "dry_run":
         return "dry_run_only"
     return "replay_failed"
@@ -279,6 +304,7 @@ def _evidence_gate(
     repair_posture: RepairPosture,
     evidence_complete: bool,
     consumer_dlq_events: Iterable[ConsumerDlqEventResponse],
+    unresolved_consumer_dlq_event_ids: set[str],
 ) -> tuple[Literal["ALLOW", "BLOCK", "REVIEW_REQUIRED"], list[str]]:
     reasons: set[str] = set()
     if job_status == "failed":
@@ -295,7 +321,11 @@ def _evidence_gate(
         reasons.add("QUARANTINED_SOURCE_BATCH")
     elif outcome == "empty":
         reasons.add("EMPTY_SOURCE_BATCH")
-    if any(not _is_explicit_quarantine_event(event) for event in consumer_dlq_events):
+    if any(
+        event.event_id in unresolved_consumer_dlq_event_ids
+        and not _is_explicit_quarantine_event(event)
+        for event in consumer_dlq_events
+    ):
         reasons.add("CORRELATED_PROCESSING_FAILURE")
     if replay_posture in {"replay_failed", "replay_bookkeeping_failed"}:
         reasons.add("REPLAY_RECOVERY_INCOMPLETE")
