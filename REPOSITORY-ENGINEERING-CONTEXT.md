@@ -248,7 +248,11 @@ Current repository posture:
     rows must be backfilled before dispatch; ambiguous legacy rows remain ownerless and fail closed.
     Legacy ownerless rows may use the bounded replayable-correlation lookup only when exactly one
     job matches; ambiguous reuse must remain unmapped and fail closed. Evidence bundles query DLQ
-    rows by indexed job ownership and may additionally link exact replay event ids.
+    rows by indexed job ownership and may additionally link exact replay event ids. Direct booked-
+    transaction replay must retain the message-scoped owner on the republished record. Before a
+    consumer publishes a DLQ record, it must resolve that owner against durable ingestion jobs;
+    unknown or stale header values are omitted from the DLQ payload, header, and evidence row so a
+    foreign-key failure cannot cause duplicate publication or stop source consumption.
 28. Reference-data ingestion source-observation lineage now has a shared DTO contract for
     benchmark, index, risk-free, and classification families. The canonical API-facing fields are
     `source_system`, `source_record_id`, `observed_at`, and `quality_status`; legacy
@@ -270,7 +274,8 @@ Current repository posture:
     recovery. A later `duplicate_blocked` preserves recovery only when an older equivalent
     fingerprint has durable `replayed` proof. Later failure, `replayed_bookkeeping_failed`,
     dry-run-only history, or truncated evidence remains fail closed. Job-retry audit rows never
-    clear consumer-DLQ failures.
+    clear consumer-DLQ failures. Consumer-DLQ replay fingerprints include the DLQ event identity;
+    sibling events owned by one ingestion job must never suppress each other's recovery proof.
 31. Direct ingestion-router Kafka publish dependency failures use the shared
     `routers.publish_errors` mapper. Preserve the `INGESTION_PUBLISH_FAILED` application code, but
     return HTTP 503 with `Retry-After`, dependency=`kafka`, retryability, correlation lineage,
