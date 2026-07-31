@@ -66,7 +66,10 @@ def test_ordered_unique_transaction_ids_preserves_first_seen_order() -> None:
 def test_plan_transaction_replay_builds_payloads_and_explicit_headers() -> None:
     plan = plan_transaction_replay(
         transactions=[_transaction("TXN1", portfolio_id="P-1")],
-        correlation=ReplayCorrelationMetadata(correlation_id=" corr-001 "),
+        correlation=ReplayCorrelationMetadata(
+            correlation_id=" corr-001 ",
+            ingestion_job_id=" job-001 ",
+        ),
     )
 
     assert len(plan.messages) == 1
@@ -77,6 +80,7 @@ def test_plan_transaction_replay_builds_payloads_and_explicit_headers() -> None:
     assert message.payload["transaction_id"] == "TXN1"
     assert message.headers == [
         ("correlation_id", b"corr-001"),
+        ("ingestion_job_id", b"job-001"),
         ("lotus-transaction-processing-intent", b"repair"),
     ]
 

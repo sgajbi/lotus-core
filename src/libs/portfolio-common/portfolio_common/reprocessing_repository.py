@@ -6,6 +6,7 @@ from sqlalchemy import case, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .database_models import Transaction as DBTransaction
+from .ingestion_lineage import ingestion_job_id_var, normalize_ingestion_job_id
 from .kafka_utils import KafkaProducer
 from .logging_utils import correlation_id_var, normalize_lineage_value
 from .reprocessing_replay import (
@@ -71,7 +72,8 @@ class ReprocessingRepository:
             return 0
 
         correlation = ReplayCorrelationMetadata(
-            correlation_id=_resolved_replay_correlation_id(correlation_id)
+            correlation_id=_resolved_replay_correlation_id(correlation_id),
+            ingestion_job_id=normalize_ingestion_job_id(ingestion_job_id_var.get()),
         )
         plan = plan_transaction_replay(
             transactions=transactions_to_replay,
