@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import cast
 
-from portfolio_common.reconciliation_quality import BLOCKED, BREAK_OPEN, COMPLETE, PARTIAL, UNKNOWN
+from portfolio_common.reconciliation_quality import UNKNOWN
 from portfolio_common.source_data_product_metadata import (
     source_data_product_runtime_metadata,
     stable_content_hash,
@@ -50,23 +50,6 @@ def evidence_product_runtime_metadata(
 def reconciliation_evidence_identity(payload: dict[str, object]) -> tuple[str, str]:
     content_hash = stable_content_hash(payload)
     return f"re_{content_hash.removeprefix('sha256:')[:32]}", content_hash
-
-
-def aggregate_reconciliation_statuses(statuses: list[str]) -> str:
-    if not statuses:
-        return cast(str, UNKNOWN)
-    status_rank = {
-        BLOCKED: 4,
-        BREAK_OPEN: 3,
-        PARTIAL: 2,
-        COMPLETE: 1,
-    }
-    strongest_status = max(statuses, key=lambda status: status_rank.get(status, 0))
-    if strongest_status in {BLOCKED, BREAK_OPEN, PARTIAL}:
-        return strongest_status
-    if all(status == COMPLETE for status in statuses):
-        return cast(str, COMPLETE)
-    return cast(str, UNKNOWN)
 
 
 def normalize_analytics_export_status(status: str | None) -> str | None:

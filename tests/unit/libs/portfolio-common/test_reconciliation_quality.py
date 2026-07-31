@@ -12,6 +12,7 @@ from portfolio_common.reconciliation_quality import (
     DataQualityCoverageSignal,
     ReconciliationBreakSignal,
     ReconciliationRunSignal,
+    aggregate_reconciliation_statuses,
     classify_data_quality_coverage,
     classify_finding_status,
     classify_reconciliation_status,
@@ -109,6 +110,32 @@ def test_reconciliation_bound_data_quality_status_fails_closed(
         )
         == expected
     )
+
+
+@pytest.mark.parametrize(
+    ("statuses", "expected"),
+    [
+        ([COMPLETE, BLOCKED], BLOCKED),
+        ([UNKNOWN, STALE], STALE),
+        ([COMPLETE, BREAK_OPEN, STALE], STALE),
+        ([UNKNOWN, PARTIAL], UNKNOWN),
+        ([COMPLETE, UNRECONCILED], UNRECONCILED),
+        ([COMPLETE, " stale "], STALE),
+        ([COMPLETE, None], UNKNOWN),
+        ([COMPLETE, "unexpected"], UNKNOWN),
+        ([COMPLETE, COMPLETE], COMPLETE),
+        ([], UNKNOWN),
+    ],
+)
+def test_aggregate_reconciliation_statuses_uses_governed_precedence(
+    statuses: list[str | None],
+    expected: str,
+) -> None:
+    assert aggregate_reconciliation_statuses(statuses) == expected
+
+
+def test_aggregate_reconciliation_statuses_supports_domain_empty_status() -> None:
+    assert aggregate_reconciliation_statuses([], empty_status=UNRECONCILED) == UNRECONCILED
 
 
 def test_sort_reconciliation_breaks_prioritizes_blocking_severity_age_and_id() -> None:

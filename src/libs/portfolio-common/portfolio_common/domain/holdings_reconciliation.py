@@ -14,6 +14,7 @@ from portfolio_common.reconciliation_quality import (
     STALE,
     UNKNOWN,
     UNRECONCILED,
+    aggregate_reconciliation_statuses,
 )
 
 
@@ -133,14 +134,15 @@ def holdings_reconciliation_status(
     for scope in scopes.items:
         scope_controls = controls_by_scope.get((scope.business_date, scope.epoch), [])
         statuses.append(
-            _aggregate_reconciliation_statuses(
+            aggregate_reconciliation_statuses(
                 [
                     _scope_reconciliation_status(scope=scope, control=control)
                     for control in scope_controls
-                ]
+                ],
+                empty_status=UNRECONCILED,
             )
         )
-    return _aggregate_reconciliation_statuses(statuses)
+    return aggregate_reconciliation_statuses(statuses, empty_status=UNRECONCILED)
 
 
 def _scope_reconciliation_status(
@@ -159,15 +161,6 @@ def _scope_reconciliation_status(
         return UNKNOWN
     if _timestamp_precedes(control.updated_at, scope.latest_evidence_timestamp):
         return STALE
-    return COMPLETE
-
-
-def _aggregate_reconciliation_statuses(statuses: list[str]) -> str:
-    if not statuses:
-        return UNRECONCILED
-    for status in (BLOCKED, STALE, UNRECONCILED, UNKNOWN, PARTIAL):
-        if status in statuses:
-            return status
     return COMPLETE
 
 
