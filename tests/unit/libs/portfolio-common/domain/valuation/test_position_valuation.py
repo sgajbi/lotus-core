@@ -487,6 +487,29 @@ def test_missing_consumed_source_evidence_fails_closed() -> None:
         )
 
 
+def test_local_economics_lineage_binds_distinct_source_inputs_with_equal_output() -> None:
+    policy = _policy(input_basis=ValuationInputBasis.UNIT_PRICE)
+    first = calculate_position_valuation_local_economics(
+        policy=policy,
+        inputs=PositionValuationEconomicInputs(
+            source_value=Decimal("2"),
+            signed_quantity=Decimal("50"),
+        ),
+    )
+    second = calculate_position_valuation_local_economics(
+        policy=policy,
+        inputs=PositionValuationEconomicInputs(
+            source_value=Decimal("4"),
+            signed_quantity=Decimal("25"),
+        ),
+    )
+
+    assert first.total_market_value_local == second.total_market_value_local == Decimal("100")
+    assert first.lineage.input_content_hash != second.lineage.input_content_hash
+    assert first.lineage.calculation_content_hash != second.lineage.calculation_content_hash
+    assert first.lineage.output_content_hash != second.lineage.output_content_hash
+
+
 def test_invalid_policy_combinations_are_rejected_before_calculation() -> None:
     with pytest.raises(ValueError, match="positive quote_denominator"):
         _policy(

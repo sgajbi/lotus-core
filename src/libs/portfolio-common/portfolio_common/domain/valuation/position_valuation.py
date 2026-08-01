@@ -399,6 +399,8 @@ def calculate_position_valuation_local_economics(
             settlement_variation = scaled_value
 
     return _normalize_local_economics(
+        valuation_policy=policy,
+        economic_inputs=inputs,
         current_principal=current_principal,
         clean_value=clean_value,
         accrued_income=accrued_income,
@@ -410,6 +412,8 @@ def calculate_position_valuation_local_economics(
 
 def _normalize_local_economics(
     *,
+    valuation_policy: PositionValuationPolicy,
+    economic_inputs: PositionValuationEconomicInputs,
     current_principal: Decimal | None,
     clean_value: Decimal | None,
     accrued_income: Decimal | None,
@@ -467,14 +471,7 @@ def _normalize_local_economics(
         algorithm_id=POSITION_VALUATION_LOCAL_ECONOMICS_ALGORITHM_ID,
         algorithm_version=POSITION_VALUATION_LOCAL_ECONOMICS_ALGORITHM_VERSION,
         intermediate_precision=POSITION_VALUATION_INTERMEDIATE_PRECISION,
-        input_payload={
-            "accrued_income": accrued_income,
-            "clean_value": clean_value,
-            "current_principal": current_principal,
-            "notional_exposure": notional_exposure,
-            "settlement_variation": settlement_variation,
-            "total_market_value": total_market_value,
-        },
+        input_payload=_local_economics_input_payload(valuation_policy, economic_inputs),
         output_payload=output_payload,
         numeric_output_policy=policy.lineage_identity(),
     )
@@ -487,6 +484,33 @@ def _normalize_local_economics(
         settlement_variation_local=normalized_settlement,
         lineage=lineage,
     )
+
+
+def _local_economics_input_payload(
+    policy: PositionValuationPolicy,
+    inputs: PositionValuationEconomicInputs,
+) -> dict[str, object]:
+    return {
+        "calculated_accrued_income": inputs.calculated_accrued_income,
+        "contract_multiplier": inputs.contract_multiplier,
+        "policy": {
+            "accrued_income_treatment": policy.accrued_income_treatment.value,
+            "fx_conversion": policy.fx_conversion.value,
+            "input_basis": policy.input_basis.value,
+            "output_measure": policy.output_measure.value,
+            "policy_id": policy.policy_id,
+            "policy_version": policy.policy_version,
+            "position_scaling": policy.position_scaling.value,
+            "principal_basis": policy.principal_basis.value,
+            "quote_denominator": policy.quote_denominator,
+        },
+        "principal_factor": inputs.principal_factor,
+        "signed_current_principal": inputs.signed_current_principal,
+        "signed_face_amount": inputs.signed_face_amount,
+        "signed_quantity": inputs.signed_quantity,
+        "source_value": inputs.source_value,
+        "supplied_accrued_income": inputs.supplied_accrued_income,
+    }
 
 
 def _normalize_outputs(
