@@ -34,6 +34,9 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure.co
     SqlAlchemyCostBasisLotRepository,
     SqlAlchemyCostBasisTransactionRepository,
 )
+from src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis.lot_state_mapper import (  # noqa: E501
+    buy_lot_state_payload,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -327,6 +330,35 @@ def _average_cost_source(
         realized_gain_loss=Decimal(0),
         net_cost_local=Decimal(cost),
         realized_gain_loss_local=Decimal(0),
+    )
+
+
+async def test_opening_lot_lineage_hashes_persisted_accrued_interest() -> None:
+    first = _average_cost_source(
+        "BUY-ACCRUED",
+        transaction_date=datetime(2026, 1, 1, 10, 0),
+        quantity="10",
+        cost="100",
+    )
+    second = _average_cost_source(
+        "BUY-ACCRUED",
+        transaction_date=datetime(2026, 1, 1, 10, 0),
+        quantity="10",
+        cost="100",
+    )
+    first.accrued_interest = Decimal("1.25")
+    second.accrued_interest = Decimal("1.50")
+
+    first_payload = buy_lot_state_payload(first)
+    second_payload = buy_lot_state_payload(second)
+
+    assert first_payload["accrued_interest_paid_local"] == Decimal("1.25")
+    assert second_payload["accrued_interest_paid_local"] == Decimal("1.50")
+    assert isinstance(first_payload["calculation_lineage"], dict)
+    assert isinstance(second_payload["calculation_lineage"], dict)
+    assert (
+        first_payload["calculation_lineage"]["output_content_hash"]
+        != second_payload["calculation_lineage"]["output_content_hash"]
     )
 
 

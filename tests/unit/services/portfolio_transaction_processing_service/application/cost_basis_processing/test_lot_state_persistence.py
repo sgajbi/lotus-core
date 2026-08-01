@@ -268,3 +268,35 @@ async def test_full_avco_rebuild_establishes_pool_checkpoint() -> None:
     assert checkpoint.cost_local == Decimal("60")
     assert checkpoint.cost_base == Decimal("63")
     assert checkpoint.representative_source_transaction_id == "BUY-1"
+    assert checkpoint.calculation_lineage is not None
+    assert checkpoint.calculation_lineage.algorithm_id == "average-cost-pool-processing-rebuild"
+
+
+async def test_full_avco_rebuild_checkpoint_binds_processed_transaction_evidence() -> None:
+    async def checkpoint_input_hash(*, revision: str) -> str:
+        average_cost_pools = AsyncMock(spec=CostBasisAverageCostPoolPort)
+        processed = _processed("DIVIDEND")
+        processed[0].calculation_lineage = build_calculation_lineage(
+            algorithm_id="test-cost-basis-calculation",
+            algorithm_version=1,
+            intermediate_precision=28,
+            input_payload={"revision": revision},
+            output_payload={"net_cost": Decimal("48")},
+        )
+        await persist_open_lot_state(
+            transaction=_transaction("DIVIDEND"),
+            effective_transaction_type="DIVIDEND",
+            open_lot_states=_open_lot_states(),
+            average_cost_pools=average_cost_pools,
+            lot_states=AsyncMock(spec=CostBasisLotStatePort),
+            incremental=False,
+            persistence_scope=OpenLotPersistenceScope.COMPLETE_SNAPSHOT,
+            cost_basis_method=CostBasisMethod.AVCO,
+            average_cost_pool_transition=None,
+            processed=processed,
+        )
+        checkpoint = average_cost_pools.upsert_average_cost_pool_checkpoint.await_args.args[0]
+        assert checkpoint.calculation_lineage is not None
+        return checkpoint.calculation_lineage.input_content_hash
+
+    assert await checkpoint_input_hash(revision="1") != await checkpoint_input_hash(revision="2")

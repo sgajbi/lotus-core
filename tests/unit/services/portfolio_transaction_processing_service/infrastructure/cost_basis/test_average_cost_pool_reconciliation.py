@@ -225,6 +225,7 @@ async def test_equal_economics_refresh_changed_replay_evidence_then_reconcile_cu
     [
         "average-cost-pool-transition",
         "average-cost-pool-checkpoint-materialization",
+        "average-cost-pool-processing-rebuild",
     ],
 )
 async def test_equal_economics_accept_governed_incremental_pool_lineage_without_rebuild(

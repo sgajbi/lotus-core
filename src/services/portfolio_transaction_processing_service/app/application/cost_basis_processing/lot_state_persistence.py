@@ -1,6 +1,7 @@
 """Persist calculated cost-basis lot state through application ports."""
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
+from dataclasses import replace
 from enum import Enum
 
 from portfolio_common.domain.calculation_lineage import CalculationLineage
@@ -67,13 +68,20 @@ async def persist_open_lot_state(
     should_update_lot_states = not initial_opening_lot and (
         not incremental or (mutates_lot_state and not incremental_opening)
     )
-    if should_update_lot_states:
+    should_persist_complete_average_cost_pool = cost_basis_method is CostBasisMethod.AVCO and (
+        not incremental or (mutates_lot_state and not incremental_opening)
+    )
+    transition_evidence = None
+    if should_update_lot_states or should_persist_complete_average_cost_pool:
         transition_evidence = _transition_evidence(
             transaction=transaction,
             processed=processed,
             transition_kind=persistence_scope.value,
             open_lot_states=open_lot_states,
         )
+
+    if should_update_lot_states:
+        assert transition_evidence is not None
         update_lot_states = (
             lot_states.update_selected_open_lot_states
             if persistence_scope is OpenLotPersistenceScope.SELECTED_LOTS
@@ -86,18 +94,39 @@ async def persist_open_lot_state(
             transition_evidence=transition_evidence,
         )
 
-    should_persist_complete_average_cost_pool = cost_basis_method is CostBasisMethod.AVCO and (
-        not incremental or (mutates_lot_state and not incremental_opening)
-    )
     if should_persist_complete_average_cost_pool:
-        await average_cost_pools.upsert_average_cost_pool_checkpoint(
-            AverageCostPoolCheckpoint.from_open_lot_states(
-                portfolio_id=transaction.portfolio_id,
-                instrument_id=transaction.instrument_id,
-                security_id=transaction.security_id,
-                states_by_source_transaction_id=open_lot_states,
-            )
+        assert transition_evidence is not None
+        checkpoint = AverageCostPoolCheckpoint.from_open_lot_states(
+            portfolio_id=transaction.portfolio_id,
+            instrument_id=transaction.instrument_id,
+            security_id=transaction.security_id,
+            states_by_source_transaction_id=open_lot_states,
         )
+        checkpoint_lineage = build_cost_basis_state_lineage(
+            algorithm_id="average-cost-pool-processing-rebuild",
+            input_payload={
+                "transition_evidence": transition_evidence.lineage_payload(),
+            },
+            output_payload=_average_cost_pool_checkpoint_output(checkpoint),
+        )
+        await average_cost_pools.upsert_average_cost_pool_checkpoint(
+            replace(checkpoint, calculation_lineage=checkpoint_lineage)
+        )
+
+
+def _average_cost_pool_checkpoint_output(
+    checkpoint: AverageCostPoolCheckpoint,
+) -> Mapping[str, object]:
+    return {
+        "cost_base": checkpoint.cost_base,
+        "cost_local": checkpoint.cost_local,
+        "instrument_id": checkpoint.instrument_id,
+        "portfolio_id": checkpoint.portfolio_id,
+        "quantity": checkpoint.quantity,
+        "representative_source_transaction_id": (checkpoint.representative_source_transaction_id),
+        "security_id": checkpoint.security_id,
+        "state_version": checkpoint.state_version,
+    }
 
 
 def _transition_evidence(

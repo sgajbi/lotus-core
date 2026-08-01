@@ -58,6 +58,7 @@ def buy_lot_state_payload(transaction: CostBasisTransaction) -> dict[str, object
             if key
             in {
                 "acquisition_date",
+                "accrued_interest_paid_local",
                 "instrument_id",
                 "lot_cost_base",
                 "lot_cost_local",
