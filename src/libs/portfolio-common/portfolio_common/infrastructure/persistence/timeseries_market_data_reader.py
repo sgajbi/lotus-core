@@ -1,6 +1,6 @@
 """Shared market/reference reads used by timeseries processing services."""
 
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import cast
 
@@ -67,4 +67,11 @@ class TimeseriesMarketDataReader:
         row = result.scalars().first()
         if row is None:
             return None
-        return TimeseriesFxRate(rate=cast(Decimal, row.rate))
+        return TimeseriesFxRate(
+            rate=cast(Decimal, row.rate),
+            from_currency=normalize_currency_code(str(row.from_currency)),
+            to_currency=normalize_currency_code(str(row.to_currency)),
+            rate_date=cast(date, row.rate_date),
+            source_record_id=cast(int, row.id),
+            source_updated_at=cast(datetime, row.updated_at),
+        )

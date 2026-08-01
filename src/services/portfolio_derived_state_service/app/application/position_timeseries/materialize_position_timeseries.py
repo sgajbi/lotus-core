@@ -42,9 +42,22 @@ _MATERIALIZABLE_VALUATION_STATUSES = frozenset({"VALUED_CURRENT", "VALUED_STALE"
 
 @dataclass(frozen=True)
 class _DependentPropagation:
-    changed_dates: tuple[date, ...]
+    durable_change_dates: tuple[date, ...]
+    numeric_change_dates: tuple[date, ...]
     truncated: bool
     carry_forward_end_exclusive: date | None
+
+
+@dataclass(frozen=True)
+class _DayMaterialization:
+    numeric_changed: bool
+    evidence_refreshed: bool
+
+    @property
+    def durable_change(self) -> bool:
+        """Return whether the position-timeseries row was inserted or refreshed."""
+
+        return self.numeric_changed or self.evidence_refreshed
 
 
 class MaterializePositionTimeseries:
@@ -103,7 +116,7 @@ class MaterializePositionTimeseries:
             a_date=current_snapshot.date,
             epoch=current_snapshot.epoch,
         )
-        current_day_changed, _ = await self._materialize_day(
+        current_day = await self._materialize_day(
             repository,
             current_snapshot=current_snapshot,
             previous_snapshot=previous_snapshot,
@@ -114,33 +127,33 @@ class MaterializePositionTimeseries:
             current_snapshot=current_snapshot,
             epoch=current_snapshot.epoch,
         )
-        changed_dates = [
-            *([current_snapshot.date] if current_day_changed else []),
-            *dependent_propagation.changed_dates,
+        durable_change_dates = [
+            *([current_snapshot.date] if current_day.durable_change else []),
+            *dependent_propagation.durable_change_dates,
         ]
-        if changed_dates:
+        if durable_change_dates:
             await repository.acquire_portfolio_aggregation_mutation_fence(
                 current_snapshot.portfolio_id
             )
         await repository.stage_aggregation_jobs(
             current_snapshot.portfolio_id,
-            changed_dates,
+            durable_change_dates,
             current_snapshot.epoch,
             command.correlation_id,
         )
-        if changed_dates:
+        if durable_change_dates:
             await repository.restage_aggregation_jobs_in_carry_forward_interval(
                 current_snapshot.portfolio_id,
-                start_date=changed_dates[0],
+                start_date=durable_change_dates[0],
                 end_date_exclusive=dependent_propagation.carry_forward_end_exclusive,
-                excluded_dates=changed_dates,
+                excluded_dates=durable_change_dates,
                 target_epoch=current_snapshot.epoch,
                 correlation_id=command.correlation_id,
             )
         return PositionTimeseriesMaterializationResult(
             snapshot_found=True,
-            current_day_changed=current_day_changed,
-            dependent_days_changed=len(dependent_propagation.changed_dates),
+            current_day_changed=current_day.numeric_changed,
+            dependent_days_changed=len(dependent_propagation.numeric_change_dates),
             dependent_propagation_truncated=dependent_propagation.truncated,
         )
 
@@ -263,7 +276,7 @@ class MaterializePositionTimeseries:
             return False
         if existing_record.materialized_at is None:
             return True
-        return current_snapshot.source_updated_at > existing_record.materialized_at
+        return bool(current_snapshot.source_updated_at > existing_record.materialized_at)
 
     async def _materialize_day(
         self,
@@ -275,7 +288,7 @@ class MaterializePositionTimeseries:
         require_existing: bool = False,
         existing_timeseries: PositionTimeseriesRecord | None | object = _UNSET_PRELOAD,
         cashflows: list[PositionCashflowRecord] | object = _UNSET_PRELOAD,
-    ) -> tuple[bool, PositionTimeseriesRecord | None]:
+    ) -> _DayMaterialization:
         if existing_timeseries is _UNSET_PRELOAD:
             existing_timeseries = await repository.get_position_timeseries(
                 current_snapshot.portfolio_id,
@@ -284,7 +297,10 @@ class MaterializePositionTimeseries:
                 epoch,
             )
         if require_existing and existing_timeseries is None:
-            return False, None
+            return _DayMaterialization(
+                numeric_changed=False,
+                evidence_refreshed=False,
+            )
         if cashflows is _UNSET_PRELOAD:
             cashflows = await repository.get_all_cashflows_for_security_date(
                 current_snapshot.portfolio_id,
@@ -307,10 +323,16 @@ class MaterializePositionTimeseries:
             and existing_record.calculation_lineage != new_record.calculation_lineage
         )
         if not material_changed and not source_refresh_required and not lineage_refresh_required:
-            return False, new_record
+            return _DayMaterialization(
+                numeric_changed=False,
+                evidence_refreshed=False,
+            )
 
         await repository.upsert_position_timeseries(new_record)
-        return material_changed or source_refresh_required, new_record
+        return _DayMaterialization(
+            numeric_changed=material_changed,
+            evidence_refreshed=source_refresh_required or lineage_refresh_required,
+        )
 
     async def _propagate_dependent_days(
         self,
@@ -320,7 +342,8 @@ class MaterializePositionTimeseries:
         epoch: int,
     ) -> _DependentPropagation:
         previous_snapshot = current_snapshot
-        changed_dates: list[date] = []
+        durable_change_dates: list[date] = []
+        numeric_change_dates: list[date] = []
         has_more_future_snapshots = False
         stop_propagation = False
         carry_forward_end_exclusive: date | None = None
@@ -353,7 +376,7 @@ class MaterializePositionTimeseries:
             )
 
             for next_snapshot in snapshots_to_process:
-                changed, _ = await self._materialize_day(
+                outcome = await self._materialize_day(
                     repository,
                     current_snapshot=next_snapshot,
                     previous_snapshot=previous_snapshot,
@@ -362,13 +385,15 @@ class MaterializePositionTimeseries:
                     existing_timeseries=existing_by_date.get(next_snapshot.date),
                     cashflows=cashflows_by_date.get(next_snapshot.date, []),
                 )
-                if not changed:
+                if not outcome.durable_change:
                     stop_propagation = True
                     has_more_future_snapshots = False
                     carry_forward_end_exclusive = next_snapshot.date
                     break
 
-                changed_dates.append(next_snapshot.date)
+                durable_change_dates.append(next_snapshot.date)
+                if outcome.numeric_changed:
+                    numeric_change_dates.append(next_snapshot.date)
                 previous_snapshot = next_snapshot
 
             if stop_propagation or not has_more_future_snapshots:
@@ -385,7 +410,8 @@ class MaterializePositionTimeseries:
                 },
             )
         return _DependentPropagation(
-            changed_dates=tuple(changed_dates),
+            durable_change_dates=tuple(durable_change_dates),
+            numeric_change_dates=tuple(numeric_change_dates),
             truncated=has_more_future_snapshots,
             carry_forward_end_exclusive=carry_forward_end_exclusive,
         )

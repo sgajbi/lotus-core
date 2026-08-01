@@ -8,6 +8,7 @@ from decimal import Decimal
 
 from portfolio_common.database_models import Portfolio
 from portfolio_common.database_models import Transaction as DBTransaction
+from portfolio_common.domain.calculation_lineage import CalculationLineage
 from portfolio_common.domain.transaction.type_registry import TRANSACTION_TYPE_REGISTRY
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,7 +19,10 @@ from ...domain import (
     AverageCostPoolReconciliationAssessment,
     AverageCostPoolReconciliationStatus,
 )
-from ...domain.cost_basis import LOT_OPENING_BEHAVIORS
+from ...domain.cost_basis import (
+    LOT_OPENING_BEHAVIORS,
+    build_average_cost_pool_rebuild_lineage,
+)
 from ...ports import (
     AverageCostPoolPersistedSummary,
     CostBasisAverageCostPoolPort,
@@ -150,6 +154,10 @@ class SqlAlchemyAverageCostPoolReconciliationAdapter:
                     expected_quantity = plan.checkpoint.quantity
                     expected_cost_local = plan.checkpoint.cost_local
                     expected_cost_base = plan.checkpoint.cost_base
+                    expected_checkpoint_lineage = build_average_cost_pool_rebuild_lineage(
+                        replay_lineage=plan.replay_lineage,
+                        checkpoint=plan.checkpoint,
+                    )
                     persisted_before = (
                         await average_cost_pools.get_average_cost_pool_persisted_summary(
                             portfolio_id=key.portfolio_id,
@@ -162,6 +170,7 @@ class SqlAlchemyAverageCostPoolReconciliationAdapter:
                         expected_quantity=expected_quantity,
                         expected_cost_local=expected_cost_local,
                         expected_cost_base=expected_cost_base,
+                        expected_checkpoint_lineage=expected_checkpoint_lineage,
                     ):
                         return _assessment(
                             key=key,
@@ -184,6 +193,7 @@ class SqlAlchemyAverageCostPoolReconciliationAdapter:
                             reason_code=_drift_reason(
                                 persisted_before,
                                 expected_source_count=expected_source_count,
+                                expected_checkpoint_lineage=expected_checkpoint_lineage,
                             ),
                         )
 
@@ -197,6 +207,18 @@ class SqlAlchemyAverageCostPoolReconciliationAdapter:
                             security_id=key.security_id,
                         )
                     )
+                    if not _summary_matches_plan(
+                        persisted_after,
+                        expected_source_count=expected_source_count,
+                        expected_quantity=expected_quantity,
+                        expected_cost_local=expected_cost_local,
+                        expected_cost_base=expected_cost_base,
+                        expected_checkpoint_lineage=expected_checkpoint_lineage,
+                    ):
+                        raise ValueError(
+                            "Average cost rebuild did not persist the expected state "
+                            "and replay evidence"
+                        )
                     return _assessment(
                         key=key,
                         status=AverageCostPoolReconciliationStatus.RECONCILED,
@@ -235,6 +257,7 @@ def _empty_summary() -> AverageCostPoolPersistedSummary:
         pool_quantity=None,
         pool_cost_local=None,
         pool_cost_base=None,
+        pool_calculation_lineage=None,
     )
 
 
@@ -245,6 +268,7 @@ def _summary_matches_plan(
     expected_quantity: Decimal,
     expected_cost_local: Decimal,
     expected_cost_base: Decimal,
+    expected_checkpoint_lineage: CalculationLineage,
 ) -> bool:
     return bool(
         summary.source_count == expected_source_count
@@ -254,6 +278,7 @@ def _summary_matches_plan(
         and summary.pool_quantity == expected_quantity
         and summary.pool_cost_local == expected_cost_local
         and summary.pool_cost_base == expected_cost_base
+        and summary.pool_calculation_lineage == expected_checkpoint_lineage
     )
 
 
@@ -261,11 +286,14 @@ def _drift_reason(
     summary: AverageCostPoolPersistedSummary,
     *,
     expected_source_count: int,
+    expected_checkpoint_lineage: CalculationLineage,
 ) -> str:
     if summary.pool_quantity is None:
         return "pool_state_missing"
     if summary.source_count != expected_source_count:
         return "source_count_mismatch"
+    if summary.pool_calculation_lineage != expected_checkpoint_lineage:
+        return "checkpoint_replay_evidence_mismatch"
     return "pool_or_source_aggregate_mismatch"
 
 

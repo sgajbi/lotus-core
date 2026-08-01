@@ -1,6 +1,7 @@
 """Framework-neutral market-data records used by timeseries calculations."""
 
 from dataclasses import dataclass
+from datetime import date, datetime
 from decimal import Decimal
 
 
@@ -14,6 +15,11 @@ class TimeseriesInstrument:
 
 @dataclass(frozen=True, slots=True)
 class TimeseriesFxRate:
-    """FX rate value required for timeseries conversion."""
+    """Selected FX fact and persisted identity used by timeseries conversion."""
 
     rate: Decimal
+    from_currency: str
+    to_currency: str
+    rate_date: date
+    source_record_id: int | None
+    source_updated_at: datetime | None

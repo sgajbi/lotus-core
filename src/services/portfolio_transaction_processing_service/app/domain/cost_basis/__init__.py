@@ -5,6 +5,7 @@ from .average_cost_pool_checkpoint import (
     AverageCostPoolCheckpoint,
     AverageCostPoolRebuildPlan,
     AverageCostPoolTransition,
+    build_average_cost_pool_rebuild_lineage,
 )
 from .average_cost_pool_reconciliation import (
     AverageCostPoolKey,
@@ -73,6 +74,7 @@ __all__ = [
     "AverageCostSourceAllocation",
     "AverageCostSourceContribution",
     "AverageCostPoolTransition",
+    "build_average_cost_pool_rebuild_lineage",
     "AVERAGE_COST_POOL_STATE_VERSION",
     "AVERAGE_COST_POOL_LOT_BEHAVIORS",
     "CASH_INFLOW_TRANSACTION_TYPES",

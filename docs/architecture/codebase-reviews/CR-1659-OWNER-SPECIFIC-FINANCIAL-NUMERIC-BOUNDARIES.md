@@ -255,6 +255,18 @@ identity, and public response shapes remain unchanged.
   their selected lineage without extra queries. Source-revision-only tests prove lineage hashes
   change while scalar financial outputs remain identical; legacy rows with absent lineage remain
   supported. The combined warning-strict review suite passes 70 tests.
+- A subsequent final review cycle closed the same pattern across downstream boundaries. Full AVCO
+  rebuild plans now carry ordered canonical-history and processed-transaction replay lineage; rebuilt
+  source receipts bind it, and the replacement checkpoint deterministically binds replay evidence
+  plus final checkpoint output without self-chaining overwritten state. Reconciliation compares that
+  receipt under the existing per-key lock, refreshes evidence-only drift, and remains idempotently
+  current on a second identical run. Position materialization distinguishes numeric change from evidence refresh so lineage-
+  only changes continue dependent replay and stage portfolio aggregation without inflating numeric
+  change reporting. Portfolio contributions now carry the selected typed FX fact, including currency
+  pair, effective date, persisted row identity, and aware source revision; equal scalar rates from
+  different facts therefore retain different receipts. These changes reuse existing rows and query
+  shapes except for the bounded AVCO rebuild's prior-checkpoint evidence read; they add no hot-path
+  N+1 behavior. The combined focused review suites pass 91 tests.
 
 ## Compatibility and remaining work
 

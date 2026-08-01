@@ -1,11 +1,12 @@
 """Prove source enrichment for portfolio-timeseries calculation."""
 
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from portfolio_common.domain.market_data.timeseries import TimeseriesFxRate
 
 from src.services.portfolio_derived_state_service.app.application.portfolio_timeseries import (
     CalculatePortfolioTimeseries,
@@ -36,6 +37,17 @@ def _position_timeseries(
         eod_cashflow_portfolio=eod_cashflow_portfolio,
         eod_market_value=eod_market_value,
         fees=fees,
+    )
+
+
+def _persisted_fx_rate(rate: object = Decimal("1.2")) -> TimeseriesFxRate:
+    return TimeseriesFxRate(
+        rate=Decimal(str(rate)),
+        from_currency="EUR",
+        to_currency="USD",
+        rate_date=date(2026, 3, 7),
+        source_record_id=41,
+        source_updated_at=datetime(2026, 3, 7, 9, tzinfo=UTC),
     )
 
 
@@ -113,7 +125,7 @@ async def test_calculation_caches_positive_fx_rates_by_currency_and_date() -> No
                 SimpleNamespace(security_id="SEC-EUR-2", currency="EUR"),
             ]
         ),
-        get_fx_rate=AsyncMock(return_value=SimpleNamespace(rate="1.2")),
+        get_fx_rate=AsyncMock(return_value=_persisted_fx_rate()),
     )
 
     result = await CalculatePortfolioTimeseries().calculate_daily_record(
@@ -140,7 +152,7 @@ async def test_calculation_rejects_non_positive_fx_rate() -> None:
         get_instruments_by_ids=AsyncMock(
             return_value=[SimpleNamespace(security_id="SEC-EUR", currency="EUR")]
         ),
-        get_fx_rate=AsyncMock(return_value=SimpleNamespace(rate="0")),
+        get_fx_rate=AsyncMock(return_value=_persisted_fx_rate("0")),
     )
 
     with pytest.raises(FxRateNotFoundError, match="Non-positive FX rate from EUR to USD"):

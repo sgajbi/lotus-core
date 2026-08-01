@@ -5,6 +5,7 @@ from decimal import Decimal
 from unittest.mock import AsyncMock
 
 import pytest
+from portfolio_common.domain.calculation_lineage import build_calculation_lineage
 from portfolio_common.domain.cost_basis_method import CostBasisMethod
 
 from src.services.portfolio_transaction_processing_service.app.application.cost_basis_processing import (  # noqa: E501
@@ -32,6 +33,7 @@ def _booked_transaction(
     *,
     quantity: str,
     price: str,
+    history_revision: str | None = None,
 ) -> BookedTransaction:
     quantity_value = Decimal(quantity)
     price_value = Decimal(price)
@@ -47,6 +49,17 @@ def _booked_transaction(
         gross_transaction_amount=quantity_value * price_value,
         trade_currency="USD",
         currency="USD",
+        calculation_lineage=(
+            build_calculation_lineage(
+                algorithm_id="prior-booked-transaction",
+                algorithm_version=1,
+                intermediate_precision=28,
+                input_payload={"history_revision": history_revision},
+                output_payload={"transaction_id": transaction_id},
+            )
+            if history_revision is not None
+            else None
+        ),
     )
 
 
@@ -116,6 +129,35 @@ async def test_rebuild_plan_replays_complete_canonical_history() -> None:
         portfolio_id="P1",
         security_id="S1",
     )
+
+
+async def test_rebuild_replay_lineage_distinguishes_identical_economics_by_history() -> None:
+    async def replay_receipt(history_revision: str) -> str:
+        transactions = AsyncMock(spec=CostBasisTransactionStatePort)
+        transactions.get_transaction_history.return_value = [
+            _booked_transaction(
+                "BUY-AVCO-1",
+                "BUY",
+                datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc),
+                quantity="10",
+                price="10",
+                history_revision=history_revision,
+            )
+        ]
+        plan = await AverageCostPoolRebuildPlanner().build(
+            portfolio_id="P1",
+            security_id="S1",
+            transactions=transactions,
+            reference_data=_reference_data(CostBasisMethod.AVCO),
+            fx_rates=AsyncMock(spec=CostBasisFxRatePort),
+        )
+        assert plan.checkpoint.quantity == Decimal("10")
+        assert plan.checkpoint.cost_local == Decimal("100")
+        return plan.replay_lineage.input_content_hash
+
+    baseline = await replay_receipt("1")
+
+    assert await replay_receipt("2") != baseline
 
 
 async def test_rebuild_plan_rejects_non_avco_portfolio_before_history_read() -> None:

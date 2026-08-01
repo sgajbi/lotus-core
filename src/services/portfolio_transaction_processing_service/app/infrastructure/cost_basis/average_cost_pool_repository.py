@@ -21,6 +21,7 @@ from ...domain.cost_basis import (
     AverageCostPoolRebuildPlan,
     AverageCostPoolTransition,
     OpenLotState,
+    build_average_cost_pool_rebuild_lineage,
 )
 from ...domain.cost_basis.state_lineage import (
     CostBasisStateTransitionEvidence,
@@ -227,6 +228,7 @@ class SqlAlchemyAverageCostPoolRepository:
                         ),
                         "latest_transaction_id": plan.processing_checkpoint.latest_transaction_id,
                     },
+                    "replay_lineage": plan.replay_lineage.lineage_payload(),
                     "source_transaction_id": source_transaction.transaction_id,
                 },
                 output_payload={
@@ -247,7 +249,13 @@ class SqlAlchemyAverageCostPoolRepository:
                 )
             )
 
-        await self.upsert_average_cost_pool_checkpoint(checkpoint)
+        checkpoint_lineage = build_average_cost_pool_rebuild_lineage(
+            replay_lineage=plan.replay_lineage,
+            checkpoint=checkpoint,
+        )
+        await self.upsert_average_cost_pool_checkpoint(
+            replace(checkpoint, calculation_lineage=checkpoint_lineage)
+        )
 
     async def get_average_cost_pool_persisted_summary(
         self,
@@ -292,6 +300,11 @@ class SqlAlchemyAverageCostPoolRepository:
             pool_quantity=pool.pool_quantity if pool is not None else None,
             pool_cost_local=pool.pool_cost_local if pool is not None else None,
             pool_cost_base=pool.pool_cost_base if pool is not None else None,
+            pool_calculation_lineage=(
+                calculation_lineage_from_payload(pool.calculation_lineage)
+                if pool is not None
+                else None
+            ),
         )
 
     async def update_selected_open_lot_states(

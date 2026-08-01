@@ -14,6 +14,12 @@ from src.services.portfolio_transaction_processing_service.app.domain import (
     AverageCostPoolKey,
     AverageCostPoolReconciliationStatus,
 )
+from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
+    build_average_cost_pool_rebuild_lineage,
+)
+from src.services.portfolio_transaction_processing_service.app.domain.cost_basis.state_lineage import (  # noqa: E501
+    build_cost_basis_state_lineage,
+)
 from src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis.average_cost_pool_reconciliation import (  # noqa: E501
     SqlAlchemyAverageCostPoolReconciliationAdapter,
 )
@@ -46,7 +52,9 @@ def _summary(
     cost_local: str = "180",
     cost_base: str = "195",
     pool_present: bool = True,
+    replay_revision: str = "1",
 ) -> AverageCostPoolPersistedSummary:
+    plan = _plan(replay_revision=replay_revision)
     return AverageCostPoolPersistedSummary(
         source_count=source_count,
         source_quantity=Decimal(quantity),
@@ -55,17 +63,38 @@ def _summary(
         pool_quantity=Decimal(quantity) if pool_present else None,
         pool_cost_local=Decimal(cost_local) if pool_present else None,
         pool_cost_base=Decimal(cost_base) if pool_present else None,
+        pool_calculation_lineage=(
+            build_average_cost_pool_rebuild_lineage(
+                replay_lineage=plan.replay_lineage,
+                checkpoint=plan.checkpoint,
+            )
+            if pool_present
+            else None
+        ),
     )
 
 
-def _plan() -> SimpleNamespace:
+def _plan(*, replay_revision: str = "1") -> SimpleNamespace:
     return SimpleNamespace(
-        source_transactions=(SimpleNamespace(), SimpleNamespace()),
+        source_transactions=(
+            SimpleNamespace(transaction_id="BUY-1"),
+            SimpleNamespace(transaction_id="BUY-2"),
+        ),
         processing_checkpoint=SimpleNamespace(latest_transaction_id="SELL-AVCO-1"),
         checkpoint=SimpleNamespace(
+            portfolio_id="P1",
+            instrument_id="I1",
+            security_id="S1",
+            representative_source_transaction_id="BUY-2",
             quantity=Decimal("15"),
             cost_local=Decimal("180"),
             cost_base=Decimal("195"),
+            state_version="avco-pool-v1",
+        ),
+        replay_lineage=build_cost_basis_state_lineage(
+            algorithm_id="test-average-cost-pool-replay",
+            input_payload={"replay_revision": replay_revision},
+            output_payload={"quantity": Decimal("15")},
         ),
     )
 
@@ -159,6 +188,28 @@ async def test_apply_commits_only_after_post_write_exact_reconciliation() -> Non
     )
     assert repository.get_average_cost_pool_persisted_summary.await_count == 2
     session.begin.return_value.__aexit__.assert_awaited_once_with(None, None, None)
+
+
+async def test_equal_economics_refresh_changed_replay_evidence_then_reconcile_current() -> None:
+    session = _session()
+    adapter, rebuild_planner, repository, processing_state = _adapter(session=session)
+    plan = _plan(replay_revision="2")
+    rebuild_planner.build.return_value = plan
+    repository.get_average_cost_pool_persisted_summary.side_effect = [
+        _summary(replay_revision="1"),
+        _summary(replay_revision="2"),
+        _summary(replay_revision="2"),
+    ]
+
+    refreshed = await adapter.reconcile(key=AverageCostPoolKey("P1", "S1"), apply=True)
+    current = await adapter.reconcile(key=AverageCostPoolKey("P1", "S1"), apply=True)
+
+    assert refreshed.status is AverageCostPoolReconciliationStatus.RECONCILED
+    assert current.status is AverageCostPoolReconciliationStatus.CURRENT
+    repository.apply_average_cost_pool_rebuild.assert_awaited_once_with(plan)
+    processing_state.upsert_cost_basis_processing_checkpoint.assert_awaited_once_with(
+        plan.processing_checkpoint
+    )
 
 
 async def test_apply_rolls_back_and_reports_failure_when_post_write_state_does_not_reconcile() -> (

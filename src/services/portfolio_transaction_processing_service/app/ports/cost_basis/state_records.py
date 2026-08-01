@@ -3,6 +3,8 @@
 from dataclasses import dataclass
 from decimal import Decimal
 
+from portfolio_common.domain.calculation_lineage import CalculationLineage
+
 from ...domain.cost_basis import AverageCostPoolCheckpoint
 from ...domain.transaction import BookedTransaction
 
@@ -36,3 +38,4 @@ class AverageCostPoolPersistedSummary:
     pool_quantity: Decimal | None
     pool_cost_local: Decimal | None
     pool_cost_base: Decimal | None
+    pool_calculation_lineage: CalculationLineage | None
