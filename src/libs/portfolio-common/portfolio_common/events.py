@@ -30,8 +30,10 @@ def _standardize_event_datetime_value(value: object) -> object:
         return value
     if isinstance(value, str):
         value = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    if isinstance(value, datetime) and value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc)
+    if isinstance(value, datetime):
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("Event datetime must be timezone-aware.")
+        return value.astimezone(timezone.utc)
     return value
 
 
