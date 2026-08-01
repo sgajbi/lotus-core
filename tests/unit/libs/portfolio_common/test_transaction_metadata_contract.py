@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from portfolio_common.database_models import Transaction as DBTransaction
@@ -11,7 +11,7 @@ def test_transaction_event_accepts_linkage_and_policy_metadata() -> None:
         portfolio_id="PORT-001",
         instrument_id="INST-001",
         security_id="SEC-001",
-        transaction_date=datetime(2026, 2, 28, 12, 30, 0),
+        transaction_date=datetime(2026, 2, 28, 12, 30, 0, tzinfo=timezone.utc),
         transaction_type="BUY",
         quantity=Decimal("100"),
         price=Decimal("12.34"),

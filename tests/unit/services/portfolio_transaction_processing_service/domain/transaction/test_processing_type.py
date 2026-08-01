@@ -1,6 +1,6 @@
 """Test effective transaction processing classification."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from portfolio_common.events import TransactionEvent
@@ -17,7 +17,7 @@ def _base_event() -> TransactionEvent:
         portfolio_id="PORT-001",
         instrument_id="FXC-EURUSD-001",
         security_id="FXC-EURUSD-001",
-        transaction_date=datetime(2026, 4, 1, 9, 0, 0),
+        transaction_date=datetime(2026, 4, 1, 9, 0, 0, tzinfo=timezone.utc),
         transaction_type="FX_FORWARD",
         quantity=Decimal("0"),
         price=Decimal("0"),

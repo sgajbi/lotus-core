@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
@@ -30,18 +30,50 @@ def _txn(
 
 
 def test_transaction_event_standardizes_temporal_fields_to_utc_aware() -> None:
+    singapore = timezone(timedelta(hours=8))
     event = _txn(
         "TXN_TIME",
-        datetime(2026, 1, 10, 8, 0),
-        datetime(2026, 1, 10, 8, 5),
+        datetime(2026, 1, 10, 8, 0, tzinfo=singapore),
+        datetime(2026, 1, 10, 8, 5, tzinfo=singapore),
         settlement_date="2026-01-12T10:00:00Z",
     )
 
     assert event.transaction_date.tzinfo == UTC
+    assert event.transaction_date == datetime(2026, 1, 10, 0, 0, tzinfo=UTC)
     assert event.created_at is not None
     assert event.created_at.tzinfo == UTC
+    assert event.created_at == datetime(2026, 1, 10, 0, 5, tzinfo=UTC)
     assert event.settlement_date is not None
     assert event.settlement_date.tzinfo == UTC
+
+
+@pytest.mark.parametrize(
+    ("field_name", "value"),
+    [
+        ("transaction_date", datetime(2026, 1, 10, 8, 0)),
+        ("transaction_date", "2026-01-10T08:00:00"),
+        ("settlement_date", datetime(2026, 1, 12, 10, 0)),
+        ("settlement_date", "2026-01-12T10:00:00"),
+        ("created_at", datetime(2026, 1, 10, 8, 5)),
+        ("created_at", "2026-01-10T08:05:00"),
+    ],
+)
+def test_transaction_event_rejects_timezone_ambiguous_temporal_fields(
+    field_name: str,
+    value: datetime | str,
+) -> None:
+    payload = _txn(
+        "TXN_NAIVE",
+        datetime(2026, 1, 10, 8, 0, tzinfo=UTC),
+        None,
+    ).model_dump()
+    payload[field_name] = value
+
+    with pytest.raises(ValidationError) as exc_info:
+        TransactionEvent.model_validate(payload)
+
+    assert exc_info.value.errors(include_input=False)[0]["loc"] == (field_name,)
+    assert "timezone-aware" in str(exc_info.value)
 
 
 def test_transaction_event_rejects_unknown_payload_fields() -> None:

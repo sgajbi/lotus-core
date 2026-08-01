@@ -18,10 +18,10 @@ The same repository mapped database rows through the public transaction event bo
 mapper deliberately excludes derived `calculation_lineage` from Kafka contracts, but internal
 history, single-row, update, and upsert results consequently lost their persisted receipt too.
 
-The FX lineage canonicalizer attached UTC to naive transaction, settlement, and creation
-timestamps. Position-history ordering used the same implicit-UTC pattern before placing its total
-ordering key into calculation lineage. Both converted an ambiguous local time into apparently
-governed financial evidence.
+The authoritative `TransactionEvent` validator attached UTC to naive external transaction,
+settlement, and creation timestamps before the transaction-processing mapper ran. The FX lineage
+canonicalizer and position-history ordering repeated the same implicit-UTC pattern. Together they
+converted an ambiguous external or domain local time into apparently governed financial evidence.
 
 ## Correction
 
@@ -29,18 +29,19 @@ The SQLAlchemy transaction repository now returns the row produced by `INSERT ..
 RETURNING` and reattaches its internal calculation receipt after the public event mapper. FX
 booking rebuilds the receipt from that complete row. It performs a second upsert only when conflict
 resolution or database defaults changed the persisted output, then verifies that the returned
-receipt binds the final durable row. The normal insert/reprocess path with unchanged output retains
-one write round trip; existing omitted-field retention semantics and public event contracts remain
-unchanged.
+receipt binds the final durable row. A path whose returned output is already identical retains one
+write round trip; database-generated `created_at` or retained conflict values correctly require the
+second receipt write. Existing omitted-field retention semantics remain unchanged.
 
-FX lineage and position-history ordering now reject naive or otherwise offset-ambiguous datetimes.
-Timezone-aware values are converted to UTC before hashing or ordering, so equivalent instants have
-one deterministic identity.
+The authoritative governed event boundary, FX lineage, and position-history ordering now reject
+naive or otherwise offset-ambiguous datetimes. Timezone-aware values are converted to UTC before
+mapping, hashing, or ordering, so equivalent instants have one deterministic identity.
 
 ## Same-Pattern Review
 
-The scan covered every `on_conflict_do_update`, calculation-lineage builder, and implicit UTC
-attachment in `portfolio_transaction_processing_service`.
+The scan covered the shared governed event timestamp validator and every
+`on_conflict_do_update`, calculation-lineage builder, and implicit UTC attachment in
+`portfolio_transaction_processing_service`.
 
 - Cashflow replacement supplies every persisted calculated output field on conflict; it does not
   have the optional-field omission defect.
@@ -58,17 +59,19 @@ attachment in `portfolio_transaction_processing_service`.
 
 ## Compatibility And Documentation
 
-There is no public API, OpenAPI, event, database schema, migration, topic, partition, or runtime
-topology change. Timezone-aware transaction inputs remain compatible. Naive FX and position-history
-calculation inputs now fail closed intentionally. Repository context and this review ledger change
-because the final-row receipt and timestamp-boundary rules are reusable. README and authored wiki
-are explicit no-change because no user command, operator workflow, or published capability changed.
-The existing delivery, issue-resolution, calculated-output guard, and review-ledger skills already
+There is no public API, OpenAPI, event schema/payload-shape, database schema, migration, topic,
+partition, or runtime topology change. Timezone-aware transaction inputs remain compatible and are
+canonicalized to UTC. Naive governed transaction events and FX/position-history calculation inputs
+now fail closed intentionally. Repository context and this review ledger change because the
+final-row receipt and timestamp-boundary rules are reusable. README and authored wiki are explicit
+no-change because no user command, operator workflow, or published capability changed. The
+existing delivery, issue-resolution, calculated-output guard, and review-ledger skills already
 require these checks, so central platform context and skills are also unchanged.
 
 ## Validation
 
-- FX, position-history, cost-repository, cost-processing, and settlement unit cohorts passed;
+- governed event, event-to-booked-to-FX, FX, position-history, cost-repository, cost-processing, and
+  settlement unit cohorts passed;
 - the PostgreSQL reprocessing proof retained an omitted optional source value and verified the
   final stored receipt against the complete durable row;
 - targeted Ruff, configured MyPy, and diff-hygiene checks passed;

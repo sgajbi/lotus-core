@@ -1,6 +1,6 @@
 """Characterize cashflow policy through canonical event mapping."""
 
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from decimal import Decimal, getcontext
 
 import pytest
@@ -26,7 +26,7 @@ def base_transaction_event() -> TransactionEvent:
         portfolio_id="PORT_CF_01",
         instrument_id="INST_CF_01",
         security_id="SEC_CF_01",
-        transaction_date=datetime(2025, 8, 1, 10, 0, 0),
+        transaction_date=datetime(2025, 8, 1, 10, 0, 0, tzinfo=timezone.utc),
         transaction_type="BUY",  # Default type
         quantity=Decimal("100"),
         price=Decimal("10"),
