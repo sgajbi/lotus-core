@@ -142,7 +142,9 @@ async def test_processor_materializes_current_history_and_rearms_downstream_gene
         epoch=3,
     )
     records = repository.save_records.await_args.args[0]
-    assert records == (
+    assert len(records) == 1
+    record = records[0]
+    assert replace(record, calculation_lineage=None) == (
         PositionHistoryRecord(
             portfolio_id="PB-001",
             security_id="SEC-001",
@@ -152,7 +154,12 @@ async def test_processor_materializes_current_history_and_rearms_downstream_gene
             cost_basis=Decimal("100"),
             cost_basis_local=Decimal("100"),
             epoch=3,
-        ),
+        )
+    )
+    assert record.calculation_lineage is not None
+    assert record.calculation_lineage.numeric_output_policy is not None
+    assert record.calculation_lineage.numeric_output_policy.policy_id == (
+        "position-history-ledger-output@1.0.0"
     )
     state_store.rearm_generation.assert_awaited_once_with(
         portfolio_id="PB-001",
