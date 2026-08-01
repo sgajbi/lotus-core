@@ -135,7 +135,52 @@ def test_buy_strategy(cost_calculator, mock_disposition_engine, buy_transaction)
     assert buy_transaction.gross_cost == Decimal("1500")
     assert buy_transaction.realized_gain_loss == Decimal("0")
     assert buy_transaction.realized_gain_loss_local == Decimal("0")
+    lineage = buy_transaction.calculation_lineage
+    assert lineage.algorithm_id == "transaction-cost-basis-calculation"
+    assert lineage.numeric_output_policy is not None
+    assert lineage.numeric_output_policy.policy_id == "transaction-cost-ledger-output@1.0.0"
     mock_disposition_engine.add_buy_lot.assert_called_once_with(buy_transaction)
+
+
+def test_transaction_cost_lineage_is_deterministic_and_material_input_sensitive(
+    cost_calculator,
+) -> None:
+    def transaction(fee: str) -> CostBasisTransaction:
+        return CostBasisTransaction(
+            transaction_id="BUY-LINEAGE-001",
+            portfolio_id="P1",
+            instrument_id="AAPL",
+            security_id="S1",
+            transaction_type="BUY",
+            transaction_date=datetime(2026, 8, 1),
+            quantity=Decimal("10"),
+            gross_transaction_amount=Decimal("1500"),
+            trade_currency="USD",
+            fees=Fees(brokerage=Decimal(fee)),
+            portfolio_base_currency="USD",
+            transaction_fx_rate=Decimal("1"),
+        )
+
+    baseline = transaction("5.5")
+    repeated = transaction("5.5")
+    changed = transaction("6.5")
+
+    cost_calculator.calculate_transaction_costs(baseline)
+    cost_calculator.calculate_transaction_costs(repeated)
+    cost_calculator.calculate_transaction_costs(changed)
+    replayed = CostBasisTransaction(
+        **baseline.model_dump(exclude={"calculation_lineage", "error_reason"})
+    )
+    cost_calculator.calculate_transaction_costs(replayed)
+
+    assert baseline.calculation_lineage == repeated.calculation_lineage
+    assert replayed.calculation_lineage == baseline.calculation_lineage
+    assert baseline.calculation_lineage.input_content_hash != (
+        changed.calculation_lineage.input_content_hash
+    )
+    assert baseline.calculation_lineage.output_content_hash != (
+        changed.calculation_lineage.output_content_hash
+    )
 
 
 def test_buy_strategy_dual_currency(cost_calculator, mock_disposition_engine):
