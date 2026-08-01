@@ -3431,12 +3431,13 @@ Most relevant current governance:
      mapper intentionally excludes it, and rebuild plus rewrite the receipt only when the returned
      row changes its output identity. Verify the final returned receipt before staging downstream
      effects. Governed transaction, settlement, creation, and position-ordering timestamps must be
-     timezone-aware; reject ambiguous external values first at `TransactionEvent`, retain the same
-     fail-closed rule at domain calculation boundaries, and normalize aware values to UTC before
-     mapping, hashing, or constructing the deterministic ordering key. Do not silently attach UTC
-     at a financial calculation boundary. A parser that still owns an explicit legacy timestamp
-     compatibility contract requires its own downstream-safe migration rather than an incidental
-     local change.
+     timezone-aware; reject ambiguous external values synchronously at the ingestion request DTO
+     and again at `TransactionEvent`, retain the same fail-closed rule at domain calculation
+     boundaries, and normalize aware values to UTC before mapping, hashing, or constructing the
+     deterministic ordering key. Never acknowledge an asynchronous ingestion command that the
+     published event contract will reject. Do not silently attach UTC at a financial calculation
+     boundary. A parser that still owns an explicit legacy timestamp compatibility contract
+     requires its own downstream-safe migration rather than an incidental local change.
 
 ## Context Maintenance Rule
 

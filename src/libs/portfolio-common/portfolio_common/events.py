@@ -23,18 +23,7 @@ from .domain.transaction_control_codes import (
 )
 from .domain.valuation.source_facts import resolve_optional_valuation_book_scope
 from .pydantic_financial_numeric import ExactDecimal18_10
-
-
-def _standardize_event_datetime_value(value: object) -> object:
-    if value is None:
-        return value
-    if isinstance(value, str):
-        value = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    if isinstance(value, datetime):
-        if value.tzinfo is None or value.utcoffset() is None:
-            raise ValueError("Event datetime must be timezone-aware.")
-        return value.astimezone(timezone.utc)
-    return value
+from .temporal import standardize_governed_datetime
 
 
 def _event_decimal_amount(value: object) -> Decimal:
@@ -157,7 +146,7 @@ class FxRatePersistedEvent(FxRateEvent):
     @field_validator("generated_at", mode="before")
     @classmethod
     def _standardize_generated_at(cls, value: object) -> object:
-        return _standardize_event_datetime_value(value)
+        return standardize_governed_datetime(value)
 
     @model_validator(mode="after")
     def _require_utc_generated_at(self) -> "FxRatePersistedEvent":
@@ -399,7 +388,7 @@ class TransactionEvent(CoreEventModel):
     @field_validator("transaction_date", "settlement_date", "created_at", mode="before")
     @classmethod
     def _standardize_event_datetime(cls, value: object) -> object:
-        return _standardize_event_datetime_value(value)
+        return standardize_governed_datetime(value)
 
     @field_validator(
         "cash_entry_mode",

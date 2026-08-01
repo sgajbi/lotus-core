@@ -19,9 +19,11 @@ mapper deliberately excludes derived `calculation_lineage` from Kafka contracts,
 history, single-row, update, and upsert results consequently lost their persisted receipt too.
 
 The authoritative `TransactionEvent` validator attached UTC to naive external transaction,
-settlement, and creation timestamps before the transaction-processing mapper ran. The FX lineage
-canonicalizer and position-history ordering repeated the same implicit-UTC pattern. Together they
-converted an ambiguous external or domain local time into apparently governed financial evidence.
+settlement, and creation timestamps before the transaction-processing mapper ran. The ingestion
+request model also accepted such a command, so the API could acknowledge it before downstream
+event validation failed terminally. The FX lineage canonicalizer and position-history ordering
+repeated the same implicit-UTC pattern. Together they converted an ambiguous external or domain
+local time into apparently governed financial evidence.
 
 ## Correction
 
@@ -33,9 +35,11 @@ receipt binds the final durable row. A path whose returned output is already ide
 write round trip; database-generated `created_at` or retained conflict values correctly require the
 second receipt write. Existing omitted-field retention semantics remain unchanged.
 
-The authoritative governed event boundary, FX lineage, and position-history ordering now reject
-naive or otherwise offset-ambiguous datetimes. Timezone-aware values are converted to UTC before
-mapping, hashing, or ordering, so equivalent instants have one deterministic identity.
+One shared policy now makes the synchronous ingestion request boundary, authoritative governed
+event boundary, FX lineage, and position-history ordering reject naive or otherwise
+offset-ambiguous datetimes. Timezone-aware values are converted to UTC before publishing, mapping,
+hashing, or ordering, so equivalent instants have one deterministic identity. Rejected ingestion
+requests return before job creation or Kafka publication.
 
 ## Same-Pattern Review
 
@@ -70,8 +74,8 @@ require these checks, so central platform context and skills are also unchanged.
 
 ## Validation
 
-- governed event, event-to-booked-to-FX, FX, position-history, cost-repository, cost-processing, and
-  settlement unit cohorts passed;
+- governed ingestion request, no-job/no-publish router, governed event, event-to-booked-to-FX, FX,
+  position-history, cost-repository, cost-processing, and settlement cohorts passed;
 - the PostgreSQL reprocessing proof retained an omitted optional source value and verified the
   final stored receipt against the complete durable row;
 - targeted Ruff, configured MyPy, and diff-hygiene checks passed;

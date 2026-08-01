@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
@@ -16,7 +16,7 @@ def test_transaction_model_success():
         "portfolio_id": "test_port_001",
         "instrument_id": "AAPL",
         "security_id": "SEC_AAPL",
-        "transaction_date": "2025-07-21T00:00:00",
+        "transaction_date": "2025-07-21T00:00:00Z",
         "transaction_type": "BUY",
         "quantity": "10.0",
         "price": "150.0",
@@ -24,12 +24,73 @@ def test_transaction_model_success():
         "trade_currency": "USD",
         "currency": "USD",
         "trade_fee": "5.0",
-        "settlement_date": "2025-07-23T00:00:00",
-        "created_at": datetime.now(),
+        "settlement_date": "2025-07-23T00:00:00Z",
+        "created_at": datetime.now(UTC),
     }
     transaction = Transaction(**valid_payload)
     assert transaction.transaction_id == "test_txn_001"
     assert transaction.quantity == Decimal("10.0")
+    assert transaction.transaction_date.tzinfo is not None
+    assert transaction.settlement_date is not None
+    assert transaction.settlement_date.tzinfo is not None
+    assert transaction.created_at.tzinfo is not None
+
+
+@pytest.mark.parametrize(
+    ("field_name", "value"),
+    [
+        ("transaction_date", "2025-07-21T00:00:00"),
+        ("transaction_date", datetime(2025, 7, 21)),
+        ("settlement_date", "2025-07-23T00:00:00"),
+        ("settlement_date", datetime(2025, 7, 23)),
+        ("created_at", "2025-07-21T00:01:00"),
+        ("created_at", datetime(2025, 7, 21, 0, 1)),
+    ],
+)
+def test_transaction_model_rejects_timezone_ambiguous_timestamps(
+    field_name: str,
+    value: datetime | str,
+) -> None:
+    payload = {
+        "transaction_id": "test_txn_ambiguous",
+        "portfolio_id": "test_port_001",
+        "instrument_id": "AAPL",
+        "security_id": "SEC_AAPL",
+        "transaction_date": "2025-07-21T00:00:00Z",
+        "transaction_type": "BUY",
+        "quantity": "10.0",
+        "price": "150.0",
+        "gross_transaction_amount": "1500.0",
+        "trade_currency": "USD",
+        "currency": "USD",
+        "settlement_date": "2025-07-23T00:00:00Z",
+        field_name: value,
+    }
+
+    with pytest.raises(ValidationError) as exc_info:
+        Transaction(**payload)
+
+    assert exc_info.value.errors(include_input=False)[0]["loc"] == (field_name,)
+    assert "timezone-aware" in str(exc_info.value)
+
+
+def test_transaction_model_canonicalizes_aware_timestamps_to_utc() -> None:
+    singapore = timezone(timedelta(hours=8))
+    transaction = Transaction(
+        transaction_id="test_txn_aware",
+        portfolio_id="test_port_001",
+        instrument_id="AAPL",
+        security_id="SEC_AAPL",
+        transaction_date=datetime(2025, 7, 21, 8, 0, tzinfo=singapore),
+        transaction_type="BUY",
+        quantity="10.0",
+        price="150.0",
+        gross_transaction_amount="1500.0",
+        trade_currency="USD",
+        currency="USD",
+    )
+
+    assert transaction.transaction_date == datetime(2025, 7, 21, tzinfo=UTC)
 
 
 def test_transaction_model_trims_required_identity_fields() -> None:
@@ -38,7 +99,7 @@ def test_transaction_model_trims_required_identity_fields() -> None:
         "portfolio_id": " PORT_TRIM_001 ",
         "instrument_id": " INST_TRIM_001 ",
         "security_id": " SEC_TRIM_001 ",
-        "transaction_date": "2025-07-21T00:00:00",
+        "transaction_date": "2025-07-21T00:00:00Z",
         "transaction_type": "BUY",
         "quantity": "10.0",
         "price": "150.0",
@@ -65,7 +126,7 @@ def test_transaction_model_rejects_blank_required_identity_fields(field_name: st
         "portfolio_id": "PORT_VALID_001",
         "instrument_id": "INST_VALID_001",
         "security_id": "SEC_VALID_001",
-        "transaction_date": "2025-07-21T00:00:00",
+        "transaction_date": "2025-07-21T00:00:00Z",
         "transaction_type": "BUY",
         "quantity": "10.0",
         "price": "150.0",
@@ -92,7 +153,7 @@ def test_transaction_model_missing_field_fails():
         "transaction_id": "test_txn_002",
         "portfolio_id": "test_port_002",
         "security_id": "SEC_GOOG",
-        "transaction_date": "2025-07-22T00:00:00",
+        "transaction_date": "2025-07-22T00:00:00Z",
         "transaction_type": "SELL",
         "quantity": "5.0",
         "price": "200.0",
@@ -115,7 +176,7 @@ def test_transaction_model_invalid_gross_amount_fails():
         "portfolio_id": "P1",
         "instrument_id": "I1",
         "security_id": "S1",
-        "transaction_date": "2025-01-01T00:00:00",
+        "transaction_date": "2025-01-01T00:00:00Z",
         "transaction_type": "BUY",
         "quantity": "10.0",
         "price": "100.0",
@@ -140,7 +201,7 @@ def test_transaction_model_invalid_trade_fee_fails():
         "portfolio_id": "P1",
         "instrument_id": "I1",
         "security_id": "S1",
-        "transaction_date": "2025-01-01T00:00:00",
+        "transaction_date": "2025-01-01T00:00:00Z",
         "transaction_type": "BUY",
         "quantity": "10.0",
         "price": "100.0",
@@ -163,7 +224,7 @@ def test_transaction_model_aggregates_trade_fee_from_components() -> None:
         "portfolio_id": "P1",
         "instrument_id": "I1",
         "security_id": "S1",
-        "transaction_date": "2025-01-01T00:00:00",
+        "transaction_date": "2025-01-01T00:00:00Z",
         "transaction_type": "BUY",
         "quantity": "10.0",
         "price": "100.0",
@@ -189,7 +250,7 @@ def test_transaction_model_rejects_negative_fee_component() -> None:
         "portfolio_id": "P1",
         "instrument_id": "I1",
         "security_id": "S1",
-        "transaction_date": "2025-01-01T00:00:00",
+        "transaction_date": "2025-01-01T00:00:00Z",
         "transaction_type": "BUY",
         "quantity": "10.0",
         "price": "100.0",
@@ -214,7 +275,7 @@ def test_transaction_model_non_numeric_input_fails():
         "portfolio_id": "P1",
         "instrument_id": "I1",
         "security_id": "S1",
-        "transaction_date": "2025-01-01T00:00:00",
+        "transaction_date": "2025-01-01T00:00:00Z",
         "transaction_type": "BUY",
         "quantity": "10.0",
         "price": "100.0",
@@ -240,7 +301,7 @@ def test_transaction_model_dividend_with_zero_qty_price_succeeds():
         "portfolio_id": "test_port_001",
         "instrument_id": "IBM",
         "security_id": "SEC_IBM",
-        "transaction_date": "2025-08-23T00:00:00",
+        "transaction_date": "2025-08-23T00:00:00Z",
         "transaction_type": "DIVIDEND",
         "quantity": "0",
         "price": "0",

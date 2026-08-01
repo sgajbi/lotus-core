@@ -1809,6 +1809,31 @@ async def test_ingest_transactions_rejects_blank_identifiers_before_job_creation
     mock_kafka_producer.publish_message.assert_not_called()
 
 
+@pytest.mark.parametrize(
+    "field_name",
+    ["transaction_date", "settlement_date", "created_at"],
+)
+async def test_ingest_transactions_rejects_ambiguous_timestamps_before_job_creation(
+    field_name: str,
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    mock_kafka_producer: MagicMock,
+) -> None:
+    mock_kafka_producer.publish_message.reset_mock()
+    fake_job_service = ingestion_test_harness["fake_job_service"]
+    payload = _transaction_batch_payload("TX_NAIVE_TIMESTAMP_001")
+    payload["transactions"][0][field_name] = "2026-03-01T10:00:00"
+
+    response = await async_test_client.post("/ingest/transactions", json=payload)
+
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert any(field_name in error["loc"] and "timezone-aware" in error["msg"] for error in detail)
+    assert fake_job_service.jobs == {}
+    assert fake_job_service.failures == {}
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
 async def test_ingest_transactions_endpoint_accepts_empty_batch(
     async_test_client: httpx.AsyncClient, mock_kafka_producer: MagicMock
 ):
