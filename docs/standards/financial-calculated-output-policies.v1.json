@@ -95,7 +95,8 @@
           "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_strategies.py::_assign_fifo_lot_costs",
           "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_strategies.py::_consume_next_fifo_lot",
           "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/lot_state.py::CostLot.open_state",
-          "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/residual_allocation.py::allocate_nonnegative_storage_share"
+          "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/residual_allocation.py::allocate_nonnegative_storage_share",
+          "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/state_lineage.py::_canonical_cost_basis_output"
         ]
       },
       "lineage_gap_callsites": []
