@@ -23,6 +23,8 @@ from portfolio_common.database_models import (
     InstrumentLookthroughComponent,
     InstrumentValuationPolicyAssignmentRecord,
     LiquidityReserveRequirement,
+    LotAmortizedCostPeriodRecord,
+    LotAmortizedCostProfileRecord,
     MarketPrice,
     MarketPriceSourceFactRecord,
     ModelPortfolioDefinition,
@@ -117,6 +119,40 @@ def test_average_cost_pool_state_declares_integrity_constraints_and_support_inde
         "average_cost_pool_state.portfolio_id",
         "average_cost_pool_state.security_id",
     ]
+
+
+def test_lot_amortized_cost_records_declare_append_only_integrity_contract() -> None:
+    profile_table = LotAmortizedCostProfileRecord.__table__
+    period_table = LotAmortizedCostPeriodRecord.__table__
+    profile_constraints = {constraint.name for constraint in profile_table.constraints}
+    period_constraints = {constraint.name for constraint in period_table.constraints}
+    profile_indexes = {index.name: index for index in profile_table.indexes}
+    period_indexes = {index.name: index for index in period_table.indexes}
+
+    assert "uq_lot_amort_profile_version" in profile_constraints
+    assert {
+        "ck_lot_amort_profile_lifecycle_shape",
+        "ck_lot_amort_profile_amounts_finite",
+        "ck_lot_amort_profile_sources_array",
+    } <= profile_constraints
+    assert "uq_lot_amort_period_ordinal" in period_constraints
+    assert {
+        "ck_lot_amort_period_amounts_finite",
+        "ck_lot_amort_period_amounts_governed",
+        "fk_lot_amort_period_profile_version",
+    } <= period_constraints
+    assert "ix_lot_amort_profile_scope_version" in profile_indexes
+    assert "ix_lot_amort_profile_parked_effective" in profile_indexes
+    assert "ix_lot_amort_period_profile_end" in period_indexes
+    assert all(
+        isinstance(profile_table.columns[column_name].type, ExactNumeric)
+        for column_name in (
+            "initial_amortized_cost_local",
+            "redemption_value_local",
+            "final_amortized_cost_local",
+            "residual_local",
+        )
+    )
 
 
 def test_reprocessing_job_declares_pending_reset_watermarks_uniqueness_index():

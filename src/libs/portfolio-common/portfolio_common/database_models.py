@@ -9,6 +9,7 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     String,
@@ -2345,6 +2346,217 @@ class PositionLotState(Base):
             "portfolio_id",
             acquisition_date,
             lot_id,
+        ),
+    )
+
+
+class LotAmortizedCostProfileRecord(Base):
+    """Append-only lot amortized-cost profile header and audit evidence."""
+
+    __tablename__ = "lot_amortized_cost_profiles"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    profile_id = Column(String(96), nullable=False)
+    profile_version = Column(Integer, nullable=False)
+    tenant_id = Column(String, nullable=False)
+    legal_book_id = Column(String, nullable=False)
+    portfolio_id = Column(String, ForeignKey("portfolios.portfolio_id"), nullable=False)
+    security_id = Column(String, ForeignKey("instruments.security_id"), nullable=False)
+    lot_id = Column(String, ForeignKey("position_lot_state.lot_id"), nullable=False)
+    effective_date = Column(Date, nullable=False)
+    status = Column(String, nullable=False)
+    eligibility_reason = Column(String, nullable=True)
+    policy_id = Column(String, nullable=True)
+    policy_version = Column(Integer, nullable=True)
+    schedule_version = Column(Integer, nullable=True)
+    currency = Column(String(3), nullable=True)
+    direction = Column(String, nullable=True)
+    initial_amortized_cost_local = Column(ExactNumeric(18, 10), nullable=True)
+    redemption_value_local = Column(ExactNumeric(18, 10), nullable=True)
+    final_amortized_cost_local = Column(ExactNumeric(18, 10), nullable=True)
+    residual_local = Column(ExactNumeric(18, 10), nullable=True)
+    authority_content_hash = Column(String(64), nullable=True)
+    source_references = Column(JSON(none_as_null=True), nullable=False)
+    calculation_lineage = Column(JSON(none_as_null=True), nullable=True)
+    profile_content_hash = Column(String(64), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "profile_id",
+            "profile_version",
+            name="uq_lot_amort_profile_version",
+        ),
+        CheckConstraint(
+            "profile_version >= 1",
+            name="ck_lot_amort_profile_version_positive",
+        ),
+        CheckConstraint(
+            "tenant_id = btrim(tenant_id) AND tenant_id <> '' "
+            "AND legal_book_id = btrim(legal_book_id) AND legal_book_id <> '' "
+            "AND portfolio_id = btrim(portfolio_id) AND portfolio_id <> '' "
+            "AND security_id = btrim(security_id) AND security_id <> '' "
+            "AND lot_id = btrim(lot_id) AND lot_id <> ''",
+            name="ck_lot_amort_profile_scope_normalized",
+        ),
+        CheckConstraint(
+            "status IN ('ACTIVE', 'PARKED', 'INELIGIBLE')",
+            name="ck_lot_amort_profile_status",
+        ),
+        CheckConstraint(
+            "direction IS NULL OR direction IN "
+            "('PREMIUM_AMORTIZATION', 'DISCOUNT_ACCRETION', 'AT_PAR')",
+            name="ck_lot_amort_profile_direction",
+        ),
+        CheckConstraint(
+            "currency IS NULL OR currency ~ '^[A-Z]{3}$'",
+            name="ck_lot_amort_profile_currency",
+        ),
+        CheckConstraint(
+            "policy_version IS NULL OR policy_version >= 1",
+            name="ck_lot_amort_profile_policy_version",
+        ),
+        CheckConstraint(
+            "schedule_version IS NULL OR schedule_version >= 1",
+            name="ck_lot_amort_profile_schedule_version",
+        ),
+        _finite_numeric_check_constraint(
+            "ck_lot_amort_profile_amounts_finite",
+            "initial_amortized_cost_local",
+            "redemption_value_local",
+            "final_amortized_cost_local",
+            "residual_local",
+        ),
+        CheckConstraint(
+            "initial_amortized_cost_local >= 0",
+            name="ck_lot_amort_profile_initial_nonnegative",
+        ),
+        CheckConstraint(
+            "redemption_value_local >= 0",
+            name="ck_lot_amort_profile_redemption_nonnegative",
+        ),
+        CheckConstraint(
+            "final_amortized_cost_local >= 0",
+            name="ck_lot_amort_profile_final_nonnegative",
+        ),
+        CheckConstraint(
+            "authority_content_hash IS NULL OR authority_content_hash ~ '^[0-9a-f]{64}$'",
+            name="ck_lot_amort_profile_authority_hash",
+        ),
+        CheckConstraint(
+            "profile_content_hash ~ '^[0-9a-f]{64}$'",
+            name="ck_lot_amort_profile_content_hash",
+        ),
+        CheckConstraint(
+            "json_typeof(source_references::json) = 'array'",
+            name="ck_lot_amort_profile_sources_array",
+        ),
+        CheckConstraint(
+            "(status = 'ACTIVE' AND eligibility_reason IS NULL "
+            "AND policy_id IS NOT NULL AND policy_version IS NOT NULL "
+            "AND schedule_version IS NOT NULL AND currency IS NOT NULL "
+            "AND direction IS NOT NULL AND initial_amortized_cost_local IS NOT NULL "
+            "AND redemption_value_local IS NOT NULL "
+            "AND final_amortized_cost_local IS NOT NULL AND residual_local IS NOT NULL "
+            "AND authority_content_hash IS NOT NULL AND calculation_lineage IS NOT NULL "
+            "AND json_array_length(source_references::json) > 0) "
+            "OR (status IN ('PARKED', 'INELIGIBLE') AND eligibility_reason IS NOT NULL "
+            "AND direction IS NULL AND initial_amortized_cost_local IS NULL "
+            "AND redemption_value_local IS NULL AND final_amortized_cost_local IS NULL "
+            "AND residual_local IS NULL AND calculation_lineage IS NULL)",
+            name="ck_lot_amort_profile_lifecycle_shape",
+        ),
+        Index(
+            "ix_lot_amort_profile_scope_version",
+            "tenant_id",
+            "legal_book_id",
+            "portfolio_id",
+            "security_id",
+            "lot_id",
+            profile_version.desc(),
+        ),
+        Index(
+            "ix_lot_amort_profile_parked_effective",
+            "status",
+            "effective_date",
+            "profile_id",
+            postgresql_where=text("status IN ('PARKED', 'INELIGIBLE')"),
+        ),
+    )
+
+
+class LotAmortizedCostPeriodRecord(Base):
+    """Immutable normalized period row for one lot amortized-cost profile version."""
+
+    __tablename__ = "lot_amortized_cost_periods"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    profile_id = Column(String(96), nullable=False)
+    profile_version = Column(Integer, nullable=False)
+    period_ordinal = Column(Integer, nullable=False)
+    period_start_date = Column(Date, nullable=False)
+    period_end_date = Column(Date, nullable=False)
+    year_fraction = Column(ExactNumeric(18, 10), nullable=False)
+    period_rate = Column(ExactNumeric(18, 10), nullable=True)
+    begin_amortized_cost_local = Column(ExactNumeric(18, 10), nullable=False)
+    interest_income_local = Column(ExactNumeric(18, 10), nullable=False)
+    cash_coupon_local = Column(ExactNumeric(18, 10), nullable=False)
+    amortization_amount_local = Column(ExactNumeric(18, 10), nullable=False)
+    end_amortized_cost_local = Column(ExactNumeric(18, 10), nullable=False)
+    rounding_adjustment_local = Column(ExactNumeric(18, 10), nullable=False)
+    calculation_output_hash = Column(String(64), nullable=False)
+    period_content_hash = Column(String(64), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["profile_id", "profile_version"],
+            [
+                "lot_amortized_cost_profiles.profile_id",
+                "lot_amortized_cost_profiles.profile_version",
+            ],
+            name="fk_lot_amort_period_profile_version",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "profile_id",
+            "profile_version",
+            "period_ordinal",
+            name="uq_lot_amort_period_ordinal",
+        ),
+        CheckConstraint(
+            "profile_version >= 1 AND period_ordinal >= 1",
+            name="ck_lot_amort_period_identity_positive",
+        ),
+        CheckConstraint(
+            "period_end_date > period_start_date",
+            name="ck_lot_amort_period_date_order",
+        ),
+        _finite_numeric_check_constraint(
+            "ck_lot_amort_period_amounts_finite",
+            "year_fraction",
+            "period_rate",
+            "begin_amortized_cost_local",
+            "interest_income_local",
+            "cash_coupon_local",
+            "amortization_amount_local",
+            "end_amortized_cost_local",
+            "rounding_adjustment_local",
+        ),
+        CheckConstraint(
+            "year_fraction > 0 AND begin_amortized_cost_local >= 0 "
+            "AND cash_coupon_local >= 0 AND end_amortized_cost_local >= 0",
+            name="ck_lot_amort_period_amounts_governed",
+        ),
+        CheckConstraint(
+            "calculation_output_hash ~ '^[0-9a-f]{64}$' AND period_content_hash ~ '^[0-9a-f]{64}$'",
+            name="ck_lot_amort_period_hashes",
+        ),
+        Index(
+            "ix_lot_amort_period_profile_end",
+            "profile_id",
+            profile_version.desc(),
+            "period_end_date",
         ),
     )
 
