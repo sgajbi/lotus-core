@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock
 
@@ -33,7 +33,7 @@ def _message() -> MagicMock:
         "portfolio_id": "PB-001",
         "instrument_id": "INST-001",
         "security_id": "SEC-001",
-        "transaction_date": datetime(2026, 4, 10, 9, 30).isoformat(),
+        "transaction_date": datetime(2026, 4, 10, 9, 30, tzinfo=UTC).isoformat(),
         "transaction_type": "BUY",
         "quantity": str(Decimal("10")),
         "price": str(Decimal("25.50")),

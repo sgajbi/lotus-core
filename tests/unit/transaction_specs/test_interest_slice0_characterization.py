@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from unittest.mock import MagicMock
 
@@ -60,7 +60,7 @@ def test_interest_fee_transformation_to_engine_fees_structure() -> None:
         portfolio_id="PORT_SLICE0",
         instrument_id="BOND_10Y_USD",
         security_id="BOND_10Y_USD",
-        transaction_date=datetime(2026, 2, 20),
+        transaction_date=datetime(2026, 2, 20, tzinfo=UTC),
         transaction_type="INTEREST",
         quantity=Decimal("0"),
         price=Decimal("0"),
@@ -87,7 +87,7 @@ def test_interest_cost_calculation_current_behavior_zero_cost_and_no_realized_pn
         instrument_id="BOND_10Y_USD",
         security_id="BOND_10Y_USD",
         transaction_type="INTEREST",
-        transaction_date=datetime(2026, 2, 20),
+        transaction_date=datetime(2026, 2, 20, tzinfo=UTC),
         quantity=Decimal("0"),
         price=Decimal("0"),
         gross_transaction_amount=Decimal("126.25"),
@@ -118,7 +118,7 @@ def test_interest_position_calculation_preserves_quantity_and_cost_basis() -> No
         portfolio_id="PORT_SLICE0",
         instrument_id="BOND_10Y_USD",
         security_id="BOND_10Y_USD",
-        transaction_date=datetime(2026, 2, 20),
+        transaction_date=datetime(2026, 2, 20, tzinfo=UTC),
         transaction_type="INTEREST",
         quantity=Decimal("0"),
         price=Decimal("0"),
@@ -139,8 +139,8 @@ def test_interest_cashflow_current_behavior_positive_income_inflow() -> None:
         portfolio_id="PORT_SLICE0",
         instrument_id="BOND_10Y_USD",
         security_id="BOND_10Y_USD",
-        transaction_date=datetime(2026, 2, 20, 10, 0, 0),
-        settlement_date=datetime(2026, 2, 24, 9, 30, 0),
+        transaction_date=datetime(2026, 2, 20, 10, 0, 0, tzinfo=UTC),
+        settlement_date=datetime(2026, 2, 24, 9, 30, 0, tzinfo=UTC),
         transaction_type="INTEREST",
         quantity=Decimal("0"),
         price=Decimal("0"),
@@ -167,7 +167,7 @@ def test_interest_cashflow_current_behavior_positive_income_inflow() -> None:
 def test_interest_query_record_mapping_preserves_current_fields() -> None:
     db_txn = DBTransaction(
         transaction_id="INT_SLICE0_006",
-        transaction_date=datetime(2026, 2, 20),
+        transaction_date=datetime(2026, 2, 20, tzinfo=UTC),
         transaction_type="INTEREST",
         instrument_id="BOND_10Y_USD",
         security_id="BOND_10Y_USD",

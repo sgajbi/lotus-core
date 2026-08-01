@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from portfolio_common.events import TransactionEvent
@@ -20,7 +20,7 @@ def test_slice2_tax_rule_alignment_marks_portfolio_flow_true() -> None:
         portfolio_id="PORT-074",
         instrument_id="INST-074",
         security_id="SEC-074",
-        transaction_date=datetime(2026, 3, 5, 12, 0, 0),
+        transaction_date=datetime(2026, 3, 5, 12, 0, 0, tzinfo=UTC),
         transaction_type="TAX",
         quantity=Decimal("0"),
         price=Decimal("0"),
@@ -54,7 +54,7 @@ def test_ca_transfer_classification_signs_for_in_and_out() -> None:
         portfolio_id="PORT-074",
         instrument_id="INST-074",
         security_id="SEC-074",
-        transaction_date=datetime(2026, 3, 5, 12, 0, 0),
+        transaction_date=datetime(2026, 3, 5, 12, 0, 0, tzinfo=UTC),
         transaction_type="MERGER_IN",
         quantity=Decimal("10"),
         price=Decimal("0"),

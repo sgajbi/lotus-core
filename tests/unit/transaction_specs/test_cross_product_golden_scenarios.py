@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 
@@ -49,7 +49,7 @@ def _event(
         portfolio_id=raw["portfolio_id"],
         instrument_id=raw["security_id"],
         security_id=raw["security_id"],
-        transaction_date=datetime(2026, 4, 10, 10, 0, 0),
+        transaction_date=datetime(2026, 4, 10, 10, 0, 0, tzinfo=UTC),
         transaction_type=raw["transaction_type"],
         quantity=Decimal(quantity or raw.get("quantity", "0")),
         price=Decimal(raw.get("price", "0")),

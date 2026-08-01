@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from decimal import Decimal
 from types import SimpleNamespace
 
@@ -28,7 +28,7 @@ def _transaction(
         portfolio_id=portfolio_id,
         instrument_id="I1",
         security_id=security_id,
-        transaction_date=datetime(2026, 1, 2, 10, 0, 0),
+        transaction_date=datetime(2026, 1, 2, 10, 0, 0, tzinfo=UTC),
         transaction_type="BUY",
         quantity=Decimal("10"),
         price=Decimal("100"),
