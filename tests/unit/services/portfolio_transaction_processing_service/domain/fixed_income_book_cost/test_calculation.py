@@ -218,6 +218,37 @@ def test_negative_effective_yield_is_supported_when_economics_reconcile() -> Non
     assert result.final_amortized_cost_local == Decimal("99.0000000000")
 
 
+def test_effective_yield_row_explains_sub_quantum_rounding() -> None:
+    result = calculate_amortized_cost_schedule(
+        policy=_policy(
+            method=AmortizedCostMethod.EFFECTIVE_YIELD,
+            convention=YieldApplicationConvention.PER_PERIOD_EFFECTIVE,
+        ),
+        inputs=AmortizedCostScheduleInput(
+            initial_clean_cost_local=Decimal("1"),
+            fees_in_basis_local=Decimal("0"),
+            redemption_value_local=Decimal("1"),
+            periods=(
+                _period(
+                    date(2026, 1, 1),
+                    date(2027, 1, 1),
+                    coupon="0.00000000004",
+                    rate="0.00000000006",
+                ),
+            ),
+        ),
+    )
+
+    row = result.periods[0]
+    assert row.interest_income_local == Decimal("0.0000000001")
+    assert row.cash_coupon_local == Decimal("0E-10")
+    assert row.amortization_amount_local == Decimal("0E-10")
+    assert row.rounding_adjustment_local == Decimal("-0.0000000001")
+    assert row.amortization_amount_local == (
+        row.interest_income_local - row.cash_coupon_local + row.rounding_adjustment_local
+    )
+
+
 def test_equal_outputs_from_distinct_economic_inputs_have_distinct_lineage() -> None:
     periods = (_period(date(2026, 1, 1), date(2027, 1, 1)),)
     first = calculate_amortized_cost_schedule(
