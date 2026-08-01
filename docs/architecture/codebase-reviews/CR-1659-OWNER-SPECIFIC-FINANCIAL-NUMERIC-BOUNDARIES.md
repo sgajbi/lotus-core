@@ -267,6 +267,16 @@ identity, and public response shapes remain unchanged.
   different facts therefore retain different receipts. These changes reuse existing rows and query
   shapes except for the bounded AVCO rebuild's prior-checkpoint evidence read; they add no hot-path
   N+1 behavior. The combined focused review suites pass 91 tests.
+- The final late-review pass found that reconciliation compared the canonical full-replay receipt
+  byte-for-byte with healthy receipts emitted by ordinary incremental transition and checkpoint
+  writers. Because algorithm identity is part of the calculation hash, exact economics could be
+  falsely reported as drift. Reconciliation now requires exact receipt equality for a prior rebuild,
+  but recognizes only the two repository-owned incremental algorithm identities when their version,
+  precision, numeric policy, complete source aggregates, and pool aggregates match replay truth.
+  Unknown writers and changed rebuild evidence still fail closed. The assessment model also records
+  evidence-only drift without pretending that financial amounts differ. Twenty-four focused tests,
+  Ruff, and MyPy pass, including both healthy incremental writers, changed replay evidence, and an
+  unknown-writer negative case.
 
 ## Compatibility and remaining work
 

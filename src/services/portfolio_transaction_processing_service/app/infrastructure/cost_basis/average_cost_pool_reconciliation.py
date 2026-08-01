@@ -39,6 +39,13 @@ from .transaction_repository import SqlAlchemyCostBasisTransactionRepository
 
 logger = logging.getLogger(__name__)
 
+_INCREMENTAL_POOL_LINEAGE_ALGORITHMS = frozenset(
+    {
+        "average-cost-pool-checkpoint-materialization",
+        "average-cost-pool-transition",
+    }
+)
+
 AVERAGE_COST_SOURCE_TRANSACTION_TYPES = tuple(
     sorted(
         code
@@ -278,7 +285,38 @@ def _summary_matches_plan(
         and summary.pool_quantity == expected_quantity
         and summary.pool_cost_local == expected_cost_local
         and summary.pool_cost_base == expected_cost_base
-        and summary.pool_calculation_lineage == expected_checkpoint_lineage
+        and _pool_lineage_matches_plan(
+            summary.pool_calculation_lineage,
+            expected_checkpoint_lineage=expected_checkpoint_lineage,
+        )
+    )
+
+
+def _pool_lineage_matches_plan(
+    persisted: CalculationLineage | None,
+    *,
+    expected_checkpoint_lineage: CalculationLineage,
+) -> bool:
+    """Accept replay-exact or governed incremental evidence for equal pool economics.
+
+    Rebuild receipts bind the complete canonical replay and therefore must match exactly.
+    Ordinary processing receipts bind the latest valid state transition instead; their input
+    hashes cannot equal a full replay receipt.  For those repository-owned writers, validate
+    the governed calculation semantics while the caller independently proves the complete
+    persisted source and pool aggregates.
+    """
+
+    if persisted is None:
+        return False
+    if persisted.algorithm_id == expected_checkpoint_lineage.algorithm_id:
+        return bool(persisted == expected_checkpoint_lineage)
+    return all(
+        (
+            persisted.algorithm_id in _INCREMENTAL_POOL_LINEAGE_ALGORITHMS,
+            persisted.algorithm_version == expected_checkpoint_lineage.algorithm_version,
+            persisted.intermediate_precision == expected_checkpoint_lineage.intermediate_precision,
+            persisted.numeric_output_policy == expected_checkpoint_lineage.numeric_output_policy,
+        )
     )
 
 
@@ -292,7 +330,10 @@ def _drift_reason(
         return "pool_state_missing"
     if summary.source_count != expected_source_count:
         return "source_count_mismatch"
-    if summary.pool_calculation_lineage != expected_checkpoint_lineage:
+    if not _pool_lineage_matches_plan(
+        summary.pool_calculation_lineage,
+        expected_checkpoint_lineage=expected_checkpoint_lineage,
+    ):
         return "checkpoint_replay_evidence_mismatch"
     return "pool_or_source_aggregate_mismatch"
 
