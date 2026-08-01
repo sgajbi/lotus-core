@@ -572,6 +572,7 @@ async def test_non_lot_full_rebuild_refreshes_open_lot_cost_snapshot(
         persistence_scope=calculation.open_lot_persistence_scope,
         cost_basis_method=cost_basis_method,
         average_cost_pool_transition=calculation.average_cost_pool_transition,
+        processed=calculation.processed,
     )
 
     assert calculation.incremental is False
@@ -583,6 +584,9 @@ async def test_non_lot_full_rebuild_refreshes_open_lot_cost_snapshot(
             portfolio_id="P1",
             security_id="S1",
             states_by_source_transaction_id=calculation.open_lot_states,
+            transition_evidence=lot_states.update_open_lot_states.await_args.kwargs[
+                "transition_evidence"
+            ],
         )
         average_cost_pools.upsert_average_cost_pool_checkpoint.assert_not_awaited()
     else:
@@ -590,6 +594,9 @@ async def test_non_lot_full_rebuild_refreshes_open_lot_cost_snapshot(
             portfolio_id="P1",
             security_id="S1",
             states_by_source_transaction_id=calculation.open_lot_states,
+            transition_evidence=lot_states.update_open_lot_states.await_args.kwargs[
+                "transition_evidence"
+            ],
         )
         persisted_pool = average_cost_pools.upsert_average_cost_pool_checkpoint.await_args.args[0]
         assert persisted_pool.quantity == Decimal("10")

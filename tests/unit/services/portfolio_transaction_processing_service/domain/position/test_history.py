@@ -6,6 +6,10 @@ from decimal import Decimal, localcontext
 from pathlib import Path
 
 import pytest
+from portfolio_common.domain.calculation_lineage import (
+    CalculationLineage,
+    build_calculation_lineage,
+)
 
 from src.services.portfolio_transaction_processing_service.app.domain import BookedTransaction
 from src.services.portfolio_transaction_processing_service.app.domain.position.history import (
@@ -41,6 +45,7 @@ def _transaction(
     created_at: datetime | None = None,
     portfolio_id: str = "PB-001",
     security_id: str = "SEC-001",
+    calculation_lineage: CalculationLineage | None = None,
 ) -> BookedTransaction:
     return BookedTransaction(
         transaction_id=transaction_id,
@@ -59,6 +64,17 @@ def _transaction(
         child_sequence_hint=child_sequence_hint,
         target_instrument_id=target_instrument_id,
         created_at=created_at,
+        calculation_lineage=calculation_lineage,
+    )
+
+
+def _transaction_lineage(source_revision: str) -> CalculationLineage:
+    return build_calculation_lineage(
+        algorithm_id="transaction-cost-basis-calculation",
+        algorithm_version=1,
+        intermediate_precision=28,
+        input_payload={"source_revision": source_revision},
+        output_payload={"net_cost": Decimal("60"), "quantity": Decimal("5")},
     )
 
 
@@ -248,6 +264,44 @@ def test_position_history_lineage_changes_with_material_transaction_input() -> N
     changed_lineage = changed.calculation_lineage
     assert baseline_lineage is not None
     assert changed_lineage is not None
+    assert baseline_lineage.input_content_hash != changed_lineage.input_content_hash
+    assert baseline_lineage.output_content_hash != changed_lineage.output_content_hash
+
+
+def test_position_history_lineage_binds_upstream_transaction_calculation_lineage() -> None:
+    baseline = build_position_history(
+        anchor=None,
+        transactions=(
+            _transaction(
+                "TX-BUY",
+                "BUY",
+                quantity=Decimal("5"),
+                net_cost=Decimal("60"),
+                calculation_lineage=_transaction_lineage("source-revision-1"),
+            ),
+        ),
+        epoch=4,
+    )[0]
+    changed = build_position_history(
+        anchor=None,
+        transactions=(
+            _transaction(
+                "TX-BUY",
+                "BUY",
+                quantity=Decimal("5"),
+                net_cost=Decimal("60"),
+                calculation_lineage=_transaction_lineage("source-revision-2"),
+            ),
+        ),
+        epoch=4,
+    )[0]
+
+    baseline_lineage = baseline.calculation_lineage
+    changed_lineage = changed.calculation_lineage
+    assert baseline_lineage is not None
+    assert changed_lineage is not None
+    assert baseline.quantity == changed.quantity
+    assert baseline.cost_basis == changed.cost_basis
     assert baseline_lineage.input_content_hash != changed_lineage.input_content_hash
     assert baseline_lineage.output_content_hash != changed_lineage.output_content_hash
 

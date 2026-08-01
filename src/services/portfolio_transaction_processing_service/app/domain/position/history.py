@@ -170,6 +170,11 @@ def _position_history_lineage_input(
         ),
         "transaction": {
             "booked_transaction_type": transaction.transaction_type,
+            "calculation_lineage": (
+                transaction.calculation_lineage.lineage_payload()
+                if transaction.calculation_lineage is not None
+                else None
+            ),
             "component_type": transaction.component_type,
             "effective_processing_transaction_type": (
                 resolve_effective_processing_transaction_type(transaction)

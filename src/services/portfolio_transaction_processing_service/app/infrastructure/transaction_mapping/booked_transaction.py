@@ -7,9 +7,14 @@ from dataclasses import fields
 from portfolio_common.events import GOVERNED_EVENT_ENVELOPE_FIELDS, TransactionEvent
 
 from ...domain import BookedTransaction
+from ...domain.transaction import BOOKED_TRANSACTION_DERIVED_FIELDS
 
-_DOMAIN_FIELD_NAMES = tuple(field.name for field in fields(BookedTransaction))
-_DOMAIN_FIELD_SET = frozenset(_DOMAIN_FIELD_NAMES)
+_EVENT_DOMAIN_FIELD_NAMES = tuple(
+    field.name
+    for field in fields(BookedTransaction)
+    if field.name not in BOOKED_TRANSACTION_DERIVED_FIELDS
+)
+_EVENT_DOMAIN_FIELD_SET = frozenset(_EVENT_DOMAIN_FIELD_NAMES)
 _TUPLE_FIELDS = frozenset({"linked_component_ids", "dependency_reference_ids"})
 
 
@@ -25,14 +30,14 @@ def to_transaction_event(
     correlation_id: str | None,
     traceparent: str | None,
 ) -> TransactionEvent:
-    payload = {name: getattr(transaction, name) for name in _DOMAIN_FIELD_NAMES}
+    payload = {name: getattr(transaction, name) for name in _EVENT_DOMAIN_FIELD_NAMES}
     payload.update(correlation_id=correlation_id, traceparent=traceparent)
     return TransactionEvent.model_validate(payload)
 
 
 def to_booked_transaction(event: TransactionEvent) -> BookedTransaction:
     payload = event.model_dump(mode="python")
-    domain_values = {name: payload[name] for name in _DOMAIN_FIELD_NAMES}
+    domain_values = {name: payload[name] for name in _EVENT_DOMAIN_FIELD_NAMES}
     for field_name in _TUPLE_FIELDS:
         value = domain_values[field_name]
         domain_values[field_name] = tuple(value) if value is not None else None
@@ -46,7 +51,7 @@ def with_booked_transaction_fields(
     """Return the event envelope carrying the supplied domain transaction fields."""
 
     payload = event.model_dump(mode="python")
-    payload.update({name: getattr(transaction, name) for name in _DOMAIN_FIELD_NAMES})
+    payload.update({name: getattr(transaction, name) for name in _EVENT_DOMAIN_FIELD_NAMES})
     return TransactionEvent.model_validate(payload)
 
 
@@ -57,8 +62,8 @@ def validate_booked_transaction_event_mapping_contract(
         set(TransactionEvent.model_fields) if external_field_names is None else external_field_names
     )
     business_fields = external_fields - GOVERNED_EVENT_ENVELOPE_FIELDS
-    missing_domain_fields = sorted(business_fields - _DOMAIN_FIELD_SET)
-    extra_domain_fields = sorted(_DOMAIN_FIELD_SET - business_fields)
+    missing_domain_fields = sorted(business_fields - _EVENT_DOMAIN_FIELD_SET)
+    extra_domain_fields = sorted(_EVENT_DOMAIN_FIELD_SET - business_fields)
     if missing_domain_fields or extra_domain_fields:
         raise BookedTransactionEventMappingError(
             "Transaction event/domain field drift: "

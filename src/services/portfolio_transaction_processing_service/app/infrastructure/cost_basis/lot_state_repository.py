@@ -5,7 +5,10 @@ from typing import cast
 
 from portfolio_common.database_models import PositionLotState
 from portfolio_common.database_models import Transaction as DBTransaction
-from portfolio_common.domain.calculation_lineage import CalculationLineage
+from portfolio_common.domain.calculation_lineage import (
+    CalculationLineage,
+    calculation_lineage_from_payload,
+)
 from portfolio_common.events import TransactionEvent
 from portfolio_common.identifiers import normalize_lookup_identifier
 from sqlalchemy import func, select
@@ -14,7 +17,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import Select
 
 from ...domain.cost_basis import CostBasisTransaction, OpenLotState
-from ...domain.cost_basis.state_lineage import build_cost_basis_state_lineage
+from ...domain.cost_basis.state_lineage import (
+    CostBasisStateTransitionEvidence,
+    build_cost_basis_state_lineage,
+)
 from ...ports import OpenLotCheckpointRecord
 from ..transaction_mapping.booked_transaction import to_booked_transaction
 from .lot_state_mapper import buy_lot_state_payload, mutable_lot_state_fields
@@ -87,6 +93,7 @@ class SqlAlchemyCostBasisLotRepository:
         portfolio_id: str,
         security_id: str,
         states_by_source_transaction_id: dict[str, OpenLotState],
+        transition_evidence: CostBasisStateTransitionEvidence,
     ) -> None:
         """Replace the complete open-lot snapshot for one portfolio-security stream."""
 
@@ -95,6 +102,7 @@ class SqlAlchemyCostBasisLotRepository:
             security_id=security_id,
         )
         for lot_row in lot_rows:
+            prior_lineage = calculation_lineage_from_payload(lot_row.calculation_lineage)
             state = states_by_source_transaction_id.get(lot_row.source_transaction_id)
             if state is None:
                 lot_row.open_quantity = Decimal(0)
@@ -108,6 +116,8 @@ class SqlAlchemyCostBasisLotRepository:
                         cost_base=Decimal(0),
                     ),
                     algorithm_id="cost-basis-complete-lot-snapshot",
+                    prior_lineage=prior_lineage,
+                    transition_evidence=transition_evidence,
                 )
                 continue
             lot_row.open_quantity = state.quantity
@@ -117,6 +127,8 @@ class SqlAlchemyCostBasisLotRepository:
                 source_transaction_id=lot_row.source_transaction_id,
                 state=state,
                 algorithm_id="cost-basis-complete-lot-snapshot",
+                prior_lineage=prior_lineage,
+                transition_evidence=transition_evidence,
             )
 
     async def update_selected_open_lot_states(
@@ -125,6 +137,7 @@ class SqlAlchemyCostBasisLotRepository:
         portfolio_id: str,
         security_id: str,
         states_by_source_transaction_id: dict[str, OpenLotState],
+        transition_evidence: CostBasisStateTransitionEvidence,
     ) -> None:
         """Update selected source lots without closing omitted open lots."""
 
@@ -143,6 +156,7 @@ class SqlAlchemyCostBasisLotRepository:
             raise ValueError(f"Selected cost-basis source lots are missing: {missing_ids}")
 
         for lot_row in lot_rows:
+            prior_lineage = calculation_lineage_from_payload(lot_row.calculation_lineage)
             state = states_by_source_transaction_id[lot_row.source_transaction_id]
             lot_row.open_quantity = state.quantity
             lot_row.lot_cost_local = state.cost_local
@@ -151,6 +165,8 @@ class SqlAlchemyCostBasisLotRepository:
                 source_transaction_id=lot_row.source_transaction_id,
                 state=state,
                 algorithm_id="cost-basis-selected-lot-update",
+                prior_lineage=prior_lineage,
+                transition_evidence=transition_evidence,
             )
 
     @staticmethod
@@ -214,6 +230,8 @@ def _open_lot_state_lineage_payload(
     source_transaction_id: str,
     state: OpenLotState,
     algorithm_id: str,
+    prior_lineage: CalculationLineage | None,
+    transition_evidence: CostBasisStateTransitionEvidence,
 ) -> dict[str, object]:
     output = {
         "cost_base": state.cost_base,
@@ -223,7 +241,12 @@ def _open_lot_state_lineage_payload(
     }
     lineage: CalculationLineage = build_cost_basis_state_lineage(
         algorithm_id=algorithm_id,
-        input_payload={"materialized_open_lot_state": output},
+        input_payload={
+            "prior_calculation_lineage": (
+                prior_lineage.lineage_payload() if prior_lineage is not None else None
+            ),
+            "transition": transition_evidence.lineage_payload(),
+        },
         output_payload=output,
     )
     return cast(dict[str, object], lineage.lineage_payload())

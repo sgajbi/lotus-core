@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 
 import pytest
+from portfolio_common.domain.calculation_lineage import build_calculation_lineage
 from portfolio_common.events import TransactionEvent
 
 from src.services.portfolio_transaction_processing_service.app.domain import BookedTransaction
@@ -32,7 +33,7 @@ def _transaction() -> BookedTransaction:
     )
 
 
-def test_mapper_round_trips_every_domain_field() -> None:
+def test_mapper_round_trips_every_event_backed_domain_field() -> None:
     transaction = _transaction()
 
     event = mapper.to_transaction_event(
@@ -67,6 +68,28 @@ def test_mapper_applies_domain_fields_without_losing_event_envelope() -> None:
     assert updated_event.traceparent == event.traceparent
     assert mapper.to_booked_transaction(updated_event) == enriched
     assert mapper.to_booked_transaction(event) == transaction
+
+
+def test_mapper_keeps_persisted_calculation_lineage_out_of_transport_contract() -> None:
+    lineage = build_calculation_lineage(
+        algorithm_id="transaction-cost-basis-calculation",
+        algorithm_version=1,
+        intermediate_precision=28,
+        input_payload={"source_revision": "revision-1"},
+        output_payload={"net_cost": Decimal("255")},
+    )
+    transaction = replace(_transaction(), calculation_lineage=lineage)
+
+    event = mapper.to_transaction_event(
+        transaction,
+        correlation_id="corr-001",
+        traceparent="trace-001",
+    )
+    rehydrated = mapper.to_booked_transaction(event)
+
+    assert "calculation_lineage" not in event.model_dump(mode="python")
+    assert rehydrated.calculation_lineage is None
+    mapper.validate_booked_transaction_event_mapping_contract()
 
 
 def test_mapper_rejects_external_field_drift() -> None:

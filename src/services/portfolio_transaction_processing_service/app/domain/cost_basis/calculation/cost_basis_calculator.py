@@ -1263,12 +1263,34 @@ def _transaction_cost_output(transaction: CostBasisTransaction) -> dict[str, obj
     """Return the complete calculated transaction-cost output persisted atomically."""
 
     return {
+        "allocated_cost_basis_base": _optional_transaction_decimal(
+            transaction, "allocated_cost_basis_base"
+        ),
+        "allocated_cost_basis_local": _optional_transaction_decimal(
+            transaction, "allocated_cost_basis_local"
+        ),
         "fee_components": (transaction.fees.model_dump() if transaction.fees is not None else {}),
         "gross_cost": transaction.gross_cost,
         "net_cost": transaction.net_cost,
         "net_cost_local": transaction.net_cost_local,
+        "realized_capital_pnl_base": _optional_transaction_decimal(
+            transaction, "realized_capital_pnl_base"
+        ),
+        "realized_capital_pnl_local": _optional_transaction_decimal(
+            transaction, "realized_capital_pnl_local"
+        ),
+        "realized_fx_pnl_base": _optional_transaction_decimal(transaction, "realized_fx_pnl_base"),
+        "realized_fx_pnl_local": _optional_transaction_decimal(
+            transaction, "realized_fx_pnl_local"
+        ),
         "realized_gain_loss": transaction.realized_gain_loss,
         "realized_gain_loss_local": transaction.realized_gain_loss_local,
+        "realized_total_pnl_base": _optional_transaction_decimal(
+            transaction, "realized_total_pnl_base"
+        ),
+        "realized_total_pnl_local": _optional_transaction_decimal(
+            transaction, "realized_total_pnl_local"
+        ),
         "transaction_fx_rate": transaction.transaction_fx_rate,
         "transaction_id": transaction.transaction_id,
     }
@@ -1277,14 +1299,25 @@ def _transaction_cost_output(transaction: CostBasisTransaction) -> dict[str, obj
 def _transaction_cost_input(transaction: CostBasisTransaction) -> dict[str, object]:
     """Return normalized effective inputs without prior or newly calculated outputs."""
 
-    return transaction.model_dump(
-        exclude={
-            "calculation_lineage",
-            "error_reason",
-            "gross_cost",
-            "net_cost",
-            "net_cost_local",
-            "realized_gain_loss",
-            "realized_gain_loss_local",
-        }
+    return cast(
+        dict[str, object],
+        transaction.model_dump(
+            exclude={
+                "calculation_lineage",
+                "allocated_cost_basis_base",
+                "allocated_cost_basis_local",
+                "error_reason",
+                "gross_cost",
+                "net_cost",
+                "net_cost_local",
+                "realized_gain_loss",
+                "realized_gain_loss_local",
+                "realized_capital_pnl_base",
+                "realized_capital_pnl_local",
+                "realized_fx_pnl_base",
+                "realized_fx_pnl_local",
+                "realized_total_pnl_base",
+                "realized_total_pnl_local",
+            }
+        ),
     )

@@ -164,6 +164,7 @@ class PreparedCostProcessingUseCase:
             persistence_scope=calculation.open_lot_persistence_scope,
             cost_basis_method=prepared.cost_basis_method,
             average_cost_pool_transition=calculation.average_cost_pool_transition,
+            processed=calculation.processed,
         )
         await _persist_processing_checkpoint(
             processed=calculation.processed,

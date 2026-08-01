@@ -6,6 +6,10 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
 
+from portfolio_common.domain.calculation_lineage import CalculationLineage
+
+BOOKED_TRANSACTION_DERIVED_FIELDS = frozenset({"calculation_lineage"})
+
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class BookedTransaction:
@@ -111,3 +115,4 @@ class BookedTransaction:
     synthetic_flow_source: str | None = None
     created_at: datetime | None = None
     epoch: int | None = None
+    calculation_lineage: CalculationLineage | None = None

@@ -1,6 +1,6 @@
 """Canonical booked transactions and deterministic transaction identity."""
 
-from .booked import BookedTransaction
+from .booked import BOOKED_TRANSACTION_DERIVED_FIELDS, BookedTransaction
 from .booking_metadata import (
     BUY_DEFAULT_POLICY_ID,
     BUY_DEFAULT_POLICY_VERSION,
@@ -66,6 +66,7 @@ __all__ = [
     "BUY_DEFAULT_POLICY_ID",
     "BUY_DEFAULT_POLICY_VERSION",
     "BookedTransaction",
+    "BOOKED_TRANSACTION_DERIVED_FIELDS",
     "BuyValidationReasonCode",
     "CashEntryMode",
     "DIVIDEND_DEFAULT_POLICY_ID",

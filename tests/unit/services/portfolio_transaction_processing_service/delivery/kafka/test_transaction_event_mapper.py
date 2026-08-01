@@ -11,6 +11,9 @@ from src.services.portfolio_transaction_processing_service.app.delivery.kafka im
     transaction_event_mapper as mapper,
 )
 from src.services.portfolio_transaction_processing_service.app.domain import BookedTransaction
+from src.services.portfolio_transaction_processing_service.app.domain.transaction import (
+    BOOKED_TRANSACTION_DERIVED_FIELDS,
+)
 
 
 def _transaction_event() -> TransactionEvent:
@@ -39,10 +42,15 @@ def _transaction_event() -> TransactionEvent:
 
 
 def test_domain_model_covers_every_transaction_business_field() -> None:
-    domain_fields = {field.name for field in fields(BookedTransaction)}
+    domain_fields = {
+        field.name
+        for field in fields(BookedTransaction)
+        if field.name not in BOOKED_TRANSACTION_DERIVED_FIELDS
+    }
     event_business_fields = set(TransactionEvent.model_fields) - GOVERNED_EVENT_ENVELOPE_FIELDS
 
     assert domain_fields == event_business_fields
+    assert BOOKED_TRANSACTION_DERIVED_FIELDS == {"calculation_lineage"}
     mapper.validate_transaction_event_mapping_contract()
 
 

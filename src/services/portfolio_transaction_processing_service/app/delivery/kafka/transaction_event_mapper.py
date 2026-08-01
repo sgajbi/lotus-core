@@ -11,9 +11,14 @@ from ...application import (
     TransactionProcessingIntent,
 )
 from ...domain import BookedTransaction
+from ...domain.transaction import BOOKED_TRANSACTION_DERIVED_FIELDS
 
 _TUPLE_FIELDS = frozenset({"linked_component_ids", "dependency_reference_ids"})
-_DOMAIN_FIELD_NAMES = tuple(field.name for field in fields(BookedTransaction))
+_DOMAIN_FIELD_NAMES = tuple(
+    field.name
+    for field in fields(BookedTransaction)
+    if field.name not in BOOKED_TRANSACTION_DERIVED_FIELDS
+)
 _DOMAIN_FIELD_SET = frozenset(_DOMAIN_FIELD_NAMES)
 
 

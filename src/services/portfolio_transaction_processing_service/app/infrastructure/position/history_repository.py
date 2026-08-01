@@ -256,7 +256,9 @@ def _to_booked_transaction(row: Transaction) -> BookedTransaction:
             value = field.default
         else:
             raise ValueError(f"Transaction row is missing required field {field.name!r}")
-        if field.name in _TUPLE_FIELDS and value is not None:
+        if field.name == "calculation_lineage":
+            value = calculation_lineage_from_payload(value)
+        elif field.name in _TUPLE_FIELDS and value is not None:
             value = tuple(value)
         payload[field.name] = value
     return BookedTransaction(**payload)
