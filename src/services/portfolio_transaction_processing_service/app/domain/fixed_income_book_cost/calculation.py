@@ -285,9 +285,13 @@ def _resolve_period_rate(
 ) -> Decimal:
     convention = policy.yield_application_convention
     if convention is YieldApplicationConvention.PER_PERIOD_EFFECTIVE:
-        assert period.supplied_period_rate is not None
+        if period.supplied_period_rate is None:
+            raise AmortizedCostCalculationError(
+                "per-period-effective period requires supplied_period_rate"
+            )
         return period.supplied_period_rate
-    assert annual_yield is not None
+    if annual_yield is None:
+        raise AmortizedCostCalculationError("annual-yield period requires annual_yield")
     if convention is YieldApplicationConvention.ANNUAL_NOMINAL_SIMPLE:
         return annual_yield * period.year_fraction
     if convention is YieldApplicationConvention.ANNUAL_EFFECTIVE:
