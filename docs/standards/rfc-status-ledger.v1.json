@@ -6382,25 +6382,21 @@
       "title": "RFC-AMORTIZATION-01 Canonical Fixed Income Amortization & Accretion Specification (Premium / Discount / OID)",
       "family": "transaction",
       "path": "docs/rfc-transaction-specs/transactions/misc/RFC-AMORTIZATION-01 Canonical Fixed Income Amortization & Accretion Specification.md",
-      "status": "active_current_state",
+      "status": "target_state",
       "owner": "lotus-core",
       "affected_services": [
         "ingestion_service",
-        "persistence_service",
-        "cost_calculator_service",
-        "cashflow_calculator_service",
-        "position_calculator",
+        "portfolio_transaction_processing_service",
+        "position_valuation_calculator",
+        "financial_reconciliation_service",
         "query_service"
       ],
       "affected_routes": [],
       "affected_data_models": [
         "transactions",
-        "cashflows",
-        "position history",
-        "transaction metadata"
+        "position_lot_state"
       ],
       "implementation_refs": [
-        "docs/rfc-transaction-specs/README.md",
         "docs/rfc-transaction-specs/transactions/misc/RFC-AMORTIZATION-01 Canonical Fixed Income Amortization & Accretion Specification.md"
       ],
       "test_evidence": [
@@ -6411,10 +6407,12 @@
         "docs/rfc-transaction-specs/transactions/misc/RFC-AMORTIZATION-01 Canonical Fixed Income Amortization & Accretion Specification.md"
       ],
       "wiki_links": [
-        "wiki/RFC-Index.md"
+        "wiki/RFC-Index.md",
+        "wiki/Transaction-and-Product-Lifecycle-Capabilities.md"
       ],
       "supported_feature_refs": [
-        "docs/features/supported-features.md"
+        "docs/features/supported-features.md",
+        "docs/features/transaction-and-product-lifecycle-capabilities.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
@@ -6422,7 +6420,7 @@
       "supersedes": [],
       "superseded_by": [],
       "deprecation_relationship": "none",
-      "status_rationale": "Status seeded from current governed RFC document location; refine when this RFC is reopened or implemented."
+      "status_rationale": "Target-state contract under #478. Production amortized-cost profiles, period state, disposal integration, and query evidence are not yet implemented; the lifecycle capability catalog remains target_not_implemented."
     },
     {
       "rfc_id": "RFC-CONVERSION-01",
