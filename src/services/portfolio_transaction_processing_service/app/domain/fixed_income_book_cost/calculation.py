@@ -170,7 +170,7 @@ def calculate_amortized_cost_schedule(
         raise AmortizedCostReconciliationError(
             "final amortized cost does not reconcile to redemption value within tolerance"
         )
-    output_payload = _output_payload(
+    output_payload = amortized_cost_schedule_output_payload(
         direction=direction,
         initial=initial,
         redemption=redemption,
@@ -343,7 +343,7 @@ def _input_payload(
     }
 
 
-def _output_payload(
+def amortized_cost_schedule_output_payload(
     *,
     direction: AmortizedCostDirection,
     initial: Decimal,
@@ -352,6 +352,8 @@ def _output_payload(
     residual: Decimal,
     periods: tuple[AmortizationPeriodResult, ...],
 ) -> dict[str, object]:
+    """Return the canonical normalized schedule output bound by calculation lineage."""
+
     return {
         "direction": direction.value,
         "final_amortized_cost_local": final,

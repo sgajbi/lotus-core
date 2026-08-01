@@ -33,6 +33,14 @@ from .policy import (
     YieldApplicationConvention,
     classify_amortized_cost_direction,
 )
+from .profile import (
+    LOT_AMORTIZED_COST_PROFILE_ID_VERSION,
+    LotAmortizedCostPeriodLedgerEntry,
+    LotAmortizedCostProfileVersion,
+    lot_amortized_cost_profile_id,
+    materialize_active_lot_amortized_cost_profile,
+    materialize_parked_lot_amortized_cost_profile,
+)
 from .resolution import (
     AmortizedCostInputResolutionError,
     LotAmortizedCostAuthorityCacheKey,
@@ -51,6 +59,7 @@ from .source_facts import (
 __all__ = [
     "AMORTIZED_COST_SCHEDULE_ALGORITHM_ID",
     "AMORTIZED_COST_SCHEDULE_ALGORITHM_VERSION",
+    "LOT_AMORTIZED_COST_PROFILE_ID_VERSION",
     "AmortizedCostAssignmentCacheKey",
     "AmortizedCostAssignmentStatus",
     "AmortizedCostAuthorityError",
@@ -70,6 +79,8 @@ __all__ = [
     "AmortizationPeriodResult",
     "DiscountOriginClassification",
     "LotAmortizationScheduleFact",
+    "LotAmortizedCostPeriodLedgerEntry",
+    "LotAmortizedCostProfileVersion",
     "LotAmortizedCostAuthorityCacheKey",
     "LotAmortizedCostBasisFact",
     "LotAmortizedCostPolicyAssignment",
@@ -83,6 +94,9 @@ __all__ = [
     "amortization_replay_start_for_assignment_correction",
     "calculate_amortized_cost_schedule",
     "classify_amortized_cost_direction",
+    "lot_amortized_cost_profile_id",
+    "materialize_active_lot_amortized_cost_profile",
+    "materialize_parked_lot_amortized_cost_profile",
     "resolve_amortized_cost_assignment",
     "resolve_lot_amortized_cost_inputs",
     "validate_no_overlapping_active_amortized_cost_assignments",
