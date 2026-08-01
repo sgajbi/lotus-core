@@ -219,6 +219,32 @@ class PositionValuationInputs:
 
 
 @dataclass(frozen=True, slots=True)
+class PositionValuationEconomicInputs:
+    """Framework-free numeric inputs consumed by local valuation economics."""
+
+    source_value: Decimal
+    signed_quantity: Decimal
+    signed_face_amount: Decimal | None = None
+    principal_factor: Decimal | None = None
+    signed_current_principal: Decimal | None = None
+    contract_multiplier: Decimal | None = None
+    calculated_accrued_income: Decimal | None = None
+    supplied_accrued_income: Decimal | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class PositionValuationLocalEconomics:
+    """Normalized local-currency economics before FX and lineage decoration."""
+
+    current_principal: Decimal | None
+    clean_value_local: Decimal | None
+    accrued_income_local: Decimal | None
+    total_market_value_local: Decimal | None
+    notional_exposure_local: Decimal | None
+    settlement_variation_local: Decimal | None
+
+
+@dataclass(frozen=True, slots=True)
 class PositionValuationResult:
     """Distinct supported measures normalized once by the owning output policy."""
 
@@ -287,37 +313,20 @@ def calculate_position_valuation(
     """Apply one declared policy without quote, product, or pricing inference."""
 
     evidence = inputs.evidence
-    _validate_source_value(policy, inputs.source_value)
-    # Policy-driven scaling uses the governed working precision, while the
-    # normalized-output boundary below owns the ledger policy and its lineage.
-    with localcontext(
-        Context(
-            prec=POSITION_VALUATION_INTERMEDIATE_PRECISION,
-            rounding=POSITION_VALUATION_INTERMEDIATE_ROUNDING,
-        )
-    ):
-        current_principal = _resolve_current_principal(policy, inputs)
-        scaled_value = _scale_source_value(policy, inputs, current_principal)
-        accrued_income = _resolve_accrued_income(policy, inputs)
-        fx_rate = _resolve_fx_rate(policy, inputs)
-
-        clean_value: Decimal | None = None
-        total_market_value: Decimal | None = None
-        notional_exposure: Decimal | None = None
-        settlement_variation: Decimal | None = None
-
-        if policy.output_measure is ValuationOutputMeasure.MARKET_VALUE:
-            if policy.input_basis is ValuationInputBasis.PERCENT_OF_PRINCIPAL_DIRTY:
-                total_market_value = scaled_value
-            elif policy.input_basis is ValuationInputBasis.PERCENT_OF_PRINCIPAL_CLEAN:
-                clean_value = scaled_value
-                total_market_value = scaled_value + (accrued_income or Decimal(0))
-            else:
-                total_market_value = scaled_value + (accrued_income or Decimal(0))
-        elif policy.output_measure is ValuationOutputMeasure.NOTIONAL_EXPOSURE:
-            notional_exposure = scaled_value
-        else:
-            settlement_variation = scaled_value
+    local_economics = calculate_position_valuation_local_economics(
+        policy=policy,
+        inputs=PositionValuationEconomicInputs(
+            source_value=inputs.source_value,
+            signed_quantity=inputs.signed_quantity,
+            signed_face_amount=inputs.signed_face_amount,
+            principal_factor=inputs.principal_factor,
+            signed_current_principal=inputs.signed_current_principal,
+            contract_multiplier=inputs.contract_multiplier,
+            calculated_accrued_income=inputs.calculated_accrued_income,
+            supplied_accrued_income=inputs.supplied_accrued_income,
+        ),
+    )
+    fx_rate = _resolve_fx_rate(policy, inputs)
 
     source_currency = _normalize_currency(inputs.source_currency)
     reporting_currency = _normalize_currency(inputs.reporting_currency)
@@ -327,12 +336,7 @@ def calculate_position_valuation(
         evidence=evidence,
         source_currency=source_currency,
         reporting_currency=reporting_currency,
-        current_principal=current_principal,
-        clean_value=clean_value,
-        accrued_income=accrued_income,
-        total_market_value=total_market_value,
-        notional_exposure=notional_exposure,
-        settlement_variation=settlement_variation,
+        local_economics=local_economics,
         fx_rate=fx_rate,
     )
     normalized = normalized_calculation.outputs
@@ -355,6 +359,109 @@ def calculate_position_valuation(
     )
 
 
+def calculate_position_valuation_local_economics(
+    *,
+    policy: PositionValuationPolicy,
+    inputs: PositionValuationEconomicInputs,
+) -> PositionValuationLocalEconomics:
+    """Calculate normalized local economics without framework or source-lineage concerns."""
+
+    _validate_source_value(policy, inputs.source_value)
+    with localcontext(
+        Context(
+            prec=POSITION_VALUATION_INTERMEDIATE_PRECISION,
+            rounding=POSITION_VALUATION_INTERMEDIATE_ROUNDING,
+        )
+    ):
+        current_principal = _resolve_current_principal(policy, inputs)
+        scaled_value = _scale_source_value(policy, inputs, current_principal)
+        accrued_income = _resolve_accrued_income(policy, inputs)
+
+        clean_value: Decimal | None = None
+        total_market_value: Decimal | None = None
+        notional_exposure: Decimal | None = None
+        settlement_variation: Decimal | None = None
+
+        if policy.output_measure is ValuationOutputMeasure.MARKET_VALUE:
+            if policy.input_basis is ValuationInputBasis.PERCENT_OF_PRINCIPAL_DIRTY:
+                total_market_value = scaled_value
+            elif policy.input_basis is ValuationInputBasis.PERCENT_OF_PRINCIPAL_CLEAN:
+                clean_value = scaled_value
+                total_market_value = scaled_value + (accrued_income or Decimal(0))
+            else:
+                total_market_value = scaled_value + (accrued_income or Decimal(0))
+        elif policy.output_measure is ValuationOutputMeasure.NOTIONAL_EXPOSURE:
+            notional_exposure = scaled_value
+        else:
+            settlement_variation = scaled_value
+
+    return _normalize_local_economics(
+        current_principal=current_principal,
+        clean_value=clean_value,
+        accrued_income=accrued_income,
+        total_market_value=total_market_value,
+        notional_exposure=notional_exposure,
+        settlement_variation=settlement_variation,
+    )
+
+
+def _normalize_local_economics(
+    *,
+    current_principal: Decimal | None,
+    clean_value: Decimal | None,
+    accrued_income: Decimal | None,
+    total_market_value: Decimal | None,
+    notional_exposure: Decimal | None,
+    settlement_variation: Decimal | None,
+) -> PositionValuationLocalEconomics:
+    policy = POSITION_VALUATION_LEDGER_OUTPUT_V1
+    normalized_current_principal = (
+        policy.normalize(current_principal, field_name="current_principal")
+        if current_principal is not None
+        else None
+    )
+    normalized_clean_value = (
+        policy.normalize(clean_value, field_name="clean_value_local")
+        if clean_value is not None
+        else None
+    )
+    normalized_accrued_income = (
+        policy.normalize(accrued_income, field_name="accrued_income_local")
+        if accrued_income is not None
+        else None
+    )
+    normalized_notional = (
+        policy.normalize(notional_exposure, field_name="notional_exposure_local")
+        if notional_exposure is not None
+        else None
+    )
+    normalized_settlement = (
+        policy.normalize(settlement_variation, field_name="settlement_variation_local")
+        if settlement_variation is not None
+        else None
+    )
+    if normalized_clean_value is not None:
+        normalized_total_market_value = policy.add(
+            normalized_clean_value,
+            normalized_accrued_income or Decimal(0),
+            field_name="total_market_value_local",
+        )
+    else:
+        normalized_total_market_value = (
+            policy.normalize(total_market_value, field_name="total_market_value_local")
+            if total_market_value is not None
+            else None
+        )
+    return PositionValuationLocalEconomics(
+        current_principal=normalized_current_principal,
+        clean_value_local=normalized_clean_value,
+        accrued_income_local=normalized_accrued_income,
+        total_market_value_local=normalized_total_market_value,
+        notional_exposure_local=normalized_notional,
+        settlement_variation_local=normalized_settlement,
+    )
+
+
 def _normalize_outputs(
     *,
     valuation_policy: PositionValuationPolicy,
@@ -362,52 +469,16 @@ def _normalize_outputs(
     evidence: PositionValuationEvidence,
     source_currency: str,
     reporting_currency: str,
-    current_principal: Decimal | None,
-    clean_value: Decimal | None,
-    accrued_income: Decimal | None,
-    total_market_value: Decimal | None,
-    notional_exposure: Decimal | None,
-    settlement_variation: Decimal | None,
+    local_economics: PositionValuationLocalEconomics,
     fx_rate: Decimal,
 ) -> _NormalizedPositionCalculation:
     policy = POSITION_VALUATION_LEDGER_OUTPUT_V1
-    current_principal = (
-        policy.normalize(current_principal, field_name="current_principal")
-        if current_principal is not None
-        else None
-    )
-    clean_value = (
-        policy.normalize(clean_value, field_name="clean_value_local")
-        if clean_value is not None
-        else None
-    )
-    accrued_income = (
-        policy.normalize(accrued_income, field_name="accrued_income_local")
-        if accrued_income is not None
-        else None
-    )
-    notional_exposure = (
-        policy.normalize(notional_exposure, field_name="notional_exposure_local")
-        if notional_exposure is not None
-        else None
-    )
-    settlement_variation = (
-        policy.normalize(settlement_variation, field_name="settlement_variation_local")
-        if settlement_variation is not None
-        else None
-    )
-    if clean_value is not None:
-        total_market_value = policy.add(
-            clean_value,
-            accrued_income or Decimal(0),
-            field_name="total_market_value_local",
-        )
-    else:
-        total_market_value = (
-            policy.normalize(total_market_value, field_name="total_market_value_local")
-            if total_market_value is not None
-            else None
-        )
+    current_principal = local_economics.current_principal
+    clean_value = local_economics.clean_value_local
+    accrued_income = local_economics.accrued_income_local
+    total_market_value = local_economics.total_market_value_local
+    notional_exposure = local_economics.notional_exposure_local
+    settlement_variation = local_economics.settlement_variation_local
 
     clean_value_reporting = (
         policy.multiply(clean_value, fx_rate, field_name="clean_value_reporting")
@@ -618,7 +689,7 @@ def _validate_source_value(policy: PositionValuationPolicy, source_value: Decima
 
 def _resolve_current_principal(
     policy: PositionValuationPolicy,
-    inputs: PositionValuationInputs,
+    inputs: PositionValuationEconomicInputs,
 ) -> Decimal | None:
     if policy.position_scaling is not PositionScaling.PRINCIPAL:
         return None
@@ -637,7 +708,7 @@ def _resolve_current_principal(
 
 def _scale_source_value(
     policy: PositionValuationPolicy,
-    inputs: PositionValuationInputs,
+    inputs: PositionValuationEconomicInputs,
     current_principal: Decimal | None,
 ) -> Decimal:
     if policy.position_scaling is PositionScaling.NONE:
@@ -656,7 +727,7 @@ def _scale_source_value(
 
 def _resolve_accrued_income(
     policy: PositionValuationPolicy,
-    inputs: PositionValuationInputs,
+    inputs: PositionValuationEconomicInputs,
 ) -> Decimal | None:
     treatment = policy.accrued_income_treatment
     if treatment in {

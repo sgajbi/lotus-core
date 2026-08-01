@@ -14,6 +14,7 @@ from portfolio_common.domain.valuation import (
     FinancialSourceReference,
     FxConversionPolicy,
     PositionScaling,
+    PositionValuationEconomicInputs,
     PositionValuationEvidence,
     PositionValuationInputs,
     PositionValuationPolicy,
@@ -23,6 +24,7 @@ from portfolio_common.domain.valuation import (
     ValuationOutputMeasure,
     build_calculation_lineage,
     calculate_position_valuation,
+    calculate_position_valuation_local_economics,
     canonical_content_hash,
 )
 
@@ -120,6 +122,45 @@ def test_unit_price_and_nav_are_scaled_by_position_units(
     assert (
         result.lineage.numeric_output_policy.policy_id == "position-valuation-ledger-output@1.0.0"
     )
+
+
+def test_local_economics_matches_lineaged_unit_price_result() -> None:
+    policy = _policy(input_basis=ValuationInputBasis.UNIT_PRICE)
+
+    economics = calculate_position_valuation_local_economics(
+        policy=policy,
+        inputs=PositionValuationEconomicInputs(
+            source_value=Decimal("32.50"),
+            signed_quantity=Decimal("125"),
+        ),
+    )
+    result = calculate_position_valuation(policy=policy, inputs=_inputs())
+
+    assert economics.total_market_value_local == result.total_market_value_local
+    assert economics.clean_value_local is result.clean_value_local is None
+    assert economics.current_principal is result.current_principal is None
+
+
+def test_local_economics_normalizes_explicit_face_principal_without_evidence() -> None:
+    economics = calculate_position_valuation_local_economics(
+        policy=_policy(
+            input_basis=ValuationInputBasis.PERCENT_OF_PRINCIPAL_DIRTY,
+            principal_basis=PrincipalBasis.FACE_AMOUNT,
+            scaling=PositionScaling.PRINCIPAL,
+            accrued=AccruedIncomeTreatment.INCLUDED_IN_SOURCE_VALUE,
+            denominator=Decimal("100"),
+        ),
+        inputs=PositionValuationEconomicInputs(
+            source_value=Decimal("99.25"),
+            signed_quantity=Decimal("1000000"),
+            signed_face_amount=Decimal("1000000"),
+        ),
+    )
+
+    assert economics.current_principal == Decimal("1000000.0000000000")
+    assert economics.total_market_value_local == Decimal("992500.0000000000")
+    assert economics.clean_value_local is None
+    assert economics.accrued_income_local is None
 
 
 def test_position_lineage_changes_on_source_revision_even_when_value_is_equal() -> None:
