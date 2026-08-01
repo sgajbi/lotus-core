@@ -40,6 +40,12 @@ conventions, requires clean-cost and exact-scope assignment authority, and makes
 park explicitly. The RFC ledger now reports this work truthfully as `target_state`; capability docs
 and wiki remain `target_not_implemented` until the runtime is complete.
 
+The transaction-processing domain now owns a framework-independent amortized-cost policy vocabulary.
+It validates method/convention compatibility, policy identity and version, fee treatment, and
+residual tolerance fail closed. Premium, discount, and par direction is derived from governed
+opening book cost and redemption value rather than broad instrument labels. This is an additive
+foundation only; it does not promote amortized cost to a supported runtime capability.
+
 ## Same-Pattern Review
 
 The review covers both remaining `resolve_valuation_unit_price` call sites, authoritative price and
@@ -59,10 +65,12 @@ implemented.
 
 ## Validation
 
-- signed commits `fb558698e`, `2ceec9e34`, `7f76491fe`, and `fc79da648`;
+- signed commits `fb558698e`, `2ceec9e34`, `7f76491fe`, `fc79da648`, `47f059684`, and
+  `3deb33d9b`;
 - 35 warning-strict authoritative valuation tests;
 - 49 warning-strict shared valuation/calculator tests;
 - 77 warning-strict reconciliation domain/service/repository tests;
+- 18 warning-strict amortized-cost policy tests;
 - scoped Ruff lint/format, MyPy, RFC ledger, architecture-documentation, transaction-capability,
   wiki, JSON, and diff-hygiene guards.
 
