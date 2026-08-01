@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 
 from ..calculation_lineage import FinancialSourceReference, canonical_content_hash
 from ..currency import normalize_currency_code
-from .source_versions import latest_source_versions
+from ..source_versions import latest_source_versions
 
 if TYPE_CHECKING:
     from .position_valuation import PositionValuationPolicy

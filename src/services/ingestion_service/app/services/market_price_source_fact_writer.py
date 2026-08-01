@@ -8,6 +8,7 @@ from datetime import date
 from typing import TypeVar
 
 from portfolio_common.database_models import MarketPriceSourceFactRecord
+from portfolio_common.domain.source_versions import latest_source_versions
 from portfolio_common.domain.valuation import (
     FinancialSourceReference,
     MarketPriceQuoteBasis,
@@ -17,7 +18,6 @@ from portfolio_common.domain.valuation import (
     OverlappingMarketPriceSourceFactError,
     ValuationAuthorityScope,
 )
-from portfolio_common.domain.valuation.source_versions import latest_source_versions
 from sqlalchemy import select, text, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
