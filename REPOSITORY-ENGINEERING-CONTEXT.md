@@ -3424,6 +3424,17 @@ Most relevant current governance:
      bounded wait and consume the eventual outcome of cancellation-resistant driver cleanup. Reuse
      `tests.test_support.async_task_coordination` for this pattern; ordinary barriers whose complete
      participant set is already under one bounded gather do not need an extra supervisor.
+232. A financial calculation receipt accepted by transaction persistence must bind the complete
+     final durable row, not only the incoming shape evaluated before conflict resolution. Preserve
+     transaction upsert's optional-field retention semantics, return the row from the atomic
+     PostgreSQL conflict statement, rehydrate internal calculation lineage after the public event
+     mapper intentionally excludes it, and rebuild plus rewrite the receipt only when the returned
+     row changes its output identity. Verify the final returned receipt before staging downstream
+     effects. Governed transaction, settlement, creation, and position-ordering timestamps must be
+     timezone-aware; reject ambiguous values and normalize aware values to UTC before hashing or
+     constructing the deterministic ordering key. Do not silently attach UTC at a financial
+     calculation boundary. A parser that still owns an explicit legacy timestamp compatibility
+     contract requires its own downstream-safe migration rather than an incidental local change.
 
 ## Context Maintenance Rule
 
