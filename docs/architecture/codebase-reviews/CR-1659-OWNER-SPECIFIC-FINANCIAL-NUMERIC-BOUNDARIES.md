@@ -205,6 +205,12 @@ identity, and public response shapes remain unchanged.
 - The closure guard suite passes 100 tests; `make calculated-output-policy-guard` reports eight
   classified policies and `make financial-numeric-persistence-guard` reports 98 Numeric columns
   across 31 tables, 97 bounded and one exact-unbounded, with zero planned gaps.
+- Four exact-source PostgreSQL lifecycle proofs pass in 403.47 seconds: FIFO transaction cost,
+  lot-state and chained position-history lineage; AVCO source and pool lineage; deterministic
+  position-timeseries replay; and owned-lease portfolio-timeseries persistence with its completion
+  event. The preceding cached-image run stopped before migrations `c134` through `c138` and failed
+  on absent columns; rebuilding the branch-qualified runtime converted all four to green and is
+  retained only as invalid stale-runtime diagnostic evidence.
 
 ## Compatibility and remaining work
 
