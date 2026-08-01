@@ -111,6 +111,11 @@ def build_position_history(
     prior_lineage = anchor.calculation_lineage if anchor is not None else None
     records: list[PositionHistoryRecord] = []
     for transaction in ordered_transactions:
+        transaction_timestamp = _canonical_ordering_datetime(
+            transaction.transaction_date,
+            field_name="transaction_date",
+        )
+        position_date = transaction_timestamp.date()
         previous_balance = current_balance
         current_balance = calculate_next_position_state(previous_balance, transaction)
         output_payload = {
@@ -118,7 +123,7 @@ def build_position_history(
             "cost_basis_local": current_balance.cost_basis_local,
             "epoch": epoch,
             "portfolio_id": transaction.portfolio_id,
-            "position_date": transaction.transaction_date.date(),
+            "position_date": position_date,
             "quantity": current_balance.quantity,
             "security_id": transaction.security_id,
             "transaction_id": transaction.transaction_id,
@@ -140,7 +145,7 @@ def build_position_history(
             portfolio_id=transaction.portfolio_id,
             security_id=transaction.security_id,
             transaction_id=transaction.transaction_id,
-            position_date=transaction.transaction_date.date(),
+            position_date=position_date,
             quantity=current_balance.quantity,
             cost_basis=current_balance.cost_basis,
             cost_basis_local=current_balance.cost_basis_local,
