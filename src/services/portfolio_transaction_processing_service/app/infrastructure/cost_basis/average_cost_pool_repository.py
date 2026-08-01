@@ -8,6 +8,7 @@ from portfolio_common.database_models import AverageCostPoolState, PositionLotSt
 from portfolio_common.database_models import Transaction as DBTransaction
 from portfolio_common.domain.calculation_lineage import (
     CalculationLineage,
+    calculation_lineage_binds_output,
     calculation_lineage_from_payload,
 )
 from portfolio_common.events import TransactionEvent
@@ -279,27 +280,52 @@ class SqlAlchemyAverageCostPoolRepository:
             .scalars()
             .first()
         )
-        source_count, source_quantity, source_cost_local, source_cost_base = (
+        source_rows = (
             await self._session.execute(
                 select(
-                    func.count(PositionLotState.id),
-                    func.coalesce(func.sum(PositionLotState.open_quantity), Decimal(0)),
-                    func.coalesce(func.sum(PositionLotState.lot_cost_local), Decimal(0)),
-                    func.coalesce(func.sum(PositionLotState.lot_cost_base), Decimal(0)),
-                ).where(
+                    PositionLotState.source_transaction_id,
+                    PositionLotState.lot_id,
+                    PositionLotState.portfolio_id,
+                    PositionLotState.instrument_id,
+                    PositionLotState.security_id,
+                    PositionLotState.acquisition_date,
+                    PositionLotState.original_quantity,
+                    PositionLotState.open_quantity,
+                    PositionLotState.lot_cost_local,
+                    PositionLotState.lot_cost_base,
+                    PositionLotState.accrued_interest_paid_local,
+                    PositionLotState.economic_event_id,
+                    PositionLotState.linked_transaction_group_id,
+                    PositionLotState.calculation_policy_id,
+                    PositionLotState.calculation_policy_version,
+                    PositionLotState.source_system,
+                    PositionLotState.calculation_lineage,
+                )
+                .where(
                     func.trim(PositionLotState.portfolio_id) == normalized_portfolio_id,
                     func.trim(PositionLotState.security_id) == normalized_security_id,
                 )
+                .order_by(PositionLotState.source_transaction_id)
             )
-        ).one()
+        ).all()
+        source_count = len(source_rows)
+        source_quantity = sum((row.open_quantity for row in source_rows), Decimal(0))
+        source_cost_local = sum((row.lot_cost_local for row in source_rows), Decimal(0))
+        source_cost_base = sum((row.lot_cost_base for row in source_rows), Decimal(0))
         return AverageCostPoolPersistedSummary(
-            source_count=int(source_count),
+            source_count=source_count,
             source_quantity=source_quantity,
             source_cost_local=source_cost_local,
             source_cost_base=source_cost_base,
+            source_lineage_valid=all(_source_row_lineage_is_valid(row) for row in source_rows),
             pool_quantity=pool.pool_quantity if pool is not None else None,
             pool_cost_local=pool.pool_cost_local if pool is not None else None,
             pool_cost_base=pool.pool_cost_base if pool is not None else None,
+            pool_instrument_id=pool.instrument_id if pool is not None else None,
+            pool_representative_source_transaction_id=(
+                pool.representative_source_transaction_id if pool is not None else None
+            ),
+            pool_state_version=pool.state_version if pool is not None else None,
             pool_calculation_lineage=(
                 calculation_lineage_from_payload(pool.calculation_lineage)
                 if pool is not None
@@ -522,6 +548,54 @@ class SqlAlchemyAverageCostPoolRepository:
                 },
                 output_payload=output_payload,
             ).lineage_payload()
+
+
+_SOURCE_STATE_LINEAGE_ALGORITHMS = frozenset(
+    {
+        "average-cost-source-rebuild",
+        "average-cost-source-transition",
+        "cost-basis-complete-lot-snapshot",
+        "cost-basis-selected-lot-update",
+    }
+)
+
+
+def _source_row_lineage_is_valid(row: Any) -> bool:
+    try:
+        lineage = calculation_lineage_from_payload(row.calculation_lineage)
+    except (TypeError, ValueError):
+        return False
+    if lineage is None:
+        return False
+    if lineage.algorithm_id == "cost-basis-opening-lot-materialization":
+        output_payload = {
+            "acquisition_date": row.acquisition_date,
+            "accrued_interest_paid_local": row.accrued_interest_paid_local,
+            "calculation_policy_id": row.calculation_policy_id,
+            "calculation_policy_version": row.calculation_policy_version,
+            "economic_event_id": row.economic_event_id,
+            "instrument_id": row.instrument_id,
+            "linked_transaction_group_id": row.linked_transaction_group_id,
+            "lot_cost_base": row.lot_cost_base,
+            "lot_cost_local": row.lot_cost_local,
+            "lot_id": row.lot_id,
+            "open_quantity": row.open_quantity,
+            "original_quantity": row.original_quantity,
+            "portfolio_id": row.portfolio_id,
+            "security_id": row.security_id,
+            "source_system": row.source_system,
+            "source_transaction_id": row.source_transaction_id,
+        }
+    elif lineage.algorithm_id in _SOURCE_STATE_LINEAGE_ALGORITHMS:
+        output_payload = {
+            "cost_base": row.lot_cost_base,
+            "cost_local": row.lot_cost_local,
+            "quantity": row.open_quantity,
+            "source_transaction_id": row.source_transaction_id,
+        }
+    else:
+        return False
+    return bool(calculation_lineage_binds_output(lineage, output_payload=output_payload))
 
 
 def _open_lot_state_payload(state: OpenLotState) -> dict[str, object]:

@@ -81,7 +81,7 @@ async def persist_open_lot_state(
         )
 
     if should_update_lot_states:
-        assert transition_evidence is not None
+        required_transition_evidence = _require_transition_evidence(transition_evidence)
         update_lot_states = (
             lot_states.update_selected_open_lot_states
             if persistence_scope is OpenLotPersistenceScope.SELECTED_LOTS
@@ -91,11 +91,11 @@ async def persist_open_lot_state(
             portfolio_id=transaction.portfolio_id,
             security_id=transaction.security_id,
             states_by_source_transaction_id=open_lot_states,
-            transition_evidence=transition_evidence,
+            transition_evidence=required_transition_evidence,
         )
 
     if should_persist_complete_average_cost_pool:
-        assert transition_evidence is not None
+        required_transition_evidence = _require_transition_evidence(transition_evidence)
         checkpoint = AverageCostPoolCheckpoint.from_open_lot_states(
             portfolio_id=transaction.portfolio_id,
             instrument_id=transaction.instrument_id,
@@ -105,13 +105,23 @@ async def persist_open_lot_state(
         checkpoint_lineage = build_cost_basis_state_lineage(
             algorithm_id="average-cost-pool-processing-rebuild",
             input_payload={
-                "transition_evidence": transition_evidence.lineage_payload(),
+                "transition_evidence": required_transition_evidence.lineage_payload(),
             },
             output_payload=_average_cost_pool_checkpoint_output(checkpoint),
         )
         await average_cost_pools.upsert_average_cost_pool_checkpoint(
             replace(checkpoint, calculation_lineage=checkpoint_lineage)
         )
+
+
+def _require_transition_evidence(
+    evidence: CostBasisStateTransitionEvidence | None,
+) -> CostBasisStateTransitionEvidence:
+    """Fail closed when a persistence path lacks its calculation receipt."""
+
+    if evidence is None:
+        raise ValueError("Cost-basis state persistence requires transition evidence")
+    return evidence
 
 
 def _average_cost_pool_checkpoint_output(

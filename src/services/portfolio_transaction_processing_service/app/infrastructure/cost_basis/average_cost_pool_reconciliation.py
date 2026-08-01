@@ -8,7 +8,10 @@ from decimal import Decimal
 
 from portfolio_common.database_models import Portfolio
 from portfolio_common.database_models import Transaction as DBTransaction
-from portfolio_common.domain.calculation_lineage import CalculationLineage
+from portfolio_common.domain.calculation_lineage import (
+    CalculationLineage,
+    calculation_lineage_binds_output,
+)
 from portfolio_common.domain.transaction.type_registry import TRANSACTION_TYPE_REGISTRY
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,6 +24,7 @@ from ...domain import (
 )
 from ...domain.cost_basis import (
     LOT_OPENING_BEHAVIORS,
+    AverageCostPoolCheckpoint,
     build_average_cost_pool_rebuild_lineage,
 )
 from ...ports import (
@@ -178,6 +182,7 @@ class SqlAlchemyAverageCostPoolReconciliationAdapter:
                         expected_quantity=expected_quantity,
                         expected_cost_local=expected_cost_local,
                         expected_cost_base=expected_cost_base,
+                        expected_checkpoint=plan.checkpoint,
                         expected_checkpoint_lineage=expected_checkpoint_lineage,
                     ):
                         return _assessment(
@@ -201,6 +206,7 @@ class SqlAlchemyAverageCostPoolReconciliationAdapter:
                             reason_code=_drift_reason(
                                 persisted_before,
                                 expected_source_count=expected_source_count,
+                                expected_checkpoint=plan.checkpoint,
                                 expected_checkpoint_lineage=expected_checkpoint_lineage,
                             ),
                         )
@@ -221,6 +227,7 @@ class SqlAlchemyAverageCostPoolReconciliationAdapter:
                         expected_quantity=expected_quantity,
                         expected_cost_local=expected_cost_local,
                         expected_cost_base=expected_cost_base,
+                        expected_checkpoint=plan.checkpoint,
                         expected_checkpoint_lineage=expected_checkpoint_lineage,
                     ):
                         raise ValueError(
@@ -262,9 +269,13 @@ def _empty_summary() -> AverageCostPoolPersistedSummary:
         source_quantity=Decimal(0),
         source_cost_local=Decimal(0),
         source_cost_base=Decimal(0),
+        source_lineage_valid=True,
         pool_quantity=None,
         pool_cost_local=None,
         pool_cost_base=None,
+        pool_instrument_id=None,
+        pool_representative_source_transaction_id=None,
+        pool_state_version=None,
         pool_calculation_lineage=None,
     )
 
@@ -276,18 +287,25 @@ def _summary_matches_plan(
     expected_quantity: Decimal,
     expected_cost_local: Decimal,
     expected_cost_base: Decimal,
+    expected_checkpoint: AverageCostPoolCheckpoint,
     expected_checkpoint_lineage: CalculationLineage,
 ) -> bool:
     return bool(
         summary.source_count == expected_source_count
+        and summary.source_lineage_valid
         and summary.source_quantity == expected_quantity
         and summary.source_cost_local == expected_cost_local
         and summary.source_cost_base == expected_cost_base
         and summary.pool_quantity == expected_quantity
         and summary.pool_cost_local == expected_cost_local
         and summary.pool_cost_base == expected_cost_base
+        and summary.pool_instrument_id == expected_checkpoint.instrument_id
+        and summary.pool_representative_source_transaction_id
+        == expected_checkpoint.representative_source_transaction_id
+        and summary.pool_state_version == expected_checkpoint.state_version
         and _pool_lineage_matches_plan(
             summary.pool_calculation_lineage,
+            expected_checkpoint=expected_checkpoint,
             expected_checkpoint_lineage=expected_checkpoint_lineage,
         )
     )
@@ -296,6 +314,7 @@ def _summary_matches_plan(
 def _pool_lineage_matches_plan(
     persisted: CalculationLineage | None,
     *,
+    expected_checkpoint: AverageCostPoolCheckpoint,
     expected_checkpoint_lineage: CalculationLineage,
 ) -> bool:
     """Accept replay-exact or governed incremental evidence for equal pool economics.
@@ -311,7 +330,7 @@ def _pool_lineage_matches_plan(
         return False
     if persisted.algorithm_id == expected_checkpoint_lineage.algorithm_id:
         return bool(persisted == expected_checkpoint_lineage)
-    return all(
+    semantics_match = all(
         (
             persisted.algorithm_id in _INCREMENTAL_POOL_LINEAGE_ALGORITHMS,
             persisted.algorithm_version == expected_checkpoint_lineage.algorithm_version,
@@ -319,20 +338,41 @@ def _pool_lineage_matches_plan(
             persisted.numeric_output_policy == expected_checkpoint_lineage.numeric_output_policy,
         )
     )
+    if not semantics_match:
+        return False
+    output_payload = {
+        "cost_base": expected_checkpoint.cost_base,
+        "cost_local": expected_checkpoint.cost_local,
+        "instrument_id": expected_checkpoint.instrument_id,
+        "portfolio_id": expected_checkpoint.portfolio_id,
+        "quantity": expected_checkpoint.quantity,
+        "representative_source_transaction_id": (
+            expected_checkpoint.representative_source_transaction_id
+        ),
+        "security_id": expected_checkpoint.security_id,
+        "state_version": expected_checkpoint.state_version,
+    }
+    if persisted.algorithm_id != "average-cost-pool-processing-rebuild":
+        output_payload["calculation_lineage"] = None
+    return bool(calculation_lineage_binds_output(persisted, output_payload=output_payload))
 
 
 def _drift_reason(
     summary: AverageCostPoolPersistedSummary,
     *,
     expected_source_count: int,
+    expected_checkpoint: AverageCostPoolCheckpoint,
     expected_checkpoint_lineage: CalculationLineage,
 ) -> str:
     if summary.pool_quantity is None:
         return "pool_state_missing"
     if summary.source_count != expected_source_count:
         return "source_count_mismatch"
+    if not summary.source_lineage_valid:
+        return "source_lineage_evidence_mismatch"
     if not _pool_lineage_matches_plan(
         summary.pool_calculation_lineage,
+        expected_checkpoint=expected_checkpoint,
         expected_checkpoint_lineage=expected_checkpoint_lineage,
     ):
         return "checkpoint_replay_evidence_mismatch"

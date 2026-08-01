@@ -285,6 +285,17 @@ identity, and public response shapes remain unchanged.
   interest-paid amount. Tests prove identical ending pool economics retain distinct inputs for
   different processed evidence, and a changed accrued-interest output changes the lot output hash.
   The combined warning-strict focused suite passes 43 tests, with Ruff and MyPy green.
+- Final evidence-certification review then proved that matching source counts and aggregates could
+  still certify legacy, stale, or copied source-lot receipts, and that the incremental-writer
+  allowlist checked receipt metadata without proving the receipt's internal calculation hash or
+  exact persisted checkpoint output. Reconciliation now validates every bounded source row against
+  its complete persisted output, requires exact checkpoint identity in addition to economics, and
+  cryptographically verifies allowlisted incremental receipts against that checkpoint. Malformed,
+  unknown, copied, or output-mismatched receipts fail closed. The validation uses one ordered,
+  projection-only query in the operator-owned reconciliation path; it adds no hot-path query or
+  N+1 behavior. The final focused warning-strict suite passes 85 tests, full MyPy passes across 241
+  source files, and the Bandit gate reports zero findings. Production assertions were replaced by
+  an explicit fail-closed transition-evidence boundary.
 
 ## Compatibility and remaining work
 

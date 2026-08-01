@@ -10,6 +10,7 @@ from portfolio_common.domain.calculation_lineage import (
     FinancialSourceReference,
     NumericOutputPolicyLineage,
     build_calculation_lineage,
+    calculation_lineage_binds_output,
     calculation_lineage_from_payload,
     canonical_content_hash,
 )
@@ -135,6 +136,35 @@ def test_persisted_lineage_payload_rehydrates_without_identity_loss() -> None:
 
     assert calculation_lineage_from_payload(lineage.lineage_payload()) == lineage
     assert calculation_lineage_from_payload(None) is None
+
+
+def test_lineage_binding_verifies_internal_receipt_and_exact_output() -> None:
+    output = {"gross_accrued_income": Decimal("13270.8333333333333333")}
+    lineage = _lineage(output_payload=output, numeric_output_policy=OUTPUT_POLICY)
+
+    assert calculation_lineage_binds_output(lineage, output_payload=output)
+    assert not calculation_lineage_binds_output(
+        lineage,
+        output_payload={"gross_accrued_income": Decimal("13270.84")},
+    )
+
+
+def test_lineage_binding_rejects_tampered_internal_calculation_hash() -> None:
+    lineage = _lineage()
+    tampered = CalculationLineage(
+        algorithm_id=lineage.algorithm_id,
+        algorithm_version=lineage.algorithm_version,
+        intermediate_precision=lineage.intermediate_precision,
+        input_content_hash=lineage.input_content_hash,
+        calculation_content_hash="0" * 64,
+        output_content_hash=lineage.output_content_hash,
+        numeric_output_policy=lineage.numeric_output_policy,
+    )
+
+    assert not calculation_lineage_binds_output(
+        tampered,
+        output_payload={"gross_accrued_income": Decimal("13270.8333333333333333")},
+    )
 
 
 @pytest.mark.parametrize(

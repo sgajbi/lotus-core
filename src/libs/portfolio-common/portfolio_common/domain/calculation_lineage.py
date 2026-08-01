@@ -185,6 +185,34 @@ def build_calculation_lineage(
     )
 
 
+def calculation_lineage_binds_output(
+    lineage: CalculationLineage,
+    *,
+    output_payload: Mapping[str, object],
+) -> bool:
+    """Verify receipt integrity and its binding to one canonical output payload."""
+
+    calculation_payload: dict[str, object] = {
+        "algorithm_id": lineage.algorithm_id,
+        "algorithm_version": lineage.algorithm_version,
+        "input_content_hash": lineage.input_content_hash,
+        "intermediate_precision": lineage.intermediate_precision,
+    }
+    if lineage.numeric_output_policy is not None:
+        calculation_payload["numeric_output_policy"] = (
+            lineage.numeric_output_policy.lineage_payload()
+        )
+    expected_calculation_hash = canonical_content_hash(calculation_payload)
+    if lineage.calculation_content_hash != expected_calculation_hash:
+        return False
+    return lineage.output_content_hash == canonical_content_hash(
+        {
+            "calculation_content_hash": expected_calculation_hash,
+            "output": output_payload,
+        }
+    )
+
+
 def calculation_lineage_from_payload(payload: object) -> CalculationLineage | None:
     """Rehydrate persisted calculation lineage through one strict shared boundary."""
 
