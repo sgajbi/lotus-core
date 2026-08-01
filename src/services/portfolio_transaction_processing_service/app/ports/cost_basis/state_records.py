@@ -35,7 +35,11 @@ class AverageCostPoolPersistedSummary:
     source_quantity: Decimal
     source_cost_local: Decimal
     source_cost_base: Decimal
+    source_lineage_valid: bool
     pool_quantity: Decimal | None
     pool_cost_local: Decimal | None
     pool_cost_base: Decimal | None
+    pool_instrument_id: str | None
+    pool_representative_source_transaction_id: str | None
+    pool_state_version: str | None
     pool_calculation_lineage: CalculationLineage | None

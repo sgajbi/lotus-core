@@ -1,5 +1,6 @@
 """Verify SQLAlchemy AVCO reconciliation adapter behavior and transaction ownership."""
 
+from dataclasses import replace
 from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -54,6 +55,7 @@ def _summary(
     pool_present: bool = True,
     replay_revision: str = "1",
     lineage_algorithm_id: str = "average-cost-pool-rebuild",
+    source_lineage_valid: bool = True,
 ) -> AverageCostPoolPersistedSummary:
     plan = _plan(replay_revision=replay_revision)
     pool_lineage = build_average_cost_pool_rebuild_lineage(
@@ -61,23 +63,39 @@ def _summary(
         checkpoint=plan.checkpoint,
     )
     if lineage_algorithm_id != "average-cost-pool-rebuild":
+        output_payload = {
+            "cost_base": Decimal(cost_base),
+            "cost_local": Decimal(cost_local),
+            "instrument_id": plan.checkpoint.instrument_id,
+            "portfolio_id": plan.checkpoint.portfolio_id,
+            "quantity": Decimal(quantity),
+            "representative_source_transaction_id": (
+                plan.checkpoint.representative_source_transaction_id
+            ),
+            "security_id": plan.checkpoint.security_id,
+            "state_version": plan.checkpoint.state_version,
+        }
+        if lineage_algorithm_id != "average-cost-pool-processing-rebuild":
+            output_payload["calculation_lineage"] = None
         pool_lineage = build_cost_basis_state_lineage(
             algorithm_id=lineage_algorithm_id,
             input_payload={"repository_owned_evidence": "latest-transition"},
-            output_payload={
-                "cost_base": Decimal(cost_base),
-                "cost_local": Decimal(cost_local),
-                "quantity": Decimal(quantity),
-            },
+            output_payload=output_payload,
         )
     return AverageCostPoolPersistedSummary(
         source_count=source_count,
         source_quantity=Decimal(quantity),
         source_cost_local=Decimal(cost_local),
         source_cost_base=Decimal(cost_base),
+        source_lineage_valid=source_lineage_valid,
         pool_quantity=Decimal(quantity) if pool_present else None,
         pool_cost_local=Decimal(cost_local) if pool_present else None,
         pool_cost_base=Decimal(cost_base) if pool_present else None,
+        pool_instrument_id=plan.checkpoint.instrument_id if pool_present else None,
+        pool_representative_source_transaction_id=(
+            plan.checkpoint.representative_source_transaction_id if pool_present else None
+        ),
+        pool_state_version=plan.checkpoint.state_version if pool_present else None,
         pool_calculation_lineage=(pool_lineage if pool_present else None),
     )
 
@@ -251,6 +269,41 @@ async def test_equal_economics_reject_unknown_pool_lineage_algorithm() -> None:
     rebuild_planner.build.return_value = _plan()
     repository.get_average_cost_pool_persisted_summary.return_value = _summary(
         lineage_algorithm_id="unowned-pool-writer"
+    )
+
+    assessment = await adapter.reconcile(key=AverageCostPoolKey("P1", "S1"), apply=False)
+
+    assert assessment.status is AverageCostPoolReconciliationStatus.DRIFTED
+    assert assessment.reason_code == "checkpoint_replay_evidence_mismatch"
+
+
+async def test_equal_economics_reject_invalid_source_lineage_evidence() -> None:
+    session = _session()
+    adapter, rebuild_planner, repository, _ = _adapter(session=session)
+    rebuild_planner.build.return_value = _plan()
+    repository.get_average_cost_pool_persisted_summary.return_value = _summary(
+        source_lineage_valid=False
+    )
+
+    assessment = await adapter.reconcile(key=AverageCostPoolKey("P1", "S1"), apply=False)
+
+    assert assessment.status is AverageCostPoolReconciliationStatus.DRIFTED
+    assert assessment.reason_code == "source_lineage_evidence_mismatch"
+
+
+async def test_equal_economics_reject_incremental_receipt_not_bound_to_checkpoint() -> None:
+    session = _session()
+    adapter, rebuild_planner, repository, _ = _adapter(session=session)
+    rebuild_planner.build.return_value = _plan()
+    summary = _summary(lineage_algorithm_id="average-cost-pool-transition")
+    copied_lineage = build_cost_basis_state_lineage(
+        algorithm_id="average-cost-pool-transition",
+        input_payload={"repository_owned_evidence": "copied"},
+        output_payload={"quantity": Decimal("15")},
+    )
+    repository.get_average_cost_pool_persisted_summary.return_value = replace(
+        summary,
+        pool_calculation_lineage=copied_lineage,
     )
 
     assessment = await adapter.reconcile(key=AverageCostPoolKey("P1", "S1"), apply=False)

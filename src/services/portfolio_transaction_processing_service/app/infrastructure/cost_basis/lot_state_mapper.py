@@ -59,7 +59,11 @@ def buy_lot_state_payload(transaction: CostBasisTransaction) -> dict[str, object
             in {
                 "acquisition_date",
                 "accrued_interest_paid_local",
+                "calculation_policy_id",
+                "calculation_policy_version",
+                "economic_event_id",
                 "instrument_id",
+                "linked_transaction_group_id",
                 "lot_cost_base",
                 "lot_cost_local",
                 "lot_id",
@@ -67,6 +71,7 @@ def buy_lot_state_payload(transaction: CostBasisTransaction) -> dict[str, object
                 "original_quantity",
                 "portfolio_id",
                 "security_id",
+                "source_system",
                 "source_transaction_id",
             }
         },

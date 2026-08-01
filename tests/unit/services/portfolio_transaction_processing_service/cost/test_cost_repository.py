@@ -1,5 +1,6 @@
 from datetime import UTC, date, datetime
 from decimal import Decimal
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -483,12 +484,37 @@ async def test_get_average_cost_pool_persisted_summary_maps_missing_pool_and_sou
     pool_result = MagicMock()
     pool_result.scalars.return_value.first.return_value = None
     source_result = MagicMock()
-    source_result.one.return_value = (
-        2,
-        Decimal("9"),
-        Decimal("108"),
-        Decimal("117"),
+    first_payload = buy_lot_state_payload(
+        _average_cost_source(
+            "BUY-1",
+            transaction_date=datetime(2026, 1, 1, 10, 0),
+            quantity="4",
+            cost="48",
+        )
     )
+    second_payload = buy_lot_state_payload(
+        _average_cost_source(
+            "BUY-2",
+            transaction_date=datetime(2026, 1, 2, 10, 0),
+            quantity="5",
+            cost="60",
+        )
+    )
+    second_payload["lot_cost_base"] = Decimal("69")
+    second_payload["calculation_lineage"] = build_cost_basis_state_lineage(
+        algorithm_id="average-cost-source-rebuild",
+        input_payload={"source_transaction_id": "BUY-2"},
+        output_payload={
+            "cost_base": Decimal("69"),
+            "cost_local": Decimal("60"),
+            "quantity": Decimal("5"),
+            "source_transaction_id": "BUY-2",
+        },
+    ).lineage_payload()
+    source_result.all.return_value = [
+        SimpleNamespace(**first_payload),
+        SimpleNamespace(**second_payload),
+    ]
     db_session.execute.side_effect = [pool_result, source_result]
 
     summary = await SqlAlchemyAverageCostPoolRepository(
@@ -502,6 +528,7 @@ async def test_get_average_cost_pool_persisted_summary_maps_missing_pool_and_sou
     assert summary.source_quantity == Decimal("9")
     assert summary.source_cost_local == Decimal("108")
     assert summary.source_cost_base == Decimal("117")
+    assert summary.source_lineage_valid is True
     assert summary.pool_quantity is None
     source_sql = str(
         db_session.execute.call_args_list[1]
@@ -513,6 +540,30 @@ async def test_get_average_cost_pool_persisted_summary_maps_missing_pool_and_sou
     )
     assert "trim(position_lot_state.portfolio_id) = 'P1'" in source_sql
     assert "trim(position_lot_state.security_id) = 'S1'" in source_sql
+
+
+async def test_get_average_cost_pool_persisted_summary_rejects_unbound_source_receipt() -> None:
+    db_session = AsyncMock()
+    pool_result = MagicMock()
+    pool_result.scalars.return_value.first.return_value = None
+    source_result = MagicMock()
+    source_payload = buy_lot_state_payload(
+        _average_cost_source(
+            "BUY-1",
+            transaction_date=datetime(2026, 1, 1, 10, 0),
+            quantity="4",
+            cost="48",
+        )
+    )
+    source_payload["open_quantity"] = Decimal("3")
+    source_result.all.return_value = [SimpleNamespace(**source_payload)]
+    db_session.execute.side_effect = [pool_result, source_result]
+
+    summary = await SqlAlchemyAverageCostPoolRepository(
+        db_session
+    ).get_average_cost_pool_persisted_summary(portfolio_id="P1", security_id="S1")
+
+    assert summary.source_lineage_valid is False
 
 
 async def test_apply_average_cost_pool_transition_scales_sources_and_assigns_residual() -> None:
