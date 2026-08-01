@@ -1,5 +1,5 @@
 # services/persistence_service/tests/integration/test_repositories.py
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 
 import pytest
@@ -397,7 +397,7 @@ async def test_transaction_repository_is_idempotent(clean_db, async_db_session: 
         portfolio_id="PORT_T1",
         instrument_id="INST_T1",
         security_id="SEC_T1",
-        transaction_date=datetime(2025, 7, 31, 10, 0, 0),
+        transaction_date=datetime(2025, 7, 31, 10, 0, 0, tzinfo=UTC),
         transaction_type="BUY",
         quantity=Decimal("100"),
         price=Decimal("10"),
@@ -455,7 +455,7 @@ async def test_transaction_repository_persists_linkage_and_policy_metadata(
         portfolio_id="PORT_META_01",
         instrument_id="INST_META_01",
         security_id="SEC_META_01",
-        transaction_date=datetime(2026, 2, 28, 10, 0, 0),
+        transaction_date=datetime(2026, 2, 28, 10, 0, 0, tzinfo=UTC),
         transaction_type="BUY",
         quantity=Decimal("100"),
         price=Decimal("10"),
@@ -530,7 +530,7 @@ async def test_transaction_repository_persists_interest_linkage_and_policy_metad
         portfolio_id="PORT_META_INT_01",
         instrument_id="INST_META_INT_01",
         security_id="SEC_META_INT_01",
-        transaction_date=datetime(2026, 3, 2, 10, 0, 0),
+        transaction_date=datetime(2026, 3, 2, 10, 0, 0, tzinfo=UTC),
         transaction_type="INTEREST",
         quantity=Decimal("0"),
         price=Decimal("0"),
@@ -620,8 +620,8 @@ async def test_transaction_repository_persists_dual_leg_adjustment_metadata(
         portfolio_id="PORT_META_ADJ_01",
         instrument_id="CASH-USD",
         security_id="CASH-USD",
-        transaction_date=datetime(2026, 3, 5, 10, 0, 0),
-        settlement_date=datetime(2026, 3, 5, 10, 0, 0),
+        transaction_date=datetime(2026, 3, 5, 10, 0, 0, tzinfo=UTC),
+        settlement_date=datetime(2026, 3, 5, 10, 0, 0, tzinfo=UTC),
         transaction_type="ADJUSTMENT",
         quantity=Decimal("0"),
         price=Decimal("0"),
@@ -681,8 +681,8 @@ async def test_transaction_repository_persists_fx_metadata(
         portfolio_id="PORT_META_FX_01",
         instrument_id="FXC-EURUSD-001",
         security_id="FXC-EURUSD-001",
-        transaction_date=datetime(2026, 4, 1, 10, 0, 0),
-        settlement_date=datetime(2026, 7, 1, 10, 0, 0),
+        transaction_date=datetime(2026, 4, 1, 10, 0, 0, tzinfo=UTC),
+        settlement_date=datetime(2026, 7, 1, 10, 0, 0, tzinfo=UTC),
         transaction_type="FX_FORWARD",
         quantity=Decimal("0"),
         price=Decimal("0"),
