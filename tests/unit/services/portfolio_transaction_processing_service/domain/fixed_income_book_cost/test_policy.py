@@ -17,7 +17,7 @@ def _policy(**overrides: object) -> AmortizedCostPolicy:
     values: dict[str, object] = {
         "policy_id": "FI_EIR_BOOK_COST",
         "policy_version": 1,
-        "method": AmortizedCostMethod.EFFECTIVE_INTEREST,
+        "method": AmortizedCostMethod.EFFECTIVE_YIELD,
         "yield_application_convention": YieldApplicationConvention.ANNUAL_EFFECTIVE,
         "include_fees_in_initial_basis": True,
         "residual_tolerance_local": Decimal("0.01"),
@@ -33,6 +33,10 @@ def test_policy_normalizes_identity_and_retains_explicit_yield_convention() -> N
     assert policy.yield_application_convention is YieldApplicationConvention.ANNUAL_EFFECTIVE
 
 
+def test_rfc_effective_yield_vocabulary_deserializes_without_translation() -> None:
+    assert AmortizedCostMethod("EFFECTIVE_YIELD") is AmortizedCostMethod.EFFECTIVE_YIELD
+
+
 @pytest.mark.parametrize(
     ("field_name", "value", "expected_error", "message"),
     [
@@ -40,7 +44,7 @@ def test_policy_normalizes_identity_and_retains_explicit_yield_convention() -> N
         ("policy_id", "   ", ValueError, "must be nonblank"),
         ("policy_version", True, TypeError, "must be an integer"),
         ("policy_version", 0, ValueError, "must be positive"),
-        ("method", "EFFECTIVE_INTEREST", TypeError, "must be an AmortizedCostMethod"),
+        ("method", "EFFECTIVE_YIELD", TypeError, "must be an AmortizedCostMethod"),
         (
             "yield_application_convention",
             "ANNUAL_EFFECTIVE",
@@ -77,7 +81,7 @@ def test_policy_rejects_malformed_or_unsafe_fields(
         _policy(**{field_name: value})
 
 
-def test_effective_interest_requires_explicit_yield_convention() -> None:
+def test_effective_yield_requires_explicit_yield_convention() -> None:
     with pytest.raises(ValueError, match="requires a yield convention"):
         _policy(yield_application_convention=None)
 
