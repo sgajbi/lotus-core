@@ -8,6 +8,7 @@ from portfolio_common.database_models import (
     Transaction as DBTransaction,
 )
 from portfolio_common.database_models import TransactionCost
+from portfolio_common.domain.calculation_lineage import CalculationLineage
 from portfolio_common.domain.currency import normalize_currency_code
 from portfolio_common.events import TransactionEvent
 from portfolio_common.identifiers import normalize_lookup_identifier
@@ -189,6 +190,12 @@ class SqlAlchemyCostBasisTransactionRepository:
     ) -> BookedTransaction | None:
         """Apply economics and replace fee components without rereading the canonical row."""
 
+        calculation_lineage = getattr(transaction_result, "calculation_lineage", None)
+        if not isinstance(calculation_lineage, CalculationLineage):
+            raise ValueError(
+                "Calculated transaction is missing governed calculation lineage: "
+                f"{transaction_result.transaction_id}"
+            )
         update_values = {
             "net_cost": transaction_result.net_cost,
             "gross_cost": transaction_result.gross_cost,
@@ -196,6 +203,7 @@ class SqlAlchemyCostBasisTransactionRepository:
             "transaction_fx_rate": transaction_result.transaction_fx_rate,
             "net_cost_local": transaction_result.net_cost_local,
             "realized_gain_loss_local": transaction_result.realized_gain_loss_local,
+            "calculation_lineage": calculation_lineage.lineage_payload(),
             **{
                 field_name: field_value
                 for field_name in TRANSACTION_METADATA_FIELDS

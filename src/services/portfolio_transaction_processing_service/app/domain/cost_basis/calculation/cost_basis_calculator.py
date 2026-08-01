@@ -3,6 +3,7 @@
 from decimal import Decimal
 from typing import Callable, Protocol, cast
 
+from portfolio_common.domain.calculation_lineage import build_calculation_lineage
 from portfolio_common.domain.decimal_amount import decimal_or_none
 from portfolio_common.domain.transaction.numeric_policy import (
     TRANSACTION_COST_LEDGER_OUTPUT_V1,
@@ -134,6 +135,16 @@ def _cash_movement_amount(transaction: CostBasisTransaction) -> Decimal:
     quantity_amount = _decimal_or_zero(transaction.quantity, field_name="quantity")
     movement_amount = gross_amount if not gross_amount.is_zero() else quantity_amount
     return abs(movement_amount)
+
+
+def _normalize_cash_movement_inputs(transaction: CostBasisTransaction) -> None:
+    """Canonicalize legacy blank cash amounts once before calculation and lineage."""
+
+    transaction.gross_transaction_amount = _decimal_or_zero(
+        transaction.gross_transaction_amount,
+        field_name="gross_transaction_amount",
+    )
+    transaction.quantity = _decimal_or_zero(transaction.quantity, field_name="quantity")
 
 
 def _cash_outflow_book_cost(transaction: CostBasisTransaction) -> Decimal:
@@ -1189,10 +1200,26 @@ class CostBasisCalculator:
                 f"Unknown transaction type '{transaction.transaction_type}'.",
             )
             return
+        if _is_cash_instrument(transaction):
+            _normalize_cash_movement_inputs(transaction)
+        lineage_input = _transaction_cost_input(transaction)
         strategy = self._resolve_strategy(transaction.transaction_type, transaction)
         if strategy is None:
             return
         strategy.calculate_costs(transaction, self._disposition_engine, self._error_reporter)
+        if self._error_reporter.has_errors_for(transaction.transaction_id):
+            return
+        transaction.set_calculated_field(
+            "calculation_lineage",
+            build_calculation_lineage(
+                algorithm_id="transaction-cost-basis-calculation",
+                algorithm_version=1,
+                intermediate_precision=TRANSACTION_COST_LEDGER_OUTPUT_V1.working_precision,
+                input_payload=lineage_input,
+                output_payload=_transaction_cost_output(transaction),
+                numeric_output_policy=TRANSACTION_COST_LEDGER_OUTPUT_V1.lineage_identity(),
+            ),
+        )
 
     def _resolve_strategy(
         self, transaction_type: str, transaction: CostBasisTransaction
@@ -1230,3 +1257,34 @@ class CostBasisCalculator:
                 f"No cost calculation strategy is registered for '{transaction_type}'.",
             )
         return strategy
+
+
+def _transaction_cost_output(transaction: CostBasisTransaction) -> dict[str, object]:
+    """Return the complete calculated transaction-cost output persisted atomically."""
+
+    return {
+        "fee_components": (transaction.fees.model_dump() if transaction.fees is not None else {}),
+        "gross_cost": transaction.gross_cost,
+        "net_cost": transaction.net_cost,
+        "net_cost_local": transaction.net_cost_local,
+        "realized_gain_loss": transaction.realized_gain_loss,
+        "realized_gain_loss_local": transaction.realized_gain_loss_local,
+        "transaction_fx_rate": transaction.transaction_fx_rate,
+        "transaction_id": transaction.transaction_id,
+    }
+
+
+def _transaction_cost_input(transaction: CostBasisTransaction) -> dict[str, object]:
+    """Return normalized effective inputs without prior or newly calculated outputs."""
+
+    return transaction.model_dump(
+        exclude={
+            "calculation_lineage",
+            "error_reason",
+            "gross_cost",
+            "net_cost",
+            "net_cost_local",
+            "realized_gain_loss",
+            "realized_gain_loss_local",
+        }
+    )

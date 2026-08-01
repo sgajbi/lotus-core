@@ -8,6 +8,8 @@ from portfolio_common.database_models import (
     PositionLotState,
 )
 from portfolio_common.database_models import Transaction as DBTransaction
+from portfolio_common.domain.calculation_lineage import build_calculation_lineage
+from portfolio_common.domain.transaction.numeric_policy import TRANSACTION_COST_LEDGER_OUTPUT_V1
 from sqlalchemy.dialects import postgresql
 
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (  # noqa: E501  # noqa: E501
@@ -846,6 +848,15 @@ async def test_apply_transaction_costs_and_replace_breakdown_uses_update_returni
         cash_entry_mode="AUTO_GENERATE",
         settlement_cash_account_id="CASH-USD-01",
     )
+    calculation_lineage = build_calculation_lineage(
+        algorithm_id="transaction-cost-basis-calculation",
+        algorithm_version=1,
+        intermediate_precision=TRANSACTION_COST_LEDGER_OUTPUT_V1.working_precision,
+        input_payload={"transaction_id": "BUY01"},
+        output_payload={"net_cost": Decimal("1002")},
+        numeric_output_policy=TRANSACTION_COST_LEDGER_OUTPUT_V1.lineage_identity(),
+    )
+    engine_transaction.set_calculated_field("calculation_lineage", calculation_lineage)
 
     updated_transaction = await repository.apply_transaction_costs_and_replace_breakdown(
         engine_transaction
@@ -860,9 +871,32 @@ async def test_apply_transaction_costs_and_replace_breakdown_uses_update_returni
     assert update_statement.startswith("UPDATE transactions SET")
     assert "economic_event_id=" in update_statement
     assert "calculation_policy_version=" in update_statement
+    assert "calculation_lineage=" in update_statement
     assert "RETURNING transactions.id" in update_statement
     assert delete_statement.startswith("DELETE FROM transaction_costs")
     db_session.add_all.assert_called_once_with([])
+
+
+async def test_apply_transaction_costs_fails_closed_without_calculation_lineage() -> None:
+    db_session = AsyncMock()
+    repository = SqlAlchemyCostBasisTransactionRepository(db_session)
+    transaction = EngineTransaction(
+        transaction_id="BUY-NO-LINEAGE",
+        portfolio_id="PORT_COST_01",
+        instrument_id="SEC01",
+        security_id="SEC01",
+        transaction_type="BUY",
+        transaction_date=datetime(2026, 1, 1, 10, 0, 0),
+        quantity=Decimal("10"),
+        gross_transaction_amount=Decimal("1000"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+    )
+
+    with pytest.raises(ValueError, match="missing governed calculation lineage"):
+        await repository.apply_transaction_costs_and_replace_breakdown(transaction)
+
+    db_session.execute.assert_not_awaited()
 
 
 async def test_upsert_booked_transaction_persists_only_canonical_table_fields() -> None:

@@ -1906,6 +1906,7 @@ class Transaction(Base):
     linked_transaction_group_id = Column(String, nullable=True, index=True)
     calculation_policy_id = Column(String, nullable=True)
     calculation_policy_version = Column(String, nullable=True)
+    calculation_lineage = Column(JSON(none_as_null=True), nullable=True)
     source_system = Column(String, nullable=True)
     cash_entry_mode = Column(String, nullable=True)
     external_cash_transaction_id = Column(String, nullable=True, index=True)
