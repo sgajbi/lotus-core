@@ -10,7 +10,7 @@ from enum import StrEnum
 class AmortizedCostMethod(StrEnum):
     """Supported accounting methods for book-cost evolution."""
 
-    EFFECTIVE_INTEREST = "EFFECTIVE_INTEREST"
+    EFFECTIVE_YIELD = "EFFECTIVE_YIELD"
     STRAIGHT_LINE = "STRAIGHT_LINE"
 
 
@@ -88,7 +88,7 @@ class AmortizedCostPolicy:
             )
         if not isinstance(self.include_fees_in_initial_basis, bool):
             raise TypeError("include_fees_in_initial_basis must be a boolean")
-        if self.method is AmortizedCostMethod.EFFECTIVE_INTEREST:
+        if self.method is AmortizedCostMethod.EFFECTIVE_YIELD:
             if self.yield_application_convention is None:
                 raise ValueError("effective-interest policy requires a yield convention")
         elif self.yield_application_convention is not None:
