@@ -1,7 +1,8 @@
 """Build deterministic lineage at durable cost-basis state boundaries."""
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence, Set
 from dataclasses import dataclass
+from decimal import Decimal
 
 from portfolio_common.domain.calculation_lineage import (
     CalculationLineage,
@@ -47,6 +48,46 @@ def build_cost_basis_state_lineage(
         algorithm_version=1,
         intermediate_precision=COST_BASIS_STATE_LEDGER_OUTPUT_V1.working_precision,
         input_payload=input_payload,
-        output_payload=output_payload,
+        output_payload=canonical_cost_basis_output_payload(output_payload),
         numeric_output_policy=COST_BASIS_STATE_LEDGER_OUTPUT_V1.lineage_identity(),
     )
+
+
+def canonical_cost_basis_output_payload(
+    output_payload: Mapping[str, object],
+) -> dict[str, object]:
+    """Return the exact policy-scale representation used by persisted receipts."""
+
+    return {
+        key: _canonical_cost_basis_output(value, field_path=key)
+        for key, value in output_payload.items()
+    }
+
+
+def _canonical_cost_basis_output(value: object, *, field_path: str) -> object:
+    """Bind receipts to the exact numeric representation persisted by the ledger."""
+
+    if isinstance(value, Decimal):
+        normalized = COST_BASIS_STATE_LEDGER_OUTPUT_V1.normalize(
+            value,
+            field_name=field_path,
+        )
+        quantum = Decimal(1).scaleb(-COST_BASIS_STATE_LEDGER_OUTPUT_V1.scale)
+        with COST_BASIS_STATE_LEDGER_OUTPUT_V1.arithmetic_context():
+            return normalized.quantize(
+                quantum,
+                rounding=COST_BASIS_STATE_LEDGER_OUTPUT_V1.rounding,
+            )
+    if isinstance(value, Mapping):
+        return {
+            key: _canonical_cost_basis_output(item, field_path=f"{field_path}.{key}")
+            for key, item in value.items()
+        }
+    if isinstance(value, Set):
+        return {_canonical_cost_basis_output(item, field_path=f"{field_path}[]") for item in value}
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        return [
+            _canonical_cost_basis_output(item, field_path=f"{field_path}[{index}]")
+            for index, item in enumerate(value)
+        ]
+    return value
