@@ -8,6 +8,7 @@ from datetime import date
 from typing import TypeVar
 
 from portfolio_common.database_models import InstrumentValuationPolicyAssignmentRecord
+from portfolio_common.domain.source_versions import latest_source_versions
 from portfolio_common.domain.valuation.assignments import (
     InstrumentValuationPolicyAssignment,
     ValuationPolicyAssignmentError,
@@ -19,7 +20,6 @@ from portfolio_common.domain.valuation.policy_registry import (
     UnknownValuationPolicyError,
     resolve_position_valuation_policy,
 )
-from portfolio_common.domain.valuation.source_versions import latest_source_versions
 from sqlalchemy import select, text, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 

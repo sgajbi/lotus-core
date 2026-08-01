@@ -8,8 +8,8 @@ from enum import StrEnum
 from typing import cast
 
 from ..calculation_lineage import FinancialSourceReference, canonical_content_hash
+from ..source_versions import latest_source_versions
 from .source_facts import ValuationAuthorityScope
-from .source_versions import latest_source_versions
 
 
 class ValuationPolicyAssignmentError(ValueError):

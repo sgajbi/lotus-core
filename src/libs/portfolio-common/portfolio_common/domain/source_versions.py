@@ -1,4 +1,4 @@
-"""Shared fail-closed ranking for versioned financial source records."""
+"""Fail-closed ranking for versioned financial source records."""
 
 from __future__ import annotations
 
