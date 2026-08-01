@@ -2,8 +2,8 @@
   "schema_version": "2.0.0",
   "model_path": "src/libs/portfolio-common/portfolio_common/database_models.py",
   "expected_inventory": {
-    "numeric_columns": 98,
-    "tables": 31
+    "numeric_columns": 110,
+    "tables": 33
   },
   "profiles": {
     "finite": {
@@ -94,6 +94,10 @@
       "owner": "portfolio-transaction-processing-service",
       "boundary_class": "calculation-state"
     },
+    "fixed-income-book-cost": {
+      "owner": "portfolio-transaction-processing-service",
+      "boundary_class": "calculation-state"
+    },
     "derived-timeseries": {
       "owner": "portfolio-aggregation-service",
       "boundary_class": "calculation-state"
@@ -131,6 +135,8 @@
     "cost_basis_processing_state": "cost-basis-state",
     "average_cost_pool_state": "cost-basis-state",
     "accrued_income_offset_state": "cost-basis-state",
+    "lot_amortized_cost_profiles": "fixed-income-book-cost",
+    "lot_amortized_cost_periods": "fixed-income-book-cost",
     "position_timeseries": "derived-timeseries",
     "portfolio_timeseries": "derived-timeseries",
     "financial_reconciliation_runs": "reconciliation-controls",
@@ -271,6 +277,22 @@
     "accrued_income_offset_state": {
       "accrued_interest_paid_local": {"profile": "nonnegative-finite", "rollout_status": "orm-enforced"},
       "remaining_offset_local": {"profile": "nonnegative-finite", "rollout_status": "orm-enforced"}
+    },
+    "lot_amortized_cost_profiles": {
+      "initial_amortized_cost_local": {"profile": "nullable-nonnegative-finite", "rollout_status": "orm-enforced"},
+      "redemption_value_local": {"profile": "nullable-nonnegative-finite", "rollout_status": "orm-enforced"},
+      "final_amortized_cost_local": {"profile": "nullable-nonnegative-finite", "rollout_status": "orm-enforced"},
+      "residual_local": {"profile": "nullable-finite", "rollout_status": "orm-enforced"}
+    },
+    "lot_amortized_cost_periods": {
+      "year_fraction": {"profile": "positive-finite", "rollout_status": "orm-enforced"},
+      "period_rate": {"profile": "nullable-finite", "rollout_status": "orm-enforced"},
+      "begin_amortized_cost_local": {"profile": "nonnegative-finite", "rollout_status": "orm-enforced"},
+      "interest_income_local": {"profile": "finite", "rollout_status": "orm-enforced"},
+      "cash_coupon_local": {"profile": "nonnegative-finite", "rollout_status": "orm-enforced"},
+      "amortization_amount_local": {"profile": "finite", "rollout_status": "orm-enforced"},
+      "end_amortized_cost_local": {"profile": "nonnegative-finite", "rollout_status": "orm-enforced"},
+      "rounding_adjustment_local": {"profile": "finite", "rollout_status": "orm-enforced"}
     },
     "position_timeseries": {
       "bod_market_value": {"profile": "finite", "rollout_status": "orm-enforced"},
