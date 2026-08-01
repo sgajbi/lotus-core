@@ -67,9 +67,12 @@ def position_transaction_ordering_key(
     transaction: BookedTransaction,
 ) -> PositionTransactionOrderKey:
     """Return the canonical total ordering for position-history replay."""
-    transaction_timestamp = _aware_datetime(transaction.transaction_date)
+    transaction_timestamp = _canonical_ordering_datetime(
+        transaction.transaction_date,
+        field_name="transaction_date",
+    )
     ingestion_timestamp = (
-        _aware_datetime(transaction.created_at)
+        _canonical_ordering_datetime(transaction.created_at, field_name="created_at")
         if transaction.created_at is not None
         else datetime.fromtimestamp(0, tz=timezone.utc)
     )
@@ -209,5 +212,9 @@ def _require_single_position_key(
         )
 
 
-def _aware_datetime(value: datetime) -> datetime:
-    return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+def _canonical_ordering_datetime(value: datetime, *, field_name: str) -> datetime:
+    if value.tzinfo is None or value.utcoffset() is None:
+        raise PositionHistoryInvariantError(
+            f"Position-history {field_name} must be timezone-aware."
+        )
+    return value.astimezone(timezone.utc)
