@@ -38,6 +38,10 @@ contracts.
   portfolio-timeseries outputs executed governed arithmetic but did not persist calculation
   lineage. Requiring every helper to emit a receipt would duplicate evidence on hot paths, so the
   guard also needed a statically verified final durable-output boundary.
+- PR #877 review found aggregate AVCO transition lineage copied onto individual source rows even
+  though its output hash described only the pool checkpoint. It also found lineage-only
+  position-timeseries recalculation was discarded when financial values and source timestamps were
+  unchanged.
 
 ## Resolution
 
@@ -130,6 +134,11 @@ contracts.
   credit only when static analysis proves that exact callable invokes the governed lineage builder;
   stale or invented boundaries fail closed. The inventory is now eight `required`, zero `partial`,
   zero `not-exposed`, and zero unclassified gaps.
+- Kept AVCO numeric scaling set-based, captured pre-transition source states in one ordered read,
+  and attached one row-specific receipt to each final managed source row. Each receipt now binds the
+  prior source state, pool transition, and exact persisted row output; membership drift fails
+  closed. Position-timeseries now upserts a changed receipt independently of numeric restaging, so
+  legacy-null or stale evidence is repaired without publishing a false business-state change.
 
 The later cashflow persistence slice adds one nullable JSON column and no topic or runtime-topology
 change. Exactly representable inputs, cashflow formulas, serialized Decimal amounts, transaction
@@ -211,6 +220,9 @@ identity, and public response shapes remain unchanged.
   event. The preceding cached-image run stopped before migrations `c134` through `c138` and failed
   on absent columns; rebuilding the branch-qualified runtime converted all four to green and is
   retained only as invalid stale-runtime diagnostic evidence.
+- PR #877 fix-forward passes 33 warning-strict AVCO/position-materialization tests, MyPy across 241
+  source files, focused Ruff/format/diff gates, and an exact-source PostgreSQL AVCO row-output-hash
+  proof (`1 passed in 55.68s`).
 
 ## Compatibility and remaining work
 

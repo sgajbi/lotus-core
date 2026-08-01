@@ -425,6 +425,11 @@ async def test_get_average_cost_pool_persisted_summary_maps_missing_pool_and_sou
 async def test_apply_average_cost_pool_transition_scales_sources_and_assigns_residual() -> None:
     db_session = AsyncMock()
     repository = SqlAlchemyAverageCostPoolRepository(db_session)
+    states_before_result = MagicMock()
+    states_before_result.all.return_value = [
+        ("BUY-1", Decimal("10"), Decimal("120"), Decimal("130")),
+        ("BUY-2", Decimal("5"), Decimal("60"), Decimal("65")),
+    ]
     scale_result = MagicMock()
     aggregate_result = MagicMock()
     aggregate_result.one.return_value = (
@@ -433,11 +438,27 @@ async def test_apply_average_cost_pool_transition_scales_sources_and_assigns_res
         Decimal("77"),
     )
     residual_result = MagicMock(rowcount=1)
+    first_source = MagicMock(
+        source_transaction_id="BUY-1",
+        open_quantity=Decimal("7"),
+        lot_cost_local=Decimal("70"),
+        lot_cost_base=Decimal("77"),
+    )
+    second_source = MagicMock(
+        source_transaction_id="BUY-2",
+        open_quantity=Decimal("2"),
+        lot_cost_local=Decimal("38"),
+        lot_cost_base=Decimal("40"),
+    )
+    final_states_result = MagicMock()
+    final_states_result.scalars.return_value.all.return_value = [first_source, second_source]
     upsert_result = MagicMock()
     db_session.execute.side_effect = [
+        states_before_result,
         scale_result,
         aggregate_result,
         residual_result,
+        final_states_result,
         upsert_result,
     ]
     transition = AverageCostPoolTransition(
@@ -452,7 +473,7 @@ async def test_apply_average_cost_pool_transition_scales_sources_and_assigns_res
 
     await repository.apply_average_cost_pool_transition(transition)
 
-    scale_compiled = db_session.execute.call_args_list[0].args[0].compile()
+    scale_compiled = db_session.execute.call_args_list[1].args[0].compile()
     scale_sql = str(scale_compiled)
     assert "open_quantity=trunc(" in scale_sql
     assert "position_lot_state.open_quantity *" in scale_sql
@@ -460,14 +481,20 @@ async def test_apply_average_cost_pool_transition_scales_sources_and_assigns_res
     assert "lot_cost_local=round(" in scale_sql
     assert "position_lot_state.lot_cost_local *" in scale_sql
     assert "BUY-2" in scale_compiled.params.values()
-    residual_compiled = db_session.execute.call_args_list[2].args[0].compile()
+    residual_compiled = db_session.execute.call_args_list[3].args[0].compile()
     residual_sql = str(residual_compiled)
     assert "source_transaction_id =" in residual_sql
     assert "BUY-2" in residual_compiled.params.values()
     assert Decimal("2") in residual_compiled.params.values()
     assert Decimal("38") in residual_compiled.params.values()
     assert Decimal("40") in residual_compiled.params.values()
-    upsert_sql = str(db_session.execute.call_args_list[3].args[0].compile())
+    assert first_source.calculation_lineage["algorithm_id"] == ("average-cost-source-transition")
+    assert second_source.calculation_lineage["algorithm_id"] == ("average-cost-source-transition")
+    assert (
+        first_source.calculation_lineage["output_content_hash"]
+        != (second_source.calculation_lineage["output_content_hash"])
+    )
+    upsert_sql = str(db_session.execute.call_args_list[5].args[0].compile())
     assert "INSERT INTO average_cost_pool_state" in upsert_sql
 
 
@@ -475,7 +502,7 @@ async def test_apply_average_cost_pool_transition_rejects_missing_close_sources(
     db_session = AsyncMock()
     repository = SqlAlchemyAverageCostPoolRepository(db_session)
     close_result = MagicMock(rowcount=0)
-    db_session.execute.return_value = close_result
+    db_session.execute.side_effect = [MagicMock(), close_result]
     transition = AverageCostPoolTransition(
         before=_average_cost_checkpoint(),
         existing_sources_after=OpenLotState(
@@ -489,7 +516,7 @@ async def test_apply_average_cost_pool_transition_rejects_missing_close_sources(
     with pytest.raises(ValueError, match="found no persisted source lots"):
         await repository.apply_average_cost_pool_transition(transition)
 
-    assert db_session.execute.await_count == 1
+    assert db_session.execute.await_count == 2
 
 
 async def test_apply_average_cost_pool_transition_rejects_negative_residual() -> None:
@@ -501,7 +528,7 @@ async def test_apply_average_cost_pool_transition_rejects_negative_residual() ->
         Decimal("109"),
         Decimal("118"),
     )
-    db_session.execute.side_effect = [MagicMock(), aggregate_result]
+    db_session.execute.side_effect = [MagicMock(), MagicMock(), aggregate_result]
     transition = AverageCostPoolTransition(
         before=_average_cost_checkpoint(),
         existing_sources_after=OpenLotState(
@@ -515,7 +542,7 @@ async def test_apply_average_cost_pool_transition_rejects_negative_residual() ->
     with pytest.raises(ValueError, match="exceeds the target pool aggregate"):
         await repository.apply_average_cost_pool_transition(transition)
 
-    assert db_session.execute.await_count == 2
+    assert db_session.execute.await_count == 3
 
 
 async def test_apply_average_cost_pool_transition_updates_explicit_new_source() -> None:

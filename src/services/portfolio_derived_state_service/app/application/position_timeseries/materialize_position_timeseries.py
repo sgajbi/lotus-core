@@ -300,13 +300,17 @@ class MaterializePositionTimeseries:
             epoch=epoch,
         )
         existing_record = cast(PositionTimeseriesRecord | None, existing_timeseries)
-        if not self._has_material_change(
-            existing_record, new_record
-        ) and not self._requires_source_refresh(existing_record, current_snapshot):
+        material_changed = self._has_material_change(existing_record, new_record)
+        source_refresh_required = self._requires_source_refresh(existing_record, current_snapshot)
+        lineage_refresh_required = (
+            existing_record is not None
+            and existing_record.calculation_lineage != new_record.calculation_lineage
+        )
+        if not material_changed and not source_refresh_required and not lineage_refresh_required:
             return False, new_record
 
         await repository.upsert_position_timeseries(new_record)
-        return True, new_record
+        return material_changed or source_refresh_required, new_record
 
     async def _propagate_dependent_days(
         self,
