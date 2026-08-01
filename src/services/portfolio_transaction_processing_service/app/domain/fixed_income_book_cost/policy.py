@@ -90,7 +90,7 @@ class AmortizedCostPolicy:
             raise TypeError("include_fees_in_amortized_cost must be a boolean")
         if self.method is AmortizedCostMethod.EFFECTIVE_YIELD:
             if self.yield_application_convention is None:
-                raise ValueError("effective-interest policy requires a yield convention")
+                raise ValueError("effective-yield policy requires a yield convention")
         elif self.yield_application_convention is not None:
             raise ValueError("straight-line policy must not declare a yield convention")
         if not isinstance(self.residual_tolerance_local, Decimal):
