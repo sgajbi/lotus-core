@@ -1,9 +1,11 @@
 """SQLAlchemy persistence for cost-basis lot state and disposal checkpoints."""
 
 from decimal import Decimal
+from typing import cast
 
 from portfolio_common.database_models import PositionLotState
 from portfolio_common.database_models import Transaction as DBTransaction
+from portfolio_common.domain.calculation_lineage import CalculationLineage
 from portfolio_common.events import TransactionEvent
 from portfolio_common.identifiers import normalize_lookup_identifier
 from sqlalchemy import func, select
@@ -12,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import Select
 
 from ...domain.cost_basis import CostBasisTransaction, OpenLotState
+from ...domain.cost_basis.state_lineage import build_cost_basis_state_lineage
 from ...ports import OpenLotCheckpointRecord
 from ..transaction_mapping.booked_transaction import to_booked_transaction
 from .lot_state_mapper import buy_lot_state_payload, mutable_lot_state_fields
@@ -97,10 +100,24 @@ class SqlAlchemyCostBasisLotRepository:
                 lot_row.open_quantity = Decimal(0)
                 lot_row.lot_cost_local = Decimal(0)
                 lot_row.lot_cost_base = Decimal(0)
+                lot_row.calculation_lineage = _open_lot_state_lineage_payload(
+                    source_transaction_id=lot_row.source_transaction_id,
+                    state=OpenLotState(
+                        quantity=Decimal(0),
+                        cost_local=Decimal(0),
+                        cost_base=Decimal(0),
+                    ),
+                    algorithm_id="cost-basis-complete-lot-snapshot",
+                )
                 continue
             lot_row.open_quantity = state.quantity
             lot_row.lot_cost_local = state.cost_local
             lot_row.lot_cost_base = state.cost_base
+            lot_row.calculation_lineage = _open_lot_state_lineage_payload(
+                source_transaction_id=lot_row.source_transaction_id,
+                state=state,
+                algorithm_id="cost-basis-complete-lot-snapshot",
+            )
 
     async def update_selected_open_lot_states(
         self,
@@ -130,6 +147,11 @@ class SqlAlchemyCostBasisLotRepository:
             lot_row.open_quantity = state.quantity
             lot_row.lot_cost_local = state.cost_local
             lot_row.lot_cost_base = state.cost_base
+            lot_row.calculation_lineage = _open_lot_state_lineage_payload(
+                source_transaction_id=lot_row.source_transaction_id,
+                state=state,
+                algorithm_id="cost-basis-selected-lot-update",
+            )
 
     @staticmethod
     def _open_lot_checkpoint_statement(
@@ -185,3 +207,23 @@ class SqlAlchemyCostBasisLotRepository:
             cost_local=lot.lot_cost_local,
             cost_base=lot.lot_cost_base,
         )
+
+
+def _open_lot_state_lineage_payload(
+    *,
+    source_transaction_id: str,
+    state: OpenLotState,
+    algorithm_id: str,
+) -> dict[str, object]:
+    output = {
+        "cost_base": state.cost_base,
+        "cost_local": state.cost_local,
+        "quantity": state.quantity,
+        "source_transaction_id": source_transaction_id,
+    }
+    lineage: CalculationLineage = build_cost_basis_state_lineage(
+        algorithm_id=algorithm_id,
+        input_payload={"materialized_open_lot_state": output},
+        output_payload=output,
+    )
+    return cast(dict[str, object], lineage.lineage_payload())
