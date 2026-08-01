@@ -33,6 +33,14 @@ from .policy import (
     YieldApplicationConvention,
     classify_amortized_cost_direction,
 )
+from .source_facts import (
+    AmortizedCostSourceFactStatus,
+    AmortizedCostSourceMetadata,
+    DiscountOriginClassification,
+    LotAmortizationScheduleFact,
+    LotAmortizedCostBasisFact,
+    LotEffectiveYieldFact,
+)
 
 __all__ = [
     "AMORTIZED_COST_SCHEDULE_ALGORITHM_ID",
@@ -49,10 +57,16 @@ __all__ = [
     "AmortizedCostReconciliationError",
     "AmortizedCostScheduleInput",
     "AmortizedCostScheduleResult",
+    "AmortizedCostSourceFactStatus",
+    "AmortizedCostSourceMetadata",
     "AmortizationPeriodInput",
     "AmortizationPeriodResult",
+    "DiscountOriginClassification",
+    "LotAmortizationScheduleFact",
+    "LotAmortizedCostBasisFact",
     "LotAmortizedCostPolicyAssignment",
     "LotBookCostAuthorityScope",
+    "LotEffectiveYieldFact",
     "MissingAmortizedCostAssignmentError",
     "OverlappingAmortizedCostAssignmentError",
     "ResolvedAmortizedCostAssignment",
