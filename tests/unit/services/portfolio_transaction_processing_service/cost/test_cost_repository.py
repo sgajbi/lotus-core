@@ -24,6 +24,7 @@ from src.services.portfolio_transaction_processing_service.app.domain.cost_basis
 )
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis.state_lineage import (  # noqa: E501
     CostBasisStateTransitionEvidence,
+    build_cost_basis_state_lineage,
 )
 from src.services.portfolio_transaction_processing_service.app.domain.transaction import (
     BookedTransaction,
@@ -497,7 +498,10 @@ async def test_apply_average_cost_pool_transition_scales_sources_and_assigns_res
         explicit_sources_after={},
     )
 
-    await repository.apply_average_cost_pool_transition(transition)
+    await repository.apply_average_cost_pool_transition(
+        transition,
+        transition_evidence=_transition_evidence(),
+    )
 
     scale_compiled = db_session.execute.call_args_list[1].args[0].compile()
     scale_sql = str(scale_compiled)
@@ -599,7 +603,10 @@ async def test_apply_average_cost_pool_transition_rejects_missing_close_sources(
     )
 
     with pytest.raises(ValueError, match="found no persisted source lots"):
-        await repository.apply_average_cost_pool_transition(transition)
+        await repository.apply_average_cost_pool_transition(
+            transition,
+            transition_evidence=_transition_evidence(),
+        )
 
     assert db_session.execute.await_count == 2
 
@@ -625,7 +632,10 @@ async def test_apply_average_cost_pool_transition_rejects_negative_residual() ->
     )
 
     with pytest.raises(ValueError, match="exceeds the target pool aggregate"):
-        await repository.apply_average_cost_pool_transition(transition)
+        await repository.apply_average_cost_pool_transition(
+            transition,
+            transition_evidence=_transition_evidence(),
+        )
 
     assert db_session.execute.await_count == 3
 
@@ -659,15 +669,68 @@ async def test_apply_average_cost_pool_transition_updates_explicit_new_source() 
         explicit_sources_after={"BUY-3": explicit_state},
     )
 
-    await repository.apply_average_cost_pool_transition(transition)
+    evidence = _transition_evidence()
+    await repository.apply_average_cost_pool_transition(
+        transition,
+        transition_evidence=evidence,
+    )
 
     assert db_session.execute.await_count == 2
     selected_update_sql = str(
         db_session.execute.call_args_list[0].args[0].compile(compile_kwargs={"literal_binds": True})
     )
     assert "source_transaction_id IN ('BUY-3')" in selected_update_sql
+    assert (
+        new_lot.calculation_lineage["input_content_hash"]
+        == build_cost_basis_state_lineage(
+            algorithm_id="cost-basis-selected-lot-update",
+            input_payload={
+                "prior_calculation_lineage": None,
+                "transition": evidence.lineage_payload(),
+            },
+            output_payload={
+                "cost_base": Decimal("75"),
+                "cost_local": Decimal("70"),
+                "quantity": Decimal("5"),
+                "source_transaction_id": "BUY-3",
+            },
+        ).input_content_hash
+    )
     checkpoint_compiled = db_session.execute.call_args_list[1].args[0].compile()
     assert "BUY-3" in checkpoint_compiled.params.values()
+
+
+async def test_average_cost_pool_receipt_binds_application_transition_evidence() -> None:
+    transition = AverageCostPoolTransition(
+        before=_average_cost_checkpoint(),
+        existing_sources_after=_average_cost_checkpoint().as_open_lot_state(),
+        explicit_sources_after={},
+    )
+
+    async def receipt(*, trigger_transaction_id: str) -> str:
+        db_session = AsyncMock()
+        evidence = CostBasisStateTransitionEvidence(
+            trigger_transaction_id=trigger_transaction_id,
+            transition_kind="average_cost_pool",
+            transition_lineage=build_calculation_lineage(
+                algorithm_id="test-application-transition",
+                algorithm_version=1,
+                intermediate_precision=28,
+                input_payload={"transaction_id": trigger_transaction_id},
+                output_payload={"quantity": Decimal("10")},
+            ),
+        )
+        await SqlAlchemyAverageCostPoolRepository(db_session).apply_average_cost_pool_transition(
+            transition,
+            transition_evidence=evidence,
+        )
+        checkpoint_statement = db_session.execute.await_args.args[0]
+        calculation_lineage = checkpoint_statement.compile().params["calculation_lineage"]
+        return str(calculation_lineage["input_content_hash"])
+
+    baseline = await receipt(trigger_transaction_id="SELL-1")
+
+    assert await receipt(trigger_transaction_id="SELL-2") != baseline
 
 
 async def test_get_fifo_disposal_lots_streams_only_quantity_covering_oldest_lots() -> None:

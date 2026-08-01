@@ -144,6 +144,8 @@ class SqlAlchemyAverageCostPoolRepository:
     async def apply_average_cost_pool_transition(
         self,
         transition: AverageCostPoolTransition,
+        *,
+        transition_evidence: CostBasisStateTransitionEvidence,
     ) -> None:
         """Persist one incremental pool and source-lot state transition atomically."""
 
@@ -151,6 +153,7 @@ class SqlAlchemyAverageCostPoolRepository:
         transition_lineage = build_cost_basis_state_lineage(
             algorithm_id="average-cost-pool-transition",
             input_payload={
+                "application_transition_evidence": transition_evidence.lineage_payload(),
                 "before": _checkpoint_payload(transition.before),
                 "existing_sources_after": _open_lot_state_payload(
                     transition.existing_sources_after
@@ -167,16 +170,11 @@ class SqlAlchemyAverageCostPoolRepository:
             transition_lineage=transition_lineage,
         )
         if transition.explicit_sources_after:
-            trigger_transaction_id = next(reversed(tuple(transition.explicit_sources_after)))
             await self.update_selected_open_lot_states(
                 portfolio_id=transition.before.portfolio_id,
                 security_id=transition.before.security_id,
                 states_by_source_transaction_id=dict(transition.explicit_sources_after),
-                transition_evidence=CostBasisStateTransitionEvidence(
-                    trigger_transaction_id=trigger_transaction_id,
-                    transition_kind="average_cost_pool_transition",
-                    transition_lineage=transition_lineage,
-                ),
+                transition_evidence=transition_evidence,
             )
         await self.upsert_average_cost_pool_checkpoint(
             replace(after, calculation_lineage=transition_lineage)

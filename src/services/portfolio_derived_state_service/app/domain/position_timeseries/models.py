@@ -20,6 +20,7 @@ class PositionSnapshotRecord:
     market_value_local: Decimal | None
     valuation_status: str = "VALUED_CURRENT"
     source_updated_at: datetime | None = None
+    calculation_lineage: CalculationLineage | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,6 +35,7 @@ class PositionCashflowRecord:
     timing: str
     is_position_flow: bool
     is_portfolio_flow: bool
+    calculation_lineage: CalculationLineage | None = None
 
 
 @dataclass(frozen=True, slots=True)

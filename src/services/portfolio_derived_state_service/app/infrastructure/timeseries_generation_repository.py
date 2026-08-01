@@ -9,6 +9,7 @@ from typing import Any, Sequence, cast
 from portfolio_common.database_models import (
     Cashflow,
     DailyPositionSnapshot,
+    DailyPositionValuationReceiptRecord,
     PortfolioAggregationJob,
     PortfolioTimeseries,
     PositionTimeseries,
@@ -49,9 +50,20 @@ class TimeseriesGenerationRepository(TimeseriesMarketDataReader):
     ) -> PositionSnapshotRecord | None:
         """Load one persisted valuation snapshot as an immutable domain record."""
 
-        row = await self.db.get(DailyPositionSnapshot, snapshot_id)
+        result = await self.db.execute(
+            select(
+                DailyPositionSnapshot,
+                DailyPositionValuationReceiptRecord.calculation_lineage,
+            )
+            .outerjoin(
+                DailyPositionValuationReceiptRecord,
+                DailyPositionValuationReceiptRecord.snapshot_id == DailyPositionSnapshot.id,
+            )
+            .where(DailyPositionSnapshot.id == snapshot_id)
+        )
+        row = result.first()
         return (
-            to_position_snapshot_record(row, fallback_epoch=fallback_epoch)
+            _joined_position_snapshot_record(row, fallback_epoch=fallback_epoch)
             if row is not None
             else None
         )
@@ -258,7 +270,14 @@ class TimeseriesGenerationRepository(TimeseriesMarketDataReader):
         normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
         normalized_security_id = normalize_lookup_identifier(security_id)
         stmt = (
-            select(DailyPositionSnapshot)
+            select(
+                DailyPositionSnapshot,
+                DailyPositionValuationReceiptRecord.calculation_lineage,
+            )
+            .outerjoin(
+                DailyPositionValuationReceiptRecord,
+                DailyPositionValuationReceiptRecord.snapshot_id == DailyPositionSnapshot.id,
+            )
             .filter(
                 func.trim(DailyPositionSnapshot.portfolio_id) == normalized_portfolio_id,
                 func.trim(DailyPositionSnapshot.security_id) == normalized_security_id,
@@ -269,8 +288,8 @@ class TimeseriesGenerationRepository(TimeseriesMarketDataReader):
             .limit(1)
         )
         result = await self.db.execute(stmt)
-        row = result.scalars().first()
-        return to_position_snapshot_record(row) if row is not None else None
+        row = result.first()
+        return _joined_position_snapshot_record(row) if row is not None else None
 
     @async_timed(repository="TimeseriesRepository", method="get_next_snapshots_after")
     async def get_next_snapshots_after(
@@ -302,15 +321,22 @@ class TimeseriesGenerationRepository(TimeseriesMarketDataReader):
             .subquery()
         )
         stmt = (
-            select(DailyPositionSnapshot)
+            select(
+                DailyPositionSnapshot,
+                DailyPositionValuationReceiptRecord.calculation_lineage,
+            )
             .join(ranked_future_snapshots, DailyPositionSnapshot.id == ranked_future_snapshots.c.id)
+            .outerjoin(
+                DailyPositionValuationReceiptRecord,
+                DailyPositionValuationReceiptRecord.snapshot_id == DailyPositionSnapshot.id,
+            )
             .where(ranked_future_snapshots.c.rn == 1)
             .order_by(DailyPositionSnapshot.date.asc())
             .limit(limit)
         )
         result = await self.db.execute(stmt)
-        rows = cast(list[DailyPositionSnapshot], result.scalars().all())
-        return [to_position_snapshot_record(row) for row in rows]
+        rows = cast(list[Sequence[object]], result.all())
+        return [_joined_position_snapshot_record(row) for row in rows]
 
     @async_timed(repository="TimeseriesRepository", method="get_cashflows_for_security_dates")
     async def get_cashflows_for_security_dates(
@@ -585,6 +611,7 @@ def to_position_snapshot_record(
     row: DailyPositionSnapshot,
     *,
     fallback_epoch: int = 0,
+    calculation_lineage_payload: object = None,
 ) -> PositionSnapshotRecord:
     """Detach valued fields used by timeseries calculation from an ORM snapshot."""
 
@@ -598,6 +625,19 @@ def to_position_snapshot_record(
         market_value_local=cast(Decimal | None, row.market_value_local),
         valuation_status=str(row.valuation_status),
         source_updated_at=cast(datetime, row.updated_at),
+        calculation_lineage=calculation_lineage_from_payload(calculation_lineage_payload),
+    )
+
+
+def _joined_position_snapshot_record(
+    row: Sequence[object],
+    *,
+    fallback_epoch: int = 0,
+) -> PositionSnapshotRecord:
+    return to_position_snapshot_record(
+        cast(DailyPositionSnapshot, row[0]),
+        fallback_epoch=fallback_epoch,
+        calculation_lineage_payload=row[1],
     )
 
 
@@ -611,6 +651,7 @@ def _position_cashflow_record(row: Cashflow) -> PositionCashflowRecord:
         timing=str(row.timing),
         is_position_flow=bool(row.is_position_flow),
         is_portfolio_flow=bool(row.is_portfolio_flow),
+        calculation_lineage=calculation_lineage_from_payload(row.calculation_lineage),
     )
 
 

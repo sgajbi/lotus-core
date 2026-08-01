@@ -228,7 +228,15 @@ async def test_average_cost_transition_is_applied_atomically() -> None:
         processed=_processed(),
     )
 
-    average_cost_pools.apply_average_cost_pool_transition.assert_awaited_once_with(transition)
+    average_cost_pools.apply_average_cost_pool_transition.assert_awaited_once()
+    assert average_cost_pools.apply_average_cost_pool_transition.await_args.args == (transition,)
+    transition_evidence = average_cost_pools.apply_average_cost_pool_transition.await_args.kwargs[
+        "transition_evidence"
+    ]
+    assert transition_evidence.trigger_transaction_id == "SELL-1"
+    assert transition_evidence.transition_kind == "average_cost_pool"
+    transition_payload = transition_evidence.transition_lineage.lineage_payload()
+    assert transition_payload["algorithm_id"] == "cost-basis-lot-state-transition"
     average_cost_pools.upsert_average_cost_pool_checkpoint.assert_not_awaited()
     lot_states.update_open_lot_states.assert_not_awaited()
     lot_states.update_selected_open_lot_states.assert_not_awaited()

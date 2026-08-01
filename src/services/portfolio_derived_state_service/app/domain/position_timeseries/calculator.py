@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass, replace
 from decimal import Decimal
+from typing import cast
 
 from portfolio_common.domain.analytics.cashflow_semantics import (
     normalize_cashflow_timing,
@@ -46,10 +47,13 @@ def _required_market_value(
 def _average_cost(*, cost_basis: Decimal, quantity: Decimal) -> Decimal:
     if not quantity:
         return ZERO
-    return POSITION_TIMESERIES_LEDGER_OUTPUT_V1.divide(
-        cost_basis,
-        quantity,
-        field_name="cost",
+    return cast(
+        Decimal,
+        POSITION_TIMESERIES_LEDGER_OUTPUT_V1.divide(
+            cost_basis,
+            quantity,
+            field_name="cost",
+        ),
     )
 
 
@@ -180,6 +184,11 @@ def _position_timeseries_input(
     def snapshot_payload(snapshot: PositionSnapshotRecord) -> dict[str, object]:
         return {
             "cost_basis_local": snapshot.cost_basis_local,
+            "calculation_lineage": (
+                snapshot.calculation_lineage.lineage_payload()
+                if snapshot.calculation_lineage is not None
+                else None
+            ),
             "date": snapshot.date,
             "epoch": snapshot.epoch,
             "market_value_local": snapshot.market_value_local,
@@ -194,6 +203,11 @@ def _position_timeseries_input(
             {
                 "amount": cashflow.amount,
                 "cashflow_date": cashflow.cashflow_date,
+                "calculation_lineage": (
+                    cashflow.calculation_lineage.lineage_payload()
+                    if cashflow.calculation_lineage is not None
+                    else None
+                ),
                 "classification": cashflow.classification,
                 "epoch": cashflow.epoch,
                 "is_portfolio_flow": cashflow.is_portfolio_flow,

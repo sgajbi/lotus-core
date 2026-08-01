@@ -48,7 +48,16 @@ async def persist_open_lot_state(
     """Persist the exact lot-state scope produced by a cost-basis calculation."""
 
     if average_cost_pool_transition is not None:
-        await average_cost_pools.apply_average_cost_pool_transition(average_cost_pool_transition)
+        transition_evidence = _transition_evidence(
+            transaction=transaction,
+            processed=processed,
+            transition_kind=persistence_scope.value,
+            open_lot_states=open_lot_states,
+        )
+        await average_cost_pools.apply_average_cost_pool_transition(
+            average_cost_pool_transition,
+            transition_evidence=transition_evidence,
+        )
         return
 
     lot_behavior = transaction_lot_behavior(effective_transaction_type)

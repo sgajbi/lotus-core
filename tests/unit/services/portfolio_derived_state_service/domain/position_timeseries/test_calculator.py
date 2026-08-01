@@ -6,6 +6,10 @@ from decimal import Decimal
 from typing import cast
 
 import pytest
+from portfolio_common.domain.calculation_lineage import (
+    CalculationLineage,
+    build_calculation_lineage,
+)
 
 from src.services.portfolio_derived_state_service.app.domain.position_timeseries.calculator import (
     PositionSnapshotNotValuedError,
@@ -57,6 +61,7 @@ def _cashflow(
     is_position_flow: bool,
     is_portfolio_flow: bool,
     transaction_id: str = "T1",
+    calculation_lineage: CalculationLineage | None = None,
 ) -> PositionCashflowRecord:
     return PositionCashflowRecord(
         transaction_id=transaction_id,
@@ -67,6 +72,17 @@ def _cashflow(
         timing=timing,
         is_position_flow=is_position_flow,
         is_portfolio_flow=is_portfolio_flow,
+        calculation_lineage=calculation_lineage,
+    )
+
+
+def _source_lineage(source_revision: str) -> CalculationLineage:
+    return build_calculation_lineage(
+        algorithm_id="upstream-financial-calculation",
+        algorithm_version=1,
+        intermediate_precision=28,
+        input_payload={"source_revision": source_revision},
+        output_payload={"amount": Decimal("100")},
     )
 
 
@@ -202,6 +218,80 @@ def test_position_timeseries_lineage_is_deterministic_and_material_input_sensiti
     assert baseline.calculation_lineage.output_content_hash != (
         changed.calculation_lineage.output_content_hash
     )
+
+
+@pytest.mark.parametrize("source_kind", ["current_snapshot", "previous_snapshot", "cashflow"])
+def test_position_timeseries_lineage_binds_upstream_financial_lineage(
+    current_snapshot: PositionSnapshotRecord,
+    previous_snapshot: PositionSnapshotRecord,
+    source_kind: str,
+) -> None:
+    baseline_current = current_snapshot
+    changed_current = current_snapshot
+    baseline_previous = previous_snapshot
+    changed_previous = previous_snapshot
+    baseline_cashflows: list[PositionCashflowRecord] = []
+    changed_cashflows: list[PositionCashflowRecord] = []
+    if source_kind == "current_snapshot":
+        baseline_current = replace(
+            current_snapshot,
+            calculation_lineage=_source_lineage("valuation-revision-1"),
+        )
+        changed_current = replace(
+            current_snapshot,
+            calculation_lineage=_source_lineage("valuation-revision-2"),
+        )
+    elif source_kind == "previous_snapshot":
+        baseline_previous = replace(
+            previous_snapshot,
+            calculation_lineage=_source_lineage("valuation-revision-1"),
+        )
+        changed_previous = replace(
+            previous_snapshot,
+            calculation_lineage=_source_lineage("valuation-revision-2"),
+        )
+    else:
+        baseline_cashflows = [
+            _cashflow(
+                amount=Decimal("100"),
+                timing="EOD",
+                classification="INCOME",
+                is_position_flow=True,
+                is_portfolio_flow=False,
+                calculation_lineage=_source_lineage("cashflow-revision-1"),
+            )
+        ]
+        changed_cashflows = [
+            _cashflow(
+                amount=Decimal("100"),
+                timing="EOD",
+                classification="INCOME",
+                is_position_flow=True,
+                is_portfolio_flow=False,
+                calculation_lineage=_source_lineage("cashflow-revision-2"),
+            )
+        ]
+
+    baseline = calculate_position_timeseries(
+        current_snapshot=baseline_current,
+        previous_snapshot=baseline_previous,
+        cashflows=baseline_cashflows,
+        epoch=5,
+    )
+    changed = calculate_position_timeseries(
+        current_snapshot=changed_current,
+        previous_snapshot=changed_previous,
+        cashflows=changed_cashflows,
+        epoch=5,
+    )
+
+    baseline_lineage = baseline.calculation_lineage
+    changed_lineage = changed.calculation_lineage
+    assert baseline_lineage is not None
+    assert changed_lineage is not None
+    assert replace(baseline, calculation_lineage=None) == replace(changed, calculation_lineage=None)
+    assert baseline_lineage.input_content_hash != changed_lineage.input_content_hash
+    assert baseline_lineage.output_content_hash != changed_lineage.output_content_hash
 
 
 def test_calculation_defensively_normalizes_numeric_text_and_blank_amounts() -> None:
