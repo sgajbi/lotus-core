@@ -48,6 +48,7 @@ async def persist_open_lot_state(
 ) -> None:
     """Persist the exact lot-state scope produced by a cost-basis calculation."""
 
+    transition_evidence: CostBasisStateTransitionEvidence | None = None
     if average_cost_pool_transition is not None:
         transition_evidence = _transition_evidence(
             transaction=transaction,
@@ -71,7 +72,6 @@ async def persist_open_lot_state(
     should_persist_complete_average_cost_pool = cost_basis_method is CostBasisMethod.AVCO and (
         not incremental or (mutates_lot_state and not incremental_opening)
     )
-    transition_evidence = None
     if should_update_lot_states or should_persist_complete_average_cost_pool:
         transition_evidence = _transition_evidence(
             transaction=transaction,
