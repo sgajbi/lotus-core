@@ -4,19 +4,20 @@
 
 * **Document ID:** RFC-AMORTIZATION-01
 * **Title:** Canonical Fixed Income Amortization & Accretion Specification (Premium / Discount / OID)
-* **Version:** 1.0.0
+* **Version:** 1.1.0
 * **Status:** Draft
-* **Owner:** *TBD*
+* **Owner:** Transaction Economics Domain
 * **Reviewers:** *TBD*
 * **Approvers:** *TBD*
-* **Last Updated:** *TBD*
+* **Last Updated:** 2026-08-02
 * **Effective Date:** *TBD*
 
 ### 1.1 Change Log
 
-| Version | Date  | Author | Summary                                                |
-| ------- | ----- | ------ | ------------------------------------------------------ |
-| 1.0.0   | *TBD* | *TBD*  | Initial canonical amortization/accretion specification |
+| Version | Date       | Author            | Summary                                                                                                    |
+| ------- | ---------- | ----------------- | ---------------------------------------------------------------------------------------------------------- |
+| 1.0.0   | *TBD*      | *TBD*             | Initial canonical amortization/accretion specification                                                     |
+| 1.1.0   | 2026-08-02 | Lotus Engineering | Correct straight-line direction; define yield conventions, clean-cost authority, and fail-closed eligibility |
 
 ---
 
@@ -158,16 +159,25 @@ After implementation:
 
 ### 8.1 Eligibility
 
-An instrument/lot is eligible for amortization if:
+An instrument/lot is eligible for amortization only if:
 
-* `instrument_type` is fixed income (bond/note)
-* `amortization_method` is enabled by policy
-* required schedule inputs exist (see Section 9)
+* an explicit, effective-dated amortization-policy assignment is active for the exact
+  tenant, legal book, portfolio, instrument, and acquisition lot;
+* the source identifies the lot as eligible; broad product-name or asset-class inference is
+  prohibited;
+* authoritative clean acquisition cost is present separately from accrued interest paid;
+* the selected method, rate convention, redemption value, and complete cashflow/principal
+  schedule inputs exist (see Section 9).
+
+Missing, overlapping, stale, unsupported, or incomplete authority creates an auditable
+`PARKED` or `INELIGIBLE` result with a stable reason code. It never falls back to original cost,
+a product string, or an inferred yield while claiming amortized-cost support.
 
 ### 8.2 Mandatory configurable policies
 
 * `amortization_enabled: bool`
 * `amortization_method = EFFECTIVE_YIELD | STRAIGHT_LINE`
+* `yield_application_convention = ANNUAL_EFFECTIVE | ANNUAL_NOMINAL_SIMPLE | PER_PERIOD_EFFECTIVE`
 * `amortization_frequency = DAILY | COUPON_PERIOD | MONTHLY`
 * `day_count_convention` (ACT/360, ACT/365, 30/360, etc.)
 * `include_fees_in_amortized_cost: bool`
@@ -204,9 +214,14 @@ Per lot:
 * `initial_amortized_cost_local` (derived: usually equals clean cost + fees-in-basis)
 * `initial_redemption_value_local`
 
+`initial_clean_cost_local` must be supplied or derived from an authoritative clean-price
+representation. A dirty settlement amount or generic book cost that includes accrued interest is
+not valid clean-cost evidence. The implementation must fail closed rather than subtract an inferred
+accrued amount.
+
 ### 9.3 Effective yield input
 
-The system must support:
+The target design may support:
 
 * `effective_yield` provided by upstream (preferred), OR
 * derivation from schedule + price (allowed if schedule and clean price are available)
@@ -215,7 +230,10 @@ Policy:
 
 * `effective_yield_source = UPSTREAM | DERIVE | REQUIRE_UPSTREAM`
 
-Recommended default: `REQUIRE_UPSTREAM` for correctness, but allow `DERIVE` for migrations.
+The first production implementation uses `REQUIRE_UPSTREAM`. `DERIVE` remains unsupported until a
+separately versioned solver, independent golden evidence, convergence/error policy, and source
+lineage are implemented. An `effective_yield` is incomplete without its
+`yield_application_convention`; no annual/per-period interpretation may be inferred.
 
 ---
 
@@ -230,10 +248,11 @@ Per lot (or per position if average-cost FI lots are used):
 * `lot_id`
 * `amortization_method`
 * `effective_yield`
+* `yield_application_convention`
 * `day_count_convention`
 * `amortization_frequency`
 * `schedule_version_id` (for audit)
-* `profile_status = ACTIVE | TERMINATED`
+* `profile_status = ACTIVE | PARKED | INELIGIBLE | TERMINATED | SUPERSEDED`
 * linkage:
 
   * `originating_buy_transaction_id`
@@ -268,23 +287,35 @@ Amortization applies to **clean cost** only:
 
 For each period:
 
-1. Compute effective interest on beginning amortized cost:
+1. Resolve the governed period rate from the explicitly assigned yield convention:
 
-`eir_interest_local = begin_amortized_cost_local × effective_yield × year_fraction(period)`
+* `ANNUAL_EFFECTIVE`:
+  `period_rate = (1 + annual_effective_yield) ^ year_fraction(period) - 1`
+* `ANNUAL_NOMINAL_SIMPLE`:
+  `period_rate = annual_nominal_rate × year_fraction(period)`
+* `PER_PERIOD_EFFECTIVE`:
+  `period_rate = supplied_effective_rate_for_period`
 
-2. Cash coupon expected for the period:
+The rate convention and every supplied period rate are source-versioned inputs. Unknown or
+mathematically invalid combinations fail closed.
+
+2. Compute effective interest on beginning amortized cost:
+
+`eir_interest_local = begin_amortized_cost_local × period_rate`
+
+3. Cash coupon expected for the period:
 
 `cash_coupon_local = coupon_cashflow_for_period`
 (if coupon posted separately, this is still needed for schedule reconciliation)
 
-3. Amortization amount:
+4. Amortization amount:
 
 `amortization_amount_local = eir_interest_local - cash_coupon_local`
 
 * If positive: **accretion** (discount/OID)
 * If negative: **amortization** (premium)
 
-4. End amortized cost:
+5. End amortized cost before a separately represented principal reduction:
 
 `end_amortized_cost_local = begin_amortized_cost_local + amortization_amount_local`
 
@@ -294,9 +325,16 @@ At maturity, amortized cost must reconcile to redemption value (within tolerance
 
 If policy selects straight-line:
 
-`amortization_amount_local = (initial_amortized_cost_local - redemption_value_local) / number_of_periods_remaining`
+`total_adjustment_local = redemption_value_local - initial_amortized_cost_local`
 
-Direction handled by sign.
+`amortization_amount_local = total_adjustment_local × period_weight / remaining_weight`
+
+`period_weight` and `remaining_weight` use authoritative governed year fractions, so irregular and
+stub periods are not treated as equal merely because they are both schedule rows.
+
+The sign follows the same roll-forward as Section 11.3: positive movement accretes a discount;
+negative movement amortizes a premium. The final period may absorb only a residual within the
+governed rounding tolerance; a larger residual parks the profile as unreconciled.
 
 ### 11.5 Rounding and reconciliation (mandatory)
 
