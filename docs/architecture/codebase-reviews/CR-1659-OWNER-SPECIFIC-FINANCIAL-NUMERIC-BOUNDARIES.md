@@ -3,9 +3,9 @@
 ## Scope
 
 This review tracks bounded GitHub issue #829 owner-specific numeric work across generic simulation,
-position-history accumulation, durable cashflow amounts, accrued-income calculation, position
-valuation, and the shared calculated-output arithmetic and lineage contracts. It does not claim
-closure of the complete producer-policy inventory.
+transaction cost, cost-basis state, position history, cashflow, accrued income, position and
+portfolio timeseries, position valuation, and the shared calculated-output arithmetic and lineage
+contracts.
 
 ## Findings
 
@@ -34,6 +34,10 @@ closure of the complete producer-policy inventory.
 - PR #855 review found precision-only local contexts still inherited ambient rounding in accrued
   income, position valuation, and their day-count inputs. It also found that a downgrade would try
   to restore the old null-lineage constraint while new legacy rows still contained lineage.
+- The remaining transaction-cost, cost-basis-state, position-history, position-timeseries, and
+  portfolio-timeseries outputs executed governed arithmetic but did not persist calculation
+  lineage. Requiring every helper to emit a receipt would duplicate evidence on hot paths, so the
+  guard also needed a statically verified final durable-output boundary.
 
 ## Resolution
 
@@ -116,6 +120,16 @@ closure of the complete producer-policy inventory.
   `LEGACY_UNSCOPED` receipts before restoring the prior constraint. Deletion preserves the
   snapshot and avoids retaining either lineage the old schema cannot represent or a receipt hash
   that no longer matches its content.
+- Added deterministic typed lineage at each remaining owner boundary: final calculated transaction
+  costs, FIFO and AVCO state transitions, position-history rows, position-timeseries rows, and
+  portfolio-timeseries rows. Migrations `c134b2c3d507` through `c138b2c3d50b` add nullable JSON
+  evidence without inventing receipts for legacy rows. Transaction fees remain atomically replaced
+  with their parent cost result, position history retains its ordered chain, portfolio contributions
+  are sorted before hashing, and AVCO preserves set-based persistence rather than adding N+1 work.
+- Extended the guard contract with optional `lineage_boundary_callsites`. A declared boundary earns
+  credit only when static analysis proves that exact callable invokes the governed lineage builder;
+  stale or invented boundaries fail closed. The inventory is now eight `required`, zero `partial`,
+  zero `not-exposed`, and zero unclassified gaps.
 
 The later cashflow persistence slice adds one nullable JSON column and no topic or runtime-topology
 change. Exactly representable inputs, cashflow formulas, serialized Decimal amounts, transaction
@@ -185,6 +199,12 @@ identity, and public response shapes remain unchanged.
   position-valuation, and migration tests, including opposite ambient rounding modes and downgrade
   operation ordering; calculated-output-policy, migration smoke, MyPy, and focused Ruff gates also
   passed.
+- Signed commits `498cb0514`, `443d53b67`, `500bbdfbb`, `b62b8e892`, and `7d1899b53`
+  implement the five remaining owner families. Their focused suites passed 21, 113, 83, 57, and
+  203 tests respectively, with repository-native Ruff and MyPy validation.
+- The closure guard suite passes 100 tests; `make calculated-output-policy-guard` reports eight
+  classified policies and `make financial-numeric-persistence-guard` reports 98 Numeric columns
+  across 31 tables, 97 bounded and one exact-unbounded, with zero planned gaps.
 
 ## Compatibility and remaining work
 
@@ -193,19 +213,14 @@ only after acceptance. Gateway #511 is exact-main complete. Accrued-income and p
 lineage hashes intentionally change because numeric policy is now calculation identity. Query
 Service calculation-lineage responses now expose an additive optional policy object; calculations
 that do not execute a governed output policy remain valid with `numeric_output_policy=null`.
-Issue #829 remains open for complete producer-policy inventory reconciliation and durable
-persistence/query/replay compatibility.
-
-The declaration inventory is complete and enforced. Cashflow, accrued income, and position
-valuation are lineage-bound; cashflow and non-flat legacy valuation evidence are persisted. The
-residual is narrower: five executing policies remain `not-exposed`, cashflow and valuation
-legacy/backfill absence remains explicit rather than inferred, and the remaining families still
-need compatible durable persistence/query/replay proof before #829 can close.
+The declaration inventory is complete and enforced. All eight calculated-output families are
+lineage-bound at their accountable output boundary. Additive nullable persistence keeps legacy rows
+valid and explicitly unknown rather than inferring current-policy evidence. Formulas, normalized
+values, public response shapes, topic contracts, and runtime topology are unchanged.
 
 ## Documentation decision
 
-Repository context and this existing review record carry the implementation detail without adding
-a duplicate document. The additive Query lineage field remains reflected in generated OpenAPI and
-API-vocabulary truth. Cashflow and valuation persistence are recorded in the existing
-rounding/precision standard and their existing wiki pages. No new route, operator command, topic,
-or runtime topology changed.
+Repository context, the machine-readable policy standard, and this existing review record carry the
+implementation detail without adding a duplicate document. No route, public response, operator
+command, topic, runtime topology, or wiki-owned workflow changed, so no OpenAPI or wiki source
+change is required.

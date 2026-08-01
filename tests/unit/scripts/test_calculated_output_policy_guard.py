@@ -630,6 +630,40 @@ def test_guard_rejects_missing_required_lineage_binding(tmp_path: Path) -> None:
     )
 
 
+def test_guard_accepts_verified_final_output_boundary_for_upstream_arithmetic(
+    tmp_path: Path,
+) -> None:
+    _write_policy(tmp_path, unbound_consumer=True)
+
+    assert (
+        evaluate(
+            tmp_path,
+            _contract(
+                tmp_path,
+                lineage_boundary_callsites=["src/owner/consumer.py::<module>"],
+            ),
+        )
+        == ()
+    )
+
+
+def test_guard_rejects_boundary_that_does_not_invoke_governed_builder(tmp_path: Path) -> None:
+    _write_policy(tmp_path, unbound_consumer=True)
+
+    findings = evaluate(
+        tmp_path,
+        _contract(
+            tmp_path,
+            lineage_boundary_callsites=["src/owner/unbound_consumer.py::<module>"],
+        ),
+    )
+
+    assert (
+        "TEST_LEDGER_OUTPUT_V1: lineage boundary does not invoke the governed builder at "
+        "src/owner/unbound_consumer.py::<module>"
+    ) in findings
+
+
 def test_guard_accepts_partial_binding_with_exact_consumer_gap(tmp_path: Path) -> None:
     _write_policy(tmp_path, unbound_consumer=True)
 
@@ -1232,7 +1266,7 @@ def test_guard_rejects_invalid_contract_envelope(
     [
         (
             lambda policy: policy.pop("owner"),
-            "policy keys must be",
+            "policy keys must include",
         ),
         (
             lambda policy: policy.__setitem__("owner", " "),

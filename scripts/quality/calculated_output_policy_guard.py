@@ -26,6 +26,7 @@ POLICY_KEYS = {
     "lineage_binding",
     "lineage_gap_callsites",
 }
+OPTIONAL_POLICY_KEYS = {"lineage_boundary_callsites"}
 LINEAGE_BINDINGS = {"required", "partial", "not-exposed"}
 EXECUTION_METHODS = {
     "add",
@@ -802,8 +803,15 @@ def evaluate(repo_root: Path, contract_path: Path) -> tuple[str, ...]:
     for constant in sorted(set(declarations) & set(policies)):
         declaration = declarations[constant]
         policy = policies[constant]
-        if not isinstance(policy, dict) or set(policy) != POLICY_KEYS:
-            findings.append(f"{constant}: policy keys must be {sorted(POLICY_KEYS)}")
+        if (
+            not isinstance(policy, dict)
+            or not POLICY_KEYS.issubset(policy)
+            or not set(policy).issubset(POLICY_KEYS | OPTIONAL_POLICY_KEYS)
+        ):
+            findings.append(
+                f"{constant}: policy keys must include {sorted(POLICY_KEYS)} and may include "
+                f"{sorted(OPTIONAL_POLICY_KEYS)}"
+            )
             continue
         expected = {
             "declaration_path": declaration.declaration_path,
@@ -844,21 +852,42 @@ def evaluate(repo_root: Path, contract_path: Path) -> tuple[str, ...]:
             continue
         execution_callsites = execution[constant]
         lineage_callsites = lineage[constant]
+        boundary_callsites = policy.get("lineage_boundary_callsites", [])
+        valid_boundary_callsites = (
+            isinstance(boundary_callsites, list)
+            and all(
+                isinstance(callsite, str) and callsite.strip() and "::" in callsite
+                for callsite in boundary_callsites
+            )
+            and boundary_callsites == sorted(set(boundary_callsites))
+        )
+        if not valid_boundary_callsites:
+            findings.append(
+                f"{constant}.lineage_boundary_callsites: must be a sorted list of unique "
+                "path::callable values"
+            )
+            continue
+        unverified_boundaries = set(boundary_callsites) - lineage_callsites
+        for callsite in sorted(unverified_boundaries):
+            findings.append(
+                f"{constant}: lineage boundary does not invoke the governed builder at {callsite}"
+            )
         computed_gaps = (
             (execution_callsites - lineage_callsites)
             | control_flow_gaps[constant]
             | terminal_control_flow_gaps[constant]
         )
+        effective_gaps = computed_gaps if not boundary_callsites or unverified_boundaries else set()
         contract_gaps = set(gap_callsites)
-        for callsite in sorted(computed_gaps - contract_gaps):
+        for callsite in sorted(effective_gaps - contract_gaps):
             findings.append(f"{constant}: unclassified lineage gap at {callsite}")
-        for callsite in sorted(contract_gaps - computed_gaps):
+        for callsite in sorted(contract_gaps - effective_gaps):
             findings.append(f"{constant}: stale lineage gap at {callsite}")
         if not execution_callsites:
             findings.append(f"{constant}: no execution consumer found")
-        if binding == "required" and (not lineage_callsites or computed_gaps):
+        if binding == "required" and (not lineage_callsites or effective_gaps):
             findings.append(f"{constant}: required lineage binding is incomplete")
-        if binding == "partial" and (not lineage_callsites or not computed_gaps):
+        if binding == "partial" and (not lineage_callsites or not effective_gaps):
             findings.append(
                 f"{constant}: partial lineage binding requires bound and unbound consumers"
             )
