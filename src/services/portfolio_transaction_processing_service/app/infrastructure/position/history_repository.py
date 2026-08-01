@@ -12,6 +12,7 @@ from time import monotonic
 from typing import Any, cast
 
 from portfolio_common.database_models import DailyPositionSnapshot, PositionHistory, Transaction
+from portfolio_common.domain.calculation_lineage import calculation_lineage_from_payload
 from portfolio_common.identifiers import normalize_lookup_identifier
 from portfolio_common.monitoring import observe_position_history_replay_lock_wait
 from portfolio_common.utils import async_timed
@@ -271,6 +272,7 @@ def _to_position_history_record(row: PositionHistory) -> PositionHistoryRecord:
         cost_basis=Decimal(row.cost_basis),
         cost_basis_local=Decimal(row.cost_basis_local or 0),
         epoch=int(row.epoch),
+        calculation_lineage=calculation_lineage_from_payload(row.calculation_lineage),
     )
 
 
@@ -284,4 +286,9 @@ def _to_position_history_row(record: PositionHistoryRecord) -> PositionHistory:
         cost_basis=record.cost_basis,
         cost_basis_local=record.cost_basis_local,
         epoch=record.epoch,
+        calculation_lineage=(
+            record.calculation_lineage.lineage_payload()
+            if record.calculation_lineage is not None
+            else None
+        ),
     )

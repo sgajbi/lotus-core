@@ -2,7 +2,7 @@
 
 from dataclasses import FrozenInstanceError
 from datetime import date, datetime, timedelta, timezone
-from decimal import Decimal
+from decimal import Decimal, localcontext
 from pathlib import Path
 
 import pytest
@@ -162,30 +162,94 @@ def test_build_position_history_applies_anchor_and_returns_immutable_records() -
 
     records = build_position_history(anchor=anchor, transactions=(sell, buy), epoch=4)
 
-    assert records == (
-        PositionHistoryRecord(
-            portfolio_id="PB-001",
-            security_id="SEC-001",
-            transaction_id="TX-BUY",
-            position_date=date(2026, 4, 10),
-            quantity=Decimal("15"),
-            cost_basis=Decimal("160"),
-            cost_basis_local=Decimal("150"),
-            epoch=4,
-        ),
-        PositionHistoryRecord(
-            portfolio_id="PB-001",
-            security_id="SEC-001",
-            transaction_id="TX-SELL",
-            position_date=date(2026, 4, 11),
-            quantity=Decimal("12"),
-            cost_basis=Decimal("136"),
-            cost_basis_local=Decimal("129"),
-            epoch=4,
-        ),
+    assert tuple(
+        (
+            record.transaction_id,
+            record.position_date,
+            record.quantity,
+            record.cost_basis,
+            record.cost_basis_local,
+            record.epoch,
+        )
+        for record in records
+    ) == (
+        ("TX-BUY", date(2026, 4, 10), Decimal("15"), Decimal("160"), Decimal("150"), 4),
+        ("TX-SELL", date(2026, 4, 11), Decimal("12"), Decimal("136"), Decimal("129"), 4),
     )
+    assert all(record.calculation_lineage is not None for record in records)
+    first_lineage = records[0].calculation_lineage
+    assert first_lineage is not None
+    assert first_lineage.algorithm_id == "position-history-state-transition"
+    assert first_lineage.numeric_output_policy is not None
+    assert first_lineage.numeric_output_policy.policy_id == ("position-history-ledger-output@1.0.0")
     with pytest.raises(FrozenInstanceError):
         records[0].quantity = Decimal("999")  # type: ignore[misc]
+
+
+def test_position_history_lineage_is_deterministic_and_chains_prior_output() -> None:
+    transactions = (
+        _transaction("TX-BUY", "BUY", quantity=Decimal("5"), net_cost=Decimal("60")),
+        _transaction(
+            "TX-SELL",
+            "SELL",
+            transaction_date=datetime(2026, 4, 11, 9, 30, tzinfo=timezone.utc),
+            quantity=Decimal("2"),
+            net_cost=Decimal("-24"),
+        ),
+    )
+
+    first_run = build_position_history(anchor=None, transactions=transactions, epoch=4)
+    second_run = build_position_history(anchor=None, transactions=reversed(transactions), epoch=4)
+
+    assert tuple(record.calculation_lineage for record in first_run) == tuple(
+        record.calculation_lineage for record in second_run
+    )
+    first_lineage = first_run[0].calculation_lineage
+    second_lineage = first_run[1].calculation_lineage
+    assert first_lineage is not None
+    assert second_lineage is not None
+    assert first_lineage.output_content_hash != second_lineage.output_content_hash
+
+
+def test_position_history_lineage_is_independent_of_ambient_decimal_context() -> None:
+    transaction = _transaction(
+        "TX-BUY",
+        "BUY",
+        quantity=Decimal("1.2345678901"),
+        net_cost=Decimal("12.3456789012"),
+        net_cost_local=Decimal("9.8765432109"),
+    )
+
+    expected = build_position_history(anchor=None, transactions=(transaction,), epoch=2)
+    with localcontext() as context:
+        context.prec = 6
+        actual = build_position_history(anchor=None, transactions=(transaction,), epoch=2)
+
+    assert actual == expected
+
+
+def test_position_history_lineage_changes_with_material_transaction_input() -> None:
+    baseline = build_position_history(
+        anchor=None,
+        transactions=(
+            _transaction("TX-BUY", "BUY", quantity=Decimal("5"), net_cost=Decimal("60")),
+        ),
+        epoch=4,
+    )[0]
+    changed = build_position_history(
+        anchor=None,
+        transactions=(
+            _transaction("TX-BUY", "BUY", quantity=Decimal("6"), net_cost=Decimal("60")),
+        ),
+        epoch=4,
+    )[0]
+
+    baseline_lineage = baseline.calculation_lineage
+    changed_lineage = changed.calculation_lineage
+    assert baseline_lineage is not None
+    assert changed_lineage is not None
+    assert baseline_lineage.input_content_hash != changed_lineage.input_content_hash
+    assert baseline_lineage.output_content_hash != changed_lineage.output_content_hash
 
 
 def test_build_position_history_rejects_mixed_position_keys() -> None:

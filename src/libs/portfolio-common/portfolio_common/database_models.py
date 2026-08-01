@@ -180,6 +180,7 @@ class PositionHistory(Base):
     quantity = Column(ExactNumeric(18, 10), nullable=False)
     cost_basis = Column(ExactNumeric(18, 10), nullable=False)
     cost_basis_local = Column(ExactNumeric(18, 10), nullable=True)
+    calculation_lineage = Column(JSON(none_as_null=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
