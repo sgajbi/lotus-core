@@ -23,6 +23,7 @@ from ...domain.cost_basis.state_lineage import (
 )
 from ...ports import OpenLotCheckpointRecord
 from ..transaction_mapping.booked_transaction import to_booked_transaction
+from .lot_state_lineage import lot_state_lineage_output_from_row
 from .lot_state_mapper import buy_lot_state_payload, mutable_lot_state_fields
 
 
@@ -109,12 +110,7 @@ class SqlAlchemyCostBasisLotRepository:
                 lot_row.lot_cost_local = Decimal(0)
                 lot_row.lot_cost_base = Decimal(0)
                 lot_row.calculation_lineage = _open_lot_state_lineage_payload(
-                    source_transaction_id=lot_row.source_transaction_id,
-                    state=OpenLotState(
-                        quantity=Decimal(0),
-                        cost_local=Decimal(0),
-                        cost_base=Decimal(0),
-                    ),
+                    lot_row=lot_row,
                     algorithm_id="cost-basis-complete-lot-snapshot",
                     prior_lineage=prior_lineage,
                     transition_evidence=transition_evidence,
@@ -124,8 +120,7 @@ class SqlAlchemyCostBasisLotRepository:
             lot_row.lot_cost_local = state.cost_local
             lot_row.lot_cost_base = state.cost_base
             lot_row.calculation_lineage = _open_lot_state_lineage_payload(
-                source_transaction_id=lot_row.source_transaction_id,
-                state=state,
+                lot_row=lot_row,
                 algorithm_id="cost-basis-complete-lot-snapshot",
                 prior_lineage=prior_lineage,
                 transition_evidence=transition_evidence,
@@ -162,8 +157,7 @@ class SqlAlchemyCostBasisLotRepository:
             lot_row.lot_cost_local = state.cost_local
             lot_row.lot_cost_base = state.cost_base
             lot_row.calculation_lineage = _open_lot_state_lineage_payload(
-                source_transaction_id=lot_row.source_transaction_id,
-                state=state,
+                lot_row=lot_row,
                 algorithm_id="cost-basis-selected-lot-update",
                 prior_lineage=prior_lineage,
                 transition_evidence=transition_evidence,
@@ -227,18 +221,11 @@ class SqlAlchemyCostBasisLotRepository:
 
 def _open_lot_state_lineage_payload(
     *,
-    source_transaction_id: str,
-    state: OpenLotState,
+    lot_row: PositionLotState,
     algorithm_id: str,
     prior_lineage: CalculationLineage | None,
     transition_evidence: CostBasisStateTransitionEvidence,
 ) -> dict[str, object]:
-    output = {
-        "cost_base": state.cost_base,
-        "cost_local": state.cost_local,
-        "quantity": state.quantity,
-        "source_transaction_id": source_transaction_id,
-    }
     lineage: CalculationLineage = build_cost_basis_state_lineage(
         algorithm_id=algorithm_id,
         input_payload={
@@ -247,6 +234,6 @@ def _open_lot_state_lineage_payload(
             ),
             "transition": transition_evidence.lineage_payload(),
         },
-        output_payload=output,
+        output_payload=lot_state_lineage_output_from_row(lot_row),
     )
     return cast(dict[str, object], lineage.lineage_payload())

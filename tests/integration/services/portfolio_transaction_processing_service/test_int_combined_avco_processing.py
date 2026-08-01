@@ -14,7 +14,10 @@ from portfolio_common.database_models import (
     ProcessedEvent,
 )
 from portfolio_common.database_models import Transaction as DBTransaction
-from portfolio_common.domain.calculation_lineage import canonical_content_hash
+from portfolio_common.domain.calculation_lineage import (
+    calculation_lineage_binds_output,
+    calculation_lineage_from_payload,
+)
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -26,6 +29,9 @@ from src.services.portfolio_transaction_processing_service.app.domain.transactio
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis import (
     SqlAlchemyAverageCostPoolRepository,
+)
+from src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis.lot_state_lineage import (  # noqa: E501
+    lot_state_lineage_output_from_row,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure.idempotency import (
     TRANSACTION_PROCESSING_SERVICE_NAME,
@@ -208,16 +214,11 @@ async def test_combined_avco_disposal_reconciles_pooled_and_source_cost_basis(
     for lot in source_lots:
         lineage = lot.calculation_lineage
         assert lineage is not None
-        assert lineage["output_content_hash"] == canonical_content_hash(
-            {
-                "calculation_content_hash": lineage["calculation_content_hash"],
-                "output": {
-                    "cost_base": lot.lot_cost_base,
-                    "cost_local": lot.lot_cost_local,
-                    "quantity": lot.open_quantity,
-                    "source_transaction_id": lot.source_transaction_id,
-                },
-            }
+        typed_lineage = calculation_lineage_from_payload(lineage)
+        assert typed_lineage is not None
+        assert calculation_lineage_binds_output(
+            typed_lineage,
+            output_payload=lot_state_lineage_output_from_row(lot),
         )
     assert [(cashflow.classification, cashflow.amount) for cashflow in cashflows] == [
         ("INVESTMENT_OUTFLOW", Decimal("-1000")),

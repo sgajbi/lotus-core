@@ -1,10 +1,13 @@
 """Expose canonical foreign-exchange transaction economics policies."""
 
 from .baseline_processing import (
+    FX_BASELINE_CALCULATION_ALGORITHM_ID,
+    FX_BASELINE_CALCULATION_ALGORITHM_VERSION,
     UnsupportedFxRealizedPnlModeError,
     assert_fx_processed_transaction_valid,
     build_fx_baseline_processing_update,
     build_fx_processed_transaction,
+    fx_booked_transaction_output_payload,
 )
 from .contract_instrument import (
     FX_CONTRACT_ASSET_CLASS,
@@ -39,6 +42,8 @@ from .validation import (
 
 __all__ = [
     "FX_BUSINESS_TRANSACTION_TYPES",
+    "FX_BASELINE_CALCULATION_ALGORITHM_ID",
+    "FX_BASELINE_CALCULATION_ALGORITHM_VERSION",
     "FX_COMPONENT_TYPES",
     "FX_CASH_LEG_ROLES",
     "FX_RATE_QUOTE_CONVENTIONS",
@@ -56,6 +61,7 @@ __all__ = [
     "build_fx_contract_instrument",
     "build_fx_processed_transaction",
     "build_fx_baseline_processing_update",
+    "fx_booked_transaction_output_payload",
     "assert_fx_processed_transaction_valid",
     "UnsupportedFxRealizedPnlModeError",
     "FxValidationError",

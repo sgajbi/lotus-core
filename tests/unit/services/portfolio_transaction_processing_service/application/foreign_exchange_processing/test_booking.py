@@ -6,12 +6,17 @@ from decimal import Decimal
 from unittest.mock import AsyncMock
 
 import pytest
+from portfolio_common.domain.calculation_lineage import calculation_lineage_binds_output
 
 from src.services.portfolio_transaction_processing_service.app.application import (
     foreign_exchange_processing,
 )
 from src.services.portfolio_transaction_processing_service.app.domain.transaction import (
     BookedTransaction,
+)
+from src.services.portfolio_transaction_processing_service.app.domain.transaction.fx import (
+    FX_BASELINE_CALCULATION_ALGORITHM_ID,
+    fx_booked_transaction_output_payload,
 )
 from src.services.portfolio_transaction_processing_service.app.ports import (
     ForeignExchangeTransactionPersistencePort,
@@ -74,6 +79,14 @@ async def test_booking_persists_validated_fx_transaction_and_returns_contract_in
     )
 
     assert result.transaction.fx_realized_pnl_mode == "UPSTREAM_PROVIDED"
+    assert result.transaction.calculation_lineage is not None
+    assert (
+        result.transaction.calculation_lineage.algorithm_id == FX_BASELINE_CALCULATION_ALGORITHM_ID
+    )
+    assert calculation_lineage_binds_output(
+        result.transaction.calculation_lineage,
+        output_payload=fx_booked_transaction_output_payload(result.transaction),
+    )
     persistence.upsert_booked_transaction.assert_awaited_once_with(result.transaction)
     assert result.contract_instrument is not None
     assert result.contract_instrument.security_id == "FXC-2026-0001"
@@ -107,6 +120,42 @@ async def test_booking_rejects_invalid_fx_transaction_before_persistence() -> No
         )
 
     persistence.upsert_booked_transaction.assert_not_awaited()
+
+
+async def test_booking_lineage_is_deterministic_and_changes_with_material_fx_output() -> None:
+    persistence = AsyncMock(spec=ForeignExchangeTransactionPersistencePort)
+    baseline = _foreign_exchange_transaction()
+
+    first = await book_foreign_exchange_transaction(
+        transaction=baseline,
+        transaction_persistence=persistence,
+    )
+    repeated = await book_foreign_exchange_transaction(
+        transaction=first.transaction,
+        transaction_persistence=persistence,
+    )
+    changed = await book_foreign_exchange_transaction(
+        transaction=replace(
+            baseline,
+            realized_fx_pnl_local=Decimal("1300"),
+            realized_total_pnl_local=Decimal("1300"),
+            realized_fx_pnl_base=Decimal("1300"),
+            realized_total_pnl_base=Decimal("1300"),
+        ),
+        transaction_persistence=persistence,
+    )
+
+    assert first.transaction.calculation_lineage == repeated.transaction.calculation_lineage
+    assert first.transaction.calculation_lineage is not None
+    assert changed.transaction.calculation_lineage is not None
+    assert (
+        first.transaction.calculation_lineage.input_content_hash
+        != changed.transaction.calculation_lineage.input_content_hash
+    )
+    assert (
+        first.transaction.calculation_lineage.output_content_hash
+        != changed.transaction.calculation_lineage.output_content_hash
+    )
 
 
 @pytest.mark.parametrize(

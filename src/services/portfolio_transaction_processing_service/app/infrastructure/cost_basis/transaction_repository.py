@@ -105,13 +105,17 @@ BOOKED_TRANSACTION_PERSISTENCE_EXCLUDE_FIELDS = frozenset(
 
 
 def _booked_transaction_payload(transaction: BookedTransaction) -> dict[str, Any]:
-    return {
+    payload = {
         field_name: value
         for field_name in BOOKED_TRANSACTION_FIELD_NAMES
         if (value := getattr(transaction, field_name)) is not None
         and field_name in TRANSACTION_TABLE_FIELDS
         and field_name not in BOOKED_TRANSACTION_PERSISTENCE_EXCLUDE_FIELDS
     }
+    calculation_lineage = payload.get("calculation_lineage")
+    if isinstance(calculation_lineage, CalculationLineage):
+        payload["calculation_lineage"] = calculation_lineage.lineage_payload()
+    return payload
 
 
 FEE_COMPONENT_FIELDS = (

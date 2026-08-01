@@ -7,6 +7,7 @@ from sqlalchemy.dialects.postgresql.dml import Insert
 
 from ...domain.cost_basis import CostBasisTransaction
 from ...domain.cost_basis.state_lineage import build_cost_basis_state_lineage
+from .lot_state_lineage import lot_state_lineage_output_from_mapping
 
 _IMMUTABLE_LOT_STATE_FIELDS = frozenset({"id", "lot_id", "source_transaction_id"})
 
@@ -52,29 +53,7 @@ def buy_lot_state_payload(transaction: CostBasisTransaction) -> dict[str, object
             ),
             "source_transaction_id": transaction.transaction_id,
         },
-        output_payload={
-            key: value
-            for key, value in payload.items()
-            if key
-            in {
-                "acquisition_date",
-                "accrued_interest_paid_local",
-                "calculation_policy_id",
-                "calculation_policy_version",
-                "economic_event_id",
-                "instrument_id",
-                "linked_transaction_group_id",
-                "lot_cost_base",
-                "lot_cost_local",
-                "lot_id",
-                "open_quantity",
-                "original_quantity",
-                "portfolio_id",
-                "security_id",
-                "source_system",
-                "source_transaction_id",
-            }
-        },
+        output_payload=lot_state_lineage_output_from_mapping(payload),
     )
     payload["calculation_lineage"] = lineage.lineage_payload()
     return payload
