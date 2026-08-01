@@ -63,7 +63,7 @@ class AmortizedCostPolicy:
     policy_version: int
     method: AmortizedCostMethod
     yield_application_convention: YieldApplicationConvention | None
-    include_fees_in_initial_basis: bool
+    include_fees_in_amortized_cost: bool
     residual_tolerance_local: Decimal
 
     def __post_init__(self) -> None:
@@ -86,8 +86,8 @@ class AmortizedCostPolicy:
             raise TypeError(
                 "yield_application_convention must be a YieldApplicationConvention or None"
             )
-        if not isinstance(self.include_fees_in_initial_basis, bool):
-            raise TypeError("include_fees_in_initial_basis must be a boolean")
+        if not isinstance(self.include_fees_in_amortized_cost, bool):
+            raise TypeError("include_fees_in_amortized_cost must be a boolean")
         if self.method is AmortizedCostMethod.EFFECTIVE_YIELD:
             if self.yield_application_convention is None:
                 raise ValueError("effective-interest policy requires a yield convention")

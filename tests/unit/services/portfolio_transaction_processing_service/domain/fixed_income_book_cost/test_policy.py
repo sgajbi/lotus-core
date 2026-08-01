@@ -19,7 +19,7 @@ def _policy(**overrides: object) -> AmortizedCostPolicy:
         "policy_version": 1,
         "method": AmortizedCostMethod.EFFECTIVE_YIELD,
         "yield_application_convention": YieldApplicationConvention.ANNUAL_EFFECTIVE,
-        "include_fees_in_initial_basis": True,
+        "include_fees_in_amortized_cost": True,
         "residual_tolerance_local": Decimal("0.01"),
     }
     values.update(overrides)
@@ -52,7 +52,7 @@ def test_rfc_effective_yield_vocabulary_deserializes_without_translation() -> No
             "must be a YieldApplicationConvention or None",
         ),
         (
-            "include_fees_in_initial_basis",
+            "include_fees_in_amortized_cost",
             1,
             TypeError,
             "must be a boolean",
