@@ -21,7 +21,6 @@ from portfolio_common.domain.valuation import (
     MarketPriceSourceFactStatus,
     MissingValuationPolicyAssignmentError,
     PositionValuationEvidence,
-    PrincipalBasis,
     ValuationAuthorityScope,
     ValuationPolicyAssignmentStatus,
     canonical_content_hash,
@@ -244,6 +243,8 @@ async def test_valuation_processor_executes_success_path_without_kafka_consumer(
         "cost_basis",
         "expected_market_value",
         "expected_unrealized",
+        "expected_status",
+        "expects_receipt",
     ),
     [
         (
@@ -254,6 +255,8 @@ async def test_valuation_processor_executes_success_path_without_kafka_consumer(
             Decimal("10000"),
             Decimal("10135.0000000000"),
             Decimal("135.0000000000"),
+            "VALUED_CURRENT",
+            True,
         ),
         (
             "DIRTY_PERCENT_FACE_MARKET_VALUE",
@@ -261,8 +264,10 @@ async def test_valuation_processor_executes_success_path_without_kafka_consumer(
             Decimal("99.25"),
             Decimal("1000000"),
             Decimal("990000"),
-            Decimal("992500.0000000000"),
-            Decimal("2500.0000000000"),
+            None,
+            None,
+            "FAILED",
+            False,
         ),
     ],
 )
@@ -274,8 +279,10 @@ async def test_scoped_portfolio_uses_exact_authority_without_legacy_price_read(
     price: Decimal,
     quantity: Decimal,
     cost_basis: Decimal,
-    expected_market_value: Decimal,
-    expected_unrealized: Decimal,
+    expected_market_value: Decimal | None,
+    expected_unrealized: Decimal | None,
+    expected_status: str,
+    expects_receipt: bool,
 ) -> None:
     repo = mock_dependencies["valuation_repo"]
     mock_dependencies["idempotency_repo"].claim_event_processing.return_value = True
@@ -356,11 +363,6 @@ async def test_scoped_portfolio_uses_exact_authority_without_legacy_price_read(
         source_currency=price_fact.source_reference,
         reporting_currency=_source_reference("portfolio"),
         signed_quantity=_source_reference("position"),
-        signed_face_amount=(
-            _source_reference("position")
-            if policy.principal_basis is PrincipalBasis.FACE_AMOUNT
-            else None
-        ),
     )
     mock_dependencies["source_evidence_builder"].return_value = evidence
 
@@ -379,20 +381,24 @@ async def test_scoped_portfolio_uses_exact_authority_without_legacy_price_read(
     price_resolver.resolve_many.assert_awaited_once()
     mock_dependencies["source_evidence_builder"].assert_called_once_with(
         assignment=policy_assignment,
-        policy=policy,
         price_fact=price_fact,
         position=position,
         portfolio=portfolio,
         fx_rate=None,
     )
     persisted_snapshot = repo.upsert_daily_snapshot.await_args.args[0]
-    assert persisted_snapshot.market_price == price
+    assert persisted_snapshot.market_price == (price if expects_receipt else None)
     assert persisted_snapshot.market_value_local == expected_market_value
     assert persisted_snapshot.unrealized_gain_loss_local == expected_unrealized
-    assert persisted_snapshot.valuation_status == "VALUED_CURRENT"
-    receipt = mock_dependencies["valuation_receipt_repo"].upsert.await_args.kwargs["receipt"]
-    assert receipt.policy_id == policy_id
-    assert receipt.receipt_hash
+    assert persisted_snapshot.valuation_status == expected_status
+    if expects_receipt:
+        receipt = mock_dependencies["valuation_receipt_repo"].upsert.await_args.kwargs["receipt"]
+        assert receipt.policy_id == policy_id
+        assert receipt.receipt_hash
+        mock_dependencies["valuation_receipt_repo"].delete.assert_not_awaited()
+    else:
+        mock_dependencies["valuation_receipt_repo"].upsert.assert_not_awaited()
+        mock_dependencies["valuation_receipt_repo"].delete.assert_awaited_once_with(snapshot_id=9)
     authority_path_metric.labels.assert_called_once_with(
         "authoritative",
         "exact_portfolio_scope",
