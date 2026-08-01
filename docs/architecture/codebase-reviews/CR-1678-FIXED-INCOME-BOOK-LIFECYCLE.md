@@ -85,10 +85,10 @@ implemented.
 - 49 warning-strict shared valuation/calculator tests;
 - 77 warning-strict reconciliation domain/service/repository tests;
 - 18 warning-strict amortized-cost policy tests;
-- 32 warning-strict fixed-income policy and schedule-kernel tests, including irregular-period,
-  premium, discount, negative-yield, rate-authority, reconciliation, sub-quantum rounding, and
-  lineage proofs;
-- 137 warning-strict fixed-income and calculated-output-policy guard tests;
+- 34 warning-strict fixed-income policy and schedule-kernel tests, including irregular-period,
+  premium, discount, negative-yield, rate-authority, date-only input, reconciliation, sub-quantum
+  rounding, and lineage proofs;
+- 139 warning-strict fixed-income and calculated-output-policy guard tests;
 - scoped Ruff lint/format, MyPy, RFC ledger, architecture-documentation, transaction-capability,
   wiki, JSON, calculated-output-policy, and diff-hygiene guards.
 

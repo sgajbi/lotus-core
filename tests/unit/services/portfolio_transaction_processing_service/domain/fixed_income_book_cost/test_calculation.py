@@ -1,8 +1,9 @@
 """Tests for deterministic fixed-income amortized-cost schedules."""
 
 from dataclasses import replace
-from datetime import date
+from datetime import date, datetime, timezone
 from decimal import Decimal
+from typing import cast
 
 import pytest
 from portfolio_common.domain.calculation_lineage import calculation_lineage_binds_output
@@ -75,6 +76,31 @@ def test_straight_line_irregular_periods_conserve_discount_and_replay_identicall
     assert first.final_amortized_cost_local == Decimal("100.0000000000")
     assert first.residual_local == Decimal("0E-10")
     assert first == replay
+
+
+def test_straight_line_premium_movement_is_included_in_interest_income() -> None:
+    result = calculate_amortized_cost_schedule(
+        policy=_policy(),
+        inputs=AmortizedCostScheduleInput(
+            initial_clean_cost_local=Decimal("105"),
+            fees_in_basis_local=Decimal("0"),
+            redemption_value_local=Decimal("100"),
+            periods=(
+                _period(
+                    date(2026, 1, 1),
+                    date(2027, 1, 1),
+                    coupon="8.15",
+                ),
+            ),
+        ),
+    )
+
+    row = result.periods[0]
+    assert row.amortization_amount_local == Decimal("-5.0000000000")
+    assert row.interest_income_local == Decimal("3.1500000000")
+    assert row.interest_income_local == (
+        row.cash_coupon_local + row.amortization_amount_local - row.rounding_adjustment_local
+    )
 
 
 def test_effective_yield_premium_schedule_reconciles_and_binds_lineage() -> None:
@@ -362,3 +388,11 @@ def test_schedule_rejects_gaps_and_invalid_period_economics() -> None:
         )
     with pytest.raises(ValueError, match="cash_coupon_local must be nonnegative"):
         _period(date(2026, 1, 1), date(2027, 1, 1), coupon="-1")
+
+
+def test_period_rejects_datetime_at_date_only_boundary() -> None:
+    with pytest.raises(TypeError, match="period_start_date must be a date"):
+        _period(
+            cast(date, datetime(2026, 1, 1, tzinfo=timezone.utc)),
+            date(2027, 1, 1),
+        )
