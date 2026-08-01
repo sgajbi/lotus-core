@@ -45,9 +45,9 @@ class AmortizationPeriodInput:
     supplied_period_rate: Decimal | None = None
 
     def __post_init__(self) -> None:
-        if not isinstance(self.period_start_date, date):
+        if type(self.period_start_date) is not date:
             raise TypeError("period_start_date must be a date")
-        if not isinstance(self.period_end_date, date):
+        if type(self.period_end_date) is not date:
             raise TypeError("period_end_date must be a date")
         if self.period_end_date <= self.period_start_date:
             raise ValueError("period_end_date must be after period_start_date")
@@ -211,12 +211,12 @@ def _calculate_period(
     period_rate: Decimal | None
     if policy.method is AmortizedCostMethod.STRAIGHT_LINE:
         period_rate = None
-        interest = period.cash_coupon_local
         raw_movement = (
             (redemption_value - begin)
             if is_final
             else ((redemption_value - begin) * period.year_fraction / remaining_weight)
         )
+        interest = period.cash_coupon_local + raw_movement
     else:
         period_rate = _resolve_period_rate(policy, period, annual_yield)
         interest = begin * period_rate
@@ -230,12 +230,10 @@ def _calculate_period(
     end = numeric_policy.add(begin, movement, field_name="end_amortized_cost_local")
     if end < 0:
         raise AmortizedCostCalculationError("end amortized cost must be nonnegative")
-    rounding_adjustment = Decimal(0)
-    if policy.method is AmortizedCostMethod.EFFECTIVE_YIELD:
-        rounding_adjustment = numeric_policy.normalize(
-            movement - (normalized_interest - normalized_coupon),
-            field_name="rounding_adjustment_local",
-        )
+    rounding_adjustment = numeric_policy.normalize(
+        movement - (normalized_interest - normalized_coupon),
+        field_name="rounding_adjustment_local",
+    )
     return AmortizationPeriodResult(
         period_start_date=period.period_start_date,
         period_end_date=period.period_end_date,
