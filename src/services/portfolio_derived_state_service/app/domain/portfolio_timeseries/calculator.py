@@ -67,7 +67,7 @@ def calculate_portfolio_timeseries(
                 )
             seen_security_ids.add(security_id)
 
-            fx_rate = contribution.fx_rate_to_portfolio_currency
+            fx_rate = contribution.fx_rate.rate
             total_bod_market_value += decimal_or_zero(position.bod_market_value) * fx_rate
             total_bod_cashflow += decimal_or_zero(position.bod_cashflow_portfolio) * fx_rate
             total_eod_cashflow += decimal_or_zero(position.eod_cashflow_portfolio) * fx_rate
@@ -127,7 +127,14 @@ def _portfolio_timeseries_input(
         "aggregation_date": aggregation_date,
         "contributions": [
             {
-                "fx_rate_to_portfolio_currency": contribution.fx_rate_to_portfolio_currency,
+                "fx_rate": {
+                    "from_currency": contribution.fx_rate.from_currency,
+                    "rate": contribution.fx_rate.rate,
+                    "rate_date": contribution.fx_rate.rate_date,
+                    "source_record_id": contribution.fx_rate.source_record_id,
+                    "source_updated_at": contribution.fx_rate.source_updated_at,
+                    "to_currency": contribution.fx_rate.to_currency,
+                },
                 "position": {
                     "bod_cashflow_portfolio": position.bod_cashflow_portfolio,
                     "bod_market_value": position.bod_market_value,

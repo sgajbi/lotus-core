@@ -4,13 +4,12 @@ from datetime import date
 from decimal import Decimal
 
 from portfolio_common.domain.market_data.fx_rate import coerce_positive_fx_rate_or_none
+from portfolio_common.domain.market_data.timeseries import TimeseriesFxRate
 
-from ...domain.portfolio_timeseries import (
-    PortfolioPositionContribution,
-    calculate_portfolio_timeseries,
-)
+from ...domain.portfolio_timeseries.calculator import calculate_portfolio_timeseries
 from ...domain.portfolio_timeseries.models import (
     PortfolioAggregationScope,
+    PortfolioPositionContribution,
     PortfolioTimeseriesRecord,
 )
 from ...domain.position_timeseries.models import PositionTimeseriesRecord
@@ -49,7 +48,7 @@ class CalculatePortfolioTimeseries:
             _normalize_security_id(instrument.security_id): instrument
             for instrument in await repository.get_instruments_by_ids(security_ids)
         }
-        fx_rate_cache: dict[tuple[str, str, date], Decimal] = {}
+        fx_rate_cache: dict[tuple[str, str, date], TimeseriesFxRate] = {}
         contributions: list[PortfolioPositionContribution] = []
 
         for position in position_timeseries:
@@ -74,7 +73,7 @@ class CalculatePortfolioTimeseries:
             contributions.append(
                 PortfolioPositionContribution(
                     position_timeseries=position,
-                    fx_rate_to_portfolio_currency=fx_rate,
+                    fx_rate=fx_rate,
                 )
             )
 
@@ -100,10 +99,17 @@ async def _resolve_fx_rate(
     instrument_currency: str,
     portfolio_currency: str,
     valuation_date: date,
-    cache: dict[tuple[str, str, date], Decimal],
-) -> Decimal:
+    cache: dict[tuple[str, str, date], TimeseriesFxRate],
+) -> TimeseriesFxRate:
     if instrument_currency == portfolio_currency:
-        return Decimal("1")
+        return TimeseriesFxRate(
+            rate=Decimal("1"),
+            from_currency=instrument_currency,
+            to_currency=portfolio_currency,
+            rate_date=valuation_date,
+            source_record_id=None,
+            source_updated_at=None,
+        )
 
     cache_key = (instrument_currency, portfolio_currency, valuation_date)
     cached_rate = cache.get(cache_key)
@@ -127,5 +133,22 @@ async def _resolve_fx_rate(
             f"for date {valuation_date}."
         )
 
-    cache[cache_key] = normalized_rate
-    return normalized_rate
+    if (
+        _normalize_currency(fx_rate.from_currency) != instrument_currency
+        or _normalize_currency(fx_rate.to_currency) != portfolio_currency
+    ):
+        raise FxRateNotFoundError(
+            "FX rate source identity does not match requested pair "
+            f"{instrument_currency} to {portfolio_currency}."
+        )
+
+    selected_rate = TimeseriesFxRate(
+        rate=normalized_rate,
+        from_currency=instrument_currency,
+        to_currency=portfolio_currency,
+        rate_date=fx_rate.rate_date,
+        source_record_id=fx_rate.source_record_id,
+        source_updated_at=fx_rate.source_updated_at,
+    )
+    cache[cache_key] = selected_rate
+    return selected_rate

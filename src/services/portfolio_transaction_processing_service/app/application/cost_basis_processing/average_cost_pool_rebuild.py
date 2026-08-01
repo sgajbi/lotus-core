@@ -1,5 +1,8 @@
 """Plan deterministic average-cost-pool rebuilds from canonical transaction history."""
 
+from collections.abc import Sequence
+
+from portfolio_common.domain.calculation_lineage import CalculationLineage
 from portfolio_common.domain.cost_basis_method import CostBasisMethod, normalize_cost_basis_method
 
 from ...domain.cost_basis import (
@@ -7,10 +10,13 @@ from ...domain.cost_basis import (
     AverageCostPoolCheckpoint,
     AverageCostPoolRebuildPlan,
     CostBasisProcessingCheckpoint,
+    CostBasisTransaction,
     build_cost_basis_engine_input,
     transaction_lot_behavior,
     transaction_order_key,
 )
+from ...domain.cost_basis.state_lineage import build_cost_basis_state_lineage
+from ...domain.transaction import BookedTransaction
 from ...ports import (
     CostBasisCalculationObserver,
     CostBasisFxRatePort,
@@ -91,12 +97,78 @@ class AverageCostPoolRebuildPlanner:
             security_id=security_id,
             states_by_source_transaction_id=source_states,
         )
+        processing_checkpoint = CostBasisProcessingCheckpoint.from_transaction(
+            latest_transaction,
+            cost_basis_method=CostBasisMethod.AVCO,
+        )
         return AverageCostPoolRebuildPlan(
             checkpoint=checkpoint,
-            processing_checkpoint=CostBasisProcessingCheckpoint.from_transaction(
-                latest_transaction,
-                cost_basis_method=CostBasisMethod.AVCO,
+            processing_checkpoint=processing_checkpoint,
+            replay_lineage=_rebuild_replay_lineage(
+                history=history,
+                processed=processed,
+                checkpoint=checkpoint,
+                processing_checkpoint=processing_checkpoint,
             ),
             source_transactions=source_transactions,
             source_states=source_states,
         )
+
+
+def _rebuild_replay_lineage(
+    *,
+    history: Sequence[BookedTransaction],
+    processed: Sequence[CostBasisTransaction],
+    checkpoint: AverageCostPoolCheckpoint,
+    processing_checkpoint: CostBasisProcessingCheckpoint,
+) -> CalculationLineage:
+    """Bind canonical persisted history to its deterministic AVCO replay result."""
+
+    replayed_transactions: list[dict[str, object]] = []
+    for sequence, transaction in enumerate(processed):
+        transaction_id = str(getattr(transaction, "transaction_id", ""))
+        lineage = getattr(transaction, "calculation_lineage", None)
+        if not isinstance(lineage, CalculationLineage):
+            raise ValueError(f"Replayed transaction lacks lineage: {transaction_id}")
+        replayed_transactions.append(
+            {
+                "calculation_lineage": lineage.lineage_payload(),
+                "sequence": sequence,
+                "transaction_id": transaction_id,
+            }
+        )
+
+    return build_cost_basis_state_lineage(
+        algorithm_id="average-cost-pool-replay",
+        input_payload={
+            "canonical_history": [
+                {
+                    "calculation_lineage": (
+                        transaction.calculation_lineage.lineage_payload()
+                        if transaction.calculation_lineage is not None
+                        else None
+                    ),
+                    "sequence": sequence,
+                    "transaction_date": transaction.transaction_date.isoformat(),
+                    "transaction_id": transaction.transaction_id,
+                    "transaction_type": transaction.transaction_type,
+                }
+                for sequence, transaction in enumerate(history)
+            ]
+        },
+        output_payload={
+            "checkpoint": {
+                "cost_base": checkpoint.cost_base,
+                "cost_local": checkpoint.cost_local,
+                "quantity": checkpoint.quantity,
+                "representative_source_transaction_id": (
+                    checkpoint.representative_source_transaction_id
+                ),
+            },
+            "processing_checkpoint": {
+                "calculation_state_version": (processing_checkpoint.calculation_state_version),
+                "latest_transaction_id": processing_checkpoint.latest_transaction_id,
+            },
+            "replayed_transactions": replayed_transactions,
+        },
+    )

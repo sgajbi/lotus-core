@@ -14,6 +14,7 @@ from portfolio_common.domain.transaction.numeric_policy import COST_BASIS_STATE_
 from .calculation.lot_state import OpenLotState
 from .models.cost_basis_transaction import CostBasisTransaction
 from .processing_checkpoint import CostBasisProcessingCheckpoint
+from .state_lineage import build_cost_basis_state_lineage
 
 AVERAGE_COST_POOL_STATE_VERSION = "avco-pool-v1"
 
@@ -185,11 +186,14 @@ class AverageCostPoolTransition:
 class AverageCostPoolRebuildPlan:
     checkpoint: AverageCostPoolCheckpoint
     processing_checkpoint: CostBasisProcessingCheckpoint
+    replay_lineage: CalculationLineage
     source_transactions: tuple[CostBasisTransaction, ...]
     source_states: Mapping[str, OpenLotState]
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "source_states", MappingProxyType(dict(self.source_states)))
+        if not isinstance(self.replay_lineage, CalculationLineage):
+            raise ValueError("Average cost rebuild requires typed replay lineage")
         if (
             self.processing_checkpoint.portfolio_id != self.checkpoint.portfolio_id
             or self.processing_checkpoint.security_id != self.checkpoint.security_id
@@ -219,6 +223,32 @@ class AverageCostPoolRebuildPlan:
         )
         if expected_checkpoint != self.checkpoint:
             raise ValueError("Average cost rebuild checkpoint does not match source state")
+
+
+def build_average_cost_pool_rebuild_lineage(
+    *,
+    replay_lineage: CalculationLineage,
+    checkpoint: AverageCostPoolCheckpoint,
+) -> CalculationLineage:
+    """Bind an authoritative replay receipt to its deterministic replacement checkpoint."""
+
+    return build_cost_basis_state_lineage(
+        algorithm_id="average-cost-pool-rebuild",
+        input_payload={"replay_lineage": replay_lineage.lineage_payload()},
+        output_payload={
+            "calculation_lineage": None,
+            "cost_base": checkpoint.cost_base,
+            "cost_local": checkpoint.cost_local,
+            "instrument_id": checkpoint.instrument_id,
+            "portfolio_id": checkpoint.portfolio_id,
+            "quantity": checkpoint.quantity,
+            "representative_source_transaction_id": (
+                checkpoint.representative_source_transaction_id
+            ),
+            "security_id": checkpoint.security_id,
+            "state_version": checkpoint.state_version,
+        },
+    )
 
 
 def _validate_open_lot_state(state: OpenLotState, *, field_name: str) -> None:

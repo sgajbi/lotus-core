@@ -8,6 +8,10 @@ from decimal import Decimal
 from typing import TypeVar
 
 import pytest
+from portfolio_common.domain.calculation_lineage import (
+    CalculationLineage,
+    build_calculation_lineage,
+)
 
 from src.services.portfolio_derived_state_service.app.application.position_timeseries import (
     MaterializePositionTimeseries,
@@ -16,6 +20,9 @@ from src.services.portfolio_derived_state_service.app.application.position_times
 )
 from src.services.portfolio_derived_state_service.app.application.position_timeseries import (
     materialize_position_timeseries as materialization_module,
+)
+from src.services.portfolio_derived_state_service.app.domain.position_timeseries.calculator import (
+    calculate_position_timeseries,
 )
 from src.services.portfolio_derived_state_service.app.domain.position_timeseries.models import (
     PositionCashflowRecord,
@@ -218,6 +225,16 @@ def _snapshot(a_date: date = date(2026, 4, 10)) -> PositionSnapshotRecord:
     )
 
 
+def _source_lineage(source_revision: str) -> CalculationLineage:
+    return build_calculation_lineage(
+        algorithm_id="position-valuation",
+        algorithm_version=1,
+        intermediate_precision=28,
+        input_payload={"source_revision": source_revision},
+        output_payload={"market_value_local": Decimal("1260")},
+    )
+
+
 def _command() -> MaterializePositionTimeseriesCommand:
     return MaterializePositionTimeseriesCommand(
         snapshot_id=41,
@@ -416,7 +433,7 @@ async def test_materialization_rejects_trigger_identity_mismatch_without_effects
     assert provider.transaction_count == 1
 
 
-async def test_materialization_refreshes_missing_lineage_without_restaging() -> None:
+async def test_materialization_refreshes_missing_lineage_and_stages_evidence() -> None:
     snapshot = _snapshot()
     repository = InMemoryPositionTimeseriesRepository(snapshot)
     repository.existing_by_date[snapshot.date] = _timeseries_record(snapshot)
@@ -428,7 +445,70 @@ async def test_materialization_refreshes_missing_lineage_without_restaging() -> 
     assert result.current_day_changed is False
     assert len(repository.upserted) == 1
     assert repository.upserted[0].calculation_lineage is not None
-    assert repository.staged_dates == []
+    assert repository.staged_dates == [snapshot.date]
+
+
+async def test_lineage_only_refresh_propagates_and_stages_without_numeric_change() -> None:
+    old_current = replace(
+        _snapshot(),
+        calculation_lineage=_source_lineage("valuation-revision-1"),
+    )
+    current = replace(
+        old_current,
+        calculation_lineage=_source_lineage("valuation-revision-2"),
+    )
+    first_future = replace(
+        _snapshot(date(2026, 4, 11)),
+        calculation_lineage=_source_lineage("future-valuation-revision-1"),
+    )
+    converged_future = replace(
+        _snapshot(date(2026, 4, 12)),
+        calculation_lineage=_source_lineage("future-valuation-revision-2"),
+    )
+    repository = InMemoryPositionTimeseriesRepository(current)
+    repository.future_snapshots = [first_future, converged_future]
+    repository.existing_by_date = {
+        current.date: calculate_position_timeseries(
+            current_snapshot=old_current,
+            previous_snapshot=None,
+            cashflows=[],
+            epoch=3,
+        ),
+        first_future.date: calculate_position_timeseries(
+            current_snapshot=first_future,
+            previous_snapshot=old_current,
+            cashflows=[],
+            epoch=3,
+        ),
+        converged_future.date: calculate_position_timeseries(
+            current_snapshot=converged_future,
+            previous_snapshot=first_future,
+            cashflows=[],
+            epoch=3,
+        ),
+    }
+
+    result = await MaterializePositionTimeseries(
+        repository_provider=InMemoryRepositoryProvider(repository)
+    ).execute(_command())
+
+    assert result.current_day_changed is False
+    assert result.dependent_days_changed == 0
+    assert [record.date for record in repository.upserted] == [
+        current.date,
+        first_future.date,
+    ]
+    assert repository.staged_dates == [current.date, first_future.date]
+    assert repository.restaged_intervals == [
+        {
+            "portfolio_id": "PB_SG_GLOBAL_BAL_001",
+            "start_date": current.date,
+            "end_date_exclusive": converged_future.date,
+            "excluded_dates": [current.date, first_future.date],
+            "target_epoch": 3,
+            "correlation_id": "corr-derived-001",
+        }
+    ]
 
 
 async def test_materialization_refreshes_newer_authoritative_snapshot() -> None:
@@ -446,12 +526,12 @@ async def test_materialization_refreshes_newer_authoritative_snapshot() -> None:
         repository_provider=InMemoryRepositoryProvider(repository)
     ).execute(_command())
 
-    assert result.current_day_changed is True
+    assert result.current_day_changed is False
     assert [record.date for record in repository.upserted] == [snapshot.date]
     assert repository.staged_dates == [snapshot.date]
 
 
-async def test_materialization_ignores_duplicate_snapshot_delivery() -> None:
+async def test_duplicate_snapshot_delivery_refreshes_missing_evidence() -> None:
     snapshot = replace(
         _snapshot(),
         source_updated_at=datetime(2026, 4, 10, 10, 0, tzinfo=UTC),
@@ -469,7 +549,7 @@ async def test_materialization_ignores_duplicate_snapshot_delivery() -> None:
     assert result.current_day_changed is False
     assert len(repository.upserted) == 1
     assert repository.upserted[0].calculation_lineage is not None
-    assert repository.staged_dates == []
+    assert repository.staged_dates == [snapshot.date]
 
 
 async def test_backdated_materialization_recalculates_dependent_beginning_value() -> None:
@@ -511,9 +591,11 @@ async def test_backdated_materialization_stops_when_future_state_converges() -> 
     repository = InMemoryPositionTimeseriesRepository(current_snapshot)
     repository.future_snapshots = [first_future, second_future]
     repository.existing_by_date[first_future.date] = _timeseries_record(first_future)
-    repository.existing_by_date[second_future.date] = _timeseries_record(
-        second_future,
-        bod_market_value=first_future.market_value_local or Decimal("0"),
+    repository.existing_by_date[second_future.date] = calculate_position_timeseries(
+        current_snapshot=second_future,
+        previous_snapshot=first_future,
+        cashflows=[],
+        epoch=3,
     )
 
     result = await MaterializePositionTimeseries(
@@ -524,7 +606,6 @@ async def test_backdated_materialization_stops_when_future_state_converges() -> 
     assert [record.date for record in repository.upserted] == [
         date(2026, 4, 10),
         date(2026, 4, 11),
-        date(2026, 4, 12),
     ]
     assert repository.staged_dates == [date(2026, 4, 10), date(2026, 4, 11)]
     assert repository.restaged_intervals[-1] == {

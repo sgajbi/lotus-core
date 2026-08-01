@@ -330,7 +330,7 @@ def _average_cost_source(
     )
 
 
-def _average_cost_rebuild_plan() -> AverageCostPoolRebuildPlan:
+def _average_cost_rebuild_plan(*, replay_revision: str = "1") -> AverageCostPoolRebuildPlan:
     first = _average_cost_source(
         "BUY-1",
         transaction_date=datetime(2026, 1, 1, 10, 0),
@@ -367,6 +367,11 @@ def _average_cost_rebuild_plan() -> AverageCostPoolRebuildPlan:
             second,
             cost_basis_method="AVCO",
         ),
+        replay_lineage=build_cost_basis_state_lineage(
+            algorithm_id="test-average-cost-replay",
+            input_payload={"history_revision": replay_revision},
+            output_payload={"quantity": checkpoint.quantity},
+        ),
         source_transactions=(first, second),
         source_states=states,
     )
@@ -376,6 +381,12 @@ async def test_apply_average_cost_pool_rebuild_bulk_replaces_lot_and_pool_state(
     db_session = AsyncMock()
     repository = SqlAlchemyAverageCostPoolRepository(db_session)
     repository.REBUILD_UPSERT_CHUNK_SIZE = 1
+    db_session.execute.side_effect = [
+        MagicMock(),
+        MagicMock(),
+        MagicMock(),
+        MagicMock(),
+    ]
 
     await repository.apply_average_cost_pool_rebuild(_average_cost_rebuild_plan())
 
@@ -401,6 +412,38 @@ async def test_apply_average_cost_pool_rebuild_bulk_replaces_lot_and_pool_state(
     assert "INSERT INTO average_cost_pool_state" in str(
         db_session.execute.call_args_list[3].args[0]
     )
+
+
+async def test_average_cost_rebuild_receipts_are_replay_bound_and_idempotent() -> None:
+    async def receipt(*, replay_revision: str) -> tuple[str, str]:
+        db_session = AsyncMock()
+        db_session.execute.side_effect = [
+            MagicMock(),
+            MagicMock(),
+            MagicMock(),
+        ]
+        repository = SqlAlchemyAverageCostPoolRepository(db_session)
+        await repository.apply_average_cost_pool_rebuild(
+            _average_cost_rebuild_plan(replay_revision=replay_revision)
+        )
+        source_params = db_session.execute.call_args_list[1].args[0].compile().params
+        source_lineage = next(
+            value for key, value in source_params.items() if key.startswith("calculation_lineage")
+        )
+        checkpoint_statement = db_session.execute.call_args_list[-1].args[0]
+        checkpoint_lineage = checkpoint_statement.compile().params["calculation_lineage"]
+        return (
+            str(checkpoint_lineage["input_content_hash"]),
+            str(source_lineage["input_content_hash"]),
+        )
+
+    baseline = await receipt(replay_revision="1")
+    repeated = await receipt(replay_revision="1")
+    changed_replay = await receipt(replay_revision="2")
+
+    assert repeated == baseline
+    assert changed_replay[0] != baseline[0]
+    assert changed_replay[1] != baseline[1]
 
 
 async def test_get_average_cost_pool_persisted_summary_maps_missing_pool_and_source_sums() -> None:

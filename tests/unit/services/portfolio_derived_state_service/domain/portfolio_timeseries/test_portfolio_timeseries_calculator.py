@@ -1,9 +1,10 @@
 """Prove pure portfolio-timeseries aggregation arithmetic and scope invariants."""
 
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal
 
 import pytest
+from portfolio_common.domain.market_data.timeseries import TimeseriesFxRate
 
 from src.services.portfolio_derived_state_service.app.domain.portfolio_timeseries import (
     DuplicatePortfolioPositionContribution,
@@ -55,6 +56,24 @@ def _scope() -> PortfolioAggregationScope:
     return PortfolioAggregationScope(portfolio_id="PORT-AGG", base_currency="USD")
 
 
+def _fx_rate(
+    rate: Decimal,
+    *,
+    rate_date: date = date(2026, 3, 8),
+    source_record_id: int = 101,
+    source_updated_at: datetime = datetime(2026, 3, 8, 8, tzinfo=UTC),
+) -> TimeseriesFxRate:
+    is_identity = rate == Decimal("1")
+    return TimeseriesFxRate(
+        rate=rate,
+        from_currency="USD" if is_identity else "EUR",
+        to_currency="USD",
+        rate_date=rate_date,
+        source_record_id=None if is_identity else source_record_id,
+        source_updated_at=None if is_identity else source_updated_at,
+    )
+
+
 def test_calculator_sums_position_economics_in_portfolio_currency() -> None:
     result = calculate_portfolio_timeseries(
         portfolio=_scope(),
@@ -63,11 +82,11 @@ def test_calculator_sums_position_economics_in_portfolio_currency() -> None:
         contributions=[
             PortfolioPositionContribution(
                 position_timeseries=_position("SEC-USD"),
-                fx_rate_to_portfolio_currency=Decimal("1"),
+                fx_rate=_fx_rate(Decimal("1")),
             ),
             PortfolioPositionContribution(
                 position_timeseries=_position("SEC-EUR"),
-                fx_rate_to_portfolio_currency=Decimal("1.2"),
+                fx_rate=_fx_rate(Decimal("1.2")),
             ),
         ],
     )
@@ -89,11 +108,11 @@ def test_calculator_lineage_and_output_are_independent_of_contribution_order() -
     contributions = [
         PortfolioPositionContribution(
             position_timeseries=_position("SEC-USD"),
-            fx_rate_to_portfolio_currency=Decimal("1"),
+            fx_rate=_fx_rate(Decimal("1")),
         ),
         PortfolioPositionContribution(
             position_timeseries=_position("SEC-EUR"),
-            fx_rate_to_portfolio_currency=Decimal("1.2"),
+            fx_rate=_fx_rate(Decimal("1.2")),
         ),
     ]
 
@@ -122,7 +141,7 @@ def test_calculator_lineage_changes_with_material_fx_input() -> None:
         contributions=[
             PortfolioPositionContribution(
                 position_timeseries=position,
-                fx_rate_to_portfolio_currency=Decimal("1.2"),
+                fx_rate=_fx_rate(Decimal("1.2")),
             )
         ],
     )
@@ -133,7 +152,7 @@ def test_calculator_lineage_changes_with_material_fx_input() -> None:
         contributions=[
             PortfolioPositionContribution(
                 position_timeseries=position,
-                fx_rate_to_portfolio_currency=Decimal("1.3"),
+                fx_rate=_fx_rate(Decimal("1.3")),
             )
         ],
     )
@@ -145,6 +164,51 @@ def test_calculator_lineage_changes_with_material_fx_input() -> None:
     )
     assert baseline.calculation_lineage.output_content_hash != (
         changed.calculation_lineage.output_content_hash
+    )
+
+
+def test_calculator_lineage_binds_equal_rate_to_selected_fx_fact() -> None:
+    position = _position("SEC-EUR")
+    baseline = calculate_portfolio_timeseries(
+        portfolio=_scope(),
+        aggregation_date=date(2026, 3, 8),
+        epoch=2,
+        contributions=[
+            PortfolioPositionContribution(
+                position_timeseries=position,
+                fx_rate=_fx_rate(Decimal("1.2")),
+            )
+        ],
+    )
+    changed_fact = calculate_portfolio_timeseries(
+        portfolio=_scope(),
+        aggregation_date=date(2026, 3, 8),
+        epoch=2,
+        contributions=[
+            PortfolioPositionContribution(
+                position_timeseries=position,
+                fx_rate=_fx_rate(
+                    Decimal("1.2"),
+                    rate_date=date(2026, 3, 7),
+                    source_record_id=102,
+                    source_updated_at=datetime(2026, 3, 8, 8, 0, 1, tzinfo=UTC),
+                ),
+            )
+        ],
+    )
+
+    assert changed_fact.bod_market_value == baseline.bod_market_value
+    assert changed_fact.bod_cashflow == baseline.bod_cashflow
+    assert changed_fact.eod_cashflow == baseline.eod_cashflow
+    assert changed_fact.eod_market_value == baseline.eod_market_value
+    assert changed_fact.fees == baseline.fees
+    assert baseline.calculation_lineage is not None
+    assert changed_fact.calculation_lineage is not None
+    assert baseline.calculation_lineage.input_content_hash != (
+        changed_fact.calculation_lineage.input_content_hash
+    )
+    assert baseline.calculation_lineage.output_content_hash != (
+        changed_fact.calculation_lineage.output_content_hash
     )
 
 
@@ -163,7 +227,7 @@ def test_calculator_normalizes_fx_amplified_outputs_once_at_portfolio_boundary()
                     eod_market_value=Decimal("1.0000000001"),
                     fees=Decimal("1.0000000001"),
                 ),
-                fx_rate_to_portfolio_currency=Decimal("1.0000000001"),
+                fx_rate=_fx_rate(Decimal("1.0000000001")),
             )
         ],
     )
@@ -181,7 +245,7 @@ def test_calculator_rejects_portfolio_total_magnitude_overflow() -> None:
             "SEC-OVERFLOW",
             bod_market_value=Decimal("60000000"),
         ),
-        fx_rate_to_portfolio_currency=Decimal("2"),
+        fx_rate=_fx_rate(Decimal("2")),
     )
 
     with pytest.raises(ValueError, match="portfolio-timeseries-ledger-output@1.0.0"):
@@ -211,7 +275,7 @@ def test_calculator_returns_zero_record_for_portfolio_without_positions() -> Non
 def test_calculator_rejects_cross_portfolio_contribution() -> None:
     contribution = PortfolioPositionContribution(
         position_timeseries=_position("SEC-OTHER", portfolio_id="OTHER-PORT"),
-        fx_rate_to_portfolio_currency=Decimal("1"),
+        fx_rate=_fx_rate(Decimal("1")),
     )
 
     with pytest.raises(PortfolioContributionScopeMismatch):
@@ -227,11 +291,11 @@ def test_calculator_rejects_duplicate_security_contribution() -> None:
     contributions = [
         PortfolioPositionContribution(
             position_timeseries=_position("SEC-DUPLICATE"),
-            fx_rate_to_portfolio_currency=Decimal("1"),
+            fx_rate=_fx_rate(Decimal("1")),
         ),
         PortfolioPositionContribution(
             position_timeseries=_position(" SEC-DUPLICATE "),
-            fx_rate_to_portfolio_currency=Decimal("1"),
+            fx_rate=_fx_rate(Decimal("1")),
         ),
     ]
 
@@ -256,7 +320,7 @@ def test_calculator_accepts_latest_contribution_within_target_window() -> None:
                     business_date=date(2026, 3, 7),
                     epoch=1,
                 ),
-                fx_rate_to_portfolio_currency=Decimal("1"),
+                fx_rate=_fx_rate(Decimal("1")),
             )
         ],
     )
@@ -276,7 +340,7 @@ def test_calculator_rejects_future_contribution_outside_target_window(
 ) -> None:
     contribution = PortfolioPositionContribution(
         position_timeseries=position,
-        fx_rate_to_portfolio_currency=Decimal("1"),
+        fx_rate=_fx_rate(Decimal("1")),
     )
 
     with pytest.raises(PortfolioContributionWindowMismatch):
@@ -303,5 +367,5 @@ def test_contribution_rejects_non_positive_fx_rate(fx_rate: Decimal) -> None:
     with pytest.raises(InvalidPortfolioPositionContribution):
         PortfolioPositionContribution(
             position_timeseries=_position("SEC-INVALID-FX"),
-            fx_rate_to_portfolio_currency=fx_rate,
+            fx_rate=_fx_rate(fx_rate),
         )

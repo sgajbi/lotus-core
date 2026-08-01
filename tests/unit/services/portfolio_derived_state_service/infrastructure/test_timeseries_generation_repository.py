@@ -1,6 +1,6 @@
 """Characterize position timeseries generation persistence contracts."""
 
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock
 
@@ -300,10 +300,16 @@ async def test_get_fx_rate_uses_normalized_functional_index_predicates(
     repository: TimeseriesGenerationRepository, mock_db_session: AsyncMock
 ):
     """Verifies the query for the latest FX rate."""
+    source_updated_at = datetime(2025, 1, 10, 9, tzinfo=UTC)
     mock_db_session.execute.return_value.scalars.return_value.first.return_value = MagicMock(
-        rate=Decimal("1.25")
+        id=73,
+        from_currency=" USD ",
+        to_currency=" eur ",
+        rate_date=date(2025, 1, 9),
+        rate=Decimal("1.25"),
+        updated_at=source_updated_at,
     )
-    await repository.get_fx_rate(" usd ", " eur ", date(2025, 1, 10))
+    selected_rate = await repository.get_fx_rate(" usd ", " eur ", date(2025, 1, 10))
     compiled_query = str(
         mock_db_session.execute.call_args[0][0].compile(compile_kwargs={"literal_binds": True})
     ).lower()
@@ -311,6 +317,13 @@ async def test_get_fx_rate_uses_normalized_functional_index_predicates(
     assert "upper(trim(fx_rates.to_currency)) = 'eur'" in compiled_query
     assert "fx_rates.rate_date <= '2025-01-10'" in compiled_query
     assert "order by fx_rates.rate_date desc, fx_rates.id desc" in compiled_query
+    assert selected_rate is not None
+    assert selected_rate.rate == Decimal("1.25")
+    assert selected_rate.from_currency == "USD"
+    assert selected_rate.to_currency == "EUR"
+    assert selected_rate.rate_date == date(2025, 1, 9)
+    assert selected_rate.source_record_id == 73
+    assert selected_rate.source_updated_at == source_updated_at
 
 
 async def test_upsert_position_timeseries(
