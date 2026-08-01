@@ -7,11 +7,18 @@ from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from decimal import Decimal
 
+from portfolio_common.domain.calculation_lineage import (
+    CalculationLineage,
+    build_calculation_lineage,
+)
+
 from ..transaction.booked import BookedTransaction
 from ..transaction.corporate_action.ordering import (
     corporate_action_dependency_rank,
     corporate_action_target_order_key,
 )
+from ..transaction.processing_type import resolve_effective_processing_transaction_type
+from .numeric_policy import POSITION_HISTORY_LEDGER_OUTPUT_V1
 from .reducer import PositionBalanceState, calculate_next_position_state
 
 PositionTransactionOrderKey = tuple[date, datetime, int, int, str, datetime, str]
@@ -33,6 +40,7 @@ class PositionHistoryRecord:
     cost_basis: Decimal
     cost_basis_local: Decimal
     epoch: int
+    calculation_lineage: CalculationLineage | None = None
 
     @property
     def balance(self) -> PositionBalanceState:
@@ -97,22 +105,86 @@ def build_position_history(
     _require_single_position_key(anchor=anchor, transactions=ordered_transactions)
 
     current_balance = anchor.balance if anchor is not None else PositionBalanceState()
+    prior_lineage = anchor.calculation_lineage if anchor is not None else None
     records: list[PositionHistoryRecord] = []
     for transaction in ordered_transactions:
-        current_balance = calculate_next_position_state(current_balance, transaction)
-        records.append(
-            PositionHistoryRecord(
-                portfolio_id=transaction.portfolio_id,
-                security_id=transaction.security_id,
-                transaction_id=transaction.transaction_id,
-                position_date=transaction.transaction_date.date(),
-                quantity=current_balance.quantity,
-                cost_basis=current_balance.cost_basis,
-                cost_basis_local=current_balance.cost_basis_local,
+        previous_balance = current_balance
+        current_balance = calculate_next_position_state(previous_balance, transaction)
+        output_payload = {
+            "cost_basis": current_balance.cost_basis,
+            "cost_basis_local": current_balance.cost_basis_local,
+            "epoch": epoch,
+            "portfolio_id": transaction.portfolio_id,
+            "position_date": transaction.transaction_date.date(),
+            "quantity": current_balance.quantity,
+            "security_id": transaction.security_id,
+            "transaction_id": transaction.transaction_id,
+        }
+        calculation_lineage = build_calculation_lineage(
+            algorithm_id="position-history-state-transition",
+            algorithm_version=1,
+            intermediate_precision=POSITION_HISTORY_LEDGER_OUTPUT_V1.working_precision,
+            input_payload=_position_history_lineage_input(
+                previous_balance=previous_balance,
+                prior_lineage=prior_lineage,
+                transaction=transaction,
                 epoch=epoch,
-            )
+            ),
+            output_payload=output_payload,
+            numeric_output_policy=POSITION_HISTORY_LEDGER_OUTPUT_V1.lineage_identity(),
         )
+        record = PositionHistoryRecord(
+            portfolio_id=transaction.portfolio_id,
+            security_id=transaction.security_id,
+            transaction_id=transaction.transaction_id,
+            position_date=transaction.transaction_date.date(),
+            quantity=current_balance.quantity,
+            cost_basis=current_balance.cost_basis,
+            cost_basis_local=current_balance.cost_basis_local,
+            epoch=epoch,
+            calculation_lineage=calculation_lineage,
+        )
+        records.append(record)
+        prior_lineage = calculation_lineage
     return tuple(records)
+
+
+def _position_history_lineage_input(
+    *,
+    previous_balance: PositionBalanceState,
+    prior_lineage: CalculationLineage | None,
+    transaction: BookedTransaction,
+    epoch: int,
+) -> dict[str, object]:
+    """Return the ordered source facts that can change a position-history balance."""
+
+    return {
+        "epoch": epoch,
+        "previous_balance": {
+            "cost_basis": previous_balance.cost_basis,
+            "cost_basis_local": previous_balance.cost_basis_local,
+            "quantity": previous_balance.quantity,
+        },
+        "prior_calculation_lineage": (
+            prior_lineage.lineage_payload() if prior_lineage is not None else None
+        ),
+        "transaction": {
+            "booked_transaction_type": transaction.transaction_type,
+            "component_type": transaction.component_type,
+            "effective_processing_transaction_type": (
+                resolve_effective_processing_transaction_type(transaction)
+            ),
+            "gross_transaction_amount": transaction.gross_transaction_amount,
+            "movement_direction": transaction.movement_direction,
+            "net_cost": transaction.net_cost,
+            "net_cost_local": transaction.net_cost_local,
+            "ordering_key": position_transaction_ordering_key(transaction),
+            "portfolio_id": transaction.portfolio_id,
+            "quantity": transaction.quantity,
+            "security_id": transaction.security_id,
+            "transaction_id": transaction.transaction_id,
+        },
+    }
 
 
 def _require_single_position_key(

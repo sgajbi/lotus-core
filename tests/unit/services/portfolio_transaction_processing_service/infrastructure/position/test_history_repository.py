@@ -6,9 +6,16 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from portfolio_common.database_models import PositionHistory, Transaction
+from portfolio_common.domain.calculation_lineage import (
+    CalculationLineage,
+    build_calculation_lineage,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.portfolio_transaction_processing_service.app.domain import PositionHistoryRecord
+from src.services.portfolio_transaction_processing_service.app.domain.position.numeric_policy import (  # noqa: E501
+    POSITION_HISTORY_LEDGER_OUTPUT_V1,
+)
 from src.services.portfolio_transaction_processing_service.app.infrastructure.position.history_repository import (  # noqa: E501
     SqlAlchemyPositionHistoryRepository,
     _position_history_replay_lock_key,
@@ -16,6 +23,17 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure.po
 from src.services.portfolio_transaction_processing_service.app.ports import (
     PositionMaterializationProgress,
 )
+
+
+def _calculation_lineage() -> CalculationLineage:
+    return build_calculation_lineage(
+        algorithm_id="position-history-state-transition",
+        algorithm_version=1,
+        intermediate_precision=POSITION_HISTORY_LEDGER_OUTPUT_V1.working_precision,
+        input_payload={"transaction_id": "TX-001"},
+        output_payload={"quantity": Decimal("10")},
+        numeric_output_policy=POSITION_HISTORY_LEDGER_OUTPUT_V1.lineage_identity(),
+    )
 
 
 @pytest.mark.asyncio
@@ -91,9 +109,40 @@ async def test_last_record_before_maps_nullable_local_basis_to_zero() -> None:
 
 
 @pytest.mark.asyncio
+async def test_last_record_before_rehydrates_calculation_lineage() -> None:
+    session = AsyncMock(spec=AsyncSession)
+    lineage = _calculation_lineage()
+    row = PositionHistory(
+        portfolio_id="PB-001",
+        security_id="SEC-001",
+        transaction_id="TX-001",
+        position_date=date(2026, 4, 9),
+        quantity=Decimal("10"),
+        cost_basis=Decimal("100"),
+        cost_basis_local=Decimal("95"),
+        epoch=2,
+        calculation_lineage=lineage.lineage_payload(),
+    )
+    result = MagicMock()
+    result.scalars.return_value.first.return_value = row
+    session.execute.return_value = result
+
+    record = await SqlAlchemyPositionHistoryRepository(session).last_record_before(
+        portfolio_id="PB-001",
+        security_id="SEC-001",
+        position_date=date(2026, 4, 10),
+        epoch=2,
+    )
+
+    assert record is not None
+    assert record.calculation_lineage == lineage
+
+
+@pytest.mark.asyncio
 async def test_save_records_maps_domain_records_without_eager_flush() -> None:
     session = AsyncMock(spec=AsyncSession)
     repository = SqlAlchemyPositionHistoryRepository(session)
+    lineage = _calculation_lineage()
     record = PositionHistoryRecord(
         portfolio_id="PB-001",
         security_id="SEC-001",
@@ -103,6 +152,7 @@ async def test_save_records_maps_domain_records_without_eager_flush() -> None:
         cost_basis=Decimal("100"),
         cost_basis_local=Decimal("95"),
         epoch=3,
+        calculation_lineage=lineage,
     )
 
     await repository.save_records((record,))
@@ -113,6 +163,7 @@ async def test_save_records_maps_domain_records_without_eager_flush() -> None:
     assert rows[0].portfolio_id == "PB-001"
     assert rows[0].transaction_id == "TX-001"
     assert rows[0].cost_basis_local == Decimal("95")
+    assert rows[0].calculation_lineage == lineage.lineage_payload()
     session.flush.assert_not_awaited()
 
 
