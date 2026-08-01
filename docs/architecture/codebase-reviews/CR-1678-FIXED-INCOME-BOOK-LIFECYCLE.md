@@ -51,6 +51,15 @@ residual tolerance fail closed. Premium, discount, and par direction is derived 
 opening book cost and redemption value rather than broad instrument labels. This is an additive
 foundation only; it does not promote amortized cost to a supported runtime capability.
 
+The same domain package now owns a pure, deterministic schedule kernel for straight-line and
+effective-yield evolution. Straight-line schedules allocate the remaining premium or discount by
+authoritative period weight and absorb only the final governed residual. Effective-yield schedules
+distinguish annual-effective, annual-nominal-simple, and supplied per-period rates; ambiguous or
+missing rate authority fails closed. Every normalized period row and reconciled schedule is bound
+to complete input, policy, calculation, output, and numeric-policy lineage. The kernel supports
+negative yields greater than negative one, irregular periods, fees-in-basis policy, and replay
+identity without introducing persistence, runtime bookability, or a public contract.
+
 ## Same-Pattern Review
 
 The review covers both remaining `resolve_valuation_unit_price` call sites, authoritative price and
@@ -76,6 +85,9 @@ implemented.
 - 49 warning-strict shared valuation/calculator tests;
 - 77 warning-strict reconciliation domain/service/repository tests;
 - 18 warning-strict amortized-cost policy tests;
+- 31 warning-strict fixed-income policy and schedule-kernel tests, including irregular-period,
+  premium, discount, negative-yield, rate-authority, reconciliation, and lineage proofs;
+- 136 warning-strict fixed-income and calculated-output-policy guard tests;
 - scoped Ruff lint/format, MyPy, RFC ledger, architecture-documentation, transaction-capability,
   wiki, JSON, calculated-output-policy, and diff-hygiene guards.
 
