@@ -18,6 +18,7 @@ from src.services.portfolio_transaction_processing_service.app.domain.position.h
     PositionRecalculationState,
     build_position_history,
     order_position_transactions,
+    position_transaction_ordering_key,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[6]
@@ -79,7 +80,7 @@ def _transaction_lineage(source_revision: str) -> CalculationLineage:
 
 
 def test_order_position_transactions_uses_canonical_dependency_and_target_order() -> None:
-    transaction_time = datetime(2026, 4, 10, 9, 30)
+    transaction_time = datetime(2026, 4, 10, 9, 30, tzinfo=timezone.utc)
     transactions = (
         _transaction("CASH", "CASH_CONSIDERATION", transaction_date=transaction_time),
         _transaction(
@@ -146,6 +147,59 @@ def test_order_position_transactions_uses_ingestion_and_identity_tiebreakers() -
         "TX-A",
         "TX-C",
         "TX-B",
+    )
+
+
+@pytest.mark.parametrize(
+    ("updates", "expected_field"),
+    [
+        ({"transaction_date": datetime(2026, 4, 10, 9, 30)}, "transaction_date"),
+        ({"created_at": datetime(2026, 4, 10, 9, 31)}, "created_at"),
+    ],
+)
+def test_position_ordering_rejects_timezone_ambiguous_lineage_inputs(
+    updates: dict[str, datetime],
+    expected_field: str,
+) -> None:
+    transaction = _transaction("TX-NAIVE", "BUY", **updates)
+
+    with pytest.raises(
+        PositionHistoryInvariantError,
+        match=rf"{expected_field}.*timezone-aware",
+    ):
+        position_transaction_ordering_key(transaction)
+
+
+def test_position_ordering_canonicalizes_equivalent_aware_instants_to_utc() -> None:
+    utc_transaction = _transaction(
+        "TX-CANONICAL",
+        "BUY",
+        transaction_date=datetime(2026, 4, 10, 1, 30, tzinfo=timezone.utc),
+        created_at=datetime(2026, 4, 10, 2, 0, tzinfo=timezone.utc),
+    )
+    singapore_transaction = _transaction(
+        "TX-CANONICAL",
+        "BUY",
+        transaction_date=datetime(
+            2026,
+            4,
+            10,
+            9,
+            30,
+            tzinfo=timezone(timedelta(hours=8)),
+        ),
+        created_at=datetime(
+            2026,
+            4,
+            10,
+            10,
+            0,
+            tzinfo=timezone(timedelta(hours=8)),
+        ),
+    )
+
+    assert position_transaction_ordering_key(utc_transaction) == (
+        position_transaction_ordering_key(singapore_transaction)
     )
 
 
