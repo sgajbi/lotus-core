@@ -2569,6 +2569,7 @@ class PortfolioTimeseries(Base):
     eod_cashflow = Column(ExactNumeric(18, 10), nullable=False)
     eod_market_value = Column(ExactNumeric(18, 10), nullable=False)
     fees = Column(ExactNumeric(18, 10), nullable=False)
+    calculation_lineage = Column(JSON(none_as_null=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False

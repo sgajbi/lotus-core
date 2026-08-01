@@ -77,6 +77,75 @@ def test_calculator_sums_position_economics_in_portfolio_currency() -> None:
     assert result.eod_cashflow == Decimal("4.4")
     assert result.eod_market_value == Decimal("242.0")
     assert result.fees == Decimal("1.10")
+    assert result.calculation_lineage is not None
+    assert result.calculation_lineage.algorithm_id == "portfolio-timeseries-aggregation"
+    assert result.calculation_lineage.numeric_output_policy is not None
+    assert result.calculation_lineage.numeric_output_policy.policy_id == (
+        "portfolio-timeseries-ledger-output@1.0.0"
+    )
+
+
+def test_calculator_lineage_and_output_are_independent_of_contribution_order() -> None:
+    contributions = [
+        PortfolioPositionContribution(
+            position_timeseries=_position("SEC-USD"),
+            fx_rate_to_portfolio_currency=Decimal("1"),
+        ),
+        PortfolioPositionContribution(
+            position_timeseries=_position("SEC-EUR"),
+            fx_rate_to_portfolio_currency=Decimal("1.2"),
+        ),
+    ]
+
+    baseline = calculate_portfolio_timeseries(
+        portfolio=_scope(),
+        aggregation_date=date(2026, 3, 8),
+        epoch=2,
+        contributions=contributions,
+    )
+    reversed_result = calculate_portfolio_timeseries(
+        portfolio=_scope(),
+        aggregation_date=date(2026, 3, 8),
+        epoch=2,
+        contributions=list(reversed(contributions)),
+    )
+
+    assert reversed_result == baseline
+
+
+def test_calculator_lineage_changes_with_material_fx_input() -> None:
+    position = _position("SEC-EUR")
+    baseline = calculate_portfolio_timeseries(
+        portfolio=_scope(),
+        aggregation_date=date(2026, 3, 8),
+        epoch=2,
+        contributions=[
+            PortfolioPositionContribution(
+                position_timeseries=position,
+                fx_rate_to_portfolio_currency=Decimal("1.2"),
+            )
+        ],
+    )
+    changed = calculate_portfolio_timeseries(
+        portfolio=_scope(),
+        aggregation_date=date(2026, 3, 8),
+        epoch=2,
+        contributions=[
+            PortfolioPositionContribution(
+                position_timeseries=position,
+                fx_rate_to_portfolio_currency=Decimal("1.3"),
+            )
+        ],
+    )
+
+    assert baseline.calculation_lineage is not None
+    assert changed.calculation_lineage is not None
+    assert baseline.calculation_lineage.input_content_hash != (
+        changed.calculation_lineage.input_content_hash
+    )
+    assert baseline.calculation_lineage.output_content_hash != (
+        changed.calculation_lineage.output_content_hash
+    )
 
 
 def test_calculator_normalizes_fx_amplified_outputs_once_at_portfolio_boundary() -> None:
