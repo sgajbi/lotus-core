@@ -1,6 +1,6 @@
 """SQLAlchemy persistence for transaction cost-basis processing."""
 
-from dataclasses import fields
+from dataclasses import fields, replace
 from decimal import Decimal
 from typing import Any
 
@@ -8,7 +8,10 @@ from portfolio_common.database_models import (
     Transaction as DBTransaction,
 )
 from portfolio_common.database_models import TransactionCost
-from portfolio_common.domain.calculation_lineage import CalculationLineage
+from portfolio_common.domain.calculation_lineage import (
+    CalculationLineage,
+    calculation_lineage_from_payload,
+)
 from portfolio_common.domain.currency import normalize_currency_code
 from portfolio_common.events import TransactionEvent
 from portfolio_common.identifiers import normalize_lookup_identifier
@@ -118,6 +121,16 @@ def _booked_transaction_payload(transaction: BookedTransaction) -> dict[str, Any
     return payload
 
 
+def _to_persisted_booked_transaction(transaction: DBTransaction) -> BookedTransaction:
+    """Rehydrate the internal calculation receipt excluded from the public event contract."""
+
+    booked = to_booked_transaction(TransactionEvent.model_validate(transaction))
+    return replace(
+        booked,
+        calculation_lineage=calculation_lineage_from_payload(transaction.calculation_lineage),
+    )
+
+
 FEE_COMPONENT_FIELDS = (
     "brokerage",
     "stamp_duty",
@@ -184,10 +197,7 @@ class SqlAlchemyCostBasisTransactionRepository:
         )
 
         result = await self.db.execute(stmt)
-        return [
-            to_booked_transaction(TransactionEvent.model_validate(row))
-            for row in result.scalars().all()
-        ]
+        return [_to_persisted_booked_transaction(row) for row in result.scalars().all()]
 
     async def apply_transaction_costs_and_replace_breakdown(
         self, transaction_result: CostBasisTransaction
@@ -235,7 +245,7 @@ class SqlAlchemyCostBasisTransactionRepository:
                 db_txn=db_transaction,
             )
         )
-        return to_booked_transaction(TransactionEvent.model_validate(db_transaction))
+        return _to_persisted_booked_transaction(db_transaction)
 
     async def get_booked_transaction(
         self, transaction_id: str, *, portfolio_id: str | None = None
@@ -249,10 +259,12 @@ class SqlAlchemyCostBasisTransactionRepository:
         transaction = result.scalars().first()
         if transaction is None:
             return None
-        return to_booked_transaction(TransactionEvent.model_validate(transaction))
+        return _to_persisted_booked_transaction(transaction)
 
-    async def upsert_booked_transaction(self, transaction: BookedTransaction) -> None:
-        """Upsert one canonical booked transaction."""
+    async def upsert_booked_transaction(
+        self, transaction: BookedTransaction
+    ) -> BookedTransaction:
+        """Upsert and return the final canonical booked transaction row."""
 
         transaction_values = _booked_transaction_payload(transaction)
         stmt = pg_insert(DBTransaction).values(**transaction_values)
@@ -262,6 +274,12 @@ class SqlAlchemyCostBasisTransactionRepository:
             if field_name not in {"id", "transaction_id"}
         ]
         update_dict = {field: getattr(stmt.excluded, field) for field in update_fields}
-        await self.db.execute(
-            stmt.on_conflict_do_update(index_elements=["transaction_id"], set_=update_dict)
-        )
+        persisted = (
+            await self.db.execute(
+                stmt.on_conflict_do_update(
+                    index_elements=["transaction_id"],
+                    set_=update_dict,
+                ).returning(DBTransaction)
+            )
+        ).scalars().one()
+        return _to_persisted_booked_transaction(persisted)
