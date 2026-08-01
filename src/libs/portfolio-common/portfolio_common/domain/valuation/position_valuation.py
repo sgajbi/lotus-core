@@ -26,6 +26,8 @@ POSITION_VALUATION_ALGORITHM_ID = "POSITION_VALUATION_SCALING"
 POSITION_VALUATION_ALGORITHM_VERSION = 2
 POSITION_VALUATION_INTERMEDIATE_PRECISION = POSITION_VALUATION_LEDGER_OUTPUT_V1.working_precision
 POSITION_VALUATION_INTERMEDIATE_ROUNDING = POSITION_VALUATION_LEDGER_OUTPUT_V1.rounding
+POSITION_VALUATION_LOCAL_ECONOMICS_ALGORITHM_ID = "POSITION_VALUATION_LOCAL_ECONOMICS_NORMALIZATION"
+POSITION_VALUATION_LOCAL_ECONOMICS_ALGORITHM_VERSION = 1
 
 
 class ValuationInputBasis(StrEnum):
@@ -234,7 +236,7 @@ class PositionValuationEconomicInputs:
 
 @dataclass(frozen=True, slots=True)
 class PositionValuationLocalEconomics:
-    """Normalized local-currency economics before FX and lineage decoration."""
+    """Normalized local economics with calculation lineage but before FX/source decoration."""
 
     current_principal: Decimal | None
     clean_value_local: Decimal | None
@@ -242,6 +244,7 @@ class PositionValuationLocalEconomics:
     total_market_value_local: Decimal | None
     notional_exposure_local: Decimal | None
     settlement_variation_local: Decimal | None
+    lineage: CalculationLineage
 
 
 @dataclass(frozen=True, slots=True)
@@ -452,6 +455,29 @@ def _normalize_local_economics(
             if total_market_value is not None
             else None
         )
+    output_payload = {
+        "accrued_income_local": normalized_accrued_income,
+        "clean_value_local": normalized_clean_value,
+        "current_principal": normalized_current_principal,
+        "notional_exposure_local": normalized_notional,
+        "settlement_variation_local": normalized_settlement,
+        "total_market_value_local": normalized_total_market_value,
+    }
+    lineage = build_calculation_lineage(
+        algorithm_id=POSITION_VALUATION_LOCAL_ECONOMICS_ALGORITHM_ID,
+        algorithm_version=POSITION_VALUATION_LOCAL_ECONOMICS_ALGORITHM_VERSION,
+        intermediate_precision=POSITION_VALUATION_INTERMEDIATE_PRECISION,
+        input_payload={
+            "accrued_income": accrued_income,
+            "clean_value": clean_value,
+            "current_principal": current_principal,
+            "notional_exposure": notional_exposure,
+            "settlement_variation": settlement_variation,
+            "total_market_value": total_market_value,
+        },
+        output_payload=output_payload,
+        numeric_output_policy=policy.lineage_identity(),
+    )
     return PositionValuationLocalEconomics(
         current_principal=normalized_current_principal,
         clean_value_local=normalized_clean_value,
@@ -459,6 +485,7 @@ def _normalize_local_economics(
         total_market_value_local=normalized_total_market_value,
         notional_exposure_local=normalized_notional,
         settlement_variation_local=normalized_settlement,
+        lineage=lineage,
     )
 
 

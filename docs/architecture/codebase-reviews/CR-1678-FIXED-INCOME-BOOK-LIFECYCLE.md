@@ -33,7 +33,9 @@ The scoped valuation path now binds persisted position quantity as face principa
 effective-dated assignment declares `FACE_AMOUNT`. Unit-price behavior remains distinct; factor and
 independently supplied current-principal policies remain fail closed. A framework-free local
 valuation-economics seam now owns scaling once, and independent reconciliation uses that seam for
-supported unit-price, dirty percent-of-face, and clean no-periodic-accrual receipts.
+supported unit-price, dirty percent-of-face, and clean no-periodic-accrual receipts. The shared seam
+returns deterministic input/calculation/output lineage bound to the governed valuation numeric
+policy, including when reconciliation consumes the local-currency result without source adapters.
 
 RFC-AMORTIZATION-01 version 1.1 corrects straight-line direction, defines yield-application
 conventions, requires clean-cost and exact-scope assignment authority, and makes unsupported profiles
@@ -72,7 +74,7 @@ implemented.
 - 77 warning-strict reconciliation domain/service/repository tests;
 - 18 warning-strict amortized-cost policy tests;
 - scoped Ruff lint/format, MyPy, RFC ledger, architecture-documentation, transaction-capability,
-  wiki, JSON, and diff-hygiene guards.
+  wiki, JSON, calculated-output-policy, and diff-hygiene guards.
 
 Protected PR, exact-main, migration, OpenAPI, runtime recovery, load, wiki publication, and issue
 closure evidence remain pending until their corresponding implementation slices exist.

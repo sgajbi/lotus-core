@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from decimal import ROUND_DOWN, ROUND_UP, Decimal, localcontext
 
 import pytest
+from portfolio_common.domain.calculation_lineage import calculation_lineage_binds_output
 from portfolio_common.domain.financial.precision import (
     DecimalPrecisionError,
     DecimalPrecisionViolation,
@@ -139,6 +140,13 @@ def test_local_economics_matches_lineaged_unit_price_result() -> None:
     assert economics.total_market_value_local == result.total_market_value_local
     assert economics.clean_value_local is result.clean_value_local is None
     assert economics.current_principal is result.current_principal is None
+    assert economics.lineage.algorithm_id == "POSITION_VALUATION_LOCAL_ECONOMICS_NORMALIZATION"
+    assert economics.lineage.algorithm_version == 1
+    assert economics.lineage.numeric_output_policy is not None
+    assert (
+        economics.lineage.numeric_output_policy.policy_id
+        == "position-valuation-ledger-output@1.0.0"
+    )
 
 
 def test_local_economics_normalizes_explicit_face_principal_without_evidence() -> None:
@@ -161,6 +169,17 @@ def test_local_economics_normalizes_explicit_face_principal_without_evidence() -
     assert economics.total_market_value_local == Decimal("992500.0000000000")
     assert economics.clean_value_local is None
     assert economics.accrued_income_local is None
+    assert calculation_lineage_binds_output(
+        economics.lineage,
+        output_payload={
+            "accrued_income_local": economics.accrued_income_local,
+            "clean_value_local": economics.clean_value_local,
+            "current_principal": economics.current_principal,
+            "notional_exposure_local": economics.notional_exposure_local,
+            "settlement_variation_local": economics.settlement_variation_local,
+            "total_market_value_local": economics.total_market_value_local,
+        },
+    )
 
 
 def test_position_lineage_changes_on_source_revision_even_when_value_is_equal() -> None:
