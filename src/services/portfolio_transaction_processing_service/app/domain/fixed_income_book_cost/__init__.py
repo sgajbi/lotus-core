@@ -1,5 +1,18 @@
 """Framework-independent fixed-income amortized-cost domain policy."""
 
+from .authority import (
+    AmortizedCostAssignmentCacheKey,
+    AmortizedCostAssignmentStatus,
+    AmortizedCostAuthorityError,
+    LotAmortizedCostPolicyAssignment,
+    LotBookCostAuthorityScope,
+    MissingAmortizedCostAssignmentError,
+    OverlappingAmortizedCostAssignmentError,
+    ResolvedAmortizedCostAssignment,
+    amortization_replay_start_for_assignment_correction,
+    resolve_amortized_cost_assignment,
+    validate_no_overlapping_active_amortized_cost_assignments,
+)
 from .calculation import (
     AMORTIZED_COST_SCHEDULE_ALGORITHM_ID,
     AMORTIZED_COST_SCHEDULE_ALGORITHM_VERSION,
@@ -24,6 +37,9 @@ from .policy import (
 __all__ = [
     "AMORTIZED_COST_SCHEDULE_ALGORITHM_ID",
     "AMORTIZED_COST_SCHEDULE_ALGORITHM_VERSION",
+    "AmortizedCostAssignmentCacheKey",
+    "AmortizedCostAssignmentStatus",
+    "AmortizedCostAuthorityError",
     "AmortizedCostDirection",
     "AmortizedCostCalculationError",
     "AmortizedCostEligibilityReason",
@@ -35,7 +51,15 @@ __all__ = [
     "AmortizedCostScheduleResult",
     "AmortizationPeriodInput",
     "AmortizationPeriodResult",
+    "LotAmortizedCostPolicyAssignment",
+    "LotBookCostAuthorityScope",
+    "MissingAmortizedCostAssignmentError",
+    "OverlappingAmortizedCostAssignmentError",
+    "ResolvedAmortizedCostAssignment",
     "YieldApplicationConvention",
+    "amortization_replay_start_for_assignment_correction",
     "calculate_amortized_cost_schedule",
     "classify_amortized_cost_direction",
+    "resolve_amortized_cost_assignment",
+    "validate_no_overlapping_active_amortized_cost_assignments",
 ]
