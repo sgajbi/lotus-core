@@ -11,6 +11,7 @@ from portfolio_common.domain.calculation_lineage import (
     calculation_lineage_binds_output,
     calculation_lineage_from_payload,
 )
+from portfolio_common.domain.transaction.numeric_policy import COST_BASIS_STATE_LEDGER_OUTPUT_V1
 from portfolio_common.events import TransactionEvent
 from portfolio_common.identifiers import normalize_lookup_identifier
 from sqlalchemy import func, select, update
@@ -31,6 +32,10 @@ from ...domain.cost_basis.state_lineage import (
 )
 from ...ports import AverageCostPoolCheckpointRecord, AverageCostPoolPersistedSummary
 from ..transaction_mapping.booked_transaction import to_booked_transaction
+from .lot_state_lineage import (
+    lot_state_lineage_output_from_mapping,
+    lot_state_lineage_output_from_row,
+)
 from .lot_state_mapper import buy_lot_state_payload, mutable_lot_state_fields
 from .lot_state_repository import SqlAlchemyCostBasisLotRepository
 
@@ -216,11 +221,6 @@ class SqlAlchemyAverageCostPoolRepository:
                 lot_cost_local=state.cost_local if state is not None else Decimal(0),
                 lot_cost_base=state.cost_base if state is not None else Decimal(0),
             )
-            target_state = state or OpenLotState(
-                quantity=Decimal(0),
-                cost_local=Decimal(0),
-                cost_base=Decimal(0),
-            )
             source_lineage = build_cost_basis_state_lineage(
                 algorithm_id="average-cost-source-rebuild",
                 input_payload={
@@ -233,10 +233,7 @@ class SqlAlchemyAverageCostPoolRepository:
                     "replay_lineage": plan.replay_lineage.lineage_payload(),
                     "source_transaction_id": source_transaction.transaction_id,
                 },
-                output_payload={
-                    "source_transaction_id": source_transaction.transaction_id,
-                    **_open_lot_state_payload(target_state),
-                },
+                output_payload=lot_state_lineage_output_from_mapping(payload),
             )
             payload["calculation_lineage"] = source_lineage.lineage_payload()
             payloads.append(payload)
@@ -526,12 +523,6 @@ class SqlAlchemyAverageCostPoolRepository:
             prior_lineage = calculation_lineage_from_payload(
                 state_before["prior_calculation_lineage"]
             )
-            output_payload = {
-                "cost_base": row.lot_cost_base,
-                "cost_local": row.lot_cost_local,
-                "quantity": row.open_quantity,
-                "source_transaction_id": source_transaction_id,
-            }
             row.calculation_lineage = build_cost_basis_state_lineage(
                 algorithm_id="average-cost-source-transition",
                 input_payload={
@@ -547,7 +538,7 @@ class SqlAlchemyAverageCostPoolRepository:
                     },
                     "transition_lineage": transition_lineage.lineage_payload(),
                 },
-                output_payload=output_payload,
+                output_payload=lot_state_lineage_output_from_row(row),
             ).lineage_payload()
 
 
@@ -555,6 +546,7 @@ _SOURCE_STATE_LINEAGE_ALGORITHMS = frozenset(
     {
         "average-cost-source-rebuild",
         "average-cost-source-transition",
+        "cost-basis-opening-lot-materialization",
         "cost-basis-complete-lot-snapshot",
         "cost-basis-selected-lot-update",
     }
@@ -568,38 +560,19 @@ def _source_row_lineage_is_valid(row: Any) -> bool:
         return False
     if lineage is None:
         return False
-    if lineage.algorithm_id == "cost-basis-opening-lot-materialization":
-        output_payload = {
-            "acquisition_date": row.acquisition_date,
-            "accrued_interest_paid_local": row.accrued_interest_paid_local,
-            "calculation_policy_id": row.calculation_policy_id,
-            "calculation_policy_version": row.calculation_policy_version,
-            "economic_event_id": row.economic_event_id,
-            "instrument_id": row.instrument_id,
-            "linked_transaction_group_id": row.linked_transaction_group_id,
-            "lot_cost_base": row.lot_cost_base,
-            "lot_cost_local": row.lot_cost_local,
-            "lot_id": row.lot_id,
-            "open_quantity": row.open_quantity,
-            "original_quantity": row.original_quantity,
-            "portfolio_id": row.portfolio_id,
-            "security_id": row.security_id,
-            "source_system": row.source_system,
-            "source_transaction_id": row.source_transaction_id,
-        }
-    elif lineage.algorithm_id in _SOURCE_STATE_LINEAGE_ALGORITHMS:
-        output_payload = {
-            "cost_base": row.lot_cost_base,
-            "cost_local": row.lot_cost_local,
-            "quantity": row.open_quantity,
-            "source_transaction_id": row.source_transaction_id,
-        }
-    else:
+    if (
+        lineage.algorithm_id not in _SOURCE_STATE_LINEAGE_ALGORITHMS
+        or lineage.algorithm_version != 1
+        or lineage.intermediate_precision != COST_BASIS_STATE_LEDGER_OUTPUT_V1.working_precision
+        or lineage.numeric_output_policy != COST_BASIS_STATE_LEDGER_OUTPUT_V1.lineage_identity()
+    ):
         return False
     return bool(
         calculation_lineage_binds_output(
             lineage,
-            output_payload=canonical_cost_basis_output_payload(output_payload),
+            output_payload=canonical_cost_basis_output_payload(
+                lot_state_lineage_output_from_row(row)
+            ),
         )
     )
 

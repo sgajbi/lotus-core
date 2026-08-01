@@ -47,6 +47,11 @@ contracts.
   transaction receipt, and lot-state receipts did not bind the consuming transition or prior
   durable state. The first call-graph boundary implementation also allowed unrelated same-named
   functions to satisfy declared coverage through ambiguous imports or shared helpers.
+- Exact-head review then found that the dedicated foreign-exchange booking path bypassed the
+  transaction-cost calculator and could upsert a null or stale receipt. It also found that later
+  lot-state writers replaced the complete opening receipt with evidence covering only quantity and
+  costs, and that internally self-consistent receipts with unsupported algorithm or numeric-policy
+  semantics could still be accepted as current.
 
 ## Resolution
 
@@ -162,6 +167,14 @@ contracts.
   and unaliased dotted imports cannot certify a declared boundary.
 - Removed the unused `CostLot.total_cost_local` and `CostLot.total_cost_base` compatibility
   properties after repository-wide usage analysis proved that no caller consumed them.
+- The FX baseline processor now replaces stale evidence with a deterministic, policy-bound receipt
+  over the canonical FX input and complete persistence-shaped booked transaction before the atomic
+  upsert. The calculated-output registry recognizes this second transaction-policy boundary.
+- Centralized the complete durable lot-state output projection and reused it for opening
+  materialization, AVCO rebuilds, FIFO/selected updates, AVCO transitions, and persisted receipt
+  verification. Source validation now requires an allowlisted algorithm plus the exact governed
+  algorithm version, working precision, and numeric-output policy before checking output binding.
+  Durable identity corruption and forged version-999 evidence therefore fail closed.
 
 The later cashflow persistence slice adds one nullable JSON column and no topic or runtime-topology
 change. Exactly representable inputs, cashflow formulas, serialized Decimal amounts, transaction
@@ -300,6 +313,11 @@ identity, and public response shapes remain unchanged.
   warning-strict suite passes 89 tests, the complete transaction-processing contract passes all 76
   tests, full MyPy passes across 241 source files, and the Bandit gate reports zero findings.
   Production assertions were replaced by an explicit fail-closed transition-evidence boundary.
+- Exact-head P1 closure adds 11 focused FX tests and 29 focused lot-repository tests, plus the real
+  PostgreSQL historical AVCO reconciliation proof. The tests cover deterministic FX replay,
+  material-output hash sensitivity, stale-receipt replacement, complete durable lot-row binding,
+  non-economic identity corruption, and rejection of internally consistent version-999 evidence.
+  Ruff, focused MyPy, diff hygiene, and the eight-policy calculated-output guard pass.
 
 ## Compatibility and remaining work
 

@@ -10,7 +10,10 @@ from portfolio_common.database_models import (
 )
 from portfolio_common.database_models import Transaction as DBTransaction
 from portfolio_common.domain.calculation_lineage import build_calculation_lineage
-from portfolio_common.domain.transaction.numeric_policy import TRANSACTION_COST_LEDGER_OUTPUT_V1
+from portfolio_common.domain.transaction.numeric_policy import (
+    COST_BASIS_STATE_LEDGER_OUTPUT_V1,
+    TRANSACTION_COST_LEDGER_OUTPUT_V1,
+)
 from sqlalchemy.dialects import postgresql
 
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (  # noqa: E501  # noqa: E501
@@ -26,6 +29,7 @@ from src.services.portfolio_transaction_processing_service.app.domain.cost_basis
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis.state_lineage import (  # noqa: E501
     CostBasisStateTransitionEvidence,
     build_cost_basis_state_lineage,
+    canonical_cost_basis_output_payload,
 )
 from src.services.portfolio_transaction_processing_service.app.domain.transaction import (
     BookedTransaction,
@@ -34,6 +38,9 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure.co
     SqlAlchemyAverageCostPoolRepository,
     SqlAlchemyCostBasisLotRepository,
     SqlAlchemyCostBasisTransactionRepository,
+)
+from src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis.lot_state_lineage import (  # noqa: E501
+    lot_state_lineage_output_from_mapping,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis.lot_state_mapper import (  # noqa: E501
     buy_lot_state_payload,
@@ -53,6 +60,30 @@ def _transition_evidence() -> CostBasisStateTransitionEvidence:
             input_payload={"transaction_id": "SELL01"},
             output_payload={"realized_gain_loss": Decimal("10")},
         ),
+    )
+
+
+def _persisted_source_lot(
+    source_transaction_id: str,
+    *,
+    quantity: str,
+    cost_local: str,
+    cost_base: str,
+    calculation_lineage: dict[str, object] | None = None,
+) -> PositionLotState:
+    return PositionLotState(
+        lot_id=f"LOT-{source_transaction_id}",
+        source_transaction_id=source_transaction_id,
+        portfolio_id="P1",
+        instrument_id="I1",
+        security_id="S1",
+        acquisition_date=date(2026, 1, 1),
+        original_quantity=Decimal("10"),
+        open_quantity=Decimal(quantity),
+        lot_cost_local=Decimal(cost_local),
+        lot_cost_base=Decimal(cost_base),
+        accrued_interest_paid_local=Decimal(0),
+        calculation_lineage=calculation_lineage,
     )
 
 
@@ -504,12 +535,7 @@ async def test_get_average_cost_pool_persisted_summary_maps_missing_pool_and_sou
     second_payload["calculation_lineage"] = build_cost_basis_state_lineage(
         algorithm_id="average-cost-source-rebuild",
         input_payload={"source_transaction_id": "BUY-2"},
-        output_payload={
-            "cost_base": Decimal("69"),
-            "cost_local": Decimal("60"),
-            "quantity": Decimal("5"),
-            "source_transaction_id": "BUY-2",
-        },
+        output_payload=lot_state_lineage_output_from_mapping(second_payload),
     ).lineage_payload()
     source_result.all.return_value = [
         SimpleNamespace(**first_payload),
@@ -566,6 +592,69 @@ async def test_get_average_cost_pool_persisted_summary_rejects_unbound_source_re
     assert summary.source_lineage_valid is False
 
 
+async def test_persisted_summary_rejects_transition_receipt_after_durable_identity_drift() -> None:
+    db_session = AsyncMock()
+    pool_result = MagicMock()
+    pool_result.scalars.return_value.first.return_value = None
+    source_result = MagicMock()
+    source_payload = buy_lot_state_payload(
+        _average_cost_source(
+            "BUY-1",
+            transaction_date=datetime(2026, 1, 1, 10, 0),
+            quantity="4",
+            cost="48",
+        )
+    )
+    source_payload["calculation_lineage"] = build_cost_basis_state_lineage(
+        algorithm_id="average-cost-source-transition",
+        input_payload={"source_transaction_id": "BUY-1"},
+        output_payload=lot_state_lineage_output_from_mapping(source_payload),
+    ).lineage_payload()
+    source_payload["instrument_id"] = "CORRUPTED-INSTRUMENT"
+    source_result.all.return_value = [SimpleNamespace(**source_payload)]
+    db_session.execute.side_effect = [pool_result, source_result]
+
+    summary = await SqlAlchemyAverageCostPoolRepository(
+        db_session
+    ).get_average_cost_pool_persisted_summary(portfolio_id="P1", security_id="S1")
+
+    assert summary.source_lineage_valid is False
+
+
+async def test_persisted_summary_rejects_self_consistent_receipt_with_unknown_version() -> None:
+    db_session = AsyncMock()
+    pool_result = MagicMock()
+    pool_result.scalars.return_value.first.return_value = None
+    source_result = MagicMock()
+    source_payload = buy_lot_state_payload(
+        _average_cost_source(
+            "BUY-1",
+            transaction_date=datetime(2026, 1, 1, 10, 0),
+            quantity="4",
+            cost="48",
+        )
+    )
+    output_payload = canonical_cost_basis_output_payload(
+        lot_state_lineage_output_from_mapping(source_payload)
+    )
+    source_payload["calculation_lineage"] = build_calculation_lineage(
+        algorithm_id="average-cost-source-transition",
+        algorithm_version=999,
+        intermediate_precision=COST_BASIS_STATE_LEDGER_OUTPUT_V1.working_precision,
+        input_payload={"source_transaction_id": "BUY-1"},
+        output_payload=output_payload,
+        numeric_output_policy=COST_BASIS_STATE_LEDGER_OUTPUT_V1.lineage_identity(),
+    ).lineage_payload()
+    source_result.all.return_value = [SimpleNamespace(**source_payload)]
+    db_session.execute.side_effect = [pool_result, source_result]
+
+    summary = await SqlAlchemyAverageCostPoolRepository(
+        db_session
+    ).get_average_cost_pool_persisted_summary(portfolio_id="P1", security_id="S1")
+
+    assert summary.source_lineage_valid is False
+
+
 async def test_apply_average_cost_pool_transition_scales_sources_and_assigns_residual() -> None:
     db_session = AsyncMock()
     repository = SqlAlchemyAverageCostPoolRepository(db_session)
@@ -589,18 +678,18 @@ async def test_apply_average_cost_pool_transition_scales_sources_and_assigns_res
         Decimal("77"),
     )
     residual_result = MagicMock(rowcount=1)
-    first_source = MagicMock(
-        source_transaction_id="BUY-1",
-        open_quantity=Decimal("7"),
-        lot_cost_local=Decimal("70"),
-        lot_cost_base=Decimal("77"),
+    first_source = _persisted_source_lot(
+        "BUY-1",
+        quantity="7",
+        cost_local="70",
+        cost_base="77",
         calculation_lineage=prior_source_lineage,
     )
-    second_source = MagicMock(
-        source_transaction_id="BUY-2",
-        open_quantity=Decimal("2"),
-        lot_cost_local=Decimal("38"),
-        lot_cost_base=Decimal("40"),
+    second_source = _persisted_source_lot(
+        "BUY-2",
+        quantity="2",
+        cost_local="38",
+        cost_base="40",
         calculation_lineage=prior_source_lineage,
     )
     final_states_result = MagicMock()
@@ -667,11 +756,11 @@ async def test_average_cost_source_lineage_binds_prior_and_transition_revisions(
 
     async def receipt(*, prior_revision: str, transition_revision: str) -> str:
         db_session = AsyncMock()
-        row = MagicMock(
-            source_transaction_id="BUY-1",
-            open_quantity=Decimal("9"),
-            lot_cost_local=Decimal("108"),
-            lot_cost_base=Decimal("117"),
+        row = _persisted_source_lot(
+            "BUY-1",
+            quantity="9",
+            cost_local="108",
+            cost_base="117",
             calculation_lineage=build_calculation_lineage(
                 algorithm_id="prior-average-cost-source",
                 algorithm_version=1,
@@ -1269,6 +1358,14 @@ async def test_apply_transaction_costs_fails_closed_without_calculation_lineage(
 async def test_upsert_booked_transaction_persists_only_canonical_table_fields() -> None:
     db_session = AsyncMock()
     repository = SqlAlchemyCostBasisTransactionRepository(db_session)
+    calculation_lineage = build_calculation_lineage(
+        algorithm_id="foreign-exchange-baseline-processing",
+        algorithm_version=1,
+        intermediate_precision=TRANSACTION_COST_LEDGER_OUTPUT_V1.working_precision,
+        input_payload={"transaction_id": "FX-OPEN-001"},
+        output_payload={"net_cost": Decimal("0")},
+        numeric_output_policy=TRANSACTION_COST_LEDGER_OUTPUT_V1.lineage_identity(),
+    )
 
     transaction = BookedTransaction(
         transaction_id="FX-OPEN-001",
@@ -1292,6 +1389,7 @@ async def test_upsert_booked_transaction_persists_only_canonical_table_fields() 
         fx_contract_id="FXC-2026-0001",
         brokerage=Decimal("10"),
         epoch=7,
+        calculation_lineage=calculation_lineage,
     )
 
     result = await repository.upsert_booked_transaction(transaction)
@@ -1301,5 +1399,6 @@ async def test_upsert_booked_transaction_persists_only_canonical_table_fields() 
     statement = db_session.execute.await_args.args[0]
     parameters = statement.compile().params
     assert parameters["transaction_id"] == "FX-OPEN-001"
+    assert parameters["calculation_lineage"] == calculation_lineage.lineage_payload()
     assert "brokerage" not in parameters
     assert "epoch" not in parameters
