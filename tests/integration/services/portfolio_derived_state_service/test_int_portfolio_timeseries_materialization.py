@@ -11,6 +11,7 @@ from portfolio_common.database_models import (
     PortfolioAggregationJob,
     PortfolioTimeseries,
 )
+from portfolio_common.domain.calculation_lineage import build_calculation_lineage
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -19,11 +20,135 @@ from src.services.portfolio_derived_state_service.app.application.portfolio_time
     MaterializePortfolioTimeseriesCommand,
     PortfolioTimeseriesMaterializationStatus,
 )
+from src.services.portfolio_derived_state_service.app.domain.portfolio_timeseries import (
+    numeric_policy,
+)
+from src.services.portfolio_derived_state_service.app.domain.portfolio_timeseries.models import (
+    PortfolioTimeseriesRecord,
+)
 from src.services.portfolio_derived_state_service.app.infrastructure import (
     portfolio_timeseries_unit_of_work_provider as unit_of_work_provider_module,
 )
 
 pytestmark = pytest.mark.asyncio
+
+
+@pytest.mark.lifecycle
+async def test_owned_lease_persists_portfolio_output_lineage_atomically(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    """Prove the calculated portfolio receipt survives the PostgreSQL upsert boundary."""
+
+    del clean_db
+    portfolio_id = "PORT-AGG-LINEAGE-01"
+    aggregation_date = date(2025, 8, 22)
+    lease_token = "lineage-lease-token"
+    job = PortfolioAggregationJob(
+        portfolio_id=portfolio_id,
+        aggregation_date=aggregation_date,
+        status="PROCESSING",
+        lease_owner="aggregation-runtime-lineage",
+        lease_token=lease_token,
+        lease_expires_at=datetime.now(UTC) + timedelta(minutes=5),
+    )
+    async_db_session.add_all(
+        [
+            Portfolio(
+                portfolio_id=portfolio_id,
+                base_currency="USD",
+                open_date=date(2025, 1, 1),
+                risk_exposure="MODERATE",
+                investment_time_horizon="MEDIUM_TERM",
+                portfolio_type="DISCRETIONARY",
+                booking_center_code="SG",
+                client_id="CLIENT-AGG-LINEAGE-01",
+                is_leverage_allowed=False,
+                status="ACTIVE",
+            ),
+            job,
+        ]
+    )
+    await async_db_session.commit()
+    await async_db_session.refresh(job)
+    job_id = int(job.id)
+    target_epoch = int(job.target_epoch)
+    source_revision = int(job.source_revision)
+    await async_db_session.rollback()
+
+    output_payload = {
+        "portfolio_id": portfolio_id,
+        "date": aggregation_date,
+        "epoch": target_epoch,
+        "bod_market_value": Decimal("0"),
+        "bod_cashflow": Decimal("0"),
+        "eod_cashflow": Decimal("0"),
+        "eod_market_value": Decimal("0"),
+        "fees": Decimal("0"),
+    }
+    lineage = build_calculation_lineage(
+        algorithm_id="portfolio-timeseries-daily",
+        algorithm_version=1,
+        intermediate_precision=64,
+        input_payload={"portfolio_id": portfolio_id, "position_count": 0},
+        output_payload=output_payload,
+        numeric_output_policy=(
+            numeric_policy.PORTFOLIO_TIMESERIES_LEDGER_OUTPUT_V1.lineage_identity()
+        ),
+    )
+    calculator = AsyncMock()
+    calculator.calculate_daily_record.return_value = PortfolioTimeseriesRecord(
+        **output_payload,
+        calculation_lineage=lineage,
+    )
+
+    async def override_session():
+        session_factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
+        async with session_factory() as session:
+            yield session
+
+    use_case = MaterializePortfolioTimeseries(
+        unit_of_work_provider=(
+            unit_of_work_provider_module.SqlAlchemyPortfolioTimeseriesUnitOfWorkProvider()
+        ),
+        calculator=calculator,
+    )
+    with patch(
+        "src.services.portfolio_derived_state_service.app.infrastructure."
+        "portfolio_timeseries_unit_of_work_provider.get_async_db_session",
+        new=override_session,
+    ):
+        result = await use_case.execute(
+            MaterializePortfolioTimeseriesCommand(
+                job_id=job_id,
+                lease_token=lease_token,
+                portfolio_id=portfolio_id,
+                aggregation_date=aggregation_date,
+                aggregation_revision=1,
+                target_epoch=target_epoch,
+                source_revision=source_revision,
+                correlation_id="corr-agg-lineage-01",
+            )
+        )
+
+    persisted = await async_db_session.scalar(
+        select(PortfolioTimeseries).where(
+            PortfolioTimeseries.portfolio_id == portfolio_id,
+            PortfolioTimeseries.date == aggregation_date,
+            PortfolioTimeseries.epoch == target_epoch,
+        )
+    )
+    completion = await async_db_session.scalar(
+        select(OutboxEvent).where(
+            OutboxEvent.aggregate_id
+            == f"{portfolio_id}:{aggregation_date.isoformat()}:{target_epoch}"
+        )
+    )
+
+    assert result.status is PortfolioTimeseriesMaterializationStatus.COMPLETE
+    assert persisted is not None
+    assert persisted.calculation_lineage == lineage.lineage_payload()
+    assert completion is not None
 
 
 @pytest.mark.lifecycle

@@ -153,8 +153,16 @@ async def test_combined_buy_sell_preserves_lot_cashflow_and_position_results(
     assert lot.open_quantity == Decimal("310")
     assert lot.lot_cost_local == Decimal("31000")
     assert lot.lot_cost_base == Decimal("31000")
+    assert lot.calculation_lineage is not None
+    assert lot.calculation_lineage["numeric_output_policy"]["name"] == (
+        "cost-basis-state-ledger-output"
+    )
     assert persisted_sell.net_cost == Decimal("-11000")
     assert persisted_sell.realized_gain_loss == Decimal("1100")
+    assert persisted_sell.calculation_lineage is not None
+    assert persisted_sell.calculation_lineage["numeric_output_policy"]["name"] == (
+        "transaction-cost-ledger-output"
+    )
     assert [(row.classification, row.amount) for row in cashflows] == [
         ("INVESTMENT_OUTFLOW", Decimal("-42000")),
         ("INVESTMENT_INFLOW", Decimal("12100")),
@@ -163,6 +171,12 @@ async def test_combined_buy_sell_preserves_lot_cashflow_and_position_results(
         (Decimal("420"), Decimal("42000")),
         (Decimal("310"), Decimal("31000")),
     ]
+    assert all(row.calculation_lineage is not None for row in positions)
+    assert {
+        row.calculation_lineage["numeric_output_policy"]["name"]
+        for row in positions
+        if row.calculation_lineage is not None
+    } == {"position-history-ledger-output"}
     assert sorted(row.event_type for row in outbox_rows) == [
         "CashflowCalculated",
         "CashflowCalculated",

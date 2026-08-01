@@ -311,6 +311,11 @@ async def test_newer_snapshot_refreshes_position_and_rearms_portfolio_day_once(
     first_materialized_at = refreshed_series.updated_at
     assert first_result.current_day_changed is True
     assert first_materialized_at > original_materialized_at
+    assert refreshed_series.calculation_lineage is not None
+    assert refreshed_series.calculation_lineage["numeric_output_policy"]["name"] == (
+        "position-timeseries-ledger-output"
+    )
+    first_lineage = refreshed_series.calculation_lineage
     assert aggregation_job.status == "PENDING"
     carry_forward_job = await async_db_session.scalar(
         select(PortfolioAggregationJob).where(
@@ -337,6 +342,7 @@ async def test_newer_snapshot_refreshes_position_and_rearms_portfolio_day_once(
     assert duplicate_series is not None
     assert duplicate_result.current_day_changed is False
     assert duplicate_series.updated_at == first_materialized_at
+    assert duplicate_series.calculation_lineage == first_lineage
     duplicate_carry_forward_job = await async_db_session.scalar(
         select(PortfolioAggregationJob).where(
             PortfolioAggregationJob.portfolio_id == portfolio_id,

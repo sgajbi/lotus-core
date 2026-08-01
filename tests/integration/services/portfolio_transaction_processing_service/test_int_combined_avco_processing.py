@@ -199,6 +199,11 @@ async def test_combined_avco_disposal_reconciles_pooled_and_source_cost_basis(
     assert pool_state.pool_cost_base == Decimal("1650")
     assert pool_state.representative_source_transaction_id == second_buy.transaction_id
     assert pool_state.state_version == "avco-pool-v1"
+    assert pool_state.calculation_lineage is not None
+    assert pool_state.calculation_lineage["numeric_output_policy"]["name"] == (
+        "cost-basis-state-ledger-output"
+    )
+    assert all(lot.calculation_lineage is not None for lot in source_lots)
     assert [(cashflow.classification, cashflow.amount) for cashflow in cashflows] == [
         ("INVESTMENT_OUTFLOW", Decimal("-1000")),
         ("INVESTMENT_OUTFLOW", Decimal("-1200")),
@@ -212,6 +217,7 @@ async def test_combined_avco_disposal_reconciles_pooled_and_source_cost_basis(
         (Decimal("200"), Decimal("2200"), Decimal("2200")),
         (Decimal("150"), Decimal("1650"), Decimal("1650")),
     ]
+    assert all(position.calculation_lineage is not None for position in positions)
 
 
 async def test_non_lot_avco_rebuild_repairs_source_lots_with_pool_checkpoint(
