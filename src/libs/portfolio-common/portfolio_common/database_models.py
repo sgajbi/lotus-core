@@ -2288,6 +2288,7 @@ class PositionLotState(Base):
     calculation_policy_id = Column(String, nullable=True)
     calculation_policy_version = Column(String, nullable=True)
     source_system = Column(String, nullable=True)
+    calculation_lineage = Column(JSON(none_as_null=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
@@ -2414,6 +2415,7 @@ class AverageCostPoolState(Base):
     pool_cost_local = Column(ExactNumeric(18, 10), nullable=False)
     pool_cost_base = Column(ExactNumeric(18, 10), nullable=False)
     state_version = Column(String, nullable=False)
+    calculation_lineage = Column(JSON(none_as_null=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False

@@ -1,10 +1,12 @@
 """SQLAlchemy persistence for average-cost pool state and source lots."""
 
+from dataclasses import replace
 from decimal import Decimal
 from typing import Any
 
 from portfolio_common.database_models import AverageCostPoolState, PositionLotState
 from portfolio_common.database_models import Transaction as DBTransaction
+from portfolio_common.domain.calculation_lineage import calculation_lineage_from_payload
 from portfolio_common.events import TransactionEvent
 from portfolio_common.identifiers import normalize_lookup_identifier
 from sqlalchemy import func, select, update
@@ -17,6 +19,7 @@ from ...domain.cost_basis import (
     AverageCostPoolTransition,
     OpenLotState,
 )
+from ...domain.cost_basis.state_lineage import build_cost_basis_state_lineage
 from ...ports import AverageCostPoolCheckpointRecord, AverageCostPoolPersistedSummary
 from ..transaction_mapping.booked_transaction import to_booked_transaction
 from .lot_state_mapper import buy_lot_state_payload, mutable_lot_state_fields
@@ -84,6 +87,7 @@ class SqlAlchemyAverageCostPoolRepository:
                 cost_local=state.pool_cost_local,
                 cost_base=state.pool_cost_base,
                 state_version=state.state_version,
+                calculation_lineage=calculation_lineage_from_payload(state.calculation_lineage),
             ),
             representative_transaction=(
                 to_booked_transaction(TransactionEvent.model_validate(representative_transaction))
@@ -98,6 +102,11 @@ class SqlAlchemyAverageCostPoolRepository:
     ) -> None:
         """Idempotently persist the current average-cost aggregate checkpoint."""
 
+        lineage = checkpoint.calculation_lineage or build_cost_basis_state_lineage(
+            algorithm_id="average-cost-pool-checkpoint-materialization",
+            input_payload={"checkpoint_state": _checkpoint_payload(checkpoint)},
+            output_payload=_checkpoint_payload(checkpoint),
+        )
         payload = {
             "portfolio_id": normalize_lookup_identifier(checkpoint.portfolio_id),
             "security_id": normalize_lookup_identifier(checkpoint.security_id),
@@ -111,6 +120,7 @@ class SqlAlchemyAverageCostPoolRepository:
             "pool_cost_local": checkpoint.cost_local,
             "pool_cost_base": checkpoint.cost_base,
             "state_version": checkpoint.state_version,
+            "calculation_lineage": lineage.lineage_payload(),
         }
         statement = pg_insert(AverageCostPoolState).values(**payload)
         await self._session.execute(
@@ -131,14 +141,34 @@ class SqlAlchemyAverageCostPoolRepository:
     ) -> None:
         """Persist one incremental pool and source-lot state transition atomically."""
 
-        await self._scale_existing_average_cost_sources(transition)
+        after = transition.after
+        transition_lineage = build_cost_basis_state_lineage(
+            algorithm_id="average-cost-pool-transition",
+            input_payload={
+                "before": _checkpoint_payload(transition.before),
+                "existing_sources_after": _open_lot_state_payload(
+                    transition.existing_sources_after
+                ),
+                "explicit_sources_after": {
+                    source_id: _open_lot_state_payload(state)
+                    for source_id, state in transition.explicit_sources_after.items()
+                },
+            },
+            output_payload=_checkpoint_payload(after),
+        )
+        await self._scale_existing_average_cost_sources(
+            transition,
+            calculation_lineage=transition_lineage.lineage_payload(),
+        )
         if transition.explicit_sources_after:
             await self.update_selected_open_lot_states(
                 portfolio_id=transition.before.portfolio_id,
                 security_id=transition.before.security_id,
                 states_by_source_transaction_id=dict(transition.explicit_sources_after),
             )
-        await self.upsert_average_cost_pool_checkpoint(transition.after)
+        await self.upsert_average_cost_pool_checkpoint(
+            replace(after, calculation_lineage=transition_lineage)
+        )
 
     async def apply_average_cost_pool_rebuild(
         self,
@@ -159,6 +189,7 @@ class SqlAlchemyAverageCostPoolRepository:
                 open_quantity=Decimal(0),
                 lot_cost_local=Decimal(0),
                 lot_cost_base=Decimal(0),
+                calculation_lineage=None,
                 updated_at=func.now(),
             )
         )
@@ -172,6 +203,28 @@ class SqlAlchemyAverageCostPoolRepository:
                 lot_cost_local=state.cost_local if state is not None else Decimal(0),
                 lot_cost_base=state.cost_base if state is not None else Decimal(0),
             )
+            target_state = state or OpenLotState(
+                quantity=Decimal(0),
+                cost_local=Decimal(0),
+                cost_base=Decimal(0),
+            )
+            source_lineage = build_cost_basis_state_lineage(
+                algorithm_id="average-cost-source-rebuild",
+                input_payload={
+                    "processing_checkpoint": {
+                        "calculation_state_version": (
+                            plan.processing_checkpoint.calculation_state_version
+                        ),
+                        "latest_transaction_id": plan.processing_checkpoint.latest_transaction_id,
+                    },
+                    "source_transaction_id": source_transaction.transaction_id,
+                },
+                output_payload={
+                    "source_transaction_id": source_transaction.transaction_id,
+                    **_open_lot_state_payload(target_state),
+                },
+            )
+            payload["calculation_lineage"] = source_lineage.lineage_payload()
             payloads.append(payload)
         for offset in range(0, len(payloads), self.REBUILD_UPSERT_CHUNK_SIZE):
             statement = pg_insert(PositionLotState).values(
@@ -248,6 +301,8 @@ class SqlAlchemyAverageCostPoolRepository:
     async def _scale_existing_average_cost_sources(
         self,
         transition: AverageCostPoolTransition,
+        *,
+        calculation_lineage: dict[str, object],
     ) -> None:
         before = transition.before
         after = transition.existing_sources_after
@@ -272,6 +327,7 @@ class SqlAlchemyAverageCostPoolRepository:
                     open_quantity=Decimal(0),
                     lot_cost_local=Decimal(0),
                     lot_cost_base=Decimal(0),
+                    calculation_lineage=calculation_lineage,
                     updated_at=func.now(),
                 )
             )
@@ -308,6 +364,7 @@ class SqlAlchemyAverageCostPoolRepository:
                     after=after.cost_base,
                     round_down=False,
                 ),
+                calculation_lineage=calculation_lineage,
                 updated_at=func.now(),
             )
         )
@@ -341,8 +398,30 @@ class SqlAlchemyAverageCostPoolRepository:
                 open_quantity=residual_state.quantity,
                 lot_cost_local=residual_state.cost_local,
                 lot_cost_base=residual_state.cost_base,
+                calculation_lineage=calculation_lineage,
                 updated_at=func.now(),
             )
         )
         if residual_result.rowcount != 1:
             raise ValueError("Average cost pool representative source was not updated exactly once")
+
+
+def _open_lot_state_payload(state: OpenLotState) -> dict[str, object]:
+    return {
+        "cost_base": state.cost_base,
+        "cost_local": state.cost_local,
+        "quantity": state.quantity,
+    }
+
+
+def _checkpoint_payload(checkpoint: AverageCostPoolCheckpoint) -> dict[str, object]:
+    return {
+        "cost_base": checkpoint.cost_base,
+        "cost_local": checkpoint.cost_local,
+        "instrument_id": checkpoint.instrument_id,
+        "portfolio_id": checkpoint.portfolio_id,
+        "quantity": checkpoint.quantity,
+        "representative_source_transaction_id": (checkpoint.representative_source_transaction_id),
+        "security_id": checkpoint.security_id,
+        "state_version": checkpoint.state_version,
+    }

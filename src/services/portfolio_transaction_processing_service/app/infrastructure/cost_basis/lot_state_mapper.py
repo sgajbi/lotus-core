@@ -2,9 +2,11 @@
 
 from decimal import Decimal
 
+from portfolio_common.domain.calculation_lineage import CalculationLineage
 from sqlalchemy.dialects.postgresql.dml import Insert
 
 from ...domain.cost_basis import CostBasisTransaction
+from ...domain.cost_basis.state_lineage import build_cost_basis_state_lineage
 
 _IMMUTABLE_LOT_STATE_FIELDS = frozenset({"id", "lot_id", "source_transaction_id"})
 
@@ -13,7 +15,7 @@ def buy_lot_state_payload(transaction: CostBasisTransaction) -> dict[str, object
     """Return the durable lot-state values opened by a purchase transaction."""
 
     accrued_interest_local = transaction.accrued_interest or Decimal(0)
-    return {
+    payload: dict[str, object] = {
         "lot_id": f"LOT-{transaction.transaction_id}",
         "source_transaction_id": transaction.transaction_id,
         "portfolio_id": transaction.portfolio_id,
@@ -39,6 +41,37 @@ def buy_lot_state_payload(transaction: CostBasisTransaction) -> dict[str, object
         ),
         "source_system": getattr(transaction, "source_system", None),
     }
+    parent_lineage = getattr(transaction, "calculation_lineage", None)
+    lineage = build_cost_basis_state_lineage(
+        algorithm_id="cost-basis-opening-lot-materialization",
+        input_payload={
+            "calculated_transaction_lineage": (
+                parent_lineage.lineage_payload()
+                if isinstance(parent_lineage, CalculationLineage)
+                else None
+            ),
+            "source_transaction_id": transaction.transaction_id,
+        },
+        output_payload={
+            key: value
+            for key, value in payload.items()
+            if key
+            in {
+                "acquisition_date",
+                "instrument_id",
+                "lot_cost_base",
+                "lot_cost_local",
+                "lot_id",
+                "open_quantity",
+                "original_quantity",
+                "portfolio_id",
+                "security_id",
+                "source_transaction_id",
+            }
+        },
+    )
+    payload["calculation_lineage"] = lineage.lineage_payload()
+    return payload
 
 
 def mutable_lot_state_fields(insert_statement: Insert) -> dict[str, object]:

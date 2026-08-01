@@ -7,7 +7,9 @@ from decimal import Decimal
 from types import MappingProxyType
 from typing import Mapping
 
+from portfolio_common.domain.calculation_lineage import CalculationLineage
 from portfolio_common.domain.cost_basis_method import CostBasisMethod
+from portfolio_common.domain.transaction.numeric_policy import COST_BASIS_STATE_LEDGER_OUTPUT_V1
 
 from .calculation.lot_state import OpenLotState
 from .models.cost_basis_transaction import CostBasisTransaction
@@ -33,6 +35,7 @@ class AverageCostPoolCheckpoint:
     cost_local: Decimal
     cost_base: Decimal
     state_version: str = AVERAGE_COST_POOL_STATE_VERSION
+    calculation_lineage: CalculationLineage | None = None
 
     def __post_init__(self) -> None:
         _require_nonnegative_finite(
@@ -63,15 +66,10 @@ class AverageCostPoolCheckpoint:
         security_id: str,
         states_by_source_transaction_id: Mapping[str, OpenLotState],
     ) -> AverageCostPoolCheckpoint:
-        quantity = sum(
-            (state.quantity for state in states_by_source_transaction_id.values()), Decimal(0)
-        )
-        cost_local = sum(
-            (state.cost_local for state in states_by_source_transaction_id.values()), Decimal(0)
-        )
-        cost_base = sum(
-            (state.cost_base for state in states_by_source_transaction_id.values()), Decimal(0)
-        )
+        states = tuple(states_by_source_transaction_id.values())
+        quantity = _sum_state_field(states, field_name="quantity")
+        cost_local = _sum_state_field(states, field_name="cost_local")
+        cost_base = _sum_state_field(states, field_name="cost_base")
         representative_source_transaction_id = next(
             (
                 source_transaction_id
@@ -142,15 +140,10 @@ class AverageCostPoolTransition:
 
     @property
     def after(self) -> AverageCostPoolCheckpoint:
-        explicit_quantity = sum(
-            (state.quantity for state in self.explicit_sources_after.values()), Decimal(0)
-        )
-        explicit_cost_local = sum(
-            (state.cost_local for state in self.explicit_sources_after.values()), Decimal(0)
-        )
-        explicit_cost_base = sum(
-            (state.cost_base for state in self.explicit_sources_after.values()), Decimal(0)
-        )
+        explicit_states = tuple(self.explicit_sources_after.values())
+        explicit_quantity = _sum_state_field(explicit_states, field_name="quantity")
+        explicit_cost_local = _sum_state_field(explicit_states, field_name="cost_local")
+        explicit_cost_base = _sum_state_field(explicit_states, field_name="cost_base")
         representative_source_transaction_id = next(
             (
                 source_transaction_id
@@ -170,9 +163,21 @@ class AverageCostPoolTransition:
             instrument_id=self.before.instrument_id,
             security_id=self.before.security_id,
             representative_source_transaction_id=representative_source_transaction_id,
-            quantity=self.existing_sources_after.quantity + explicit_quantity,
-            cost_local=self.existing_sources_after.cost_local + explicit_cost_local,
-            cost_base=self.existing_sources_after.cost_base + explicit_cost_base,
+            quantity=COST_BASIS_STATE_LEDGER_OUTPUT_V1.add(
+                self.existing_sources_after.quantity,
+                explicit_quantity,
+                field_name="pool_quantity",
+            ),
+            cost_local=COST_BASIS_STATE_LEDGER_OUTPUT_V1.add(
+                self.existing_sources_after.cost_local,
+                explicit_cost_local,
+                field_name="pool_cost_local",
+            ),
+            cost_base=COST_BASIS_STATE_LEDGER_OUTPUT_V1.add(
+                self.existing_sources_after.cost_base,
+                explicit_cost_base,
+                field_name="pool_cost_base",
+            ),
         )
 
 
@@ -233,3 +238,18 @@ def _validate_open_lot_state(state: OpenLotState, *, field_name: str) -> None:
         state.cost_local != Decimal(0) or state.cost_base != Decimal(0)
     ):
         raise ValueError(f"{field_name} closed quantity must have zero basis")
+
+
+def _sum_state_field(
+    states: tuple[OpenLotState, ...],
+    *,
+    field_name: str,
+) -> Decimal:
+    total = Decimal(0)
+    for state in states:
+        total = COST_BASIS_STATE_LEDGER_OUTPUT_V1.add(
+            total,
+            getattr(state, field_name),
+            field_name=f"pool_{field_name}",
+        )
+    return total

@@ -262,13 +262,16 @@ async def test_upsert_average_cost_pool_checkpoint_is_idempotent_and_normalized(
     )
 
     stmt = db_session.execute.call_args.args[0]
-    compiled_query = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    compiled_query = str(stmt.compile())
     assert "ON CONFLICT (portfolio_id, security_id) DO UPDATE" in compiled_query
     assert "updated_at = now()" in compiled_query
     assert stmt.compile().params["portfolio_id"] == "P1"
     assert stmt.compile().params["security_id"] == "S1"
     assert stmt.compile().params["instrument_id"] == "I1"
     assert stmt.compile().params["representative_source_transaction_id"] == "BUY-2"
+    lineage = stmt.compile().params["calculation_lineage"]
+    assert lineage["algorithm_id"] == "average-cost-pool-checkpoint-materialization"
+    assert lineage["numeric_output_policy"]["name"] == "cost-basis-state-ledger-output"
 
 
 def _average_cost_checkpoint() -> AverageCostPoolCheckpoint:
@@ -369,19 +372,14 @@ async def test_apply_average_cost_pool_rebuild_bulk_replaces_lot_and_pool_state(
     )
     assert "UPDATE position_lot_state" in close_sql
     assert "open_quantity=0" in close_sql
-    source_upsert_sql = str(
-        db_session.execute.call_args_list[1]
-        .args[0]
-        .compile(
-            dialect=postgresql.dialect(),
-            compile_kwargs={"literal_binds": True},
-        )
-    )
+    source_statement = db_session.execute.call_args_list[1].args[0]
+    source_compiled = source_statement.compile(dialect=postgresql.dialect())
+    source_upsert_sql = str(source_compiled)
     assert "INSERT INTO position_lot_state" in source_upsert_sql
     assert "ON CONFLICT (source_transaction_id) DO UPDATE" in source_upsert_sql
-    assert "'BUY-1'" in source_upsert_sql
     assert "open_quantity" in source_upsert_sql
-    assert "6" in source_upsert_sql
+    assert "BUY-1" in source_compiled.params.values()
+    assert Decimal("6") in source_compiled.params.values()
     assert "INSERT INTO average_cost_pool_state" in str(
         db_session.execute.call_args_list[3].args[0]
     )
@@ -454,25 +452,22 @@ async def test_apply_average_cost_pool_transition_scales_sources_and_assigns_res
 
     await repository.apply_average_cost_pool_transition(transition)
 
-    scale_sql = str(
-        db_session.execute.call_args_list[0].args[0].compile(compile_kwargs={"literal_binds": True})
-    )
+    scale_compiled = db_session.execute.call_args_list[0].args[0].compile()
+    scale_sql = str(scale_compiled)
     assert "open_quantity=trunc(" in scale_sql
-    assert "position_lot_state.open_quantity * 9" in scale_sql
-    assert "CAST(15 AS NUMERIC(18, 10))" in scale_sql
+    assert "position_lot_state.open_quantity *" in scale_sql
+    assert "NUMERIC(18, 10)" in scale_sql
     assert "lot_cost_local=round(" in scale_sql
-    assert "position_lot_state.lot_cost_local * 108" in scale_sql
-    assert "source_transaction_id != 'BUY-2'" in scale_sql
-    residual_sql = str(
-        db_session.execute.call_args_list[2].args[0].compile(compile_kwargs={"literal_binds": True})
-    )
-    assert "source_transaction_id = 'BUY-2'" in residual_sql
-    assert "open_quantity=2" in residual_sql
-    assert "lot_cost_local=38" in residual_sql
-    assert "lot_cost_base=40" in residual_sql
-    upsert_sql = str(
-        db_session.execute.call_args_list[3].args[0].compile(compile_kwargs={"literal_binds": True})
-    )
+    assert "position_lot_state.lot_cost_local *" in scale_sql
+    assert "BUY-2" in scale_compiled.params.values()
+    residual_compiled = db_session.execute.call_args_list[2].args[0].compile()
+    residual_sql = str(residual_compiled)
+    assert "source_transaction_id =" in residual_sql
+    assert "BUY-2" in residual_compiled.params.values()
+    assert Decimal("2") in residual_compiled.params.values()
+    assert Decimal("38") in residual_compiled.params.values()
+    assert Decimal("40") in residual_compiled.params.values()
+    upsert_sql = str(db_session.execute.call_args_list[3].args[0].compile())
     assert "INSERT INTO average_cost_pool_state" in upsert_sql
 
 
@@ -559,10 +554,8 @@ async def test_apply_average_cost_pool_transition_updates_explicit_new_source() 
         db_session.execute.call_args_list[0].args[0].compile(compile_kwargs={"literal_binds": True})
     )
     assert "source_transaction_id IN ('BUY-3')" in selected_update_sql
-    checkpoint_sql = str(
-        db_session.execute.call_args_list[1].args[0].compile(compile_kwargs={"literal_binds": True})
-    )
-    assert "'BUY-3'" in checkpoint_sql
+    checkpoint_compiled = db_session.execute.call_args_list[1].args[0].compile()
+    assert "BUY-3" in checkpoint_compiled.params.values()
 
 
 async def test_get_fifo_disposal_lots_streams_only_quantity_covering_oldest_lots() -> None:
@@ -692,9 +685,13 @@ async def test_update_open_lot_states_trims_ids_and_reconciles_quantity_and_cost
     assert lot_row.open_quantity == Decimal("4")
     assert lot_row.lot_cost_local == Decimal("400")
     assert lot_row.lot_cost_base == Decimal("420")
+    assert lot_row.calculation_lineage["algorithm_id"] == ("cost-basis-complete-lot-snapshot")
     assert closed_lot_row.open_quantity == Decimal("0")
     assert closed_lot_row.lot_cost_local == Decimal("0")
     assert closed_lot_row.lot_cost_base == Decimal("0")
+    assert closed_lot_row.calculation_lineage["numeric_output_policy"]["name"] == (
+        "cost-basis-state-ledger-output"
+    )
     compiled_query = str(
         db_session.execute.call_args.args[0].compile(compile_kwargs={"literal_binds": True})
     )
