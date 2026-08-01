@@ -39,8 +39,10 @@ policy, including when reconciliation consumes the local-currency result without
 
 RFC-AMORTIZATION-01 version 1.1 corrects straight-line direction, defines yield-application
 conventions, requires clean-cost and exact-scope assignment authority, and makes unsupported profiles
-park explicitly. The RFC ledger now reports this work truthfully as `target_state`; capability docs
-and wiki remain `target_not_implemented` until the runtime is complete.
+park explicitly. Its straight-line recurrence allocates the remaining unrecognized adjustment over
+the current and remaining authoritative schedule weight, preventing over-amortization as the
+denominator declines. The RFC ledger now reports this work truthfully as `target_state`; capability
+docs and wiki remain `target_not_implemented` until the runtime is complete.
 
 The transaction-processing domain now owns a framework-independent amortized-cost policy vocabulary.
 It validates method/convention compatibility, policy identity and version, fee treatment, and

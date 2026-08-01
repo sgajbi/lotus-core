@@ -325,12 +325,15 @@ At maturity, amortized cost must reconcile to redemption value (within tolerance
 
 If policy selects straight-line:
 
-`total_adjustment_local = redemption_value_local - initial_amortized_cost_local`
+`remaining_adjustment_local = redemption_value_local - begin_amortized_cost_local`
 
-`amortization_amount_local = total_adjustment_local × period_weight / remaining_weight`
+`amortization_amount_local = remaining_adjustment_local × period_weight / remaining_weight`
 
-`period_weight` and `remaining_weight` use authoritative governed year fractions, so irregular and
-stub periods are not treated as equal merely because they are both schedule rows.
+`period_weight` is the authoritative governed year fraction for the current period.
+`remaining_weight` is the sum of authoritative governed year fractions for the current and all
+remaining periods. Using the remaining unrecognized adjustment with the remaining weight prevents a
+shrinking denominator from reapplying the original total adjustment. Irregular and stub periods are
+therefore not treated as equal merely because they are both schedule rows.
 
 The sign follows the same roll-forward as Section 11.3: positive movement accretes a discount;
 negative movement amortizes a premium. The final period may absorb only a residual within the
