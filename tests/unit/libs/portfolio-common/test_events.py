@@ -1,4 +1,4 @@
-from datetime import UTC, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
@@ -56,11 +56,14 @@ def test_transaction_event_standardizes_temporal_fields_to_utc_aware() -> None:
         ("settlement_date", "2026-01-12T10:00:00"),
         ("created_at", datetime(2026, 1, 10, 8, 5)),
         ("created_at", "2026-01-10T08:05:00"),
+        ("transaction_date", date(2026, 1, 10)),
+        ("settlement_date", date(2026, 1, 12)),
+        ("created_at", date(2026, 1, 10)),
     ],
 )
 def test_transaction_event_rejects_timezone_ambiguous_temporal_fields(
     field_name: str,
-    value: datetime | str,
+    value: date | datetime | str,
 ) -> None:
     payload = _txn(
         "TXN_NAIVE",
