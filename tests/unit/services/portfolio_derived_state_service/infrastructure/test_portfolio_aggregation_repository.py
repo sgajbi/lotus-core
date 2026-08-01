@@ -312,6 +312,7 @@ async def test_get_all_position_timeseries_for_date_returns_immutable_records(
         eod_cashflow_portfolio=Decimal("2"),
         eod_market_value=Decimal("110"),
         fees=Decimal("3"),
+        calculation_lineage=None,
     )
     mock_db_session.execute.return_value.scalars.return_value.all.return_value = [row]
 

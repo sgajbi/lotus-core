@@ -36,7 +36,7 @@ def _timeseries_upsert_statement(
     identity_columns: tuple[str, ...],
 ):
     insert_values = {
-        column.name: getattr(record, column.name)
+        column.name: _persistence_value(getattr(record, column.name))
         for column in model.__table__.columns
         if column.name not in TIMESERIES_AUDIT_COLUMNS
     }
@@ -49,3 +49,10 @@ def _timeseries_upsert_statement(
         .values(**insert_values)
         .on_conflict_do_update(index_elements=list(identity_columns), set_=update_values)
     )
+
+
+def _persistence_value(value: Any) -> Any:
+    """Serialize typed lineage while leaving ordinary SQLAlchemy values unchanged."""
+
+    lineage_payload = getattr(value, "lineage_payload", None)
+    return lineage_payload() if callable(lineage_payload) else value

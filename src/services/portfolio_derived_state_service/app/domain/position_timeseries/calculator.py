@@ -1,12 +1,13 @@
 """Pure calculation policy for one position-timeseries business day."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from decimal import Decimal
 
 from portfolio_common.domain.analytics.cashflow_semantics import (
     normalize_cashflow_timing,
     normalize_position_flow_amount,
 )
+from portfolio_common.domain.calculation_lineage import build_calculation_lineage
 from portfolio_common.domain.decimal_amount import decimal_or_none
 
 from .models import PositionCashflowRecord, PositionSnapshotRecord, PositionTimeseriesRecord
@@ -134,7 +135,7 @@ def calculate_position_timeseries(
     eod_cost_basis = _decimal_or_zero(current_snapshot.cost_basis_local)
     cashflow_buckets = _cashflow_buckets(cashflows)
 
-    return PositionTimeseriesRecord(
+    record = PositionTimeseriesRecord(
         portfolio_id=current_snapshot.portfolio_id,
         security_id=current_snapshot.security_id,
         date=current_snapshot.date,
@@ -149,3 +150,82 @@ def calculate_position_timeseries(
         quantity=eod_quantity,
         cost=_average_cost(cost_basis=eod_cost_basis, quantity=eod_quantity),
     )
+    return replace(
+        record,
+        calculation_lineage=build_calculation_lineage(
+            algorithm_id="position-timeseries-materialization",
+            algorithm_version=1,
+            intermediate_precision=POSITION_TIMESERIES_LEDGER_OUTPUT_V1.working_precision,
+            input_payload=_position_timeseries_input(
+                current_snapshot=current_snapshot,
+                previous_snapshot=previous_snapshot,
+                cashflows=cashflows,
+                epoch=epoch,
+            ),
+            output_payload=_position_timeseries_output(record),
+            numeric_output_policy=POSITION_TIMESERIES_LEDGER_OUTPUT_V1.lineage_identity(),
+        ),
+    )
+
+
+def _position_timeseries_input(
+    *,
+    current_snapshot: PositionSnapshotRecord,
+    previous_snapshot: PositionSnapshotRecord | None,
+    cashflows: list[PositionCashflowRecord],
+    epoch: int,
+) -> dict[str, object]:
+    """Return the valuation and cashflow facts used for one position day."""
+
+    def snapshot_payload(snapshot: PositionSnapshotRecord) -> dict[str, object]:
+        return {
+            "cost_basis_local": snapshot.cost_basis_local,
+            "date": snapshot.date,
+            "epoch": snapshot.epoch,
+            "market_value_local": snapshot.market_value_local,
+            "portfolio_id": snapshot.portfolio_id,
+            "quantity": snapshot.quantity,
+            "security_id": snapshot.security_id,
+            "valuation_status": snapshot.valuation_status,
+        }
+
+    return {
+        "cashflows": [
+            {
+                "amount": cashflow.amount,
+                "cashflow_date": cashflow.cashflow_date,
+                "classification": cashflow.classification,
+                "epoch": cashflow.epoch,
+                "is_portfolio_flow": cashflow.is_portfolio_flow,
+                "is_position_flow": cashflow.is_position_flow,
+                "timing": cashflow.timing,
+                "transaction_id": cashflow.transaction_id,
+            }
+            for cashflow in cashflows
+        ],
+        "current_snapshot": snapshot_payload(current_snapshot),
+        "epoch": epoch,
+        "previous_snapshot": (
+            snapshot_payload(previous_snapshot) if previous_snapshot is not None else None
+        ),
+    }
+
+
+def _position_timeseries_output(record: PositionTimeseriesRecord) -> dict[str, object]:
+    """Return every calculated field persisted for one position day."""
+
+    return {
+        "bod_cashflow_portfolio": record.bod_cashflow_portfolio,
+        "bod_cashflow_position": record.bod_cashflow_position,
+        "bod_market_value": record.bod_market_value,
+        "cost": record.cost,
+        "date": record.date,
+        "eod_cashflow_portfolio": record.eod_cashflow_portfolio,
+        "eod_cashflow_position": record.eod_cashflow_position,
+        "eod_market_value": record.eod_market_value,
+        "epoch": record.epoch,
+        "fees": record.fees,
+        "portfolio_id": record.portfolio_id,
+        "quantity": record.quantity,
+        "security_id": record.security_id,
+    }

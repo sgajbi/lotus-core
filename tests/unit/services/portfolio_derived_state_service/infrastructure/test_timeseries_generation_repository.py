@@ -6,9 +6,19 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from portfolio_common.database_models import PositionTimeseries
+from portfolio_common.domain.calculation_lineage import (
+    CalculationLineage,
+    build_calculation_lineage,
+)
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.services.portfolio_derived_state_service.app.domain.position_timeseries.models import (  # noqa: E501
+    PositionTimeseriesRecord,
+)
+from src.services.portfolio_derived_state_service.app.domain.position_timeseries.numeric_policy import (  # noqa: E501
+    POSITION_TIMESERIES_LEDGER_OUTPUT_V1,
+)
 from src.services.portfolio_derived_state_service.app.infrastructure import (
     timeseries_generation_repository,
 )
@@ -16,6 +26,17 @@ from src.services.portfolio_derived_state_service.app.infrastructure import (
 TimeseriesGenerationRepository = timeseries_generation_repository.TimeseriesGenerationRepository
 
 pytestmark = pytest.mark.asyncio
+
+
+def _lineage() -> CalculationLineage:
+    return build_calculation_lineage(
+        algorithm_id="position-timeseries-materialization",
+        algorithm_version=1,
+        intermediate_precision=POSITION_TIMESERIES_LEDGER_OUTPUT_V1.working_precision,
+        input_payload={"snapshot_id": 1},
+        output_payload={"eod_market_value": Decimal("110")},
+        numeric_output_policy=POSITION_TIMESERIES_LEDGER_OUTPUT_V1.lineage_identity(),
+    )
 
 
 @pytest.fixture
@@ -84,6 +105,7 @@ async def test_get_position_timeseries_for_dates_filters_exact_dates_and_epoch(
         fees=Decimal("5"),
         quantity=Decimal("10"),
         cost=Decimal("9"),
+        calculation_lineage=None,
     )
     mock_db_session.execute.return_value.scalars.return_value.all.return_value = [dated_row]
 
@@ -224,6 +246,7 @@ async def test_get_position_timeseries_for_dates_returns_immutable_records(
         fees=Decimal("5"),
         quantity=Decimal("10"),
         cost=Decimal("9"),
+        calculation_lineage=None,
     )
     mock_db_session.execute.return_value.scalars.return_value.all.return_value = [row]
 
@@ -269,6 +292,34 @@ async def test_upsert_position_timeseries(
     assert "INSERT INTO position_timeseries" in compiled_stmt
     # --- FIX: Assert for the correct primary key including epoch ---
     assert "ON CONFLICT (portfolio_id, security_id, date, epoch) DO UPDATE" in compiled_stmt
+
+
+async def test_upsert_position_timeseries_serializes_typed_lineage(
+    repository: TimeseriesGenerationRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    lineage = _lineage()
+    record = PositionTimeseriesRecord(
+        portfolio_id="P1",
+        security_id="S1",
+        date=date(2025, 1, 10),
+        epoch=1,
+        bod_market_value=Decimal("100"),
+        bod_cashflow_position=Decimal("1"),
+        eod_cashflow_position=Decimal("2"),
+        bod_cashflow_portfolio=Decimal("3"),
+        eod_cashflow_portfolio=Decimal("4"),
+        eod_market_value=Decimal("110"),
+        fees=Decimal("5"),
+        quantity=Decimal("10"),
+        cost=Decimal("9"),
+        calculation_lineage=lineage,
+    )
+
+    await repository.upsert_position_timeseries(record)
+
+    statement = mock_db_session.execute.await_args.args[0]
+    assert statement.compile().params["calculation_lineage"] == lineage.lineage_payload()
 
 
 async def test_get_all_cashflows_for_security_date_uses_latest_cashflow_epoch_within_target_epoch(
