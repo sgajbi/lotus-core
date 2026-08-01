@@ -195,21 +195,11 @@ def _authoritative_market_value_local(
         )
     except (TypeError, ValueError, UnknownValuationPolicyError):
         return None
-    if policy.input_basis.value != receipt.quote_basis or not (
-        (
-            policy.position_scaling is PositionScaling.QUANTITY
-            and policy.principal_basis is PrincipalBasis.POSITION_UNITS
-            and policy.input_basis is ValuationInputBasis.UNIT_PRICE
-        )
-        or (
-            policy.position_scaling is PositionScaling.PRINCIPAL
-            and policy.principal_basis is PrincipalBasis.FACE_AMOUNT
-            and policy.input_basis
-            in {
-                ValuationInputBasis.PERCENT_OF_PRINCIPAL_CLEAN,
-                ValuationInputBasis.PERCENT_OF_PRINCIPAL_DIRTY,
-            }
-        )
+    if (
+        policy.input_basis.value != receipt.quote_basis
+        or policy.position_scaling is not PositionScaling.QUANTITY
+        or policy.principal_basis is not PrincipalBasis.POSITION_UNITS
+        or policy.input_basis is not ValuationInputBasis.UNIT_PRICE
     ):
         return None
     if policy.output_measure is not ValuationOutputMeasure.MARKET_VALUE:
@@ -220,9 +210,6 @@ def _authoritative_market_value_local(
             inputs=PositionValuationEconomicInputs(
                 source_value=market_price,
                 signed_quantity=quantity,
-                signed_face_amount=(
-                    quantity if policy.principal_basis is PrincipalBasis.FACE_AMOUNT else None
-                ),
             ),
         )
     except UnsupportedValuationError:
@@ -243,12 +230,7 @@ def _unsupported_authoritative_receipt_finding(
         transaction_id=None,
         business_date=evidence.business_date,
         epoch=evidence.epoch,
-        expected_value={
-            "supportability": [
-                "SUPPORTED_UNIT_PRICE_QUANTITY",
-                "SUPPORTED_FACE_PRINCIPAL_NO_SEPARATE_ACCRUAL",
-            ]
-        },
+        expected_value={"supportability": "SUPPORTED_UNIT_PRICE_QUANTITY"},
         observed_value={
             "policy_id": receipt.policy_id,
             "policy_version": receipt.policy_version,

@@ -9,8 +9,6 @@ from portfolio_common.domain.valuation import (
     FinancialSourceReference,
     MarketPriceSourceFact,
     PositionValuationEvidence,
-    PositionValuationPolicy,
-    PrincipalBasis,
     ResolvedValuationPolicyAssignment,
     canonical_content_hash,
 )
@@ -19,7 +17,6 @@ from portfolio_common.domain.valuation import (
 def build_authoritative_valuation_evidence(
     *,
     assignment: ResolvedValuationPolicyAssignment,
-    policy: PositionValuationPolicy,
     price_fact: MarketPriceSourceFact,
     position: PositionHistory,
     portfolio: Portfolio,
@@ -36,9 +33,6 @@ def build_authoritative_valuation_evidence(
         source_currency=price_fact.source_reference,
         reporting_currency=portfolio_reference,
         signed_quantity=position_reference,
-        signed_face_amount=(
-            position_reference if policy.principal_basis is PrincipalBasis.FACE_AMOUNT else None
-        ),
         direct_source_to_reporting_fx_rate=fx_reference,
     )
 

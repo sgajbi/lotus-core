@@ -11,12 +11,9 @@ from portfolio_common.domain.valuation import (
     MarketPriceQuoteBasis,
     MarketPriceSourceFact,
     MarketPriceSourceFactStatus,
-    PositionValuationPolicy,
-    PrincipalBasis,
     ResolvedValuationPolicyAssignment,
     ValuationAuthorityScope,
     ValuationPolicyAssignmentStatus,
-    resolve_position_valuation_policy,
     resolve_valuation_policy_assignment,
 )
 
@@ -111,14 +108,9 @@ def _fx_rate() -> FxRate:
     )
 
 
-def _policy(policy_id: str = "UNIT_PRICE_MARKET_VALUE") -> PositionValuationPolicy:
-    return resolve_position_valuation_policy(policy_id, 1)
-
-
 def test_evidence_binds_assignment_price_position_portfolio_and_fx_sources() -> None:
     evidence = build_authoritative_valuation_evidence(
         assignment=_assignment(),
-        policy=_policy(),
         price_fact=_price_fact(),
         position=_position(),
         portfolio=_portfolio(),
@@ -137,7 +129,6 @@ def test_evidence_binds_assignment_price_position_portfolio_and_fx_sources() -> 
 def test_evidence_hash_changes_when_position_input_changes() -> None:
     baseline = build_authoritative_valuation_evidence(
         assignment=_assignment(),
-        policy=_policy(),
         price_fact=_price_fact(),
         position=_position(),
         portfolio=_portfolio(),
@@ -147,7 +138,6 @@ def test_evidence_hash_changes_when_position_input_changes() -> None:
     changed_position.quantity = Decimal("11")
     changed = build_authoritative_valuation_evidence(
         assignment=_assignment(),
-        policy=_policy(),
         price_fact=_price_fact(),
         position=changed_position,
         portfolio=_portfolio(),
@@ -167,7 +157,6 @@ def test_evidence_rejects_unpersisted_or_naive_rows() -> None:
     with pytest.raises(ValueError, match="persisted row id"):
         build_authoritative_valuation_evidence(
             assignment=_assignment(),
-            policy=_policy(),
             price_fact=_price_fact(),
             position=unpersisted,
             portfolio=_portfolio(),
@@ -177,7 +166,6 @@ def test_evidence_rejects_unpersisted_or_naive_rows() -> None:
     with pytest.raises(ValueError, match="timezone-aware"):
         build_authoritative_valuation_evidence(
             assignment=_assignment(),
-            policy=_policy(),
             price_fact=_price_fact(),
             position=_position(updated_at=datetime(2026, 7, 29, 9, 5)),
             portfolio=_portfolio(),
@@ -205,7 +193,6 @@ def test_evidence_rejects_malformed_persisted_position_identity(
     with pytest.raises(expected_error, match=message):
         build_authoritative_valuation_evidence(
             assignment=_assignment(),
-            policy=_policy(),
             price_fact=_price_fact(),
             position=position,
             portfolio=_portfolio(),
@@ -213,20 +200,19 @@ def test_evidence_rejects_malformed_persisted_position_identity(
         )
 
 
-def test_face_amount_policy_binds_position_source_as_face_amount() -> None:
+def test_position_quantity_is_not_relabelled_as_face_amount() -> None:
     policy_id = "DIRTY_PERCENT_FACE_MARKET_VALUE"
 
     evidence = build_authoritative_valuation_evidence(
         assignment=_assignment(policy_id),
-        policy=_policy(policy_id),
         price_fact=_price_fact(),
         position=_position(),
         portfolio=_portfolio(),
         fx_rate=None,
     )
 
-    assert _policy(policy_id).principal_basis is PrincipalBasis.FACE_AMOUNT
-    assert evidence.signed_face_amount == evidence.signed_quantity
+    assert evidence.signed_quantity is not None
+    assert evidence.signed_face_amount is None
 
 
 def test_factor_policy_does_not_infer_face_amount_from_position_quantity() -> None:
@@ -234,12 +220,10 @@ def test_factor_policy_does_not_infer_face_amount_from_position_quantity() -> No
 
     evidence = build_authoritative_valuation_evidence(
         assignment=_assignment(policy_id),
-        policy=_policy(policy_id),
         price_fact=_price_fact(),
         position=_position(),
         portfolio=_portfolio(),
         fx_rate=None,
     )
 
-    assert _policy(policy_id).principal_basis is PrincipalBasis.FACTOR_ADJUSTED_CURRENT_PRINCIPAL
     assert evidence.signed_face_amount is None

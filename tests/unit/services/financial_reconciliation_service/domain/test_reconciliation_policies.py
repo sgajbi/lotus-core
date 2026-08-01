@@ -121,7 +121,7 @@ def test_authoritative_unit_price_receipt_bypasses_legacy_bond_heuristic() -> No
         ),
     ],
 )
-def test_authoritative_face_principal_receipt_reconciles_without_legacy_heuristic(
+def test_authoritative_face_principal_receipt_fails_closed_without_authoritative_principal(
     policy_id: str,
     quote_basis: str,
 ) -> None:
@@ -148,7 +148,9 @@ def test_authoritative_face_principal_receipt_reconciles_without_legacy_heuristi
         tolerance=Decimal("0.0001"),
     )
 
-    assert findings == []
+    assert [finding.finding_type for finding in findings] == [
+        "unsupported_authoritative_valuation_receipt"
+    ]
 
 
 def test_face_principal_receipt_with_unavailable_accrual_fails_closed() -> None:
