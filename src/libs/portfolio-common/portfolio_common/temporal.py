@@ -1,0 +1,16 @@
+"""Shared policies for governed financial timestamps."""
+
+from datetime import UTC, datetime
+
+
+def standardize_governed_datetime(value: object) -> object:
+    """Reject ambiguous datetimes and canonicalize timezone-aware values to UTC."""
+    if value is None:
+        return value
+    if isinstance(value, str):
+        value = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if isinstance(value, datetime):
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("Governed datetime must be timezone-aware.")
+        return value.astimezone(UTC)
+    return value

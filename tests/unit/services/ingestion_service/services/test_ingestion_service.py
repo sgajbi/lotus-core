@@ -1,5 +1,5 @@
 # tests/unit/services/ingestion-service/services/test_ingestion_service.py
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from unittest.mock import MagicMock
 
@@ -80,7 +80,7 @@ async def test_publish_transactions(
             portfolio_id="P1",
             instrument_id="I1",
             security_id="S1",
-            transaction_date=datetime.now(),
+            transaction_date=datetime.now(UTC),
             transaction_type="BUY",
             quantity=Decimal("1"),
             price=Decimal("1"),
@@ -110,7 +110,7 @@ async def test_publish_transactions_normalizes_partition_key(
             portfolio_id="  P1  ",
             instrument_id="I1",
             security_id="S1",
-            transaction_date=datetime.now(),
+            transaction_date=datetime.now(UTC),
             transaction_type="BUY",
             quantity=Decimal("1"),
             price=Decimal("1"),
@@ -132,7 +132,7 @@ async def test_publish_transactions_keeps_linked_multi_security_legs_together(
 ) -> None:
     common = {
         "portfolio_id": "P1",
-        "transaction_date": datetime.now(),
+        "transaction_date": datetime.now(UTC),
         "quantity": Decimal("1"),
         "price": Decimal("1"),
         "gross_transaction_amount": Decimal("1"),
@@ -175,7 +175,7 @@ async def test_publish_single_linked_transaction_uses_group_partition(
         portfolio_id="P1",
         instrument_id="I-SOURCE",
         security_id="S-SOURCE",
-        transaction_date=datetime.now(),
+        transaction_date=datetime.now(UTC),
         transaction_type="DEMERGER_OUT",
         quantity=Decimal("1"),
         price=Decimal("1"),
@@ -201,7 +201,7 @@ async def test_publish_transactions_rejects_empty_partition_key(
             portfolio_id="   ",
             instrument_id="I1",
             security_id="S1",
-            transaction_date=datetime.now(),
+            transaction_date=datetime.now(UTC),
             transaction_type="BUY",
             quantity=Decimal("1"),
             price=Decimal("1"),
@@ -226,7 +226,7 @@ async def test_publish_transactions_rejects_empty_security_partition_component(
             portfolio_id="P1",
             instrument_id="I1",
             security_id="   ",
-            transaction_date=datetime.now(),
+            transaction_date=datetime.now(UTC),
             transaction_type="BUY",
             quantity=Decimal("1"),
             price=Decimal("1"),
@@ -295,7 +295,7 @@ async def test_publish_transactions_reports_remaining_unpublished_keys_on_batch_
             portfolio_id="P1",
             instrument_id="I1",
             security_id="S1",
-            transaction_date=datetime.now(),
+            transaction_date=datetime.now(UTC),
             transaction_type="BUY",
             quantity=1,
             price=1,
@@ -308,7 +308,7 @@ async def test_publish_transactions_reports_remaining_unpublished_keys_on_batch_
             portfolio_id="P1",
             instrument_id="I1",
             security_id="S1",
-            transaction_date=datetime.now(),
+            transaction_date=datetime.now(UTC),
             transaction_type="BUY",
             quantity=1,
             price=1,
@@ -321,7 +321,7 @@ async def test_publish_transactions_reports_remaining_unpublished_keys_on_batch_
             portfolio_id="P1",
             instrument_id="I1",
             security_id="S1",
-            transaction_date=datetime.now(),
+            transaction_date=datetime.now(UTC),
             transaction_type="BUY",
             quantity=1,
             price=1,

@@ -17,6 +17,7 @@ from portfolio_common.domain.transaction_control_codes import (
     normalize_transaction_control_code,
 )
 from portfolio_common.openapi_enrichment import document_exact_numeric_properties
+from portfolio_common.temporal import standardize_governed_datetime
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -679,6 +680,11 @@ class Transaction(BaseModel):
         description="Ingestion-side creation timestamp for lineage and troubleshooting.",
         json_schema_extra={"example": "2026-03-10T11:32:15Z"},
     )
+
+    @field_validator("transaction_date", "settlement_date", "created_at", mode="before")
+    @classmethod
+    def _standardize_governed_timestamps(cls, value: object) -> object:
+        return standardize_governed_datetime(value)
 
     @field_validator(
         "trade_currency",
