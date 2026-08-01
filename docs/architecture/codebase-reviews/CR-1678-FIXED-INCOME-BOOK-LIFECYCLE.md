@@ -9,10 +9,11 @@ order.
 
 ## Findings
 
-The authoritative valuation runtime had complete policy vocabulary but did not supply face principal
-from persisted position evidence. Independent reconciliation accepted only authoritative unit-price
-receipts. The scoped calculator therefore could not execute a valid percent-of-face assignment, and
-the control plane rejected the same output even if it were produced.
+The authoritative valuation runtime had complete policy vocabulary but no source-owned face or
+current-principal fact. Review proved that persisted position `quantity` can represent instrument
+units rather than nominal face, so relabelling it as principal would understate supported legacy
+bond examples by 1,000 times. Independent reconciliation therefore cannot safely reproduce a
+percent-of-face receipt from the current projection.
 
 The amortization RFC also contradicted its own roll-forward: its straight-line numerator made a
 premium increase and a discount decrease. It left effective yield ambiguous between annual and
@@ -29,13 +30,13 @@ Runtime review found three hard dependencies before redemption can be enabled:
 
 ## Corrections To Date
 
-The scoped valuation path now binds persisted position quantity as face principal only when the exact
-effective-dated assignment declares `FACE_AMOUNT`. Unit-price behavior remains distinct; factor and
-independently supplied current-principal policies remain fail closed. A framework-free local
-valuation-economics seam now owns scaling once, and independent reconciliation uses that seam for
-supported unit-price, dirty percent-of-face, and clean no-periodic-accrual receipts. The shared seam
-returns deterministic input/calculation/output lineage bound to the governed valuation numeric
-policy, including when reconciliation consumes the local-currency result without source adapters.
+The scoped valuation path now keeps position quantity and face principal semantically distinct.
+Authoritative unit-price behavior remains supported, while face, factor-adjusted, and independently
+supplied current-principal policies fail closed until a source-owned principal fact or governed
+units-to-face conversion is available. A framework-free local valuation-economics seam owns scaling
+once, and independent reconciliation uses it only for supported unit-price receipts. Its
+deterministic lineage binds the actual source value, signed quantity, principal inputs, and complete
+valuation-policy identity, so equal outputs from different economic inputs cannot collide.
 
 RFC-AMORTIZATION-01 version 1.1 corrects straight-line direction, defines yield-application
 conventions, requires clean-cost and exact-scope assignment authority, and makes unsupported profiles
