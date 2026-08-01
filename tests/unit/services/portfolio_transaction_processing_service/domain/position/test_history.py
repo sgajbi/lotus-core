@@ -203,6 +203,44 @@ def test_position_ordering_canonicalizes_equivalent_aware_instants_to_utc() -> N
     )
 
 
+def test_position_history_uses_canonical_date_for_equivalent_cross_midnight_instants() -> None:
+    utc_transaction = _transaction(
+        "TX-CROSS-MIDNIGHT",
+        "BUY",
+        transaction_date=datetime(2026, 4, 9, 16, 30, tzinfo=timezone.utc),
+        quantity=Decimal("5"),
+        net_cost=Decimal("60"),
+    )
+    singapore_transaction = _transaction(
+        "TX-CROSS-MIDNIGHT",
+        "BUY",
+        transaction_date=datetime(
+            2026,
+            4,
+            10,
+            0,
+            30,
+            tzinfo=timezone(timedelta(hours=8)),
+        ),
+        quantity=Decimal("5"),
+        net_cost=Decimal("60"),
+    )
+
+    utc_history = build_position_history(
+        anchor=None,
+        transactions=(utc_transaction,),
+        epoch=4,
+    )
+    singapore_history = build_position_history(
+        anchor=None,
+        transactions=(singapore_transaction,),
+        epoch=4,
+    )
+
+    assert utc_history == singapore_history
+    assert utc_history[0].position_date == date(2026, 4, 9)
+
+
 def test_build_position_history_applies_anchor_and_returns_immutable_records() -> None:
     anchor = PositionHistoryRecord(
         portfolio_id="PB-001",
