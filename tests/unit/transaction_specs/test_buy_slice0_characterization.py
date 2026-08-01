@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from portfolio_common.database_models import Transaction as DBTransaction
@@ -46,7 +46,7 @@ def test_buy_fee_transformation_to_engine_fees_structure() -> None:
         portfolio_id="PORT_SLICE0",
         instrument_id="SEC_UST_5Y",
         security_id="SEC_UST_5Y",
-        transaction_date=datetime(2026, 1, 15),
+        transaction_date=datetime(2026, 1, 15, tzinfo=UTC),
         transaction_type="BUY",
         quantity=Decimal("10"),
         price=Decimal("99.25"),
@@ -72,7 +72,7 @@ def test_buy_position_calculation_increases_quantity_and_cost_basis() -> None:
         portfolio_id="PORT_SLICE0",
         instrument_id="SEC_UST_5Y",
         security_id="SEC_UST_5Y",
-        transaction_date=datetime(2026, 1, 15),
+        transaction_date=datetime(2026, 1, 15, tzinfo=UTC),
         transaction_type="BUY",
         quantity=Decimal("10"),
         price=Decimal("99.25"),
@@ -92,7 +92,7 @@ def test_buy_position_calculation_increases_quantity_and_cost_basis() -> None:
 def test_buy_query_record_mapping_preserves_current_fields() -> None:
     db_txn = DBTransaction(
         transaction_id="BUY_SLICE0_004",
-        transaction_date=datetime(2026, 1, 15),
+        transaction_date=datetime(2026, 1, 15, tzinfo=UTC),
         transaction_type="BUY",
         instrument_id="SEC_UST_5Y",
         security_id="SEC_UST_5Y",

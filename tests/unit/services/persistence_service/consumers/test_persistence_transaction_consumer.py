@@ -41,7 +41,7 @@ def valid_transaction_event():
         portfolio_id="PORT_UT_01",
         instrument_id="INST_UT_01",
         security_id="SEC_UT_01",
-        transaction_date="2025-07-31T12:00:00",
+        transaction_date="2025-07-31T12:00:00Z",
         transaction_type="BUY",
         quantity=100,
         price=50,

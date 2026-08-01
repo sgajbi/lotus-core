@@ -105,7 +105,7 @@ async def test_get_transaction_history_trims_portfolio_security_and_excluded_tra
         instrument_id="SEC01",
         security_id="SEC01",
         transaction_type="BUY",
-        transaction_date=datetime(2026, 1, 1, 10, 0, 0),
+        transaction_date=datetime(2026, 1, 1, 10, 0, 0, tzinfo=UTC),
         quantity=Decimal("10"),
         price=Decimal("100"),
         gross_transaction_amount=Decimal("1000"),
@@ -167,7 +167,7 @@ async def test_get_booked_transaction_maps_domain_transaction_and_scopes_portfol
         instrument_id="CASH_USD",
         security_id="CASH_USD",
         transaction_type="CASH_OUTFLOW",
-        transaction_date=datetime(2026, 1, 3, 10, 0, 0),
+        transaction_date=datetime(2026, 1, 3, 10, 0, 0, tzinfo=UTC),
         quantity=Decimal("1000"),
         price=Decimal("1"),
         gross_transaction_amount=Decimal("1000"),
@@ -213,7 +213,7 @@ async def test_get_open_lot_checkpoint_records_returns_only_positive_lots() -> N
         instrument_id="SEC01",
         security_id="SEC01",
         transaction_type="BUY",
-        transaction_date=datetime(2026, 1, 1, 10, 0, 0),
+        transaction_date=datetime(2026, 1, 1, 10, 0, 0, tzinfo=UTC),
         quantity=Decimal("10"),
         price=Decimal("100"),
         gross_transaction_amount=Decimal("1000"),
@@ -276,7 +276,7 @@ async def test_get_average_cost_pool_checkpoint_maps_aggregate_and_source_lineag
         instrument_id="I1",
         security_id="S1",
         transaction_type="BUY",
-        transaction_date=datetime(2026, 1, 2),
+        transaction_date=datetime(2026, 1, 2, tzinfo=UTC),
         quantity=Decimal("10"),
         price=Decimal("12"),
         gross_transaction_amount=Decimal("120"),
@@ -386,13 +386,13 @@ def _average_cost_source(
 async def test_opening_lot_lineage_hashes_persisted_accrued_interest() -> None:
     first = _average_cost_source(
         "BUY-ACCRUED",
-        transaction_date=datetime(2026, 1, 1, 10, 0),
+        transaction_date=datetime(2026, 1, 1, 10, 0, tzinfo=UTC),
         quantity="10",
         cost="100",
     )
     second = _average_cost_source(
         "BUY-ACCRUED",
-        transaction_date=datetime(2026, 1, 1, 10, 0),
+        transaction_date=datetime(2026, 1, 1, 10, 0, tzinfo=UTC),
         quantity="10",
         cost="100",
     )
@@ -415,13 +415,13 @@ async def test_opening_lot_lineage_hashes_persisted_accrued_interest() -> None:
 def _average_cost_rebuild_plan(*, replay_revision: str = "1") -> AverageCostPoolRebuildPlan:
     first = _average_cost_source(
         "BUY-1",
-        transaction_date=datetime(2026, 1, 1, 10, 0),
+        transaction_date=datetime(2026, 1, 1, 10, 0, tzinfo=UTC),
         quantity="10",
         cost="100",
     )
     second = _average_cost_source(
         "BUY-2",
-        transaction_date=datetime(2026, 1, 2, 10, 0),
+        transaction_date=datetime(2026, 1, 2, 10, 0, tzinfo=UTC),
         quantity="5",
         cost="80",
     )
@@ -536,7 +536,7 @@ async def test_get_average_cost_pool_persisted_summary_maps_missing_pool_and_sou
     first_payload = buy_lot_state_payload(
         _average_cost_source(
             "BUY-1",
-            transaction_date=datetime(2026, 1, 1, 10, 0),
+            transaction_date=datetime(2026, 1, 1, 10, 0, tzinfo=UTC),
             quantity="4",
             cost="48",
         )
@@ -544,7 +544,7 @@ async def test_get_average_cost_pool_persisted_summary_maps_missing_pool_and_sou
     second_payload = buy_lot_state_payload(
         _average_cost_source(
             "BUY-2",
-            transaction_date=datetime(2026, 1, 2, 10, 0),
+            transaction_date=datetime(2026, 1, 2, 10, 0, tzinfo=UTC),
             quantity="5",
             cost="60",
         )
@@ -594,7 +594,7 @@ async def test_get_average_cost_pool_persisted_summary_rejects_unbound_source_re
     source_payload = buy_lot_state_payload(
         _average_cost_source(
             "BUY-1",
-            transaction_date=datetime(2026, 1, 1, 10, 0),
+            transaction_date=datetime(2026, 1, 1, 10, 0, tzinfo=UTC),
             quantity="4",
             cost="48",
         )
@@ -618,7 +618,7 @@ async def test_persisted_summary_rejects_transition_receipt_after_durable_identi
     source_payload = buy_lot_state_payload(
         _average_cost_source(
             "BUY-1",
-            transaction_date=datetime(2026, 1, 1, 10, 0),
+            transaction_date=datetime(2026, 1, 1, 10, 0, tzinfo=UTC),
             quantity="4",
             cost="48",
         )
@@ -647,7 +647,7 @@ async def test_persisted_summary_rejects_self_consistent_receipt_with_unknown_ve
     source_payload = buy_lot_state_payload(
         _average_cost_source(
             "BUY-1",
-            transaction_date=datetime(2026, 1, 1, 10, 0),
+            transaction_date=datetime(2026, 1, 1, 10, 0, tzinfo=UTC),
             quantity="4",
             cost="48",
         )
@@ -972,9 +972,9 @@ async def test_get_fifo_disposal_lots_streams_only_quantity_covering_oldest_lots
     lots_and_transactions = []
     for sequence, (quantity, transaction_date) in enumerate(
         (
-            ("4", datetime(2026, 1, 1, 10, 0, 0)),
-            ("5", datetime(2026, 1, 2, 10, 0, 0)),
-            ("7", datetime(2026, 1, 3, 10, 0, 0)),
+            ("4", datetime(2026, 1, 1, 10, 0, 0, tzinfo=UTC)),
+            ("5", datetime(2026, 1, 2, 10, 0, 0, tzinfo=UTC)),
+            ("7", datetime(2026, 1, 3, 10, 0, 0, tzinfo=UTC)),
         ),
         start=1,
     ):
@@ -1276,7 +1276,7 @@ async def test_apply_transaction_costs_and_replace_breakdown_uses_update_returni
         instrument_id="SEC01",
         security_id="SEC01",
         transaction_type="BUY",
-        transaction_date=datetime(2026, 1, 1, 10, 0, 0),
+        transaction_date=datetime(2026, 1, 1, 10, 0, 0, tzinfo=UTC),
         quantity=Decimal("10"),
         price=Decimal("100"),
         gross_transaction_amount=Decimal("1000"),
@@ -1304,8 +1304,8 @@ async def test_apply_transaction_costs_and_replace_breakdown_uses_update_returni
         instrument_id="SEC01",
         security_id="SEC01",
         transaction_type="BUY",
-        transaction_date=datetime(2026, 1, 1, 10, 0, 0),
-        settlement_date=datetime(2026, 1, 3, 16, 0, 0),
+        transaction_date=datetime(2026, 1, 1, 10, 0, 0, tzinfo=UTC),
+        settlement_date=datetime(2026, 1, 3, 16, 0, 0, tzinfo=UTC),
         quantity=Decimal("10"),
         gross_transaction_amount=Decimal("1000"),
         trade_currency="USD",
@@ -1361,7 +1361,7 @@ async def test_apply_transaction_costs_fails_closed_without_calculation_lineage(
         instrument_id="SEC01",
         security_id="SEC01",
         transaction_type="BUY",
-        transaction_date=datetime(2026, 1, 1, 10, 0, 0),
+        transaction_date=datetime(2026, 1, 1, 10, 0, 0, tzinfo=UTC),
         quantity=Decimal("10"),
         gross_transaction_amount=Decimal("1000"),
         trade_currency="USD",
@@ -1393,8 +1393,8 @@ async def test_upsert_booked_transaction_persists_only_canonical_table_fields() 
         security_id="FXC-2026-0001",
         transaction_type="FX_FORWARD",
         component_type="FX_CONTRACT_OPEN",
-        transaction_date=datetime(2026, 4, 1, 9, 0, 0),
-        settlement_date=datetime(2026, 7, 1, 0, 0, 0),
+        transaction_date=datetime(2026, 4, 1, 9, 0, 0, tzinfo=UTC),
+        settlement_date=datetime(2026, 7, 1, 0, 0, 0, tzinfo=UTC),
         quantity=Decimal("0"),
         price=Decimal("0"),
         gross_transaction_amount=Decimal("0"),

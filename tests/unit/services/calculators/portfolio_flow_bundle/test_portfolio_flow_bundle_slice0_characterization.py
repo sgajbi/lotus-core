@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
@@ -40,7 +40,7 @@ def _event(
         portfolio_id="PORT_074",
         instrument_id="INST_074",
         security_id="SEC_074",
-        transaction_date=datetime(2026, 3, 5, 10, 0, 0),
+        transaction_date=datetime(2026, 3, 5, 10, 0, 0, tzinfo=UTC),
         transaction_type=transaction_type,
         quantity=Decimal(quantity),
         price=Decimal("1"),
