@@ -1,4 +1,4 @@
-from datetime import UTC, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
@@ -45,11 +45,14 @@ def test_transaction_model_success():
         ("settlement_date", datetime(2025, 7, 23)),
         ("created_at", "2025-07-21T00:01:00"),
         ("created_at", datetime(2025, 7, 21, 0, 1)),
+        ("transaction_date", date(2025, 7, 21)),
+        ("settlement_date", date(2025, 7, 23)),
+        ("created_at", date(2025, 7, 21)),
     ],
 )
 def test_transaction_model_rejects_timezone_ambiguous_timestamps(
     field_name: str,
-    value: datetime | str,
+    value: date | datetime | str,
 ) -> None:
     payload = {
         "transaction_id": "test_txn_ambiguous",
