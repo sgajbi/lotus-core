@@ -1,6 +1,8 @@
 from datetime import date
 from decimal import Decimal
 
+import pytest
+
 from services.financial_reconciliation_service.app.domain.reconciliation_policies import (
     DEFAULT_VALUE_TOLERANCE,
     PositionValuationEvidence,
@@ -107,6 +109,75 @@ def test_authoritative_unit_price_receipt_bypasses_legacy_bond_heuristic() -> No
     )
 
     assert findings == []
+
+
+@pytest.mark.parametrize(
+    ("policy_id", "quote_basis"),
+    [
+        ("DIRTY_PERCENT_FACE_MARKET_VALUE", "PERCENT_OF_PRINCIPAL_DIRTY"),
+        (
+            "CLEAN_PERCENT_FACE_NO_PERIODIC_ACCRUAL",
+            "PERCENT_OF_PRINCIPAL_CLEAN",
+        ),
+    ],
+)
+def test_authoritative_face_principal_receipt_reconciles_without_legacy_heuristic(
+    policy_id: str,
+    quote_basis: str,
+) -> None:
+    findings = position_valuation_reconciliation_findings(
+        evidence=PositionValuationEvidence(
+            portfolio_id="PORT-BOND",
+            security_id="BOND-FACE",
+            business_date=date(2026, 3, 8),
+            epoch=0,
+            quantity=Decimal("1000000"),
+            market_price=Decimal("99.25"),
+            market_value_local=Decimal("992500"),
+            cost_basis_local=Decimal("990000"),
+            unrealized_gain_loss_local=Decimal("2500"),
+            product_type="BOND",
+            valuation_receipt=PositionValuationReceiptEvidence(
+                supportability="SUPPORTED",
+                policy_id=policy_id,
+                policy_version=1,
+                quote_basis=quote_basis,
+                receipt_hash="c" * 64,
+            ),
+        ),
+        tolerance=Decimal("0.0001"),
+    )
+
+    assert findings == []
+
+
+def test_face_principal_receipt_with_unavailable_accrual_fails_closed() -> None:
+    findings = position_valuation_reconciliation_findings(
+        evidence=PositionValuationEvidence(
+            portfolio_id="PORT-BOND",
+            security_id="BOND-ACCRUAL",
+            business_date=date(2026, 3, 8),
+            epoch=0,
+            quantity=Decimal("1000000"),
+            market_price=Decimal("99.25"),
+            market_value_local=Decimal("992500"),
+            cost_basis_local=Decimal("990000"),
+            unrealized_gain_loss_local=Decimal("2500"),
+            product_type="BOND",
+            valuation_receipt=PositionValuationReceiptEvidence(
+                supportability="SUPPORTED",
+                policy_id="CLEAN_PERCENT_FACE_CALCULATED_ACCRUAL",
+                policy_version=1,
+                quote_basis="PERCENT_OF_PRINCIPAL_CLEAN",
+                receipt_hash="d" * 64,
+            ),
+        ),
+        tolerance=Decimal("0.0001"),
+    )
+
+    assert [finding.finding_type for finding in findings] == [
+        "unsupported_authoritative_valuation_receipt"
+    ]
 
 
 def test_invalid_authoritative_receipt_fails_closed_without_legacy_heuristic() -> None:

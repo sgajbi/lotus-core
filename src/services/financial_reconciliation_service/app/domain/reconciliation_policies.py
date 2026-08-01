@@ -4,7 +4,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
-from typing import Any
+from typing import Any, cast
 
 from portfolio_common.domain.decimal_amount import required_decimal
 from portfolio_common.domain.financial.precision import DecimalPrecisionPolicy
@@ -16,8 +16,13 @@ from portfolio_common.domain.market_data.valuation_unit_price import (
 )
 from portfolio_common.domain.valuation import (
     PositionScaling,
+    PositionValuationEconomicInputs,
+    PrincipalBasis,
     UnknownValuationPolicyError,
+    UnsupportedValuationError,
+    ValuationInputBasis,
     ValuationOutputMeasure,
+    calculate_position_valuation_local_economics,
     resolve_position_valuation_policy,
 )
 
@@ -54,9 +59,12 @@ def resolve_value_tolerance(override: Decimal | None) -> Decimal:
 
     if override is None:
         return DEFAULT_VALUE_TOLERANCE
-    return RECONCILIATION_TOLERANCE_PRECISION_V1.require_exact(
-        override,
-        field_name="tolerance",
+    return cast(
+        Decimal,
+        RECONCILIATION_TOLERANCE_PRECISION_V1.require_exact(
+            override,
+            field_name="tolerance",
+        ),
     )
 
 
@@ -164,7 +172,7 @@ def expected_market_value_local(
         cost_basis_local=cost_basis_local,
         product_type=product_type,
     )
-    return quantity * valuation_price_local
+    return quantity * cast(Decimal, valuation_price_local)
 
 
 def _authoritative_market_value_local(
@@ -187,14 +195,39 @@ def _authoritative_market_value_local(
         )
     except (TypeError, ValueError, UnknownValuationPolicyError):
         return None
-    if (
-        policy.input_basis.value != receipt.quote_basis
-        or policy.output_measure is not ValuationOutputMeasure.MARKET_VALUE
-        or policy.position_scaling is not PositionScaling.QUANTITY
-        or policy.input_basis.value != "UNIT_PRICE"
+    if policy.input_basis.value != receipt.quote_basis or not (
+        (
+            policy.position_scaling is PositionScaling.QUANTITY
+            and policy.principal_basis is PrincipalBasis.POSITION_UNITS
+            and policy.input_basis is ValuationInputBasis.UNIT_PRICE
+        )
+        or (
+            policy.position_scaling is PositionScaling.PRINCIPAL
+            and policy.principal_basis is PrincipalBasis.FACE_AMOUNT
+            and policy.input_basis
+            in {
+                ValuationInputBasis.PERCENT_OF_PRINCIPAL_CLEAN,
+                ValuationInputBasis.PERCENT_OF_PRINCIPAL_DIRTY,
+            }
+        )
     ):
         return None
-    return quantity * market_price
+    if policy.output_measure is not ValuationOutputMeasure.MARKET_VALUE:
+        return None
+    try:
+        economics = calculate_position_valuation_local_economics(
+            policy=policy,
+            inputs=PositionValuationEconomicInputs(
+                source_value=market_price,
+                signed_quantity=quantity,
+                signed_face_amount=(
+                    quantity if policy.principal_basis is PrincipalBasis.FACE_AMOUNT else None
+                ),
+            ),
+        )
+    except UnsupportedValuationError:
+        return None
+    return cast(Decimal | None, economics.total_market_value_local)
 
 
 def _unsupported_authoritative_receipt_finding(
@@ -210,7 +243,12 @@ def _unsupported_authoritative_receipt_finding(
         transaction_id=None,
         business_date=evidence.business_date,
         epoch=evidence.epoch,
-        expected_value={"supportability": "SUPPORTED_UNIT_PRICE_QUANTITY"},
+        expected_value={
+            "supportability": [
+                "SUPPORTED_UNIT_PRICE_QUANTITY",
+                "SUPPORTED_FACE_PRINCIPAL_NO_SEPARATE_ACCRUAL",
+            ]
+        },
         observed_value={
             "policy_id": receipt.policy_id,
             "policy_version": receipt.policy_version,
