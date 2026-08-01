@@ -277,6 +277,14 @@ identity, and public response shapes remain unchanged.
   evidence-only drift without pretending that financial amounts differ. Twenty-four focused tests,
   Ruff, and MyPy pass, including both healthy incremental writers, changed replay evidence, and an
   unknown-writer negative case.
+- The last review pass extended that same completeness rule to the ordinary backdated-processing
+  path and opening-lot rows. A non-incremental AVCO checkpoint now binds the existing typed
+  transition receipt containing the triggering transaction and all processed calculation receipts;
+  reconciliation recognizes that repository-owned writer only when complete economics and governed
+  calculation semantics agree. Opening-lot output lineage now includes the persisted accrued-
+  interest-paid amount. Tests prove identical ending pool economics retain distinct inputs for
+  different processed evidence, and a changed accrued-interest output changes the lot output hash.
+  The combined warning-strict focused suite passes 43 tests, with Ruff and MyPy green.
 
 ## Compatibility and remaining work
 

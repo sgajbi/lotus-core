@@ -42,6 +42,7 @@ logger = logging.getLogger(__name__)
 _INCREMENTAL_POOL_LINEAGE_ALGORITHMS = frozenset(
     {
         "average-cost-pool-checkpoint-materialization",
+        "average-cost-pool-processing-rebuild",
         "average-cost-pool-transition",
     }
 )
