@@ -22,6 +22,8 @@ from portfolio_common.domain.valuation import (
     MarketPriceSourceFact,
     MarketPriceSourceFactError,
     PositionValuationEvidence,
+    PositionValuationPolicy,
+    PrincipalBasis,
     ResolvedValuationPolicyAssignment,
     UnknownValuationPolicyError,
     UnsupportedValuationError,
@@ -109,6 +111,7 @@ class ValuationSourceEvidenceBuilder(Protocol):
         self,
         *,
         assignment: ResolvedValuationPolicyAssignment,
+        policy: PositionValuationPolicy,
         price_fact: MarketPriceSourceFact,
         position: PositionHistory,
         portfolio: Portfolio,
@@ -545,6 +548,7 @@ class ValuationJobProcessor:
             )
         evidence = dependencies.source_evidence_builder(
             assignment=policy_resolution.assignment,
+            policy=policy_resolution.policy,
             price_fact=price_fact,
             position=position,
             portfolio=portfolio,
@@ -560,6 +564,11 @@ class ValuationJobProcessor:
                 reporting_currency=portfolio_currency,
                 evidence=evidence,
                 direct_source_to_reporting_fx_rate=fx_rate.rate if fx_rate else None,
+                signed_face_amount=(
+                    snapshot.quantity
+                    if policy_resolution.policy.principal_basis is PrincipalBasis.FACE_AMOUNT
+                    else None
+                ),
             )
         )
         self._apply_authoritative_valuation_result(

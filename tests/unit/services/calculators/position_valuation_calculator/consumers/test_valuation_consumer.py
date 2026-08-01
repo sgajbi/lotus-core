@@ -21,6 +21,7 @@ from portfolio_common.domain.valuation import (
     MarketPriceSourceFactStatus,
     MissingValuationPolicyAssignmentError,
     PositionValuationEvidence,
+    PrincipalBasis,
     ValuationAuthorityScope,
     ValuationPolicyAssignmentStatus,
     canonical_content_hash,
@@ -234,16 +235,54 @@ async def test_valuation_processor_executes_success_path_without_kafka_consumer(
     authority_path_metric.labels.assert_called_once_with("legacy", "unscoped_portfolio")
 
 
+@pytest.mark.parametrize(
+    (
+        "policy_id",
+        "quote_basis",
+        "price",
+        "quantity",
+        "cost_basis",
+        "expected_market_value",
+        "expected_unrealized",
+    ),
+    [
+        (
+            "UNIT_PRICE_MARKET_VALUE",
+            MarketPriceQuoteBasis.UNIT_PRICE,
+            Decimal("1013.5"),
+            Decimal("10"),
+            Decimal("10000"),
+            Decimal("10135.0000000000"),
+            Decimal("135.0000000000"),
+        ),
+        (
+            "DIRTY_PERCENT_FACE_MARKET_VALUE",
+            MarketPriceQuoteBasis.PERCENT_OF_PRINCIPAL_DIRTY,
+            Decimal("99.25"),
+            Decimal("1000000"),
+            Decimal("990000"),
+            Decimal("992500.0000000000"),
+            Decimal("2500.0000000000"),
+        ),
+    ],
+)
 async def test_scoped_portfolio_uses_exact_authority_without_legacy_price_read(
     mock_event: PortfolioValuationRequiredEvent,
     mock_dependencies: dict,
+    policy_id: str,
+    quote_basis: MarketPriceQuoteBasis,
+    price: Decimal,
+    quantity: Decimal,
+    cost_basis: Decimal,
+    expected_market_value: Decimal,
+    expected_unrealized: Decimal,
 ) -> None:
     repo = mock_dependencies["valuation_repo"]
     mock_dependencies["idempotency_repo"].claim_event_processing.return_value = True
     position = PositionHistory(
-        quantity=Decimal("10"),
-        cost_basis=Decimal("10000"),
-        cost_basis_local=Decimal("10000"),
+        quantity=quantity,
+        cost_basis=cost_basis,
+        cost_basis_local=cost_basis,
     )
     repo.get_last_position_history_before_date.return_value = position
     repo.get_instrument.return_value = Instrument(
@@ -271,9 +310,9 @@ async def test_scoped_portfolio_uses_exact_authority_without_legacy_price_read(
             mock_event.security_id,
         ),
         price_date=mock_event.valuation_date,
-        price=Decimal("1013.5"),
+        price=price,
         currency="USD",
-        quote_basis=MarketPriceQuoteBasis.UNIT_PRICE,
+        quote_basis=quote_basis,
         source_reference=_source_reference("market-price"),
         fact_status=MarketPriceSourceFactStatus.ACTIVE,
         fact_version=1,
@@ -284,7 +323,7 @@ async def test_scoped_portfolio_uses_exact_authority_without_legacy_price_read(
                 tenant_id="TENANT-SG",
                 legal_book_id="BOOK-SG",
                 security_id=mock_event.security_id,
-                policy_id="UNIT_PRICE_MARKET_VALUE",
+                policy_id=policy_id,
                 policy_version=1,
                 valid_from=mock_event.valuation_date,
                 valid_to=None,
@@ -294,7 +333,7 @@ async def test_scoped_portfolio_uses_exact_authority_without_legacy_price_read(
                 source_record_id="assignment-1",
                 source_revision="1",
                 observed_at=datetime(2025, 8, 1, tzinfo=UTC),
-                assignment_reason="unit-price instrument",
+                assignment_reason="explicit valuation representation",
             )
         ],
         tenant_id="TENANT-SG",
@@ -302,9 +341,10 @@ async def test_scoped_portfolio_uses_exact_authority_without_legacy_price_read(
         security_id=mock_event.security_id,
         valuation_date=mock_event.valuation_date,
     )
+    policy = resolve_position_valuation_policy(policy_id, 1)
     policy_resolution = ResolvedRuntimeValuationPolicy(
         assignment=policy_assignment,
-        policy=resolve_position_valuation_policy("UNIT_PRICE_MARKET_VALUE", 1),
+        policy=policy,
     )
     policy_resolver = mock_dependencies["valuation_policy_assignment_resolver"]
     price_resolver = mock_dependencies["market_price_source_fact_resolver"]
@@ -316,6 +356,11 @@ async def test_scoped_portfolio_uses_exact_authority_without_legacy_price_read(
         source_currency=price_fact.source_reference,
         reporting_currency=_source_reference("portfolio"),
         signed_quantity=_source_reference("position"),
+        signed_face_amount=(
+            _source_reference("position")
+            if policy.principal_basis is PrincipalBasis.FACE_AMOUNT
+            else None
+        ),
     )
     mock_dependencies["source_evidence_builder"].return_value = evidence
 
@@ -332,14 +377,21 @@ async def test_scoped_portfolio_uses_exact_authority_without_legacy_price_read(
     repo.get_latest_price_for_position.assert_not_awaited()
     policy_resolver.resolve_many.assert_awaited_once()
     price_resolver.resolve_many.assert_awaited_once()
-    mock_dependencies["source_evidence_builder"].assert_called_once()
+    mock_dependencies["source_evidence_builder"].assert_called_once_with(
+        assignment=policy_assignment,
+        policy=policy,
+        price_fact=price_fact,
+        position=position,
+        portfolio=portfolio,
+        fx_rate=None,
+    )
     persisted_snapshot = repo.upsert_daily_snapshot.await_args.args[0]
-    assert persisted_snapshot.market_price == Decimal("1013.5")
-    assert persisted_snapshot.market_value_local == Decimal("10135.0000000000")
-    assert persisted_snapshot.unrealized_gain_loss_local == Decimal("135.0000000000")
+    assert persisted_snapshot.market_price == price
+    assert persisted_snapshot.market_value_local == expected_market_value
+    assert persisted_snapshot.unrealized_gain_loss_local == expected_unrealized
     assert persisted_snapshot.valuation_status == "VALUED_CURRENT"
     receipt = mock_dependencies["valuation_receipt_repo"].upsert.await_args.kwargs["receipt"]
-    assert receipt.policy_id == "UNIT_PRICE_MARKET_VALUE"
+    assert receipt.policy_id == policy_id
     assert receipt.receipt_hash
     authority_path_metric.labels.assert_called_once_with(
         "authoritative",
