@@ -27,6 +27,12 @@ pytestmark = pytest.mark.asyncio
 book_foreign_exchange_transaction = foreign_exchange_processing.book_foreign_exchange_transaction
 
 
+def _transaction_persistence() -> AsyncMock:
+    persistence = AsyncMock(spec=ForeignExchangeTransactionPersistencePort)
+    persistence.upsert_booked_transaction.side_effect = lambda transaction: transaction
+    return persistence
+
+
 def _foreign_exchange_transaction(**updates: object) -> BookedTransaction:
     transaction = BookedTransaction(
         transaction_id="FX-OPEN-001",
@@ -71,7 +77,7 @@ def _foreign_exchange_transaction(**updates: object) -> BookedTransaction:
 
 async def test_booking_persists_validated_fx_transaction_and_returns_contract_instrument() -> None:
     transaction = _foreign_exchange_transaction(fx_realized_pnl_mode=" upstream_provided ")
-    persistence = AsyncMock(spec=ForeignExchangeTransactionPersistencePort)
+    persistence = _transaction_persistence()
 
     result = await book_foreign_exchange_transaction(
         transaction=transaction,
@@ -92,13 +98,36 @@ async def test_booking_persists_validated_fx_transaction_and_returns_contract_in
     assert result.contract_instrument.security_id == "FXC-2026-0001"
 
 
+async def test_booking_rebinds_lineage_when_conflict_retains_optional_durable_output() -> None:
+    persistence = AsyncMock(spec=ForeignExchangeTransactionPersistencePort)
+
+    async def _persist(transaction: BookedTransaction) -> BookedTransaction:
+        if persistence.upsert_booked_transaction.await_count == 1:
+            return replace(transaction, source_system="EXISTING_BOOKING_LEDGER")
+        return transaction
+
+    persistence.upsert_booked_transaction.side_effect = _persist
+
+    result = await book_foreign_exchange_transaction(
+        transaction=_foreign_exchange_transaction(source_system=None),
+        transaction_persistence=persistence,
+    )
+
+    assert persistence.upsert_booked_transaction.await_count == 2
+    assert result.transaction.source_system == "EXISTING_BOOKING_LEDGER"
+    assert calculation_lineage_binds_output(
+        result.transaction.calculation_lineage,
+        output_payload=fx_booked_transaction_output_payload(result.transaction),
+    )
+
+
 async def test_booking_returns_no_contract_instrument_for_cash_settlement_component() -> None:
     transaction = _foreign_exchange_transaction(
         component_type="FX_CASH_SETTLEMENT_BUY",
         fx_cash_leg_role="BUY",
         linked_fx_cash_leg_id="FX-CASH-SELL-001",
     )
-    persistence = AsyncMock(spec=ForeignExchangeTransactionPersistencePort)
+    persistence = _transaction_persistence()
 
     result = await book_foreign_exchange_transaction(
         transaction=transaction,
@@ -111,7 +140,7 @@ async def test_booking_returns_no_contract_instrument_for_cash_settlement_compon
 
 async def test_booking_rejects_invalid_fx_transaction_before_persistence() -> None:
     transaction = _foreign_exchange_transaction(buy_currency="USD", sell_currency="USD")
-    persistence = AsyncMock(spec=ForeignExchangeTransactionPersistencePort)
+    persistence = _transaction_persistence()
 
     with pytest.raises(ValueError, match="FX validation failed"):
         await book_foreign_exchange_transaction(
@@ -123,7 +152,7 @@ async def test_booking_rejects_invalid_fx_transaction_before_persistence() -> No
 
 
 async def test_booking_lineage_is_deterministic_and_changes_with_material_fx_output() -> None:
-    persistence = AsyncMock(spec=ForeignExchangeTransactionPersistencePort)
+    persistence = _transaction_persistence()
     baseline = _foreign_exchange_transaction()
 
     first = await book_foreign_exchange_transaction(
@@ -163,7 +192,7 @@ async def test_booking_rejects_timezone_ambiguous_fx_lineage_timestamps(
     field_name: str,
 ) -> None:
     transaction = _foreign_exchange_transaction(**{field_name: datetime(2026, 4, 1, 9, 0)})
-    persistence = AsyncMock(spec=ForeignExchangeTransactionPersistencePort)
+    persistence = _transaction_persistence()
 
     with pytest.raises(ValueError, match=rf"{field_name}.*timezone-aware"):
         await book_foreign_exchange_transaction(
@@ -175,7 +204,7 @@ async def test_booking_rejects_timezone_ambiguous_fx_lineage_timestamps(
 
 
 async def test_booking_canonicalizes_aware_fx_timestamps_to_the_same_utc_lineage() -> None:
-    persistence = AsyncMock(spec=ForeignExchangeTransactionPersistencePort)
+    persistence = _transaction_persistence()
     utc_transaction = _foreign_exchange_transaction(
         transaction_date=datetime(2026, 4, 1, 1, 0, tzinfo=UTC),
         settlement_date=datetime(2026, 7, 1, 1, 0, tzinfo=UTC),
@@ -232,7 +261,7 @@ async def test_booking_rejects_embedded_fx_charge_before_persistence(
     expected_reason: str,
 ) -> None:
     transaction = _foreign_exchange_transaction(**charge_update)
-    persistence = AsyncMock(spec=ForeignExchangeTransactionPersistencePort)
+    persistence = _transaction_persistence()
 
     with pytest.raises(ValueError, match=expected_reason):
         await book_foreign_exchange_transaction(

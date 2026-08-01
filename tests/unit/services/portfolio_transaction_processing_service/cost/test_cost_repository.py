@@ -92,6 +92,13 @@ async def test_get_transaction_history_trims_portfolio_security_and_excluded_tra
     repository = SqlAlchemyCostBasisTransactionRepository(db_session)
 
     execute_result = MagicMock()
+    calculation_lineage = build_calculation_lineage(
+        algorithm_id="transaction-cost-basis-calculation",
+        algorithm_version=1,
+        intermediate_precision=28,
+        input_payload={"transaction_id": "BUY01"},
+        output_payload={"net_cost": Decimal("1000")},
+    )
     persisted_transaction = DBTransaction(
         transaction_id="BUY01",
         portfolio_id="PORT_COST_01",
@@ -104,6 +111,7 @@ async def test_get_transaction_history_trims_portfolio_security_and_excluded_tra
         gross_transaction_amount=Decimal("1000"),
         trade_currency="USD",
         currency="USD",
+        calculation_lineage=calculation_lineage.lineage_payload(),
     )
     execute_result.scalars.return_value.all.return_value = [persisted_transaction]
     db_session.execute.return_value = execute_result
@@ -128,6 +136,7 @@ async def test_get_transaction_history_trims_portfolio_security_and_excluded_tra
             trade_currency="USD",
             currency="USD",
             trade_fee=None,
+            calculation_lineage=calculation_lineage,
         )
     ]
     assert transactions[0] is not persisted_transaction
@@ -145,6 +154,13 @@ async def test_get_transaction_history_trims_portfolio_security_and_excluded_tra
 async def test_get_booked_transaction_maps_domain_transaction_and_scopes_portfolio() -> None:
     db_session = AsyncMock()
     repository = SqlAlchemyCostBasisTransactionRepository(db_session)
+    calculation_lineage = build_calculation_lineage(
+        algorithm_id="cash-settlement-calculation",
+        algorithm_version=1,
+        intermediate_precision=28,
+        input_payload={"transaction_id": "CASH01"},
+        output_payload={"amount": Decimal("1000")},
+    )
     persisted_transaction = DBTransaction(
         transaction_id="CASH01",
         portfolio_id="PORT_COST_01",
@@ -157,6 +173,7 @@ async def test_get_booked_transaction_maps_domain_transaction_and_scopes_portfol
         gross_transaction_amount=Decimal("1000"),
         trade_currency="USD",
         currency="USD",
+        calculation_lineage=calculation_lineage.lineage_payload(),
     )
     execute_result = MagicMock()
     execute_result.scalars.return_value.first.return_value = persisted_transaction
@@ -177,6 +194,7 @@ async def test_get_booked_transaction_maps_domain_transaction_and_scopes_portfol
         trade_currency="USD",
         currency="USD",
         trade_fee=None,
+        calculation_lineage=calculation_lineage,
     )
     assert transaction is not persisted_transaction
     compiled_query = str(
@@ -1313,6 +1331,7 @@ async def test_apply_transaction_costs_and_replace_breakdown_uses_update_returni
         numeric_output_policy=TRANSACTION_COST_LEDGER_OUTPUT_V1.lineage_identity(),
     )
     engine_transaction.set_calculated_field("calculation_lineage", calculation_lineage)
+    db_transaction.calculation_lineage = calculation_lineage.lineage_payload()
 
     updated_transaction = await repository.apply_transaction_costs_and_replace_breakdown(
         engine_transaction
@@ -1392,9 +1411,36 @@ async def test_upsert_booked_transaction_persists_only_canonical_table_fields() 
         calculation_lineage=calculation_lineage,
     )
 
+    persisted_transaction = DBTransaction(
+        transaction_id=transaction.transaction_id,
+        portfolio_id=transaction.portfolio_id,
+        instrument_id=transaction.instrument_id,
+        security_id=transaction.security_id,
+        transaction_type=transaction.transaction_type,
+        component_type=transaction.component_type,
+        transaction_date=transaction.transaction_date,
+        settlement_date=transaction.settlement_date,
+        quantity=transaction.quantity,
+        price=transaction.price,
+        gross_transaction_amount=transaction.gross_transaction_amount,
+        trade_currency=transaction.trade_currency,
+        currency=transaction.currency,
+        buy_currency=transaction.buy_currency,
+        sell_currency=transaction.sell_currency,
+        buy_amount=transaction.buy_amount,
+        sell_amount=transaction.sell_amount,
+        contract_rate=transaction.contract_rate,
+        fx_contract_id=transaction.fx_contract_id,
+        calculation_lineage=calculation_lineage.lineage_payload(),
+    )
+    execute_result = MagicMock()
+    execute_result.scalars.return_value.one.return_value = persisted_transaction
+    db_session.execute.return_value = execute_result
+
     result = await repository.upsert_booked_transaction(transaction)
 
-    assert result is None
+    assert result.transaction_id == transaction.transaction_id
+    assert result.calculation_lineage == calculation_lineage
     db_session.execute.assert_awaited_once()
     statement = db_session.execute.await_args.args[0]
     parameters = statement.compile().params
