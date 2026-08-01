@@ -78,7 +78,8 @@
       "rounding": "ROUND_HALF_EVEN",
       "lineage_binding": "required",
       "lineage_boundary_callsites": [
-        "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/state_lineage.py::build_cost_basis_state_lineage"
+        "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/state_lineage.py::build_cost_basis_state_lineage",
+        "src/services/portfolio_transaction_processing_service/app/domain/fixed_income_book_cost/calculation.py::calculate_amortized_cost_schedule"
       ],
       "lineage_boundary_covered_callsites": {
         "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/state_lineage.py::build_cost_basis_state_lineage": [
@@ -101,6 +102,9 @@
           "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/lot_state.py::CostLot.open_state",
           "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/residual_allocation.py::allocate_nonnegative_storage_share",
           "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/state_lineage.py::_canonical_cost_basis_output"
+        ],
+        "src/services/portfolio_transaction_processing_service/app/domain/fixed_income_book_cost/calculation.py::calculate_amortized_cost_schedule": [
+          "src/services/portfolio_transaction_processing_service/app/domain/fixed_income_book_cost/calculation.py::_calculate_period"
         ]
       },
       "lineage_gap_callsites": []
