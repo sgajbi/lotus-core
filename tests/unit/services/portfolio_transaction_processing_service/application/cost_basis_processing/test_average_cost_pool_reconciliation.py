@@ -162,13 +162,6 @@ def test_average_cost_pool_key_rejects_blank_identifiers(
         ({"source_count": -1}, "source count must be nonnegative"),
         ({"expected_quantity": Decimal("-1")}, "amounts must be nonnegative"),
         ({"reason_code": "unexpected_reason"}, "must not carry a failure reason"),
-        (
-            {
-                "status": AverageCostPoolReconciliationStatus.DRIFTED,
-                "reason_code": "reported_drift",
-            },
-            "must differ from replay truth",
-        ),
     ],
 )
 def test_average_cost_pool_assessment_rejects_contradictory_state(
@@ -182,3 +175,19 @@ def test_average_cost_pool_assessment_rejects_contradictory_state(
 
     with pytest.raises(ValueError, match=message):
         replace(current, **changes)
+
+
+def test_average_cost_pool_assessment_allows_evidence_only_drift() -> None:
+    current = assessment(
+        AverageCostPoolKey("P1", "S1"),
+        AverageCostPoolReconciliationStatus.CURRENT,
+    )
+
+    drifted = replace(
+        current,
+        status=AverageCostPoolReconciliationStatus.DRIFTED,
+        reason_code="checkpoint_replay_evidence_mismatch",
+    )
+
+    assert drifted.status is AverageCostPoolReconciliationStatus.DRIFTED
+    assert drifted.reason_code == "checkpoint_replay_evidence_mismatch"

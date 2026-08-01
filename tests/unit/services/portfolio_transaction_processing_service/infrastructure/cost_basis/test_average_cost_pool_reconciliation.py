@@ -53,8 +53,23 @@ def _summary(
     cost_base: str = "195",
     pool_present: bool = True,
     replay_revision: str = "1",
+    lineage_algorithm_id: str = "average-cost-pool-rebuild",
 ) -> AverageCostPoolPersistedSummary:
     plan = _plan(replay_revision=replay_revision)
+    pool_lineage = build_average_cost_pool_rebuild_lineage(
+        replay_lineage=plan.replay_lineage,
+        checkpoint=plan.checkpoint,
+    )
+    if lineage_algorithm_id != "average-cost-pool-rebuild":
+        pool_lineage = build_cost_basis_state_lineage(
+            algorithm_id=lineage_algorithm_id,
+            input_payload={"repository_owned_evidence": "latest-transition"},
+            output_payload={
+                "cost_base": Decimal(cost_base),
+                "cost_local": Decimal(cost_local),
+                "quantity": Decimal(quantity),
+            },
+        )
     return AverageCostPoolPersistedSummary(
         source_count=source_count,
         source_quantity=Decimal(quantity),
@@ -63,14 +78,7 @@ def _summary(
         pool_quantity=Decimal(quantity) if pool_present else None,
         pool_cost_local=Decimal(cost_local) if pool_present else None,
         pool_cost_base=Decimal(cost_base) if pool_present else None,
-        pool_calculation_lineage=(
-            build_average_cost_pool_rebuild_lineage(
-                replay_lineage=plan.replay_lineage,
-                checkpoint=plan.checkpoint,
-            )
-            if pool_present
-            else None
-        ),
+        pool_calculation_lineage=(pool_lineage if pool_present else None),
     )
 
 
@@ -210,6 +218,44 @@ async def test_equal_economics_refresh_changed_replay_evidence_then_reconcile_cu
     processing_state.upsert_cost_basis_processing_checkpoint.assert_awaited_once_with(
         plan.processing_checkpoint
     )
+
+
+@pytest.mark.parametrize(
+    "lineage_algorithm_id",
+    [
+        "average-cost-pool-transition",
+        "average-cost-pool-checkpoint-materialization",
+    ],
+)
+async def test_equal_economics_accept_governed_incremental_pool_lineage_without_rebuild(
+    lineage_algorithm_id: str,
+) -> None:
+    session = _session()
+    adapter, rebuild_planner, repository, processing_state = _adapter(session=session)
+    rebuild_planner.build.return_value = _plan()
+    repository.get_average_cost_pool_persisted_summary.return_value = _summary(
+        lineage_algorithm_id=lineage_algorithm_id
+    )
+
+    assessment = await adapter.reconcile(key=AverageCostPoolKey("P1", "S1"), apply=True)
+
+    assert assessment.status is AverageCostPoolReconciliationStatus.CURRENT
+    repository.apply_average_cost_pool_rebuild.assert_not_awaited()
+    processing_state.upsert_cost_basis_processing_checkpoint.assert_not_awaited()
+
+
+async def test_equal_economics_reject_unknown_pool_lineage_algorithm() -> None:
+    session = _session()
+    adapter, rebuild_planner, repository, _ = _adapter(session=session)
+    rebuild_planner.build.return_value = _plan()
+    repository.get_average_cost_pool_persisted_summary.return_value = _summary(
+        lineage_algorithm_id="unowned-pool-writer"
+    )
+
+    assessment = await adapter.reconcile(key=AverageCostPoolKey("P1", "S1"), apply=False)
+
+    assert assessment.status is AverageCostPoolReconciliationStatus.DRIFTED
+    assert assessment.reason_code == "checkpoint_replay_evidence_mismatch"
 
 
 async def test_apply_rolls_back_and_reports_failure_when_post_write_state_does_not_reconcile() -> (
