@@ -1,8 +1,10 @@
 """Pure arithmetic policy for portfolio-timeseries aggregation."""
 
+from dataclasses import replace
 from datetime import date
 from decimal import Decimal
 
+from portfolio_common.domain.calculation_lineage import build_calculation_lineage
 from portfolio_common.domain.decimal_amount import decimal_or_zero
 
 from .errors import (
@@ -44,7 +46,11 @@ def calculate_portfolio_timeseries(
 
     policy = PORTFOLIO_TIMESERIES_LEDGER_OUTPUT_V1
     with policy.arithmetic_context():
-        for contribution in contributions:
+        ordered_contributions = sorted(
+            contributions,
+            key=lambda contribution: contribution.position_timeseries.security_id.strip(),
+        )
+        for contribution in ordered_contributions:
             position = contribution.position_timeseries
             security_id = position.security_id.strip()
             if position.portfolio_id.strip() != portfolio_id:
@@ -68,7 +74,7 @@ def calculate_portfolio_timeseries(
             total_eod_market_value += decimal_or_zero(position.eod_market_value) * fx_rate
             total_fees += decimal_or_zero(position.fees) * fx_rate
 
-    return PortfolioTimeseriesRecord(
+    record = PortfolioTimeseriesRecord(
         portfolio_id=portfolio.portfolio_id,
         date=aggregation_date,
         epoch=epoch,
@@ -90,3 +96,77 @@ def calculate_portfolio_timeseries(
         ),
         fees=policy.normalize(total_fees, field_name="fees"),
     )
+    return replace(
+        record,
+        calculation_lineage=build_calculation_lineage(
+            algorithm_id="portfolio-timeseries-aggregation",
+            algorithm_version=1,
+            intermediate_precision=policy.working_precision,
+            input_payload=_portfolio_timeseries_input(
+                portfolio=portfolio,
+                aggregation_date=aggregation_date,
+                epoch=epoch,
+                contributions=ordered_contributions,
+            ),
+            output_payload=_portfolio_timeseries_output(record),
+            numeric_output_policy=policy.lineage_identity(),
+        ),
+    )
+
+
+def _portfolio_timeseries_input(
+    *,
+    portfolio: PortfolioAggregationScope,
+    aggregation_date: date,
+    epoch: int,
+    contributions: list[PortfolioPositionContribution],
+) -> dict[str, object]:
+    """Return ordered position-day and FX facts used by portfolio aggregation."""
+
+    return {
+        "aggregation_date": aggregation_date,
+        "contributions": [
+            {
+                "fx_rate_to_portfolio_currency": contribution.fx_rate_to_portfolio_currency,
+                "position": {
+                    "bod_cashflow_portfolio": position.bod_cashflow_portfolio,
+                    "bod_market_value": position.bod_market_value,
+                    "calculation_lineage": _position_lineage_payload(position),
+                    "date": position.date,
+                    "eod_cashflow_portfolio": position.eod_cashflow_portfolio,
+                    "eod_market_value": position.eod_market_value,
+                    "epoch": position.epoch,
+                    "fees": position.fees,
+                    "portfolio_id": position.portfolio_id,
+                    "security_id": position.security_id,
+                },
+            }
+            for contribution in contributions
+            for position in (contribution.position_timeseries,)
+        ],
+        "epoch": epoch,
+        "portfolio": {
+            "base_currency": portfolio.base_currency,
+            "portfolio_id": portfolio.portfolio_id,
+        },
+    }
+
+
+def _position_lineage_payload(position: object) -> object:
+    lineage = getattr(position, "calculation_lineage", None)
+    return lineage.lineage_payload() if lineage is not None else None
+
+
+def _portfolio_timeseries_output(record: PortfolioTimeseriesRecord) -> dict[str, object]:
+    """Return every calculated field persisted for one portfolio day."""
+
+    return {
+        "bod_cashflow": record.bod_cashflow,
+        "bod_market_value": record.bod_market_value,
+        "date": record.date,
+        "eod_cashflow": record.eod_cashflow,
+        "eod_market_value": record.eod_market_value,
+        "epoch": record.epoch,
+        "fees": record.fees,
+        "portfolio_id": record.portfolio_id,
+    }

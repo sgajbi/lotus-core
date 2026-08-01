@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 
+from portfolio_common.domain.calculation_lineage import CalculationLineage
+
 from ..position_timeseries.models import PositionTimeseriesRecord
 from .errors import InvalidPortfolioPositionContribution
 
@@ -28,6 +30,7 @@ class PortfolioTimeseriesRecord:
     eod_cashflow: Decimal
     eod_market_value: Decimal
     fees: Decimal
+    calculation_lineage: CalculationLineage | None = None
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
