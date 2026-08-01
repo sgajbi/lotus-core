@@ -39,6 +39,7 @@ def _calculation_lineage() -> CalculationLineage:
 @pytest.mark.asyncio
 async def test_list_all_transactions_maps_orm_rows_to_booked_transactions() -> None:
     session = AsyncMock(spec=AsyncSession)
+    lineage = _calculation_lineage()
     row = Transaction(
         transaction_id="TX-001",
         portfolio_id="PB-001",
@@ -53,6 +54,7 @@ async def test_list_all_transactions_maps_orm_rows_to_booked_transactions() -> N
         transaction_date=datetime(2026, 4, 10, tzinfo=timezone.utc),
         linked_component_ids=["LEG-1", "LEG-2"],
         dependency_reference_ids=["PARENT-1"],
+        calculation_lineage=lineage.lineage_payload(),
     )
     result = MagicMock()
     result.scalars.return_value.all.return_value = [row]
@@ -69,6 +71,7 @@ async def test_list_all_transactions_maps_orm_rows_to_booked_transactions() -> N
     assert transactions[0].linked_component_ids == ("LEG-1", "LEG-2")
     assert transactions[0].dependency_reference_ids == ("PARENT-1",)
     assert transactions[0].epoch is None
+    assert transactions[0].calculation_lineage == lineage
 
 
 @pytest.mark.asyncio

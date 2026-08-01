@@ -634,17 +634,215 @@ def test_guard_accepts_verified_final_output_boundary_for_upstream_arithmetic(
     tmp_path: Path,
 ) -> None:
     _write_policy(tmp_path, unbound_consumer=True)
+    (tmp_path / "src" / "owner" / "unbound_consumer.py").write_text(
+        "from decimal import Decimal\n"
+        "from owner.numeric_policy import TEST_LEDGER_OUTPUT_V1\n"
+        "def calculate_upstream():\n"
+        "    return TEST_LEDGER_OUTPUT_V1.normalize(Decimal('2'), field_name='value')\n",
+        encoding="utf-8",
+    )
+    consumer = tmp_path / "src" / "owner" / "consumer.py"
+    consumer.write_text(
+        "from owner.unbound_consumer import calculate_upstream\n"
+        + consumer.read_text(encoding="utf-8")
+        + "upstream = calculate_upstream()\n",
+        encoding="utf-8",
+    )
+
+    boundary = "src/owner/consumer.py::<module>"
+    upstream = "src/owner/unbound_consumer.py::calculate_upstream"
 
     assert (
         evaluate(
             tmp_path,
             _contract(
                 tmp_path,
-                lineage_boundary_callsites=["src/owner/consumer.py::<module>"],
+                lineage_boundary_callsites=[boundary],
+                lineage_boundary_covered_callsites={boundary: [upstream]},
             ),
         )
         == ()
     )
+
+
+def test_guard_does_not_hide_unrelated_gap_beside_verified_boundary(
+    tmp_path: Path,
+) -> None:
+    _write_policy(tmp_path, unbound_consumer=True)
+    (tmp_path / "src" / "owner" / "unbound_consumer.py").write_text(
+        "from decimal import Decimal\n"
+        "from owner.numeric_policy import TEST_LEDGER_OUTPUT_V1\n"
+        "def calculate_upstream():\n"
+        "    return TEST_LEDGER_OUTPUT_V1.normalize(Decimal('2'), field_name='value')\n",
+        encoding="utf-8",
+    )
+    consumer = tmp_path / "src" / "owner" / "consumer.py"
+    consumer.write_text(
+        "from owner.unbound_consumer import calculate_upstream\n"
+        + consumer.read_text(encoding="utf-8")
+        + "upstream = calculate_upstream()\n",
+        encoding="utf-8",
+    )
+    unrelated = tmp_path / "src" / "owner" / "unrelated_consumer.py"
+    unrelated.write_text(
+        "from decimal import Decimal\n"
+        "from owner.numeric_policy import TEST_LEDGER_OUTPUT_V1\n"
+        "value = TEST_LEDGER_OUTPUT_V1.normalize(Decimal('3'), field_name='value')\n",
+        encoding="utf-8",
+    )
+    boundary = "src/owner/consumer.py::<module>"
+
+    findings = evaluate(
+        tmp_path,
+        _contract(
+            tmp_path,
+            lineage_boundary_callsites=[boundary],
+            lineage_boundary_covered_callsites={
+                boundary: [
+                    "src/owner/unbound_consumer.py::calculate_upstream",
+                    "src/owner/unrelated_consumer.py::<module>",
+                ]
+            },
+        ),
+    )
+
+    assert (
+        "TEST_LEDGER_OUTPUT_V1: unclassified lineage gap at "
+        "src/owner/unrelated_consumer.py::<module>"
+    ) in findings
+    assert "TEST_LEDGER_OUTPUT_V1: required lineage binding is incomplete" in findings
+    assert any("has no call-graph path" in finding for finding in findings)
+
+
+def test_guard_rejects_sibling_consumer_connected_only_by_shared_helper(
+    tmp_path: Path,
+) -> None:
+    _write_policy(tmp_path, unbound_consumer=True)
+    source = tmp_path / "src" / "owner"
+    (source / "shared.py").write_text("def shared():\n    return None\n", encoding="utf-8")
+    (source / "unbound_consumer.py").write_text(
+        "from decimal import Decimal\n"
+        "from owner.numeric_policy import TEST_LEDGER_OUTPUT_V1\n"
+        "from owner.shared import shared\n"
+        "def unrelated_calculation():\n"
+        "    shared()\n"
+        "    return TEST_LEDGER_OUTPUT_V1.normalize(Decimal('2'), field_name='value')\n",
+        encoding="utf-8",
+    )
+    consumer = source / "consumer.py"
+    consumer.write_text(
+        "from owner.shared import shared\n" + consumer.read_text(encoding="utf-8") + "shared()\n",
+        encoding="utf-8",
+    )
+    boundary = "src/owner/consumer.py::<module>"
+    unrelated = "src/owner/unbound_consumer.py::unrelated_calculation"
+
+    findings = evaluate(
+        tmp_path,
+        _contract(
+            tmp_path,
+            lineage_boundary_callsites=[boundary],
+            lineage_boundary_covered_callsites={boundary: [unrelated]},
+        ),
+    )
+
+    assert any("has no call-graph path" in finding for finding in findings)
+    assert f"TEST_LEDGER_OUTPUT_V1: unclassified lineage gap at {unrelated}" in findings
+
+
+def test_guard_rejects_unimported_same_named_consumer(tmp_path: Path) -> None:
+    _write_policy(tmp_path)
+    source = tmp_path / "src" / "owner"
+    (source / "real.py").write_text(
+        "def calculate_upstream():\n    return 1\n",
+        encoding="utf-8",
+    )
+    (source / "unrelated.py").write_text(
+        "from decimal import Decimal\n"
+        "from owner.numeric_policy import TEST_LEDGER_OUTPUT_V1\n"
+        "def calculate_upstream():\n"
+        "    return TEST_LEDGER_OUTPUT_V1.normalize(Decimal('2'), field_name='value')\n",
+        encoding="utf-8",
+    )
+    consumer = source / "consumer.py"
+    consumer.write_text(
+        "from owner.real import calculate_upstream\n"
+        + consumer.read_text(encoding="utf-8")
+        + "upstream = calculate_upstream()\n",
+        encoding="utf-8",
+    )
+    boundary = "src/owner/consumer.py::<module>"
+    unrelated = "src/owner/unrelated.py::calculate_upstream"
+
+    findings = evaluate(
+        tmp_path,
+        _contract(
+            tmp_path,
+            lineage_boundary_callsites=[boundary],
+            lineage_boundary_covered_callsites={boundary: [unrelated]},
+        ),
+    )
+
+    assert any("has no call-graph path" in finding for finding in findings)
+    assert f"TEST_LEDGER_OUTPUT_V1: unclassified lineage gap at {unrelated}" in findings
+
+
+def test_guard_rejects_unimported_same_name_with_dotted_import(tmp_path: Path) -> None:
+    _write_policy(tmp_path)
+    source = tmp_path / "src" / "owner"
+    (source / "real.py").write_text(
+        "def calculate_upstream():\n    return 1\n",
+        encoding="utf-8",
+    )
+    (source / "unrelated.py").write_text(
+        "from decimal import Decimal\n"
+        "from owner.numeric_policy import TEST_LEDGER_OUTPUT_V1\n"
+        "def calculate_upstream():\n"
+        "    return TEST_LEDGER_OUTPUT_V1.normalize(Decimal('2'), field_name='value')\n",
+        encoding="utf-8",
+    )
+    consumer = source / "consumer.py"
+    consumer.write_text(
+        "import owner.real\n"
+        + consumer.read_text(encoding="utf-8")
+        + "upstream = owner.real.calculate_upstream()\n",
+        encoding="utf-8",
+    )
+    boundary = "src/owner/consumer.py::<module>"
+    unrelated = "src/owner/unrelated.py::calculate_upstream"
+
+    findings = evaluate(
+        tmp_path,
+        _contract(
+            tmp_path,
+            lineage_boundary_callsites=[boundary],
+            lineage_boundary_covered_callsites={boundary: [unrelated]},
+        ),
+    )
+
+    assert any("has no call-graph path" in finding for finding in findings)
+    assert f"TEST_LEDGER_OUTPUT_V1: unclassified lineage gap at {unrelated}" in findings
+
+
+def test_guard_rejects_stale_declared_boundary_coverage(tmp_path: Path) -> None:
+    _write_policy(tmp_path)
+    boundary = "src/owner/consumer.py::<module>"
+
+    findings = evaluate(
+        tmp_path,
+        _contract(
+            tmp_path,
+            lineage_boundary_callsites=[boundary],
+            lineage_boundary_covered_callsites={
+                boundary: ["src/owner/missing_consumer.py::<module>"]
+            },
+        ),
+    )
+
+    assert (
+        "TEST_LEDGER_OUTPUT_V1: stale lineage boundary coverage at "
+        "src/owner/missing_consumer.py::<module>"
+    ) in findings
 
 
 def test_guard_rejects_boundary_that_does_not_invoke_governed_builder(tmp_path: Path) -> None:

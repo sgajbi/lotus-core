@@ -4,6 +4,7 @@ from decimal import Decimal
 from typing import Protocol
 
 from ...domain.cost_basis import CostBasisTransaction, OpenLotState
+from ...domain.cost_basis.state_lineage import CostBasisStateTransitionEvidence
 from .state_records import OpenLotCheckpointRecord
 
 
@@ -33,6 +34,7 @@ class CostBasisLotStatePort(Protocol):
         portfolio_id: str,
         security_id: str,
         states_by_source_transaction_id: dict[str, OpenLotState],
+        transition_evidence: CostBasisStateTransitionEvidence,
     ) -> None: ...
 
     async def update_selected_open_lot_states(
@@ -41,4 +43,5 @@ class CostBasisLotStatePort(Protocol):
         portfolio_id: str,
         security_id: str,
         states_by_source_transaction_id: dict[str, OpenLotState],
+        transition_evidence: CostBasisStateTransitionEvidence,
     ) -> None: ...

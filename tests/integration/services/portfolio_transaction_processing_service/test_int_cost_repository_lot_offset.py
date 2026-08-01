@@ -11,6 +11,7 @@ from portfolio_common.database_models import (
 from portfolio_common.database_models import (
     Transaction as DBTransaction,
 )
+from portfolio_common.domain.calculation_lineage import build_calculation_lineage
 from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,6 +23,9 @@ from src.services.portfolio_transaction_processing_service.app.domain.cost_basis
     Fees,
     OpenLotState,
 )
+from src.services.portfolio_transaction_processing_service.app.domain.cost_basis.state_lineage import (  # noqa: E501
+    CostBasisStateTransitionEvidence,
+)
 from src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis import (
     SqlAlchemyCostBasisLotRepository,
     SqlAlchemyCostBasisTransactionRepository,
@@ -31,6 +35,20 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure.in
 )
 
 pytestmark = pytest.mark.asyncio
+
+
+def _transition_evidence(transaction_id: str) -> CostBasisStateTransitionEvidence:
+    return CostBasisStateTransitionEvidence(
+        trigger_transaction_id=transaction_id,
+        transition_kind="integration_lot_transition",
+        transition_lineage=build_calculation_lineage(
+            algorithm_id="integration-cost-basis-calculation",
+            algorithm_version=1,
+            intermediate_precision=28,
+            input_payload={"transaction_id": transaction_id},
+            output_payload={"persisted": True},
+        ),
+    )
 
 
 async def _persist_cost_state_parent(
@@ -297,6 +315,7 @@ async def test_cost_repository_updates_current_lot_quantity_and_cost_from_engine
                 cost_base=Decimal("4000"),
             )
         },
+        transition_evidence=_transition_evidence("TXN_SLICE4_02"),
     )
     await async_db_session.commit()
 
@@ -393,6 +412,7 @@ async def test_fifo_disposal_reads_and_updates_only_required_open_lots(
                 cost_base=Decimal("300"),
             ),
         },
+        transition_evidence=_transition_evidence("SELL_FIFO_01"),
     )
     await async_db_session.commit()
 
@@ -574,6 +594,13 @@ async def test_cost_repository_applies_costs_and_replaces_breakdown_idempotently
             gst=Decimal("0"),
             other_fees=Decimal("0.01"),
         ),
+    )
+    txn.calculation_lineage = build_calculation_lineage(
+        algorithm_id="integration-cost-basis-calculation",
+        algorithm_version=1,
+        intermediate_precision=28,
+        input_payload={"transaction_id": txn.transaction_id},
+        output_payload={"net_cost": Decimal("9813.60")},
     )
 
     updated_transaction = await repo.apply_transaction_costs_and_replace_breakdown(txn)

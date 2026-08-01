@@ -183,6 +183,149 @@ def test_transaction_cost_lineage_is_deterministic_and_material_input_sensitive(
     )
 
 
+@pytest.mark.parametrize(
+    "changed_field",
+    [
+        "allocated_cost_basis_local",
+        "allocated_cost_basis_base",
+        "realized_capital_pnl_local",
+        "realized_fx_pnl_local",
+        "realized_total_pnl_local",
+        "realized_capital_pnl_base",
+        "realized_fx_pnl_base",
+        "realized_total_pnl_base",
+    ],
+)
+def test_transaction_cost_lineage_output_covers_persisted_pnl_decomposition(
+    cost_calculator,
+    changed_field: str,
+) -> None:
+    def transaction() -> CostBasisTransaction:
+        return CostBasisTransaction(
+            transaction_id="BUY-DECOMPOSITION-LINEAGE-001",
+            portfolio_id="P1",
+            instrument_id="AAPL",
+            security_id="S1",
+            transaction_type="BUY",
+            transaction_date=datetime(2026, 8, 1),
+            quantity=Decimal("10"),
+            gross_transaction_amount=Decimal("1500"),
+            trade_currency="USD",
+            portfolio_base_currency="USD",
+            transaction_fx_rate=Decimal("1"),
+        )
+
+    baseline_components = {
+        "allocated_cost_basis_local": Decimal("1200"),
+        "allocated_cost_basis_base": Decimal("1210"),
+        "realized_capital_pnl_local": Decimal("200"),
+        "realized_fx_pnl_local": Decimal("10"),
+        "realized_total_pnl_local": Decimal("210"),
+        "realized_capital_pnl_base": Decimal("205"),
+        "realized_fx_pnl_base": Decimal("12"),
+        "realized_total_pnl_base": Decimal("217"),
+    }
+    changed_components = dict(baseline_components)
+    changed_components[changed_field] += Decimal("1")
+    component_outputs = iter((baseline_components, changed_components))
+
+    strategy = MagicMock()
+
+    def calculate_costs(calculated_transaction, *_args) -> None:
+        calculated_transaction.gross_cost = Decimal("1500")
+        calculated_transaction.net_cost = Decimal("1510")
+        calculated_transaction.net_cost_local = Decimal("1510")
+        calculated_transaction.realized_gain_loss = Decimal("217")
+        calculated_transaction.realized_gain_loss_local = Decimal("210")
+        for field_name, value in next(component_outputs).items():
+            calculated_transaction.set_calculated_field(field_name, value)
+
+    strategy.calculate_costs.side_effect = calculate_costs
+    cost_calculator._strategies["BUY"] = strategy
+    baseline = transaction()
+    changed = transaction()
+
+    cost_calculator.calculate_transaction_costs(baseline)
+    cost_calculator.calculate_transaction_costs(changed)
+
+    baseline_lineage = baseline.calculation_lineage
+    changed_lineage = changed.calculation_lineage
+    assert baseline_lineage is not None
+    assert changed_lineage is not None
+    assert baseline_lineage.input_content_hash == changed_lineage.input_content_hash
+    assert (
+        baseline.gross_cost,
+        baseline.net_cost,
+        baseline.net_cost_local,
+        baseline.realized_gain_loss,
+        baseline.realized_gain_loss_local,
+    ) == (
+        changed.gross_cost,
+        changed.net_cost,
+        changed.net_cost_local,
+        changed.realized_gain_loss,
+        changed.realized_gain_loss_local,
+    )
+    assert baseline_lineage.output_content_hash != changed_lineage.output_content_hash
+
+
+def test_transaction_cost_lineage_replay_excludes_stale_decomposition_outputs(
+    cost_calculator,
+) -> None:
+    source = {
+        "transaction_id": "BUY-DECOMPOSITION-REPLAY-001",
+        "portfolio_id": "P1",
+        "instrument_id": "AAPL",
+        "security_id": "AAPL",
+        "transaction_type": "BUY",
+        "transaction_date": datetime(2026, 1, 1),
+        "quantity": Decimal("10"),
+        "gross_transaction_amount": Decimal("1500"),
+        "trade_currency": "USD",
+        "portfolio_base_currency": "USD",
+        "transaction_fx_rate": Decimal("1"),
+    }
+    calculated_outputs = {
+        "allocated_cost_basis_base": Decimal("1210"),
+        "allocated_cost_basis_local": Decimal("1200"),
+        "realized_capital_pnl_base": Decimal("205"),
+        "realized_capital_pnl_local": Decimal("200"),
+        "realized_fx_pnl_base": Decimal("12"),
+        "realized_fx_pnl_local": Decimal("10"),
+        "realized_total_pnl_base": Decimal("217"),
+        "realized_total_pnl_local": Decimal("210"),
+    }
+    fresh = CostBasisTransaction(**source)
+    replay = CostBasisTransaction(**source, **calculated_outputs)
+    strategy = MagicMock()
+
+    def calculate_costs(transaction, *_args) -> None:
+        transaction.gross_cost = Decimal("1500")
+        transaction.net_cost = Decimal("1510")
+        transaction.net_cost_local = Decimal("1510")
+        transaction.realized_gain_loss = Decimal("217")
+        transaction.realized_gain_loss_local = Decimal("210")
+        for field_name, value in calculated_outputs.items():
+            transaction.set_calculated_field(field_name, value)
+
+    strategy.calculate_costs.side_effect = calculate_costs
+    cost_calculator._strategies["BUY"] = strategy
+
+    cost_calculator.calculate_transaction_costs(fresh)
+    cost_calculator.calculate_transaction_costs(replay)
+
+    assert fresh.calculation_lineage is not None
+    assert replay.calculation_lineage is not None
+    assert (
+        fresh.calculation_lineage.input_content_hash
+        == replay.calculation_lineage.input_content_hash
+    )
+    assert (
+        fresh.calculation_lineage.output_content_hash
+        == replay.calculation_lineage.output_content_hash
+    )
+
+
 def test_buy_strategy_dual_currency(cost_calculator, mock_disposition_engine):
     dual_currency_buy = CostBasisTransaction(
         transaction_id="DC_BUY_01",

@@ -6,7 +6,10 @@ from typing import Any
 
 from portfolio_common.database_models import AverageCostPoolState, PositionLotState
 from portfolio_common.database_models import Transaction as DBTransaction
-from portfolio_common.domain.calculation_lineage import calculation_lineage_from_payload
+from portfolio_common.domain.calculation_lineage import (
+    CalculationLineage,
+    calculation_lineage_from_payload,
+)
 from portfolio_common.events import TransactionEvent
 from portfolio_common.identifiers import normalize_lookup_identifier
 from sqlalchemy import func, select, update
@@ -19,7 +22,10 @@ from ...domain.cost_basis import (
     AverageCostPoolTransition,
     OpenLotState,
 )
-from ...domain.cost_basis.state_lineage import build_cost_basis_state_lineage
+from ...domain.cost_basis.state_lineage import (
+    CostBasisStateTransitionEvidence,
+    build_cost_basis_state_lineage,
+)
 from ...ports import AverageCostPoolCheckpointRecord, AverageCostPoolPersistedSummary
 from ..transaction_mapping.booked_transaction import to_booked_transaction
 from .lot_state_mapper import buy_lot_state_payload, mutable_lot_state_fields
@@ -158,12 +164,19 @@ class SqlAlchemyAverageCostPoolRepository:
         )
         await self._scale_existing_average_cost_sources(
             transition,
+            transition_lineage=transition_lineage,
         )
         if transition.explicit_sources_after:
+            trigger_transaction_id = next(reversed(tuple(transition.explicit_sources_after)))
             await self.update_selected_open_lot_states(
                 portfolio_id=transition.before.portfolio_id,
                 security_id=transition.before.security_id,
                 states_by_source_transaction_id=dict(transition.explicit_sources_after),
+                transition_evidence=CostBasisStateTransitionEvidence(
+                    trigger_transaction_id=trigger_transaction_id,
+                    transition_kind="average_cost_pool_transition",
+                    transition_lineage=transition_lineage,
+                ),
             )
         await self.upsert_average_cost_pool_checkpoint(
             replace(after, calculation_lineage=transition_lineage)
@@ -289,17 +302,21 @@ class SqlAlchemyAverageCostPoolRepository:
         portfolio_id: str,
         security_id: str,
         states_by_source_transaction_id: dict[str, OpenLotState],
+        transition_evidence: CostBasisStateTransitionEvidence,
     ) -> None:
         """Update selected pool source lots without closing omitted open lots."""
         await self._lot_states.update_selected_open_lot_states(
             portfolio_id=portfolio_id,
             security_id=security_id,
             states_by_source_transaction_id=states_by_source_transaction_id,
+            transition_evidence=transition_evidence,
         )
 
     async def _scale_existing_average_cost_sources(
         self,
         transition: AverageCostPoolTransition,
+        *,
+        transition_lineage: CalculationLineage,
     ) -> None:
         before = transition.before
         after = transition.existing_sources_after
@@ -334,6 +351,7 @@ class SqlAlchemyAverageCostPoolRepository:
                 predicates=predicates,
                 source_states_before=source_states_before,
                 transition=transition,
+                transition_lineage=transition_lineage,
             )
             return
 
@@ -408,6 +426,7 @@ class SqlAlchemyAverageCostPoolRepository:
             predicates=predicates,
             source_states_before=source_states_before,
             transition=transition,
+            transition_lineage=transition_lineage,
         )
 
     async def _load_average_cost_source_states(
@@ -421,6 +440,7 @@ class SqlAlchemyAverageCostPoolRepository:
                     PositionLotState.open_quantity,
                     PositionLotState.lot_cost_local,
                     PositionLotState.lot_cost_base,
+                    PositionLotState.calculation_lineage,
                 )
                 .where(*predicates)
                 .order_by(PositionLotState.source_transaction_id)
@@ -432,8 +452,9 @@ class SqlAlchemyAverageCostPoolRepository:
                 "cost_local": cost_local,
                 "quantity": quantity,
                 "source_transaction_id": source_transaction_id,
+                "prior_calculation_lineage": calculation_lineage,
             }
-            for source_transaction_id, quantity, cost_local, cost_base in rows
+            for source_transaction_id, quantity, cost_local, cost_base, calculation_lineage in rows
         }
 
     async def _refresh_average_cost_source_lineage(
@@ -442,6 +463,7 @@ class SqlAlchemyAverageCostPoolRepository:
         predicates: list[Any],
         source_states_before: dict[str, dict[str, object]],
         transition: AverageCostPoolTransition,
+        transition_lineage: CalculationLineage,
     ) -> None:
         source_rows = (
             (
@@ -463,6 +485,9 @@ class SqlAlchemyAverageCostPoolRepository:
                 raise ValueError(
                     "Average cost source identity changed during the locked transition"
                 )
+            prior_lineage = calculation_lineage_from_payload(
+                state_before["prior_calculation_lineage"]
+            )
             output_payload = {
                 "cost_base": row.lot_cost_base,
                 "cost_local": row.lot_cost_local,
@@ -474,7 +499,15 @@ class SqlAlchemyAverageCostPoolRepository:
                 input_payload={
                     "pool_before": _checkpoint_payload(transition.before),
                     "pool_target": _open_lot_state_payload(transition.existing_sources_after),
-                    "source_before": state_before,
+                    "prior_calculation_lineage": (
+                        prior_lineage.lineage_payload() if prior_lineage is not None else None
+                    ),
+                    "source_before": {
+                        key: value
+                        for key, value in state_before.items()
+                        if key != "prior_calculation_lineage"
+                    },
+                    "transition_lineage": transition_lineage.lineage_payload(),
                 },
                 output_payload=output_payload,
             ).lineage_payload()
@@ -490,6 +523,11 @@ def _open_lot_state_payload(state: OpenLotState) -> dict[str, object]:
 
 def _checkpoint_payload(checkpoint: AverageCostPoolCheckpoint) -> dict[str, object]:
     return {
+        "calculation_lineage": (
+            checkpoint.calculation_lineage.lineage_payload()
+            if checkpoint.calculation_lineage is not None
+            else None
+        ),
         "cost_base": checkpoint.cost_base,
         "cost_local": checkpoint.cost_local,
         "instrument_id": checkpoint.instrument_id,

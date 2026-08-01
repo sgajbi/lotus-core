@@ -5,6 +5,7 @@ from decimal import Decimal
 from unittest.mock import AsyncMock
 
 import pytest
+from portfolio_common.domain.calculation_lineage import build_calculation_lineage
 from portfolio_common.domain.cost_basis_method import CostBasisMethod
 
 from src.services.portfolio_transaction_processing_service.app.application import (
@@ -13,6 +14,7 @@ from src.services.portfolio_transaction_processing_service.app.application impor
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
     AverageCostPoolCheckpoint,
     AverageCostPoolTransition,
+    CostBasisTransaction,
     OpenLotState,
 )
 from src.services.portfolio_transaction_processing_service.app.domain.transaction import (
@@ -55,6 +57,29 @@ def _open_lot_states() -> dict[str, OpenLotState]:
     }
 
 
+def _processed(transaction_type: str = "SELL") -> list[CostBasisTransaction]:
+    transaction = CostBasisTransaction(
+        transaction_id=f"{transaction_type}-1",
+        portfolio_id="PORT-1",
+        instrument_id="INST-1",
+        security_id="SEC-1",
+        transaction_type=transaction_type,
+        transaction_date=datetime(2026, 1, 2),
+        quantity=Decimal("4"),
+        gross_transaction_amount=Decimal("48"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+    )
+    transaction.calculation_lineage = build_calculation_lineage(
+        algorithm_id="test-cost-basis-calculation",
+        algorithm_version=1,
+        intermediate_precision=28,
+        input_payload={"transaction_id": transaction.transaction_id},
+        output_payload={"net_cost": Decimal("48")},
+    )
+    return [transaction]
+
+
 async def test_full_rebuild_replaces_complete_open_lot_snapshot() -> None:
     average_cost_pools = AsyncMock(spec=CostBasisAverageCostPoolPort)
     lot_states = AsyncMock(spec=CostBasisLotStatePort)
@@ -70,12 +95,16 @@ async def test_full_rebuild_replaces_complete_open_lot_snapshot() -> None:
         persistence_scope=OpenLotPersistenceScope.COMPLETE_SNAPSHOT,
         cost_basis_method=CostBasisMethod.FIFO,
         average_cost_pool_transition=None,
+        processed=_processed("DIVIDEND"),
     )
 
     lot_states.update_open_lot_states.assert_awaited_once_with(
         portfolio_id="PORT-1",
         security_id="SEC-1",
         states_by_source_transaction_id=states,
+        transition_evidence=lot_states.update_open_lot_states.await_args.kwargs[
+            "transition_evidence"
+        ],
     )
     lot_states.update_selected_open_lot_states.assert_not_awaited()
     average_cost_pools.upsert_average_cost_pool_checkpoint.assert_not_awaited()
@@ -105,6 +134,7 @@ async def test_initial_opening_lot_does_not_reread_complete_snapshot(
         persistence_scope=OpenLotPersistenceScope.INITIAL_OPENING_LOT,
         cost_basis_method=cost_basis_method,
         average_cost_pool_transition=None,
+        processed=_processed("BUY"),
     )
 
     lot_states.update_open_lot_states.assert_not_awaited()
@@ -131,6 +161,7 @@ async def test_incremental_non_lot_transaction_preserves_existing_snapshot() -> 
         persistence_scope=OpenLotPersistenceScope.COMPLETE_SNAPSHOT,
         cost_basis_method=CostBasisMethod.FIFO,
         average_cost_pool_transition=None,
+        processed=_processed("DIVIDEND"),
     )
 
     lot_states.update_open_lot_states.assert_not_awaited()
@@ -153,12 +184,16 @@ async def test_incremental_fifo_disposal_updates_only_selected_lots() -> None:
         persistence_scope=OpenLotPersistenceScope.SELECTED_LOTS,
         cost_basis_method=CostBasisMethod.FIFO,
         average_cost_pool_transition=None,
+        processed=_processed(),
     )
 
     lot_states.update_selected_open_lot_states.assert_awaited_once_with(
         portfolio_id="PORT-1",
         security_id="SEC-1",
         states_by_source_transaction_id=states,
+        transition_evidence=lot_states.update_selected_open_lot_states.await_args.kwargs[
+            "transition_evidence"
+        ],
     )
     lot_states.update_open_lot_states.assert_not_awaited()
 
@@ -190,6 +225,7 @@ async def test_average_cost_transition_is_applied_atomically() -> None:
         persistence_scope=OpenLotPersistenceScope.AVERAGE_COST_POOL,
         cost_basis_method=CostBasisMethod.AVCO,
         average_cost_pool_transition=transition,
+        processed=_processed(),
     )
 
     average_cost_pools.apply_average_cost_pool_transition.assert_awaited_once_with(transition)
@@ -213,6 +249,7 @@ async def test_full_avco_rebuild_establishes_pool_checkpoint() -> None:
         persistence_scope=OpenLotPersistenceScope.COMPLETE_SNAPSHOT,
         cost_basis_method=CostBasisMethod.AVCO,
         average_cost_pool_transition=None,
+        processed=_processed("DIVIDEND"),
     )
 
     checkpoint = average_cost_pools.upsert_average_cost_pool_checkpoint.await_args.args[0]

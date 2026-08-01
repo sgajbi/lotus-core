@@ -22,6 +22,9 @@ from src.services.portfolio_transaction_processing_service.app.domain.cost_basis
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
     CostBasisTransaction as EngineTransaction,
 )
+from src.services.portfolio_transaction_processing_service.app.domain.cost_basis.state_lineage import (  # noqa: E501
+    CostBasisStateTransitionEvidence,
+)
 from src.services.portfolio_transaction_processing_service.app.domain.transaction import (
     BookedTransaction,
 )
@@ -32,6 +35,20 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure.co
 )
 
 pytestmark = pytest.mark.asyncio
+
+
+def _transition_evidence() -> CostBasisStateTransitionEvidence:
+    return CostBasisStateTransitionEvidence(
+        trigger_transaction_id="SELL01",
+        transition_kind="selected_lots",
+        transition_lineage=build_calculation_lineage(
+            algorithm_id="test-cost-basis-calculation",
+            algorithm_version=1,
+            intermediate_precision=28,
+            input_payload={"transaction_id": "SELL01"},
+            output_payload={"realized_gain_loss": Decimal("10")},
+        ),
+    )
 
 
 async def test_get_transaction_history_trims_portfolio_security_and_excluded_transaction_ids():
@@ -426,9 +443,16 @@ async def test_apply_average_cost_pool_transition_scales_sources_and_assigns_res
     db_session = AsyncMock()
     repository = SqlAlchemyAverageCostPoolRepository(db_session)
     states_before_result = MagicMock()
+    prior_source_lineage = build_calculation_lineage(
+        algorithm_id="prior-average-cost-source",
+        algorithm_version=1,
+        intermediate_precision=28,
+        input_payload={"source_revision": "1"},
+        output_payload={"quantity": Decimal("10")},
+    ).lineage_payload()
     states_before_result.all.return_value = [
-        ("BUY-1", Decimal("10"), Decimal("120"), Decimal("130")),
-        ("BUY-2", Decimal("5"), Decimal("60"), Decimal("65")),
+        ("BUY-1", Decimal("10"), Decimal("120"), Decimal("130"), prior_source_lineage),
+        ("BUY-2", Decimal("5"), Decimal("60"), Decimal("65"), prior_source_lineage),
     ]
     scale_result = MagicMock()
     aggregate_result = MagicMock()
@@ -443,12 +467,14 @@ async def test_apply_average_cost_pool_transition_scales_sources_and_assigns_res
         open_quantity=Decimal("7"),
         lot_cost_local=Decimal("70"),
         lot_cost_base=Decimal("77"),
+        calculation_lineage=prior_source_lineage,
     )
     second_source = MagicMock(
         source_transaction_id="BUY-2",
         open_quantity=Decimal("2"),
         lot_cost_local=Decimal("38"),
         lot_cost_base=Decimal("40"),
+        calculation_lineage=prior_source_lineage,
     )
     final_states_result = MagicMock()
     final_states_result.scalars.return_value.all.return_value = [first_source, second_source]
@@ -496,6 +522,65 @@ async def test_apply_average_cost_pool_transition_scales_sources_and_assigns_res
     )
     upsert_sql = str(db_session.execute.call_args_list[5].args[0].compile())
     assert "INSERT INTO average_cost_pool_state" in upsert_sql
+
+
+async def test_average_cost_source_lineage_binds_prior_and_transition_revisions() -> None:
+    transition = AverageCostPoolTransition(
+        before=_average_cost_checkpoint(),
+        existing_sources_after=OpenLotState(
+            quantity=Decimal("9"),
+            cost_local=Decimal("108"),
+            cost_base=Decimal("117"),
+        ),
+        explicit_sources_after={},
+    )
+
+    async def receipt(*, prior_revision: str, transition_revision: str) -> str:
+        db_session = AsyncMock()
+        row = MagicMock(
+            source_transaction_id="BUY-1",
+            open_quantity=Decimal("9"),
+            lot_cost_local=Decimal("108"),
+            lot_cost_base=Decimal("117"),
+            calculation_lineage=build_calculation_lineage(
+                algorithm_id="prior-average-cost-source",
+                algorithm_version=1,
+                intermediate_precision=28,
+                input_payload={"source_revision": prior_revision},
+                output_payload={"quantity": Decimal("10")},
+            ).lineage_payload(),
+        )
+        result = MagicMock()
+        result.scalars.return_value.all.return_value = [row]
+        db_session.execute.return_value = result
+        await SqlAlchemyAverageCostPoolRepository(db_session)._refresh_average_cost_source_lineage(
+            predicates=[],
+            source_states_before={
+                "BUY-1": {
+                    "cost_base": Decimal("130"),
+                    "cost_local": Decimal("120"),
+                    "prior_calculation_lineage": row.calculation_lineage,
+                    "quantity": Decimal("10"),
+                    "source_transaction_id": "BUY-1",
+                }
+            },
+            transition=transition,
+            transition_lineage=build_calculation_lineage(
+                algorithm_id="average-cost-pool-transition",
+                algorithm_version=1,
+                intermediate_precision=28,
+                input_payload={"source_revision": transition_revision},
+                output_payload={"quantity": Decimal("9")},
+            ),
+        )
+        return str(row.calculation_lineage["input_content_hash"])
+
+    baseline = await receipt(prior_revision="1", transition_revision="1")
+    changed_prior = await receipt(prior_revision="2", transition_revision="1")
+    changed_transition = await receipt(prior_revision="1", transition_revision="2")
+
+    assert changed_prior != baseline
+    assert changed_transition != baseline
 
 
 async def test_apply_average_cost_pool_transition_rejects_missing_close_sources() -> None:
@@ -707,6 +792,7 @@ async def test_update_open_lot_states_trims_ids_and_reconciles_quantity_and_cost
                 cost_base=Decimal("420"),
             )
         },
+        transition_evidence=_transition_evidence(),
     )
 
     assert lot_row.open_quantity == Decimal("4")
@@ -767,6 +853,7 @@ async def test_update_selected_open_lot_states_does_not_close_omitted_lots() -> 
                 cost_base=Decimal("420"),
             )
         },
+        transition_evidence=_transition_evidence(),
     )
 
     assert selected_lot.open_quantity == Decimal("4")
@@ -779,6 +866,71 @@ async def test_update_selected_open_lot_states_does_not_close_omitted_lots() -> 
         db_session.execute.call_args.args[0].compile(compile_kwargs={"literal_binds": True})
     )
     assert "position_lot_state.source_transaction_id IN ('BUY01')" in compiled_query
+
+
+async def test_lot_state_lineage_binds_trigger_and_prior_state_for_identical_output() -> None:
+    def lot_row(*, prior_marker: str) -> PositionLotState:
+        prior_lineage = build_calculation_lineage(
+            algorithm_id="prior-lot-state",
+            algorithm_version=1,
+            intermediate_precision=28,
+            input_payload={"marker": prior_marker},
+            output_payload={"quantity": Decimal("10")},
+        )
+        return PositionLotState(
+            lot_id=f"LOT-{prior_marker}",
+            source_transaction_id="BUY01",
+            portfolio_id="PORT_COST_01",
+            instrument_id="SEC01",
+            security_id="SEC01",
+            acquisition_date=date(2026, 1, 1),
+            original_quantity=Decimal("10"),
+            open_quantity=Decimal("10"),
+            lot_cost_local=Decimal("1000"),
+            lot_cost_base=Decimal("1000"),
+            calculation_lineage=prior_lineage.lineage_payload(),
+        )
+
+    async def update(
+        row: PositionLotState,
+        *,
+        trigger_marker: str,
+    ) -> str:
+        db_session = AsyncMock()
+        result = MagicMock()
+        result.scalars.return_value.all.return_value = [row]
+        db_session.execute.return_value = result
+        evidence = CostBasisStateTransitionEvidence(
+            trigger_transaction_id="SELL01",
+            transition_kind="selected_lots",
+            transition_lineage=build_calculation_lineage(
+                algorithm_id="trigger-cost-basis",
+                algorithm_version=1,
+                intermediate_precision=28,
+                input_payload={"marker": trigger_marker},
+                output_payload={"realized_gain_loss": Decimal("10")},
+            ),
+        )
+        await SqlAlchemyCostBasisLotRepository(db_session).update_selected_open_lot_states(
+            portfolio_id="PORT_COST_01",
+            security_id="SEC01",
+            states_by_source_transaction_id={
+                "BUY01": OpenLotState(
+                    quantity=Decimal("4"),
+                    cost_local=Decimal("400"),
+                    cost_base=Decimal("420"),
+                )
+            },
+            transition_evidence=evidence,
+        )
+        return str(row.calculation_lineage["input_content_hash"])
+
+    baseline_hash = await update(lot_row(prior_marker="prior-a"), trigger_marker="trigger-a")
+    changed_trigger_hash = await update(lot_row(prior_marker="prior-a"), trigger_marker="trigger-b")
+    changed_prior_hash = await update(lot_row(prior_marker="prior-b"), trigger_marker="trigger-a")
+
+    assert changed_trigger_hash != baseline_hash
+    assert changed_prior_hash != baseline_hash
 
 
 async def test_update_selected_open_lot_states_rejects_missing_source_lot() -> None:
@@ -799,6 +951,7 @@ async def test_update_selected_open_lot_states_rejects_missing_source_lot() -> N
                     cost_base=Decimal("420"),
                 )
             },
+            transition_evidence=_transition_evidence(),
         )
 
 
@@ -810,6 +963,7 @@ async def test_update_selected_open_lot_states_skips_empty_selection() -> None:
         portfolio_id="PORT_COST_01",
         security_id="SEC01",
         states_by_source_transaction_id={},
+        transition_evidence=_transition_evidence(),
     )
 
     db_session.execute.assert_not_awaited()

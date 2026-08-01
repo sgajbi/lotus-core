@@ -26,7 +26,10 @@ POLICY_KEYS = {
     "lineage_binding",
     "lineage_gap_callsites",
 }
-OPTIONAL_POLICY_KEYS = {"lineage_boundary_callsites"}
+OPTIONAL_POLICY_KEYS = {
+    "lineage_boundary_callsites",
+    "lineage_boundary_covered_callsites",
+}
 LINEAGE_BINDINGS = {"required", "partial", "not-exposed"}
 EXECUTION_METHODS = {
     "add",
@@ -185,6 +188,202 @@ def _usage(
             terminal_control_flow_gaps=terminal_control_flow_gaps,
         ).visit(tree)
     return execution, lineage, control_flow_gaps, terminal_control_flow_gaps
+
+
+def _call_graph(repo_root: Path) -> dict[str, set[str]]:
+    """Build import-aware callee-to-caller edges for boundary reachability."""
+
+    trees: list[tuple[str, str, ast.Module]] = []
+    callables_by_name: dict[str, set[str]] = {}
+    properties_by_name: dict[str, set[str]] = {}
+    callables_by_dotted_name: dict[str, set[str]] = {}
+    properties_by_dotted_name: dict[str, set[str]] = {}
+    local_callables: dict[tuple[str, str], set[str]] = {}
+    local_properties: dict[tuple[str, str], set[str]] = {}
+    for path in sorted((repo_root / "src").rglob("*.py")):
+        relative_path = path.relative_to(repo_root).as_posix()
+        module_name = _source_module(relative_path)
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        trees.append((relative_path, module_name, tree))
+        callables_by_name.setdefault("<module>", set()).add(f"{relative_path}::<module>")
+
+        class CallableCollector(ast.NodeVisitor):
+            def __init__(self) -> None:
+                self.scope: list[str] = []
+
+            def visit_ClassDef(self, node: ast.ClassDef) -> None:
+                self.scope.append(node.name)
+                self.generic_visit(node)
+                self.scope.pop()
+
+            def _visit_function(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
+                qualified_name = ".".join((*self.scope, node.name))
+                callsite = f"{relative_path}::{qualified_name}"
+                callables_by_name.setdefault(node.name, set()).add(callsite)
+                callables_by_dotted_name.setdefault(f"{module_name}.{qualified_name}", set()).add(
+                    callsite
+                )
+                local_callables.setdefault((relative_path, node.name), set()).add(callsite)
+                if any(
+                    isinstance(decorator, ast.Name) and decorator.id == "property"
+                    for decorator in node.decorator_list
+                ):
+                    properties_by_name.setdefault(node.name, set()).add(callsite)
+                    properties_by_dotted_name.setdefault(
+                        f"{module_name}.{qualified_name}", set()
+                    ).add(callsite)
+                    local_properties.setdefault((relative_path, node.name), set()).add(callsite)
+                self.scope.append(node.name)
+                self.generic_visit(node)
+                self.scope.pop()
+
+            visit_FunctionDef = _visit_function
+            visit_AsyncFunctionDef = _visit_function
+
+        CallableCollector().visit(tree)
+
+    graph: dict[str, set[str]] = {
+        callsite: set() for callsites in callables_by_name.values() for callsite in callsites
+    }
+    for relative_path, module_name, tree in trees:
+        module_aliases: dict[str, str] = {}
+        symbol_aliases: dict[str, str] = {}
+        package_parts = module_name.split(".")[:-1]
+        for statement in tree.body:
+            if isinstance(statement, ast.Import):
+                for alias in statement.names:
+                    root_name = alias.name.split(".")[0]
+                    module_aliases[alias.asname or root_name] = (
+                        alias.name if alias.asname else root_name
+                    )
+            elif isinstance(statement, ast.ImportFrom):
+                imported_module_parts = package_parts[:]
+                if statement.level:
+                    imported_module_parts = imported_module_parts[
+                        : len(imported_module_parts) - (statement.level - 1)
+                    ]
+                else:
+                    imported_module_parts = []
+                if statement.module:
+                    imported_module_parts.extend(statement.module.split("."))
+                imported_module = ".".join(imported_module_parts)
+                for alias in statement.names:
+                    if alias.name != "*":
+                        symbol_aliases[alias.asname or alias.name] = (
+                            f"{imported_module}.{alias.name}"
+                        )
+
+        class CallCollector(ast.NodeVisitor):
+            def __init__(self) -> None:
+                self.scope: list[str] = []
+
+            @property
+            def caller(self) -> str:
+                qualified_name = ".".join(self.scope) if self.scope else "<module>"
+                return f"{relative_path}::{qualified_name}"
+
+            def visit_ClassDef(self, node: ast.ClassDef) -> None:
+                self.scope.append(node.name)
+                self.generic_visit(node)
+                self.scope.pop()
+
+            def _visit_function(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
+                self.scope.append(node.name)
+                self.generic_visit(node)
+                self.scope.pop()
+
+            visit_FunctionDef = _visit_function
+            visit_AsyncFunctionDef = _visit_function
+
+            @staticmethod
+            def _attribute_parts(expression: ast.Attribute) -> list[str] | None:
+                parts = [expression.attr]
+                value = expression.value
+                while isinstance(value, ast.Attribute):
+                    parts.append(value.attr)
+                    value = value.value
+                if not isinstance(value, ast.Name):
+                    return None
+                parts.append(value.id)
+                return list(reversed(parts))
+
+            def _resolve_name(self, name: str) -> set[str]:
+                imported = symbol_aliases.get(name)
+                if imported is not None:
+                    return callables_by_dotted_name.get(imported, set())
+                local = local_callables.get((relative_path, name), set())
+                if local:
+                    return local
+                candidates = callables_by_name.get(name, set())
+                return candidates if len(candidates) == 1 else set()
+
+            def _resolve_attribute(
+                self,
+                expression: ast.Attribute,
+                *,
+                properties: bool = False,
+            ) -> set[str]:
+                parts = self._attribute_parts(expression)
+                dotted_index = properties_by_dotted_name if properties else callables_by_dotted_name
+                local_index = local_properties if properties else local_callables
+                name_index = properties_by_name if properties else callables_by_name
+                if parts:
+                    root = parts[0]
+                    imported_root = module_aliases.get(root) or symbol_aliases.get(root)
+                    if imported_root is not None:
+                        dotted_name = ".".join((imported_root, *parts[1:]))
+                        return dotted_index.get(dotted_name, set())
+                name = expression.attr
+                if parts and parts[0] in {"self", "cls"} and len(parts) == 2:
+                    local = local_index.get((relative_path, name), set())
+                    if local:
+                        return local
+                candidates = name_index.get(name, set())
+                # An attribute call can be protocol/interface dispatch. Its receiver
+                # is runtime-selected, so every same-named method is a possible
+                # callee; directionality still prevents sibling/common-helper paths.
+                return candidates
+
+            def _connect(self, callees: set[str]) -> None:
+                graph.setdefault(self.caller, set())
+                for callee in callees:
+                    graph[callee].add(self.caller)
+
+            def visit_Call(self, node: ast.Call) -> None:
+                if isinstance(node.func, ast.Name):
+                    self._connect(self._resolve_name(node.func.id))
+                elif isinstance(node.func, ast.Attribute):
+                    self._connect(self._resolve_attribute(node.func))
+                self.generic_visit(node)
+
+            def visit_Attribute(self, node: ast.Attribute) -> None:
+                if isinstance(node.ctx, ast.Load):
+                    self._connect(self._resolve_attribute(node, properties=True))
+                self.generic_visit(node)
+
+        CallCollector().visit(tree)
+    return graph
+
+
+def _call_graph_reaches(
+    graph: dict[str, set[str]],
+    *,
+    source: str,
+    target: str,
+) -> bool:
+    if source not in graph or target not in graph:
+        return False
+    pending = [source]
+    visited: set[str] = set()
+    while pending:
+        callsite = pending.pop()
+        if callsite == target:
+            return True
+        if callsite in visited:
+            continue
+        visited.add(callsite)
+        pending.extend(graph[callsite] - visited)
+    return False
 
 
 class _UsageVisitor(ast.NodeVisitor):
@@ -800,6 +999,7 @@ def evaluate(repo_root: Path, contract_path: Path) -> tuple[str, ...]:
         control_flow_gaps,
         terminal_control_flow_gaps,
     ) = _usage(repo_root, declarations)
+    call_graph = _call_graph(repo_root)
     for constant in sorted(set(declarations) & set(policies)):
         declaration = declarations[constant]
         policy = policies[constant]
@@ -867,6 +1067,29 @@ def evaluate(repo_root: Path, contract_path: Path) -> tuple[str, ...]:
                 "path::callable values"
             )
             continue
+        raw_boundary_coverage = policy.get("lineage_boundary_covered_callsites", {})
+        valid_boundary_coverage = (
+            isinstance(raw_boundary_coverage, dict)
+            and list(raw_boundary_coverage) == sorted(raw_boundary_coverage)
+            and all(
+                isinstance(boundary, str)
+                and boundary in boundary_callsites
+                and isinstance(covered_callsites, list)
+                and all(
+                    isinstance(callsite, str) and callsite.strip() and "::" in callsite
+                    for callsite in covered_callsites
+                )
+                and covered_callsites == sorted(set(covered_callsites))
+                for boundary, covered_callsites in raw_boundary_coverage.items()
+            )
+        )
+        if not valid_boundary_coverage:
+            findings.append(
+                f"{constant}.lineage_boundary_covered_callsites: must be an object keyed by "
+                "declared boundary callsite with sorted unique path::callable value lists"
+            )
+            continue
+        boundary_coverage = cast(dict[str, list[str]], raw_boundary_coverage)
         unverified_boundaries = set(boundary_callsites) - lineage_callsites
         for callsite in sorted(unverified_boundaries):
             findings.append(
@@ -877,7 +1100,26 @@ def evaluate(repo_root: Path, contract_path: Path) -> tuple[str, ...]:
             | control_flow_gaps[constant]
             | terminal_control_flow_gaps[constant]
         )
-        effective_gaps = computed_gaps if not boundary_callsites or unverified_boundaries else set()
+        covered_callsites: set[str] = set()
+        for boundary, callsites in boundary_coverage.items():
+            if boundary in unverified_boundaries:
+                continue
+            for callsite in callsites:
+                if callsite not in computed_gaps:
+                    findings.append(f"{constant}: stale lineage boundary coverage at {callsite}")
+                    continue
+                if not _call_graph_reaches(
+                    call_graph,
+                    source=callsite,
+                    target=boundary,
+                ):
+                    findings.append(
+                        f"{constant}: lineage boundary coverage has no call-graph path from "
+                        f"{callsite} to {boundary}"
+                    )
+                    continue
+                covered_callsites.add(callsite)
+        effective_gaps = computed_gaps - covered_callsites
         contract_gaps = set(gap_callsites)
         for callsite in sorted(effective_gaps - contract_gaps):
             findings.append(f"{constant}: unclassified lineage gap at {callsite}")

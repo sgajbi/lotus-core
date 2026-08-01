@@ -42,6 +42,11 @@ contracts.
   though its output hash described only the pool checkpoint. It also found lineage-only
   position-timeseries recalculation was discarded when financial values and source timestamps were
   unchanged.
+- Final PR #877 review found three remaining trust gaps: transaction lineage omitted the persisted
+  cost decomposition outputs, position-history evidence did not bind the exact upstream booked
+  transaction receipt, and lot-state receipts did not bind the consuming transition or prior
+  durable state. The first call-graph boundary implementation also allowed unrelated same-named
+  functions to satisfy declared coverage through ambiguous imports or shared helpers.
 
 ## Resolution
 
@@ -139,6 +144,24 @@ contracts.
   prior source state, pool transition, and exact persisted row output; membership drift fails
   closed. Position-timeseries now upserts a changed receipt independently of numeric restaging, so
   legacy-null or stale evidence is repaired without publishing a false business-state change.
+- Completed transaction cost receipts with all persisted local/base cost-basis and realized-P&L
+  components while excluding those calculated outputs from replay inputs, so stale persisted values
+  cannot destabilize idempotent input identity. Booked transactions now carry typed optional
+  lineage internally while both Kafka mappers continue to omit this derived evidence from the
+  established transport contract. Position-history receipts bind that upstream lineage.
+- Added one compact cost-basis transition receipt per calculation. It binds the consuming
+  transaction identity and lineage, ordered processed-transaction receipts, transition kind, and
+  final lot-state snapshot. Each persisted lot then binds that receipt and its own prior durable
+  lineage, retaining change sensitivity without transaction-by-lot hashing. AVCO receipts likewise
+  bind prior row/checkpoint lineage and the exact transition receipt while preserving bounded,
+  set-based database work.
+- Replaced trust-by-declaration boundary coverage with a directed source call graph. Exact imported
+  symbols and module-qualified calls resolve to exact callables; same-file calls resolve locally;
+  ambiguous bare names fail closed; and protocol-style attribute dispatch remains conservative.
+  Negative tests prove that unrelated same-named functions, shared-helper siblings, aliased imports,
+  and unaliased dotted imports cannot certify a declared boundary.
+- Removed the unused `CostLot.total_cost_local` and `CostLot.total_cost_base` compatibility
+  properties after repository-wide usage analysis proved that no caller consumed them.
 
 The later cashflow persistence slice adds one nullable JSON column and no topic or runtime-topology
 change. Exactly representable inputs, cashflow formulas, serialized Decimal amounts, transaction
@@ -211,7 +234,7 @@ identity, and public response shapes remain unchanged.
 - Signed commits `498cb0514`, `443d53b67`, `500bbdfbb`, `b62b8e892`, and `7d1899b53`
   implement the five remaining owner families. Their focused suites passed 21, 113, 83, 57, and
   203 tests respectively, with repository-native Ruff and MyPy validation.
-- The closure guard suite passes 100 tests; `make calculated-output-policy-guard` reports eight
+- The closure guard suite passes 105 tests; `make calculated-output-policy-guard` reports eight
   classified policies and `make financial-numeric-persistence-guard` reports 98 Numeric columns
   across 31 tables, 97 bounded and one exact-unbounded, with zero planned gaps.
 - Four exact-source PostgreSQL lifecycle proofs pass in 403.47 seconds: FIFO transaction cost,
@@ -220,9 +243,10 @@ identity, and public response shapes remain unchanged.
   event. The preceding cached-image run stopped before migrations `c134` through `c138` and failed
   on absent columns; rebuilding the branch-qualified runtime converted all four to green and is
   retained only as invalid stale-runtime diagnostic evidence.
-- PR #877 fix-forward passes 33 warning-strict AVCO/position-materialization tests, MyPy across 241
-  source files, focused Ruff/format/diff gates, and an exact-source PostgreSQL AVCO row-output-hash
-  proof (`1 passed in 55.68s`).
+- PR #877 fix-forward passes the warning-strict AVCO/position-materialization tests, MyPy across 241
+  source files, focused Ruff/format/diff gates, and exact-source PostgreSQL AVCO row-output-hash and
+  bounded-work proofs. Final transaction processing/buy contract and protected CI evidence are
+  recorded on PR #877 and issue #829 at the exact signed head.
 
 ## Compatibility and remaining work
 
