@@ -33,6 +33,12 @@ from .policy import (
     YieldApplicationConvention,
     classify_amortized_cost_direction,
 )
+from .resolution import (
+    AmortizedCostInputResolutionError,
+    LotAmortizedCostAuthorityCacheKey,
+    ResolvedLotAmortizedCostInputs,
+    resolve_lot_amortized_cost_inputs,
+)
 from .source_facts import (
     AmortizedCostSourceFactStatus,
     AmortizedCostSourceMetadata,
@@ -51,6 +57,7 @@ __all__ = [
     "AmortizedCostDirection",
     "AmortizedCostCalculationError",
     "AmortizedCostEligibilityReason",
+    "AmortizedCostInputResolutionError",
     "AmortizedCostMethod",
     "AmortizedCostPolicy",
     "AmortizedCostProfileStatus",
@@ -63,6 +70,7 @@ __all__ = [
     "AmortizationPeriodResult",
     "DiscountOriginClassification",
     "LotAmortizationScheduleFact",
+    "LotAmortizedCostAuthorityCacheKey",
     "LotAmortizedCostBasisFact",
     "LotAmortizedCostPolicyAssignment",
     "LotBookCostAuthorityScope",
@@ -70,10 +78,12 @@ __all__ = [
     "MissingAmortizedCostAssignmentError",
     "OverlappingAmortizedCostAssignmentError",
     "ResolvedAmortizedCostAssignment",
+    "ResolvedLotAmortizedCostInputs",
     "YieldApplicationConvention",
     "amortization_replay_start_for_assignment_correction",
     "calculate_amortized_cost_schedule",
     "classify_amortized_cost_direction",
     "resolve_amortized_cost_assignment",
+    "resolve_lot_amortized_cost_inputs",
     "validate_no_overlapping_active_amortized_cost_assignments",
 ]
