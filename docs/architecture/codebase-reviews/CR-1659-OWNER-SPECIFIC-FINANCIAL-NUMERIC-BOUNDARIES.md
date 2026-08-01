@@ -293,9 +293,13 @@ identity, and public response shapes remain unchanged.
   cryptographically verifies allowlisted incremental receipts against that checkpoint. Malformed,
   unknown, copied, or output-mismatched receipts fail closed. The validation uses one ordered,
   projection-only query in the operator-owned reconciliation path; it adds no hot-path query or
-  N+1 behavior. The final focused warning-strict suite passes 85 tests, full MyPy passes across 241
-  source files, and the Bandit gate reports zero findings. Production assertions were replaced by
-  an explicit fail-closed transition-evidence boundary.
+  N+1 behavior. Protected contract proof then exposed numerically equal `Decimal` values hashing
+  differently before and after PostgreSQL imposed the declared scale. The cost-basis receipt
+  builder now canonicalizes every nested numeric output to its governed 10-decimal persistence
+  representation before hashing, while leaving calculation inputs unchanged. The final focused
+  warning-strict suite passes 89 tests, the complete transaction-processing contract passes all 76
+  tests, full MyPy passes across 241 source files, and the Bandit gate reports zero findings.
+  Production assertions were replaced by an explicit fail-closed transition-evidence boundary.
 
 ## Compatibility and remaining work
 

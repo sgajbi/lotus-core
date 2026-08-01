@@ -32,6 +32,27 @@ def test_transition_evidence_exposes_complete_lineage_payload() -> None:
     }
 
 
+def test_state_lineage_uses_persisted_decimal_scale_for_output_identity() -> None:
+    compact = build_cost_basis_state_lineage(
+        algorithm_id="test-cost-basis-output",
+        input_payload={"transaction_id": "BUY01"},
+        output_payload={
+            "quantity": Decimal("5"),
+            "nested": {"cost_local": Decimal("12.5")},
+        },
+    )
+    persisted_shape = build_cost_basis_state_lineage(
+        algorithm_id="test-cost-basis-output",
+        input_payload={"transaction_id": "BUY01"},
+        output_payload={
+            "quantity": Decimal("5.0000000000"),
+            "nested": {"cost_local": Decimal("12.5000000000")},
+        },
+    )
+
+    assert compact.output_content_hash == persisted_shape.output_content_hash
+
+
 @pytest.mark.parametrize(
     ("trigger_transaction_id", "transition_kind", "expected_message"),
     [

@@ -27,6 +27,7 @@ from ...domain.cost_basis import (
 from ...domain.cost_basis.state_lineage import (
     CostBasisStateTransitionEvidence,
     build_cost_basis_state_lineage,
+    canonical_cost_basis_output_payload,
 )
 from ...ports import AverageCostPoolCheckpointRecord, AverageCostPoolPersistedSummary
 from ..transaction_mapping.booked_transaction import to_booked_transaction
@@ -595,7 +596,12 @@ def _source_row_lineage_is_valid(row: Any) -> bool:
         }
     else:
         return False
-    return bool(calculation_lineage_binds_output(lineage, output_payload=output_payload))
+    return bool(
+        calculation_lineage_binds_output(
+            lineage,
+            output_payload=canonical_cost_basis_output_payload(output_payload),
+        )
+    )
 
 
 def _open_lot_state_payload(state: OpenLotState) -> dict[str, object]:

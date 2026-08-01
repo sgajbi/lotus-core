@@ -27,6 +27,7 @@ from ...domain.cost_basis import (
     AverageCostPoolCheckpoint,
     build_average_cost_pool_rebuild_lineage,
 )
+from ...domain.cost_basis.state_lineage import canonical_cost_basis_output_payload
 from ...ports import (
     AverageCostPoolPersistedSummary,
     CostBasisAverageCostPoolPort,
@@ -230,9 +231,15 @@ class SqlAlchemyAverageCostPoolReconciliationAdapter:
                         expected_checkpoint=plan.checkpoint,
                         expected_checkpoint_lineage=expected_checkpoint_lineage,
                     ):
+                        post_write_reason = _drift_reason(
+                            persisted_after,
+                            expected_source_count=expected_source_count,
+                            expected_checkpoint=plan.checkpoint,
+                            expected_checkpoint_lineage=expected_checkpoint_lineage,
+                        )
                         raise ValueError(
                             "Average cost rebuild did not persist the expected state "
-                            "and replay evidence"
+                            f"and replay evidence: {post_write_reason}"
                         )
                     return _assessment(
                         key=key,
@@ -354,7 +361,12 @@ def _pool_lineage_matches_plan(
     }
     if persisted.algorithm_id != "average-cost-pool-processing-rebuild":
         output_payload["calculation_lineage"] = None
-    return bool(calculation_lineage_binds_output(persisted, output_payload=output_payload))
+    return bool(
+        calculation_lineage_binds_output(
+            persisted,
+            output_payload=canonical_cost_basis_output_payload(output_payload),
+        )
+    )
 
 
 def _drift_reason(
