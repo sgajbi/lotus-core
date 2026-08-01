@@ -2515,6 +2515,7 @@ class PositionTimeseries(Base):
     fees = Column(ExactNumeric(18, 10), default=0, nullable=False)
     quantity = Column(ExactNumeric(18, 10), nullable=False)
     cost = Column(ExactNumeric(18, 10), nullable=False)
+    calculation_lineage = Column(JSON(none_as_null=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False

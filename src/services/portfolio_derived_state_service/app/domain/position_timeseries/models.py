@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
 
+from portfolio_common.domain.calculation_lineage import CalculationLineage
+
 
 @dataclass(frozen=True, slots=True)
 class PositionSnapshotRecord:
@@ -51,4 +53,5 @@ class PositionTimeseriesRecord:
     fees: Decimal
     quantity: Decimal
     cost: Decimal
+    calculation_lineage: CalculationLineage | None = None
     materialized_at: datetime | None = None

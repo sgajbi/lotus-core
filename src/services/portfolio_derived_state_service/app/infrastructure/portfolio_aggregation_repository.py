@@ -12,6 +12,7 @@ from portfolio_common.database_models import (
     PortfolioAggregationJob,
     PositionTimeseries,
 )
+from portfolio_common.domain.calculation_lineage import calculation_lineage_from_payload
 from portfolio_common.identifiers import normalize_lookup_identifier
 from portfolio_common.infrastructure.persistence.timeseries_market_data_reader import (
     TimeseriesMarketDataReader,
@@ -451,6 +452,7 @@ def _position_timeseries_record(row: PositionTimeseries) -> PositionTimeseriesRe
         fees=cast(Decimal, row.fees),
         quantity=cast(Decimal, row.quantity),
         cost=cast(Decimal, row.cost),
+        calculation_lineage=calculation_lineage_from_payload(row.calculation_lineage),
     )
 
 

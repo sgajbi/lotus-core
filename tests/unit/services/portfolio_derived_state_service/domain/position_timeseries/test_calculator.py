@@ -162,6 +162,46 @@ def test_calculation_separates_position_and_portfolio_cashflows(
     assert record.eod_cashflow_position == Decimal("-50")
     assert record.eod_cashflow_portfolio == Decimal("-50")
     assert record.fees == Decimal("50")
+    assert record.calculation_lineage is not None
+    assert record.calculation_lineage.algorithm_id == "position-timeseries-materialization"
+    assert record.calculation_lineage.numeric_output_policy is not None
+    assert record.calculation_lineage.numeric_output_policy.policy_id == (
+        "position-timeseries-ledger-output@1.0.0"
+    )
+
+
+def test_position_timeseries_lineage_is_deterministic_and_material_input_sensitive(
+    current_snapshot: PositionSnapshotRecord,
+    previous_snapshot: PositionSnapshotRecord,
+) -> None:
+    baseline = calculate_position_timeseries(
+        current_snapshot=current_snapshot,
+        previous_snapshot=previous_snapshot,
+        cashflows=[],
+        epoch=5,
+    )
+    repeated = calculate_position_timeseries(
+        current_snapshot=current_snapshot,
+        previous_snapshot=previous_snapshot,
+        cashflows=[],
+        epoch=5,
+    )
+    changed = calculate_position_timeseries(
+        current_snapshot=replace(current_snapshot, market_value_local=Decimal("12001")),
+        previous_snapshot=previous_snapshot,
+        cashflows=[],
+        epoch=5,
+    )
+
+    assert repeated.calculation_lineage == baseline.calculation_lineage
+    assert baseline.calculation_lineage is not None
+    assert changed.calculation_lineage is not None
+    assert baseline.calculation_lineage.input_content_hash != (
+        changed.calculation_lineage.input_content_hash
+    )
+    assert baseline.calculation_lineage.output_content_hash != (
+        changed.calculation_lineage.output_content_hash
+    )
 
 
 def test_calculation_defensively_normalizes_numeric_text_and_blank_amounts() -> None:
