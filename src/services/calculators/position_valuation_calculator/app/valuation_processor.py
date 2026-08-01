@@ -479,7 +479,7 @@ class ValuationJobProcessor:
     def _is_flat_position(snapshot: DailyPositionSnapshot) -> bool:
         """Return whether a quote-independent zero valuation is fully supported."""
 
-        return (
+        return bool(
             snapshot.quantity == ZERO
             and snapshot.cost_basis == ZERO
             and snapshot.cost_basis_local == ZERO
