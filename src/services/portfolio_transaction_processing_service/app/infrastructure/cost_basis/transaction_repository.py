@@ -261,9 +261,7 @@ class SqlAlchemyCostBasisTransactionRepository:
             return None
         return _to_persisted_booked_transaction(transaction)
 
-    async def upsert_booked_transaction(
-        self, transaction: BookedTransaction
-    ) -> BookedTransaction:
+    async def upsert_booked_transaction(self, transaction: BookedTransaction) -> BookedTransaction:
         """Upsert and return the final canonical booked transaction row."""
 
         transaction_values = _booked_transaction_payload(transaction)
@@ -275,11 +273,15 @@ class SqlAlchemyCostBasisTransactionRepository:
         ]
         update_dict = {field: getattr(stmt.excluded, field) for field in update_fields}
         persisted = (
-            await self.db.execute(
-                stmt.on_conflict_do_update(
-                    index_elements=["transaction_id"],
-                    set_=update_dict,
-                ).returning(DBTransaction)
+            (
+                await self.db.execute(
+                    stmt.on_conflict_do_update(
+                        index_elements=["transaction_id"],
+                        set_=update_dict,
+                    ).returning(DBTransaction)
+                )
             )
-        ).scalars().one()
+            .scalars()
+            .one()
+        )
         return _to_persisted_booked_transaction(persisted)
