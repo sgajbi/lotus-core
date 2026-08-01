@@ -328,12 +328,12 @@ Current repository posture:
     enforcement migrations should add checks as `NOT VALID`, validate all new constraints for one
     table in one statement, fail atomically on contaminated history, and receive DB-direct
     rejection, finite boundary, downgrade, and reapply proof.
-    The v1 inventory currently covers all 96 SQLAlchemy Numeric columns across 30 tables with
-    96 ORM-enforced classifications and zero planned entries. Alembic `c120` protects the original
+    The v1 inventory currently covers all 98 SQLAlchemy Numeric columns across 31 tables with
+    98 ORM-enforced classifications and zero planned entries. Alembic `c120` protects the original
     cost-ledger slice; ordered `c122` through `c126` protect reference inputs, client policy,
     position state, transaction economics, cashflows, derived timeseries, and reconciliation.
     Precision and scale remain owned by GitHub #829. The persistence boundary now uses
-    `portfolio_common.financial_numeric.ExactNumeric` for all 96 governed columns: existing
+    `portfolio_common.financial_numeric.ExactNumeric` for all 98 governed columns: existing
     `NUMERIC(18,10)` and `NUMERIC(18,4)` DDL is preserved, excess scale and magnitude are rejected
     before execution, and the market-price authority remains exact-unbounded. Keep the
      `exact_bind_enforcement` guard requirement. This safety net does not replace owner-specific
@@ -346,10 +346,13 @@ Current repository posture:
      `make calculated-output-policy-guard`, which runs under `make lint`. Every
      `CalculatedDecimalPolicy` declaration requires exact source-shape parity, a nonblank owner and
      output family, at least one execution consumer, and an explicit lineage posture per enclosing
-     callable. Policies marked `required` must bind every execution callable; `partial` requires
-     both bound and explicitly classified unbound `path::callable` values; `not-exposed` requires
-     every execution callable to be recorded as a gap. `partial` and `not-exposed` are visible gaps
-     owned by GitHub #829, not exemptions from future lineage work. The guard resolves direct and
+     callable. Policies marked `required` must either bind each arithmetic callable directly or
+     declare a statically verified final-output boundary that invokes the governed lineage builder;
+     this avoids duplicating lineage across upstream hot-path helpers while keeping the durable
+     output accountable. `partial` requires both bound and explicitly classified unbound
+     `path::callable` values; `not-exposed` requires every execution callable to be recorded as a
+     gap. All eight policies are now `required`, with zero partial, not-exposed, or unclassified
+     gaps. The guard resolves direct and
      aliased policy imports, module-qualified references, and local assignments from qualified
      policies; do not rely on import spelling to define lineage posture.
     Job-backed ingestion idempotency replay must resolve from durable lifecycle outcome evidence,
