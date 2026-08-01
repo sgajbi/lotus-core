@@ -416,7 +416,7 @@ async def test_materialization_rejects_trigger_identity_mismatch_without_effects
     assert provider.transaction_count == 1
 
 
-async def test_materialization_skips_identical_current_business_state() -> None:
+async def test_materialization_refreshes_missing_lineage_without_restaging() -> None:
     snapshot = _snapshot()
     repository = InMemoryPositionTimeseriesRepository(snapshot)
     repository.existing_by_date[snapshot.date] = _timeseries_record(snapshot)
@@ -426,7 +426,8 @@ async def test_materialization_skips_identical_current_business_state() -> None:
     ).execute(_command())
 
     assert result.current_day_changed is False
-    assert repository.upserted == []
+    assert len(repository.upserted) == 1
+    assert repository.upserted[0].calculation_lineage is not None
     assert repository.staged_dates == []
 
 
@@ -466,7 +467,8 @@ async def test_materialization_ignores_duplicate_snapshot_delivery() -> None:
     ).execute(_command())
 
     assert result.current_day_changed is False
-    assert repository.upserted == []
+    assert len(repository.upserted) == 1
+    assert repository.upserted[0].calculation_lineage is not None
     assert repository.staged_dates == []
 
 
@@ -522,6 +524,7 @@ async def test_backdated_materialization_stops_when_future_state_converges() -> 
     assert [record.date for record in repository.upserted] == [
         date(2026, 4, 10),
         date(2026, 4, 11),
+        date(2026, 4, 12),
     ]
     assert repository.staged_dates == [date(2026, 4, 10), date(2026, 4, 11)]
     assert repository.restaged_intervals[-1] == {

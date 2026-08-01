@@ -158,7 +158,6 @@ class SqlAlchemyAverageCostPoolRepository:
         )
         await self._scale_existing_average_cost_sources(
             transition,
-            calculation_lineage=transition_lineage.lineage_payload(),
         )
         if transition.explicit_sources_after:
             await self.update_selected_open_lot_states(
@@ -301,8 +300,6 @@ class SqlAlchemyAverageCostPoolRepository:
     async def _scale_existing_average_cost_sources(
         self,
         transition: AverageCostPoolTransition,
-        *,
-        calculation_lineage: dict[str, object],
     ) -> None:
         before = transition.before
         after = transition.existing_sources_after
@@ -318,6 +315,7 @@ class SqlAlchemyAverageCostPoolRepository:
         explicit_source_ids = set(transition.explicit_sources_after)
         if explicit_source_ids:
             predicates.append(PositionLotState.source_transaction_id.not_in(explicit_source_ids))
+        source_states_before = await self._load_average_cost_source_states(predicates)
 
         if after.quantity == Decimal(0):
             result = await self._session.execute(
@@ -327,12 +325,16 @@ class SqlAlchemyAverageCostPoolRepository:
                     open_quantity=Decimal(0),
                     lot_cost_local=Decimal(0),
                     lot_cost_base=Decimal(0),
-                    calculation_lineage=calculation_lineage,
                     updated_at=func.now(),
                 )
             )
             if result.rowcount < 1:
                 raise ValueError("Average cost pool close found no persisted source lots")
+            await self._refresh_average_cost_source_lineage(
+                predicates=predicates,
+                source_states_before=source_states_before,
+                transition=transition,
+            )
             return
 
         representative_source_id = before.representative_source_transaction_id
@@ -364,7 +366,6 @@ class SqlAlchemyAverageCostPoolRepository:
                     after=after.cost_base,
                     round_down=False,
                 ),
-                calculation_lineage=calculation_lineage,
                 updated_at=func.now(),
             )
         )
@@ -398,12 +399,85 @@ class SqlAlchemyAverageCostPoolRepository:
                 open_quantity=residual_state.quantity,
                 lot_cost_local=residual_state.cost_local,
                 lot_cost_base=residual_state.cost_base,
-                calculation_lineage=calculation_lineage,
                 updated_at=func.now(),
             )
         )
         if residual_result.rowcount != 1:
             raise ValueError("Average cost pool representative source was not updated exactly once")
+        await self._refresh_average_cost_source_lineage(
+            predicates=predicates,
+            source_states_before=source_states_before,
+            transition=transition,
+        )
+
+    async def _load_average_cost_source_states(
+        self,
+        predicates: list[Any],
+    ) -> dict[str, dict[str, object]]:
+        rows = (
+            await self._session.execute(
+                select(
+                    PositionLotState.source_transaction_id,
+                    PositionLotState.open_quantity,
+                    PositionLotState.lot_cost_local,
+                    PositionLotState.lot_cost_base,
+                )
+                .where(*predicates)
+                .order_by(PositionLotState.source_transaction_id)
+            )
+        ).all()
+        return {
+            str(source_transaction_id): {
+                "cost_base": cost_base,
+                "cost_local": cost_local,
+                "quantity": quantity,
+                "source_transaction_id": source_transaction_id,
+            }
+            for source_transaction_id, quantity, cost_local, cost_base in rows
+        }
+
+    async def _refresh_average_cost_source_lineage(
+        self,
+        *,
+        predicates: list[Any],
+        source_states_before: dict[str, dict[str, object]],
+        transition: AverageCostPoolTransition,
+    ) -> None:
+        source_rows = (
+            (
+                await self._session.execute(
+                    select(PositionLotState)
+                    .where(*predicates)
+                    .order_by(PositionLotState.source_transaction_id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if len(source_rows) != len(source_states_before):
+            raise ValueError("Average cost source membership changed during the locked transition")
+        for row in source_rows:
+            source_transaction_id = str(row.source_transaction_id)
+            state_before = source_states_before.get(source_transaction_id)
+            if state_before is None:
+                raise ValueError(
+                    "Average cost source identity changed during the locked transition"
+                )
+            output_payload = {
+                "cost_base": row.lot_cost_base,
+                "cost_local": row.lot_cost_local,
+                "quantity": row.open_quantity,
+                "source_transaction_id": source_transaction_id,
+            }
+            row.calculation_lineage = build_cost_basis_state_lineage(
+                algorithm_id="average-cost-source-transition",
+                input_payload={
+                    "pool_before": _checkpoint_payload(transition.before),
+                    "pool_target": _open_lot_state_payload(transition.existing_sources_after),
+                    "source_before": state_before,
+                },
+                output_payload=output_payload,
+            ).lineage_payload()
 
 
 def _open_lot_state_payload(state: OpenLotState) -> dict[str, object]:
