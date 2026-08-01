@@ -223,13 +223,19 @@ def _calculate_period(
         raw_movement = interest - period.cash_coupon_local
     movement = numeric_policy.normalize(raw_movement, field_name="amortization_amount_local")
     normalized_interest = numeric_policy.normalize(interest, field_name="interest_income_local")
+    normalized_coupon = numeric_policy.normalize(
+        period.cash_coupon_local,
+        field_name="cash_coupon_local",
+    )
     end = numeric_policy.add(begin, movement, field_name="end_amortized_cost_local")
     if end < 0:
         raise AmortizedCostCalculationError("end amortized cost must be nonnegative")
-    rounding_adjustment = numeric_policy.normalize(
-        movement - raw_movement,
-        field_name="rounding_adjustment_local",
-    )
+    rounding_adjustment = Decimal(0)
+    if policy.method is AmortizedCostMethod.EFFECTIVE_YIELD:
+        rounding_adjustment = numeric_policy.normalize(
+            movement - (normalized_interest - normalized_coupon),
+            field_name="rounding_adjustment_local",
+        )
     return AmortizationPeriodResult(
         period_start_date=period.period_start_date,
         period_end_date=period.period_end_date,
@@ -237,10 +243,7 @@ def _calculate_period(
         period_rate=period_rate,
         begin_amortized_cost_local=begin,
         interest_income_local=normalized_interest,
-        cash_coupon_local=numeric_policy.normalize(
-            period.cash_coupon_local,
-            field_name="cash_coupon_local",
-        ),
+        cash_coupon_local=normalized_coupon,
         amortization_amount_local=movement,
         end_amortized_cost_local=end,
         rounding_adjustment_local=rounding_adjustment,
