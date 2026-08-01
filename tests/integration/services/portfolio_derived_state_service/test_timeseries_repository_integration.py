@@ -29,6 +29,9 @@ from src.services.portfolio_derived_state_service.app.application.position_times
 from src.services.portfolio_derived_state_service.app.domain.aggregation_jobs.models import (
     AggregationJobLease,
 )
+from src.services.portfolio_derived_state_service.app.domain.position_timeseries.calculator import (
+    calculate_position_timeseries,
+)
 from src.services.portfolio_derived_state_service.app.infrastructure import (
     portfolio_aggregation_repository,
     timeseries_generation_repository,
@@ -210,7 +213,7 @@ def _transaction(
     )
 
 
-async def test_newer_snapshot_refreshes_position_and_rearms_portfolio_day_once(
+async def test_newer_snapshot_refreshes_evidence_and_rearms_portfolio_day_once(
     db_engine,
     clean_db,
     async_db_session: AsyncSession,
@@ -309,7 +312,8 @@ async def test_newer_snapshot_refreshes_position_and_rearms_portfolio_day_once(
     assert refreshed_series is not None
     assert aggregation_job is not None
     first_materialized_at = refreshed_series.updated_at
-    assert first_result.current_day_changed is True
+    assert first_result.current_day_changed is False
+    assert first_result.dependent_days_changed == 0
     assert first_materialized_at > original_materialized_at
     assert refreshed_series.calculation_lineage is not None
     assert refreshed_series.calculation_lineage["numeric_output_policy"]["name"] == (
@@ -529,21 +533,37 @@ async def test_materialization_restages_carry_forward_days_before_convergence(
         changed_snapshot = _snapshot(portfolio_id, security_id, changed_day, epoch=2)
         convergence_snapshot = _snapshot(portfolio_id, security_id, convergence_day, epoch=2)
         session.add_all([changed_snapshot, convergence_snapshot])
+        session.flush()
+        # Prove convergence against PostgreSQL-normalized NUMERIC inputs, not
+        # transient Decimal representations that persistence will reshape.
+        session.expire_all()
+        convergence_record = calculate_position_timeseries(
+            current_snapshot=timeseries_generation_repository.to_position_snapshot_record(
+                convergence_snapshot
+            ),
+            previous_snapshot=timeseries_generation_repository.to_position_snapshot_record(
+                changed_snapshot
+            ),
+            cashflows=[],
+            epoch=2,
+        )
+        assert convergence_record.calculation_lineage is not None
         session.add(
             PositionTimeseries(
                 portfolio_id=portfolio_id,
                 security_id=security_id,
                 date=convergence_day,
                 epoch=2,
-                bod_market_value=Decimal("100"),
-                bod_cashflow_position=Decimal("0"),
-                eod_cashflow_position=Decimal("0"),
-                bod_cashflow_portfolio=Decimal("0"),
-                eod_cashflow_portfolio=Decimal("0"),
-                eod_market_value=Decimal("100"),
-                fees=Decimal("0"),
-                quantity=Decimal("10"),
-                cost=Decimal("10"),
+                bod_market_value=convergence_record.bod_market_value,
+                bod_cashflow_position=convergence_record.bod_cashflow_position,
+                eod_cashflow_position=convergence_record.eod_cashflow_position,
+                bod_cashflow_portfolio=convergence_record.bod_cashflow_portfolio,
+                eod_cashflow_portfolio=convergence_record.eod_cashflow_portfolio,
+                eod_market_value=convergence_record.eod_market_value,
+                fees=convergence_record.fees,
+                quantity=convergence_record.quantity,
+                cost=convergence_record.cost,
+                calculation_lineage=convergence_record.calculation_lineage.lineage_payload(),
             )
         )
         session.add_all(
