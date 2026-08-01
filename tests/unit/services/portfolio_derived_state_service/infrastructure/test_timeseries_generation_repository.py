@@ -5,7 +5,7 @@ from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from portfolio_common.database_models import PositionTimeseries
+from portfolio_common.database_models import DailyPositionSnapshot, PositionTimeseries
 from portfolio_common.domain.calculation_lineage import (
     CalculationLineage,
     build_calculation_lineage,
@@ -125,6 +125,43 @@ async def test_get_position_timeseries_for_dates_filters_exact_dates_and_epoch(
     assert "position_timeseries.security_id = 'S1'" in compiled_query
     assert "position_timeseries.date IN ('2025-01-10', '2025-01-11')" in compiled_query
     assert "position_timeseries.epoch = 14" in compiled_query
+
+
+async def test_get_position_snapshot_rehydrates_joined_valuation_lineage(
+    repository: TimeseriesGenerationRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    lineage = _lineage()
+    snapshot = DailyPositionSnapshot(
+        id=101,
+        portfolio_id="P1",
+        security_id="S1",
+        date=date(2025, 1, 10),
+        epoch=14,
+        quantity=Decimal("10"),
+        cost_basis=Decimal("90"),
+        cost_basis_local=Decimal("90"),
+        market_value_local=Decimal("110"),
+        valuation_status="VALUED_CURRENT",
+    )
+    mock_db_session.execute.return_value.first.return_value = (
+        snapshot,
+        lineage.lineage_payload(),
+    )
+
+    record = await repository.get_position_snapshot(101, fallback_epoch=14)
+
+    statement = mock_db_session.execute.await_args.args[0]
+    compiled_query = str(
+        statement.compile(
+            dialect=postgresql.dialect(),
+            compile_kwargs={"literal_binds": True},
+        )
+    )
+    assert "LEFT OUTER JOIN daily_position_valuation_receipts" in compiled_query
+    assert "daily_position_snapshots.id = 101" in compiled_query
+    assert record is not None
+    assert record.calculation_lineage == lineage
 
 
 async def test_invalidation_removes_exact_position_and_portfolio_days(
@@ -325,7 +362,23 @@ async def test_upsert_position_timeseries_serializes_typed_lineage(
 async def test_get_all_cashflows_for_security_date_uses_latest_cashflow_epoch_within_target_epoch(
     repository: TimeseriesGenerationRepository, mock_db_session: AsyncMock
 ):
-    await repository.get_all_cashflows_for_security_date("P1", "S1", date(2025, 1, 10), 14)
+    lineage = _lineage()
+    row = MagicMock(
+        transaction_id="TX1",
+        cashflow_date=date(2025, 1, 10),
+        epoch=14,
+        amount=Decimal("25"),
+        classification="INCOME",
+        timing="EOD",
+        is_position_flow=True,
+        is_portfolio_flow=False,
+        calculation_lineage=lineage.lineage_payload(),
+    )
+    mock_db_session.execute.return_value.scalars.return_value.all.return_value = [row]
+
+    records = await repository.get_all_cashflows_for_security_date(
+        "P1", "S1", date(2025, 1, 10), 14
+    )
 
     executed_stmt = mock_db_session.execute.call_args[0][0]
     compiled_query = str(
@@ -341,11 +394,13 @@ async def test_get_all_cashflows_for_security_date_uses_latest_cashflow_epoch_wi
     )
     assert "cashflows.id = anon_1.id" in compiled_query
     assert "anon_1.rn = 1" in compiled_query
+    assert records[0].calculation_lineage == lineage
 
 
 async def test_get_cashflows_for_security_dates_filters_exact_dates_and_epoch(
     repository: TimeseriesGenerationRepository, mock_db_session: AsyncMock
 ):
+    lineage = _lineage()
     dated_row = MagicMock(
         transaction_id="TX1",
         cashflow_date=date(2025, 1, 10),
@@ -355,6 +410,7 @@ async def test_get_cashflows_for_security_dates_filters_exact_dates_and_epoch(
         timing="EOD",
         is_position_flow=True,
         is_portfolio_flow=False,
+        calculation_lineage=lineage.lineage_payload(),
     )
     mock_db_session.execute.return_value.scalars.return_value.all.return_value = [dated_row]
 
@@ -375,6 +431,7 @@ async def test_get_cashflows_for_security_dates_filters_exact_dates_and_epoch(
     assert "cashflows.cashflow_date IN ('2025-01-10', '2025-01-11')" in compiled_query
     assert "cashflows.epoch <= 14" in compiled_query
     assert result[date(2025, 1, 10)][0].transaction_id == "TX1"
+    assert result[date(2025, 1, 10)][0].calculation_lineage == lineage
     assert result[date(2025, 1, 10)][0] is not dated_row
     assert result[date(2025, 1, 11)] == []
 
@@ -382,7 +439,8 @@ async def test_get_cashflows_for_security_dates_filters_exact_dates_and_epoch(
 async def test_get_last_snapshot_before_uses_latest_snapshot_not_exceeding_target_epoch(
     repository: TimeseriesGenerationRepository, mock_db_session: AsyncMock
 ):
-    mock_db_session.execute.return_value.scalars.return_value.first.return_value = MagicMock(
+    lineage = _lineage()
+    snapshot = MagicMock(
         portfolio_id="P1",
         security_id="S1",
         date=date(2025, 1, 9),
@@ -391,7 +449,11 @@ async def test_get_last_snapshot_before_uses_latest_snapshot_not_exceeding_targe
         cost_basis_local=Decimal("90"),
         market_value_local=Decimal("100"),
     )
-    await repository.get_last_snapshot_before("P1", "S1", date(2025, 1, 10), 14)
+    mock_db_session.execute.return_value.first.return_value = (
+        snapshot,
+        lineage.lineage_payload(),
+    )
+    record = await repository.get_last_snapshot_before("P1", "S1", date(2025, 1, 10), 14)
 
     executed_stmt = mock_db_session.execute.call_args[0][0]
     compiled_query = str(
@@ -401,17 +463,33 @@ async def test_get_last_snapshot_before_uses_latest_snapshot_not_exceeding_targe
     assert "daily_position_snapshots.epoch <= 14" in compiled_query
     assert "trim(daily_position_snapshots.portfolio_id) = 'P1'" in compiled_query
     assert "trim(daily_position_snapshots.security_id) = 'S1'" in compiled_query
+    assert "LEFT OUTER JOIN daily_position_valuation_receipts" in compiled_query
     assert (
         "ORDER BY daily_position_snapshots.date DESC, daily_position_snapshots.epoch DESC"
         in compiled_query
     )
+    assert record is not None
+    assert record.calculation_lineage == lineage
 
 
 async def test_get_next_snapshots_after_uses_latest_epoch_per_future_date(
     repository: TimeseriesGenerationRepository, mock_db_session: AsyncMock
 ):
-    mock_db_session.execute.return_value.scalars.return_value.all.return_value = []
-    await repository.get_next_snapshots_after("P1", "S1", date(2025, 1, 10), 14, 25)
+    lineage = _lineage()
+    snapshot = DailyPositionSnapshot(
+        id=102,
+        portfolio_id="P1",
+        security_id="S1",
+        date=date(2025, 1, 11),
+        epoch=14,
+        quantity=Decimal("10"),
+        cost_basis=Decimal("90"),
+        cost_basis_local=Decimal("90"),
+        market_value_local=Decimal("110"),
+        valuation_status="VALUED_CURRENT",
+    )
+    mock_db_session.execute.return_value.all.return_value = [(snapshot, lineage.lineage_payload())]
+    records = await repository.get_next_snapshots_after("P1", "S1", date(2025, 1, 10), 14, 25)
 
     executed_stmt = mock_db_session.execute.call_args[0][0]
     compiled_query = str(
@@ -422,6 +500,7 @@ async def test_get_next_snapshots_after_uses_latest_epoch_per_future_date(
     assert "trim(daily_position_snapshots.portfolio_id) = 'P1'" in compiled_query
     assert "trim(daily_position_snapshots.security_id) = 'S1'" in compiled_query
     assert "daily_position_snapshots.date > '2025-01-10'" in compiled_query
+    assert "LEFT OUTER JOIN daily_position_valuation_receipts" in compiled_query
     assert (
         "row_number() OVER (PARTITION BY daily_position_snapshots.date "
         "ORDER BY daily_position_snapshots.epoch DESC)" in compiled_query
@@ -429,6 +508,7 @@ async def test_get_next_snapshots_after_uses_latest_epoch_per_future_date(
     assert "anon_1.rn = 1" in compiled_query
     assert "ORDER BY daily_position_snapshots.date ASC" in compiled_query
     assert "LIMIT 25" in compiled_query
+    assert records[0].calculation_lineage == lineage
 
 
 async def test_stage_aggregation_jobs_rearms_completed_day_for_late_material_input(

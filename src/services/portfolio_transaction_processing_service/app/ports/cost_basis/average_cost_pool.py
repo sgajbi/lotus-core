@@ -7,6 +7,7 @@ from ...domain.cost_basis import (
     AverageCostPoolRebuildPlan,
     AverageCostPoolTransition,
 )
+from ...domain.cost_basis.state_lineage import CostBasisStateTransitionEvidence
 from .state_records import AverageCostPoolCheckpointRecord, AverageCostPoolPersistedSummary
 
 
@@ -28,6 +29,8 @@ class CostBasisAverageCostPoolPort(Protocol):
     async def apply_average_cost_pool_transition(
         self,
         transition: AverageCostPoolTransition,
+        *,
+        transition_evidence: CostBasisStateTransitionEvidence,
     ) -> None: ...
 
     async def apply_average_cost_pool_rebuild(

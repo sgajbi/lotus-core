@@ -247,6 +247,14 @@ identity, and public response shapes remain unchanged.
   source files, focused Ruff/format/diff gates, and exact-source PostgreSQL AVCO row-output-hash and
   bounded-work proofs. Final transaction processing/buy contract and protected CI evidence are
   recorded on PR #877 and issue #829 at the exact signed head.
+- Final PR review found two remaining evidence-boundary gaps: the incremental AVCO path did not bind
+  the triggering application transition into its aggregate receipt, and position-timeseries input
+  omitted the already-persisted valuation and cashflow receipts. The application now supplies one
+  required typed transition-evidence value through the AVCO port and repository, while current,
+  prior, and future snapshot reads outer-join typed valuation lineage and both cashflow paths reuse
+  their selected lineage without extra queries. Source-revision-only tests prove lineage hashes
+  change while scalar financial outputs remain identical; legacy rows with absent lineage remain
+  supported. The combined warning-strict review suite passes 70 tests.
 
 ## Compatibility and remaining work
 
