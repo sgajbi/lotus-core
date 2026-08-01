@@ -97,8 +97,12 @@ def _canonical_fx_lineage_payload(payload: Mapping[str, object]) -> dict[str, ob
 def _canonical_fx_lineage_value(value: object, *, field_path: str) -> object:
     """Match the governed numeric representation used by the transaction ledger."""
 
-    if isinstance(value, datetime) and (value.tzinfo is None or value.utcoffset() is None):
-        return value.replace(tzinfo=UTC)
+    if isinstance(value, datetime):
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError(
+                f"FX calculation-lineage timestamp '{field_path}' must be timezone-aware."
+            )
+        return value.astimezone(UTC)
     if isinstance(value, Decimal):
         normalized = TRANSACTION_COST_LEDGER_OUTPUT_V1.normalize(
             value,

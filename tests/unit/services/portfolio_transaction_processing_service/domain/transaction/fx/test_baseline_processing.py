@@ -1,7 +1,7 @@
 """Test realized FX baseline processing and cost-basis effects."""
 
 from dataclasses import replace
-from datetime import datetime
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
@@ -22,8 +22,8 @@ def _fx_transaction(**updates: object) -> BookedTransaction:
         portfolio_id="PORT-FX-1",
         instrument_id="FXC-EURUSD-001",
         security_id="FXC-EURUSD-001",
-        transaction_date=datetime(2026, 4, 1, 9, 0, 0),
-        settlement_date=datetime(2026, 7, 1, 0, 0, 0),
+        transaction_date=datetime(2026, 4, 1, 9, 0, 0, tzinfo=UTC),
+        settlement_date=datetime(2026, 7, 1, 0, 0, 0, tzinfo=UTC),
         transaction_type="FX_FORWARD",
         component_type="FX_CONTRACT_CLOSE",
         quantity=Decimal("0"),

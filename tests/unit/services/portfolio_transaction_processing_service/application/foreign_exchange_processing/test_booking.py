@@ -1,7 +1,7 @@
 """Application tests for validated foreign-exchange transaction booking."""
 
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta, timezone
 from decimal import Decimal
 from unittest.mock import AsyncMock
 
@@ -155,6 +155,61 @@ async def test_booking_lineage_is_deterministic_and_changes_with_material_fx_out
     assert (
         first.transaction.calculation_lineage.output_content_hash
         != changed.transaction.calculation_lineage.output_content_hash
+    )
+
+
+@pytest.mark.parametrize("field_name", ["transaction_date", "settlement_date", "created_at"])
+async def test_booking_rejects_timezone_ambiguous_fx_lineage_timestamps(
+    field_name: str,
+) -> None:
+    transaction = _foreign_exchange_transaction(**{field_name: datetime(2026, 4, 1, 9, 0)})
+    persistence = AsyncMock(spec=ForeignExchangeTransactionPersistencePort)
+
+    with pytest.raises(ValueError, match=rf"{field_name}.*timezone-aware"):
+        await book_foreign_exchange_transaction(
+            transaction=transaction,
+            transaction_persistence=persistence,
+        )
+
+    persistence.upsert_booked_transaction.assert_not_awaited()
+
+
+async def test_booking_canonicalizes_aware_fx_timestamps_to_the_same_utc_lineage() -> None:
+    persistence = AsyncMock(spec=ForeignExchangeTransactionPersistencePort)
+    utc_transaction = _foreign_exchange_transaction(
+        transaction_date=datetime(2026, 4, 1, 1, 0, tzinfo=UTC),
+        settlement_date=datetime(2026, 7, 1, 1, 0, tzinfo=UTC),
+    )
+    singapore_transaction = _foreign_exchange_transaction(
+        transaction_date=datetime(
+            2026,
+            4,
+            1,
+            9,
+            0,
+            tzinfo=timezone(timedelta(hours=8)),
+        ),
+        settlement_date=datetime(
+            2026,
+            7,
+            1,
+            9,
+            0,
+            tzinfo=timezone(timedelta(hours=8)),
+        ),
+    )
+
+    utc_result = await book_foreign_exchange_transaction(
+        transaction=utc_transaction,
+        transaction_persistence=persistence,
+    )
+    singapore_result = await book_foreign_exchange_transaction(
+        transaction=singapore_transaction,
+        transaction_persistence=persistence,
+    )
+
+    assert utc_result.transaction.calculation_lineage == (
+        singapore_result.transaction.calculation_lineage
     )
 
 
