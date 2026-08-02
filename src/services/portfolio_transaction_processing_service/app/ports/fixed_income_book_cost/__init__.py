@@ -5,9 +5,19 @@ from .profile_persistence import (
     LotAmortizedCostProfileHead,
     LotAmortizedCostProfilePort,
 )
+from .source_authority import (
+    LotAmortizedCostAuthority,
+    LotAmortizedCostAuthorityAppendOutcome,
+    LotAmortizedCostAuthorityBundle,
+    LotAmortizedCostAuthorityPort,
+)
 
 __all__ = [
     "LotAmortizedCostProfileAppendOutcome",
     "LotAmortizedCostProfileHead",
     "LotAmortizedCostProfilePort",
+    "LotAmortizedCostAuthority",
+    "LotAmortizedCostAuthorityAppendOutcome",
+    "LotAmortizedCostAuthorityBundle",
+    "LotAmortizedCostAuthorityPort",
 ]
