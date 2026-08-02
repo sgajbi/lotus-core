@@ -993,6 +993,27 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
   nonnegative original quantity. Unique `(lot_id, portfolio_id, security_id)` supports exact-scope
   references from dependent accounting ledgers.
 
+## `lot_amortized_cost_authority`
+
+- **Purpose**: Append-only source-version history for lot amortized-cost assignments, clean-cost
+  basis, contractual schedules, and effective-yield facts.
+- **Description**: Stores a shared governed envelope at exact tenant/legal-book/portfolio/security/
+  source-lot scope while retaining a type-specific JSON payload. Decimal and date values in that
+  payload are canonical strings so source identity is not changed by JSON number coercion. This is
+  input authority, not calculated book cost or permission to book a lifecycle.
+- **Relationships**: `(tenant_id, legal_book_id, portfolio_id)` -> the matching scoped portfolio;
+  `(lot_id, portfolio_id, security_id)` -> the matching source lot; `security_id` ->
+  `instruments.security_id`.
+- **Usage (modules/features)**:
+  `src/services/portfolio_transaction_processing_service/app/infrastructure/fixed_income_book_cost/source_authority_repository.py`.
+- **Typical access patterns**: Per-source advisory-locked append; exact-retry classification;
+  monotonic correction versions; deterministic exact-scope history load before domain resolution.
+- **Integrity**: Unique authority type/scope/source/version identity; normalized scope and source;
+  governed authority type and lifecycle; positive source version; ordered effective window;
+  SHA-256 content hash; object payload; composite book/source-lot foreign keys.
+- **Key columns**: Authority type, exact scope, effective window, lifecycle status, source version
+  and identity, observation time, authority content hash, canonical payload, and `created_at`.
+
 ## `lot_amortized_cost_profiles`
 
 - **Purpose**: Append-only source-lot amortized book-cost profile history.
@@ -1459,7 +1480,7 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
 ## Schema Review Findings
 
 ### Actively Used and Architecturally Required
-- Core ledger/state: `transactions`, `position_history`, `daily_position_snapshots`, `position_state`, `position_lot_state`, `lot_amortized_cost_profiles`, `lot_amortized_cost_periods`, `average_cost_pool_state`, `cashflows`, `portfolio_timeseries`, `position_timeseries`.
+- Core ledger/state: `transactions`, `position_history`, `daily_position_snapshots`, `position_state`, `position_lot_state`, `lot_amortized_cost_authority`, `lot_amortized_cost_profiles`, `lot_amortized_cost_periods`, `average_cost_pool_state`, `cashflows`, `portfolio_timeseries`, `position_timeseries`.
 - Processing reliability: `processed_events`, `outbox_events`, `portfolio_valuation_jobs`, `portfolio_aggregation_jobs`, `reprocessing_jobs`, `instrument_reprocessing_state`.
 - Ingestion/ops governance: `ingestion_jobs`, `ingestion_job_failures`, `ingestion_ops_control`, `consumer_dlq_events`, `consumer_dlq_replay_audit`.
 - Reference data: `business_dates`, `portfolios`, `instruments`, `market_prices`, `fx_rates`, benchmark/index/risk-free tables.

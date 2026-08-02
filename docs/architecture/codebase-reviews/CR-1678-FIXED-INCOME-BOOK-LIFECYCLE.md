@@ -75,8 +75,18 @@ outputs are canonicalized to the governed scale before hashing; derived year fra
 remain exact-unbounded because truncating working-precision evidence would invalidate lineage.
 Composite portfolio-book and source-lot foreign keys prevent cross-book or cross-security scope
 fabrication even through direct database writes.
-Source writers/loaders, transaction-UoW materialization, correction replay, public queries, disposal
-allocations, and redemption integration remain open.
+An additive `lot_amortized_cost_authority` ledger and application port now persist and reload all
+four required source families through one governed pattern. Per-source transaction locks,
+monotonic correction versions, exact-retry neutrality, canonical decimal/date payloads, composite
+book/lot foreign keys, and reconstruction hash verification prevent delivery-order or tampering
+drift. The application writer deduplicates and orders atomic caller batches before persistence.
+The profile materializer acquires the profile lock before reloading source history, skips unchanged
+authority, appends corrected active profiles contiguously, and records missing/conflicting inputs as
+parked evidence without invented economics.
+
+External ingestion DTO/routes, production composition into the owning transaction boundary,
+correction replay scheduling, public queries, disposal allocations, and redemption integration
+remain open.
 
 ## Same-Pattern Review
 
@@ -114,6 +124,10 @@ Data Models wiki documents the staged ledgers while the capability wiki remains
 - 54 focused migration, ORM, and advisory-lock unit tests;
 - 3 real-PostgreSQL repository tests covering append/retry, contiguous versions, exact as-of
   selection, and header/period tamper rejection;
+- 95 warning-strict fixed-income domain/migration tests plus 7 application writer/materializer
+  tests;
+- 3 real-PostgreSQL authority tests covering all four source families, exact retry, monotonic
+  corrections, source-version collision, typed reload, and persisted-payload tamper rejection;
 - migration and numeric guards passed at head `c139b2c3d50c`, with 110 governed numeric columns
   across 33 tables and no planned enforcement gaps;
 - scoped Ruff lint/format, MyPy, RFC ledger, architecture-documentation, transaction-capability,

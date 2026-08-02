@@ -3449,6 +3449,12 @@ Most relevant current governance:
      or repository presence does not authorize runtime booking, public query claims, disposal at
      current book cost, or redemption; those require explicit UoW wiring, correction replay,
      immutable source-lot allocations, downstream contracts, and certification evidence.
+     Persist assignment, clean-cost, schedule, and yield source corrections through the shared
+     append-only authority port: serialize each exact source stream, accept exact retries, reject
+     divergent identities and late lower versions, then reload typed authority only inside the
+     profile materialization lock. Missing or conflicting authority must create deterministic
+     parked evidence; it must never be inferred from transaction quantity, gross cost, product
+     classification, or a broad portfolio default.
 
 ## Context Maintenance Rule
 

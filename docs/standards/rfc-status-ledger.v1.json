@@ -6395,19 +6395,25 @@
       "affected_data_models": [
         "transactions",
         "position_lot_state",
+        "lot_amortized_cost_authority",
         "lot_amortized_cost_profiles",
         "lot_amortized_cost_periods"
       ],
       "implementation_refs": [
         "docs/rfc-transaction-specs/transactions/misc/RFC-AMORTIZATION-01 Canonical Fixed Income Amortization & Accretion Specification.md",
         "src/services/portfolio_transaction_processing_service/app/domain/fixed_income_book_cost",
+        "src/services/portfolio_transaction_processing_service/app/application/fixed_income_book_cost",
+        "src/services/portfolio_transaction_processing_service/app/infrastructure/fixed_income_book_cost/source_authority_repository.py",
         "src/services/portfolio_transaction_processing_service/app/infrastructure/fixed_income_book_cost/profile_repository.py",
+        "alembic/versions/c140b2c3d50d_feat_add_lot_amortized_cost_authority.py",
         "alembic/versions/c139b2c3d50c_feat_add_lot_amortized_cost_profiles.py"
       ],
       "test_evidence": [
         "tests/unit/scripts/test_rfc_status_ledger_guard.py",
         "tests/unit/services/portfolio_transaction_processing_service/domain/fixed_income_book_cost",
+        "tests/unit/services/portfolio_transaction_processing_service/application/fixed_income_book_cost",
         "tests/unit/services/portfolio_transaction_processing_service/infrastructure/fixed_income_book_cost/test_profile_repository.py",
+        "tests/integration/services/portfolio_transaction_processing_service/test_lot_amortized_cost_authority_repository.py",
         "tests/integration/services/portfolio_transaction_processing_service/test_lot_amortized_cost_profile_repository.py"
       ],
       "docs_links": [
@@ -6428,7 +6434,7 @@
       "supersedes": [],
       "superseded_by": [],
       "deprecation_relationship": "none",
-      "status_rationale": "Target-state contract under #478. Exact-scope authority, deterministic calculation, append-only profile/period schema, and a locked repository adapter are implemented foundations. Source ingestion/loading, transaction-runtime materialization, correction replay, disposal integration, public query evidence, and production certification remain incomplete; the lifecycle capability catalog remains target_not_implemented."
+      "status_rationale": "Target-state contract under #478. Exact-scope authority, deterministic calculation, append-only source/profile/period schema, governed authority writer/loader, and lock-before-reload profile materialization are implemented foundations. External ingestion contracts, production transaction-boundary composition, correction replay, disposal integration, public query evidence, and production certification remain incomplete; the lifecycle capability catalog remains target_not_implemented."
     },
     {
       "rfc_id": "RFC-CONVERSION-01",
