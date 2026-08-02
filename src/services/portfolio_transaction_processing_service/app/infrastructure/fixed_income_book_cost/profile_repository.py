@@ -281,6 +281,10 @@ class SqlAlchemyLotAmortizedCostProfileRepository:
             raise ConflictingLotAmortizedCostProfileError(
                 "persisted profile content does not match its immutable hash"
             )
+        if not _profile_record_matches(record, profile):
+            raise ConflictingLotAmortizedCostProfileError(
+                "persisted profile does not use its canonical representation"
+            )
         return profile
 
 
@@ -320,6 +324,14 @@ def _profile_values(
         "status": profile.status.value,
         "tenant_id": profile.scope.tenant_id,
     }
+
+
+def _profile_record_matches(
+    record: LotAmortizedCostProfileRecord,
+    profile: LotAmortizedCostProfileVersion,
+) -> bool:
+    expected = _profile_values(profile, profile_hash=profile.content_hash())
+    return all(getattr(record, key) == value for key, value in expected.items())
 
 
 def _period_values(period: LotAmortizedCostPeriodLedgerEntry) -> dict[str, object]:

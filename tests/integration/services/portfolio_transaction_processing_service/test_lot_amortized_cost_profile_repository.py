@@ -7,7 +7,7 @@ from datetime import date
 
 import pytest
 from portfolio_common.database_models import LotAmortizedCostProfileRecord
-from sqlalchemy import text, update
+from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.portfolio_transaction_processing_service.app.domain.fixed_income_book_cost import (
@@ -115,6 +115,40 @@ async def test_repository_rejects_identity_collision_and_persisted_hash_tamperin
         .values(profile_content_hash="0" * 64)
     )
     with pytest.raises(ConflictingLotAmortizedCostProfileError, match="immutable hash"):
+        await repository.latest(fixed_income_book_cost_scope())
+
+
+async def test_repository_rejects_unknown_profile_lineage_fields(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    await _seed_source_lot(async_db_session)
+    repository = SqlAlchemyLotAmortizedCostProfileRepository(async_db_session)
+    profile = materialize_active_lot_amortized_cost_profile(
+        resolved_fixed_income_book_cost_inputs(),
+        profile_version=1,
+    )
+    await repository.append(profile)
+    record = await async_db_session.scalar(
+        select(LotAmortizedCostProfileRecord).where(
+            LotAmortizedCostProfileRecord.profile_id == profile.profile_id,
+            LotAmortizedCostProfileRecord.profile_version == profile.profile_version,
+        )
+    )
+    assert record is not None
+    assert isinstance(record.calculation_lineage, dict)
+    lineage = dict(record.calculation_lineage)
+    lineage["unsupported"] = "tampered"
+    await async_db_session.execute(
+        update(LotAmortizedCostProfileRecord)
+        .where(LotAmortizedCostProfileRecord.id == record.id)
+        .values(calculation_lineage=lineage)
+    )
+
+    with pytest.raises(
+        ConflictingLotAmortizedCostProfileError,
+        match="does not use its canonical representation",
+    ):
         await repository.latest(fixed_income_book_cost_scope())
 
 
