@@ -44,6 +44,40 @@ class _AuthorityType(StrEnum):
     EFFECTIVE_YIELD = "EFFECTIVE_YIELD"
 
 
+_PAYLOAD_KEYS = {
+    _AuthorityType.POLICY_ASSIGNMENT: frozenset(
+        {"assignment_reason", "policy_id", "policy_version"}
+    ),
+    _AuthorityType.CLEAN_COST_BASIS: frozenset(
+        {
+            "currency",
+            "discount_origin",
+            "fees_in_basis_local",
+            "initial_clean_cost_local",
+            "redemption_value_local",
+        }
+    ),
+    _AuthorityType.AMORTIZATION_SCHEDULE: frozenset(
+        {
+            "periods",
+            "schedule_version",
+            "year_fraction_method_id",
+            "year_fraction_method_version",
+        }
+    ),
+    _AuthorityType.EFFECTIVE_YIELD: frozenset({"annual_yield", "yield_application_convention"}),
+}
+_PERIOD_KEYS = frozenset(
+    {
+        "cash_coupon_local",
+        "period_end_date",
+        "period_start_date",
+        "supplied_period_rate",
+        "year_fraction",
+    }
+)
+
+
 class SqlAlchemyLotAmortizedCostAuthorityRepository:
     """Persist immutable source versions in the caller-owned transaction."""
 
@@ -285,6 +319,7 @@ def _authority_from_record(
     if not isinstance(payload, dict):
         raise ConflictingLotAmortizedCostAuthorityError("authority payload must be an object")
     authority_type = _AuthorityType(record.authority_type)
+    _require_exact_keys(payload, _PAYLOAD_KEYS[authority_type], context="authority payload")
     if authority_type is _AuthorityType.POLICY_ASSIGNMENT:
         authority: LotAmortizedCostAuthority = LotAmortizedCostPolicyAssignment(
             scope=scope,
@@ -355,6 +390,7 @@ def _periods(payload: dict[str, object]) -> tuple[AmortizationPeriodInput, ...]:
     for row in rows:
         if not isinstance(row, dict):
             raise TypeError("period must be an object")
+        _require_exact_keys(row, _PERIOD_KEYS, context="schedule period")
         supplied_rate = row.get("supplied_period_rate")
         periods.append(
             AmortizationPeriodInput(
@@ -416,3 +452,19 @@ def _integer(payload: dict[str, object], key: str) -> int:
 
 def _decimal(payload: dict[str, object], key: str) -> Decimal:
     return Decimal(_string(payload, key))
+
+
+def _require_exact_keys(
+    payload: dict[str, object],
+    expected: frozenset[str],
+    *,
+    context: str,
+) -> None:
+    actual = frozenset(payload)
+    if actual != expected:
+        missing = sorted(expected - actual)
+        unsupported = sorted(actual - expected)
+        raise ConflictingLotAmortizedCostAuthorityError(
+            f"{context} keys do not match the immutable schema; "
+            f"missing={missing}, unsupported={unsupported}"
+        )
