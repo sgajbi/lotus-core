@@ -85,8 +85,9 @@ authority, appends corrected active profiles contiguously, and records missing/c
 parked evidence without invented economics. Parked decision identity includes the complete policy
 definition and resulting eligibility reason as well as source authority, so a policy correction
 cannot retain an obsolete parked reason as an unchanged profile. Active decision identity likewise
-binds the complete policy definition and normalized freshness cutoff, preventing changed
-calculation semantics or acceptance thresholds from retaining obsolete economics.
+binds the complete policy definition, normalized freshness cutoff, algorithm version, and numeric
+output-policy identity, preventing changed calculation semantics, precision policy, or acceptance
+thresholds from retaining obsolete economics.
 
 External ingestion DTO/routes, production composition into the owning transaction boundary,
 correction replay scheduling, public queries, disposal allocations, and redemption integration
@@ -128,7 +129,7 @@ Data Models wiki documents the staged ledgers while the capability wiki remains
 - 54 focused migration, ORM, and advisory-lock unit tests;
 - 3 real-PostgreSQL repository tests covering append/retry, contiguous versions, exact as-of
   selection, and header/period tamper rejection;
-- 95 warning-strict fixed-income domain/migration tests plus 13 application writer/materializer
+- 95 warning-strict fixed-income domain/migration tests plus 15 application writer/materializer
   tests;
 - 8 real-PostgreSQL authority cases covering all four source families, exact retry, monotonic
   corrections, source-version collision, typed reload, payload-shape enforcement at top-level and

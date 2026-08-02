@@ -28,6 +28,18 @@ AMORTIZED_COST_SCHEDULE_ALGORITHM_ID = "fixed-income-amortized-cost-schedule"
 AMORTIZED_COST_SCHEDULE_ALGORITHM_VERSION = 1
 
 
+def amortized_cost_calculation_identity() -> dict[str, object]:
+    """Return the versioned algorithm and numeric-policy identity used by materialization."""
+
+    return {
+        "algorithm_id": AMORTIZED_COST_SCHEDULE_ALGORITHM_ID,
+        "algorithm_version": AMORTIZED_COST_SCHEDULE_ALGORITHM_VERSION,
+        "numeric_output_policy": (
+            COST_BASIS_STATE_LEDGER_OUTPUT_V1.lineage_identity().lineage_payload()
+        ),
+    }
+
+
 class AmortizedCostCalculationError(ValueError):
     """Raised when authoritative schedule inputs cannot produce a valid schedule."""
 

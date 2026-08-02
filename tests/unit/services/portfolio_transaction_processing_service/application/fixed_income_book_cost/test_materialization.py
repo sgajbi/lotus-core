@@ -12,6 +12,9 @@ import pytest
 from services.portfolio_transaction_processing_service.app.application.fixed_income_book_cost import (  # noqa: E501
     MaterializeLotAmortizedCostProfileUseCase,
 )
+from services.portfolio_transaction_processing_service.app.application.fixed_income_book_cost import (  # noqa: E501
+    materialization as materialization_module,
+)
 from services.portfolio_transaction_processing_service.app.domain.fixed_income_book_cost import (
     AmortizedCostEligibilityReason,
     AmortizedCostProfileStatus,
@@ -71,7 +74,8 @@ async def test_materialization_locks_before_reloading_and_appends_active_profile
     assert result.eligibility_reason is None
     profile = profiles.append.await_args.args[0]
     assert profile.status is AmortizedCostProfileStatus.ACTIVE
-    assert profile.authority_content_hash == resolved.cache_key.authority_content_hash
+    assert profile.authority_content_hash == result.authority_content_hash
+    assert profile.authority_content_hash != resolved.cache_key.authority_content_hash
 
 
 @pytest.mark.asyncio
@@ -79,24 +83,32 @@ async def test_materialization_skips_unchanged_active_authority() -> None:
     authority, profiles = _dependencies()
     resolved = resolved_fixed_income_book_cost_inputs()
     authority.load.return_value = _bundle()
-    profiles.latest_verified_head.return_value = LotAmortizedCostProfileHead(
-        profile_id="lot-amortized-cost:existing",
-        profile_version=4,
-        profile_content_hash="a" * 64,
-        authority_content_hash=resolved.cache_key.authority_content_hash,
-    )
+    profiles.latest_verified_head.return_value = None
+    profiles.append.return_value = LotAmortizedCostProfileAppendOutcome.APPENDED
+    use_case = MaterializeLotAmortizedCostProfileUseCase(authority=authority, profiles=profiles)
 
-    result = await MaterializeLotAmortizedCostProfileUseCase(
-        authority=authority,
-        profiles=profiles,
-    ).execute(
+    first = await use_case.execute(
+        scope=fixed_income_book_cost_scope(),
+        effective_date=date(2026, 1, 1),
+        policy=resolved.policy,
+    )
+    first_profile = profiles.append.await_args.args[0]
+    profiles.latest_verified_head.return_value = LotAmortizedCostProfileHead(
+        profile_id=first_profile.profile_id,
+        profile_version=first_profile.profile_version,
+        profile_content_hash=first_profile.content_hash(),
+        authority_content_hash=first.authority_content_hash,
+    )
+    profiles.append.reset_mock()
+
+    result = await use_case.execute(
         scope=fixed_income_book_cost_scope(),
         effective_date=date(2026, 1, 1),
         policy=resolved.policy,
     )
 
     assert result.outcome is LotAmortizedCostProfileAppendOutcome.UNCHANGED
-    assert result.profile_version == 4
+    assert result.profile_version == 1
     profiles.append.assert_not_awaited()
 
 
@@ -394,3 +406,72 @@ async def test_terminal_calculation_failure_is_parked_and_reused() -> None:
     assert repeated.outcome is LotAmortizedCostProfileAppendOutcome.UNCHANGED
     assert repeated.eligibility_reason is AmortizedCostEligibilityReason.CALCULATION_FAILED
     profiles.append.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_active_decision_changes_when_calculation_identity_changes(monkeypatch) -> None:
+    authority, profiles = _dependencies()
+    resolved = resolved_fixed_income_book_cost_inputs()
+    authority.load.return_value = _bundle()
+    profiles.latest_verified_head.return_value = None
+    profiles.append.return_value = LotAmortizedCostProfileAppendOutcome.APPENDED
+    use_case = MaterializeLotAmortizedCostProfileUseCase(authority=authority, profiles=profiles)
+
+    first = await use_case.execute(
+        scope=fixed_income_book_cost_scope(),
+        effective_date=date(2026, 1, 1),
+        policy=resolved.policy,
+    )
+    first_profile = profiles.append.await_args.args[0]
+    profiles.latest_verified_head.return_value = LotAmortizedCostProfileHead(
+        profile_id=first_profile.profile_id,
+        profile_version=first_profile.profile_version,
+        profile_content_hash=first_profile.content_hash(),
+        authority_content_hash=first.authority_content_hash,
+    )
+    monkeypatch.setattr(
+        materialization_module,
+        "amortized_cost_calculation_identity",
+        lambda: {"algorithm_id": "fixed-income-amortized-cost-schedule", "algorithm_version": 2},
+    )
+
+    second = await use_case.execute(
+        scope=fixed_income_book_cost_scope(),
+        effective_date=date(2026, 1, 1),
+        policy=resolved.policy,
+    )
+
+    assert second.outcome is LotAmortizedCostProfileAppendOutcome.APPENDED
+    assert second.profile_version == 2
+    assert second.authority_content_hash != first.authority_content_hash
+
+
+@pytest.mark.asyncio
+async def test_precision_policy_failure_is_parked() -> None:
+    authority, profiles = _dependencies()
+    resolved = resolved_fixed_income_book_cost_inputs()
+    authority.load.return_value = replace(
+        _bundle(),
+        basis_facts=(
+            replace(
+                resolved.basis_fact,
+                initial_clean_cost_local=Decimal("100000000"),
+                redemption_value_local=Decimal("100000001"),
+            ),
+        ),
+    )
+    profiles.latest_verified_head.return_value = None
+    profiles.append.return_value = LotAmortizedCostProfileAppendOutcome.APPENDED
+
+    result = await MaterializeLotAmortizedCostProfileUseCase(
+        authority=authority,
+        profiles=profiles,
+    ).execute(
+        scope=fixed_income_book_cost_scope(),
+        effective_date=date(2026, 1, 1),
+        policy=resolved.policy,
+    )
+
+    assert result.outcome is LotAmortizedCostProfileAppendOutcome.APPENDED
+    assert result.eligibility_reason is AmortizedCostEligibilityReason.CALCULATION_FAILED
+    assert profiles.append.await_args.args[0].status is AmortizedCostProfileStatus.PARKED
