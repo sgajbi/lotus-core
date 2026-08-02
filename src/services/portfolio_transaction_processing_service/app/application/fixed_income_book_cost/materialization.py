@@ -90,7 +90,10 @@ class MaterializeLotAmortizedCostProfileUseCase:
                 freshness_cutoff=freshness_cutoff,
             )
         else:
-            authority_hash = resolved.cache_key.authority_content_hash
+            authority_hash = _active_decision_content_hash(
+                resolved.cache_key.authority_content_hash,
+                freshness_cutoff=freshness_cutoff,
+            )
             if head is not None and head.authority_content_hash == authority_hash:
                 return _unchanged_result(
                     head.profile_id,
@@ -102,6 +105,7 @@ class MaterializeLotAmortizedCostProfileUseCase:
                 profile = materialize_active_lot_amortized_cost_profile(
                     resolved,
                     profile_version=next_version,
+                    authority_content_hash=authority_hash,
                 )
             except AmortizedCostReconciliationError:
                 return await self._persist_parked_decision(
@@ -199,6 +203,26 @@ def _bundle_content_hash(
                 "effective_date": effective_date,
                 "schedule_facts": sorted(item.content_hash() for item in bundle.schedule_facts),
                 "yield_facts": sorted(item.content_hash() for item in bundle.yield_facts),
+            }
+        ),
+    )
+
+
+def _active_decision_content_hash(
+    authority_content_hash: str,
+    *,
+    freshness_cutoff: datetime | None,
+) -> str:
+    """Bind freshness policy to active evidence while preserving no-cutoff compatibility."""
+
+    if freshness_cutoff is None:
+        return authority_content_hash
+    return cast(
+        str,
+        canonical_content_hash(
+            {
+                "authority_content_hash": authority_content_hash,
+                "freshness_cutoff": freshness_cutoff.astimezone(UTC),
             }
         ),
     )

@@ -307,6 +307,7 @@ def materialize_active_lot_amortized_cost_profile(
     resolved: ResolvedLotAmortizedCostInputs,
     *,
     profile_version: int,
+    authority_content_hash: str | None = None,
 ) -> LotAmortizedCostProfileVersion:
     """Calculate and materialize one complete append-only active profile version."""
 
@@ -344,7 +345,11 @@ def materialize_active_lot_amortized_cost_profile(
         redemption_value_local=result.redemption_value_local,
         final_amortized_cost_local=result.final_amortized_cost_local,
         residual_local=result.residual_local,
-        authority_content_hash=resolved.cache_key.authority_content_hash,
+        authority_content_hash=(
+            resolved.cache_key.authority_content_hash
+            if authority_content_hash is None
+            else authority_content_hash
+        ),
         source_references=resolved.source_references,
         calculation_lineage=result.lineage,
         periods=periods,
