@@ -90,9 +90,10 @@ output-policy identity, preventing changed calculation semantics, precision poli
 thresholds from retaining obsolete economics.
 Authority appends acquire that same scope/profile lock before their narrower per-source lock, so a
 correction cannot commit between the materializer's source reload and profile decision.
-Atomic authority batches sort by that lock scope before authority family and source version, and
-authority payloads use PostgreSQL `JSONB`, eliminating ambiguous duplicate-object members before
-typed reconstruction and canonical-record verification.
+Atomic authority batches sort by that lock scope before authority family and source version.
+Authority payloads and profile source-reference/calculation-lineage evidence use PostgreSQL
+`JSONB`, eliminating ambiguous duplicate-object members before typed reconstruction and
+canonical-record verification.
 
 External ingestion DTO/routes, production composition into the owning transaction boundary,
 correction replay scheduling, public queries, disposal allocations, and redemption integration
