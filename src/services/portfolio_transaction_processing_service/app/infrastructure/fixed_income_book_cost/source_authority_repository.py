@@ -379,6 +379,10 @@ def _authority_from_record(
         raise ConflictingLotAmortizedCostAuthorityError(
             "persisted amortized-cost authority does not match its immutable hash"
         )
+    if not _record_matches(record, _authority_values(authority)):
+        raise ConflictingLotAmortizedCostAuthorityError(
+            "persisted amortized-cost authority does not use its canonical representation"
+        )
     return authority
 
 

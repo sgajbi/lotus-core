@@ -131,10 +131,10 @@ Data Models wiki documents the staged ledgers while the capability wiki remains
   selection, and header/period tamper rejection;
 - 95 warning-strict fixed-income domain/migration tests plus 17 application writer/materializer
   tests;
-- 16 real-PostgreSQL authority cases covering all four source families, exact retry, monotonic
+- 17 real-PostgreSQL authority cases covering all four source families, exact retry, monotonic
   corrections, source-version collision, typed reload, payload-shape enforcement at top-level and
-  nested schedule-period boundaries, canonical decimal encoding, and persisted-payload tamper
-  rejection;
+  nested schedule-period boundaries, canonical representation and decimal encoding, and
+  persisted-payload tamper rejection;
 - real-PostgreSQL authority migration apply, constraint, rollback, and reapply proof;
 - migration and numeric guards passed at head `c139b2c3d50c`, with 110 governed numeric columns
   across 33 tables and no planned enforcement gaps;
