@@ -48,9 +48,7 @@ async def test_writer_rejects_conflicting_batch_before_any_write() -> None:
         ConflictingLotAmortizedCostAuthorityBatchError,
         match="conflicting payloads",
     ):
-        await PersistLotAmortizedCostAuthorityUseCase(port).execute(
-            [assignment, conflict]
-        )
+        await PersistLotAmortizedCostAuthorityUseCase(port).execute([assignment, conflict])
 
     port.append.assert_not_awaited()
 

@@ -59,9 +59,7 @@ def test_lot_amortized_cost_authority_migration_is_reversible(monkeypatch) -> No
     ]
     definitions = operations[0][2]
     columns = {
-        definition.name: definition
-        for definition in definitions
-        if isinstance(definition, Column)
+        definition.name: definition for definition in definitions if isinstance(definition, Column)
     }
     assert set(columns) == {
         "id",
