@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal, DecimalException
+from typing import cast
 
 from portfolio_common.domain.calculation_lineage import (
     CalculationLineage,
@@ -14,6 +15,7 @@ from portfolio_common.domain.transaction.numeric_policy import (
     COST_BASIS_STATE_LEDGER_OUTPUT_V1,
 )
 
+from ..cost_basis.state_lineage import canonical_cost_basis_output_payload
 from .policy import (
     AmortizedCostDirection,
     AmortizedCostMethod,
@@ -298,10 +300,10 @@ def _validate_rate_authority(
 def _canonical_ledger_decimal(value: Decimal) -> Decimal:
     """Canonicalize an already-governed amount to its declared persistence scale."""
 
-    policy = COST_BASIS_STATE_LEDGER_OUTPUT_V1
-    quantum = Decimal(1).scaleb(-policy.scale)
-    with policy.arithmetic_context():
-        return value.quantize(quantum, rounding=policy.rounding)
+    return cast(
+        Decimal,
+        canonical_cost_basis_output_payload({"value": value})["value"],
+    )
 
 
 def _resolve_period_rate(
