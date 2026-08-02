@@ -20,6 +20,9 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure.co
     PROMETHEUS_COST_BASIS_PERSISTENCE_OBSERVER,
     SqlAlchemyAverageCostPoolReconciliationAdapter,
 )
+from src.services.portfolio_transaction_processing_service.app.infrastructure.fixed_income_book_cost import (  # noqa: E501
+    SqlAlchemyFixedIncomeBookCostAuthorityUnitOfWork,
+)
 from src.services.portfolio_transaction_processing_service.app.infrastructure.transaction_processing import (  # noqa: E501
     PROMETHEUS_TRANSACTION_PROCESSING_OBSERVER,
     SqlAlchemyTransactionProcessingUnitOfWork,
@@ -29,7 +32,9 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure.tr
 )
 from src.services.portfolio_transaction_processing_service.app.runtime.dependency_composition import (  # noqa: E501
     CanonicalBookedTransactionReplayerFactory,
+    SqlAlchemyFixedIncomeBookCostAuthorityUnitOfWorkFactory,
     SqlAlchemyTransactionProcessingUnitOfWorkFactory,
+    build_fixed_income_book_cost_authority_use_case,
     build_process_transaction_use_case,
     build_reconcile_average_cost_pools_use_case,
     build_replay_booked_transaction_use_case,
@@ -137,3 +142,21 @@ def test_average_cost_reconciliation_builder_uses_target_application_boundary() 
         use_case._reconciliation._rebuild_planner._observer
         is PROMETHEUS_COST_BASIS_CALCULATION_OBSERVER
     )
+
+
+def test_fixed_income_authority_builder_uses_fresh_unit_of_work_and_governed_catalog() -> None:
+    session_factory = MagicMock(spec=lambda: AsyncSession())
+
+    use_case = build_fixed_income_book_cost_authority_use_case(session_factory=session_factory)
+
+    factory = use_case._unit_of_work_factory
+    assert isinstance(factory, SqlAlchemyFixedIncomeBookCostAuthorityUnitOfWorkFactory)
+    first = factory()
+    second = factory()
+    assert isinstance(first, SqlAlchemyFixedIncomeBookCostAuthorityUnitOfWork)
+    assert isinstance(second, SqlAlchemyFixedIncomeBookCostAuthorityUnitOfWork)
+    assert first is not second
+    assert first._session_factory is second._session_factory is session_factory
+    assert tuple(
+        (identity.policy_id, identity.policy_version) for identity in use_case._policies.identities
+    ) == (("IFRS9_EIR_LOCAL", 1), ("STRAIGHT_LINE_LOCAL", 1))

@@ -20,12 +20,22 @@ from ..application.cost_basis_processing import (
     AverageCostPoolRebuildPlanner,
     PreparedCostProcessingUseCase,
 )
+from ..application.fixed_income_book_cost import (
+    HandleFixedIncomeBookCostAuthorityEventUseCase,
+)
+from ..domain.fixed_income_book_cost import (
+    AmortizedCostPolicyRegistry,
+    governed_amortized_cost_policy_catalog,
+)
 from ..infrastructure.cashflow import CashflowRuleCache
 from ..infrastructure.cost_basis import (
     PROMETHEUS_CORPORATE_ACTION_RECONCILIATION_OBSERVER,
     PROMETHEUS_COST_BASIS_CALCULATION_OBSERVER,
     PROMETHEUS_COST_BASIS_PERSISTENCE_OBSERVER,
     SqlAlchemyAverageCostPoolReconciliationAdapter,
+)
+from ..infrastructure.fixed_income_book_cost import (
+    SqlAlchemyFixedIncomeBookCostAuthorityUnitOfWork,
 )
 from ..infrastructure.transaction_processing import (
     PROMETHEUS_TRANSACTION_PROCESSING_OBSERVER,
@@ -50,6 +60,14 @@ class SqlAlchemyTransactionProcessingUnitOfWorkFactory:
             cost_processor=self.cost_processor,
             cashflow_rule_cache=self.cashflow_rule_cache,
         )
+
+
+@dataclass(frozen=True, slots=True)
+class SqlAlchemyFixedIncomeBookCostAuthorityUnitOfWorkFactory:
+    session_factory: Callable[[], AsyncSession]
+
+    def __call__(self) -> SqlAlchemyFixedIncomeBookCostAuthorityUnitOfWork:
+        return SqlAlchemyFixedIncomeBookCostAuthorityUnitOfWork(self.session_factory)
 
 
 @dataclass(frozen=True, slots=True)
@@ -119,3 +137,21 @@ def build_reconcile_average_cost_pools_use_case(
         ),
     )
     return ReconcileAverageCostPoolsUseCase(reconciliation)
+
+
+def build_fixed_income_book_cost_authority_use_case(
+    *,
+    session_factory: Callable[[], AsyncSession] | None = None,
+    policies: AmortizedCostPolicyRegistry | None = None,
+) -> HandleFixedIncomeBookCostAuthorityEventUseCase:
+    """Compose the authority handler with one SQL transaction and governed methodology."""
+
+    resolved_policies = policies or AmortizedCostPolicyRegistry(
+        governed_amortized_cost_policy_catalog()
+    )
+    return HandleFixedIncomeBookCostAuthorityEventUseCase(
+        unit_of_work_factory=SqlAlchemyFixedIncomeBookCostAuthorityUnitOfWorkFactory(
+            session_factory=session_factory or get_async_session_factory()
+        ),
+        policies=resolved_policies,
+    )
