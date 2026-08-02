@@ -108,6 +108,57 @@ class SqlAlchemyLotAmortizedCostProfileRepository:
             authority_content_hash=profile.authority_content_hash,
         )
 
+    async def latest_verified_head_for_effective_date(
+        self,
+        scope: LotBookCostAuthorityScope,
+        *,
+        effective_date: date,
+    ) -> LotAmortizedCostProfileHead | None:
+        """Verify and project the latest decision at one exact effective boundary."""
+
+        _require_scope(scope)
+        _require_effective_date(effective_date)
+        statement = (
+            select(LotAmortizedCostProfileRecord)
+            .where(
+                *_scope_predicates(scope),
+                LotAmortizedCostProfileRecord.effective_date == effective_date,
+            )
+            .order_by(LotAmortizedCostProfileRecord.profile_version.desc())
+            .limit(1)
+        )
+        record = (await self._session.scalars(statement)).first()
+        if record is None:
+            return None
+        profile = await self._profile_from_record(record)
+        return LotAmortizedCostProfileHead(
+            profile_id=profile.profile_id,
+            profile_version=profile.profile_version,
+            profile_content_hash=profile.content_hash(),
+            authority_content_hash=profile.authority_content_hash,
+        )
+
+    async def effective_boundaries_from(
+        self,
+        scope: LotBookCostAuthorityScope,
+        *,
+        effective_date: date,
+    ) -> tuple[date, ...]:
+        """Return distinct persisted decision boundaries affected by a correction."""
+
+        _require_scope(scope)
+        _require_effective_date(effective_date)
+        statement = (
+            select(LotAmortizedCostProfileRecord.effective_date)
+            .where(
+                *_scope_predicates(scope),
+                LotAmortizedCostProfileRecord.effective_date >= effective_date,
+            )
+            .distinct()
+            .order_by(LotAmortizedCostProfileRecord.effective_date.asc())
+        )
+        return tuple((await self._session.scalars(statement)).all())
+
     async def append(
         self,
         profile: LotAmortizedCostProfileVersion,
@@ -172,8 +223,7 @@ class SqlAlchemyLotAmortizedCostProfileRepository:
         """Load the latest append effective on or before a governed business date."""
 
         _require_scope(scope)
-        if type(effective_date) is not date:
-            raise TypeError("effective_date must be a date")
+        _require_effective_date(effective_date)
         statement = (
             select(LotAmortizedCostProfileRecord)
             .where(
@@ -436,6 +486,11 @@ def _required_string(payload: Mapping[str, object], key: str) -> str:
 def _require_scope(scope: LotBookCostAuthorityScope) -> None:
     if not isinstance(scope, LotBookCostAuthorityScope):
         raise TypeError("scope must be a LotBookCostAuthorityScope")
+
+
+def _require_effective_date(effective_date: date) -> None:
+    if type(effective_date) is not date:
+        raise TypeError("effective_date must be a date")
 
 
 def _scope_predicates(scope: LotBookCostAuthorityScope) -> tuple[object, ...]:

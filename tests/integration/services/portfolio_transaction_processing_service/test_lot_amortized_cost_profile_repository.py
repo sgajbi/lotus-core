@@ -59,6 +59,17 @@ async def test_repository_appends_queries_and_idempotently_replays_complete_prof
     await async_db_session.commit()
 
     assert await repository.latest(fixed_income_book_cost_scope()) == second
+    assert await repository.effective_boundaries_from(
+        fixed_income_book_cost_scope(),
+        effective_date=date(2026, 1, 15),
+    ) == (date(2026, 2, 1),)
+    first_head = await repository.latest_verified_head_for_effective_date(
+        fixed_income_book_cost_scope(),
+        effective_date=date(2026, 1, 1),
+    )
+    assert first_head is not None
+    assert first_head.profile_version == first.profile_version
+    assert first_head.profile_content_hash == first.content_hash()
     assert (
         await repository.effective_as_of(
             fixed_income_book_cost_scope(),
@@ -181,6 +192,16 @@ async def test_repository_validates_scope_and_returns_none_without_rows(
         await repository.latest(object())  # type: ignore[arg-type]
     with pytest.raises(TypeError, match="effective_date"):
         await repository.effective_as_of(
+            fixed_income_book_cost_scope(),
+            effective_date="2026-01-01",  # type: ignore[arg-type]
+        )
+    with pytest.raises(TypeError, match="effective_date"):
+        await repository.effective_boundaries_from(
+            fixed_income_book_cost_scope(),
+            effective_date="2026-01-01",  # type: ignore[arg-type]
+        )
+    with pytest.raises(TypeError, match="effective_date"):
+        await repository.latest_verified_head_for_effective_date(
             fixed_income_book_cost_scope(),
             effective_date="2026-01-01",  # type: ignore[arg-type]
         )
