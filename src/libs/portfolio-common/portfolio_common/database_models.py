@@ -2505,8 +2505,8 @@ class LotAmortizedCostProfileRecord(Base):
     final_amortized_cost_local = Column(ExactNumeric(18, 10), nullable=True)
     residual_local = Column(ExactNumeric(18, 10), nullable=True)
     authority_content_hash = Column(String(64), nullable=True)
-    source_references = Column(JSON(none_as_null=True), nullable=False)
-    calculation_lineage = Column(JSON(none_as_null=True), nullable=True)
+    source_references = Column(JSONB(none_as_null=True), nullable=False)
+    calculation_lineage = Column(JSONB(none_as_null=True), nullable=True)
     profile_content_hash = Column(String(64), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
@@ -2592,7 +2592,7 @@ class LotAmortizedCostProfileRecord(Base):
             name="ck_lot_amort_profile_content_hash",
         ),
         CheckConstraint(
-            "json_typeof(source_references::json) = 'array'",
+            "jsonb_typeof(source_references) = 'array'",
             name="ck_lot_amort_profile_sources_array",
         ),
         CheckConstraint(
@@ -2603,7 +2603,7 @@ class LotAmortizedCostProfileRecord(Base):
             "AND redemption_value_local IS NOT NULL "
             "AND final_amortized_cost_local IS NOT NULL AND residual_local IS NOT NULL "
             "AND authority_content_hash IS NOT NULL AND calculation_lineage IS NOT NULL "
-            "AND json_array_length(source_references::json) > 0) "
+            "AND jsonb_array_length(source_references) > 0) "
             "OR (status IN ('PARKED', 'INELIGIBLE') AND eligibility_reason IS NOT NULL "
             "AND direction IS NULL AND initial_amortized_cost_local IS NULL "
             "AND redemption_value_local IS NULL AND final_amortized_cost_local IS NULL "

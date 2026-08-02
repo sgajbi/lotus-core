@@ -8,6 +8,7 @@ Create Date: 2026-08-02
 from collections.abc import Sequence
 
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 
 from alembic import op
 
@@ -51,8 +52,8 @@ def upgrade() -> None:
         sa.Column("final_amortized_cost_local", sa.Numeric(18, 10), nullable=True),
         sa.Column("residual_local", sa.Numeric(18, 10), nullable=True),
         sa.Column("authority_content_hash", sa.String(length=64), nullable=True),
-        sa.Column("source_references", sa.JSON(none_as_null=True), nullable=False),
-        sa.Column("calculation_lineage", sa.JSON(none_as_null=True), nullable=True),
+        sa.Column("source_references", postgresql.JSONB(none_as_null=True), nullable=False),
+        sa.Column("calculation_lineage", postgresql.JSONB(none_as_null=True), nullable=True),
         sa.Column("profile_content_hash", sa.String(length=64), nullable=False),
         sa.Column(
             "created_at",
@@ -124,7 +125,7 @@ def upgrade() -> None:
             name="ck_lot_amort_profile_content_hash",
         ),
         sa.CheckConstraint(
-            "json_typeof(source_references::json) = 'array'",
+            "jsonb_typeof(source_references) = 'array'",
             name="ck_lot_amort_profile_sources_array",
         ),
         sa.CheckConstraint(
@@ -135,7 +136,7 @@ def upgrade() -> None:
             "AND redemption_value_local IS NOT NULL "
             "AND final_amortized_cost_local IS NOT NULL AND residual_local IS NOT NULL "
             "AND authority_content_hash IS NOT NULL AND calculation_lineage IS NOT NULL "
-            "AND json_array_length(source_references::json) > 0) "
+            "AND jsonb_array_length(source_references) > 0) "
             "OR (status IN ('PARKED', 'INELIGIBLE') AND eligibility_reason IS NOT NULL "
             "AND direction IS NULL AND initial_amortized_cost_local IS NULL "
             "AND redemption_value_local IS NULL AND final_amortized_cost_local IS NULL "
