@@ -49,6 +49,19 @@ def lot_amortized_cost_profile_lock_key(profile_id: str) -> int:
     return int.from_bytes(digest, byteorder="big", signed=True)
 
 
+async def acquire_lot_amortized_cost_profile_lock(
+    session: AsyncSession,
+    scope: LotBookCostAuthorityScope,
+) -> None:
+    """Fence profile materialization and authority writes for one exact lot scope."""
+
+    _require_scope(scope)
+    lock_key = lot_amortized_cost_profile_lock_key(lot_amortized_cost_profile_id(scope))
+    await session.execute(
+        text("SELECT pg_advisory_xact_lock(:lock_key)").bindparams(lock_key=lock_key)
+    )
+
+
 class SqlAlchemyLotAmortizedCostProfileRepository:
     """Store profile headers and normalized periods in the caller-owned transaction."""
 
@@ -61,11 +74,7 @@ class SqlAlchemyLotAmortizedCostProfileRepository:
     ) -> None:
         """Serialize one profile stream for the lifetime of the caller transaction."""
 
-        _require_scope(scope)
-        lock_key = lot_amortized_cost_profile_lock_key(lot_amortized_cost_profile_id(scope))
-        await self._session.execute(
-            text("SELECT pg_advisory_xact_lock(:lock_key)").bindparams(lock_key=lock_key)
-        )
+        await acquire_lot_amortized_cost_profile_lock(self._session, scope)
 
     async def latest_head(
         self,

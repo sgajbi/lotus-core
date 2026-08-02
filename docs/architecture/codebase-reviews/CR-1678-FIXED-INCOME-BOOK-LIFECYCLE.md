@@ -88,6 +88,8 @@ cannot retain an obsolete parked reason as an unchanged profile. Active decision
 binds the complete policy definition, normalized freshness cutoff, algorithm version, and numeric
 output-policy identity, preventing changed calculation semantics, precision policy, or acceptance
 thresholds from retaining obsolete economics.
+Authority appends acquire that same scope/profile lock before their narrower per-source lock, so a
+correction cannot commit between the materializer's source reload and profile decision.
 
 External ingestion DTO/routes, production composition into the owning transaction boundary,
 correction replay scheduling, public queries, disposal allocations, and redemption integration

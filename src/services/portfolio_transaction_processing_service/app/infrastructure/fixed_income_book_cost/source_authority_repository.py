@@ -31,6 +31,7 @@ from ...ports.fixed_income_book_cost import (
     LotAmortizedCostAuthorityAppendOutcome,
     LotAmortizedCostAuthorityBundle,
 )
+from .profile_repository import acquire_lot_amortized_cost_profile_lock
 
 
 class ConflictingLotAmortizedCostAuthorityError(ValueError):
@@ -89,6 +90,7 @@ class SqlAlchemyLotAmortizedCostAuthorityRepository:
         authority: LotAmortizedCostAuthority,
     ) -> LotAmortizedCostAuthorityAppendOutcome:
         values = _authority_values(authority)
+        await acquire_lot_amortized_cost_profile_lock(self._session, authority.scope)
         await self._acquire_source_lock(values)
         existing = await self._record_for_identity(values)
         if existing is not None:
