@@ -8669,7 +8669,10 @@ async def test_fixed_income_book_cost_authority_route_publishes_exact_scope_even
     response = await async_test_client.post(
         "/ingest/fixed-income-book-cost-authorities",
         json=_fixed_income_book_cost_authority_payload(),
-        headers={"X-Idempotency-Key": "book-cost-001"},
+        headers={
+            "X-Idempotency-Key": "book-cost-001",
+            "X-Tenant-Id": "TENANT_SG",
+        },
     )
 
     assert response.status_code == 202
@@ -8688,7 +8691,10 @@ async def test_fixed_income_authority_idempotency_replay_does_not_republish(
     async_test_client: httpx.AsyncClient,
     mock_kafka_producer: MagicMock,
 ) -> None:
-    headers = {"X-Idempotency-Key": "book-cost-replay-001"}
+    headers = {
+        "X-Idempotency-Key": "book-cost-replay-001",
+        "X-Tenant-Id": "TENANT_SG",
+    }
     payload = _fixed_income_book_cost_authority_payload()
 
     first = await async_test_client.post(
