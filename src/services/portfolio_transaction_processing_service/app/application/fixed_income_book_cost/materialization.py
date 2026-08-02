@@ -15,6 +15,7 @@ from ...domain.fixed_income_book_cost import (
     AmortizedCostEligibilityReason,
     AmortizedCostInputResolutionError,
     AmortizedCostPolicy,
+    AmortizedCostReconciliationError,
     LotBookCostAuthorityScope,
     materialize_active_lot_amortized_cost_profile,
     materialize_parked_lot_amortized_cost_profile,
@@ -24,6 +25,7 @@ from ...ports import (
     LotAmortizedCostAuthorityBundle,
     LotAmortizedCostAuthorityPort,
     LotAmortizedCostProfileAppendOutcome,
+    LotAmortizedCostProfileHead,
     LotAmortizedCostProfilePort,
 )
 
@@ -77,26 +79,14 @@ class MaterializeLotAmortizedCostProfileUseCase:
                 freshness_cutoff=freshness_cutoff,
             )
         except AmortizedCostInputResolutionError as exc:
-            authority_hash = _parked_decision_content_hash(
+            return await self._persist_parked_decision(
                 bundle,
-                effective_date=effective_date,
-                policy=policy,
-                eligibility_reason=exc.reason,
-            )
-            if head is not None and head.authority_content_hash == authority_hash:
-                return _unchanged_result(
-                    head.profile_id,
-                    head.profile_version,
-                    authority_hash,
-                    eligibility_reason=exc.reason,
-                )
-            profile = materialize_parked_lot_amortized_cost_profile(
+                head=head,
                 scope=scope,
                 effective_date=effective_date,
+                policy=policy,
                 profile_version=next_version,
                 reason=exc.reason,
-                authority_content_hash=authority_hash,
-                source_references=_bundle_source_references(bundle),
             )
         else:
             authority_hash = resolved.cache_key.authority_content_hash
@@ -107,10 +97,21 @@ class MaterializeLotAmortizedCostProfileUseCase:
                     authority_hash,
                     eligibility_reason=None,
                 )
-            profile = materialize_active_lot_amortized_cost_profile(
-                resolved,
-                profile_version=next_version,
-            )
+            try:
+                profile = materialize_active_lot_amortized_cost_profile(
+                    resolved,
+                    profile_version=next_version,
+                )
+            except AmortizedCostReconciliationError:
+                return await self._persist_parked_decision(
+                    bundle,
+                    head=head,
+                    scope=scope,
+                    effective_date=effective_date,
+                    policy=policy,
+                    profile_version=next_version,
+                    reason=AmortizedCostEligibilityReason.RESIDUAL_OUTSIDE_TOLERANCE,
+                )
         outcome = await self._profiles.append(profile)
         return LotAmortizedCostMaterializationResult(
             outcome=outcome,
@@ -118,6 +119,49 @@ class MaterializeLotAmortizedCostProfileUseCase:
             profile_version=profile.profile_version,
             authority_content_hash=cast(str, profile.authority_content_hash),
             eligibility_reason=profile.eligibility_reason,
+        )
+
+    async def _persist_parked_decision(
+        self,
+        bundle: LotAmortizedCostAuthorityBundle,
+        *,
+        head: LotAmortizedCostProfileHead | None,
+        scope: LotBookCostAuthorityScope,
+        effective_date: date,
+        policy: AmortizedCostPolicy,
+        profile_version: int,
+        reason: AmortizedCostEligibilityReason,
+    ) -> LotAmortizedCostMaterializationResult:
+        """Append or reuse durable fail-closed evidence for one authority decision."""
+
+        authority_hash = _parked_decision_content_hash(
+            bundle,
+            effective_date=effective_date,
+            policy=policy,
+            eligibility_reason=reason,
+        )
+        if head is not None and head.authority_content_hash == authority_hash:
+            return _unchanged_result(
+                head.profile_id,
+                head.profile_version,
+                authority_hash,
+                eligibility_reason=reason,
+            )
+        profile = materialize_parked_lot_amortized_cost_profile(
+            scope=scope,
+            effective_date=effective_date,
+            profile_version=profile_version,
+            reason=reason,
+            authority_content_hash=authority_hash,
+            source_references=_bundle_source_references(bundle),
+        )
+        outcome = await self._profiles.append(profile)
+        return LotAmortizedCostMaterializationResult(
+            outcome=outcome,
+            profile_id=profile.profile_id,
+            profile_version=profile.profile_version,
+            authority_content_hash=authority_hash,
+            eligibility_reason=reason,
         )
 
 

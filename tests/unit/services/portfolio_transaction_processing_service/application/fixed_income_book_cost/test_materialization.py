@@ -226,3 +226,52 @@ async def test_materialization_appends_when_active_policy_semantics_change() -> 
     assert second.outcome is LotAmortizedCostProfileAppendOutcome.APPENDED
     assert second.profile_version == 2
     assert second.authority_content_hash != first.authority_content_hash
+
+
+@pytest.mark.asyncio
+async def test_materialization_parks_and_reuses_residual_reconciliation_failure() -> None:
+    authority, profiles = _dependencies()
+    resolved = resolved_fixed_income_book_cost_inputs()
+    assert resolved.yield_fact is not None
+    failing_bundle = replace(
+        _bundle(),
+        yield_facts=(replace(resolved.yield_fact, annual_yield=Decimal("0")),),
+    )
+    authority.load.return_value = failing_bundle
+    profiles.latest_head.return_value = None
+    profiles.append.return_value = LotAmortizedCostProfileAppendOutcome.APPENDED
+    use_case = MaterializeLotAmortizedCostProfileUseCase(authority=authority, profiles=profiles)
+
+    first = await use_case.execute(
+        scope=fixed_income_book_cost_scope(),
+        effective_date=date(2026, 1, 1),
+        policy=resolved.policy,
+    )
+
+    assert first.outcome is LotAmortizedCostProfileAppendOutcome.APPENDED
+    assert first.eligibility_reason is AmortizedCostEligibilityReason.RESIDUAL_OUTSIDE_TOLERANCE
+    parked_profile = profiles.append.await_args.args[0]
+    assert parked_profile.status is AmortizedCostProfileStatus.PARKED
+    assert parked_profile.periods == ()
+    assert parked_profile.calculation_lineage is None
+    assert parked_profile.source_references
+
+    profiles.latest_head.return_value = LotAmortizedCostProfileHead(
+        profile_id=parked_profile.profile_id,
+        profile_version=parked_profile.profile_version,
+        profile_content_hash=parked_profile.content_hash(),
+        authority_content_hash=first.authority_content_hash,
+    )
+    profiles.append.reset_mock()
+
+    repeated = await use_case.execute(
+        scope=fixed_income_book_cost_scope(),
+        effective_date=date(2026, 1, 1),
+        policy=resolved.policy,
+    )
+
+    assert repeated.outcome is LotAmortizedCostProfileAppendOutcome.UNCHANGED
+    assert repeated.profile_version == first.profile_version
+    assert repeated.authority_content_hash == first.authority_content_hash
+    assert repeated.eligibility_reason is AmortizedCostEligibilityReason.RESIDUAL_OUTSIDE_TOLERANCE
+    profiles.append.assert_not_awaited()
