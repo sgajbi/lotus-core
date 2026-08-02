@@ -28,6 +28,10 @@ from .cost_basis_processing.timeline import (
     build_cost_basis_timeline_processor,
 )
 from .errors import TransactionProcessingError, TransactionProcessingRejected
+from .fixed_income_book_cost import (
+    LotAmortizedCostMaterializationResult,
+    MaterializeLotAmortizedCostProfileUseCase,
+)
 from .position_history import PositionHistoryProcessingResult, PositionHistoryProcessor
 from .process_transaction import ProcessTransactionUseCase
 from .replay_booked_transaction import (
@@ -59,6 +63,8 @@ __all__ = [
     "ProcessTransactionUseCase",
     "PositionHistoryProcessingResult",
     "PositionHistoryProcessor",
+    "LotAmortizedCostMaterializationResult",
+    "MaterializeLotAmortizedCostProfileUseCase",
     "ReconcileAverageCostPoolsCommand",
     "ReconcileAverageCostPoolsResult",
     "ReconcileAverageCostPoolsUseCase",
