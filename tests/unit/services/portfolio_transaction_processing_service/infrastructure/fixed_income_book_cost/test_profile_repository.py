@@ -50,3 +50,20 @@ def test_materialization_lock_key_is_stable_namespaced_and_fail_closed() -> None
     )
     with pytest.raises(ValueError, match="nonblank"):
         lot_amortized_cost_profile_lock_key(" ")
+
+
+@pytest.mark.asyncio
+async def test_verified_head_propagates_full_profile_integrity_failure() -> None:
+    session = AsyncMock()
+    repository = SqlAlchemyLotAmortizedCostProfileRepository(session)
+    repository.latest = AsyncMock(
+        side_effect=fixed_income_book_cost.ConflictingLotAmortizedCostProfileError(
+            "persisted profile content does not match its immutable hash"
+        )
+    )
+
+    with pytest.raises(
+        fixed_income_book_cost.ConflictingLotAmortizedCostProfileError,
+        match="immutable hash",
+    ):
+        await repository.latest_verified_head(fixed_income_book_cost_scope())

@@ -49,6 +49,14 @@ class LotAmortizedCostProfilePort(Protocol):
 
         ...
 
+    async def latest_verified_head(
+        self,
+        scope: LotBookCostAuthorityScope,
+    ) -> LotAmortizedCostProfileHead | None:
+        """Return the latest head only after verifying its complete persisted profile."""
+
+        ...
+
     async def append(
         self,
         profile: LotAmortizedCostProfileVersion,
