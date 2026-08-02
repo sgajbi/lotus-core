@@ -11,6 +11,11 @@ from portfolio_common.event_contracts import FixedIncomeBookCostAuthorityEvent
 
 from services.portfolio_transaction_processing_service.app.application.fixed_income_book_cost import (  # noqa: E501
     ApplyFixedIncomeBookCostAuthorityEventUseCase,
+    HandleFixedIncomeBookCostAuthorityEventUseCase,
+)
+from services.portfolio_transaction_processing_service.app.domain.fixed_income_book_cost import (
+    AmortizedCostEligibilityReason,
+    AmortizedCostPolicyRegistry,
 )
 from services.portfolio_transaction_processing_service.app.ports import (
     LotAmortizedCostAuthorityAppendOutcome,
@@ -77,6 +82,23 @@ def _dependencies():
     profiles.latest_verified_head.return_value = None
     profiles.append.return_value = LotAmortizedCostProfileAppendOutcome.APPENDED
     return authority, profiles
+
+
+class _UnitOfWork:
+    def __init__(self, authority, profiles) -> None:
+        self.authority = authority
+        self.profiles = profiles
+        self.committed = False
+        self.exit_error: BaseException | None = None
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, _exc_type, exc_value, _traceback) -> None:
+        self.exit_error = exc_value
+
+    async def commit(self) -> None:
+        self.committed = True
 
 
 @pytest.mark.asyncio
@@ -201,3 +223,82 @@ async def test_source_correction_appends_next_profile_from_latest_source_version
         and reference.source_revision == "revision-2"
         for reference in corrected_profile.source_references
     )
+
+
+@pytest.mark.asyncio
+async def test_atomic_handler_resolves_exact_policy_and_commits_active_profile() -> None:
+    authority, profiles = _dependencies()
+    resolved = resolved_fixed_income_book_cost_inputs()
+    authority.load.return_value = _bundle(basis_facts=(resolved.basis_fact,))
+    unit_of_work = _UnitOfWork(authority, profiles)
+
+    result = await HandleFixedIncomeBookCostAuthorityEventUseCase(
+        unit_of_work_factory=lambda: unit_of_work,
+        policies=AmortizedCostPolicyRegistry((resolved.policy,)),
+    ).execute(_basis_event(resolved.basis_fact))
+
+    assert unit_of_work.committed is True
+    assert unit_of_work.exit_error is None
+    assert result.persistence.appended_count == 1
+    assert result.materialization.eligibility_reason is None
+    assert profiles.append.await_args.args[0].policy_id == resolved.policy.policy_id
+    assert authority.load.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_atomic_handler_commits_parked_evidence_when_assignment_is_missing() -> None:
+    authority, profiles = _dependencies()
+    resolved = resolved_fixed_income_book_cost_inputs()
+    authority.load.return_value = LotAmortizedCostAuthorityBundle(
+        basis_facts=(resolved.basis_fact,)
+    )
+    unit_of_work = _UnitOfWork(authority, profiles)
+
+    result = await HandleFixedIncomeBookCostAuthorityEventUseCase(
+        unit_of_work_factory=lambda: unit_of_work,
+        policies=AmortizedCostPolicyRegistry((resolved.policy,)),
+    ).execute(_basis_event(resolved.basis_fact))
+
+    assert unit_of_work.committed is True
+    assert result.materialization.eligibility_reason is (
+        AmortizedCostEligibilityReason.ASSIGNMENT_MISSING
+    )
+    parked = profiles.append.await_args.args[0]
+    assert parked.policy_id is None
+    assert parked.policy_version is None
+
+
+@pytest.mark.asyncio
+async def test_atomic_handler_commits_parked_evidence_for_unregistered_policy() -> None:
+    authority, profiles = _dependencies()
+    resolved = resolved_fixed_income_book_cost_inputs()
+    authority.load.return_value = _bundle(basis_facts=(resolved.basis_fact,))
+    unit_of_work = _UnitOfWork(authority, profiles)
+
+    result = await HandleFixedIncomeBookCostAuthorityEventUseCase(
+        unit_of_work_factory=lambda: unit_of_work,
+        policies=AmortizedCostPolicyRegistry(()),
+    ).execute(_basis_event(resolved.basis_fact))
+
+    assert unit_of_work.committed is True
+    assert result.materialization.eligibility_reason is (
+        AmortizedCostEligibilityReason.POLICY_UNSUPPORTED
+    )
+
+
+@pytest.mark.asyncio
+async def test_atomic_handler_does_not_commit_when_profile_persistence_fails() -> None:
+    authority, profiles = _dependencies()
+    resolved = resolved_fixed_income_book_cost_inputs()
+    authority.load.return_value = _bundle(basis_facts=(resolved.basis_fact,))
+    profiles.append.side_effect = RuntimeError("database unavailable")
+    unit_of_work = _UnitOfWork(authority, profiles)
+
+    with pytest.raises(RuntimeError, match="database unavailable"):
+        await HandleFixedIncomeBookCostAuthorityEventUseCase(
+            unit_of_work_factory=lambda: unit_of_work,
+            policies=AmortizedCostPolicyRegistry((resolved.policy,)),
+        ).execute(_basis_event(resolved.basis_fact))
+
+    assert unit_of_work.committed is False
+    assert isinstance(unit_of_work.exit_error, RuntimeError)
