@@ -12,6 +12,11 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from portfolio_common.domain.calculation_lineage import canonical_content_hash
 from portfolio_common.domain.currency import normalize_currency_code
 from portfolio_common.domain.eventing import portfolio_security_lot_partition_key
+from portfolio_common.pydantic_financial_numeric import (
+    ExactDecimal18_10,
+    ExactNonNegativeDecimal18_10,
+    ExactPositiveDecimal18_10,
+)
 
 FIXED_INCOME_BOOK_COST_AUTHORITY_EVENT_TYPE = "fixed_income.book_cost.authority.received"
 FIXED_INCOME_BOOK_COST_AUTHORITY_SCHEMA_VERSION = "1.0.0"
@@ -24,6 +29,7 @@ _STRICT_MODEL_CONFIG = ConfigDict(
 )
 
 _PositiveStrictVersion = Annotated[int, Field(strict=True, ge=1)]
+_ExactPeriodRate = Annotated[ExactDecimal18_10, Field(gt=Decimal(-1))]
 
 
 class FixedIncomeBookCostAuthorityStatus(StrEnum):
@@ -132,9 +138,9 @@ class CleanCostBasisAuthorityContract(BaseModel):
     authority_type: Literal["CLEAN_COST_BASIS"] = "CLEAN_COST_BASIS"
     header: FixedIncomeBookCostAuthorityHeader
     currency: str = Field(min_length=3, max_length=3)
-    initial_clean_cost_local: Decimal = Field(ge=0)
-    fees_in_basis_local: Decimal = Field(ge=0)
-    redemption_value_local: Decimal = Field(ge=0)
+    initial_clean_cost_local: ExactNonNegativeDecimal18_10
+    fees_in_basis_local: ExactNonNegativeDecimal18_10
+    redemption_value_local: ExactNonNegativeDecimal18_10
     discount_origin: FixedIncomeDiscountOrigin
 
     @field_validator("currency")
@@ -168,9 +174,9 @@ class AmortizationPeriodContract(BaseModel):
 
     period_start_date: date
     period_end_date: date
-    year_fraction: Decimal = Field(gt=0)
-    cash_coupon_local: Decimal = Field(ge=0)
-    supplied_period_rate: Decimal | None = Field(default=None, gt=-1)
+    year_fraction: ExactPositiveDecimal18_10
+    cash_coupon_local: ExactNonNegativeDecimal18_10
+    supplied_period_rate: _ExactPeriodRate | None = None
 
     @model_validator(mode="after")
     def validate_period(self) -> AmortizationPeriodContract:
@@ -206,13 +212,18 @@ class EffectiveYieldAuthorityContract(BaseModel):
 
     authority_type: Literal["EFFECTIVE_YIELD"] = "EFFECTIVE_YIELD"
     header: FixedIncomeBookCostAuthorityHeader
-    annual_yield: Decimal = Field(gt=-1)
+    annual_yield: ExactDecimal18_10
     yield_application: FixedIncomeYieldApplication
 
     @model_validator(mode="after")
     def reject_period_rate_as_annual_authority(self) -> EffectiveYieldAuthorityContract:
         if self.yield_application is FixedIncomeYieldApplication.PER_PERIOD_EFFECTIVE:
             raise ValueError("per-period rates belong to the amortization schedule")
+        if (
+            self.yield_application is FixedIncomeYieldApplication.ANNUAL_EFFECTIVE
+            and self.annual_yield <= Decimal(-1)
+        ):
+            raise ValueError("annual effective yield must be greater than negative one")
         return self
 
     model_config = _STRICT_MODEL_CONFIG

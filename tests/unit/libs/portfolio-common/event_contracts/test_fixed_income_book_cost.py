@@ -51,6 +51,47 @@ def _basis_authority() -> dict[str, object]:
     }
 
 
+def _schedule_authority() -> dict[str, object]:
+    return {
+        "authority_type": "AMORTIZATION_SCHEDULE",
+        "header": _header(),
+        "schedule_version": 1,
+        "year_fraction_method_id": "ACTUAL_ACTUAL_ICMA",
+        "year_fraction_method_version": 1,
+        "periods": [
+            {
+                "period_start_date": "2026-08-01",
+                "period_end_date": "2027-02-01",
+                "year_fraction": "0.5",
+                "cash_coupon_local": "20000",
+                "supplied_period_rate": "0.02",
+            }
+        ],
+    }
+
+
+def _yield_authority() -> dict[str, object]:
+    return {
+        "authority_type": "EFFECTIVE_YIELD",
+        "header": _header(),
+        "annual_yield": "0.045",
+        "yield_application": "ANNUAL_EFFECTIVE",
+    }
+
+
+def _replace_nested(
+    authority: dict[str, object],
+    path: tuple[str, ...],
+    value: object,
+) -> None:
+    target = authority
+    for component in path[:-1]:
+        nested = target[component]
+        assert isinstance(nested, dict)
+        target = nested
+    target[path[-1]] = value
+
+
 def test_event_normalizes_exact_scope_and_preserves_decimal_strings() -> None:
     event = FixedIncomeBookCostAuthorityEvent.model_validate(_event(_basis_authority()))
 
@@ -161,32 +202,68 @@ def test_event_rejects_coercible_non_integer_versions(
             "policy_version": 1,
             "assignment_reason": "Governed effective-yield accounting policy.",
         },
-        "AMORTIZATION_SCHEDULE": {
-            "authority_type": "AMORTIZATION_SCHEDULE",
-            "header": _header(),
-            "schedule_version": 1,
-            "year_fraction_method_id": "ACTUAL_ACTUAL_ICMA",
-            "year_fraction_method_version": 1,
-            "periods": [
-                {
-                    "period_start_date": "2026-08-01",
-                    "period_end_date": "2027-02-01",
-                    "year_fraction": "0.5",
-                    "cash_coupon_local": "20000",
-                }
-            ],
-        },
+        "AMORTIZATION_SCHEDULE": _schedule_authority(),
     }
     authority = authorities[authority_type]
-    target = authority
-    for component in version_path[:-1]:
-        nested = target[component]
-        assert isinstance(nested, dict)
-        target = nested
-    target[version_path[-1]] = coercible_version
+    _replace_nested(authority, version_path, coercible_version)
 
     with pytest.raises(ValidationError):
         FixedIncomeBookCostAuthorityEvent.model_validate(_event(authority))
+
+
+@pytest.mark.parametrize("invalid_numeric", [0.1 + 0.2, "100000000.0000000000"])
+@pytest.mark.parametrize(
+    ("authority_type", "numeric_path"),
+    [
+        ("CLEAN_COST_BASIS", ("initial_clean_cost_local",)),
+        ("CLEAN_COST_BASIS", ("fees_in_basis_local",)),
+        ("CLEAN_COST_BASIS", ("redemption_value_local",)),
+        ("AMORTIZATION_SCHEDULE", ("periods", "0", "year_fraction")),
+        ("AMORTIZATION_SCHEDULE", ("periods", "0", "cash_coupon_local")),
+        ("AMORTIZATION_SCHEDULE", ("periods", "0", "supplied_period_rate")),
+        ("EFFECTIVE_YIELD", ("annual_yield",)),
+    ],
+)
+def test_event_rejects_lossy_or_out_of_range_financial_numerics(
+    authority_type: str,
+    numeric_path: tuple[str, ...],
+    invalid_numeric: object,
+) -> None:
+    authorities = {
+        "CLEAN_COST_BASIS": _basis_authority(),
+        "AMORTIZATION_SCHEDULE": _schedule_authority(),
+        "EFFECTIVE_YIELD": _yield_authority(),
+    }
+    authority = authorities[authority_type]
+    target: object = authority
+    for component in numeric_path[:-1]:
+        if isinstance(target, dict):
+            target = target[component]
+        else:
+            assert isinstance(target, list)
+            target = target[int(component)]
+    assert isinstance(target, dict)
+    target[numeric_path[-1]] = invalid_numeric
+
+    with pytest.raises(ValidationError):
+        FixedIncomeBookCostAuthorityEvent.model_validate(_event(authority))
+
+
+def test_yield_bound_depends_on_application_convention() -> None:
+    nominal = _yield_authority()
+    nominal["annual_yield"] = "-1.1"
+    nominal["yield_application"] = "ANNUAL_NOMINAL_SIMPLE"
+    effective = dict(nominal)
+    effective["yield_application"] = "ANNUAL_EFFECTIVE"
+
+    accepted = FixedIncomeBookCostAuthorityEvent.model_validate(_event(nominal))
+    assert str(accepted.authority.annual_yield) == "-1.1"
+
+    with pytest.raises(
+        ValidationError,
+        match="annual effective yield must be greater than negative one",
+    ):
+        FixedIncomeBookCostAuthorityEvent.model_validate(_event(effective))
 
 
 @pytest.mark.parametrize(
