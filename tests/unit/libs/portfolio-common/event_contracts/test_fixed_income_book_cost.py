@@ -334,6 +334,22 @@ def test_event_rejects_numeric_temporal_inputs(
 
 
 @pytest.mark.parametrize(
+    "scope_field",
+    ["tenant_id", "legal_book_id", "portfolio_id", "security_id", "lot_id"],
+)
+@pytest.mark.parametrize("invalid_component", ["VALUE|OTHER", "VALUE\nOTHER"])
+def test_event_rejects_partition_incompatible_scope_identifiers(
+    scope_field: str,
+    invalid_component: str,
+) -> None:
+    authority = _basis_authority()
+    _replace_nested(authority, ("header", "scope", scope_field), invalid_component)
+
+    with pytest.raises(ValidationError, match="must not contain"):
+        FixedIncomeBookCostAuthorityEvent.model_validate(_event(authority))
+
+
+@pytest.mark.parametrize(
     ("path", "value"),
     [
         (("header", "scope", "tenant_id"), " "),

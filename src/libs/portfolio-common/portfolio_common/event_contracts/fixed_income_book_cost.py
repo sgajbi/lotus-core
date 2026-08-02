@@ -112,6 +112,11 @@ class FixedIncomeBookCostAuthorityScope(BaseModel):
     security_id: str = Field(min_length=1, max_length=160)
     lot_id: str = Field(min_length=1, max_length=160)
 
+    @model_validator(mode="after")
+    def validate_partition_components(self) -> FixedIncomeBookCostAuthorityScope:
+        self.partition_key()
+        return self
+
     def partition_key(self) -> str:
         """Return the domain-owned event key for this source-lot authority stream."""
 
