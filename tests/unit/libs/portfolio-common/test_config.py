@@ -466,9 +466,7 @@ def test_active_topic_registry_has_explicit_source_owned_partition_counts():
     assert config_module.KAFKA_TOPIC_PARTITION_COUNTS["transactions.raw.received"] == 12
     assert config_module.KAFKA_TOPIC_PARTITION_COUNTS["transactions.persisted"] == 12
     assert (
-        config_module.KAFKA_TOPIC_PARTITION_COUNTS[
-            "fixed_income.book_cost.authority.received"
-        ]
+        config_module.KAFKA_TOPIC_PARTITION_COUNTS["fixed_income.book_cost.authority.received"]
         == 12
     )
     assert config_module.KAFKA_TOPIC_PARTITION_COUNTS["market_prices.raw.received"] == 12
