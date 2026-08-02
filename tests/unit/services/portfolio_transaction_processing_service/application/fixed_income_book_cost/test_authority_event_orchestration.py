@@ -1,0 +1,203 @@
+"""Verify authority-event persistence and exact-scope materialization orchestration."""
+
+from __future__ import annotations
+
+from dataclasses import replace
+from datetime import date
+from unittest.mock import AsyncMock
+
+import pytest
+from portfolio_common.event_contracts import FixedIncomeBookCostAuthorityEvent
+
+from services.portfolio_transaction_processing_service.app.application.fixed_income_book_cost import (  # noqa: E501
+    ApplyFixedIncomeBookCostAuthorityEventUseCase,
+)
+from services.portfolio_transaction_processing_service.app.ports import (
+    LotAmortizedCostAuthorityAppendOutcome,
+    LotAmortizedCostAuthorityBundle,
+    LotAmortizedCostAuthorityPort,
+    LotAmortizedCostProfileAppendOutcome,
+    LotAmortizedCostProfileHead,
+    LotAmortizedCostProfilePort,
+)
+from tests.test_support.fixed_income_book_cost import resolved_fixed_income_book_cost_inputs
+
+
+def _basis_event(basis) -> FixedIncomeBookCostAuthorityEvent:
+    return FixedIncomeBookCostAuthorityEvent.model_validate(
+        {
+            "event_type": "fixed_income.book_cost.authority.received",
+            "schema_version": "1.0.0",
+            "authority": {
+                "authority_type": "CLEAN_COST_BASIS",
+                "header": {
+                    "scope": {
+                        "tenant_id": basis.scope.tenant_id,
+                        "legal_book_id": basis.scope.legal_book_id,
+                        "portfolio_id": basis.scope.portfolio_id,
+                        "security_id": basis.scope.security_id,
+                        "lot_id": basis.scope.lot_id,
+                    },
+                    "source": {
+                        "source_system": basis.source.source_system,
+                        "source_record_id": basis.source.source_record_id,
+                        "source_revision": basis.source.source_revision,
+                        "source_version": basis.source.fact_version,
+                        "observed_at": basis.source.observed_at.isoformat(),
+                    },
+                    "status": basis.fact_status.value,
+                    "valid_from": basis.valid_from.isoformat(),
+                    "valid_to": basis.valid_to.isoformat() if basis.valid_to else None,
+                },
+                "currency": basis.currency,
+                "initial_clean_cost_local": str(basis.initial_clean_cost_local),
+                "fees_in_basis_local": str(basis.fees_in_basis_local),
+                "redemption_value_local": str(basis.redemption_value_local),
+                "discount_origin": basis.discount_origin.value,
+            },
+        }
+    )
+
+
+def _bundle(*, basis_facts) -> LotAmortizedCostAuthorityBundle:
+    resolved = resolved_fixed_income_book_cost_inputs()
+    assert resolved.yield_fact is not None
+    return LotAmortizedCostAuthorityBundle(
+        assignments=(resolved.assignment,),
+        basis_facts=tuple(basis_facts),
+        schedule_facts=(resolved.schedule_fact,),
+        yield_facts=(resolved.yield_fact,),
+    )
+
+
+def _dependencies():
+    authority = AsyncMock(spec=LotAmortizedCostAuthorityPort)
+    profiles = AsyncMock(spec=LotAmortizedCostProfilePort)
+    authority.append.return_value = LotAmortizedCostAuthorityAppendOutcome.APPENDED
+    profiles.latest_verified_head.return_value = None
+    profiles.append.return_value = LotAmortizedCostProfileAppendOutcome.APPENDED
+    return authority, profiles
+
+
+@pytest.mark.asyncio
+async def test_applies_mapped_authority_then_materializes_event_owned_scope() -> None:
+    authority, profiles = _dependencies()
+    resolved = resolved_fixed_income_book_cost_inputs()
+    authority.load.return_value = _bundle(basis_facts=(resolved.basis_fact,))
+    event = _basis_event(resolved.basis_fact)
+    effective_date = date(2026, 1, 1)
+
+    result = await ApplyFixedIncomeBookCostAuthorityEventUseCase(
+        authority=authority,
+        profiles=profiles,
+    ).execute(
+        event,
+        effective_date=effective_date,
+        policy=resolved.policy,
+    )
+
+    authority.append.assert_awaited_once_with(resolved.basis_fact)
+    authority.load.assert_awaited_once_with(resolved.basis_fact.scope)
+    profiles.acquire_materialization_lock.assert_awaited_once_with(resolved.basis_fact.scope)
+    persisted_profile = profiles.append.await_args.args[0]
+    assert persisted_profile.scope == resolved.basis_fact.scope
+    assert persisted_profile.effective_date == effective_date
+    assert persisted_profile.policy_id == resolved.policy.policy_id
+    assert persisted_profile.policy_version == resolved.policy.policy_version
+    assert result.scope == resolved.basis_fact.scope
+    assert result.persistence.appended_count == 1
+    assert result.materialization.outcome is LotAmortizedCostProfileAppendOutcome.APPENDED
+
+
+@pytest.mark.asyncio
+async def test_exact_duplicate_is_unchanged_for_authority_and_materialization() -> None:
+    authority, profiles = _dependencies()
+    resolved = resolved_fixed_income_book_cost_inputs()
+    authority.load.return_value = _bundle(basis_facts=(resolved.basis_fact,))
+    event = _basis_event(resolved.basis_fact)
+    use_case = ApplyFixedIncomeBookCostAuthorityEventUseCase(
+        authority=authority,
+        profiles=profiles,
+    )
+
+    first = await use_case.execute(
+        event,
+        effective_date=date(2026, 1, 1),
+        policy=resolved.policy,
+    )
+    first_profile = profiles.append.await_args.args[0]
+    authority.append.return_value = LotAmortizedCostAuthorityAppendOutcome.UNCHANGED
+    profiles.latest_verified_head.return_value = LotAmortizedCostProfileHead(
+        profile_id=first_profile.profile_id,
+        profile_version=first_profile.profile_version,
+        profile_content_hash=first_profile.content_hash(),
+        authority_content_hash=first.materialization.authority_content_hash,
+    )
+    profiles.append.reset_mock()
+
+    duplicate = await use_case.execute(
+        event,
+        effective_date=date(2026, 1, 1),
+        policy=resolved.policy,
+    )
+
+    assert duplicate.persistence.appended_count == 0
+    assert duplicate.persistence.unchanged_count == 1
+    assert duplicate.materialization.outcome is LotAmortizedCostProfileAppendOutcome.UNCHANGED
+    assert duplicate.materialization.profile_version == 1
+    profiles.append.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_source_correction_appends_next_profile_from_latest_source_version() -> None:
+    authority, profiles = _dependencies()
+    resolved = resolved_fixed_income_book_cost_inputs()
+    corrected = replace(
+        resolved.basis_fact,
+        source=replace(
+            resolved.basis_fact.source,
+            source_revision="revision-2",
+            fact_version=2,
+        ),
+    )
+    authority.load.return_value = _bundle(basis_facts=(resolved.basis_fact,))
+    use_case = ApplyFixedIncomeBookCostAuthorityEventUseCase(
+        authority=authority,
+        profiles=profiles,
+    )
+
+    first = await use_case.execute(
+        _basis_event(resolved.basis_fact),
+        effective_date=date(2026, 1, 1),
+        policy=resolved.policy,
+    )
+    first_profile = profiles.append.await_args.args[0]
+    profiles.latest_verified_head.return_value = LotAmortizedCostProfileHead(
+        profile_id=first_profile.profile_id,
+        profile_version=first_profile.profile_version,
+        profile_content_hash=first_profile.content_hash(),
+        authority_content_hash=first.materialization.authority_content_hash,
+    )
+    authority.load.return_value = _bundle(
+        basis_facts=(resolved.basis_fact, corrected),
+    )
+
+    correction = await use_case.execute(
+        _basis_event(corrected),
+        effective_date=date(2026, 1, 1),
+        policy=resolved.policy,
+    )
+
+    assert authority.append.await_args.args[0] == corrected
+    assert correction.persistence.appended_count == 1
+    assert correction.materialization.outcome is LotAmortizedCostProfileAppendOutcome.APPENDED
+    assert correction.materialization.profile_version == 2
+    assert correction.materialization.authority_content_hash != (
+        first.materialization.authority_content_hash
+    )
+    corrected_profile = profiles.append.await_args.args[0]
+    assert any(
+        reference.source_record_id == corrected.source.source_record_id
+        and reference.source_revision == "revision-2"
+        for reference in corrected_profile.source_references
+    )
