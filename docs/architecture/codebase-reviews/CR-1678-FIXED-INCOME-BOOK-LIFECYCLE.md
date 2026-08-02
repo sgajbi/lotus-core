@@ -58,7 +58,22 @@ distinguish annual-effective, annual-nominal-simple, and supplied per-period rat
 missing rate authority fails closed. Every normalized period row and reconciled schedule is bound
 to complete input, policy, calculation, output, and numeric-policy lineage. The kernel supports
 negative yields greater than negative one, irregular periods, fees-in-basis policy, and replay
-identity without introducing persistence, runtime bookability, or a public contract.
+identity. Runtime bookability and public contracts remain deliberately unchanged.
+
+The domain now also owns exact source-lot assignment, basis, schedule, and yield facts plus a
+fail-closed resolver across tenant, legal book, portfolio, security, lot, and effective date.
+Missing, overlapping, conflicting, stale, or convention-incompatible authority does not fall back
+to broad instrument classification. Immutable active or parked profiles bind source references,
+calculation lineage, deterministic content hashes, and every normalized period.
+
+Additive `lot_amortized_cost_profiles` and `lot_amortized_cost_periods` tables preserve that evidence
+without overwriting `position_lot_state` original/tax basis. An application port and SQL adapter use
+a stable transaction advisory lock, contiguous append versions, exact-retry neutrality, one bulk
+period write, tenant-safe latest/as-of reads, and fail-closed header/period reconstruction. Monetary
+outputs are canonicalized to the governed scale before hashing; derived year fractions and rates
+remain exact-unbounded because truncating working-precision evidence would invalidate lineage.
+Source writers/loaders, transaction-UoW materialization, correction replay, public queries, disposal
+allocations, and redemption integration remain open.
 
 ## Same-Pattern Review
 
@@ -72,10 +87,10 @@ unscoped history; it cannot govern an authoritative receipt.
 
 Existing unit-price results, snapshot fields, tax/original lot basis, and production-bookable
 transaction types remain stable. `FACTOR_ADJUSTED_CURRENT_PRINCIPAL`, supplied current principal,
-accrued-income variants without evidence, and every redemption type remain fail closed. No migration,
-public API/OpenAPI, Kafka runtime, or capability claim has changed yet. The authored wiki is an
-explicit no-change for this slice because it already states amortized cost and redemption are not
-implemented.
+accrued-income variants without evidence, and every redemption type remain fail closed. The schema
+change is additive; no public API/OpenAPI, Kafka runtime, or capability claim changed. The authored
+Data Models wiki documents the staged ledgers while the capability wiki remains
+`target_not_implemented`.
 
 ## Validation
 
@@ -89,8 +104,18 @@ implemented.
   premium, discount, negative-yield, rate-authority, date-only input, reconciliation, sub-quantum
   rounding, and lineage proofs;
 - 139 warning-strict fixed-income and calculated-output-policy guard tests;
+- signed commits `116e8271e`, `5869cb101`, `90ab97c28`, `5ae948013`, `8534f951f`,
+  `29fe415df`, `34da8eb92`, and `a0969c741` for source ranking, authority, facts, resolution,
+  profiles, schema, precision, and repository controls;
+- 94 warning-strict fixed-income domain and adapter unit tests;
+- 54 focused migration, ORM, and advisory-lock unit tests;
+- 3 real-PostgreSQL repository tests covering append/retry, contiguous versions, exact as-of
+  selection, and header/period tamper rejection;
+- migration and numeric guards passed at head `c139b2c3d50c`, with 110 governed numeric columns
+  across 33 tables and no planned enforcement gaps;
 - scoped Ruff lint/format, MyPy, RFC ledger, architecture-documentation, transaction-capability,
   wiki, JSON, calculated-output-policy, and diff-hygiene guards.
 
-Protected PR, exact-main, migration, OpenAPI, runtime recovery, load, wiki publication, and issue
-closure evidence remain pending until their corresponding implementation slices exist.
+Protected PR, exact-main, wiki publication, source ingestion, runtime recovery/replay, load, public
+query, disposal, redemption, and issue-closure evidence remain pending until their corresponding
+implementation slices exist.
