@@ -37,20 +37,23 @@ def _recording_factory(
     return build
 
 
-def test_composition_builds_exactly_one_live_and_one_replay_request_consumer() -> None:
+def test_composition_builds_transaction_replay_and_authority_consumers() -> None:
     calls: list[tuple[str, dict[str, Any]]] = []
     process_use_case = MagicMock()
     replay_use_case = MagicMock()
+    authority_use_case = MagicMock()
 
     consumers = consumer_composition.build_transaction_processing_consumers(
         process_transaction=process_use_case,
         replay_booked_transaction=replay_use_case,
+        handle_fixed_income_book_cost_authority=authority_use_case,
         transaction_consumer_factory=_recording_factory("live", calls),
         replay_request_consumer_factory=_recording_factory("replay_request", calls),
+        fixed_income_authority_consumer_factory=_recording_factory("authority", calls),
     )
 
-    assert len(consumers) == 2
-    assert [family for family, _ in calls] == ["live", "replay_request"]
+    assert len(consumers) == 3
+    assert [family for family, _ in calls] == ["live", "replay_request", "authority"]
     live = calls[0][1]
     assert live["topic"] == "transactions.persisted"
     assert live["group_id"] == "portfolio_transaction_processing_group"
@@ -63,6 +66,12 @@ def test_composition_builds_exactly_one_live_and_one_replay_request_consumer() -
     assert replay["service_prefix"] == "TXNREPLAY"
     assert replay["use_case"] is replay_use_case
     assert replay["retryable_failure_max_elapsed_seconds"] == 30
+    authority = calls[2][1]
+    assert authority["topic"] == "fixed_income.book_cost.authority.received"
+    assert authority["group_id"] == "fixed_income_book_cost_authority_group"
+    assert authority["service_prefix"] == "BOOKCOST"
+    assert authority["use_case"] is authority_use_case
+    assert authority["retryable_failure_max_elapsed_seconds"] == 30
     assert all(values["dlq_topic"] == "dlq.persistence_service" for _, values in calls)
 
 
@@ -72,6 +81,8 @@ def test_composition_builds_each_application_use_case_once(monkeypatch) -> None:
     replay_use_case = MagicMock()
     process_builder = MagicMock(return_value=process_use_case)
     replay_builder = MagicMock(return_value=replay_use_case)
+    authority_use_case = MagicMock()
+    authority_builder = MagicMock(return_value=authority_use_case)
     monkeypatch.setattr(
         consumer_composition,
         "build_process_transaction_use_case",
@@ -82,35 +93,48 @@ def test_composition_builds_each_application_use_case_once(monkeypatch) -> None:
         "build_replay_booked_transaction_use_case",
         replay_builder,
     )
+    monkeypatch.setattr(
+        consumer_composition,
+        "build_fixed_income_book_cost_authority_use_case",
+        authority_builder,
+    )
 
     consumer_composition.build_transaction_processing_consumers(
         transaction_consumer_factory=_recording_factory("live", calls),
         replay_request_consumer_factory=_recording_factory("replay_request", calls),
+        fixed_income_authority_consumer_factory=_recording_factory("authority", calls),
     )
 
     process_builder.assert_called_once_with()
     replay_builder.assert_called_once_with()
+    authority_builder.assert_called_once_with()
     assert calls[0][1]["use_case"] is process_use_case
     assert calls[1][1]["use_case"] is replay_use_case
+    assert calls[2][1]["use_case"] is authority_use_case
 
 
 def test_composition_loads_independent_live_and_replay_execution_profiles() -> None:
     calls: list[tuple[str, dict[str, Any]]] = []
     live_profile = MagicMock(spec=KafkaConsumerExecutionProfile)
     replay_profile = MagicMock(spec=KafkaConsumerExecutionProfile)
-    profile_loader = MagicMock(side_effect=[live_profile, replay_profile])
+    authority_profile = MagicMock(spec=KafkaConsumerExecutionProfile)
+    profile_loader = MagicMock(side_effect=[live_profile, replay_profile, authority_profile])
 
     consumer_composition.build_transaction_processing_consumers(
         process_transaction=MagicMock(),
         replay_booked_transaction=MagicMock(),
+        handle_fixed_income_book_cost_authority=MagicMock(),
         transaction_consumer_factory=_recording_factory("live", calls),
         replay_request_consumer_factory=_recording_factory("replay_request", calls),
+        fixed_income_authority_consumer_factory=_recording_factory("authority", calls),
         execution_profile_loader=profile_loader,
     )
 
     assert [item.args[0] for item in profile_loader.call_args_list] == [
         "portfolio_transaction_processing_group",
         "portfolio_transaction_replay_request_group",
+        "fixed_income_book_cost_authority_group",
     ]
     assert calls[0][1]["execution_profile"] is live_profile
     assert calls[1][1]["execution_profile"] is replay_profile
+    assert calls[2][1]["execution_profile"] is authority_profile
