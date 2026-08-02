@@ -9,6 +9,7 @@ from .source_authority_repository import (
     ConflictingLotAmortizedCostAuthorityError,
     SqlAlchemyLotAmortizedCostAuthorityRepository,
 )
+from .unit_of_work import SqlAlchemyFixedIncomeBookCostAuthorityUnitOfWork
 
 __all__ = [
     "ConflictingLotAmortizedCostProfileError",
@@ -16,4 +17,5 @@ __all__ = [
     "lot_amortized_cost_profile_lock_key",
     "ConflictingLotAmortizedCostAuthorityError",
     "SqlAlchemyLotAmortizedCostAuthorityRepository",
+    "SqlAlchemyFixedIncomeBookCostAuthorityUnitOfWork",
 ]
