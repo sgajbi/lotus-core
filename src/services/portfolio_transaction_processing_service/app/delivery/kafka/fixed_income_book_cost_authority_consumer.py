@@ -8,6 +8,11 @@ from typing import cast
 
 from confluent_kafka import Message
 from portfolio_common.event_contracts import FixedIncomeBookCostAuthorityEvent
+from portfolio_common.event_mapping import (
+    DecodedKafkaEventPayload,
+    kafka_event_id,
+    validate_kafka_event_payload,
+)
 from portfolio_common.exceptions import RetryableConsumerError
 from portfolio_common.kafka_consumer import BaseConsumer
 from portfolio_common.kafka_consumer_execution import KafkaConsumerExecutionProfile
@@ -18,6 +23,9 @@ from ...application.fixed_income_book_cost import (
 )
 
 logger = logging.getLogger(__name__)
+
+_EVENT_TYPE = "fixed_income.book_cost.authority.received"
+_ACCEPTED_SCHEMA_VERSIONS = ("1.0.0",)
 
 
 class FixedIncomeBookCostAuthorityConsumer(BaseConsumer):
@@ -52,7 +60,12 @@ class FixedIncomeBookCostAuthorityConsumer(BaseConsumer):
 
     async def process_message(self, msg: Message) -> None:
         payload = _message_payload(msg)
-        event = FixedIncomeBookCostAuthorityEvent.model_validate(payload)
+        event = validate_kafka_event_payload(
+            payload,
+            FixedIncomeBookCostAuthorityEvent,
+            expected_event_type=_EVENT_TYPE,
+            accepted_schema_versions=_ACCEPTED_SCHEMA_VERSIONS,
+        )
         actual_key = _message_key(msg)
         if actual_key != event.partition_key:
             raise ValueError(
@@ -79,14 +92,17 @@ class FixedIncomeBookCostAuthorityConsumer(BaseConsumer):
         )
 
 
-def _message_payload(msg: Message) -> object:
+def _message_payload(msg: Message) -> DecodedKafkaEventPayload:
     value = msg.value()
     if value is None:
         raise ValueError("fixed-income book-cost authority payload is missing")
     try:
-        return json.loads(value.decode("utf-8"))
+        data = json.loads(value.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise ValueError("fixed-income book-cost authority payload is not valid JSON") from exc
+    if not isinstance(data, dict):
+        raise ValueError("fixed-income book-cost authority payload must be a JSON object")
+    return DecodedKafkaEventPayload(event_id=kafka_event_id(msg), data=data)
 
 
 def _message_key(msg: Message) -> str:
