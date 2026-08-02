@@ -475,3 +475,42 @@ async def test_precision_policy_failure_is_parked() -> None:
     assert result.outcome is LotAmortizedCostProfileAppendOutcome.APPENDED
     assert result.eligibility_reason is AmortizedCostEligibilityReason.CALCULATION_FAILED
     assert profiles.append.await_args.args[0].status is AmortizedCostProfileStatus.PARKED
+
+
+@pytest.mark.asyncio
+async def test_parked_decision_changes_when_calculation_identity_changes(monkeypatch) -> None:
+    authority, profiles = _dependencies()
+    resolved = resolved_fixed_income_book_cost_inputs()
+    authority.load.return_value = LotAmortizedCostAuthorityBundle()
+    profiles.latest_verified_head.return_value = None
+    profiles.append.return_value = LotAmortizedCostProfileAppendOutcome.APPENDED
+    use_case = MaterializeLotAmortizedCostProfileUseCase(authority=authority, profiles=profiles)
+
+    first = await use_case.execute(
+        scope=fixed_income_book_cost_scope(),
+        effective_date=date(2026, 1, 1),
+        policy=resolved.policy,
+    )
+    first_profile = profiles.append.await_args.args[0]
+    profiles.latest_verified_head.return_value = LotAmortizedCostProfileHead(
+        profile_id=first_profile.profile_id,
+        profile_version=first_profile.profile_version,
+        profile_content_hash=first_profile.content_hash(),
+        authority_content_hash=first.authority_content_hash,
+    )
+    monkeypatch.setattr(
+        materialization_module,
+        "amortized_cost_calculation_identity",
+        lambda: {"algorithm_id": "fixed-income-amortized-cost-schedule", "algorithm_version": 2},
+    )
+
+    second = await use_case.execute(
+        scope=fixed_income_book_cost_scope(),
+        effective_date=date(2026, 1, 1),
+        policy=resolved.policy,
+    )
+
+    assert second.outcome is LotAmortizedCostProfileAppendOutcome.APPENDED
+    assert second.profile_version == 2
+    assert second.eligibility_reason is AmortizedCostEligibilityReason.ASSIGNMENT_MISSING
+    assert second.authority_content_hash != first.authority_content_hash

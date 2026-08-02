@@ -256,6 +256,41 @@ async def test_repository_rejects_unsupported_authority_payload_keys(
         await repository.load(fixed_income_book_cost_scope())
 
 
+async def test_repository_rejects_non_string_optional_period_rate(
+    clean_db,
+    authority_schema,
+    async_db_session: AsyncSession,
+) -> None:
+    await _seed_source_lot(async_db_session)
+    repository = SqlAlchemyLotAmortizedCostAuthorityRepository(async_db_session)
+    schedule = resolved_fixed_income_book_cost_inputs().schedule_fact
+    await repository.append(schedule)
+    record = await async_db_session.scalar(
+        select(LotAmortizedCostAuthorityRecord).where(
+            LotAmortizedCostAuthorityRecord.authority_content_hash == schedule.content_hash()
+        )
+    )
+    assert record is not None
+    payload = dict(record.authority_payload)
+    period_payloads = payload["periods"]
+    assert isinstance(period_payloads, list)
+    assert all(isinstance(period, dict) for period in period_payloads)
+    periods = [dict(period) for period in period_payloads]
+    periods[0]["supplied_period_rate"] = 0
+    payload["periods"] = periods
+    await async_db_session.execute(
+        update(LotAmortizedCostAuthorityRecord)
+        .where(LotAmortizedCostAuthorityRecord.id == record.id)
+        .values(authority_payload=payload)
+    )
+
+    with pytest.raises(
+        ConflictingLotAmortizedCostAuthorityError,
+        match="supplied_period_rate must be a string or null",
+    ):
+        await repository.load(fixed_income_book_cost_scope())
+
+
 async def _seed_source_lot(session: AsyncSession) -> None:
     await session.execute(
         text(
