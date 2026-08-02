@@ -43,6 +43,7 @@ class ApplyFixedIncomeBookCostAuthorityEventResult:
     scope: LotBookCostAuthorityScope
     persistence: PersistLotAmortizedCostAuthorityResult
     materialization: LotAmortizedCostMaterializationResult
+    rematerializations: tuple[LotAmortizedCostMaterializationResult, ...] = ()
 
 
 class FixedIncomeBookCostAuthorityUnitOfWork(Protocol):
@@ -129,7 +130,7 @@ class HandleFixedIncomeBookCostAuthorityEventUseCase:
         self,
         event: FixedIncomeBookCostAuthorityEvent,
     ) -> ApplyFixedIncomeBookCostAuthorityEventResult:
-        """Persist, resolve, materialize, and commit one exact-scope authority event."""
+        """Persist and atomically rebuild every profile boundary affected by the event."""
 
         mapped = map_fixed_income_book_cost_authority_event(event)
         effective_date = event.authority.header.valid_from
@@ -140,30 +141,64 @@ class HandleFixedIncomeBookCostAuthorityEventUseCase:
                 authority=unit_of_work.authority,
                 profiles=unit_of_work.profiles,
             )
-            policy, unresolved_reason = await self._resolve_policy(
-                authority=unit_of_work.authority,
-                scope=mapped.scope,
-                effective_date=effective_date,
+            affected_boundaries = sorted(
+                {
+                    effective_date,
+                    *await unit_of_work.profiles.effective_boundaries_from(
+                        mapped.scope,
+                        effective_date=effective_date,
+                    ),
+                }
             )
-            if policy is None:
-                if unresolved_reason is None:
-                    raise RuntimeError("unresolved policy reason was not classified")
-                materialization = await materializer.execute_parked(
-                    scope=mapped.scope,
-                    effective_date=effective_date,
-                    reason=unresolved_reason,
+            materialization_results: list[LotAmortizedCostMaterializationResult] = []
+            for boundary in affected_boundaries:
+                materialization_results.append(
+                    await self._materialize_boundary(
+                        authority=unit_of_work.authority,
+                        materializer=materializer,
+                        scope=mapped.scope,
+                        effective_date=boundary,
+                    )
                 )
-            else:
-                materialization = await materializer.execute(
-                    scope=mapped.scope,
-                    effective_date=effective_date,
-                    policy=policy,
-                )
+            materializations = tuple(materialization_results)
+            primary_index = affected_boundaries.index(effective_date)
+            materialization = materializations[primary_index]
+            rematerializations = tuple(
+                result for index, result in enumerate(materializations) if index != primary_index
+            )
             await unit_of_work.commit()
         return ApplyFixedIncomeBookCostAuthorityEventResult(
             scope=mapped.scope,
             persistence=persistence,
             materialization=materialization,
+            rematerializations=rematerializations,
+        )
+
+    async def _materialize_boundary(
+        self,
+        *,
+        authority: LotAmortizedCostAuthorityPort,
+        materializer: MaterializeLotAmortizedCostProfileUseCase,
+        scope: LotBookCostAuthorityScope,
+        effective_date: date,
+    ) -> LotAmortizedCostMaterializationResult:
+        policy, unresolved_reason = await self._resolve_policy(
+            authority=authority,
+            scope=scope,
+            effective_date=effective_date,
+        )
+        if policy is not None:
+            return await materializer.execute(
+                scope=scope,
+                effective_date=effective_date,
+                policy=policy,
+            )
+        if unresolved_reason is None:
+            raise RuntimeError("unresolved policy reason was not classified")
+        return await materializer.execute_parked(
+            scope=scope,
+            effective_date=effective_date,
+            reason=unresolved_reason,
         )
 
     async def _resolve_policy(
