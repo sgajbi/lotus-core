@@ -545,3 +545,80 @@ async def test_decimal_arithmetic_overflow_is_parked() -> None:
     assert result.outcome is LotAmortizedCostProfileAppendOutcome.APPENDED
     assert result.eligibility_reason is AmortizedCostEligibilityReason.CALCULATION_FAILED
     assert profiles.append.await_args.args[0].status is AmortizedCostProfileStatus.PARKED
+
+
+@pytest.mark.asyncio
+async def test_unresolved_policy_appends_explicit_parked_profile_without_calculation() -> None:
+    authority, profiles = _dependencies()
+    authority.load.return_value = _bundle()
+    profiles.latest_verified_head.return_value = None
+    profiles.append.return_value = LotAmortizedCostProfileAppendOutcome.APPENDED
+
+    result = await MaterializeLotAmortizedCostProfileUseCase(
+        authority=authority,
+        profiles=profiles,
+    ).execute_parked(
+        scope=fixed_income_book_cost_scope(),
+        effective_date=date(2026, 1, 1),
+        reason=AmortizedCostEligibilityReason.POLICY_UNSUPPORTED,
+    )
+
+    assert result.outcome is LotAmortizedCostProfileAppendOutcome.APPENDED
+    assert result.profile_version == 1
+    assert result.eligibility_reason is AmortizedCostEligibilityReason.POLICY_UNSUPPORTED
+    profile = profiles.append.await_args.args[0]
+    assert profile.status is AmortizedCostProfileStatus.PARKED
+    assert profile.policy_id is None
+    assert profile.policy_version is None
+    profiles.acquire_materialization_lock.assert_awaited_once_with(fixed_income_book_cost_scope())
+
+
+@pytest.mark.asyncio
+async def test_unchanged_unresolved_decision_reuses_head() -> None:
+    authority, profiles = _dependencies()
+    authority.load.return_value = _bundle()
+    profiles.latest_verified_head.return_value = None
+    profiles.append.return_value = LotAmortizedCostProfileAppendOutcome.APPENDED
+    use_case = MaterializeLotAmortizedCostProfileUseCase(authority=authority, profiles=profiles)
+
+    first = await use_case.execute_parked(
+        scope=fixed_income_book_cost_scope(),
+        effective_date=date(2026, 1, 1),
+        reason=AmortizedCostEligibilityReason.ASSIGNMENT_MISSING,
+    )
+    first_profile = profiles.append.await_args.args[0]
+    profiles.latest_verified_head.return_value = LotAmortizedCostProfileHead(
+        profile_id=first_profile.profile_id,
+        profile_version=first_profile.profile_version,
+        profile_content_hash=first_profile.content_hash(),
+        authority_content_hash=first.authority_content_hash,
+    )
+    profiles.append.reset_mock()
+
+    repeated = await use_case.execute_parked(
+        scope=fixed_income_book_cost_scope(),
+        effective_date=date(2026, 1, 1),
+        reason=AmortizedCostEligibilityReason.ASSIGNMENT_MISSING,
+    )
+
+    assert repeated.outcome is LotAmortizedCostProfileAppendOutcome.UNCHANGED
+    assert repeated.profile_version == 1
+    profiles.append.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_unresolved_path_rejects_calculation_failure_reason() -> None:
+    authority, profiles = _dependencies()
+
+    with pytest.raises(ValueError, match="assignment or policy reason"):
+        await MaterializeLotAmortizedCostProfileUseCase(
+            authority=authority,
+            profiles=profiles,
+        ).execute_parked(
+            scope=fixed_income_book_cost_scope(),
+            effective_date=date(2026, 1, 1),
+            reason=AmortizedCostEligibilityReason.CALCULATION_FAILED,
+        )
+
+    profiles.acquire_materialization_lock.assert_not_awaited()
+    authority.load.assert_not_awaited()

@@ -142,6 +142,42 @@ class MaterializeLotAmortizedCostProfileUseCase:
             eligibility_reason=profile.eligibility_reason,
         )
 
+    async def execute_parked(
+        self,
+        *,
+        scope: LotBookCostAuthorityScope,
+        effective_date: date,
+        reason: AmortizedCostEligibilityReason,
+        freshness_cutoff: datetime | None = None,
+    ) -> LotAmortizedCostMaterializationResult:
+        """Append fail-closed evidence when no governed policy can be resolved.
+
+        Source authority remains durable even when assignment or policy configuration is
+        incomplete. This path deliberately carries no policy identity and never attempts a
+        calculation; a later source correction can supersede it through normal materialization.
+        """
+
+        if reason not in {
+            AmortizedCostEligibilityReason.ASSIGNMENT_MISSING,
+            AmortizedCostEligibilityReason.ASSIGNMENT_CONFLICTING,
+            AmortizedCostEligibilityReason.ASSIGNMENT_OVERLAPPING,
+            AmortizedCostEligibilityReason.POLICY_UNSUPPORTED,
+        }:
+            raise ValueError("unresolved materialization requires an assignment or policy reason")
+        await self._profiles.acquire_materialization_lock(scope)
+        bundle = await self._authority.load(scope)
+        head = await self._profiles.latest_verified_head(scope)
+        return await self._persist_parked_decision(
+            bundle,
+            head=head,
+            scope=scope,
+            effective_date=effective_date,
+            policy=None,
+            profile_version=1 if head is None else head.profile_version + 1,
+            reason=reason,
+            freshness_cutoff=freshness_cutoff,
+        )
+
     async def _persist_parked_decision(
         self,
         bundle: LotAmortizedCostAuthorityBundle,
@@ -149,7 +185,7 @@ class MaterializeLotAmortizedCostProfileUseCase:
         head: LotAmortizedCostProfileHead | None,
         scope: LotBookCostAuthorityScope,
         effective_date: date,
-        policy: AmortizedCostPolicy,
+        policy: AmortizedCostPolicy | None,
         profile_version: int,
         reason: AmortizedCostEligibilityReason,
         freshness_cutoff: datetime | None,
@@ -248,7 +284,7 @@ def _parked_decision_content_hash(
     bundle: LotAmortizedCostAuthorityBundle,
     *,
     effective_date: date,
-    policy: AmortizedCostPolicy,
+    policy: AmortizedCostPolicy | None,
     eligibility_reason: AmortizedCostEligibilityReason,
     freshness_cutoff: datetime | None,
 ) -> str:
@@ -267,14 +303,18 @@ def _parked_decision_content_hash(
                 "freshness_cutoff": (
                     freshness_cutoff.astimezone(UTC) if freshness_cutoff is not None else None
                 ),
-                "policy": {
-                    "include_fees_in_amortized_cost": policy.include_fees_in_amortized_cost,
-                    "method": policy.method,
-                    "policy_id": policy.policy_id,
-                    "policy_version": policy.policy_version,
-                    "residual_tolerance_local": policy.residual_tolerance_local,
-                    "yield_application_convention": policy.yield_application_convention,
-                },
+                "policy": (
+                    {
+                        "include_fees_in_amortized_cost": policy.include_fees_in_amortized_cost,
+                        "method": policy.method,
+                        "policy_id": policy.policy_id,
+                        "policy_version": policy.policy_version,
+                        "residual_tolerance_local": policy.residual_tolerance_local,
+                        "yield_application_convention": policy.yield_application_convention,
+                    }
+                    if policy is not None
+                    else None
+                ),
             }
         ),
     )
