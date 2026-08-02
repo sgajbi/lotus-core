@@ -57,6 +57,26 @@ class LotAmortizedCostProfilePort(Protocol):
 
         ...
 
+    async def latest_verified_head_for_effective_date(
+        self,
+        scope: LotBookCostAuthorityScope,
+        *,
+        effective_date: date,
+    ) -> LotAmortizedCostProfileHead | None:
+        """Return the latest verified decision at one exact effective boundary."""
+
+        ...
+
+    async def effective_boundaries_from(
+        self,
+        scope: LotBookCostAuthorityScope,
+        *,
+        effective_date: date,
+    ) -> tuple[date, ...]:
+        """Return persisted decision boundaries on or after the supplied date."""
+
+        ...
+
     async def append(
         self,
         profile: LotAmortizedCostProfileVersion,
