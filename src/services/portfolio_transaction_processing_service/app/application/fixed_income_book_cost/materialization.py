@@ -77,7 +77,12 @@ class MaterializeLotAmortizedCostProfileUseCase:
                 freshness_cutoff=freshness_cutoff,
             )
         except AmortizedCostInputResolutionError as exc:
-            authority_hash = _bundle_content_hash(bundle, effective_date=effective_date)
+            authority_hash = _parked_decision_content_hash(
+                bundle,
+                effective_date=effective_date,
+                policy=policy,
+                eligibility_reason=exc.reason,
+            )
             if head is not None and head.authority_content_hash == authority_hash:
                 return _unchanged_result(
                     head.profile_id,
@@ -146,6 +151,37 @@ def _bundle_content_hash(
                 "effective_date": effective_date,
                 "schedule_facts": sorted(item.content_hash() for item in bundle.schedule_facts),
                 "yield_facts": sorted(item.content_hash() for item in bundle.yield_facts),
+            }
+        ),
+    )
+
+
+def _parked_decision_content_hash(
+    bundle: LotAmortizedCostAuthorityBundle,
+    *,
+    effective_date: date,
+    policy: AmortizedCostPolicy,
+    eligibility_reason: AmortizedCostEligibilityReason,
+) -> str:
+    """Identify the source, policy, and fail-closed decision persisted by a parked profile."""
+
+    return cast(
+        str,
+        canonical_content_hash(
+            {
+                "authority_content_hash": _bundle_content_hash(
+                    bundle,
+                    effective_date=effective_date,
+                ),
+                "eligibility_reason": eligibility_reason,
+                "policy": {
+                    "include_fees_in_amortized_cost": policy.include_fees_in_amortized_cost,
+                    "method": policy.method,
+                    "policy_id": policy.policy_id,
+                    "policy_version": policy.policy_version,
+                    "residual_tolerance_local": policy.residual_tolerance_local,
+                    "yield_application_convention": policy.yield_application_convention,
+                },
             }
         ),
     )

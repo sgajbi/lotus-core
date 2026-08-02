@@ -82,7 +82,9 @@ book/lot foreign keys, and reconstruction hash verification prevent delivery-ord
 drift. The application writer deduplicates and orders atomic caller batches before persistence.
 The profile materializer acquires the profile lock before reloading source history, skips unchanged
 authority, appends corrected active profiles contiguously, and records missing/conflicting inputs as
-parked evidence without invented economics.
+parked evidence without invented economics. Parked decision identity includes the complete policy
+definition and resulting eligibility reason as well as source authority, so a policy correction
+cannot retain an obsolete parked reason as an unchanged profile.
 
 External ingestion DTO/routes, production composition into the owning transaction boundary,
 correction replay scheduling, public queries, disposal allocations, and redemption integration
@@ -124,7 +126,7 @@ Data Models wiki documents the staged ledgers while the capability wiki remains
 - 54 focused migration, ORM, and advisory-lock unit tests;
 - 3 real-PostgreSQL repository tests covering append/retry, contiguous versions, exact as-of
   selection, and header/period tamper rejection;
-- 95 warning-strict fixed-income domain/migration tests plus 7 application writer/materializer
+- 95 warning-strict fixed-income domain/migration tests plus 8 application writer/materializer
   tests;
 - 3 real-PostgreSQL authority tests covering all four source families, exact retry, monotonic
   corrections, source-version collision, typed reload, and persisted-payload tamper rejection;

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import date
 from unittest.mock import AsyncMock
 
@@ -147,3 +148,46 @@ async def test_materialization_appends_next_version_when_authority_changes() -> 
 
     assert result.profile_version == 8
     assert profiles.append.await_args.args[0].profile_version == 8
+
+
+@pytest.mark.asyncio
+async def test_materialization_appends_when_parked_policy_decision_changes() -> None:
+    authority, profiles = _dependencies()
+    resolved = resolved_fixed_income_book_cost_inputs()
+    incomplete_bundle = LotAmortizedCostAuthorityBundle(
+        assignments=(resolved.assignment,),
+    )
+    authority.load.return_value = incomplete_bundle
+    profiles.latest_head.return_value = None
+    profiles.append.return_value = LotAmortizedCostProfileAppendOutcome.APPENDED
+    use_case = MaterializeLotAmortizedCostProfileUseCase(
+        authority=authority,
+        profiles=profiles,
+    )
+
+    first = await use_case.execute(
+        scope=fixed_income_book_cost_scope(),
+        effective_date=date(2026, 1, 1),
+        policy=replace(resolved.policy, policy_id="OTHER_POLICY"),
+    )
+    first_profile = profiles.append.await_args.args[0]
+    assert first.eligibility_reason is AmortizedCostEligibilityReason.POLICY_IDENTITY_MISMATCH
+
+    profiles.latest_head.return_value = LotAmortizedCostProfileHead(
+        profile_id=first_profile.profile_id,
+        profile_version=first_profile.profile_version,
+        profile_content_hash=first_profile.content_hash(),
+        authority_content_hash=first.authority_content_hash,
+    )
+    profiles.append.reset_mock()
+
+    second = await use_case.execute(
+        scope=fixed_income_book_cost_scope(),
+        effective_date=date(2026, 1, 1),
+        policy=resolved.policy,
+    )
+
+    assert second.outcome is LotAmortizedCostProfileAppendOutcome.APPENDED
+    assert second.profile_version == 2
+    assert second.eligibility_reason is AmortizedCostEligibilityReason.CLEAN_COST_EVIDENCE_MISSING
+    assert second.authority_content_hash != first.authority_content_hash
