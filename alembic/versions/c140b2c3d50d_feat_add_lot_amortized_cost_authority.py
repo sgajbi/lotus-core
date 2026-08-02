@@ -17,8 +17,30 @@ down_revision: str | Sequence[str] | None = "c139b2c3d50c"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
+_PROFILE_SOURCES_ARRAY_JSONB = "jsonb_typeof(source_references) = 'array'"
+_PROFILE_LIFECYCLE_JSONB = (
+    "(status = 'ACTIVE' AND eligibility_reason IS NULL "
+    "AND policy_id IS NOT NULL AND policy_version IS NOT NULL "
+    "AND schedule_version IS NOT NULL AND currency IS NOT NULL "
+    "AND direction IS NOT NULL AND initial_amortized_cost_local IS NOT NULL "
+    "AND redemption_value_local IS NOT NULL "
+    "AND final_amortized_cost_local IS NOT NULL AND residual_local IS NOT NULL "
+    "AND authority_content_hash IS NOT NULL AND calculation_lineage IS NOT NULL "
+    "AND jsonb_array_length(source_references) > 0) "
+    "OR (status IN ('PARKED', 'INELIGIBLE') AND eligibility_reason IS NOT NULL "
+    "AND direction IS NULL AND initial_amortized_cost_local IS NULL "
+    "AND redemption_value_local IS NULL AND final_amortized_cost_local IS NULL "
+    "AND residual_local IS NULL AND calculation_lineage IS NULL)"
+)
+_PROFILE_SOURCES_ARRAY_JSON = "json_typeof(source_references::json) = 'array'"
+_PROFILE_LIFECYCLE_JSON = _PROFILE_LIFECYCLE_JSONB.replace(
+    "jsonb_array_length(source_references)",
+    "json_array_length(source_references::json)",
+)
+
 
 def upgrade() -> None:
+    _upgrade_profile_json_evidence()
     op.create_table(
         "lot_amortized_cost_authority",
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
@@ -148,3 +170,82 @@ def downgrade() -> None:
         table_name="lot_amortized_cost_authority",
     )
     op.drop_table("lot_amortized_cost_authority")
+    _downgrade_profile_json_evidence()
+
+
+def _upgrade_profile_json_evidence() -> None:
+    op.drop_constraint(
+        "ck_lot_amort_profile_lifecycle_shape",
+        "lot_amortized_cost_profiles",
+        type_="check",
+    )
+    op.drop_constraint(
+        "ck_lot_amort_profile_sources_array",
+        "lot_amortized_cost_profiles",
+        type_="check",
+    )
+    op.alter_column(
+        "lot_amortized_cost_profiles",
+        "source_references",
+        existing_type=sa.JSON(none_as_null=True),
+        type_=postgresql.JSONB(none_as_null=True),
+        existing_nullable=False,
+        postgresql_using="source_references::jsonb",
+    )
+    op.alter_column(
+        "lot_amortized_cost_profiles",
+        "calculation_lineage",
+        existing_type=sa.JSON(none_as_null=True),
+        type_=postgresql.JSONB(none_as_null=True),
+        existing_nullable=True,
+        postgresql_using="calculation_lineage::jsonb",
+    )
+    op.create_check_constraint(
+        "ck_lot_amort_profile_sources_array",
+        "lot_amortized_cost_profiles",
+        _PROFILE_SOURCES_ARRAY_JSONB,
+    )
+    op.create_check_constraint(
+        "ck_lot_amort_profile_lifecycle_shape",
+        "lot_amortized_cost_profiles",
+        _PROFILE_LIFECYCLE_JSONB,
+    )
+
+
+def _downgrade_profile_json_evidence() -> None:
+    op.drop_constraint(
+        "ck_lot_amort_profile_lifecycle_shape",
+        "lot_amortized_cost_profiles",
+        type_="check",
+    )
+    op.drop_constraint(
+        "ck_lot_amort_profile_sources_array",
+        "lot_amortized_cost_profiles",
+        type_="check",
+    )
+    op.alter_column(
+        "lot_amortized_cost_profiles",
+        "source_references",
+        existing_type=postgresql.JSONB(none_as_null=True),
+        type_=sa.JSON(none_as_null=True),
+        existing_nullable=False,
+        postgresql_using="source_references::json",
+    )
+    op.alter_column(
+        "lot_amortized_cost_profiles",
+        "calculation_lineage",
+        existing_type=postgresql.JSONB(none_as_null=True),
+        type_=sa.JSON(none_as_null=True),
+        existing_nullable=True,
+        postgresql_using="calculation_lineage::json",
+    )
+    op.create_check_constraint(
+        "ck_lot_amort_profile_sources_array",
+        "lot_amortized_cost_profiles",
+        _PROFILE_SOURCES_ARRAY_JSON,
+    )
+    op.create_check_constraint(
+        "ck_lot_amort_profile_lifecycle_shape",
+        "lot_amortized_cost_profiles",
+        _PROFILE_LIFECYCLE_JSON,
+    )

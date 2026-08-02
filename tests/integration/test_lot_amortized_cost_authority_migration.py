@@ -37,6 +37,26 @@ AUTHORITY_INSERT = text(
     """
 )
 
+PROFILE_EVIDENCE_INSERT = text(
+    """
+    INSERT INTO lot_amortized_cost_profiles (
+        profile_id, profile_version, tenant_id, legal_book_id, portfolio_id,
+        security_id, lot_id, effective_date, status, policy_id, policy_version,
+        schedule_version, currency, direction, initial_amortized_cost_local,
+        redemption_value_local, final_amortized_cost_local, residual_local,
+        authority_content_hash, source_references, calculation_lineage,
+        profile_content_hash
+    ) VALUES (
+        'lot-amortized-cost:migration-json-evidence', 1, 'TENANT_SG', 'BOOK_SG_PB',
+        'AMORT_PORTFOLIO', 'AMORT_BOND_001', 'AMORT_LOT_001', DATE '2026-01-01',
+        'ACTIVE', 'IFRS9_EIR_LOCAL', 1, 1, 'SGD', 'DISCOUNT_ACCRETION',
+        97, 100, 100, 0, :authority_hash,
+        CAST(:source_references AS JSON), CAST(:calculation_lineage AS JSON),
+        :profile_hash
+    )
+    """
+)
+
 
 def test_authority_migration_applies_enforces_rolls_back_and_reapplies(
     db_engine,
@@ -50,15 +70,41 @@ def test_authority_migration_applies_enforces_rolls_back_and_reapplies(
         if inspect(connection).has_table("lot_amortized_cost_authority"):
             migration["downgrade"]()
         _ensure_predecessor_constraints(connection, operations)
+        _seed_source_lot(connection)
+        connection.execute(
+            PROFILE_EVIDENCE_INSERT,
+            {
+                "authority_hash": "c" * 64,
+                "calculation_lineage": ('{"algorithm_id":"test","algorithm_id":"test"}'),
+                "profile_hash": "d" * 64,
+                "source_references": ('[{"source_system":"test","source_system":"test"}]'),
+            },
+        )
 
         migration["upgrade"]()
         inspector = inspect(connection)
         assert inspector.has_table("lot_amortized_cost_authority")
+        profile_columns = {
+            column["name"]: column
+            for column in inspector.get_columns("lot_amortized_cost_profiles")
+        }
+        assert str(profile_columns["source_references"]["type"]) == "JSONB"
+        assert str(profile_columns["calculation_lineage"]["type"]) == "JSONB"
+        canonical_profile_evidence = connection.execute(
+            text(
+                "SELECT source_references::text, calculation_lineage::text "
+                "FROM lot_amortized_cost_profiles "
+                "WHERE profile_id = 'lot-amortized-cost:migration-json-evidence'"
+            )
+        ).one()
+        assert canonical_profile_evidence == (
+            '[{"source_system": "test"}]',
+            '{"algorithm_id": "test"}',
+        )
         assert {
             "ix_lot_amort_authority_scope_effective",
             "ix_lot_amort_authority_source_history",
         } <= {index["name"] for index in inspector.get_indexes("lot_amortized_cost_authority")}
-        _seed_source_lot(connection)
         valid = _valid_authority()
         connection.execute(AUTHORITY_INSERT, valid)
 
@@ -102,8 +148,20 @@ def test_authority_migration_applies_enforces_rolls_back_and_reapplies(
 
         migration["downgrade"]()
         assert not inspect(connection).has_table("lot_amortized_cost_authority")
+        downgraded_columns = {
+            column["name"]: column
+            for column in inspect(connection).get_columns("lot_amortized_cost_profiles")
+        }
+        assert str(downgraded_columns["source_references"]["type"]) == "JSON"
+        assert str(downgraded_columns["calculation_lineage"]["type"]) == "JSON"
         migration["upgrade"]()
         assert inspect(connection).has_table("lot_amortized_cost_authority")
+        reapplied_columns = {
+            column["name"]: column
+            for column in inspect(connection).get_columns("lot_amortized_cost_profiles")
+        }
+        assert str(reapplied_columns["source_references"]["type"]) == "JSONB"
+        assert str(reapplied_columns["calculation_lineage"]["type"]) == "JSONB"
 
 
 def _ensure_predecessor_constraints(connection, operations: Operations) -> None:

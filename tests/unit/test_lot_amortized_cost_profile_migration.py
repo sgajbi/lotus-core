@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Any
 
 from sqlalchemy import CheckConstraint, Column, ForeignKeyConstraint, UniqueConstraint
-from sqlalchemy.dialects.postgresql import JSONB
 
 from alembic import op
 
@@ -128,8 +127,6 @@ def test_lot_amortized_cost_profile_migration_is_reversible(monkeypatch) -> None
     assert profile_columns["initial_amortized_cost_local"].type.precision == 18
     assert profile_columns["initial_amortized_cost_local"].type.scale == 10
     assert profile_columns["source_references"].nullable is False
-    assert isinstance(profile_columns["source_references"].type, JSONB)
-    assert isinstance(profile_columns["calculation_lineage"].type, JSONB)
     profile_constraints = {
         definition.name: definition
         for definition in profile_definitions
