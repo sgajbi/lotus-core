@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import hashlib
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from enum import StrEnum
 from typing import cast
@@ -379,7 +379,7 @@ def _record_matches(
 
 def _source_columns(
     source: AmortizedCostSourceMetadata,
-) -> tuple[int, str, str, str, object]:
+) -> tuple[int, str, str, str, datetime]:
     return (
         source.fact_version,
         source.source_system,
