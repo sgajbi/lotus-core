@@ -175,6 +175,12 @@ def upgrade() -> None:
         unique=False,
         postgresql_where=sa.text("status IN ('PARKED', 'INELIGIBLE')"),
     )
+    op.create_index(
+        "ix_lot_amort_profile_id_effective_version",
+        "lot_amortized_cost_profiles",
+        ["profile_id", sa.text("effective_date DESC"), sa.text("profile_version DESC")],
+        unique=False,
+    )
 
     op.create_table(
         "lot_amortized_cost_periods",
@@ -184,8 +190,8 @@ def upgrade() -> None:
         sa.Column("period_ordinal", sa.Integer(), nullable=False),
         sa.Column("period_start_date", sa.Date(), nullable=False),
         sa.Column("period_end_date", sa.Date(), nullable=False),
-        sa.Column("year_fraction", sa.Numeric(18, 10), nullable=False),
-        sa.Column("period_rate", sa.Numeric(18, 10), nullable=True),
+        sa.Column("year_fraction", sa.Numeric(), nullable=False),
+        sa.Column("period_rate", sa.Numeric(), nullable=True),
         sa.Column("begin_amortized_cost_local", sa.Numeric(18, 10), nullable=False),
         sa.Column("interest_income_local", sa.Numeric(18, 10), nullable=False),
         sa.Column("cash_coupon_local", sa.Numeric(18, 10), nullable=False),
@@ -265,6 +271,10 @@ def downgrade() -> None:
         table_name="lot_amortized_cost_periods",
     )
     op.drop_table("lot_amortized_cost_periods")
+    op.drop_index(
+        "ix_lot_amort_profile_id_effective_version",
+        table_name="lot_amortized_cost_profiles",
+    )
     op.drop_index(
         "ix_lot_amort_profile_parked_effective",
         table_name="lot_amortized_cost_profiles",

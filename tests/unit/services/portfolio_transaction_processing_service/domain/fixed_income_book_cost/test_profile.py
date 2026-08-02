@@ -141,6 +141,21 @@ def test_active_profile_materializes_reconciled_period_ledger_and_lineage() -> N
     assert profile.initial_amortized_cost_local == Decimal("97.0000000000")
     assert profile.final_amortized_cost_local == Decimal("100.0000000000")
     assert profile.residual_local == Decimal("0E-10")
+    assert all(
+        value.as_tuple().exponent == -10
+        for value in (
+            profile.initial_amortized_cost_local,
+            profile.redemption_value_local,
+            profile.final_amortized_cost_local,
+            profile.residual_local,
+            profile.periods[0].begin_amortized_cost_local,
+            profile.periods[0].interest_income_local,
+            profile.periods[0].cash_coupon_local,
+            profile.periods[0].amortization_amount_local,
+            profile.periods[0].end_amortized_cost_local,
+            profile.periods[0].rounding_adjustment_local,
+        )
+    )
     assert len(profile.source_references) == 4
     assert len(profile.periods) == 1
     period = profile.periods[0]

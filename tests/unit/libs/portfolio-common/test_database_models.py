@@ -143,6 +143,7 @@ def test_lot_amortized_cost_records_declare_append_only_integrity_contract() -> 
     } <= period_constraints
     assert "ix_lot_amort_profile_scope_version" in profile_indexes
     assert "ix_lot_amort_profile_parked_effective" in profile_indexes
+    assert "ix_lot_amort_profile_id_effective_version" in profile_indexes
     assert "ix_lot_amort_period_profile_end" in period_indexes
     assert all(
         isinstance(profile_table.columns[column_name].type, ExactNumeric)
@@ -153,6 +154,10 @@ def test_lot_amortized_cost_records_declare_append_only_integrity_contract() -> 
             "residual_local",
         )
     )
+    assert period_table.columns.year_fraction.type.precision is None
+    assert period_table.columns.year_fraction.type.scale is None
+    assert period_table.columns.period_rate.type.precision is None
+    assert period_table.columns.period_rate.type.scale is None
 
 
 def test_reprocessing_job_declares_pending_reset_watermarks_uniqueness_index():
