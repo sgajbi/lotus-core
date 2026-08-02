@@ -84,11 +84,14 @@ def _replace_nested(
     path: tuple[str, ...],
     value: object,
 ) -> None:
-    target = authority
+    target: object = authority
     for component in path[:-1]:
-        nested = target[component]
-        assert isinstance(nested, dict)
-        target = nested
+        if isinstance(target, dict):
+            target = target[component]
+        else:
+            assert isinstance(target, list)
+            target = target[int(component)]
+    assert isinstance(target, dict)
     target[path[-1]] = value
 
 
@@ -235,15 +238,7 @@ def test_event_rejects_lossy_or_out_of_range_financial_numerics(
         "EFFECTIVE_YIELD": _yield_authority(),
     }
     authority = authorities[authority_type]
-    target: object = authority
-    for component in numeric_path[:-1]:
-        if isinstance(target, dict):
-            target = target[component]
-        else:
-            assert isinstance(target, list)
-            target = target[int(component)]
-    assert isinstance(target, dict)
-    target[numeric_path[-1]] = invalid_numeric
+    _replace_nested(authority, numeric_path, invalid_numeric)
 
     with pytest.raises(ValidationError):
         FixedIncomeBookCostAuthorityEvent.model_validate(_event(authority))
@@ -264,6 +259,32 @@ def test_yield_bound_depends_on_application_convention() -> None:
         match="annual effective yield must be greater than negative one",
     ):
         FixedIncomeBookCostAuthorityEvent.model_validate(_event(effective))
+
+
+@pytest.mark.parametrize(
+    ("authority_type", "temporal_path", "numeric_value"),
+    [
+        ("CLEAN_COST_BASIS", ("header", "valid_from"), 0),
+        ("CLEAN_COST_BASIS", ("header", "valid_to"), 86400),
+        ("CLEAN_COST_BASIS", ("header", "source", "observed_at"), 0),
+        ("AMORTIZATION_SCHEDULE", ("periods", "0", "period_start_date"), 0),
+        ("AMORTIZATION_SCHEDULE", ("periods", "0", "period_end_date"), 86400),
+    ],
+)
+def test_event_rejects_numeric_temporal_inputs(
+    authority_type: str,
+    temporal_path: tuple[str, ...],
+    numeric_value: int,
+) -> None:
+    authorities = {
+        "CLEAN_COST_BASIS": _basis_authority(),
+        "AMORTIZATION_SCHEDULE": _schedule_authority(),
+    }
+    authority = authorities[authority_type]
+    _replace_nested(authority, temporal_path, numeric_value)
+
+    with pytest.raises(ValidationError, match="must be an ISO 8601 string"):
+        FixedIncomeBookCostAuthorityEvent.model_validate(_event(authority))
 
 
 @pytest.mark.parametrize(
