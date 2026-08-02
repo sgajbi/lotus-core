@@ -514,3 +514,34 @@ async def test_parked_decision_changes_when_calculation_identity_changes(monkeyp
     assert second.profile_version == 2
     assert second.eligibility_reason is AmortizedCostEligibilityReason.ASSIGNMENT_MISSING
     assert second.authority_content_hash != first.authority_content_hash
+
+
+@pytest.mark.asyncio
+async def test_decimal_arithmetic_overflow_is_parked() -> None:
+    authority, profiles = _dependencies()
+    resolved = resolved_fixed_income_book_cost_inputs()
+    authority.load.return_value = replace(
+        _bundle(),
+        basis_facts=(
+            replace(
+                resolved.basis_fact,
+                initial_clean_cost_local=Decimal("1e1000000"),
+                redemption_value_local=Decimal("2e1000000"),
+            ),
+        ),
+    )
+    profiles.latest_verified_head.return_value = None
+    profiles.append.return_value = LotAmortizedCostProfileAppendOutcome.APPENDED
+
+    result = await MaterializeLotAmortizedCostProfileUseCase(
+        authority=authority,
+        profiles=profiles,
+    ).execute(
+        scope=fixed_income_book_cost_scope(),
+        effective_date=date(2026, 1, 1),
+        policy=resolved.policy,
+    )
+
+    assert result.outcome is LotAmortizedCostProfileAppendOutcome.APPENDED
+    assert result.eligibility_reason is AmortizedCostEligibilityReason.CALCULATION_FAILED
+    assert profiles.append.await_args.args[0].status is AmortizedCostProfileStatus.PARKED
