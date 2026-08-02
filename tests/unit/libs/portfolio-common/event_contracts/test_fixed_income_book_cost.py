@@ -244,6 +244,40 @@ def test_event_rejects_lossy_or_out_of_range_financial_numerics(
         FixedIncomeBookCostAuthorityEvent.model_validate(_event(authority))
 
 
+@pytest.mark.parametrize(
+    ("authority_type", "numeric_path", "first_spelling", "second_spelling"),
+    [
+        ("CLEAN_COST_BASIS", ("initial_clean_cost_local",), "980000", "980000.0"),
+        ("CLEAN_COST_BASIS", ("fees_in_basis_local",), "1000", "1000.00"),
+        ("CLEAN_COST_BASIS", ("redemption_value_local",), "1000000", "1000000.0"),
+        ("AMORTIZATION_SCHEDULE", ("periods", "0", "year_fraction"), "0.5", "0.50"),
+        ("AMORTIZATION_SCHEDULE", ("periods", "0", "cash_coupon_local"), "20000", "20000.0"),
+        ("AMORTIZATION_SCHEDULE", ("periods", "0", "supplied_period_rate"), "0.02", "0.020"),
+        ("EFFECTIVE_YIELD", ("annual_yield",), "0.045", "0.0450"),
+    ],
+)
+def test_event_hash_canonicalizes_equivalent_decimal_spellings(
+    authority_type: str,
+    numeric_path: tuple[str, ...],
+    first_spelling: str,
+    second_spelling: str,
+) -> None:
+    authorities = {
+        "CLEAN_COST_BASIS": _basis_authority,
+        "AMORTIZATION_SCHEDULE": _schedule_authority,
+        "EFFECTIVE_YIELD": _yield_authority,
+    }
+    first = authorities[authority_type]()
+    second = authorities[authority_type]()
+    _replace_nested(first, numeric_path, first_spelling)
+    _replace_nested(second, numeric_path, second_spelling)
+
+    first_event = FixedIncomeBookCostAuthorityEvent.model_validate(_event(first))
+    second_event = FixedIncomeBookCostAuthorityEvent.model_validate(_event(second))
+
+    assert first_event.content_hash() == second_event.content_hash()
+
+
 def test_yield_bound_depends_on_application_convention() -> None:
     nominal = _yield_authority()
     nominal["annual_yield"] = "-1.1"
