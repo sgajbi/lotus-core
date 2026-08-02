@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from typing import cast
 
 from portfolio_common.domain.calculation_lineage import (
@@ -65,7 +65,7 @@ class MaterializeLotAmortizedCostProfileUseCase:
 
         await self._profiles.acquire_materialization_lock(scope)
         bundle = await self._authority.load(scope)
-        head = await self._profiles.latest_head(scope)
+        head = await self._profiles.latest_verified_head(scope)
         next_version = 1 if head is None else head.profile_version + 1
         try:
             resolved = resolve_lot_amortized_cost_inputs(
@@ -87,6 +87,7 @@ class MaterializeLotAmortizedCostProfileUseCase:
                 policy=policy,
                 profile_version=next_version,
                 reason=exc.reason,
+                freshness_cutoff=freshness_cutoff,
             )
         else:
             authority_hash = resolved.cache_key.authority_content_hash
@@ -111,6 +112,7 @@ class MaterializeLotAmortizedCostProfileUseCase:
                     policy=policy,
                     profile_version=next_version,
                     reason=AmortizedCostEligibilityReason.RESIDUAL_OUTSIDE_TOLERANCE,
+                    freshness_cutoff=freshness_cutoff,
                 )
         outcome = await self._profiles.append(profile)
         return LotAmortizedCostMaterializationResult(
@@ -131,6 +133,7 @@ class MaterializeLotAmortizedCostProfileUseCase:
         policy: AmortizedCostPolicy,
         profile_version: int,
         reason: AmortizedCostEligibilityReason,
+        freshness_cutoff: datetime | None,
     ) -> LotAmortizedCostMaterializationResult:
         """Append or reuse durable fail-closed evidence for one authority decision."""
 
@@ -139,6 +142,7 @@ class MaterializeLotAmortizedCostProfileUseCase:
             effective_date=effective_date,
             policy=policy,
             eligibility_reason=reason,
+            freshness_cutoff=freshness_cutoff,
         )
         if head is not None and head.authority_content_hash == authority_hash:
             return _unchanged_result(
@@ -206,6 +210,7 @@ def _parked_decision_content_hash(
     effective_date: date,
     policy: AmortizedCostPolicy,
     eligibility_reason: AmortizedCostEligibilityReason,
+    freshness_cutoff: datetime | None,
 ) -> str:
     """Identify the source, policy, and fail-closed decision persisted by a parked profile."""
 
@@ -218,6 +223,9 @@ def _parked_decision_content_hash(
                     effective_date=effective_date,
                 ),
                 "eligibility_reason": eligibility_reason,
+                "freshness_cutoff": (
+                    freshness_cutoff.astimezone(UTC) if freshness_cutoff is not None else None
+                ),
                 "policy": {
                     "include_fees_in_amortized_cost": policy.include_fees_in_amortized_cost,
                     "method": policy.method,

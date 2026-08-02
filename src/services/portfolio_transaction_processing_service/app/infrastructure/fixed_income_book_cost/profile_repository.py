@@ -83,6 +83,22 @@ class SqlAlchemyLotAmortizedCostProfileRepository:
             authority_content_hash=record.authority_content_hash,
         )
 
+    async def latest_verified_head(
+        self,
+        scope: LotBookCostAuthorityScope,
+    ) -> LotAmortizedCostProfileHead | None:
+        """Load and hash-verify the complete latest profile before projecting its head."""
+
+        profile = await self.latest(scope)
+        if profile is None:
+            return None
+        return LotAmortizedCostProfileHead(
+            profile_id=profile.profile_id,
+            profile_version=profile.profile_version,
+            profile_content_hash=profile.content_hash(),
+            authority_content_hash=profile.authority_content_hash,
+        )
+
     async def append(
         self,
         profile: LotAmortizedCostProfileVersion,
