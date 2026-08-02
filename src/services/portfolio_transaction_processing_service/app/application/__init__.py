@@ -29,8 +29,11 @@ from .cost_basis_processing.timeline import (
 )
 from .errors import TransactionProcessingError, TransactionProcessingRejected
 from .fixed_income_book_cost import (
+    ConflictingLotAmortizedCostAuthorityBatchError,
     LotAmortizedCostMaterializationResult,
     MaterializeLotAmortizedCostProfileUseCase,
+    PersistLotAmortizedCostAuthorityResult,
+    PersistLotAmortizedCostAuthorityUseCase,
 )
 from .position_history import PositionHistoryProcessingResult, PositionHistoryProcessor
 from .process_transaction import ProcessTransactionUseCase
@@ -65,6 +68,9 @@ __all__ = [
     "PositionHistoryProcessor",
     "LotAmortizedCostMaterializationResult",
     "MaterializeLotAmortizedCostProfileUseCase",
+    "ConflictingLotAmortizedCostAuthorityBatchError",
+    "PersistLotAmortizedCostAuthorityResult",
+    "PersistLotAmortizedCostAuthorityUseCase",
     "ReconcileAverageCostPoolsCommand",
     "ReconcileAverageCostPoolsResult",
     "ReconcileAverageCostPoolsUseCase",
