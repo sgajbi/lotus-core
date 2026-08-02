@@ -32,7 +32,7 @@ AUTHORITY_INSERT = text(
         :authority_type, :tenant_id, :legal_book_id, :portfolio_id, :security_id, :lot_id,
         DATE '2026-01-01', :valid_to, :lifecycle_status, :source_version, :source_system,
         :source_record_id, :source_revision, TIMESTAMPTZ '2026-01-01 08:00:00+00',
-        :authority_content_hash, CAST(:authority_payload AS JSON)
+        :authority_content_hash, CAST(:authority_payload AS JSONB)
     )
     """
 )
@@ -83,6 +83,22 @@ def test_authority_migration_applies_enforces_rolls_back_and_reapplies(
         with pytest.raises(IntegrityError):
             connection.execute(AUTHORITY_INSERT, valid)
         duplicate.rollback()
+
+        duplicate_member = valid | {
+            "authority_content_hash": "b" * 64,
+            "authority_payload": '{"currency":"SGD","currency":"SGD"}',
+            "source_record_id": "basis-duplicate-member",
+            "source_version": 2,
+        }
+        connection.execute(AUTHORITY_INSERT, duplicate_member)
+        canonical_payload = connection.scalar(
+            text(
+                "SELECT authority_payload::text "
+                "FROM lot_amortized_cost_authority "
+                "WHERE source_record_id = 'basis-duplicate-member'"
+            )
+        )
+        assert canonical_payload == '{"currency": "SGD"}'
 
         migration["downgrade"]()
         assert not inspect(connection).has_table("lot_amortized_cost_authority")

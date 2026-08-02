@@ -18,6 +18,7 @@ from sqlalchemy import (
     func,
     text,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 
 from .db_base import Base
@@ -2383,7 +2384,7 @@ class LotAmortizedCostAuthorityRecord(Base):
     source_revision = Column(String, nullable=False)
     observed_at = Column(DateTime(timezone=True), nullable=False)
     authority_content_hash = Column(String(64), nullable=False)
-    authority_payload = Column(JSON(none_as_null=True), nullable=False)
+    authority_payload = Column(JSONB(none_as_null=True), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     __table_args__ = (
@@ -2455,7 +2456,7 @@ class LotAmortizedCostAuthorityRecord(Base):
             name="ck_lot_amort_authority_hash",
         ),
         CheckConstraint(
-            "json_typeof(authority_payload::json) = 'object'",
+            "jsonb_typeof(authority_payload) = 'object'",
             name="ck_lot_amort_authority_payload_object",
         ),
         Index(

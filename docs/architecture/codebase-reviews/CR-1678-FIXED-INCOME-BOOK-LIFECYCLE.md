@@ -90,6 +90,9 @@ output-policy identity, preventing changed calculation semantics, precision poli
 thresholds from retaining obsolete economics.
 Authority appends acquire that same scope/profile lock before their narrower per-source lock, so a
 correction cannot commit between the materializer's source reload and profile decision.
+Atomic authority batches sort by that lock scope before authority family and source version, and
+authority payloads use PostgreSQL `JSONB`, eliminating ambiguous duplicate-object members before
+typed reconstruction and canonical-record verification.
 
 External ingestion DTO/routes, production composition into the owning transaction boundary,
 correction replay scheduling, public queries, disposal allocations, and redemption integration
@@ -131,7 +134,7 @@ Data Models wiki documents the staged ledgers while the capability wiki remains
 - 54 focused migration, ORM, and advisory-lock unit tests;
 - 4 real-PostgreSQL profile repository tests covering append/retry, contiguous versions, exact
   as-of selection, and canonical header/lineage/period tamper rejection;
-- 95 warning-strict fixed-income domain/migration tests plus 17 application writer/materializer
+- 95 warning-strict fixed-income domain/migration tests plus 18 application writer/materializer
   tests;
 - 17 real-PostgreSQL authority cases covering all four source families, exact retry, monotonic
   corrections, source-version collision, typed reload, payload-shape enforcement at top-level and

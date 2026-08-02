@@ -68,3 +68,25 @@ async def test_writer_orders_corrections_by_source_version() -> None:
 
     written = [call.args[0] for call in port.append.await_args_list]
     assert written == [first, second]
+
+
+@pytest.mark.asyncio
+async def test_writer_orders_batches_by_profile_lock_scope_before_authority_family() -> None:
+    port = AsyncMock(spec=LotAmortizedCostAuthorityPort)
+    port.append.return_value = LotAmortizedCostAuthorityAppendOutcome.APPENDED
+    resolved = resolved_fixed_income_book_cost_inputs()
+    scope_a = replace(resolved.basis_fact.scope, lot_id="LOT-A")
+    scope_b = replace(resolved.basis_fact.scope, lot_id="LOT-B")
+    schedule_a = replace(resolved.schedule_fact, scope=scope_a)
+    basis_b = replace(resolved.basis_fact, scope=scope_b)
+    schedule_b = replace(resolved.schedule_fact, scope=scope_b)
+    basis_a = replace(resolved.basis_fact, scope=scope_a)
+
+    await PersistLotAmortizedCostAuthorityUseCase(port).execute([schedule_a, basis_b])
+    first_order = [call.args[0].scope.key for call in port.append.await_args_list]
+    port.append.reset_mock()
+    await PersistLotAmortizedCostAuthorityUseCase(port).execute([schedule_b, basis_a])
+    second_order = [call.args[0].scope.key for call in port.append.await_args_list]
+
+    assert first_order == [scope_a.key, scope_b.key]
+    assert second_order == [scope_a.key, scope_b.key]

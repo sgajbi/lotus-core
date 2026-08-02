@@ -85,8 +85,8 @@ def _authority_order_key(
         source_record_id = authority.source.source_record_id
         source_version = authority.source.fact_version
     return (
-        type(authority).__name__,
         *authority.scope.key,
+        type(authority).__name__,
         source_system,
         source_record_id,
         source_version,
