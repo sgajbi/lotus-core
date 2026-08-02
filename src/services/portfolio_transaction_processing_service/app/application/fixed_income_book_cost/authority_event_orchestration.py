@@ -15,13 +15,16 @@ from ...domain.fixed_income_book_cost import (
     AmortizedCostEligibilityReason,
     AmortizedCostPolicy,
     AmortizedCostPolicyRegistry,
+    LotAmortizedCostPolicyAssignment,
     LotBookCostAuthorityScope,
     MissingAmortizedCostAssignmentError,
     OverlappingAmortizedCostAssignmentError,
     UnsupportedAmortizedCostPolicyError,
+    amortization_replay_start_for_assignment_correction,
     resolve_amortized_cost_assignment,
 )
 from ...ports import (
+    LotAmortizedCostAuthority,
     LotAmortizedCostAuthorityPort,
     LotAmortizedCostProfilePort,
 )
@@ -141,12 +144,19 @@ class HandleFixedIncomeBookCostAuthorityEventUseCase:
                 authority=unit_of_work.authority,
                 profiles=unit_of_work.profiles,
             )
+            replay_start = await self._replay_start(
+                authority=unit_of_work.authority,
+                mapped=mapped,
+                persistence=persistence,
+                default=effective_date,
+            )
             affected_boundaries = sorted(
                 {
+                    replay_start,
                     effective_date,
                     *await unit_of_work.profiles.effective_boundaries_from(
                         mapped.scope,
-                        effective_date=effective_date,
+                        effective_date=replay_start,
                     ),
                 }
             )
@@ -173,6 +183,26 @@ class HandleFixedIncomeBookCostAuthorityEventUseCase:
             materialization=materialization,
             rematerializations=rematerializations,
         )
+
+    async def _replay_start(
+        self,
+        *,
+        authority: LotAmortizedCostAuthorityPort,
+        mapped: LotAmortizedCostAuthority,
+        persistence: PersistLotAmortizedCostAuthorityResult,
+        default: date,
+    ) -> date:
+        """Return the earliest boundary affected by an appended assignment correction."""
+
+        if not isinstance(mapped, LotAmortizedCostPolicyAssignment):
+            return default
+        if persistence.appended_count == 0:
+            return default
+        bundle = await authority.load(mapped.scope)
+        previous = _previous_assignment_version(bundle.assignments, current=mapped)
+        if previous is None:
+            return default
+        return amortization_replay_start_for_assignment_correction(previous, mapped) or default
 
     async def _materialize_boundary(
         self,
@@ -231,3 +261,21 @@ class HandleFixedIncomeBookCostAuthorityEventUseCase:
             )
         except UnsupportedAmortizedCostPolicyError:
             return None, AmortizedCostEligibilityReason.POLICY_UNSUPPORTED
+
+
+def _previous_assignment_version(
+    assignments: tuple[LotAmortizedCostPolicyAssignment, ...],
+    *,
+    current: LotAmortizedCostPolicyAssignment,
+) -> LotAmortizedCostPolicyAssignment | None:
+    previous_versions = (
+        assignment
+        for assignment in assignments
+        if assignment.source_record_key == current.source_record_key
+        and assignment.assignment_version < current.assignment_version
+    )
+    return max(
+        previous_versions,
+        key=lambda assignment: assignment.assignment_version,
+        default=None,
+    )

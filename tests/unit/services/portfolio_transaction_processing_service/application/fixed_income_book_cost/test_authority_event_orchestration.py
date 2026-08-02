@@ -64,6 +64,40 @@ def _basis_event(basis) -> FixedIncomeBookCostAuthorityEvent:
     )
 
 
+def _assignment_event(assignment) -> FixedIncomeBookCostAuthorityEvent:
+    return FixedIncomeBookCostAuthorityEvent.model_validate(
+        {
+            "event_type": "fixed_income.book_cost.authority.received",
+            "schema_version": "1.0.0",
+            "authority": {
+                "authority_type": "POLICY_ASSIGNMENT",
+                "header": {
+                    "scope": {
+                        "tenant_id": assignment.scope.tenant_id,
+                        "legal_book_id": assignment.scope.legal_book_id,
+                        "portfolio_id": assignment.scope.portfolio_id,
+                        "security_id": assignment.scope.security_id,
+                        "lot_id": assignment.scope.lot_id,
+                    },
+                    "source": {
+                        "source_system": assignment.source_system,
+                        "source_record_id": assignment.source_record_id,
+                        "source_revision": assignment.source_revision,
+                        "source_version": assignment.assignment_version,
+                        "observed_at": assignment.observed_at.isoformat(),
+                    },
+                    "status": assignment.assignment_status.value,
+                    "valid_from": assignment.valid_from.isoformat(),
+                    "valid_to": (assignment.valid_to.isoformat() if assignment.valid_to else None),
+                },
+                "policy_id": assignment.policy_id,
+                "policy_version": assignment.policy_version,
+                "assignment_reason": assignment.assignment_reason,
+            },
+        }
+    )
+
+
 def _bundle(*, basis_facts) -> LotAmortizedCostAuthorityBundle:
     resolved = resolved_fixed_income_book_cost_inputs()
     assert resolved.yield_fact is not None
@@ -301,6 +335,130 @@ async def test_atomic_handler_rematerializes_every_later_persisted_boundary() ->
 
 
 @pytest.mark.asyncio
+async def test_assignment_correction_moved_later_replays_superseded_boundary() -> None:
+    authority, profiles = _dependencies()
+    resolved = resolved_fixed_income_book_cost_inputs()
+    previous = resolved.assignment
+    current = replace(
+        previous,
+        valid_from=date(2026, 7, 1),
+        assignment_version=2,
+        source_revision="revision-2",
+    )
+    authority.load.return_value = replace(
+        _bundle(basis_facts=(resolved.basis_fact,)),
+        assignments=(previous, current),
+    )
+    profiles.effective_boundaries_from.return_value = (previous.valid_from,)
+    unit_of_work = _UnitOfWork(authority, profiles)
+
+    result = await HandleFixedIncomeBookCostAuthorityEventUseCase(
+        unit_of_work_factory=lambda: unit_of_work,
+        policies=AmortizedCostPolicyRegistry((resolved.policy,)),
+    ).execute(_assignment_event(current))
+
+    profiles.effective_boundaries_from.assert_awaited_once_with(
+        current.scope,
+        effective_date=previous.valid_from,
+    )
+    persisted_profiles = [call.args[0] for call in profiles.append.await_args_list]
+    assert [profile.effective_date for profile in persisted_profiles] == [
+        previous.valid_from,
+        current.valid_from,
+    ]
+    assert persisted_profiles[0].eligibility_reason is (
+        AmortizedCostEligibilityReason.ASSIGNMENT_MISSING
+    )
+    assert persisted_profiles[1].eligibility_reason is None
+    assert result.materialization.profile_id == persisted_profiles[1].profile_id
+    assert result.rematerializations[0].profile_id == persisted_profiles[0].profile_id
+    assert unit_of_work.committed is True
+
+
+@pytest.mark.asyncio
+async def test_assignment_correction_moved_earlier_replays_from_new_boundary() -> None:
+    authority, profiles = _dependencies()
+    resolved = resolved_fixed_income_book_cost_inputs()
+    previous = replace(resolved.assignment, valid_from=date(2026, 7, 1))
+    current = replace(
+        previous,
+        valid_from=date(2026, 1, 1),
+        assignment_version=2,
+        source_revision="revision-2",
+    )
+    authority.load.return_value = replace(
+        _bundle(basis_facts=(resolved.basis_fact,)),
+        assignments=(previous, current),
+    )
+    profiles.effective_boundaries_from.return_value = (previous.valid_from,)
+    unit_of_work = _UnitOfWork(authority, profiles)
+
+    result = await HandleFixedIncomeBookCostAuthorityEventUseCase(
+        unit_of_work_factory=lambda: unit_of_work,
+        policies=AmortizedCostPolicyRegistry((resolved.policy,)),
+    ).execute(_assignment_event(current))
+
+    profiles.effective_boundaries_from.assert_awaited_once_with(
+        current.scope,
+        effective_date=current.valid_from,
+    )
+    persisted_profiles = [call.args[0] for call in profiles.append.await_args_list]
+    assert [profile.effective_date for profile in persisted_profiles] == [
+        current.valid_from,
+        previous.valid_from,
+    ]
+    assert result.materialization.profile_id == persisted_profiles[0].profile_id
+    assert result.rematerializations[0].profile_id == persisted_profiles[1].profile_id
+    assert unit_of_work.committed is True
+
+
+@pytest.mark.asyncio
+async def test_exact_duplicate_assignment_does_not_broaden_replay_or_append_profile() -> None:
+    authority, profiles = _dependencies()
+    resolved = resolved_fixed_income_book_cost_inputs()
+    assignment = resolved.assignment
+    authority.load.return_value = replace(
+        _bundle(basis_facts=(resolved.basis_fact,)),
+        assignments=(assignment,),
+    )
+    first_unit_of_work = _UnitOfWork(authority, profiles)
+    handler = HandleFixedIncomeBookCostAuthorityEventUseCase(
+        unit_of_work_factory=lambda: first_unit_of_work,
+        policies=AmortizedCostPolicyRegistry((resolved.policy,)),
+    )
+
+    first = await handler.execute(_assignment_event(assignment))
+    first_profile = profiles.append.await_args.args[0]
+    profiles.latest_verified_head.return_value = LotAmortizedCostProfileHead(
+        profile_id=first_profile.profile_id,
+        profile_version=first_profile.profile_version,
+        profile_content_hash=first_profile.content_hash(),
+        authority_content_hash=first.materialization.authority_content_hash,
+    )
+    authority.append.return_value = LotAmortizedCostAuthorityAppendOutcome.UNCHANGED
+    authority.load.reset_mock()
+    profiles.append.reset_mock()
+    profiles.effective_boundaries_from.reset_mock()
+    duplicate_unit_of_work = _UnitOfWork(authority, profiles)
+    duplicate_handler = HandleFixedIncomeBookCostAuthorityEventUseCase(
+        unit_of_work_factory=lambda: duplicate_unit_of_work,
+        policies=AmortizedCostPolicyRegistry((resolved.policy,)),
+    )
+
+    duplicate = await duplicate_handler.execute(_assignment_event(assignment))
+
+    assert duplicate.persistence.unchanged_count == 1
+    assert duplicate.materialization.outcome is LotAmortizedCostProfileAppendOutcome.UNCHANGED
+    profiles.append.assert_not_awaited()
+    profiles.effective_boundaries_from.assert_awaited_once_with(
+        assignment.scope,
+        effective_date=assignment.valid_from,
+    )
+    assert authority.load.await_count == 2
+    assert duplicate_unit_of_work.committed is True
+
+
+@pytest.mark.asyncio
 async def test_atomic_handler_commits_parked_evidence_when_assignment_is_missing() -> None:
     authority, profiles = _dependencies()
     resolved = resolved_fixed_income_book_cost_inputs()
@@ -381,5 +539,35 @@ async def test_atomic_handler_rolls_back_when_later_boundary_rebuild_fails() -> 
         ).execute(_basis_event(resolved.basis_fact))
 
     assert profiles.append.await_count == 2
+    assert unit_of_work.committed is False
+    assert isinstance(unit_of_work.exit_error, RuntimeError)
+
+
+@pytest.mark.asyncio
+async def test_assignment_correction_rolls_back_when_superseded_boundary_rebuild_fails() -> None:
+    authority, profiles = _dependencies()
+    resolved = resolved_fixed_income_book_cost_inputs()
+    previous = resolved.assignment
+    current = replace(
+        previous,
+        valid_from=date(2026, 7, 1),
+        assignment_version=2,
+        source_revision="revision-2",
+    )
+    authority.load.return_value = replace(
+        _bundle(basis_facts=(resolved.basis_fact,)),
+        assignments=(previous, current),
+    )
+    profiles.effective_boundaries_from.return_value = (previous.valid_from,)
+    profiles.append.side_effect = RuntimeError("superseded boundary unavailable")
+    unit_of_work = _UnitOfWork(authority, profiles)
+
+    with pytest.raises(RuntimeError, match="superseded boundary unavailable"):
+        await HandleFixedIncomeBookCostAuthorityEventUseCase(
+            unit_of_work_factory=lambda: unit_of_work,
+            policies=AmortizedCostPolicyRegistry((resolved.policy,)),
+        ).execute(_assignment_event(current))
+
+    authority.append.assert_awaited_once_with(current)
     assert unit_of_work.committed is False
     assert isinstance(unit_of_work.exit_error, RuntimeError)
