@@ -22,6 +22,9 @@ from ..application.ingestion_publish_outcome import (
     INGESTION_PUBLISH_RETRY_AFTER_SECONDS,
     build_ingestion_publish_failure_detail,
 )
+from ..DTOs.fixed_income_book_cost_authority_dto import (
+    FixedIncomeBookCostAuthorityIngestionRequest,
+)
 from ..DTOs.ingestion_job_dto import IngestionJobResponse
 from ..ops_controls import enforce_ingestion_write_rate_limit
 from ..ports.ingestion_idempotency_replay import (
@@ -153,6 +156,14 @@ class IngestionPublishCommandHandler:
         self, command: BatchPublishIngestionCommand
     ) -> IngestionCommandResult:
         return await self.ingest_batch(command, self.publish_transactions)
+
+    async def ingest_fixed_income_book_cost_authorities(
+        self, command: BatchPublishIngestionCommand
+    ) -> IngestionCommandResult:
+        return await self.ingest_batch(
+            command,
+            self.publish_fixed_income_book_cost_authorities,
+        )
 
     async def ingest_reprocessing_requests(
         self, command: BatchPublishIngestionCommand
@@ -336,6 +347,19 @@ class IngestionPublishCommandHandler:
         self, records: Sequence[Any], idempotency_key: str | None
     ) -> None:
         await self.ingestion_service.publish_transactions(records, idempotency_key=idempotency_key)
+
+    async def publish_fixed_income_book_cost_authorities(
+        self,
+        records: Sequence[Any],
+        idempotency_key: str | None,
+    ) -> None:
+        request = FixedIncomeBookCostAuthorityIngestionRequest(
+            authorities=list(records),
+        )
+        await self.ingestion_service.publish_fixed_income_book_cost_authorities(
+            request,
+            idempotency_key=idempotency_key,
+        )
 
     async def publish_reprocessing_requests(
         self, records: Sequence[Any], idempotency_key: str | None

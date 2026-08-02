@@ -7,6 +7,9 @@ from src.services.ingestion_service.app.application import (
     TransactionReprocessingTargetNotFound,
 )
 from src.services.ingestion_service.app.domain import TransactionReprocessingTarget
+from src.services.ingestion_service.app.DTOs.fixed_income_book_cost_authority_dto import (
+    FixedIncomeBookCostAuthorityIngestionRequest,
+)
 from src.services.ingestion_service.app.ports.transaction_reprocessing import (
     TransactionReprocessingTargetReadError,
 )
@@ -78,6 +81,39 @@ def _handler() -> IngestionPublishCommandHandler:
     )
 
 
+def _fixed_income_request() -> FixedIncomeBookCostAuthorityIngestionRequest:
+    return FixedIncomeBookCostAuthorityIngestionRequest.model_validate(
+        {
+            "authorities": [
+                {
+                    "authority_type": "POLICY_ASSIGNMENT",
+                    "header": {
+                        "scope": {
+                            "tenant_id": "TENANT_SG",
+                            "legal_book_id": "BOOK_SG_PB",
+                            "portfolio_id": "PORTFOLIO_001",
+                            "security_id": "BOND_001",
+                            "lot_id": "LOT_001",
+                        },
+                        "source": {
+                            "source_system": "accounting-policy-master",
+                            "source_record_id": "assignment-001",
+                            "source_revision": "revision-1",
+                            "source_version": 1,
+                            "observed_at": "2026-08-03T09:00:00+08:00",
+                        },
+                        "status": "ACTIVE",
+                        "valid_from": "2026-08-01",
+                    },
+                    "policy_id": "IFRS9_EIR_LOCAL",
+                    "policy_version": 1,
+                    "assignment_reason": "Approved accounting treatment",
+                }
+            ]
+        }
+    )
+
+
 @pytest.mark.asyncio
 async def test_batch_publish_command_creates_job_publishes_and_marks_queued() -> None:
     handler = _handler()
@@ -100,6 +136,38 @@ async def test_batch_publish_command_creates_job_publishes_and_marks_queued() ->
     publisher.assert_awaited_once()
     handler.ingestion_job_service.mark_queued.assert_awaited_once_with("job-1")
     handler.ingestion_job_service.mark_failed.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_fixed_income_authority_command_rebuilds_typed_batch_for_publication() -> None:
+    handler = _handler()
+    handler.ingestion_service.publish_fixed_income_book_cost_authorities = AsyncMock()
+    request = _fixed_income_request()
+
+    result = await handler.ingest_fixed_income_book_cost_authorities(
+        BatchPublishIngestionCommand(
+            endpoint="/ingest/fixed-income-book-cost-authorities",
+            entity_type="fixed_income_book_cost_authority",
+            records=request.authorities,
+            idempotency_key="book-cost-001",
+            request_payload=request.model_dump(mode="json"),
+            accepted_message="Accepted.",
+        )
+    )
+
+    published_request = (
+        handler.ingestion_service.publish_fixed_income_book_cost_authorities.await_args.args[0]
+    )
+    assert isinstance(published_request, FixedIncomeBookCostAuthorityIngestionRequest)
+    assert published_request == request
+    assert (
+        handler.ingestion_service.publish_fixed_income_book_cost_authorities.await_args.kwargs[
+            "idempotency_key"
+        ]
+        == "book-cost-001"
+    )
+    assert result.entity_type == "fixed_income_book_cost_authority"
+    assert result.accepted_count == 1
 
 
 @pytest.mark.asyncio
