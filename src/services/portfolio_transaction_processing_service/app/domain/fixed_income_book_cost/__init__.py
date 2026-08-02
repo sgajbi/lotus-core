@@ -34,6 +34,13 @@ from .policy import (
     YieldApplicationConvention,
     classify_amortized_cost_direction,
 )
+from .policy_registry import (
+    AmortizedCostPolicyIdentity,
+    AmortizedCostPolicyRegistry,
+    AmortizedCostPolicyRegistryError,
+    DuplicateAmortizedCostPolicyError,
+    UnsupportedAmortizedCostPolicyError,
+)
 from .profile import (
     LOT_AMORTIZED_COST_PROFILE_ID_VERSION,
     LotAmortizedCostPeriodLedgerEntry,
@@ -70,6 +77,9 @@ __all__ = [
     "AmortizedCostInputResolutionError",
     "AmortizedCostMethod",
     "AmortizedCostPolicy",
+    "AmortizedCostPolicyIdentity",
+    "AmortizedCostPolicyRegistry",
+    "AmortizedCostPolicyRegistryError",
     "AmortizedCostProfileStatus",
     "AmortizedCostReconciliationError",
     "AmortizedCostScheduleInput",
@@ -79,6 +89,7 @@ __all__ = [
     "AmortizationPeriodInput",
     "AmortizationPeriodResult",
     "DiscountOriginClassification",
+    "DuplicateAmortizedCostPolicyError",
     "LotAmortizationScheduleFact",
     "LotAmortizedCostPeriodLedgerEntry",
     "LotAmortizedCostProfileVersion",
@@ -92,6 +103,7 @@ __all__ = [
     "ResolvedAmortizedCostAssignment",
     "ResolvedLotAmortizedCostInputs",
     "YieldApplicationConvention",
+    "UnsupportedAmortizedCostPolicyError",
     "amortization_replay_start_for_assignment_correction",
     "amortized_cost_calculation_identity",
     "calculate_amortized_cost_schedule",
