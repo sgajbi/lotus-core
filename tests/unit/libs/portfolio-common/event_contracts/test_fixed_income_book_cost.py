@@ -1,6 +1,7 @@
 """Prove the fixed-income book-cost authority event contract."""
 
 from copy import deepcopy
+from decimal import localcontext
 
 import pytest
 from portfolio_common.event_contracts.fixed_income_book_cost import (
@@ -276,6 +277,17 @@ def test_event_hash_canonicalizes_equivalent_decimal_spellings(
     second_event = FixedIncomeBookCostAuthorityEvent.model_validate(_event(second))
 
     assert first_event.content_hash() == second_event.content_hash()
+
+
+def test_event_hash_is_independent_of_ambient_decimal_precision() -> None:
+    event = FixedIncomeBookCostAuthorityEvent.model_validate(_event(_basis_authority()))
+    expected_hash = event.content_hash()
+
+    with localcontext() as context:
+        context.prec = 8
+        constrained_hash = event.content_hash()
+
+    assert constrained_hash == expected_hash
 
 
 def test_yield_bound_depends_on_application_convention() -> None:

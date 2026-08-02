@@ -86,6 +86,7 @@ class DirectKafkaTopicDefinition:
     payload_contract: str
     idempotency_header_supported: bool
     correlation_header_supported: bool
+    runtime_active: bool = True
     supportability_evidence: tuple[str, ...] = ()
     source_data_products: tuple[str, ...] = ()
 
@@ -427,6 +428,18 @@ DIRECT_KAFKA_TOPIC_DEFINITIONS: tuple[DirectKafkaTopicDefinition, ...] = (
         payload_contract="BusinessDateEvent",
         idempotency_header_supported=True,
         correlation_header_supported=True,
+        supportability_evidence=(INGESTION_EVIDENCE_BUNDLE,),
+    ),
+    DirectKafkaTopicDefinition(
+        name="FixedIncomeBookCostAuthorityReceived",
+        topic="fixed_income.book_cost.authority.received",
+        semantic_type="source_ingestion_fact",
+        producer_service="ingestion_service",
+        consumer_services=("portfolio_transaction_processing_service",),
+        payload_contract="FixedIncomeBookCostAuthorityEvent",
+        idempotency_header_supported=True,
+        correlation_header_supported=True,
+        runtime_active=False,
         supportability_evidence=(INGESTION_EVIDENCE_BUNDLE,),
     ),
     DirectKafkaTopicDefinition(

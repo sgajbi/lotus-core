@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from portfolio_common import config, events
+from portfolio_common import config, event_contracts, events
 from portfolio_common.event_supportability import (
     DIRECT_KAFKA_TOPIC_DEFINITIONS,
     EVENT_FAMILY_DEFINITIONS,
@@ -475,7 +475,10 @@ def evaluate_outbox_event_contracts(
 ) -> list[str]:
     errors: list[str] = []
     available_models = {
-        name for name in dir(events) if name.endswith("Event") or name.endswith("EventModel")
+        name
+        for module in (events, event_contracts)
+        for name in dir(module)
+        if name.endswith("Event") or name.endswith("EventModel")
     }
     try:
         validate_event_supportability_catalog(

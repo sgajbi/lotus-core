@@ -78,6 +78,24 @@
         "tests/unit/services/valuation_orchestrator_service/adapters/kafka/test_fx_rate_persisted_consumer.py",
         "tests/integration/tools/test_dlq_replayer.py"
       ]
+    },
+    "fixed_income_book_cost_authority_contract": {
+      "producer_evidence": [
+        "tests/unit/services/ingestion_service/test_fixed_income_book_cost_authority_dto.py",
+        "tests/unit/libs/portfolio-common/event_contracts/test_fixed_income_book_cost.py"
+      ],
+      "consumer_evidence": [
+        "tests/unit/services/portfolio_transaction_processing_service/domain/fixed_income_book_cost/test_source_facts.py",
+        "tests/unit/libs/portfolio-common/test_event_supportability.py"
+      ],
+      "header_and_lineage_evidence": [
+        "tests/unit/libs/portfolio-common/event_contracts/test_fixed_income_book_cost.py",
+        "tests/unit/libs/portfolio-common/domain/eventing/test_partitioning.py"
+      ],
+      "dlq_replay_evidence": [
+        "tests/unit/libs/portfolio-common/test_kafka_consumer.py",
+        "tests/integration/tools/test_dlq_replayer.py"
+      ]
     }
   },
   "event_families": [
@@ -110,6 +128,7 @@
     {"name": "TransactionReprocessingPersistedReplay", "topic": "transactions.persisted", "payload_contract": "TransactionEvent", "evidence_profile": "direct_kafka_topic", "partition_key_policy": "portfolio_id|transaction-group|linked_transaction_group_id when linked; otherwise portfolio_id|security_id"},
     {"name": "ValuationJobRequested", "topic": "valuation.job.requested", "payload_contract": "valuation_job_command", "evidence_profile": "direct_kafka_topic", "partition_key_policy": "portfolio_id|security_id"},
     {"name": "PersistenceServiceDlq", "topic": "dlq.persistence_service", "payload_contract": "base_consumer_dlq_payload", "evidence_profile": "direct_kafka_topic", "partition_key_policy": "original_message_key_or_NoKey"},
-    {"name": "ValuationServiceDlq", "topic": "dlq.valuation_service", "payload_contract": "base_consumer_dlq_payload", "evidence_profile": "direct_kafka_topic", "partition_key_policy": "original_message_key_or_NoKey"}
+    {"name": "ValuationServiceDlq", "topic": "dlq.valuation_service", "payload_contract": "base_consumer_dlq_payload", "evidence_profile": "direct_kafka_topic", "partition_key_policy": "original_message_key_or_NoKey"},
+    {"name": "FixedIncomeBookCostAuthorityReceived", "topic": "fixed_income.book_cost.authority.received", "payload_contract": "FixedIncomeBookCostAuthorityEvent", "evidence_profile": "fixed_income_book_cost_authority_contract", "partition_key_policy": "tenant_id|legal_book_id|portfolio_id|security_id|lot_id"}
   ]
 }
