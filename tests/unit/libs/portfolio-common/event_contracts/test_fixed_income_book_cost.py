@@ -119,6 +119,76 @@ def test_event_hash_changes_when_economic_input_changes() -> None:
     assert first.content_hash() != second.content_hash()
 
 
+def test_event_normalizes_observation_instant_before_hashing() -> None:
+    offset_payload = _event(_basis_authority())
+    utc_authority = _basis_authority()
+    utc_header = utc_authority["header"]
+    assert isinstance(utc_header, dict)
+    utc_source = utc_header["source"]
+    assert isinstance(utc_source, dict)
+    utc_source["observed_at"] = "2026-08-02T02:15:00Z"
+
+    offset_event = FixedIncomeBookCostAuthorityEvent.model_validate(offset_payload)
+    utc_event = FixedIncomeBookCostAuthorityEvent.model_validate(_event(utc_authority))
+
+    assert offset_event.authority.header.source.observed_at.isoformat() == (
+        "2026-08-02T02:15:00+00:00"
+    )
+    assert offset_event.content_hash() == utc_event.content_hash()
+
+
+@pytest.mark.parametrize("coercible_version", ["1", 1.0])
+@pytest.mark.parametrize(
+    ("authority_type", "version_path"),
+    [
+        ("CLEAN_COST_BASIS", ("header", "source", "source_version")),
+        ("POLICY_ASSIGNMENT", ("policy_version",)),
+        ("AMORTIZATION_SCHEDULE", ("schedule_version",)),
+        ("AMORTIZATION_SCHEDULE", ("year_fraction_method_version",)),
+    ],
+)
+def test_event_rejects_coercible_non_integer_versions(
+    authority_type: str,
+    version_path: tuple[str, ...],
+    coercible_version: object,
+) -> None:
+    authorities: dict[str, dict[str, object]] = {
+        "CLEAN_COST_BASIS": _basis_authority(),
+        "POLICY_ASSIGNMENT": {
+            "authority_type": "POLICY_ASSIGNMENT",
+            "header": _header(),
+            "policy_id": "EFFECTIVE_YIELD_BOOK_COST",
+            "policy_version": 1,
+            "assignment_reason": "Governed effective-yield accounting policy.",
+        },
+        "AMORTIZATION_SCHEDULE": {
+            "authority_type": "AMORTIZATION_SCHEDULE",
+            "header": _header(),
+            "schedule_version": 1,
+            "year_fraction_method_id": "ACTUAL_ACTUAL_ICMA",
+            "year_fraction_method_version": 1,
+            "periods": [
+                {
+                    "period_start_date": "2026-08-01",
+                    "period_end_date": "2027-02-01",
+                    "year_fraction": "0.5",
+                    "cash_coupon_local": "20000",
+                }
+            ],
+        },
+    }
+    authority = authorities[authority_type]
+    target = authority
+    for component in version_path[:-1]:
+        nested = target[component]
+        assert isinstance(nested, dict)
+        target = nested
+    target[version_path[-1]] = coercible_version
+
+    with pytest.raises(ValidationError):
+        FixedIncomeBookCostAuthorityEvent.model_validate(_event(authority))
+
+
 @pytest.mark.parametrize(
     ("path", "value"),
     [
