@@ -128,7 +128,7 @@ Data Models wiki documents the staged ledgers while the capability wiki remains
 - 54 focused migration, ORM, and advisory-lock unit tests;
 - 3 real-PostgreSQL repository tests covering append/retry, contiguous versions, exact as-of
   selection, and header/period tamper rejection;
-- 95 warning-strict fixed-income domain/migration tests plus 12 application writer/materializer
+- 95 warning-strict fixed-income domain/migration tests plus 13 application writer/materializer
   tests;
 - 3 real-PostgreSQL authority tests covering all four source families, exact retry, monotonic
   corrections, source-version collision, typed reload, and persisted-payload tamper rejection;

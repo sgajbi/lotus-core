@@ -12,6 +12,7 @@ from portfolio_common.domain.calculation_lineage import (
 )
 
 from ...domain.fixed_income_book_cost import (
+    AmortizedCostCalculationError,
     AmortizedCostEligibilityReason,
     AmortizedCostInputResolutionError,
     AmortizedCostPolicy,
@@ -116,6 +117,17 @@ class MaterializeLotAmortizedCostProfileUseCase:
                     policy=policy,
                     profile_version=next_version,
                     reason=AmortizedCostEligibilityReason.RESIDUAL_OUTSIDE_TOLERANCE,
+                    freshness_cutoff=freshness_cutoff,
+                )
+            except AmortizedCostCalculationError:
+                return await self._persist_parked_decision(
+                    bundle,
+                    head=head,
+                    scope=scope,
+                    effective_date=effective_date,
+                    policy=policy,
+                    profile_version=next_version,
+                    reason=AmortizedCostEligibilityReason.CALCULATION_FAILED,
                     freshness_cutoff=freshness_cutoff,
                 )
         outcome = await self._profiles.append(profile)

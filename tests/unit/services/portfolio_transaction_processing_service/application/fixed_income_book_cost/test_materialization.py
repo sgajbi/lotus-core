@@ -348,3 +348,49 @@ async def test_active_decision_changes_when_freshness_cutoff_changes() -> None:
     assert second.profile_version == 2
     assert second.eligibility_reason is None
     assert second.authority_content_hash != first.authority_content_hash
+
+
+@pytest.mark.asyncio
+async def test_terminal_calculation_failure_is_parked_and_reused() -> None:
+    authority, profiles = _dependencies()
+    resolved = resolved_fixed_income_book_cost_inputs()
+    assert resolved.yield_fact is not None
+    failing_period = replace(
+        resolved.schedule_fact.periods[0],
+        cash_coupon_local=Decimal("100"),
+    )
+    authority.load.return_value = replace(
+        _bundle(),
+        schedule_facts=(replace(resolved.schedule_fact, periods=(failing_period,)),),
+        yield_facts=(replace(resolved.yield_fact, annual_yield=Decimal("-0.5")),),
+    )
+    profiles.latest_verified_head.return_value = None
+    profiles.append.return_value = LotAmortizedCostProfileAppendOutcome.APPENDED
+    use_case = MaterializeLotAmortizedCostProfileUseCase(authority=authority, profiles=profiles)
+
+    first = await use_case.execute(
+        scope=fixed_income_book_cost_scope(),
+        effective_date=date(2026, 1, 1),
+        policy=resolved.policy,
+    )
+
+    assert first.eligibility_reason is AmortizedCostEligibilityReason.CALCULATION_FAILED
+    parked_profile = profiles.append.await_args.args[0]
+    assert parked_profile.status is AmortizedCostProfileStatus.PARKED
+    profiles.latest_verified_head.return_value = LotAmortizedCostProfileHead(
+        profile_id=parked_profile.profile_id,
+        profile_version=parked_profile.profile_version,
+        profile_content_hash=parked_profile.content_hash(),
+        authority_content_hash=first.authority_content_hash,
+    )
+    profiles.append.reset_mock()
+
+    repeated = await use_case.execute(
+        scope=fixed_income_book_cost_scope(),
+        effective_date=date(2026, 1, 1),
+        policy=resolved.policy,
+    )
+
+    assert repeated.outcome is LotAmortizedCostProfileAppendOutcome.UNCHANGED
+    assert repeated.eligibility_reason is AmortizedCostEligibilityReason.CALCULATION_FAILED
+    profiles.append.assert_not_awaited()
