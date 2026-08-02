@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from sqlalchemy import CheckConstraint, Column, ForeignKeyConstraint, UniqueConstraint
+from sqlalchemy.dialects.postgresql import JSONB
 
 from alembic import op
 
@@ -81,6 +82,7 @@ def test_lot_amortized_cost_authority_migration_is_reversible(monkeypatch) -> No
         "authority_payload",
         "created_at",
     }
+    assert isinstance(columns["authority_payload"].type, JSONB)
     constraints = {
         definition.name: definition
         for definition in definitions

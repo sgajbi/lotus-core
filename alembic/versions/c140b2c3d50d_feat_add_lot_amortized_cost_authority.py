@@ -8,6 +8,7 @@ Create Date: 2026-08-02
 from collections.abc import Sequence
 
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 
 from alembic import op
 
@@ -36,7 +37,7 @@ def upgrade() -> None:
         sa.Column("source_revision", sa.String(), nullable=False),
         sa.Column("observed_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("authority_content_hash", sa.String(length=64), nullable=False),
-        sa.Column("authority_payload", sa.JSON(none_as_null=True), nullable=False),
+        sa.Column("authority_payload", postgresql.JSONB(none_as_null=True), nullable=False),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
@@ -79,7 +80,7 @@ def upgrade() -> None:
             name="ck_lot_amort_authority_hash",
         ),
         sa.CheckConstraint(
-            "json_typeof(authority_payload::json) = 'object'",
+            "jsonb_typeof(authority_payload) = 'object'",
             name="ck_lot_amort_authority_payload_object",
         ),
         sa.ForeignKeyConstraint(
