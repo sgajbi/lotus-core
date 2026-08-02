@@ -80,6 +80,10 @@ def _dependencies():
     profiles = AsyncMock(spec=LotAmortizedCostProfilePort)
     authority.append.return_value = LotAmortizedCostAuthorityAppendOutcome.APPENDED
     profiles.latest_verified_head.return_value = None
+    profiles.latest_verified_head_for_effective_date.side_effect = (
+        lambda _scope, *, effective_date: profiles.latest_verified_head.return_value
+    )
+    profiles.effective_boundaries_from.return_value = ()
     profiles.append.return_value = LotAmortizedCostProfileAppendOutcome.APPENDED
     return authority, profiles
 

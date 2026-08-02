@@ -69,8 +69,12 @@ class MaterializeLotAmortizedCostProfileUseCase:
 
         await self._profiles.acquire_materialization_lock(scope)
         bundle = await self._authority.load(scope)
-        head = await self._profiles.latest_verified_head(scope)
-        next_version = 1 if head is None else head.profile_version + 1
+        stream_head = await self._profiles.latest_verified_head(scope)
+        decision_head = await self._profiles.latest_verified_head_for_effective_date(
+            scope,
+            effective_date=effective_date,
+        )
+        next_version = 1 if stream_head is None else stream_head.profile_version + 1
         try:
             resolved = resolve_lot_amortized_cost_inputs(
                 assignments=list(bundle.assignments),
@@ -85,7 +89,7 @@ class MaterializeLotAmortizedCostProfileUseCase:
         except AmortizedCostInputResolutionError as exc:
             return await self._persist_parked_decision(
                 bundle,
-                head=head,
+                decision_head=decision_head,
                 scope=scope,
                 effective_date=effective_date,
                 policy=policy,
@@ -98,10 +102,10 @@ class MaterializeLotAmortizedCostProfileUseCase:
                 resolved.cache_key.authority_content_hash,
                 freshness_cutoff=freshness_cutoff,
             )
-            if head is not None and head.authority_content_hash == authority_hash:
+            if decision_head is not None and decision_head.authority_content_hash == authority_hash:
                 return _unchanged_result(
-                    head.profile_id,
-                    head.profile_version,
+                    decision_head.profile_id,
+                    decision_head.profile_version,
                     authority_hash,
                     eligibility_reason=None,
                 )
@@ -114,7 +118,7 @@ class MaterializeLotAmortizedCostProfileUseCase:
             except AmortizedCostReconciliationError:
                 return await self._persist_parked_decision(
                     bundle,
-                    head=head,
+                    decision_head=decision_head,
                     scope=scope,
                     effective_date=effective_date,
                     policy=policy,
@@ -125,7 +129,7 @@ class MaterializeLotAmortizedCostProfileUseCase:
             except (AmortizedCostCalculationError, DecimalException, DecimalPrecisionError):
                 return await self._persist_parked_decision(
                     bundle,
-                    head=head,
+                    decision_head=decision_head,
                     scope=scope,
                     effective_date=effective_date,
                     policy=policy,
@@ -166,14 +170,18 @@ class MaterializeLotAmortizedCostProfileUseCase:
             raise ValueError("unresolved materialization requires an assignment or policy reason")
         await self._profiles.acquire_materialization_lock(scope)
         bundle = await self._authority.load(scope)
-        head = await self._profiles.latest_verified_head(scope)
+        stream_head = await self._profiles.latest_verified_head(scope)
+        decision_head = await self._profiles.latest_verified_head_for_effective_date(
+            scope,
+            effective_date=effective_date,
+        )
         return await self._persist_parked_decision(
             bundle,
-            head=head,
+            decision_head=decision_head,
             scope=scope,
             effective_date=effective_date,
             policy=None,
-            profile_version=1 if head is None else head.profile_version + 1,
+            profile_version=1 if stream_head is None else stream_head.profile_version + 1,
             reason=reason,
             freshness_cutoff=freshness_cutoff,
         )
@@ -182,7 +190,7 @@ class MaterializeLotAmortizedCostProfileUseCase:
         self,
         bundle: LotAmortizedCostAuthorityBundle,
         *,
-        head: LotAmortizedCostProfileHead | None,
+        decision_head: LotAmortizedCostProfileHead | None,
         scope: LotBookCostAuthorityScope,
         effective_date: date,
         policy: AmortizedCostPolicy | None,
@@ -199,10 +207,10 @@ class MaterializeLotAmortizedCostProfileUseCase:
             eligibility_reason=reason,
             freshness_cutoff=freshness_cutoff,
         )
-        if head is not None and head.authority_content_hash == authority_hash:
+        if decision_head is not None and decision_head.authority_content_hash == authority_hash:
             return _unchanged_result(
-                head.profile_id,
-                head.profile_version,
+                decision_head.profile_id,
+                decision_head.profile_version,
                 authority_hash,
                 eligibility_reason=reason,
             )

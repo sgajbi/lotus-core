@@ -46,6 +46,9 @@ def _bundle() -> LotAmortizedCostAuthorityBundle:
 def _dependencies():
     authority = AsyncMock(spec=LotAmortizedCostAuthorityPort)
     profiles = AsyncMock(spec=LotAmortizedCostProfilePort)
+    profiles.latest_verified_head_for_effective_date.side_effect = (
+        lambda _scope, *, effective_date: profiles.latest_verified_head.return_value
+    )
     return authority, profiles
 
 
@@ -56,6 +59,9 @@ async def test_materialization_locks_before_reloading_and_appends_active_profile
     profiles.acquire_materialization_lock.side_effect = lambda _scope: calls.append("lock")
     authority.load.side_effect = lambda _scope: (calls.append("load"), _bundle())[1]
     profiles.latest_verified_head.side_effect = lambda _scope: (calls.append("head"), None)[1]
+    profiles.latest_verified_head_for_effective_date.side_effect = (
+        lambda _scope, *, effective_date: (calls.append("decision_head"), None)[1]
+    )
     profiles.append.return_value = LotAmortizedCostProfileAppendOutcome.APPENDED
     resolved = resolved_fixed_income_book_cost_inputs()
 
@@ -68,7 +74,7 @@ async def test_materialization_locks_before_reloading_and_appends_active_profile
         policy=resolved.policy,
     )
 
-    assert calls == ["lock", "load", "head"]
+    assert calls == ["lock", "load", "head", "decision_head"]
     assert result.outcome is LotAmortizedCostProfileAppendOutcome.APPENDED
     assert result.profile_version == 1
     assert result.eligibility_reason is None
@@ -109,6 +115,58 @@ async def test_materialization_skips_unchanged_active_authority() -> None:
 
     assert result.outcome is LotAmortizedCostProfileAppendOutcome.UNCHANGED
     assert result.profile_version == 1
+    profiles.append.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_materialization_compares_idempotency_at_the_exact_effective_boundary() -> None:
+    authority, profiles = _dependencies()
+    resolved = resolved_fixed_income_book_cost_inputs()
+    authority.load.return_value = _bundle()
+    profiles.latest_verified_head.return_value = LotAmortizedCostProfileHead(
+        profile_id="later-profile",
+        profile_version=8,
+        profile_content_hash="later-profile-hash",
+        authority_content_hash="later-authority-hash",
+    )
+    first_boundary = date(2026, 1, 1)
+    use_case = MaterializeLotAmortizedCostProfileUseCase(
+        authority=authority,
+        profiles=profiles,
+    )
+    profiles.latest_verified_head_for_effective_date.return_value = None
+    profiles.latest_verified_head_for_effective_date.side_effect = None
+    profiles.append.return_value = LotAmortizedCostProfileAppendOutcome.APPENDED
+
+    first = await use_case.execute(
+        scope=fixed_income_book_cost_scope(),
+        effective_date=first_boundary,
+        policy=resolved.policy,
+    )
+    first_profile = profiles.append.await_args.args[0]
+    assert first_profile.profile_version == 9
+    profiles.latest_verified_head.return_value = LotAmortizedCostProfileHead(
+        profile_id="later-profile",
+        profile_version=10,
+        profile_content_hash="newer-later-profile-hash",
+        authority_content_hash="newer-later-authority-hash",
+    )
+    profiles.latest_verified_head_for_effective_date.return_value = LotAmortizedCostProfileHead(
+        profile_id=first_profile.profile_id,
+        profile_version=first_profile.profile_version,
+        profile_content_hash=first_profile.content_hash(),
+        authority_content_hash=first.authority_content_hash,
+    )
+    profiles.append.reset_mock()
+
+    duplicate = await use_case.execute(
+        scope=fixed_income_book_cost_scope(),
+        effective_date=first_boundary,
+        policy=resolved.policy,
+    )
+
+    assert duplicate.outcome is LotAmortizedCostProfileAppendOutcome.UNCHANGED
+    assert duplicate.profile_version == 9
     profiles.append.assert_not_awaited()
 
 
