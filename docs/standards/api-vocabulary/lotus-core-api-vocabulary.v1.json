@@ -13,7 +13,7 @@
       "openApiVersion": "3.1.0"
     }
   ],
-  "generatedAt": "2026-07-30T20:07:40.985375+00:00",
+  "generatedAt": "2026-08-02T19:04:05.761446+00:00",
   "attributeCatalog": [
     {
       "semanticId": "lotus.accepted_count",
@@ -498,6 +498,62 @@
       ]
     },
     {
+      "semanticId": "lotus.authorities",
+      "canonicalTerm": "authorities",
+      "preferredName": "authorities",
+      "description": "Source-versioned fixed-income book-cost policy, clean-cost basis, contractual schedule, and effective-yield authority. Every record is ordered by exact tenant, legal-book, portfolio, security, and source-lot identity.",
+      "example": [
+        {
+          "authority_type": "example_authority_type",
+          "header": {
+            "scope": {
+              "tenant_id": "default",
+              "legal_book_id": "LEGAL_BOOK_001",
+              "portfolio_id": "DEMO_DPM_EUR_001",
+              "security_id": "AAPL",
+              "lot_id": "LOT_001"
+            },
+            "source": {
+              "source_system": "OMS_PRIMARY",
+              "source_record_id": "SOURCE_RECORD_001",
+              "source_revision": "example_source_revision",
+              "source_version": 1,
+              "observed_at": "2026-02-27T10:30:00Z"
+            },
+            "status": "ACTIVE",
+            "valid_from": "2026-02-27",
+            "valid_to": "2026-02-27"
+          },
+          "policy_id": "POLICY_001",
+          "policy_version": "tenant-default-v1",
+          "assignment_reason": "example_assignment_reason"
+        }
+      ],
+      "type": "array",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "array"
+      ]
+    },
+    {
+      "semanticId": "lotus.authority_content_hash",
+      "canonicalTerm": "authority_content_hash",
+      "preferredName": "authority_content_hash",
+      "description": "fixed income book cost as of response field: authority content hash.",
+      "example": {
+        "id": "OBJ_001"
+      },
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
       "semanticId": "lotus.balance_account_currency",
       "canonicalTerm": "balance_account_currency",
       "preferredName": "balance_account_currency",
@@ -767,6 +823,22 @@
       ],
       "observedTypes": [
         "integer"
+      ]
+    },
+    {
+      "semanticId": "lotus.book_cost_local_as_of",
+      "canonicalTerm": "book_cost_local_as_of",
+      "preferredName": "book_cost_local_as_of",
+      "description": "fixed income book cost as of response field: book cost local as of.",
+      "example": {
+        "id": "OBJ_001"
+      },
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
       ]
     },
     {
@@ -1113,7 +1185,8 @@
         "body"
       ],
       "observedTypes": [
-        "CalculationLineageResponse"
+        "CalculationLineageResponse",
+        "object"
       ]
     },
     {
@@ -2249,6 +2322,22 @@
       ]
     },
     {
+      "semanticId": "lotus.direction",
+      "canonicalTerm": "direction",
+      "preferredName": "direction",
+      "description": "fixed income book cost as of response field: direction.",
+      "example": {
+        "id": "OBJ_001"
+      },
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
       "semanticId": "lotus.discretionary_authority_status",
       "canonicalTerm": "discretionary_authority_status",
       "preferredName": "discretionary_authority_status",
@@ -2386,6 +2475,22 @@
       ],
       "observedTypes": [
         "array"
+      ]
+    },
+    {
+      "semanticId": "lotus.eligibility_reason",
+      "canonicalTerm": "eligibility_reason",
+      "preferredName": "eligibility_reason",
+      "description": "fixed income book cost as of response field: eligibility reason.",
+      "example": {
+        "id": "OBJ_001"
+      },
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
       ]
     },
     {
@@ -2626,6 +2731,22 @@
       ],
       "observedTypes": [
         "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.final_amortized_cost_local",
+      "canonicalTerm": "final_amortized_cost_local",
+      "preferredName": "final_amortized_cost_local",
+      "description": "fixed income book cost as of response field: final amortized cost local.",
+      "example": {
+        "id": "OBJ_001"
+      },
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
       ]
     },
     {
@@ -3263,6 +3384,22 @@
       ]
     },
     {
+      "semanticId": "lotus.initial_amortized_cost_local",
+      "canonicalTerm": "initial_amortized_cost_local",
+      "preferredName": "initial_amortized_cost_local",
+      "description": "fixed income book cost as of response field: initial amortized cost local.",
+      "example": {
+        "id": "OBJ_001"
+      },
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
       "semanticId": "lotus.input_content_hash",
       "canonicalTerm": "input_content_hash",
       "preferredName": "input_content_hash",
@@ -3661,14 +3798,43 @@
       ]
     },
     {
+      "semanticId": "lotus.latest_recognized_period",
+      "canonicalTerm": "latest_recognized_period",
+      "preferredName": "latest_recognized_period",
+      "description": "fixed income book cost as of response field: latest recognized period.",
+      "example": {
+        "period_ordinal": 10,
+        "period_start_date": "2026-02-27",
+        "period_end_date": "2026-02-27",
+        "year_fraction": "example_year_fraction",
+        "period_rate": "example_value",
+        "begin_amortized_cost_local": "example_begin_amortized_cost_local",
+        "interest_income_local": "example_interest_income_local",
+        "cash_coupon_local": "example_cash_coupon_local",
+        "amortization_amount_local": "example_amortization_amount_local",
+        "end_amortized_cost_local": "example_end_amortized_cost_local",
+        "rounding_adjustment_local": "example_rounding_adjustment_local",
+        "calculation_output_hash": "example_calculation_output_hash",
+        "period_content_hash": "example_period_content_hash"
+      },
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
       "semanticId": "lotus.legal_book_id",
       "canonicalTerm": "legal_book_id",
       "preferredName": "legal_book_id",
-      "description": "Legal booking entity or governed accounting book. This field must not be inferred from booking centre or jurisdiction.",
-      "example": "LEGAL_BOOK_001",
+      "description": "Legal-book identifier required for exact-scope isolation.",
+      "example": "BOOK_SG_PB",
       "type": "string",
       "locations": [
-        "body"
+        "body",
+        "query"
       ],
       "observedTypes": [
         "object",
@@ -3961,7 +4127,8 @@
       "example": "LOT_001",
       "type": "string",
       "locations": [
-        "body"
+        "body",
+        "path"
       ],
       "observedTypes": [
         "string"
@@ -4677,6 +4844,20 @@
       ]
     },
     {
+      "semanticId": "lotus.next_recognition_date",
+      "canonicalTerm": "next_recognition_date",
+      "preferredName": "next_recognition_date",
+      "description": "fixed income book cost as of response field: next recognition date.",
+      "example": "2026-02-27",
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
       "semanticId": "lotus.next_review_due_date",
       "canonicalTerm": "next_review_due_date",
       "preferredName": "next_review_due_date",
@@ -4772,7 +4953,7 @@
       "semanticId": "lotus.observed_at",
       "canonicalTerm": "observed_at",
       "preferredName": "observed_at",
-      "description": "Timezone-aware instant at which the source observed this revision.",
+      "description": "Timestamp for observed at.",
       "example": "2026-02-27T10:30:00Z",
       "type": "string",
       "locations": [
@@ -5206,13 +5387,16 @@
       "semanticId": "lotus.policy_id",
       "canonicalTerm": "policy_id",
       "preferredName": "policy_id",
-      "description": "Exact supported valuation-policy identifier; no product default is applied.",
-      "example": "POLICY_001",
+      "description": "Unique policy identifier.",
+      "example": {
+        "id": "OBJ_001"
+      },
       "type": "string",
       "locations": [
         "body"
       ],
       "observedTypes": [
+        "object",
         "string"
       ]
     },
@@ -5636,6 +5820,48 @@
       ]
     },
     {
+      "semanticId": "lotus.profile_content_hash",
+      "canonicalTerm": "profile_content_hash",
+      "preferredName": "profile_content_hash",
+      "description": "fixed income book cost as of response field: profile content hash.",
+      "example": "example_profile_content_hash",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.profile_effective_date",
+      "canonicalTerm": "profile_effective_date",
+      "preferredName": "profile_effective_date",
+      "description": "Business date for profile effective date.",
+      "example": "2026-02-27",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.profile_id",
+      "canonicalTerm": "profile_id",
+      "preferredName": "profile_id",
+      "description": "Unique profile identifier.",
+      "example": "PROFILE_001",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
       "semanticId": "lotus.profile_status",
       "canonicalTerm": "profile_status",
       "preferredName": "profile_status",
@@ -5653,7 +5879,7 @@
       "semanticId": "lotus.profile_version",
       "canonicalTerm": "profile_version",
       "preferredName": "profile_version",
-      "description": "client tax profile record field: profile version.",
+      "description": "fixed income book cost as of response field: profile version.",
       "example": 1,
       "type": "integer",
       "locations": [
@@ -6213,6 +6439,34 @@
       ]
     },
     {
+      "semanticId": "lotus.recognized_period_count",
+      "canonicalTerm": "recognized_period_count",
+      "preferredName": "recognized_period_count",
+      "description": "fixed income book cost as of response field: recognized period count.",
+      "example": 10,
+      "type": "integer",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "integer"
+      ]
+    },
+    {
+      "semanticId": "lotus.recognized_through_date",
+      "canonicalTerm": "recognized_through_date",
+      "preferredName": "recognized_through_date",
+      "description": "fixed income book cost as of response field: recognized through date.",
+      "example": "2026-02-27",
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
       "semanticId": "lotus.reconciliation_key",
       "canonicalTerm": "reconciliation_key",
       "preferredName": "reconciliation_key",
@@ -6260,6 +6514,22 @@
       "preferredName": "recurrence_frequency",
       "description": "planned withdrawal schedule record field: recurrence frequency.",
       "example": "ONE_TIME",
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.redemption_value_local",
+      "canonicalTerm": "redemption_value_local",
+      "preferredName": "redemption_value_local",
+      "description": "Monetary value for redemption value local.",
+      "example": {
+        "id": "OBJ_001"
+      },
       "type": "object",
       "locations": [
         "body"
@@ -6383,6 +6653,20 @@
       ]
     },
     {
+      "semanticId": "lotus.requested_as_of_date",
+      "canonicalTerm": "requested_as_of_date",
+      "preferredName": "requested_as_of_date",
+      "description": "Business date for requested as of date.",
+      "example": "2026-02-27",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
       "semanticId": "lotus.requested_mode",
       "canonicalTerm": "requested_mode",
       "preferredName": "requested_mode",
@@ -6464,6 +6748,22 @@
       ],
       "observedTypes": [
         "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.residual_local",
+      "canonicalTerm": "residual_local",
+      "preferredName": "residual_local",
+      "description": "fixed income book cost as of response field: residual local.",
+      "example": {
+        "id": "OBJ_001"
+      },
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
       ]
     },
     {
@@ -6951,6 +7251,20 @@
       ],
       "observedTypes": [
         "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.schedule_version",
+      "canonicalTerm": "schedule_version",
+      "preferredName": "schedule_version",
+      "description": "fixed income book cost as of response field: schedule version.",
+      "example": 10,
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
       ]
     },
     {
@@ -7487,7 +7801,7 @@
       "semanticId": "lotus.source_content_hash",
       "canonicalTerm": "source_content_hash",
       "preferredName": "source_content_hash",
-      "description": "Lowercase SHA-256 digest of the authoritative source content.",
+      "description": "book cost source reference response field: source content hash.",
       "example": "example_source_content_hash",
       "type": "string",
       "locations": [
@@ -7602,7 +7916,7 @@
       "semanticId": "lotus.source_record_id",
       "canonicalTerm": "source_record_id",
       "preferredName": "source_record_id",
-      "description": "Stable upstream record identity across corrections.",
+      "description": "Unique source record identifier.",
       "example": "SOURCE_RECORD_001",
       "type": "string",
       "locations": [
@@ -7611,6 +7925,28 @@
       "observedTypes": [
         "object",
         "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.source_references",
+      "canonicalTerm": "source_references",
+      "preferredName": "source_references",
+      "description": "fixed income book cost as of response field: source references.",
+      "example": [
+        {
+          "source_system": "OMS_PRIMARY",
+          "source_record_id": "SOURCE_RECORD_001",
+          "source_revision": "example_source_revision",
+          "source_content_hash": "example_source_content_hash",
+          "observed_at": "2026-02-27T10:30:00Z"
+        }
+      ],
+      "type": "array",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "array"
       ]
     },
     {
@@ -7675,7 +8011,7 @@
       "semanticId": "lotus.source_revision",
       "canonicalTerm": "source_revision",
       "preferredName": "source_revision",
-      "description": "Source-native revision retained for replay and lineage.",
+      "description": "book cost source reference response field: source revision.",
       "example": "example_source_revision",
       "type": "string",
       "locations": [
@@ -8391,7 +8727,8 @@
       "example": "tenant-sg",
       "type": "string",
       "locations": [
-        "body"
+        "body",
+        "query"
       ],
       "observedTypes": [
         "object",
@@ -8553,6 +8890,20 @@
       ],
       "observedTypes": [
         "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.total_period_count",
+      "canonicalTerm": "total_period_count",
+      "preferredName": "total_period_count",
+      "description": "fixed income book cost as of response field: total period count.",
+      "example": 10,
+      "type": "integer",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "integer"
       ]
     },
     {
@@ -10383,6 +10734,96 @@
       "exposure": "consumer_visible",
       "canonicalTerm": "x_tenant_id",
       "semanticId": "lotus.x_tenant_id"
+    },
+    {
+      "name": "portfolio_id",
+      "kind": "request_option",
+      "location": "path",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Portfolio identifier within the governed legal book.",
+      "example": "PORTFOLIO_001",
+      "behaviorImpact": "Affects get_fixed_income_book_cost_as_of_portfolios__portfolio_id__positions__security_id__lots__lot_id__book_cost_get request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "portfolio_id",
+      "semanticId": "lotus.portfolio_id"
+    },
+    {
+      "name": "security_id",
+      "kind": "request_option",
+      "location": "path",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Security identifier held by the source lot.",
+      "example": "BOND_001",
+      "behaviorImpact": "Affects get_fixed_income_book_cost_as_of_portfolios__portfolio_id__positions__security_id__lots__lot_id__book_cost_get request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "security_id",
+      "semanticId": "lotus.security_id"
+    },
+    {
+      "name": "lot_id",
+      "kind": "request_option",
+      "location": "path",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source-owned position lot identifier.",
+      "example": "LOT_001",
+      "behaviorImpact": "Affects get_fixed_income_book_cost_as_of_portfolios__portfolio_id__positions__security_id__lots__lot_id__book_cost_get request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "lot_id",
+      "semanticId": "lotus.lot_id"
+    },
+    {
+      "name": "tenant_id",
+      "kind": "request_option",
+      "location": "query",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Tenant identifier required for exact-scope isolation.",
+      "example": "TENANT_SG",
+      "behaviorImpact": "Affects get_fixed_income_book_cost_as_of_portfolios__portfolio_id__positions__security_id__lots__lot_id__book_cost_get request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "tenant_id",
+      "semanticId": "lotus.tenant_id"
+    },
+    {
+      "name": "legal_book_id",
+      "kind": "request_option",
+      "location": "query",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Legal-book identifier required for exact-scope isolation.",
+      "example": "BOOK_SG_PB",
+      "behaviorImpact": "Affects get_fixed_income_book_cost_as_of_portfolios__portfolio_id__positions__security_id__lots__lot_id__book_cost_get request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "legal_book_id",
+      "semanticId": "lotus.legal_book_id"
+    },
+    {
+      "name": "as_of_date",
+      "kind": "request_option",
+      "location": "query",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Governed business date for effective profile and period recognition.",
+      "example": "2026-12-31",
+      "behaviorImpact": "Affects get_fixed_income_book_cost_as_of_portfolios__portfolio_id__positions__security_id__lots__lot_id__book_cost_get request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "as_of_date",
+      "semanticId": "lotus.as_of_date"
     },
     {
       "name": "security_id",
@@ -18459,6 +18900,397 @@
       }
     },
     {
+      "operationId": "get_fixed_income_book_cost_as_of_portfolios__portfolio_id__positions__security_id__lots__lot_id__book_cost_get",
+      "method": "GET",
+      "path": "/portfolios/{portfolio_id}/positions/{security_id}/lots/{lot_id}/book-cost",
+      "domain": "fixed_income_book_cost",
+      "serviceGroup": "query",
+      "tags": [
+        "Fixed-Income Book Cost"
+      ],
+      "summary": "Get fixed-income lot book cost as of a date",
+      "description": "Returns the latest persisted amortized-cost profile effective for one exact tenant, legal book, portfolio, security and source lot. The response identifies the recognized book cost at completed schedule boundaries, the next recognition date, immutable source references, profile hashes and input/calculation/output lineage. PARKED profiles return their explicit eligibility reason and no calculated amount. This is book-cost supportability evidence, not a market valuation, tax basis, dirty price or inferred principal calculation.",
+      "naming": {
+        "boundedContext": "fixed_income_book_cost",
+        "canonicalTerms": [
+          "as_of_date",
+          "authority_content_hash",
+          "book_cost_local_as_of",
+          "calculation_lineage",
+          "currency",
+          "direction",
+          "eligibility_reason",
+          "final_amortized_cost_local",
+          "initial_amortized_cost_local",
+          "latest_recognized_period",
+          "legal_book_id",
+          "lot_id",
+          "next_recognition_date",
+          "observed_at",
+          "policy_id",
+          "policy_version",
+          "portfolio_id",
+          "profile_content_hash",
+          "profile_effective_date",
+          "profile_id",
+          "profile_version",
+          "recognized_period_count",
+          "recognized_through_date",
+          "redemption_value_local",
+          "requested_as_of_date",
+          "residual_local",
+          "schedule_version",
+          "security_id",
+          "source_content_hash",
+          "source_record_id",
+          "source_references",
+          "source_revision",
+          "source_system",
+          "status",
+          "tenant_id",
+          "total_period_count"
+        ]
+      },
+      "request": {
+        "fields": [
+          {
+            "name": "portfolio_id",
+            "location": "path",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.portfolio_id",
+            "attributeRef": "lotus.portfolio_id"
+          },
+          {
+            "name": "security_id",
+            "location": "path",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.security_id",
+            "attributeRef": "lotus.security_id"
+          },
+          {
+            "name": "lot_id",
+            "location": "path",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.lot_id",
+            "attributeRef": "lotus.lot_id"
+          },
+          {
+            "name": "tenant_id",
+            "location": "query",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.tenant_id",
+            "attributeRef": "lotus.tenant_id"
+          },
+          {
+            "name": "legal_book_id",
+            "location": "query",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.legal_book_id",
+            "attributeRef": "lotus.legal_book_id"
+          },
+          {
+            "name": "as_of_date",
+            "location": "query",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.as_of_date",
+            "attributeRef": "lotus.as_of_date"
+          }
+        ]
+      },
+      "response": {
+        "httpStatus": 200,
+        "model": "FixedIncomeBookCostAsOfResponse",
+        "fields": [
+          {
+            "name": "tenant_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.tenant_id",
+            "attributeRef": "lotus.tenant_id"
+          },
+          {
+            "name": "legal_book_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.legal_book_id",
+            "attributeRef": "lotus.legal_book_id"
+          },
+          {
+            "name": "portfolio_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.portfolio_id",
+            "attributeRef": "lotus.portfolio_id"
+          },
+          {
+            "name": "security_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.security_id",
+            "attributeRef": "lotus.security_id"
+          },
+          {
+            "name": "lot_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.lot_id",
+            "attributeRef": "lotus.lot_id"
+          },
+          {
+            "name": "requested_as_of_date",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.requested_as_of_date",
+            "attributeRef": "lotus.requested_as_of_date"
+          },
+          {
+            "name": "profile_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.profile_id",
+            "attributeRef": "lotus.profile_id"
+          },
+          {
+            "name": "profile_version",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.profile_version",
+            "attributeRef": "lotus.profile_version"
+          },
+          {
+            "name": "profile_effective_date",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.profile_effective_date",
+            "attributeRef": "lotus.profile_effective_date"
+          },
+          {
+            "name": "status",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.status",
+            "attributeRef": "lotus.status"
+          },
+          {
+            "name": "eligibility_reason",
+            "location": "body",
+            "required": true,
+            "type": "object",
+            "semanticId": "lotus.eligibility_reason",
+            "attributeRef": "lotus.eligibility_reason"
+          },
+          {
+            "name": "policy_id",
+            "location": "body",
+            "required": true,
+            "type": "object",
+            "semanticId": "lotus.policy_id",
+            "attributeRef": "lotus.policy_id"
+          },
+          {
+            "name": "policy_version",
+            "location": "body",
+            "required": true,
+            "type": "object",
+            "semanticId": "lotus.policy_version",
+            "attributeRef": "lotus.policy_version"
+          },
+          {
+            "name": "schedule_version",
+            "location": "body",
+            "required": true,
+            "type": "object",
+            "semanticId": "lotus.schedule_version",
+            "attributeRef": "lotus.schedule_version"
+          },
+          {
+            "name": "currency",
+            "location": "body",
+            "required": true,
+            "type": "object",
+            "semanticId": "lotus.currency",
+            "attributeRef": "lotus.currency"
+          },
+          {
+            "name": "direction",
+            "location": "body",
+            "required": true,
+            "type": "object",
+            "semanticId": "lotus.direction",
+            "attributeRef": "lotus.direction"
+          },
+          {
+            "name": "book_cost_local_as_of",
+            "location": "body",
+            "required": true,
+            "type": "object",
+            "semanticId": "lotus.book_cost_local_as_of",
+            "attributeRef": "lotus.book_cost_local_as_of"
+          },
+          {
+            "name": "recognized_through_date",
+            "location": "body",
+            "required": true,
+            "type": "object",
+            "semanticId": "lotus.recognized_through_date",
+            "attributeRef": "lotus.recognized_through_date"
+          },
+          {
+            "name": "next_recognition_date",
+            "location": "body",
+            "required": true,
+            "type": "object",
+            "semanticId": "lotus.next_recognition_date",
+            "attributeRef": "lotus.next_recognition_date"
+          },
+          {
+            "name": "recognized_period_count",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.recognized_period_count",
+            "attributeRef": "lotus.recognized_period_count"
+          },
+          {
+            "name": "total_period_count",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.total_period_count",
+            "attributeRef": "lotus.total_period_count"
+          },
+          {
+            "name": "initial_amortized_cost_local",
+            "location": "body",
+            "required": true,
+            "type": "object",
+            "semanticId": "lotus.initial_amortized_cost_local",
+            "attributeRef": "lotus.initial_amortized_cost_local"
+          },
+          {
+            "name": "redemption_value_local",
+            "location": "body",
+            "required": true,
+            "type": "object",
+            "semanticId": "lotus.redemption_value_local",
+            "attributeRef": "lotus.redemption_value_local"
+          },
+          {
+            "name": "final_amortized_cost_local",
+            "location": "body",
+            "required": true,
+            "type": "object",
+            "semanticId": "lotus.final_amortized_cost_local",
+            "attributeRef": "lotus.final_amortized_cost_local"
+          },
+          {
+            "name": "residual_local",
+            "location": "body",
+            "required": true,
+            "type": "object",
+            "semanticId": "lotus.residual_local",
+            "attributeRef": "lotus.residual_local"
+          },
+          {
+            "name": "authority_content_hash",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.authority_content_hash",
+            "attributeRef": "lotus.authority_content_hash"
+          },
+          {
+            "name": "profile_content_hash",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.profile_content_hash",
+            "attributeRef": "lotus.profile_content_hash"
+          },
+          {
+            "name": "source_references",
+            "location": "body",
+            "required": true,
+            "type": "array",
+            "semanticId": "lotus.source_references",
+            "attributeRef": "lotus.source_references"
+          },
+          {
+            "name": "source_references[].source_system",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.source_system",
+            "attributeRef": "lotus.source_system"
+          },
+          {
+            "name": "source_references[].source_record_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.source_record_id",
+            "attributeRef": "lotus.source_record_id"
+          },
+          {
+            "name": "source_references[].source_revision",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.source_revision",
+            "attributeRef": "lotus.source_revision"
+          },
+          {
+            "name": "source_references[].source_content_hash",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.source_content_hash",
+            "attributeRef": "lotus.source_content_hash"
+          },
+          {
+            "name": "source_references[].observed_at",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.observed_at",
+            "attributeRef": "lotus.observed_at"
+          },
+          {
+            "name": "calculation_lineage",
+            "location": "body",
+            "required": true,
+            "type": "object",
+            "semanticId": "lotus.calculation_lineage",
+            "attributeRef": "lotus.calculation_lineage"
+          },
+          {
+            "name": "latest_recognized_period",
+            "location": "body",
+            "required": true,
+            "type": "object",
+            "semanticId": "lotus.latest_recognized_period",
+            "attributeRef": "lotus.latest_recognized_period"
+          }
+        ]
+      }
+    },
+    {
       "operationId": "get_instruments_instruments__get",
       "method": "GET",
       "path": "/instruments/",
@@ -23795,6 +24627,114 @@
             "type": "object",
             "semanticId": "lotus.source_batch_id",
             "attributeRef": "lotus.source_batch_id"
+          }
+        ]
+      },
+      "response": {
+        "httpStatus": 202,
+        "model": "BatchIngestionAcceptedResponse",
+        "fields": [
+          {
+            "name": "message",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.message",
+            "attributeRef": "lotus.message"
+          },
+          {
+            "name": "entity_type",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.entity_type",
+            "attributeRef": "lotus.entity_type"
+          },
+          {
+            "name": "accepted_count",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.accepted_count",
+            "attributeRef": "lotus.accepted_count"
+          },
+          {
+            "name": "correlation_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.correlation_id",
+            "attributeRef": "lotus.correlation_id"
+          },
+          {
+            "name": "request_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.request_id",
+            "attributeRef": "lotus.request_id"
+          },
+          {
+            "name": "trace_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.trace_id",
+            "attributeRef": "lotus.trace_id"
+          },
+          {
+            "name": "idempotency_key",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.idempotency_key",
+            "attributeRef": "lotus.idempotency_key"
+          },
+          {
+            "name": "job_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.job_id",
+            "attributeRef": "lotus.job_id"
+          }
+        ]
+      }
+    },
+    {
+      "operationId": "ingest_fixed_income_book_cost_authorities_ingest_fixed_income_book_cost_authorities_post",
+      "method": "POST",
+      "path": "/ingest/fixed-income-book-cost-authorities",
+      "domain": "fixed_income_book_cost",
+      "serviceGroup": "ingestion",
+      "tags": [
+        "Fixed-Income Book Cost"
+      ],
+      "summary": "Ingest fixed-income book-cost authority",
+      "description": "What: Accept effective-dated, source-versioned policy assignment, clean-cost basis, contractual amortization schedule, and effective-yield authority for exact source lots.\nHow: Validate strict financial contracts, reject duplicate source versions, enforce ingestion idempotency and write controls, then publish each record on the governed tenant/legal-book/portfolio/security/lot ordering key.\nWhen: Use when an accounting-policy or book-of-record source establishes or corrects premium, discount, or original-issue-discount book-cost evolution. Core never infers face amount, yield, schedule, or policy from position quantity or product name.",
+      "naming": {
+        "boundedContext": "fixed_income_book_cost",
+        "canonicalTerms": [
+          "accepted_count",
+          "authorities",
+          "correlation_id",
+          "entity_type",
+          "idempotency_key",
+          "job_id",
+          "message",
+          "request_id",
+          "trace_id"
+        ]
+      },
+      "request": {
+        "fields": [
+          {
+            "name": "authorities",
+            "location": "body",
+            "required": true,
+            "type": "array",
+            "semanticId": "lotus.authorities",
+            "attributeRef": "lotus.authorities"
           }
         ]
       },
