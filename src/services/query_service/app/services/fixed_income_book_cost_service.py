@@ -6,10 +6,6 @@ from datetime import date
 from decimal import Decimal
 from typing import cast
 
-from portfolio_common.database_models import (
-    LotAmortizedCostPeriodRecord,
-    LotAmortizedCostProfileRecord,
-)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..dtos.fixed_income_book_cost_dto import (
@@ -19,6 +15,8 @@ from ..dtos.fixed_income_book_cost_dto import (
     FixedIncomeBookCostAsOfResponse,
 )
 from ..repositories.fixed_income_book_cost_repository import (
+    FixedIncomeBookCostPeriodReadRecord,
+    FixedIncomeBookCostProfileReadRecord,
     FixedIncomeBookCostReadRepository,
 )
 
@@ -53,14 +51,17 @@ class FixedIncomeBookCostService:
                 "fixed-income book-cost profile not found for exact "
                 "tenant/legal-book/portfolio/security/lot scope and as-of date"
             )
-        profile, periods = result
-        return _response(profile=profile, periods=periods, as_of_date=as_of_date)
+        return _response(
+            profile=result.profile,
+            periods=result.periods,
+            as_of_date=as_of_date,
+        )
 
 
 def _response(
     *,
-    profile: LotAmortizedCostProfileRecord,
-    periods: list[LotAmortizedCostPeriodRecord],
+    profile: FixedIncomeBookCostProfileReadRecord,
+    periods: tuple[FixedIncomeBookCostPeriodReadRecord, ...],
     as_of_date: date,
 ) -> FixedIncomeBookCostAsOfResponse:
     recognized = [period for period in periods if period.period_end_date <= as_of_date]
@@ -116,7 +117,7 @@ def _response(
 
 
 def _period_response(
-    period: LotAmortizedCostPeriodRecord,
+    period: FixedIncomeBookCostPeriodReadRecord,
 ) -> BookCostPeriodRecognitionResponse:
     return BookCostPeriodRecognitionResponse(
         period_ordinal=period.period_ordinal,
