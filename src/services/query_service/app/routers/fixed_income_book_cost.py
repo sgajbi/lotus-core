@@ -80,7 +80,7 @@ async def get_fixed_income_book_cost_as_of(
     service: FixedIncomeBookCostService = Depends(get_fixed_income_book_cost_service),
 ) -> FixedIncomeBookCostAsOfResponse:
     try:
-        return await service.get_as_of(
+        response = await service.get_as_of(
             tenant_id=tenant_id,
             legal_book_id=legal_book_id,
             portfolio_id=portfolio_id,
@@ -88,5 +88,8 @@ async def get_fixed_income_book_cost_as_of(
             lot_id=lot_id,
             as_of_date=as_of_date,
         )
+        if not isinstance(response, FixedIncomeBookCostAsOfResponse):
+            raise TypeError("book-cost service returned an unsupported response type")
+        return response
     except LookupError as exc:
         raise lookup_error_to_http(exc) from exc
