@@ -439,7 +439,6 @@ DIRECT_KAFKA_TOPIC_DEFINITIONS: tuple[DirectKafkaTopicDefinition, ...] = (
         payload_contract="FixedIncomeBookCostAuthorityEvent",
         idempotency_header_supported=True,
         correlation_header_supported=True,
-        runtime_active=False,
         supportability_evidence=(INGESTION_EVIDENCE_BUNDLE,),
     ),
     DirectKafkaTopicDefinition(
