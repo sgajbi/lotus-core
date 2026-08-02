@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
+from decimal import DecimalException
 from typing import cast
 
 from portfolio_common.domain.calculation_lineage import (
@@ -121,7 +122,7 @@ class MaterializeLotAmortizedCostProfileUseCase:
                     reason=AmortizedCostEligibilityReason.RESIDUAL_OUTSIDE_TOLERANCE,
                     freshness_cutoff=freshness_cutoff,
                 )
-            except (AmortizedCostCalculationError, DecimalPrecisionError):
+            except (AmortizedCostCalculationError, DecimalException, DecimalPrecisionError):
                 return await self._persist_parked_decision(
                     bundle,
                     head=head,
