@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.query_service.app.repositories.fixed_income_book_cost_repository import (
     FixedIncomeBookCostAsOfReadRecord,
+    FixedIncomeBookCostReadRepository,
     _period_read_record,
     _profile_read_record,
 )
@@ -210,3 +211,91 @@ async def test_missing_exact_scope_profile_is_not_substituted() -> None:
             lot_id="LOT_404",
             as_of_date=date(2026, 3, 31),
         )
+
+
+@pytest.mark.asyncio
+async def test_repository_returns_none_when_exact_scope_has_no_effective_profile() -> None:
+    profile_result = MagicMock()
+    profile_result.first.return_value = None
+    db = MagicMock(spec=AsyncSession)
+    db.scalars = AsyncMock(return_value=profile_result)
+
+    result = await FixedIncomeBookCostReadRepository(db).effective_as_of(
+        tenant_id="TENANT_SG",
+        legal_book_id="BOOK_SG_PB",
+        portfolio_id="PORTFOLIO_001",
+        security_id="BOND_001",
+        lot_id="LOT_404",
+        as_of_date=date(2026, 3, 31),
+    )
+
+    assert result is None
+    db.scalars.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_repository_maps_profile_and_ordered_periods_to_read_records() -> None:
+    profile = _profile()
+    period = _period(
+        ordinal=1,
+        start=date(2026, 1, 1),
+        end=date(2026, 6, 30),
+        begin="980",
+        finish="984.5",
+    )
+    profile_result = MagicMock()
+    profile_result.first.return_value = profile
+    period_result = MagicMock()
+    period_result.all.return_value = [period]
+    db = MagicMock(spec=AsyncSession)
+    db.scalars = AsyncMock(side_effect=[profile_result, period_result])
+
+    result = await FixedIncomeBookCostReadRepository(db).effective_as_of(
+        tenant_id="TENANT_SG",
+        legal_book_id="BOOK_SG_PB",
+        portfolio_id="PORTFOLIO_001",
+        security_id="BOND_001",
+        lot_id="LOT_001",
+        as_of_date=date(2026, 9, 30),
+    )
+
+    assert result is not None
+    assert result.profile.profile_id == "profile-001"
+    assert result.profile.source_references[0]["source_record_id"] == "basis-001"
+    assert result.periods[0].period_ordinal == 1
+    assert result.periods[0].end_amortized_cost_local == Decimal("984.5")
+    assert db.scalars.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_non_string_scope_identifier_fails_before_repository_access() -> None:
+    service = _service(None)
+
+    with pytest.raises(TypeError, match="tenant_id must be a string"):
+        await service.get_as_of(
+            tenant_id=1,  # type: ignore[arg-type]
+            legal_book_id="BOOK_SG_PB",
+            portfolio_id="PORTFOLIO_001",
+            security_id="BOND_001",
+            lot_id="LOT_001",
+            as_of_date=date(2026, 3, 31),
+        )
+
+    service._repository.effective_as_of.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_blank_scope_identifier_fails_before_repository_access() -> None:
+    service = _service(None)
+
+    with pytest.raises(ValueError, match="legal_book_id must be nonblank"):
+        await service.get_as_of(
+            tenant_id="TENANT_SG",
+            legal_book_id="  ",
+            portfolio_id="PORTFOLIO_001",
+            security_id="BOND_001",
+            lot_id="LOT_001",
+            as_of_date=date(2026, 3, 31),
+        )
+
+    service._repository.effective_as_of.assert_not_awaited()
