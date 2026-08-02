@@ -112,3 +112,19 @@ async def test_missing_legal_book_scope_is_validation_error(async_test_client) -
 
     assert response.status_code == 422
     service.get_as_of.assert_not_awaited()
+
+
+async def test_unsupported_service_response_fails_closed(async_test_client) -> None:
+    client, service = async_test_client
+    service.get_as_of.return_value = {"book_cost_local_as_of": "984.5"}
+
+    response = await client.get(
+        "/portfolios/PORTFOLIO_001/positions/BOND_001/lots/LOT_001/book-cost",
+        params={
+            "tenant_id": "TENANT_SG",
+            "legal_book_id": "BOOK_SG_PB",
+            "as_of_date": "2026-06-30",
+        },
+    )
+
+    assert response.status_code == 500
