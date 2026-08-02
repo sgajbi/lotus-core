@@ -992,6 +992,46 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
   `lot_cost_local >= 0`, and `lot_cost_base >= 0`. Combined quantity checks also imply a
   nonnegative original quantity.
 
+## `lot_amortized_cost_profiles`
+
+- **Purpose**: Append-only source-lot amortized book-cost profile history.
+- **Description**: Preserves active, parked, or ineligible effective-dated profile headers with
+  exact tenant/legal-book/portfolio/security/lot scope, source references, calculation lineage,
+  authority/content hashes, and reconciled monetary summary. This staged ledger does not replace
+  original or tax basis in `position_lot_state` and does not by itself enable runtime bookability.
+- **Relationships**: `portfolio_id` -> `portfolios.portfolio_id`; `security_id` ->
+  `instruments.security_id`; `lot_id` -> `position_lot_state.lot_id`.
+- **Usage (modules/features)**:
+  `src/services/portfolio_transaction_processing_service/app/infrastructure/fixed_income_book_cost/profile_repository.py`.
+- **Typical access patterns**: Locked contiguous append by stable `profile_id`; latest exact-scope
+  lookup; effective-date/latest-version as-of lookup; parked/ineligible support scans.
+- **Integrity**: Unique `(profile_id, profile_version)`; normalized nonblank scope; positive
+  versions; governed lifecycle/direction/currency; finite and nonnegative monetary boundaries;
+  SHA-256 authority/profile hashes; non-empty source array and complete economics/lineage for
+  active profiles; no invented economics for parked/ineligible profiles.
+- **Key columns**: `profile_id`, `profile_version`, exact scope fields, `effective_date`, `status`,
+  `eligibility_reason`, policy/schedule identity, currency/direction, initial/redemption/final cost,
+  residual, authority hash, source references, calculation lineage, profile hash, and `created_at`.
+
+## `lot_amortized_cost_periods`
+
+- **Purpose**: Immutable normalized recognition-period ledger for one profile version.
+- **Description**: Stores every ordered period input/output and its calculation/output hashes.
+  Monetary amounts use governed `NUMERIC(18,10)` exact binds; year fractions and derived period
+  rates are exact-unbounded so persistence cannot truncate working-precision lineage evidence.
+- **Relationships**: Composite `(profile_id, profile_version)` ->
+  `lot_amortized_cost_profiles(profile_id, profile_version)` with restricted deletion.
+- **Usage (modules/features)**:
+  `src/services/portfolio_transaction_processing_service/app/infrastructure/fixed_income_book_cost/profile_repository.py`.
+- **Typical access patterns**: One ordered bulk insert per new profile version and ordered
+  reconstruction by `period_ordinal`; profile/date support reads use the parent profile indexes.
+- **Integrity**: Unique `(profile_id, profile_version, period_ordinal)`; positive contiguous domain
+  ordinal, ordered dates, positive finite year fraction, finite rates and amounts, nonnegative
+  beginning/coupon/ending amounts, and SHA-256 calculation/period hashes.
+- **Key columns**: Profile identity/version, ordinal and period dates, year fraction/rate,
+  beginning cost, interest, coupon, amortization movement, ending cost, rounding adjustment,
+  calculation output hash, period content hash, and `created_at`.
+
 ## `cost_basis_processing_state`
 
 - **Purpose**: Versioned ordering checkpoint for incremental cost-basis processing.
@@ -1416,7 +1456,7 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
 ## Schema Review Findings
 
 ### Actively Used and Architecturally Required
-- Core ledger/state: `transactions`, `position_history`, `daily_position_snapshots`, `position_state`, `position_lot_state`, `average_cost_pool_state`, `cashflows`, `portfolio_timeseries`, `position_timeseries`.
+- Core ledger/state: `transactions`, `position_history`, `daily_position_snapshots`, `position_state`, `position_lot_state`, `lot_amortized_cost_profiles`, `lot_amortized_cost_periods`, `average_cost_pool_state`, `cashflows`, `portfolio_timeseries`, `position_timeseries`.
 - Processing reliability: `processed_events`, `outbox_events`, `portfolio_valuation_jobs`, `portfolio_aggregation_jobs`, `reprocessing_jobs`, `instrument_reprocessing_state`.
 - Ingestion/ops governance: `ingestion_jobs`, `ingestion_job_failures`, `ingestion_ops_control`, `consumer_dlq_events`, `consumer_dlq_replay_audit`.
 - Reference data: `business_dates`, `portfolios`, `instruments`, `market_prices`, `fx_rates`, benchmark/index/risk-free tables.

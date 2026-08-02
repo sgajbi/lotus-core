@@ -92,6 +92,8 @@ Primary position and valuation tables include:
 
 - `position_history`
 - `position_lot_state`
+- `lot_amortized_cost_profiles`
+- `lot_amortized_cost_periods`
 - `accrued_income_offset_state`
 - `daily_position_snapshots`
 - `position_state`
@@ -108,9 +110,18 @@ place. Semantic corrections expose old/new authority and their earliest affected
 bounded replay workflow; metadata-only corrections do not create valuation work. Runtime
 correction-triggered replay remains separately governed.
 
+Fixed-income book-cost profile history is staged separately from original/tax lot basis.
+`lot_amortized_cost_profiles` is append-only at exact tenant, legal-book, portfolio, security, and
+source-lot scope; it preserves active/parked lifecycle, source authority, calculation lineage, and
+content hashes. `lot_amortized_cost_periods` preserves the ordered recognition schedule and each
+period's input/output evidence. The repository serializes profile streams, requires contiguous
+versions, treats an exact retry as unchanged, and fails closed on altered persisted evidence.
+These internal ledgers do not yet make amortized cost, disposal at current book cost, or redemption
+a supported runtime capability; `position_lot_state` remains the original/tax basis authority.
+
 Financial `NUMERIC` persistence has an explicit finite-value policy. The machine-readable inventory
-in `docs/standards/financial-numeric-persistence.v1.json` classifies all 96 ORM numeric columns
-across 30 tables by nullability and signed, positive, or nonnegative semantics; every entry is
+in `docs/standards/financial-numeric-persistence.v1.json` classifies all 110 ORM numeric columns
+across 33 tables by nullability and signed, positive, or nonnegative semantics; every entry is
 enforced. Source facts, client policy, position state, transaction economics, cashflows, derived
 timeseries, and reconciliation reject PostgreSQL `NaN`, `Infinity`, and `-Infinity`. Sign checks
 remain independent so legitimate signed cashflow, return, cost, market-value, and P&L fields are
@@ -118,8 +129,9 @@ not narrowed accidentally. Migrations add checks as `NOT VALID` before validatin
 causing deployment to fail closed if historical contamination exists rather than coercing
 financial evidence. Precision and scale remain separately governed under issue #829. Every
 governed ORM column now uses a DDL-compatible exact-bind type: bounded values that PostgreSQL would
-round or overflow are rejected before execution, while the authoritative market-price source fact
-remains exact-unbounded. Producer DTOs and calculated-output rounding policies remain
+round or overflow are rejected before execution. The authoritative market-price source value and
+the amortization period year-fraction/rate evidence remain exact-unbounded where truncation would
+change source or calculation identity. Producer DTOs and calculated-output rounding policies remain
 domain-owned; the persistence safety net does not authorize implicit or blanket rounding.
 
 `market_price_source_facts` is an additive append-history authority store. Its source-version

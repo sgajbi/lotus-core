@@ -3439,6 +3439,17 @@ Most relevant current governance:
      boundary. A parser that still owns an explicit legacy timestamp compatibility contract
      requires its own downstream-safe migration rather than an incidental local change.
 
+233. Fixed-income amortized book-cost policy, exact source-lot authority, source facts, resolution,
+     schedule calculation, and immutable profile materialization belong to the transaction-
+     processing domain. SQLAlchemy models and migrations are persistence shapes, not domain or
+     capability authority. Preserve `position_lot_state` as original/tax basis; store current book-
+     cost evolution in append-only profile and period ledgers behind application ports. Serialize
+     each stable profile stream before source reload and contiguous version selection, bulk-write
+     periods in the caller-owned transaction, and fail closed on altered lineage or hashes. Schema
+     or repository presence does not authorize runtime booking, public query claims, disposal at
+     current book cost, or redemption; those require explicit UoW wiring, correction replay,
+     immutable source-lot allocations, downstream contracts, and certification evidence.
+
 ## Context Maintenance Rule
 
 Update this document when:
