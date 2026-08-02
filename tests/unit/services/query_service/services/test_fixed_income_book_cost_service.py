@@ -11,6 +11,11 @@ from portfolio_common.database_models import (
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from services.query_service.app.repositories.fixed_income_book_cost_repository import (
+    FixedIncomeBookCostAsOfReadRecord,
+    _period_read_record,
+    _profile_read_record,
+)
 from services.query_service.app.services.fixed_income_book_cost_service import (
     FixedIncomeBookCostService,
 )
@@ -95,6 +100,12 @@ def _period(
 
 
 def _service(result) -> FixedIncomeBookCostService:
+    if result is not None:
+        profile, periods = result
+        result = FixedIncomeBookCostAsOfReadRecord(
+            profile=_profile_read_record(profile),
+            periods=tuple(_period_read_record(period) for period in periods),
+        )
     service = FixedIncomeBookCostService(MagicMock(spec=AsyncSession))
     service._repository = MagicMock()
     service._repository.effective_as_of = AsyncMock(return_value=result)
