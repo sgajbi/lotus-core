@@ -147,6 +147,27 @@ async def test_duplicate_source_version_is_rejected_before_publication(
     kafka_producer.flush.assert_not_called()
 
 
+async def test_source_versions_are_published_in_monotonic_stream_order(
+    service: IngestionService,
+    kafka_producer: MagicMock,
+) -> None:
+    version_two = _authorities()[0]
+    version_two["header"] = _header(
+        source_record_id="LOT_001-POLICY",
+        source_version=2,
+    )
+    version_two["policy_version"] = 2
+    version_one = _authorities()[0]
+
+    await service.publish_fixed_income_book_cost_authorities(_request([version_two, version_one]))
+
+    published_versions = [
+        call.kwargs["value"]["authority"]["header"]["source"]["source_version"]
+        for call in kafka_producer.publish_message.call_args_list
+    ]
+    assert published_versions == [1, 2]
+
+
 async def test_publish_rejects_untyped_request_before_publication(
     service: IngestionService,
     kafka_producer: MagicMock,

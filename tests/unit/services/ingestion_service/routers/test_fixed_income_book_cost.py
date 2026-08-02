@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from fastapi import HTTPException
 from portfolio_common.logging_utils import correlation_id_var, request_id_var, trace_id_var
 from starlette.requests import Request
 
@@ -62,7 +63,10 @@ async def test_route_passes_typed_authority_and_idempotency_to_command_handler()
             "type": "http",
             "method": "POST",
             "path": "/ingest/fixed-income-book-cost-authorities",
-            "headers": [(b"x-idempotency-key", b"book-cost-001")],
+            "headers": [
+                (b"x-idempotency-key", b"book-cost-001"),
+                (b"x-tenant-id", b"TENANT_SG"),
+            ],
             "query_string": b"",
             "server": ("test", 80),
             "scheme": "http",
@@ -91,3 +95,29 @@ async def test_route_passes_typed_authority_and_idempotency_to_command_handler()
     assert tuple(command.records) == tuple(_authority_request().authorities)
     assert response.job_id == "job-book-cost-001"
     assert response.idempotency_key == "book-cost-001"
+
+
+@pytest.mark.asyncio
+async def test_route_rejects_authority_for_another_authenticated_tenant() -> None:
+    command_handler = AsyncMock()
+    http_request = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "path": "/ingest/fixed-income-book-cost-authorities",
+            "headers": [(b"x-tenant-id", b"TENANT_OTHER")],
+            "query_string": b"",
+            "server": ("test", 80),
+            "scheme": "http",
+        }
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await ingest_fixed_income_book_cost_authorities(
+            _authority_request(),
+            http_request,
+            command_handler,
+        )
+
+    assert exc_info.value.status_code == 403
+    command_handler.ingest_fixed_income_book_cost_authorities.assert_not_awaited()

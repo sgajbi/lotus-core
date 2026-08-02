@@ -72,6 +72,15 @@ async def ingest_fixed_income_book_cost_authorities(
         get_ingestion_publish_command_handler
     ),
 ) -> BatchIngestionAcceptedResponse:
+    authenticated_tenant_id = http_request.headers.get("X-Tenant-Id", "").strip()
+    authority_tenant_ids = {
+        authority.header.scope.tenant_id.strip() for authority in request.authorities
+    }
+    if not authenticated_tenant_id or authority_tenant_ids != {authenticated_tenant_id}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="authority tenant scope must match the authenticated tenant",
+        )
     idempotency_key = resolve_idempotency_key(http_request)
     try:
         result = await command_handler.ingest_fixed_income_book_cost_authorities(
