@@ -2362,6 +2362,122 @@ class PositionLotState(Base):
     )
 
 
+class LotAmortizedCostAuthorityRecord(Base):
+    """Append-only source authority used to calculate lot amortized cost."""
+
+    __tablename__ = "lot_amortized_cost_authority"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    authority_type = Column(String, nullable=False)
+    tenant_id = Column(String, nullable=False)
+    legal_book_id = Column(String, nullable=False)
+    portfolio_id = Column(String, nullable=False)
+    security_id = Column(String, nullable=False)
+    lot_id = Column(String, nullable=False)
+    valid_from = Column(Date, nullable=False)
+    valid_to = Column(Date, nullable=True)
+    lifecycle_status = Column(String, nullable=False)
+    source_version = Column(Integer, nullable=False)
+    source_system = Column(String, nullable=False)
+    source_record_id = Column(String, nullable=False)
+    source_revision = Column(String, nullable=False)
+    observed_at = Column(DateTime(timezone=True), nullable=False)
+    authority_content_hash = Column(String(64), nullable=False)
+    authority_payload = Column(JSON(none_as_null=True), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["tenant_id", "legal_book_id", "portfolio_id"],
+            ["portfolios.tenant_id", "portfolios.legal_book_id", "portfolios.portfolio_id"],
+            name="fk_lot_amort_authority_book_scope",
+        ),
+        ForeignKeyConstraint(
+            ["security_id"],
+            ["instruments.security_id"],
+            name="fk_lot_amort_authority_security",
+        ),
+        ForeignKeyConstraint(
+            ["lot_id", "portfolio_id", "security_id"],
+            [
+                "position_lot_state.lot_id",
+                "position_lot_state.portfolio_id",
+                "position_lot_state.security_id",
+            ],
+            name="fk_lot_amort_authority_lot_scope",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "authority_type",
+            "tenant_id",
+            "legal_book_id",
+            "portfolio_id",
+            "security_id",
+            "lot_id",
+            "source_system",
+            "source_record_id",
+            "source_version",
+            name="uq_lot_amort_authority_source_version",
+        ),
+        CheckConstraint(
+            "authority_type IN ('POLICY_ASSIGNMENT', 'CLEAN_COST_BASIS', "
+            "'AMORTIZATION_SCHEDULE', 'EFFECTIVE_YIELD')",
+            name="ck_lot_amort_authority_type",
+        ),
+        CheckConstraint(
+            "tenant_id = btrim(tenant_id) AND tenant_id <> '' "
+            "AND legal_book_id = btrim(legal_book_id) AND legal_book_id <> '' "
+            "AND portfolio_id = btrim(portfolio_id) AND portfolio_id <> '' "
+            "AND security_id = btrim(security_id) AND security_id <> '' "
+            "AND lot_id = btrim(lot_id) AND lot_id <> ''",
+            name="ck_lot_amort_authority_scope_normalized",
+        ),
+        CheckConstraint(
+            "valid_to IS NULL OR valid_to >= valid_from",
+            name="ck_lot_amort_authority_effective_window",
+        ),
+        CheckConstraint(
+            "lifecycle_status IN ('ACTIVE', 'SUSPENDED', 'RETIRED')",
+            name="ck_lot_amort_authority_status",
+        ),
+        CheckConstraint(
+            "source_version >= 1",
+            name="ck_lot_amort_authority_version_positive",
+        ),
+        CheckConstraint(
+            "source_system = btrim(source_system) AND source_system <> '' "
+            "AND source_record_id = btrim(source_record_id) AND source_record_id <> '' "
+            "AND source_revision = btrim(source_revision) AND source_revision <> ''",
+            name="ck_lot_amort_authority_source_normalized",
+        ),
+        CheckConstraint(
+            "authority_content_hash ~ '^[0-9a-f]{64}$'",
+            name="ck_lot_amort_authority_hash",
+        ),
+        CheckConstraint(
+            "json_typeof(authority_payload::json) = 'object'",
+            name="ck_lot_amort_authority_payload_object",
+        ),
+        Index(
+            "ix_lot_amort_authority_scope_effective",
+            "tenant_id",
+            "legal_book_id",
+            "portfolio_id",
+            "security_id",
+            "lot_id",
+            "authority_type",
+            "valid_from",
+            "valid_to",
+        ),
+        Index(
+            "ix_lot_amort_authority_source_history",
+            "source_system",
+            "source_record_id",
+            source_version.desc(),
+        ),
+    )
+
+
 class LotAmortizedCostProfileRecord(Base):
     """Append-only lot amortized-cost profile header and audit evidence."""
 
