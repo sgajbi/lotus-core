@@ -113,6 +113,10 @@ KAFKA_FX_RATES_PERSISTED_TOPIC = os.getenv("KAFKA_FX_RATES_PERSISTED_TOPIC", "fx
 KAFKA_BUSINESS_DATES_RAW_RECEIVED_TOPIC = os.getenv(
     "KAFKA_BUSINESS_DATES_RAW_RECEIVED_TOPIC", "business_dates.raw.received"
 )
+KAFKA_FIXED_INCOME_BOOK_COST_AUTHORITY_RECEIVED_TOPIC = os.getenv(
+    "KAFKA_FIXED_INCOME_BOOK_COST_AUTHORITY_RECEIVED_TOPIC",
+    "fixed_income.book_cost.authority.received",
+)
 KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC = os.getenv(
     "KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC", "dlq.persistence_service"
 )
@@ -207,6 +211,14 @@ KAFKA_TOPIC_DEFINITIONS = (
         semantic_type="fact",
         scope="business_date",
         partition_count=1,
+    ),
+    KafkaTopicDefinition(
+        canonical_name="fixed_income.book_cost.authority.received",
+        runtime_name=KAFKA_FIXED_INCOME_BOOK_COST_AUTHORITY_RECEIVED_TOPIC,
+        lifecycle_status="active",
+        semantic_type="fact",
+        scope="tenant_legal_book_portfolio_security_lot",
+        partition_count=12,
     ),
     KafkaTopicDefinition(
         canonical_name="transactions.persisted",

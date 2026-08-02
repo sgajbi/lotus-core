@@ -78,6 +78,18 @@
       "replay_contract": "replay_with_original_calendar_key"
     },
     {
+      "topic": "fixed_income.book_cost.authority.received",
+      "partitions": 12,
+      "producer_services": ["ingestion_service"],
+      "current_key": "tenant_id|legal_book_id|portfolio_id|security_id|lot_id",
+      "ordering_scope": "tenant_legal_book_portfolio_security_source_lot",
+      "consumer_groups": ["fixed_income_book_cost_authority_group"],
+      "consumer_max_in_flight": 12,
+      "state_owner": "portfolio_transaction_processing_service.fixed_income_book_cost_authority",
+      "duplicate_policy": "source_version_content_fence_then_exact_scope_materialization",
+      "replay_contract": "replay_preserves_exact_source_lot_key_and_source_version"
+    },
+    {
       "topic": "transactions.persisted",
       "partitions": 12,
       "producer_services": ["persistence_service", "event_replay_service"],
