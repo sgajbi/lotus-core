@@ -261,6 +261,7 @@ def _parked_decision_content_hash(
                     bundle,
                     effective_date=effective_date,
                 ),
+                "calculation_identity": amortized_cost_calculation_identity(),
                 "eligibility_reason": eligibility_reason,
                 "freshness_cutoff": (
                     freshness_cutoff.astimezone(UTC) if freshness_cutoff is not None else None

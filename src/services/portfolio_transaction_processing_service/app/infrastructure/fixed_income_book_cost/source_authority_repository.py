@@ -392,6 +392,10 @@ def _periods(payload: dict[str, object]) -> tuple[AmortizationPeriodInput, ...]:
             raise TypeError("period must be an object")
         _require_exact_keys(row, _PERIOD_KEYS, context="schedule period")
         supplied_rate = row.get("supplied_period_rate")
+        if supplied_rate is not None and not isinstance(supplied_rate, str):
+            raise ConflictingLotAmortizedCostAuthorityError(
+                "schedule period supplied_period_rate must be a string or null"
+            )
         periods.append(
             AmortizationPeriodInput(
                 period_start_date=date.fromisoformat(_string(row, "period_start_date")),
@@ -399,7 +403,7 @@ def _periods(payload: dict[str, object]) -> tuple[AmortizationPeriodInput, ...]:
                 year_fraction=_decimal(row, "year_fraction"),
                 cash_coupon_local=_decimal(row, "cash_coupon_local"),
                 supplied_period_rate=(
-                    Decimal(supplied_rate) if isinstance(supplied_rate, str) else None
+                    Decimal(supplied_rate) if supplied_rate is not None else None
                 ),
             )
         )
