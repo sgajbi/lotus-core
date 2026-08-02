@@ -34,6 +34,7 @@
     "/ingest/client-restriction-profiles",
     "/ingest/client-tax-profiles",
     "/ingest/client-tax-rule-sets",
+    "/ingest/fixed-income-book-cost-authorities",
     "/ingest/fx-rates",
     "/ingest/index-price-series",
     "/ingest/index-return-series",
