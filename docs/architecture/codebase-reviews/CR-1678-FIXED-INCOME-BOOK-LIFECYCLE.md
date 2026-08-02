@@ -102,6 +102,9 @@ the governed event envelope before domain construction. Correction handling sepa
 stream-global version head from exact-boundary idempotency, then atomically rebuilds the corrected
 boundary and every persisted later boundary in chronological order. Policy assignment is resolved
 again at each boundary, and any later-boundary failure rolls back the authority event transaction.
+Assignment corrections that move `valid_from` now enumerate from the earlier of the previous and
+current assignment boundaries. The superseded earlier boundary is therefore rematerialized as
+parked evidence when a corrected assignment moves later instead of retaining obsolete economics.
 Persisted query reconstruction integrity, current-book disposal allocation, redemption integration,
 runtime recovery/load proof, and final capability certification remain open.
 
@@ -156,6 +159,10 @@ Data Models wiki documents the staged ledgers while the capability wiki remains
 - 18 warning-strict materialization tests and 9 warning-strict event-orchestration tests covering
   governed envelope validation, exact-boundary replay neutrality, chronological later-boundary
   rebuild, effective-dated policy transitions, and atomic rollback; focused Ruff and MyPy passed.
+- signed correction-boundary commit `1ba51ce63`;
+- 45 warning-strict fixed-income application tests covering moved-later and moved-earlier assignment
+  corrections, exact-duplicate neutrality, superseded-boundary parking, and atomic rollback;
+  focused Ruff, format, MyPy, and diff checks passed.
 
 Protected PR, exact-main, runtime recovery/replay and load proof, verified query reconstruction,
 disposal, redemption, and issue-closure evidence remain pending until their corresponding
