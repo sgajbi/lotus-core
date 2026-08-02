@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from enum import StrEnum
 from typing import Annotated, Literal, cast
@@ -22,6 +22,8 @@ _STRICT_MODEL_CONFIG = ConfigDict(
     str_strip_whitespace=True,
     allow_inf_nan=False,
 )
+
+_PositiveStrictVersion = Annotated[int, Field(strict=True, ge=1)]
 
 
 class FixedIncomeBookCostAuthorityStatus(StrEnum):
@@ -81,7 +83,7 @@ class FixedIncomeBookCostAuthoritySource(BaseModel):
     source_system: str = Field(min_length=1, max_length=160)
     source_record_id: str = Field(min_length=1, max_length=200)
     source_revision: str = Field(min_length=1, max_length=200)
-    source_version: int = Field(ge=1)
+    source_version: _PositiveStrictVersion
     observed_at: datetime
 
     @field_validator("observed_at")
@@ -89,7 +91,7 @@ class FixedIncomeBookCostAuthoritySource(BaseModel):
     def require_aware_observation(cls, value: datetime) -> datetime:
         if value.utcoffset() is None:
             raise ValueError("observed_at must include a timezone offset")
-        return value
+        return value.astimezone(UTC)
 
     model_config = _STRICT_MODEL_CONFIG
 
@@ -118,7 +120,7 @@ class PolicyAssignmentAuthorityContract(BaseModel):
     authority_type: Literal["POLICY_ASSIGNMENT"] = "POLICY_ASSIGNMENT"
     header: FixedIncomeBookCostAuthorityHeader
     policy_id: str = Field(min_length=1, max_length=160)
-    policy_version: int = Field(ge=1)
+    policy_version: _PositiveStrictVersion
     assignment_reason: str = Field(min_length=1, max_length=500)
 
     model_config = _STRICT_MODEL_CONFIG
@@ -184,9 +186,9 @@ class AmortizationScheduleAuthorityContract(BaseModel):
 
     authority_type: Literal["AMORTIZATION_SCHEDULE"] = "AMORTIZATION_SCHEDULE"
     header: FixedIncomeBookCostAuthorityHeader
-    schedule_version: int = Field(ge=1)
+    schedule_version: _PositiveStrictVersion
     year_fraction_method_id: str = Field(min_length=1, max_length=160)
-    year_fraction_method_version: int = Field(ge=1)
+    year_fraction_method_version: _PositiveStrictVersion
     periods: tuple[AmortizationPeriodContract, ...] = Field(min_length=1, max_length=1000)
 
     @model_validator(mode="after")
