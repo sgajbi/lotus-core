@@ -57,8 +57,7 @@ def authority_schema(clean_db, db_engine) -> None:
         else:
             operations = Operations(MigrationContext.configure(connection))
             existing_portfolio_constraints = {
-                item["name"]
-                for item in inspect(connection).get_unique_constraints("portfolios")
+                item["name"] for item in inspect(connection).get_unique_constraints("portfolios")
             }
             if "uq_portfolios_book_scope_identity" not in existing_portfolio_constraints:
                 operations.create_unique_constraint(
@@ -77,9 +76,7 @@ def authority_schema(clean_db, db_engine) -> None:
                     ["lot_id", "portfolio_id", "security_id"],
                 )
         migration = runpy.run_path(str(MIGRATION))
-        migration["upgrade"].__globals__["op"] = Operations(
-            MigrationContext.configure(connection)
-        )
+        migration["upgrade"].__globals__["op"] = Operations(MigrationContext.configure(connection))
         migration["upgrade"]()
 
 
@@ -100,13 +97,9 @@ async def test_repository_round_trips_every_authority_family_and_exact_retry(
 
     for authority in authorities:
         assert authority is not None
+        assert await repository.append(authority) is LotAmortizedCostAuthorityAppendOutcome.APPENDED
         assert (
-            await repository.append(authority)
-            is LotAmortizedCostAuthorityAppendOutcome.APPENDED
-        )
-        assert (
-            await repository.append(authority)
-            is LotAmortizedCostAuthorityAppendOutcome.UNCHANGED
+            await repository.append(authority) is LotAmortizedCostAuthorityAppendOutcome.UNCHANGED
         )
 
     bundle = await repository.load(fixed_income_book_cost_scope())
@@ -156,10 +149,7 @@ async def test_repository_appends_corrections_and_rejects_version_collision(
     )
 
     await repository.append(first)
-    assert (
-        await repository.append(corrected)
-        is LotAmortizedCostAuthorityAppendOutcome.APPENDED
-    )
+    assert await repository.append(corrected) is LotAmortizedCostAuthorityAppendOutcome.APPENDED
     with pytest.raises(
         ConflictingLotAmortizedCostAuthorityError,
         match="different content",
@@ -187,9 +177,7 @@ async def test_repository_rejects_persisted_payload_tampering_and_wrong_scope(
     await repository.append(basis)
     await async_db_session.execute(
         update(LotAmortizedCostAuthorityRecord)
-        .where(
-            LotAmortizedCostAuthorityRecord.authority_content_hash == basis.content_hash()
-        )
+        .where(LotAmortizedCostAuthorityRecord.authority_content_hash == basis.content_hash())
         .values(
             authority_payload={
                 "currency": "SGD",

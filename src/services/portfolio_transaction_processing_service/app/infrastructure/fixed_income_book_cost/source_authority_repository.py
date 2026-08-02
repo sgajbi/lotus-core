@@ -168,19 +168,15 @@ class SqlAlchemyLotAmortizedCostAuthorityRepository:
         return (
             await self._session.scalars(
                 select(LotAmortizedCostAuthorityRecord).where(
-                    LotAmortizedCostAuthorityRecord.authority_type
-                    == values["authority_type"],
+                    LotAmortizedCostAuthorityRecord.authority_type == values["authority_type"],
                     LotAmortizedCostAuthorityRecord.tenant_id == values["tenant_id"],
-                    LotAmortizedCostAuthorityRecord.legal_book_id
-                    == values["legal_book_id"],
+                    LotAmortizedCostAuthorityRecord.legal_book_id == values["legal_book_id"],
                     LotAmortizedCostAuthorityRecord.portfolio_id == values["portfolio_id"],
                     LotAmortizedCostAuthorityRecord.security_id == values["security_id"],
                     LotAmortizedCostAuthorityRecord.lot_id == values["lot_id"],
                     LotAmortizedCostAuthorityRecord.source_system == values["source_system"],
-                    LotAmortizedCostAuthorityRecord.source_record_id
-                    == values["source_record_id"],
-                    LotAmortizedCostAuthorityRecord.source_version
-                    == values["source_version"],
+                    LotAmortizedCostAuthorityRecord.source_record_id == values["source_record_id"],
+                    LotAmortizedCostAuthorityRecord.source_version == values["source_version"],
                 )
             )
         ).first()
@@ -325,18 +321,14 @@ def _authority_from_record(
                 initial_clean_cost_local=_decimal(payload, "initial_clean_cost_local"),
                 fees_in_basis_local=_decimal(payload, "fees_in_basis_local"),
                 redemption_value_local=_decimal(payload, "redemption_value_local"),
-                discount_origin=DiscountOriginClassification(
-                    _string(payload, "discount_origin")
-                ),
+                discount_origin=DiscountOriginClassification(_string(payload, "discount_origin")),
                 **common,
             )
         elif authority_type is _AuthorityType.AMORTIZATION_SCHEDULE:
             authority = LotAmortizationScheduleFact(
                 schedule_version=_integer(payload, "schedule_version"),
                 year_fraction_method_id=_string(payload, "year_fraction_method_id"),
-                year_fraction_method_version=_integer(
-                    payload, "year_fraction_method_version"
-                ),
+                year_fraction_method_version=_integer(payload, "year_fraction_method_version"),
                 periods=_periods(payload),
                 **common,
             )

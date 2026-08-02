@@ -57,10 +57,7 @@ def test_authority_migration_applies_enforces_rolls_back_and_reapplies(
         assert {
             "ix_lot_amort_authority_scope_effective",
             "ix_lot_amort_authority_source_history",
-        } <= {
-            index["name"]
-            for index in inspector.get_indexes("lot_amortized_cost_authority")
-        }
+        } <= {index["name"] for index in inspector.get_indexes("lot_amortized_cost_authority")}
         _seed_source_lot(connection)
         valid = _valid_authority()
         connection.execute(AUTHORITY_INSERT, valid)
@@ -106,9 +103,7 @@ def _ensure_predecessor_constraints(connection, operations: Operations) -> None:
             ["lot_id", "portfolio_id", "security_id"],
         ),
     ):
-        names = {
-            item["name"] for item in inspect(connection).get_unique_constraints(table_name)
-        }
+        names = {item["name"] for item in inspect(connection).get_unique_constraints(table_name)}
         if constraint_name not in names:
             operations.create_unique_constraint(
                 constraint_name,
