@@ -6,8 +6,8 @@ import json
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from portfolio_common.event_mapping import EventContractValidationError
 from portfolio_common.exceptions import RetryableConsumerError
-from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
 
 from services.portfolio_transaction_processing_service.app.delivery.kafka import (
@@ -97,8 +97,42 @@ async def test_invalid_contract_is_rejected_before_database_work() -> None:
     payload = _payload()
     payload["schema_version"] = "2.0.0"
 
-    with pytest.raises(ValidationError):
+    with pytest.raises(EventContractValidationError, match="not supported"):
         await _consumer(use_case).process_message(_message(payload=payload))
+
+    use_case.execute.assert_not_awaited()
+
+
+@pytest.mark.parametrize("missing_field", ["event_type", "schema_version"])
+async def test_missing_governed_envelope_metadata_is_rejected_before_database_work(
+    missing_field: str,
+) -> None:
+    use_case = AsyncMock()
+    payload = _payload()
+    del payload[missing_field]
+
+    with pytest.raises(EventContractValidationError, match=f"{missing_field} is required"):
+        await _consumer(use_case).process_message(_message(payload=payload))
+
+    use_case.execute.assert_not_awaited()
+
+
+async def test_wrong_event_family_is_rejected_before_database_work() -> None:
+    use_case = AsyncMock()
+    payload = _payload()
+    payload["event_type"] = "fixed_income.book_cost.profile.materialized"
+
+    with pytest.raises(EventContractValidationError, match="does not match expected"):
+        await _consumer(use_case).process_message(_message(payload=payload))
+
+    use_case.execute.assert_not_awaited()
+
+
+async def test_non_object_payload_is_rejected_before_database_work() -> None:
+    use_case = AsyncMock()
+
+    with pytest.raises(ValueError, match="must be a JSON object"):
+        await _consumer(use_case).process_message(_message(payload=[]))
 
     use_case.execute.assert_not_awaited()
 
