@@ -7,7 +7,14 @@ from decimal import Decimal
 from enum import StrEnum
 from typing import Annotated, Literal, cast
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    BeforeValidator,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
 
 from portfolio_common.domain.calculation_lineage import canonical_content_hash
 from portfolio_common.domain.currency import normalize_currency_code
@@ -30,6 +37,28 @@ _STRICT_MODEL_CONFIG = ConfigDict(
 
 _PositiveStrictVersion = Annotated[int, Field(strict=True, ge=1)]
 _ExactPeriodRate = Annotated[ExactDecimal18_10, Field(gt=Decimal(-1))]
+
+
+def _parse_iso_date(value: object) -> date:
+    if not isinstance(value, str):
+        raise ValueError("date input must be an ISO 8601 string")
+    try:
+        return date.fromisoformat(value)
+    except ValueError as exc:
+        raise ValueError("date input must be an ISO 8601 calendar date") from exc
+
+
+def _parse_iso_datetime(value: object) -> datetime:
+    if not isinstance(value, str):
+        raise ValueError("datetime input must be an ISO 8601 string")
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError("datetime input must be an ISO 8601 timestamp") from exc
+
+
+_IsoDate = Annotated[date, BeforeValidator(_parse_iso_date)]
+_IsoDatetime = Annotated[datetime, BeforeValidator(_parse_iso_datetime)]
 
 
 class FixedIncomeBookCostAuthorityStatus(StrEnum):
@@ -90,7 +119,7 @@ class FixedIncomeBookCostAuthoritySource(BaseModel):
     source_record_id: str = Field(min_length=1, max_length=200)
     source_revision: str = Field(min_length=1, max_length=200)
     source_version: _PositiveStrictVersion
-    observed_at: datetime
+    observed_at: _IsoDatetime
 
     @field_validator("observed_at")
     @classmethod
@@ -108,8 +137,8 @@ class FixedIncomeBookCostAuthorityHeader(BaseModel):
     scope: FixedIncomeBookCostAuthorityScope
     source: FixedIncomeBookCostAuthoritySource
     status: FixedIncomeBookCostAuthorityStatus
-    valid_from: date
-    valid_to: date | None = None
+    valid_from: _IsoDate
+    valid_to: _IsoDate | None = None
 
     @model_validator(mode="after")
     def validate_effective_window(self) -> FixedIncomeBookCostAuthorityHeader:
@@ -172,8 +201,8 @@ class CleanCostBasisAuthorityContract(BaseModel):
 class AmortizationPeriodContract(BaseModel):
     """One authoritative contractual period and its supplied economics."""
 
-    period_start_date: date
-    period_end_date: date
+    period_start_date: _IsoDate
+    period_end_date: _IsoDate
     year_fraction: ExactPositiveDecimal18_10
     cash_coupon_local: ExactNonNegativeDecimal18_10
     supplied_period_rate: _ExactPeriodRate | None = None
