@@ -61,6 +61,16 @@ _IsoDate = Annotated[date, BeforeValidator(_parse_iso_date)]
 _IsoDatetime = Annotated[datetime, BeforeValidator(_parse_iso_datetime)]
 
 
+def _canonicalize_hash_decimals(value: object) -> object:
+    if isinstance(value, Decimal):
+        return value.normalize()
+    if isinstance(value, dict):
+        return {key: _canonicalize_hash_decimals(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_canonicalize_hash_decimals(item) for item in value]
+    return value
+
+
 class FixedIncomeBookCostAuthorityStatus(StrEnum):
     """Source lifecycle state shared by assignment and fact authority."""
 
@@ -285,6 +295,10 @@ class FixedIncomeBookCostAuthorityEvent(BaseModel):
     def content_hash(self) -> str:
         """Bind the complete normalized transport contract for idempotency and audit."""
 
-        return cast(str, canonical_content_hash(self.model_dump(mode="json")))
+        payload = {
+            key: _canonicalize_hash_decimals(value)
+            for key, value in self.model_dump(mode="python").items()
+        }
+        return cast(str, canonical_content_hash(payload))
 
     model_config = _STRICT_MODEL_CONFIG
