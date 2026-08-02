@@ -56,7 +56,11 @@ async def async_test_client():
     )
     app.dependency_overrides[get_fixed_income_book_cost_service] = lambda: service
     transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="http://test",
+        headers={"X-Tenant-Id": "TENANT_SG"},
+    ) as client:
         yield client, service
     app.dependency_overrides.pop(get_fixed_income_book_cost_service, None)
 
