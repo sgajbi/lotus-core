@@ -180,6 +180,18 @@ def test_enterprise_policy_and_capability_rules_use_runtime_settings(monkeypatch
     assert _required_capability("GET", "/portfolios/PB1") == "portfolios.read"
 
 
+def test_book_cost_read_capability_is_registered_by_default(monkeypatch):
+    monkeypatch.delenv("ENTERPRISE_CAPABILITY_RULES_JSON", raising=False)
+
+    assert (
+        _required_capability(
+            "GET",
+            "/portfolios/PB1/positions/BOND1/lots/LOT1/book-cost",
+        )
+        == "query.fixed_income_book_cost.read"
+    )
+
+
 def test_authorize_write_request_requires_service_identity_when_headers_present(monkeypatch):
     monkeypatch.setenv("ENTERPRISE_ENFORCE_AUTHZ", "true")
     headers = {

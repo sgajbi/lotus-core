@@ -184,7 +184,31 @@ class IngestionService:
 
         if not isinstance(request, FixedIncomeBookCostAuthorityIngestionRequest):
             raise TypeError("request must be a FixedIncomeBookCostAuthorityIngestionRequest")
-        events = request.events()
+        requested_events = request.events()
+        stream_order: dict[tuple[str, str, str, str], int] = {}
+        for event in requested_events:
+            source = event.authority.header.source
+            stream_identity = (
+                event.partition_key,
+                event.authority.authority_type,
+                source.source_system,
+                source.source_record_id,
+            )
+            stream_order.setdefault(stream_identity, len(stream_order))
+        events = sorted(
+            requested_events,
+            key=lambda event: (
+                stream_order[
+                    (
+                        event.partition_key,
+                        event.authority.authority_type,
+                        event.authority.header.source.source_system,
+                        event.authority.header.source.source_record_id,
+                    )
+                ],
+                event.authority.header.source.source_version,
+            ),
+        )
         headers = self._get_headers(idempotency_key)
         record_keys = [self._fixed_income_book_cost_record_key(event) for event in events]
         for index, event in enumerate(events):

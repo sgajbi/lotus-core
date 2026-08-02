@@ -2,7 +2,7 @@
 
 from datetime import date
 
-from fastapi import APIRouter, Depends, Path, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Path, Query, status
 
 from ..dependencies import get_fixed_income_book_cost_service
 from ..dtos.fixed_income_book_cost_dto import FixedIncomeBookCostAsOfResponse
@@ -77,11 +77,29 @@ async def get_fixed_income_book_cost_as_of(
         description="Governed business date for effective profile and period recognition.",
         examples=["2026-12-31"],
     ),
+    x_tenant_id: str = Header(
+        ...,
+        min_length=1,
+        description="Authenticated tenant scope; must match the requested tenant.",
+        examples=["TENANT_SG"],
+    ),
     service: FixedIncomeBookCostService = Depends(get_fixed_income_book_cost_service),
 ) -> FixedIncomeBookCostAsOfResponse:
+    normalized_tenant_id = tenant_id.strip()
+    normalized_authenticated_tenant_id = x_tenant_id.strip()
+    if not normalized_tenant_id or not normalized_authenticated_tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="tenant identifiers must not be blank",
+        )
+    if normalized_tenant_id != normalized_authenticated_tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="requested tenant does not match authenticated tenant scope",
+        )
     try:
         response = await service.get_as_of(
-            tenant_id=tenant_id,
+            tenant_id=normalized_tenant_id,
             legal_book_id=legal_book_id,
             portfolio_id=portfolio_id,
             security_id=security_id,
@@ -93,3 +111,8 @@ async def get_fixed_income_book_cost_as_of(
         return response
     except LookupError as exc:
         raise lookup_error_to_http(exc) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc

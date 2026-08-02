@@ -17,12 +17,24 @@ from .settings import env_bool, env_int, load_query_service_settings
 logger = logging.getLogger("enterprise_readiness")
 
 _SERVICE_NAME = "lotus-core"
+QUERY_READ_CAPABILITY_RULES: dict[str, str] = {
+    "GET /portfolios/{portfolio_id}/positions/{security_id}/lots/{lot_id}/book-cost": (
+        "query.fixed_income_book_cost.read"
+    ),
+}
+
+
+def query_read_capability_rules() -> dict[str, str]:
+    return dict(QUERY_READ_CAPABILITY_RULES)
+
+
 _runtime = EnterpriseReadinessRuntime(
     service_name=_SERVICE_NAME,
     load_settings=load_query_service_settings,
     env_bool=env_bool,
     env_int=env_int,
     logger=logger,
+    default_capability_rules=query_read_capability_rules,
 )
 
 
