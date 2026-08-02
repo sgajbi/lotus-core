@@ -26,6 +26,12 @@ DEPENDENT_MIGRATION = (
     / "versions"
     / "c139b2c3d50c_feat_add_lot_amortized_cost_profiles.py"
 )
+LATEST_MIGRATION = (
+    Path(__file__).resolve().parents[2]
+    / "alembic"
+    / "versions"
+    / "c140b2c3d50d_feat_add_lot_amortized_cost_authority.py"
+)
 
 PORTFOLIO_INSERT = text(
     """
@@ -66,12 +72,19 @@ def _bind_operations(migration: dict[str, Any], connection) -> None:
     migration["downgrade"].__globals__["op"] = operations
 
 
-def _downgrade_dependent_schema(connection) -> dict[str, Any] | None:
+def _downgrade_dependent_schema(connection) -> list[dict[str, Any]]:
     """Downgrade later schema that deliberately references valuation-book scope."""
 
     inspector = inspect(connection)
+    dependent_migrations: list[dict[str, Any]] = []
+    if inspector.has_table("lot_amortized_cost_authority"):
+        latest_migration: dict[str, Any] = runpy.run_path(str(LATEST_MIGRATION))
+        _bind_operations(latest_migration, connection)
+        latest_migration["downgrade"]()
+        dependent_migrations.append(latest_migration)
+        inspector = inspect(connection)
     if not inspector.has_table("lot_amortized_cost_profiles"):
-        return None
+        return dependent_migrations
     dependent_migration: dict[str, Any] = runpy.run_path(str(DEPENDENT_MIGRATION))
     _bind_operations(dependent_migration, connection)
     operations = dependent_migration["downgrade"].__globals__["op"]
@@ -88,7 +101,8 @@ def _downgrade_dependent_schema(connection) -> dict[str, Any] | None:
         }
         if constraint_name in unique_constraints:
             operations.drop_constraint(constraint_name, table_name, type_="unique")
-    return dependent_migration
+    dependent_migrations.append(dependent_migration)
+    return dependent_migrations
 
 
 def test_portfolio_valuation_book_scope_applies_rolls_back_and_enforces_authority(
@@ -98,7 +112,7 @@ def test_portfolio_valuation_book_scope_applies_rolls_back_and_enforces_authorit
     migration: dict[str, Any] = runpy.run_path(str(MIGRATION))
 
     with db_engine.begin() as connection:
-        dependent_migration = _downgrade_dependent_schema(connection)
+        dependent_migrations = _downgrade_dependent_schema(connection)
         _bind_operations(migration, connection)
         migration["downgrade"]()
         assert "tenant_id" not in {
@@ -162,8 +176,11 @@ def test_portfolio_valuation_book_scope_applies_rolls_back_and_enforces_authorit
             },
         )
 
-        if dependent_migration is not None:
+        for dependent_migration in reversed(dependent_migrations):
             dependent_migration["upgrade"]()
+        if dependent_migrations:
             inspector = inspect(connection)
             assert inspector.has_table("lot_amortized_cost_profiles")
             assert inspector.has_table("lot_amortized_cost_periods")
+            if len(dependent_migrations) == 2:
+                assert inspector.has_table("lot_amortized_cost_authority")

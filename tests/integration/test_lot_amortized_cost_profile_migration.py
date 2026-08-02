@@ -20,6 +20,12 @@ MIGRATION = (
     / "versions"
     / "c139b2c3d50c_feat_add_lot_amortized_cost_profiles.py"
 )
+LATER_MIGRATION = (
+    Path(__file__).resolve().parents[2]
+    / "alembic"
+    / "versions"
+    / "c140b2c3d50d_feat_add_lot_amortized_cost_authority.py"
+)
 
 PROFILE_INSERT = text(
     """
@@ -137,6 +143,17 @@ def _normalize_to_previous_revision(migration: dict[str, Any], connection) -> No
         }
         if constraint_name in unique_constraints:
             operations.drop_constraint(constraint_name, table_name, type_="unique")
+
+
+def _downgrade_later_revision(connection) -> dict[str, Any] | None:
+    """Remove the head revision before exercising its direct predecessor."""
+
+    if not inspect(connection).has_table("lot_amortized_cost_authority"):
+        return None
+    later_migration: dict[str, Any] = runpy.run_path(str(LATER_MIGRATION))
+    _bind_operations(later_migration, connection)
+    later_migration["downgrade"]()
+    return later_migration
 
 
 def _seed_source_lot(connection) -> None:
@@ -263,6 +280,7 @@ def test_lot_amortized_cost_profiles_apply_roll_back_and_enforce_ledgers(
     migration: dict[str, Any] = runpy.run_path(str(MIGRATION))
 
     with db_engine.begin() as connection:
+        later_migration = _downgrade_later_revision(connection)
         _bind_operations(migration, connection)
         _normalize_to_previous_revision(migration, connection)
         migration["upgrade"]()
@@ -333,3 +351,6 @@ def test_lot_amortized_cost_profiles_apply_roll_back_and_enforce_ledgers(
         migration["upgrade"]()
         assert inspect(connection).has_table("lot_amortized_cost_profiles")
         assert inspect(connection).has_table("lot_amortized_cost_periods")
+        if later_migration is not None:
+            later_migration["upgrade"]()
+            assert inspect(connection).has_table("lot_amortized_cost_authority")
