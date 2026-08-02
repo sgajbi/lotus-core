@@ -22,6 +22,7 @@ from .calculation import (
     AmortizedCostReconciliationError,
     AmortizedCostScheduleInput,
     AmortizedCostScheduleResult,
+    amortized_cost_calculation_identity,
     calculate_amortized_cost_schedule,
 )
 from .policy import (
@@ -92,6 +93,7 @@ __all__ = [
     "ResolvedLotAmortizedCostInputs",
     "YieldApplicationConvention",
     "amortization_replay_start_for_assignment_correction",
+    "amortized_cost_calculation_identity",
     "calculate_amortized_cost_schedule",
     "classify_amortized_cost_direction",
     "lot_amortized_cost_profile_id",

@@ -10,6 +10,7 @@ from portfolio_common.domain.calculation_lineage import (
     FinancialSourceReference,
     canonical_content_hash,
 )
+from portfolio_common.domain.financial.precision import DecimalPrecisionError
 
 from ...domain.fixed_income_book_cost import (
     AmortizedCostCalculationError,
@@ -18,6 +19,7 @@ from ...domain.fixed_income_book_cost import (
     AmortizedCostPolicy,
     AmortizedCostReconciliationError,
     LotBookCostAuthorityScope,
+    amortized_cost_calculation_identity,
     materialize_active_lot_amortized_cost_profile,
     materialize_parked_lot_amortized_cost_profile,
     resolve_lot_amortized_cost_inputs,
@@ -119,7 +121,7 @@ class MaterializeLotAmortizedCostProfileUseCase:
                     reason=AmortizedCostEligibilityReason.RESIDUAL_OUTSIDE_TOLERANCE,
                     freshness_cutoff=freshness_cutoff,
                 )
-            except AmortizedCostCalculationError:
+            except (AmortizedCostCalculationError, DecimalPrecisionError):
                 return await self._persist_parked_decision(
                     bundle,
                     head=head,
@@ -225,16 +227,17 @@ def _active_decision_content_hash(
     *,
     freshness_cutoff: datetime | None,
 ) -> str:
-    """Bind freshness policy to active evidence while preserving no-cutoff compatibility."""
+    """Bind calculation and freshness policy to active decision evidence."""
 
-    if freshness_cutoff is None:
-        return authority_content_hash
     return cast(
         str,
         canonical_content_hash(
             {
                 "authority_content_hash": authority_content_hash,
-                "freshness_cutoff": freshness_cutoff.astimezone(UTC),
+                "calculation_identity": amortized_cost_calculation_identity(),
+                "freshness_cutoff": (
+                    freshness_cutoff.astimezone(UTC) if freshness_cutoff is not None else None
+                ),
             }
         ),
     )
