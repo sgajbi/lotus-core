@@ -63,7 +63,14 @@ _IsoDatetime = Annotated[datetime, BeforeValidator(_parse_iso_datetime)]
 
 def _canonicalize_hash_decimals(value: object) -> object:
     if isinstance(value, Decimal):
-        return value.normalize()
+        sign, digits, exponent = value.as_tuple()
+        canonical_digits = list(digits)
+        while canonical_digits and canonical_digits[-1] == 0:
+            canonical_digits.pop()
+            exponent += 1
+        if not canonical_digits:
+            return Decimal(0)
+        return Decimal((sign, tuple(canonical_digits), exponent))
     if isinstance(value, dict):
         return {key: _canonicalize_hash_decimals(item) for key, item in value.items()}
     if isinstance(value, (list, tuple)):

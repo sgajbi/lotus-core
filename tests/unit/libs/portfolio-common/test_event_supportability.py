@@ -1,6 +1,6 @@
 import portfolio_common.event_supportability as event_supportability
 import pytest
-from portfolio_common import events
+from portfolio_common import event_contracts, events
 from portfolio_common.event_supportability import (
     CONTROL_EXECUTION,
     CONTROL_PLANE_AND_POLICY,
@@ -25,7 +25,10 @@ from portfolio_common.source_data_security import SourceDataSecurityProfile
 
 def test_event_supportability_catalog_validates_against_existing_event_models() -> None:
     available_models = {
-        name for name in dir(events) if name.endswith("Event") or name.endswith("EventModel")
+        name
+        for module in (events, event_contracts)
+        for name in dir(module)
+        if name.endswith("Event") or name.endswith("EventModel")
     }
 
     validate_event_supportability_catalog(available_schema_models=available_models)
@@ -309,6 +312,19 @@ def test_direct_kafka_ingestion_topics_are_cataloged() -> None:
     for definition in topics.values():
         assert definition.idempotency_header_supported is True
         assert definition.correlation_header_supported is True
+
+
+def test_fixed_income_book_cost_authority_is_preregistered_but_dormant() -> None:
+    definitions = {definition.name: definition for definition in DIRECT_KAFKA_TOPIC_DEFINITIONS}
+    definition = definitions["FixedIncomeBookCostAuthorityReceived"]
+
+    assert definition.payload_contract == "FixedIncomeBookCostAuthorityEvent"
+    assert definition.topic == "fixed_income.book_cost.authority.received"
+    assert definition.producer_service == "ingestion_service"
+    assert definition.consumer_services == ("portfolio_transaction_processing_service",)
+    assert definition.idempotency_header_supported is True
+    assert definition.correlation_header_supported is True
+    assert definition.runtime_active is False
 
 
 def test_retired_internal_position_replay_event_is_not_an_active_contract() -> None:
