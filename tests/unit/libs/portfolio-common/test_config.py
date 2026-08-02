@@ -421,6 +421,7 @@ def test_canonical_topic_env_overrides_default_runtime_name(monkeypatch):
 def test_canonical_topic_defaults_match_rfc_runtime_names(monkeypatch):
     monkeypatch.delenv("KAFKA_VALUATION_JOB_REQUESTED_TOPIC", raising=False)
     monkeypatch.delenv("KAFKA_TRANSACTIONS_PERSISTED_TOPIC", raising=False)
+    monkeypatch.delenv("KAFKA_FIXED_INCOME_BOOK_COST_AUTHORITY_RECEIVED_TOPIC", raising=False)
 
     import portfolio_common.config as config_module
 
@@ -428,6 +429,10 @@ def test_canonical_topic_defaults_match_rfc_runtime_names(monkeypatch):
 
     assert reloaded.KAFKA_VALUATION_JOB_REQUESTED_TOPIC == "valuation.job.requested"
     assert reloaded.KAFKA_TRANSACTIONS_PERSISTED_TOPIC == "transactions.persisted"
+    assert (
+        reloaded.KAFKA_FIXED_INCOME_BOOK_COST_AUTHORITY_RECEIVED_TOPIC
+        == "fixed_income.book_cost.authority.received"
+    )
 
 
 def test_topic_registry_limits_runtime_names_to_active_topics():
@@ -460,6 +465,12 @@ def test_active_topic_registry_has_explicit_source_owned_partition_counts():
     assert config_module.KAFKA_TOPIC_PARTITION_COUNTS["business_dates.raw.received"] == 1
     assert config_module.KAFKA_TOPIC_PARTITION_COUNTS["transactions.raw.received"] == 12
     assert config_module.KAFKA_TOPIC_PARTITION_COUNTS["transactions.persisted"] == 12
+    assert (
+        config_module.KAFKA_TOPIC_PARTITION_COUNTS[
+            "fixed_income.book_cost.authority.received"
+        ]
+        == 12
+    )
     assert config_module.KAFKA_TOPIC_PARTITION_COUNTS["market_prices.raw.received"] == 12
     assert config_module.KAFKA_TOPIC_PARTITION_COUNTS["market_prices.persisted"] == 12
     assert config_module.KAFKA_TOPIC_PARTITION_COUNTS["transactions.reprocessing.requested"] == 8
