@@ -68,8 +68,8 @@ PROFILE_INSERT = text(
         :final_cost,
         :residual,
         :authority_hash,
-        CAST(:source_references AS JSONB),
-        CAST(:calculation_lineage AS JSONB),
+        CAST(:source_references AS JSON),
+        CAST(:calculation_lineage AS JSON),
         :profile_hash
     )
     """
@@ -309,24 +309,6 @@ def test_lot_amortized_cost_profiles_apply_roll_back_and_enforce_ledgers(
         with pytest.raises(IntegrityError):
             connection.execute(PROFILE_INSERT, profile)
         duplicate.rollback()
-
-        duplicate_members = profile | {
-            "profile_version": 3,
-            "profile_hash": "e" * 64,
-            "source_references": ('[{"source_system":"test","source_system":"test"}]'),
-            "calculation_lineage": '{"algorithm_id":"test","algorithm_id":"test"}',
-        }
-        connection.execute(PROFILE_INSERT, duplicate_members)
-        canonical_json = connection.execute(
-            text(
-                "SELECT source_references::text, calculation_lineage::text "
-                "FROM lot_amortized_cost_profiles WHERE profile_version = 3"
-            )
-        ).one()
-        assert canonical_json == (
-            '[{"source_system": "test"}]',
-            '{"algorithm_id": "test"}',
-        )
 
         invalid_periods = [
             {"period_ordinal": 0},

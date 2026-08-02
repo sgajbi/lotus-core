@@ -43,6 +43,23 @@ def test_lot_amortized_cost_authority_migration_is_reversible(monkeypatch) -> No
         "drop_table",
         lambda name: operations.append(("drop_table", name)),
     )
+    monkeypatch.setattr(
+        op,
+        "drop_constraint",
+        lambda name, table, **kwargs: operations.append(("drop_constraint", name, table, kwargs)),
+    )
+    monkeypatch.setattr(
+        op,
+        "alter_column",
+        lambda table, column, **kwargs: operations.append(("alter_column", table, column, kwargs)),
+    )
+    monkeypatch.setattr(
+        op,
+        "create_check_constraint",
+        lambda name, table, condition: operations.append(
+            ("create_check_constraint", name, table, condition)
+        ),
+    )
     migration: dict[str, Any] = runpy.run_path(str(MIGRATION))
 
     migration["upgrade"]()
@@ -50,15 +67,15 @@ def test_lot_amortized_cost_authority_migration_is_reversible(monkeypatch) -> No
 
     assert migration["revision"] == "c140b2c3d50d"
     assert migration["down_revision"] == "c139b2c3d50c"
-    assert [operation[0] for operation in operations] == [
-        "create_table",
-        "create_index",
-        "create_index",
-        "drop_index",
-        "drop_index",
-        "drop_table",
-    ]
-    definitions = operations[0][2]
+    assert [operation[0] for operation in operations].count("alter_column") == 4
+    assert [operation[0] for operation in operations].count("drop_constraint") == 4
+    assert [operation[0] for operation in operations].count("create_check_constraint") == 4
+    create_table = next(
+        operation
+        for operation in operations
+        if operation[:2] == ("create_table", "lot_amortized_cost_authority")
+    )
+    definitions = create_table[2]
     columns = {
         definition.name: definition for definition in definitions if isinstance(definition, Column)
     }
@@ -102,4 +119,4 @@ def test_lot_amortized_cost_authority_migration_is_reversible(monkeypatch) -> No
         "fk_lot_amort_authority_lot_scope",
         "uq_lot_amort_authority_source_version",
     } <= constraints.keys()
-    assert operations[-1] == ("drop_table", "lot_amortized_cost_authority")
+    assert ("drop_table", "lot_amortized_cost_authority") in operations

@@ -92,8 +92,9 @@ Authority appends acquire that same scope/profile lock before their narrower per
 correction cannot commit between the materializer's source reload and profile decision.
 Atomic authority batches sort by that lock scope before authority family and source version.
 Authority payloads and profile source-reference/calculation-lineage evidence use PostgreSQL
-`JSONB`, eliminating ambiguous duplicate-object members before typed reconstruction and
-canonical-record verification.
+`JSONB`; the successor authority migration converts already-deployed profile `JSON` columns on
+upgrade and restores them on downgrade. This eliminates ambiguous duplicate-object members before
+typed reconstruction and canonical-record verification without rewriting applied migration truth.
 
 External ingestion DTO/routes, production composition into the owning transaction boundary,
 correction replay scheduling, public queries, disposal allocations, and redemption integration
