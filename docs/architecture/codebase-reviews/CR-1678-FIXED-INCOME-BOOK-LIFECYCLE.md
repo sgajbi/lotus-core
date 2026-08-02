@@ -96,9 +96,14 @@ Authority payloads and profile source-reference/calculation-lineage evidence use
 upgrade and restores them on downgrade. This eliminates ambiguous duplicate-object members before
 typed reconstruction and canonical-record verification without rewriting applied migration truth.
 
-External ingestion DTO/routes, production composition into the owning transaction boundary,
-correction replay scheduling, public queries, disposal allocations, and redemption integration
-remain open.
+Source-owned ingestion contracts, the production Kafka consumer and unit-of-work composition, and
+the public effective-as-of query are now implemented foundations. The delivery boundary validates
+the governed event envelope before domain construction. Correction handling separates the
+stream-global version head from exact-boundary idempotency, then atomically rebuilds the corrected
+boundary and every persisted later boundary in chronological order. Policy assignment is resolved
+again at each boundary, and any later-boundary failure rolls back the authority event transaction.
+Persisted query reconstruction integrity, current-book disposal allocation, redemption integration,
+runtime recovery/load proof, and final capability certification remain open.
 
 ## Same-Pattern Review
 
@@ -147,7 +152,12 @@ Data Models wiki documents the staged ledgers while the capability wiki remains
   across 33 tables and no planned enforcement gaps;
 - scoped Ruff lint/format, MyPy, RFC ledger, architecture-documentation, transaction-capability,
   wiki, JSON, calculated-output-policy, and diff-hygiene guards.
+- signed correction-hardening commits `0a46043bf`, `03499a2c9`, `ed63915df`, and `9038326cb`;
+- 18 warning-strict materialization tests and 9 warning-strict event-orchestration tests covering
+  governed envelope validation, exact-boundary replay neutrality, chronological later-boundary
+  rebuild, effective-dated policy transitions, and atomic rollback; focused Ruff and MyPy passed.
 
-Protected PR, exact-main, wiki publication, source ingestion, runtime recovery/replay, load, public
-query, disposal, redemption, and issue-closure evidence remain pending until their corresponding
-implementation slices exist.
+Protected PR, exact-main, runtime recovery/replay and load proof, verified query reconstruction,
+disposal, redemption, and issue-closure evidence remain pending until their corresponding
+implementation slices exist. No capability-wiki change is warranted by the correction hardening
+because fixed-income current-book disposal is still not production-certified.
