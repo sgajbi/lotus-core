@@ -250,6 +250,57 @@ async def test_atomic_handler_resolves_exact_policy_and_commits_active_profile()
 
 
 @pytest.mark.asyncio
+async def test_atomic_handler_rematerializes_every_later_persisted_boundary() -> None:
+    authority, profiles = _dependencies()
+    resolved = resolved_fixed_income_book_cost_inputs()
+    later_boundary = date(2026, 7, 1)
+    later_policy = replace(
+        resolved.policy,
+        policy_id="IFRS9_EIR_REVISED",
+        policy_version=2,
+    )
+    initial_assignment = replace(resolved.assignment, valid_to=date(2026, 6, 30))
+    later_assignment = replace(
+        resolved.assignment,
+        policy_id=later_policy.policy_id,
+        policy_version=later_policy.policy_version,
+        valid_from=later_boundary,
+        assignment_version=2,
+        source_record_id="AMORT_LOT_001_POLICY_REVISED",
+        source_revision="revision-2",
+    )
+    authority.load.return_value = replace(
+        _bundle(basis_facts=(resolved.basis_fact,)),
+        assignments=(initial_assignment, later_assignment),
+    )
+    profiles.effective_boundaries_from.return_value = (
+        date(2026, 1, 1),
+        later_boundary,
+    )
+    unit_of_work = _UnitOfWork(authority, profiles)
+
+    result = await HandleFixedIncomeBookCostAuthorityEventUseCase(
+        unit_of_work_factory=lambda: unit_of_work,
+        policies=AmortizedCostPolicyRegistry((resolved.policy, later_policy)),
+    ).execute(_basis_event(resolved.basis_fact))
+
+    persisted_profiles = [call.args[0] for call in profiles.append.await_args_list]
+    assert [profile.effective_date for profile in persisted_profiles] == [
+        date(2026, 1, 1),
+        later_boundary,
+    ]
+    assert [profile.policy_id for profile in persisted_profiles] == [
+        resolved.policy.policy_id,
+        later_policy.policy_id,
+    ]
+    assert result.materialization.outcome is LotAmortizedCostProfileAppendOutcome.APPENDED
+    assert len(result.rematerializations) == 1
+    assert result.rematerializations[0].outcome is LotAmortizedCostProfileAppendOutcome.APPENDED
+    assert unit_of_work.committed is True
+    assert authority.load.await_count == 4
+
+
+@pytest.mark.asyncio
 async def test_atomic_handler_commits_parked_evidence_when_assignment_is_missing() -> None:
     authority, profiles = _dependencies()
     resolved = resolved_fixed_income_book_cost_inputs()
@@ -304,5 +355,31 @@ async def test_atomic_handler_does_not_commit_when_profile_persistence_fails() -
             policies=AmortizedCostPolicyRegistry((resolved.policy,)),
         ).execute(_basis_event(resolved.basis_fact))
 
+    assert unit_of_work.committed is False
+    assert isinstance(unit_of_work.exit_error, RuntimeError)
+
+
+@pytest.mark.asyncio
+async def test_atomic_handler_rolls_back_when_later_boundary_rebuild_fails() -> None:
+    authority, profiles = _dependencies()
+    resolved = resolved_fixed_income_book_cost_inputs()
+    authority.load.return_value = _bundle(basis_facts=(resolved.basis_fact,))
+    profiles.effective_boundaries_from.return_value = (
+        date(2026, 1, 1),
+        date(2026, 7, 1),
+    )
+    profiles.append.side_effect = (
+        LotAmortizedCostProfileAppendOutcome.APPENDED,
+        RuntimeError("later boundary unavailable"),
+    )
+    unit_of_work = _UnitOfWork(authority, profiles)
+
+    with pytest.raises(RuntimeError, match="later boundary unavailable"):
+        await HandleFixedIncomeBookCostAuthorityEventUseCase(
+            unit_of_work_factory=lambda: unit_of_work,
+            policies=AmortizedCostPolicyRegistry((resolved.policy,)),
+        ).execute(_basis_event(resolved.basis_fact))
+
+    assert profiles.append.await_count == 2
     assert unit_of_work.committed is False
     assert isinstance(unit_of_work.exit_error, RuntimeError)
