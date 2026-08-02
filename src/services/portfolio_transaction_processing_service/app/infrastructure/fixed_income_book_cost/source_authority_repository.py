@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 from datetime import date, datetime
-from decimal import Decimal
+from decimal import Decimal, DecimalException
 from enum import StrEnum
 from typing import cast
 
@@ -403,7 +403,12 @@ def _periods(payload: dict[str, object]) -> tuple[AmortizationPeriodInput, ...]:
                 year_fraction=_decimal(row, "year_fraction"),
                 cash_coupon_local=_decimal(row, "cash_coupon_local"),
                 supplied_period_rate=(
-                    Decimal(supplied_rate) if supplied_rate is not None else None
+                    _canonical_decimal_text(
+                        supplied_rate,
+                        context="schedule period supplied_period_rate",
+                    )
+                    if supplied_rate is not None
+                    else None
                 ),
             )
         )
@@ -455,7 +460,21 @@ def _integer(payload: dict[str, object], key: str) -> int:
 
 
 def _decimal(payload: dict[str, object], key: str) -> Decimal:
-    return Decimal(_string(payload, key))
+    return _canonical_decimal_text(_string(payload, key), context=key)
+
+
+def _canonical_decimal_text(value: str, *, context: str) -> Decimal:
+    try:
+        parsed = Decimal(value)
+    except DecimalException as exc:
+        raise ConflictingLotAmortizedCostAuthorityError(
+            f"{context} must use canonical decimal text"
+        ) from exc
+    if not parsed.is_finite() or str(parsed) != value:
+        raise ConflictingLotAmortizedCostAuthorityError(
+            f"{context} must use canonical decimal text"
+        )
+    return parsed
 
 
 def _require_exact_keys(
