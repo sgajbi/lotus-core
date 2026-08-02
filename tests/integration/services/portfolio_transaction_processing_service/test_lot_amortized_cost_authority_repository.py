@@ -363,6 +363,36 @@ async def test_repository_rejects_noncanonical_decimal_payload_text(
         await repository.load(fixed_income_book_cost_scope())
 
 
+async def test_repository_rejects_normalized_payload_tampering(
+    clean_db,
+    authority_schema,
+    async_db_session: AsyncSession,
+) -> None:
+    await _seed_source_lot(async_db_session)
+    repository = SqlAlchemyLotAmortizedCostAuthorityRepository(async_db_session)
+    basis = resolved_fixed_income_book_cost_inputs().basis_fact
+    await repository.append(basis)
+    record = await async_db_session.scalar(
+        select(LotAmortizedCostAuthorityRecord).where(
+            LotAmortizedCostAuthorityRecord.authority_content_hash == basis.content_hash()
+        )
+    )
+    assert record is not None
+    payload = dict(record.authority_payload)
+    payload["currency"] = "sgd"
+    await async_db_session.execute(
+        update(LotAmortizedCostAuthorityRecord)
+        .where(LotAmortizedCostAuthorityRecord.id == record.id)
+        .values(authority_payload=payload)
+    )
+
+    with pytest.raises(
+        ConflictingLotAmortizedCostAuthorityError,
+        match="does not use its canonical representation",
+    ):
+        await repository.load(fixed_income_book_cost_scope())
+
+
 async def _seed_source_lot(session: AsyncSession) -> None:
     await session.execute(
         text(
