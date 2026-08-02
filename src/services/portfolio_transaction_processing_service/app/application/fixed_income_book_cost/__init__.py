@@ -7,6 +7,9 @@ from .authority_event_mapping import (
 from .authority_event_orchestration import (
     ApplyFixedIncomeBookCostAuthorityEventResult,
     ApplyFixedIncomeBookCostAuthorityEventUseCase,
+    FixedIncomeBookCostAuthorityUnitOfWork,
+    FixedIncomeBookCostAuthorityUnitOfWorkFactory,
+    HandleFixedIncomeBookCostAuthorityEventUseCase,
 )
 from .authority_writer import (
     ConflictingLotAmortizedCostAuthorityBatchError,
@@ -21,6 +24,9 @@ from .materialization import (
 __all__ = [
     "ApplyFixedIncomeBookCostAuthorityEventResult",
     "ApplyFixedIncomeBookCostAuthorityEventUseCase",
+    "FixedIncomeBookCostAuthorityUnitOfWork",
+    "FixedIncomeBookCostAuthorityUnitOfWorkFactory",
+    "HandleFixedIncomeBookCostAuthorityEventUseCase",
     "ConflictingLotAmortizedCostAuthorityBatchError",
     "LotAmortizedCostMaterializationResult",
     "MaterializeLotAmortizedCostProfileUseCase",

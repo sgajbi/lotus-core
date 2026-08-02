@@ -2,12 +2,25 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date, datetime
+from types import TracebackType
+from typing import Protocol, Self
 
 from portfolio_common.event_contracts import FixedIncomeBookCostAuthorityEvent
 
-from ...domain.fixed_income_book_cost import AmortizedCostPolicy, LotBookCostAuthorityScope
+from ...domain.fixed_income_book_cost import (
+    AmortizedCostAuthorityError,
+    AmortizedCostEligibilityReason,
+    AmortizedCostPolicy,
+    AmortizedCostPolicyRegistry,
+    LotBookCostAuthorityScope,
+    MissingAmortizedCostAssignmentError,
+    OverlappingAmortizedCostAssignmentError,
+    UnsupportedAmortizedCostPolicyError,
+    resolve_amortized_cost_assignment,
+)
 from ...ports import (
     LotAmortizedCostAuthorityPort,
     LotAmortizedCostProfilePort,
@@ -30,6 +43,30 @@ class ApplyFixedIncomeBookCostAuthorityEventResult:
     scope: LotBookCostAuthorityScope
     persistence: PersistLotAmortizedCostAuthorityResult
     materialization: LotAmortizedCostMaterializationResult
+
+
+class FixedIncomeBookCostAuthorityUnitOfWork(Protocol):
+    """Atomic persistence boundary required by the authority event handler."""
+
+    @property
+    def authority(self) -> LotAmortizedCostAuthorityPort: ...
+
+    @property
+    def profiles(self) -> LotAmortizedCostProfilePort: ...
+
+    async def __aenter__(self) -> Self: ...
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None: ...
+
+    async def commit(self) -> None: ...
+
+
+FixedIncomeBookCostAuthorityUnitOfWorkFactory = Callable[[], FixedIncomeBookCostAuthorityUnitOfWork]
 
 
 class ApplyFixedIncomeBookCostAuthorityEventUseCase:
@@ -74,3 +111,88 @@ class ApplyFixedIncomeBookCostAuthorityEventUseCase:
             persistence=persistence,
             materialization=materialization,
         )
+
+
+class HandleFixedIncomeBookCostAuthorityEventUseCase:
+    """Apply one event under a single database transaction and explicit policy catalog."""
+
+    def __init__(
+        self,
+        *,
+        unit_of_work_factory: FixedIncomeBookCostAuthorityUnitOfWorkFactory,
+        policies: AmortizedCostPolicyRegistry,
+    ) -> None:
+        self._unit_of_work_factory = unit_of_work_factory
+        self._policies = policies
+
+    async def execute(
+        self,
+        event: FixedIncomeBookCostAuthorityEvent,
+    ) -> ApplyFixedIncomeBookCostAuthorityEventResult:
+        """Persist, resolve, materialize, and commit one exact-scope authority event."""
+
+        mapped = map_fixed_income_book_cost_authority_event(event)
+        effective_date = event.authority.header.valid_from
+        async with self._unit_of_work_factory() as unit_of_work:
+            writer = PersistLotAmortizedCostAuthorityUseCase(unit_of_work.authority)
+            persistence = await writer.execute((mapped,))
+            materializer = MaterializeLotAmortizedCostProfileUseCase(
+                authority=unit_of_work.authority,
+                profiles=unit_of_work.profiles,
+            )
+            policy, unresolved_reason = await self._resolve_policy(
+                authority=unit_of_work.authority,
+                scope=mapped.scope,
+                effective_date=effective_date,
+            )
+            if policy is None:
+                if unresolved_reason is None:
+                    raise RuntimeError("unresolved policy reason was not classified")
+                materialization = await materializer.execute_parked(
+                    scope=mapped.scope,
+                    effective_date=effective_date,
+                    reason=unresolved_reason,
+                )
+            else:
+                materialization = await materializer.execute(
+                    scope=mapped.scope,
+                    effective_date=effective_date,
+                    policy=policy,
+                )
+            await unit_of_work.commit()
+        return ApplyFixedIncomeBookCostAuthorityEventResult(
+            scope=mapped.scope,
+            persistence=persistence,
+            materialization=materialization,
+        )
+
+    async def _resolve_policy(
+        self,
+        *,
+        authority: LotAmortizedCostAuthorityPort,
+        scope: LotBookCostAuthorityScope,
+        effective_date: date,
+    ) -> tuple[AmortizedCostPolicy | None, AmortizedCostEligibilityReason | None]:
+        bundle = await authority.load(scope)
+        try:
+            assignment = resolve_amortized_cost_assignment(
+                list(bundle.assignments),
+                scope=scope,
+                effective_date=effective_date,
+            ).assignment
+        except MissingAmortizedCostAssignmentError:
+            return None, AmortizedCostEligibilityReason.ASSIGNMENT_MISSING
+        except OverlappingAmortizedCostAssignmentError:
+            return None, AmortizedCostEligibilityReason.ASSIGNMENT_OVERLAPPING
+        except AmortizedCostAuthorityError:
+            return None, AmortizedCostEligibilityReason.ASSIGNMENT_CONFLICTING
+        try:
+            return (
+                self._policies.resolve(
+                    policy_id=assignment.policy_id,
+                    policy_version=assignment.policy_version,
+                ),
+                None,
+            )
+        except UnsupportedAmortizedCostPolicyError:
+            return None, AmortizedCostEligibilityReason.POLICY_UNSUPPORTED
