@@ -92,6 +92,7 @@ Primary position and valuation tables include:
 
 - `position_history`
 - `position_lot_state`
+- `lot_amortized_cost_authority`
 - `lot_amortized_cost_profiles`
 - `lot_amortized_cost_periods`
 - `accrued_income_offset_state`
@@ -110,15 +111,22 @@ place. Semantic corrections expose old/new authority and their earliest affected
 bounded replay workflow; metadata-only corrections do not create valuation work. Runtime
 correction-triggered replay remains separately governed.
 
-Fixed-income book-cost profile history is staged separately from original/tax lot basis.
+Fixed-income book-cost source authority and profile history are staged separately from original/tax
+lot basis. `lot_amortized_cost_authority` retains append-only policy-assignment, clean-cost,
+contractual-schedule, and effective-yield source versions at exact source-lot scope. Its writer
+serializes each upstream source stream, treats exact retries as unchanged, rejects divergent or
+late lower versions, and its loader reconstructs typed domain facts with immutable-hash proof.
 `lot_amortized_cost_profiles` is append-only at exact tenant, legal-book, portfolio, security, and
 source-lot scope; it preserves active/parked lifecycle, source authority, calculation lineage, and
 content hashes. Composite portfolio-book and source-lot foreign keys reject mixed-scope ledger
 rows. `lot_amortized_cost_periods` preserves the ordered recognition schedule and each
 period's input/output evidence. The repository serializes profile streams, requires contiguous
 versions, treats an exact retry as unchanged, and fails closed on altered persisted evidence.
-These internal ledgers do not yet make amortized cost, disposal at current book cost, or redemption
-a supported runtime capability; `position_lot_state` remains the original/tax basis authority.
+An application materializer reloads source authority only after acquiring the profile lock, appends
+active profiles only when complete authority resolves, and persists a parked reason when it does
+not. These internal ledgers do not yet make amortized cost, disposal at current book cost, or
+redemption a supported runtime capability; `position_lot_state` remains the original/tax basis
+authority.
 
 Financial `NUMERIC` persistence has an explicit finite-value policy. The machine-readable inventory
 in `docs/standards/financial-numeric-persistence.v1.json` classifies all 110 ORM numeric columns
