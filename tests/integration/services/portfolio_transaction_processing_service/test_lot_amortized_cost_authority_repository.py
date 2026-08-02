@@ -10,7 +10,7 @@ import pytest
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from portfolio_common.database_models import LotAmortizedCostAuthorityRecord
-from sqlalchemy import inspect, text, update
+from sqlalchemy import inspect, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.portfolio_transaction_processing_service.app.infrastructure.fixed_income_book_cost import (  # noqa: E501
@@ -196,6 +196,64 @@ async def test_repository_rejects_persisted_payload_tampering_and_wrong_scope(
         await repository.load(fixed_income_book_cost_scope())
     with pytest.raises(TypeError, match="scope"):
         await repository.load(object())  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    ("family", "nested_period"),
+    [
+        ("assignment", False),
+        ("basis", False),
+        ("schedule", False),
+        ("yield", False),
+        ("schedule", True),
+    ],
+)
+async def test_repository_rejects_unsupported_authority_payload_keys(
+    clean_db,
+    authority_schema,
+    async_db_session: AsyncSession,
+    family: str,
+    nested_period: bool,
+) -> None:
+    await _seed_source_lot(async_db_session)
+    repository = SqlAlchemyLotAmortizedCostAuthorityRepository(async_db_session)
+    resolved = resolved_fixed_income_book_cost_inputs()
+    authorities = {
+        "assignment": resolved.assignment,
+        "basis": resolved.basis_fact,
+        "schedule": resolved.schedule_fact,
+        "yield": resolved.yield_fact,
+    }
+    authority = authorities[family]
+    assert authority is not None
+    await repository.append(authority)
+    record = await async_db_session.scalar(
+        select(LotAmortizedCostAuthorityRecord).where(
+            LotAmortizedCostAuthorityRecord.authority_content_hash == authority.content_hash()
+        )
+    )
+    assert record is not None
+    payload = dict(record.authority_payload)
+    if nested_period:
+        period_payloads = payload["periods"]
+        assert isinstance(period_payloads, list)
+        assert all(isinstance(period, dict) for period in period_payloads)
+        periods = [dict(period) for period in period_payloads]
+        periods[0]["unsupported"] = "tampered"
+        payload["periods"] = periods
+    else:
+        payload["unsupported"] = "tampered"
+    await async_db_session.execute(
+        update(LotAmortizedCostAuthorityRecord)
+        .where(LotAmortizedCostAuthorityRecord.id == record.id)
+        .values(authority_payload=payload)
+    )
+
+    with pytest.raises(
+        ConflictingLotAmortizedCostAuthorityError,
+        match="keys do not match the immutable schema",
+    ):
+        await repository.load(fixed_income_book_cost_scope())
 
 
 async def _seed_source_lot(session: AsyncSession) -> None:
