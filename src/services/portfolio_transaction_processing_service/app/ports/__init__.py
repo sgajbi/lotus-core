@@ -39,6 +39,11 @@ from .cost_basis import (
     CostProcessingEffectStagingPort,
     OpenLotCheckpointRecord,
 )
+from .fixed_income_book_cost import (
+    LotAmortizedCostProfileAppendOutcome,
+    LotAmortizedCostProfileHead,
+    LotAmortizedCostProfilePort,
+)
 from .foreign_exchange import ForeignExchangeTransactionPersistencePort
 from .income import AccruedIncomeOffsetStatePort
 from .position_history import (
@@ -115,6 +120,9 @@ __all__ = [
     "CostProcessingPort",
     "CostProcessingResult",
     "ForeignExchangeTransactionPersistencePort",
+    "LotAmortizedCostProfilePort",
+    "LotAmortizedCostProfileAppendOutcome",
+    "LotAmortizedCostProfileHead",
     "OpenLotCheckpointRecord",
     "PositionHistoryObserver",
     "PositionHistoryRepository",
