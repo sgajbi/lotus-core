@@ -6412,6 +6412,7 @@
         "tests/unit/scripts/test_rfc_status_ledger_guard.py",
         "tests/unit/services/portfolio_transaction_processing_service/domain/fixed_income_book_cost",
         "tests/unit/services/portfolio_transaction_processing_service/application/fixed_income_book_cost",
+        "tests/integration/test_lot_amortized_cost_authority_migration.py",
         "tests/unit/services/portfolio_transaction_processing_service/infrastructure/fixed_income_book_cost/test_profile_repository.py",
         "tests/integration/services/portfolio_transaction_processing_service/test_lot_amortized_cost_authority_repository.py",
         "tests/integration/services/portfolio_transaction_processing_service/test_lot_amortized_cost_profile_repository.py"

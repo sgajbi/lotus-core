@@ -128,6 +128,7 @@ Data Models wiki documents the staged ledgers while the capability wiki remains
   tests;
 - 3 real-PostgreSQL authority tests covering all four source families, exact retry, monotonic
   corrections, source-version collision, typed reload, and persisted-payload tamper rejection;
+- real-PostgreSQL authority migration apply, constraint, rollback, and reapply proof;
 - migration and numeric guards passed at head `c139b2c3d50c`, with 110 governed numeric columns
   across 33 tables and no planned enforcement gaps;
 - scoped Ruff lint/format, MyPy, RFC ledger, architecture-documentation, transaction-capability,
