@@ -19,6 +19,7 @@ from .ops_controls import (
 )
 from .routers import (
     business_dates,
+    fixed_income_book_cost,
     fx_rates,
     instruments,
     market_prices,
@@ -144,6 +145,7 @@ include_routers(
     market_prices.router,
     fx_rates.router,
     business_dates.router,
+    fixed_income_book_cost.router,
     reprocessing.router,
     portfolio_bundle.router,
     uploads.router,

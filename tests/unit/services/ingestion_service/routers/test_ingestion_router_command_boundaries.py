@@ -8,6 +8,7 @@ PUBLISH_BACKED_ROUTERS = [
     "fx_rates.py",
     "portfolio_bundle.py",
     "reprocessing.py",
+    "fixed_income_book_cost.py",
 ]
 
 

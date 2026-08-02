@@ -8629,3 +8629,100 @@ async def test_authoritative_market_price_failure_replay_preserves_original_conf
     assert first.json()["detail"]["code"] == "MARKET_PRICE_SOURCE_FACT_CONFLICT"
     assert first.json()["detail"]["job_id"]
     persist.assert_awaited_once()
+
+
+def _fixed_income_book_cost_authority_payload() -> dict[str, object]:
+    return {
+        "authorities": [
+            {
+                "authority_type": "POLICY_ASSIGNMENT",
+                "header": {
+                    "scope": {
+                        "tenant_id": "TENANT_SG",
+                        "legal_book_id": "BOOK_SG_PB",
+                        "portfolio_id": "PORTFOLIO_001",
+                        "security_id": "BOND_001",
+                        "lot_id": "LOT_001",
+                    },
+                    "source": {
+                        "source_system": "accounting-policy-master",
+                        "source_record_id": "assignment-001",
+                        "source_revision": "revision-1",
+                        "source_version": 1,
+                        "observed_at": "2026-08-03T09:00:00+08:00",
+                    },
+                    "status": "ACTIVE",
+                    "valid_from": "2026-08-01",
+                },
+                "policy_id": "IFRS9_EIR_LOCAL",
+                "policy_version": 1,
+                "assignment_reason": "Approved accounting treatment",
+            }
+        ]
+    }
+
+
+async def test_fixed_income_book_cost_authority_route_publishes_exact_scope_event(
+    async_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+) -> None:
+    response = await async_test_client.post(
+        "/ingest/fixed-income-book-cost-authorities",
+        json=_fixed_income_book_cost_authority_payload(),
+        headers={"X-Idempotency-Key": "book-cost-001"},
+    )
+
+    assert response.status_code == 202
+    body = response.json()
+    assert body["entity_type"] == "fixed_income_book_cost_authority"
+    assert body["accepted_count"] == 1
+    assert body["idempotency_key"] == "book-cost-001"
+    publish = mock_kafka_producer.publish_message.call_args.kwargs
+    assert publish["topic"] == "fixed_income.book_cost.authority.received"
+    assert publish["key"] == ("TENANT_SG|BOOK_SG_PB|PORTFOLIO_001|BOND_001|LOT_001")
+    assert publish["value"]["event_type"] == "fixed_income.book_cost.authority.received"
+    assert publish["value"]["authority"]["policy_id"] == "IFRS9_EIR_LOCAL"
+
+
+async def test_fixed_income_authority_idempotency_replay_does_not_republish(
+    async_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+) -> None:
+    headers = {"X-Idempotency-Key": "book-cost-replay-001"}
+    payload = _fixed_income_book_cost_authority_payload()
+
+    first = await async_test_client.post(
+        "/ingest/fixed-income-book-cost-authorities", json=payload, headers=headers
+    )
+    replay = await async_test_client.post(
+        "/ingest/fixed-income-book-cost-authorities", json=payload, headers=headers
+    )
+
+    assert first.status_code == replay.status_code == 202
+    assert first.json()["job_id"] == replay.json()["job_id"]
+    mock_kafka_producer.publish_message.assert_called_once()
+
+
+async def test_fixed_income_authority_duplicate_source_version_fails_before_publish(
+    async_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+) -> None:
+    payload = _fixed_income_book_cost_authority_payload()
+    payload["authorities"] = [payload["authorities"][0], payload["authorities"][0]]
+
+    response = await async_test_client.post(
+        "/ingest/fixed-income-book-cost-authorities",
+        json=payload,
+    )
+
+    assert response.status_code == 422
+    assert "duplicate source-version identities" in response.text
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
+async def test_fixed_income_authority_openapi_documents_fail_closed_contract() -> None:
+    operation = app.openapi()["paths"]["/ingest/fixed-income-book-cost-authorities"]["post"]
+
+    assert operation["summary"] == "Ingest fixed-income book-cost authority"
+    assert "never infers face amount" in operation["description"]
+    assert {"202", "409", "503", "422"} <= set(operation["responses"])
