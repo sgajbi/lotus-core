@@ -7,6 +7,7 @@ from portfolio_common.domain.eventing import (
     currency_pair_partition_key,
     original_message_partition_key,
     portfolio_partition_key,
+    portfolio_security_lot_partition_key,
     portfolio_security_partition_key,
     security_partition_key,
     transaction_partition_key,
@@ -31,20 +32,68 @@ def test_position_key_is_stable_across_dates_epochs_and_event_types() -> None:
     assert {normal.value, backdated.value, correction.value} == {"PORT_001|SEC_BOND_001"}
 
 
+def test_source_lot_key_binds_complete_legal_book_scope() -> None:
+    key = portfolio_security_lot_partition_key(
+        " PORTFOLIO_001 ",
+        " SECURITY_001 ",
+        " LOT_001 ",
+        tenant_id=" TENANT_001 ",
+        legal_book_id=" BOOK_001 ",
+    )
+
+    assert key.scope is PartitionKeyScope.PORTFOLIO_SECURITY_LOT
+    assert key.components == ("BOOK_001", "PORTFOLIO_001", "SECURITY_001", "LOT_001")
+    assert key.tenant_id == "TENANT_001"
+    assert key.value == "TENANT_001|BOOK_001|PORTFOLIO_001|SECURITY_001|LOT_001"
+
+
+@pytest.mark.parametrize(
+    ("field_name", "invalid_value"),
+    [
+        ("tenant_id", " "),
+        ("legal_book_id", " "),
+        ("portfolio_id", " "),
+        ("security_id", " "),
+        ("lot_id", " "),
+    ],
+)
+def test_source_lot_key_rejects_incomplete_scope(
+    field_name: str,
+    invalid_value: str,
+) -> None:
+    values = {
+        "tenant_id": "TENANT_001",
+        "legal_book_id": "BOOK_001",
+        "portfolio_id": "PORTFOLIO_001",
+        "security_id": "SECURITY_001",
+        "lot_id": "LOT_001",
+    }
+    values[field_name] = invalid_value
+
+    with pytest.raises(ValueError):
+        portfolio_security_lot_partition_key(
+            values["portfolio_id"],
+            values["security_id"],
+            values["lot_id"],
+            tenant_id=values["tenant_id"],
+            legal_book_id=values["legal_book_id"],
+        )
+
+
 def test_transaction_lifecycle_semantics_preserve_position_ordering() -> None:
     lifecycle_events = [
-        {"event_type": "BUY", "security_id": "SEC_A", "epoch": 1},
-        {"event_type": "DUPLICATE_BUY", "security_id": "SEC_A", "epoch": 1},
-        {"event_type": "BACKDATED_BUY", "security_id": "SEC_A", "epoch": 2},
-        {"event_type": "REVERSAL", "security_id": "SEC_A", "epoch": 3},
-        {"event_type": "CORRECTION", "security_id": "SEC_A", "epoch": 4},
-        {"event_type": "RESTATEMENT", "security_id": "SEC_A", "epoch": 5},
-        {"event_type": "CORPORATE_ACTION", "security_id": "SEC_A", "epoch": 6},
+        ("BUY", "SEC_A", 1),
+        ("DUPLICATE_BUY", "SEC_A", 1),
+        ("BACKDATED_BUY", "SEC_A", 2),
+        ("REVERSAL", "SEC_A", 3),
+        ("CORRECTION", "SEC_A", 4),
+        ("RESTATEMENT", "SEC_A", 5),
+        ("CORPORATE_ACTION", "SEC_A", 6),
     ]
 
     partition_keys = {
-        portfolio_security_partition_key("PORT_001", event["security_id"]).value
-        for event in lifecycle_events
+        portfolio_security_partition_key("PORT_001", security_id).value
+        for _event_type, security_id, _epoch in lifecycle_events
     }
 
     assert partition_keys == {"PORT_001|SEC_A"}

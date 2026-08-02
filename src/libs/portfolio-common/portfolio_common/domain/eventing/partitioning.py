@@ -14,6 +14,7 @@ class PartitionKeyScope(StrEnum):
 
     PORTFOLIO = "portfolio"
     PORTFOLIO_SECURITY = "portfolio_security"
+    PORTFOLIO_SECURITY_LOT = "portfolio_security_lot"
     PORTFOLIO_TRANSACTION_GROUP = "portfolio_transaction_group"
     SECURITY = "security"
     CURRENCY_PAIR = "currency_pair"
@@ -89,6 +90,24 @@ def portfolio_security_partition_key(
         components=(portfolio_id, security_id),
         tenant_id=tenant_id,
         tenant_required=tenant_required,
+    )
+
+
+def portfolio_security_lot_partition_key(
+    portfolio_id: str,
+    security_id: str,
+    lot_id: str,
+    *,
+    tenant_id: str,
+    legal_book_id: str,
+) -> EventPartitionKey:
+    """Order source corrections for one tenant-owned security lot."""
+
+    return _build_partition_key(
+        scope=PartitionKeyScope.PORTFOLIO_SECURITY_LOT,
+        components=(legal_book_id, portfolio_id, security_id, lot_id),
+        tenant_id=tenant_id,
+        tenant_required=True,
     )
 
 
