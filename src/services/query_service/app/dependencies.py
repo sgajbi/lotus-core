@@ -17,6 +17,7 @@ from .services.cash_account_service import CashAccountService
 from .services.cash_balance_service import CashBalanceService
 from .services.cash_movement_service import CashMovementService
 from .services.cashflow_projection_service import CashflowProjectionService
+from .services.fixed_income_book_cost_service import FixedIncomeBookCostService
 from .services.fx_rate_service import FxRateService
 from .services.instrument_service import InstrumentService
 from .services.liquidity_ladder_service import PortfolioLiquidityLadderService
@@ -114,6 +115,12 @@ def get_fx_rate_service(
     db: AsyncSession = Depends(get_async_db_session),
 ) -> FxRateService:
     return FxRateService(db)
+
+
+def get_fixed_income_book_cost_service(
+    db: AsyncSession = Depends(get_async_db_session),
+) -> FixedIncomeBookCostService:
+    return FixedIncomeBookCostService(db)
 
 
 def get_instrument_service(
