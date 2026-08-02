@@ -3,6 +3,7 @@ from typing import List
 
 from portfolio_common.config import (
     KAFKA_BUSINESS_DATES_RAW_RECEIVED_TOPIC,
+    KAFKA_FIXED_INCOME_BOOK_COST_AUTHORITY_RECEIVED_TOPIC,
     KAFKA_FX_RATES_RAW_RECEIVED_TOPIC,
     KAFKA_INSTRUMENTS_RECEIVED_TOPIC,
     KAFKA_MARKET_PRICES_RAW_RECEIVED_TOPIC,
@@ -16,6 +17,9 @@ from portfolio_common.domain.eventing import (
     portfolio_partition_key,
     security_partition_key,
     transaction_partition_key,
+)
+from portfolio_common.event_contracts.fixed_income_book_cost import (
+    FixedIncomeBookCostAuthorityEvent,
 )
 from portfolio_common.event_publisher import (
     EventPublisher,
@@ -36,6 +40,9 @@ from portfolio_common.monitoring import KAFKA_MESSAGES_PUBLISHED_TOTAL
 
 from ..domain import TransactionReprocessingTarget
 from ..DTOs.business_date_dto import BusinessDate
+from ..DTOs.fixed_income_book_cost_authority_dto import (
+    FixedIncomeBookCostAuthorityIngestionRequest,
+)
 from ..DTOs.fx_rate_dto import FxRate
 from ..DTOs.instrument_dto import Instrument
 from ..DTOs.market_price_dto import MarketPrice
@@ -154,6 +161,60 @@ class IngestionService:
     def _confirm_delivery(self, *, timeout_seconds: int) -> int:
         result = self._event_publisher.confirm_delivery(timeout_seconds=timeout_seconds)
         return result.undelivered_count
+
+    @staticmethod
+    def _fixed_income_book_cost_record_key(
+        event: FixedIncomeBookCostAuthorityEvent,
+    ) -> str:
+        """Return a stable diagnostic identity for one source-authority version."""
+
+        authority = event.authority
+        source = authority.header.source
+        return (
+            f"{event.partition_key}|{authority.authority_type}|{source.source_system}|"
+            f"{source.source_record_id}|v{source.source_version}"
+        )
+
+    async def publish_fixed_income_book_cost_authorities(
+        self,
+        request: FixedIncomeBookCostAuthorityIngestionRequest,
+        idempotency_key: str | None = None,
+    ) -> None:
+        """Publish strict source-authority events and confirm broker delivery as one batch."""
+
+        if not isinstance(request, FixedIncomeBookCostAuthorityIngestionRequest):
+            raise TypeError("request must be a FixedIncomeBookCostAuthorityIngestionRequest")
+        events = request.events()
+        headers = self._get_headers(idempotency_key)
+        record_keys = [self._fixed_income_book_cost_record_key(event) for event in events]
+        for index, event in enumerate(events):
+            try:
+                self._publish_event(
+                    topic=KAFKA_FIXED_INCOME_BOOK_COST_AUTHORITY_RECEIVED_TOPIC,
+                    key=event.partition_key,
+                    value=event.model_dump(mode="json"),
+                    headers=headers,
+                )
+                KAFKA_MESSAGES_PUBLISHED_TOTAL.labels(
+                    topic=KAFKA_FIXED_INCOME_BOOK_COST_AUTHORITY_RECEIVED_TOPIC
+                ).inc()
+            except Exception as exc:
+                try:
+                    self._raise_batch_publish_error(
+                        entity_label="fixed-income book-cost authority",
+                        failed_key=record_keys[index],
+                        record_keys=record_keys,
+                        failure_index=index,
+                    )
+                except IngestionPublishError as publish_exc:
+                    raise publish_exc from exc
+
+        undelivered_count = self._confirm_delivery(timeout_seconds=5)
+        if undelivered_count:
+            self._raise_flush_timeout_error(
+                entity_label="fixed-income book-cost authority delivery confirmation",
+                record_keys=record_keys,
+            )
 
     async def publish_business_dates(
         self, business_dates: List[BusinessDate], idempotency_key: str | None = None
