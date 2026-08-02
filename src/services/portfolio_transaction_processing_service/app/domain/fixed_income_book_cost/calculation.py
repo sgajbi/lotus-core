@@ -130,14 +130,18 @@ def calculate_amortized_cost_schedule(
     numeric_policy = COST_BASIS_STATE_LEDGER_OUTPUT_V1
     fee_basis = inputs.fees_in_basis_local if policy.include_fees_in_amortized_cost else Decimal(0)
     with numeric_policy.arithmetic_context():
-        initial = numeric_policy.add(
-            inputs.initial_clean_cost_local,
-            fee_basis,
-            field_name="initial_amortized_cost_local",
+        initial = _canonical_ledger_decimal(
+            numeric_policy.add(
+                inputs.initial_clean_cost_local,
+                fee_basis,
+                field_name="initial_amortized_cost_local",
+            )
         )
-        redemption = numeric_policy.normalize(
-            inputs.redemption_value_local,
-            field_name="redemption_value_local",
+        redemption = _canonical_ledger_decimal(
+            numeric_policy.normalize(
+                inputs.redemption_value_local,
+                field_name="redemption_value_local",
+            )
         )
         direction = classify_amortized_cost_direction(
             opening_amortized_cost_local=initial,
@@ -161,10 +165,12 @@ def calculate_amortized_cost_schedule(
             begin = row.end_amortized_cost_local
             remaining_weight -= period.year_fraction
 
-    residual = numeric_policy.subtract(
-        redemption,
-        begin,
-        field_name="residual_local",
+    residual = _canonical_ledger_decimal(
+        numeric_policy.subtract(
+            redemption,
+            begin,
+            field_name="residual_local",
+        )
     )
     if abs(residual) > policy.residual_tolerance_local:
         raise AmortizedCostReconciliationError(
@@ -221,18 +227,28 @@ def _calculate_period(
         period_rate = _resolve_period_rate(policy, period, annual_yield)
         interest = begin * period_rate
         raw_movement = interest - period.cash_coupon_local
-    movement = numeric_policy.normalize(raw_movement, field_name="amortization_amount_local")
-    normalized_interest = numeric_policy.normalize(interest, field_name="interest_income_local")
-    normalized_coupon = numeric_policy.normalize(
-        period.cash_coupon_local,
-        field_name="cash_coupon_local",
+    movement = _canonical_ledger_decimal(
+        numeric_policy.normalize(raw_movement, field_name="amortization_amount_local")
     )
-    end = numeric_policy.add(begin, movement, field_name="end_amortized_cost_local")
+    normalized_interest = _canonical_ledger_decimal(
+        numeric_policy.normalize(interest, field_name="interest_income_local")
+    )
+    normalized_coupon = _canonical_ledger_decimal(
+        numeric_policy.normalize(
+            period.cash_coupon_local,
+            field_name="cash_coupon_local",
+        )
+    )
+    end = _canonical_ledger_decimal(
+        numeric_policy.add(begin, movement, field_name="end_amortized_cost_local")
+    )
     if end < 0:
         raise AmortizedCostCalculationError("end amortized cost must be nonnegative")
-    rounding_adjustment = numeric_policy.normalize(
-        movement - (normalized_interest - normalized_coupon),
-        field_name="rounding_adjustment_local",
+    rounding_adjustment = _canonical_ledger_decimal(
+        numeric_policy.normalize(
+            movement - (normalized_interest - normalized_coupon),
+            field_name="rounding_adjustment_local",
+        )
     )
     return AmortizationPeriodResult(
         period_start_date=period.period_start_date,
@@ -277,6 +293,15 @@ def _validate_rate_authority(
         raise AmortizedCostCalculationError(
             "annual-yield schedules must not declare supplied_period_rate"
         )
+
+
+def _canonical_ledger_decimal(value: Decimal) -> Decimal:
+    """Canonicalize an already-governed amount to its declared persistence scale."""
+
+    policy = COST_BASIS_STATE_LEDGER_OUTPUT_V1
+    quantum = Decimal(1).scaleb(-policy.scale)
+    with policy.arithmetic_context():
+        return value.quantize(quantum, rounding=policy.rounding)
 
 
 def _resolve_period_rate(

@@ -2482,6 +2482,12 @@ class LotAmortizedCostProfileRecord(Base):
             "profile_id",
             postgresql_where=text("status IN ('PARKED', 'INELIGIBLE')"),
         ),
+        Index(
+            "ix_lot_amort_profile_id_effective_version",
+            "profile_id",
+            effective_date.desc(),
+            profile_version.desc(),
+        ),
     )
 
 
@@ -2496,8 +2502,8 @@ class LotAmortizedCostPeriodRecord(Base):
     period_ordinal = Column(Integer, nullable=False)
     period_start_date = Column(Date, nullable=False)
     period_end_date = Column(Date, nullable=False)
-    year_fraction = Column(ExactNumeric(18, 10), nullable=False)
-    period_rate = Column(ExactNumeric(18, 10), nullable=True)
+    year_fraction = Column(ExactNumeric(), nullable=False)
+    period_rate = Column(ExactNumeric(), nullable=True)
     begin_amortized_cost_local = Column(ExactNumeric(18, 10), nullable=False)
     interest_income_local = Column(ExactNumeric(18, 10), nullable=False)
     cash_coupon_local = Column(ExactNumeric(18, 10), nullable=False)

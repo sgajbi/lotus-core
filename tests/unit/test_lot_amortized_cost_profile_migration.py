@@ -51,10 +51,12 @@ def test_lot_amortized_cost_profile_migration_is_reversible(monkeypatch) -> None
         "create_table",
         "create_index",
         "create_index",
+        "create_index",
         "create_table",
         "create_index",
         "drop_index",
         "drop_table",
+        "drop_index",
         "drop_index",
         "drop_index",
         "drop_table",
@@ -123,7 +125,7 @@ def test_lot_amortized_cost_profile_migration_is_reversible(monkeypatch) -> None
         "uq_lot_amort_profile_version",
     } <= profile_constraints.keys()
 
-    period_definitions = operations[3][2]
+    period_definitions = operations[4][2]
     period_columns = {
         definition.name: definition
         for definition in period_definitions
@@ -148,6 +150,10 @@ def test_lot_amortized_cost_profile_migration_is_reversible(monkeypatch) -> None
         "period_content_hash",
         "created_at",
     }
+    assert period_columns["year_fraction"].type.precision is None
+    assert period_columns["year_fraction"].type.scale is None
+    assert period_columns["period_rate"].type.precision is None
+    assert period_columns["period_rate"].type.scale is None
     period_constraints = {
         definition.name: definition
         for definition in period_definitions

@@ -56,6 +56,8 @@
   "exact_bind_enforcement": "required",
   "storage_shape_overrides": {
     "market_price_source_facts.price": "exact-unbounded",
+    "lot_amortized_cost_periods.year_fraction": "exact-unbounded",
+    "lot_amortized_cost_periods.period_rate": "exact-unbounded",
     "client_tax_rule_sets.threshold_amount": "bounded-18-4",
     "client_income_needs_schedules.amount": "bounded-18-4",
     "liquidity_reserve_requirements.required_amount": "bounded-18-4",
