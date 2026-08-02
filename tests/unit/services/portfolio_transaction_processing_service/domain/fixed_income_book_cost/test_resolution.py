@@ -237,6 +237,25 @@ def test_conflicting_same_source_version_has_stable_reason() -> None:
     assert caught.value.reason is AmortizedCostEligibilityReason.SOURCE_FACT_CONFLICTING
 
 
+@pytest.mark.parametrize("newest_first", [False, True])
+def test_conflicting_older_source_version_fails_closed_independent_of_order(
+    newest_first: bool,
+) -> None:
+    first = _basis()
+    conflicting = replace(first, redemption_value_local=Decimal("101"))
+    corrected = replace(
+        first,
+        redemption_value_local=Decimal("102"),
+        source=replace(first.source, fact_version=2, source_revision="revision-2"),
+    )
+    facts = [corrected, first, conflicting] if newest_first else [first, conflicting, corrected]
+
+    with pytest.raises(AmortizedCostInputResolutionError) as caught:
+        _resolve(basis_facts=facts)
+
+    assert caught.value.reason is AmortizedCostEligibilityReason.SOURCE_FACT_CONFLICTING
+
+
 def test_conflicting_assignment_source_version_has_distinct_stable_reason() -> None:
     first = _assignment()
     conflicting = replace(first, policy_version=3)

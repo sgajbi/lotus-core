@@ -122,6 +122,8 @@ def test_average_cost_pool_state_declares_integrity_constraints_and_support_inde
 
 
 def test_lot_amortized_cost_records_declare_append_only_integrity_contract() -> None:
+    portfolio_constraints = {constraint.name for constraint in Portfolio.__table__.constraints}
+    lot_constraints = {constraint.name for constraint in PositionLotState.__table__.constraints}
     profile_table = LotAmortizedCostProfileRecord.__table__
     period_table = LotAmortizedCostPeriodRecord.__table__
     profile_constraints = {constraint.name for constraint in profile_table.constraints}
@@ -129,7 +131,13 @@ def test_lot_amortized_cost_records_declare_append_only_integrity_contract() -> 
     profile_indexes = {index.name: index for index in profile_table.indexes}
     period_indexes = {index.name: index for index in period_table.indexes}
 
-    assert "uq_lot_amort_profile_version" in profile_constraints
+    assert "uq_portfolios_book_scope_identity" in portfolio_constraints
+    assert "uq_position_lot_scope_identity" in lot_constraints
+    assert {
+        "uq_lot_amort_profile_version",
+        "fk_lot_amort_profile_book_scope",
+        "fk_lot_amort_profile_lot_scope",
+    } <= profile_constraints
     assert {
         "ck_lot_amort_profile_lifecycle_shape",
         "ck_lot_amort_profile_amounts_finite",

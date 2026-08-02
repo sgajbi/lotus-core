@@ -63,7 +63,8 @@ identity. Runtime bookability and public contracts remain deliberately unchanged
 The domain now also owns exact source-lot assignment, basis, schedule, and yield facts plus a
 fail-closed resolver across tenant, legal book, portfolio, security, lot, and effective date.
 Missing, overlapping, conflicting, stale, or convention-incompatible authority does not fall back
-to broad instrument classification. Immutable active or parked profiles bind source references,
+to broad instrument classification. Duplicate-version conflicts are validated before newest-source
+selection, so resolution is independent of delivery order. Immutable active or parked profiles bind source references,
 calculation lineage, deterministic content hashes, and every normalized period.
 
 Additive `lot_amortized_cost_profiles` and `lot_amortized_cost_periods` tables preserve that evidence
@@ -72,6 +73,8 @@ a stable transaction advisory lock, contiguous append versions, exact-retry neut
 period write, tenant-safe latest/as-of reads, and fail-closed header/period reconstruction. Monetary
 outputs are canonicalized to the governed scale before hashing; derived year fractions and rates
 remain exact-unbounded because truncating working-precision evidence would invalidate lineage.
+Composite portfolio-book and source-lot foreign keys prevent cross-book or cross-security scope
+fabrication even through direct database writes.
 Source writers/loaders, transaction-UoW materialization, correction replay, public queries, disposal
 allocations, and redemption integration remain open.
 

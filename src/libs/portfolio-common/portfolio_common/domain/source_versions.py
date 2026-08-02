@@ -18,12 +18,13 @@ def latest_source_versions(
 ) -> list[_SourceRecord]:
     """Keep the latest correction per source identity and reject ambiguous versions."""
 
-    latest: dict[_SourceRecordKey, _SourceRecord] = {}
+    versions_by_source: dict[_SourceRecordKey, dict[int, _SourceRecord]] = {}
     for record in records:
         key = source_record_key(record)
-        existing = latest.get(key)
-        if existing is None or source_version(record) > source_version(existing):
-            latest[key] = record
-        elif source_version(record) == source_version(existing) and record != existing:
+        version = source_version(record)
+        versions = versions_by_source.setdefault(key, {})
+        existing = versions.get(version)
+        if existing is not None and record != existing:
             raise conflicting_version_error()
-    return list(latest.values())
+        versions[version] = record
+    return [versions[max(versions)] for versions in versions_by_source.values()]

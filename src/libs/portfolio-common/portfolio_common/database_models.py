@@ -100,6 +100,12 @@ class Portfolio(Base):
     )
 
     __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "legal_book_id",
+            "portfolio_id",
+            name="uq_portfolios_book_scope_identity",
+        ),
         CheckConstraint(
             "(tenant_id IS NULL AND legal_book_id IS NULL) OR "
             "(tenant_id IS NOT NULL AND legal_book_id IS NOT NULL "
@@ -2296,6 +2302,12 @@ class PositionLotState(Base):
     )
 
     __table_args__ = (
+        UniqueConstraint(
+            "lot_id",
+            "portfolio_id",
+            "security_id",
+            name="uq_position_lot_scope_identity",
+        ),
         CheckConstraint(
             "CAST(original_quantity AS TEXT) NOT IN ('NaN', 'Infinity', '-Infinity') "
             "AND CAST(open_quantity AS TEXT) NOT IN ('NaN', 'Infinity', '-Infinity') "
@@ -2360,9 +2372,9 @@ class LotAmortizedCostProfileRecord(Base):
     profile_version = Column(Integer, nullable=False)
     tenant_id = Column(String, nullable=False)
     legal_book_id = Column(String, nullable=False)
-    portfolio_id = Column(String, ForeignKey("portfolios.portfolio_id"), nullable=False)
+    portfolio_id = Column(String, nullable=False)
     security_id = Column(String, ForeignKey("instruments.security_id"), nullable=False)
-    lot_id = Column(String, ForeignKey("position_lot_state.lot_id"), nullable=False)
+    lot_id = Column(String, nullable=False)
     effective_date = Column(Date, nullable=False)
     status = Column(String, nullable=False)
     eligibility_reason = Column(String, nullable=True)
@@ -2386,6 +2398,21 @@ class LotAmortizedCostProfileRecord(Base):
             "profile_id",
             "profile_version",
             name="uq_lot_amort_profile_version",
+        ),
+        ForeignKeyConstraint(
+            ["tenant_id", "legal_book_id", "portfolio_id"],
+            ["portfolios.tenant_id", "portfolios.legal_book_id", "portfolios.portfolio_id"],
+            name="fk_lot_amort_profile_book_scope",
+        ),
+        ForeignKeyConstraint(
+            ["lot_id", "portfolio_id", "security_id"],
+            [
+                "position_lot_state.lot_id",
+                "position_lot_state.portfolio_id",
+                "position_lot_state.security_id",
+            ],
+            name="fk_lot_amort_profile_lot_scope",
+            ondelete="RESTRICT",
         ),
         CheckConstraint(
             "profile_version >= 1",

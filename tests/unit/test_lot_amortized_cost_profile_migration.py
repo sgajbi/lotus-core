@@ -36,10 +36,22 @@ def test_lot_amortized_cost_profile_migration_is_reversible(monkeypatch) -> None
     monkeypatch.setattr(op, "create_index", record_create_index)
     monkeypatch.setattr(
         op,
+        "create_unique_constraint",
+        lambda name, table, columns: operations.append(
+            ("create_unique_constraint", name, table, columns)
+        ),
+    )
+    monkeypatch.setattr(
+        op,
         "drop_index",
         lambda name, **kwargs: operations.append(("drop_index", name, kwargs)),
     )
     monkeypatch.setattr(op, "drop_table", lambda name: operations.append(("drop_table", name)))
+    monkeypatch.setattr(
+        op,
+        "drop_constraint",
+        lambda name, table, **kwargs: operations.append(("drop_constraint", name, table, kwargs)),
+    )
     migration: dict[str, Any] = runpy.run_path(str(MIGRATION))
 
     migration["upgrade"]()
@@ -48,6 +60,8 @@ def test_lot_amortized_cost_profile_migration_is_reversible(monkeypatch) -> None
     assert migration["revision"] == "c139b2c3d50c"
     assert migration["down_revision"] == "c138b2c3d50b"
     assert [operation[0] for operation in operations] == [
+        "create_unique_constraint",
+        "create_unique_constraint",
         "create_table",
         "create_index",
         "create_index",
@@ -60,9 +74,24 @@ def test_lot_amortized_cost_profile_migration_is_reversible(monkeypatch) -> None
         "drop_index",
         "drop_index",
         "drop_table",
+        "drop_constraint",
+        "drop_constraint",
     ]
 
-    profile_definitions = operations[0][2]
+    assert operations[0] == (
+        "create_unique_constraint",
+        "uq_portfolios_book_scope_identity",
+        "portfolios",
+        ["tenant_id", "legal_book_id", "portfolio_id"],
+    )
+    assert operations[1] == (
+        "create_unique_constraint",
+        "uq_position_lot_scope_identity",
+        "position_lot_state",
+        ["lot_id", "portfolio_id", "security_id"],
+    )
+
+    profile_definitions = operations[2][2]
     profile_columns = {
         definition.name: definition
         for definition in profile_definitions
@@ -119,13 +148,13 @@ def test_lot_amortized_cost_profile_migration_is_reversible(monkeypatch) -> None
         "ck_lot_amort_profile_content_hash",
         "ck_lot_amort_profile_sources_array",
         "ck_lot_amort_profile_lifecycle_shape",
-        "fk_lot_amort_profile_portfolio",
+        "fk_lot_amort_profile_book_scope",
         "fk_lot_amort_profile_security",
-        "fk_lot_amort_profile_lot",
+        "fk_lot_amort_profile_lot_scope",
         "uq_lot_amort_profile_version",
     } <= profile_constraints.keys()
 
-    period_definitions = operations[4][2]
+    period_definitions = operations[6][2]
     period_columns = {
         definition.name: definition
         for definition in period_definitions
@@ -168,4 +197,17 @@ def test_lot_amortized_cost_profile_migration_is_reversible(monkeypatch) -> None
         "fk_lot_amort_period_profile_version",
         "uq_lot_amort_period_ordinal",
     } <= period_constraints.keys()
-    assert operations[-1] == ("drop_table", "lot_amortized_cost_profiles")
+    assert operations[-2:] == [
+        (
+            "drop_constraint",
+            "uq_position_lot_scope_identity",
+            "position_lot_state",
+            {"type_": "unique"},
+        ),
+        (
+            "drop_constraint",
+            "uq_portfolios_book_scope_identity",
+            "portfolios",
+            {"type_": "unique"},
+        ),
+    ]
