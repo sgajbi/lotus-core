@@ -120,6 +120,13 @@ def test_ingestion_reference_routes_share_reference_data_capability() -> None:
     )
 
 
+def test_fixed_income_book_cost_authority_requires_dedicated_capability() -> None:
+    assert (
+        _required_capability("POST", "/ingest/fixed-income-book-cost-authorities")
+        == "ingestion.fixed_income_book_cost.authority.write"
+    )
+
+
 def test_validate_ingestion_runtime_accepts_default_capability_rules(monkeypatch) -> None:
     monkeypatch.setenv("ENTERPRISE_ENFORCE_AUTHZ", "true")
     monkeypatch.setenv("ENTERPRISE_REQUIRE_CAPABILITY_RULES", "true")

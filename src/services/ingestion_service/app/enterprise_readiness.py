@@ -26,6 +26,9 @@ INGESTION_WRITE_CAPABILITY_RULES: dict[str, str] = {
     "POST /ingest/authoritative-market-price-source-facts": (
         "ingestion.market_prices.authority.write"
     ),
+    "POST /ingest/fixed-income-book-cost-authorities": (
+        "ingestion.fixed_income_book_cost.authority.write"
+    ),
     "POST /ingest/fx-rates": "ingestion.fx_rates.write",
     "POST /ingest/business-dates": "ingestion.business_dates.write",
     "POST /ingest/portfolio-bundle": "ingestion.portfolio_bundle.write",
