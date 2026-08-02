@@ -5,9 +5,15 @@ from .profile_repository import (
     SqlAlchemyLotAmortizedCostProfileRepository,
     lot_amortized_cost_profile_lock_key,
 )
+from .source_authority_repository import (
+    ConflictingLotAmortizedCostAuthorityError,
+    SqlAlchemyLotAmortizedCostAuthorityRepository,
+)
 
 __all__ = [
     "ConflictingLotAmortizedCostProfileError",
     "SqlAlchemyLotAmortizedCostProfileRepository",
     "lot_amortized_cost_profile_lock_key",
+    "ConflictingLotAmortizedCostAuthorityError",
+    "SqlAlchemyLotAmortizedCostAuthorityRepository",
 ]

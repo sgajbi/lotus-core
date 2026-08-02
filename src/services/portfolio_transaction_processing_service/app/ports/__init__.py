@@ -40,6 +40,10 @@ from .cost_basis import (
     OpenLotCheckpointRecord,
 )
 from .fixed_income_book_cost import (
+    LotAmortizedCostAuthority,
+    LotAmortizedCostAuthorityAppendOutcome,
+    LotAmortizedCostAuthorityBundle,
+    LotAmortizedCostAuthorityPort,
     LotAmortizedCostProfileAppendOutcome,
     LotAmortizedCostProfileHead,
     LotAmortizedCostProfilePort,
@@ -121,6 +125,10 @@ __all__ = [
     "CostProcessingResult",
     "ForeignExchangeTransactionPersistencePort",
     "LotAmortizedCostProfilePort",
+    "LotAmortizedCostAuthority",
+    "LotAmortizedCostAuthorityAppendOutcome",
+    "LotAmortizedCostAuthorityBundle",
+    "LotAmortizedCostAuthorityPort",
     "LotAmortizedCostProfileAppendOutcome",
     "LotAmortizedCostProfileHead",
     "OpenLotCheckpointRecord",
