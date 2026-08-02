@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import runpy
 from dataclasses import replace
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -287,6 +288,77 @@ async def test_repository_rejects_non_string_optional_period_rate(
     with pytest.raises(
         ConflictingLotAmortizedCostAuthorityError,
         match="supplied_period_rate must be a string or null",
+    ):
+        await repository.load(fixed_income_book_cost_scope())
+
+
+@pytest.mark.parametrize(
+    ("family", "field", "nested_period"),
+    [
+        ("basis", "initial_clean_cost_local", False),
+        ("basis", "fees_in_basis_local", False),
+        ("basis", "redemption_value_local", False),
+        ("yield", "annual_yield", False),
+        ("schedule", "year_fraction", True),
+        ("schedule", "cash_coupon_local", True),
+        ("schedule", "supplied_period_rate", True),
+    ],
+)
+async def test_repository_rejects_noncanonical_decimal_payload_text(
+    clean_db,
+    authority_schema,
+    async_db_session: AsyncSession,
+    family: str,
+    field: str,
+    nested_period: bool,
+) -> None:
+    await _seed_source_lot(async_db_session)
+    repository = SqlAlchemyLotAmortizedCostAuthorityRepository(async_db_session)
+    resolved = resolved_fixed_income_book_cost_inputs()
+    schedule = resolved.schedule_fact
+    if field == "supplied_period_rate":
+        schedule = replace(
+            schedule,
+            periods=(
+                replace(schedule.periods[0], supplied_period_rate=Decimal("0.01")),
+                *schedule.periods[1:],
+            ),
+        )
+    authorities = {
+        "basis": resolved.basis_fact,
+        "schedule": schedule,
+        "yield": resolved.yield_fact,
+    }
+    authority = authorities[family]
+    assert authority is not None
+    await repository.append(authority)
+    record = await async_db_session.scalar(
+        select(LotAmortizedCostAuthorityRecord).where(
+            LotAmortizedCostAuthorityRecord.authority_content_hash == authority.content_hash()
+        )
+    )
+    assert record is not None
+    payload = dict(record.authority_payload)
+    target = payload
+    if nested_period:
+        period_payloads = payload["periods"]
+        assert isinstance(period_payloads, list)
+        assert all(isinstance(period, dict) for period in period_payloads)
+        periods = [dict(period) for period in period_payloads]
+        target = next(period for period in periods if period[field] is not None)
+        payload["periods"] = periods
+    original = target[field]
+    assert isinstance(original, str)
+    target[field] = f"+{original}"
+    await async_db_session.execute(
+        update(LotAmortizedCostAuthorityRecord)
+        .where(LotAmortizedCostAuthorityRecord.id == record.id)
+        .values(authority_payload=payload)
+    )
+
+    with pytest.raises(
+        ConflictingLotAmortizedCostAuthorityError,
+        match="must use canonical decimal text",
     ):
         await repository.load(fixed_income_book_cost_scope())
 
