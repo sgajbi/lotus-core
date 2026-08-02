@@ -13,7 +13,7 @@
       "openApiVersion": "3.1.0"
     }
   ],
-  "generatedAt": "2026-08-02T19:04:05.761446+00:00",
+  "generatedAt": "2026-08-02T20:28:58.162426+00:00",
   "attributeCatalog": [
     {
       "semanticId": "lotus.accepted_count",
@@ -9678,12 +9678,13 @@
       "preferredName": "x_tenant_id",
       "description": "Tenant scope bound into runtime receipt metadata when supplied by the caller.",
       "example": "default",
-      "type": "object",
+      "type": "string",
       "locations": [
         "header"
       ],
       "observedTypes": [
-        "object"
+        "object",
+        "string"
       ]
     }
   ],
@@ -10824,6 +10825,21 @@
       "exposure": "consumer_visible",
       "canonicalTerm": "as_of_date",
       "semanticId": "lotus.as_of_date"
+    },
+    {
+      "name": "x-tenant-id",
+      "kind": "request_option",
+      "location": "header",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Authenticated tenant scope; must match the requested tenant.",
+      "example": "TENANT_SG",
+      "behaviorImpact": "Affects get_fixed_income_book_cost_as_of_portfolios__portfolio_id__positions__security_id__lots__lot_id__book_cost_get request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "x_tenant_id",
+      "semanticId": "lotus.x_tenant_id"
     },
     {
       "name": "security_id",
@@ -18948,7 +18964,8 @@
           "source_system",
           "status",
           "tenant_id",
-          "total_period_count"
+          "total_period_count",
+          "x_tenant_id"
         ]
       },
       "request": {
@@ -19000,6 +19017,14 @@
             "type": "string",
             "semanticId": "lotus.as_of_date",
             "attributeRef": "lotus.as_of_date"
+          },
+          {
+            "name": "x-tenant-id",
+            "location": "header",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.x_tenant_id",
+            "attributeRef": "lotus.x_tenant_id"
           }
         ]
       },
