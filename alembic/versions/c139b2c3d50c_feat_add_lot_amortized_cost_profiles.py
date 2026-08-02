@@ -18,6 +18,16 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
+    op.create_unique_constraint(
+        "uq_portfolios_book_scope_identity",
+        "portfolios",
+        ["tenant_id", "legal_book_id", "portfolio_id"],
+    )
+    op.create_unique_constraint(
+        "uq_position_lot_scope_identity",
+        "position_lot_state",
+        ["lot_id", "portfolio_id", "security_id"],
+    )
     op.create_table(
         "lot_amortized_cost_profiles",
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
@@ -133,9 +143,9 @@ def upgrade() -> None:
             name="ck_lot_amort_profile_lifecycle_shape",
         ),
         sa.ForeignKeyConstraint(
-            ["portfolio_id"],
-            ["portfolios.portfolio_id"],
-            name="fk_lot_amort_profile_portfolio",
+            ["tenant_id", "legal_book_id", "portfolio_id"],
+            ["portfolios.tenant_id", "portfolios.legal_book_id", "portfolios.portfolio_id"],
+            name="fk_lot_amort_profile_book_scope",
         ),
         sa.ForeignKeyConstraint(
             ["security_id"],
@@ -143,9 +153,13 @@ def upgrade() -> None:
             name="fk_lot_amort_profile_security",
         ),
         sa.ForeignKeyConstraint(
-            ["lot_id"],
-            ["position_lot_state.lot_id"],
-            name="fk_lot_amort_profile_lot",
+            ["lot_id", "portfolio_id", "security_id"],
+            [
+                "position_lot_state.lot_id",
+                "position_lot_state.portfolio_id",
+                "position_lot_state.security_id",
+            ],
+            name="fk_lot_amort_profile_lot_scope",
             ondelete="RESTRICT",
         ),
         sa.PrimaryKeyConstraint("id", name="pk_lot_amortized_cost_profiles"),
@@ -284,3 +298,13 @@ def downgrade() -> None:
         table_name="lot_amortized_cost_profiles",
     )
     op.drop_table("lot_amortized_cost_profiles")
+    op.drop_constraint(
+        "uq_position_lot_scope_identity",
+        "position_lot_state",
+        type_="unique",
+    )
+    op.drop_constraint(
+        "uq_portfolios_book_scope_identity",
+        "portfolios",
+        type_="unique",
+    )

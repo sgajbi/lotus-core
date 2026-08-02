@@ -51,3 +51,25 @@ def test_latest_source_versions_rejects_conflicting_same_version_payloads() -> N
                 _SourceRecord("A", 1, "conflict"),
             ]
         )
+
+
+@pytest.mark.parametrize(
+    "records",
+    [
+        [
+            _SourceRecord("A", 1, "first"),
+            _SourceRecord("A", 1, "conflict"),
+            _SourceRecord("A", 2, "corrected"),
+        ],
+        [
+            _SourceRecord("A", 2, "corrected"),
+            _SourceRecord("A", 1, "first"),
+            _SourceRecord("A", 1, "conflict"),
+        ],
+    ],
+)
+def test_latest_source_versions_rejects_older_conflicts_independent_of_order(
+    records: list[_SourceRecord],
+) -> None:
+    with pytest.raises(ValueError, match="ambiguous source version"):
+        _latest(records)

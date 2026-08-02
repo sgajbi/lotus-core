@@ -113,7 +113,8 @@ correction-triggered replay remains separately governed.
 Fixed-income book-cost profile history is staged separately from original/tax lot basis.
 `lot_amortized_cost_profiles` is append-only at exact tenant, legal-book, portfolio, security, and
 source-lot scope; it preserves active/parked lifecycle, source authority, calculation lineage, and
-content hashes. `lot_amortized_cost_periods` preserves the ordered recognition schedule and each
+content hashes. Composite portfolio-book and source-lot foreign keys reject mixed-scope ledger
+rows. `lot_amortized_cost_periods` preserves the ordered recognition schedule and each
 period's input/output evidence. The repository serializes profile streams, requires contiguous
 versions, treats an exact retry as unchanged, and fails closed on altered persisted evidence.
 These internal ledgers do not yet make amortized cost, disposal at current book cost, or redemption

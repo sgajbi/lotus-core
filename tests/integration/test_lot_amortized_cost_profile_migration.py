@@ -51,10 +51,10 @@ PROFILE_INSERT = text(
         'lot-amortized-cost:test',
         :profile_version,
         :tenant_id,
-        'BOOK_SG_PB',
-        'AMORT_PORTFOLIO',
-        'AMORT_BOND_001',
-        'AMORT_LOT_001',
+        :legal_book_id,
+        :portfolio_id,
+        :security_id,
+        :lot_id,
         DATE '2026-01-01',
         :status,
         :eligibility_reason,
@@ -127,6 +127,16 @@ def _normalize_to_previous_revision(migration: dict[str, Any], connection) -> No
         operations.drop_table("lot_amortized_cost_periods")
     if inspector.has_table("lot_amortized_cost_profiles"):
         operations.drop_table("lot_amortized_cost_profiles")
+    for table_name, constraint_name in (
+        ("position_lot_state", "uq_position_lot_scope_identity"),
+        ("portfolios", "uq_portfolios_book_scope_identity"),
+    ):
+        unique_constraints = {
+            constraint["name"]
+            for constraint in inspect(connection).get_unique_constraints(table_name)
+        }
+        if constraint_name in unique_constraints:
+            operations.drop_constraint(constraint_name, table_name, type_="unique")
 
 
 def _seed_source_lot(connection) -> None:
@@ -148,8 +158,31 @@ def _seed_source_lot(connection) -> None:
     connection.execute(
         text(
             """
+            INSERT INTO portfolios (
+                portfolio_id, tenant_id, legal_book_id, base_currency, open_date,
+                risk_exposure, investment_time_horizon, portfolio_type,
+                booking_center_code, client_id, is_leverage_allowed, status
+            ) VALUES (
+                'AMORT_PORTFOLIO_ALT', 'TENANT_SG', 'BOOK_SG_PB', 'SGD',
+                DATE '2026-01-01', 'MODERATE', 'LONG_TERM', 'ADVISORY',
+                'SG', 'CLIENT_002', FALSE, 'ACTIVE'
+            )
+            """
+        )
+    )
+    connection.execute(
+        text(
+            """
             INSERT INTO instruments (security_id, name, isin, currency, product_type)
             VALUES ('AMORT_BOND_001', 'Amortization Test Bond', 'XS000AMORT001', 'SGD', 'BOND')
+            """
+        )
+    )
+    connection.execute(
+        text(
+            """
+            INSERT INTO instruments (security_id, name, isin, currency, product_type)
+            VALUES ('AMORT_BOND_ALT', 'Alternate Test Bond', 'XS000AMORT002', 'SGD', 'BOND')
             """
         )
     )
@@ -189,6 +222,10 @@ def _valid_profile() -> dict[str, object]:
     return {
         "profile_version": 1,
         "tenant_id": "TENANT_SG",
+        "legal_book_id": "BOOK_SG_PB",
+        "portfolio_id": "AMORT_PORTFOLIO",
+        "security_id": "AMORT_BOND_001",
+        "lot_id": "AMORT_LOT_001",
         "status": "ACTIVE",
         "eligibility_reason": None,
         "policy_id": "IFRS9_EIR_LOCAL",
@@ -245,6 +282,10 @@ def test_lot_amortized_cost_profiles_apply_roll_back_and_enforce_ledgers(
 
         invalid_profiles = [
             {"tenant_id": " TENANT_SG ", "profile_version": 2},
+            {"tenant_id": "TENANT_ALT", "profile_version": 2},
+            {"legal_book_id": "BOOK_ALT", "profile_version": 2},
+            {"portfolio_id": "AMORT_PORTFOLIO_ALT", "profile_version": 2},
+            {"security_id": "AMORT_BOND_ALT", "profile_version": 2},
             {"profile_version": 0},
             {"profile_version": 2, "status": "DELETED"},
             {"profile_version": 2, "currency": "sgd"},

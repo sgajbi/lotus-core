@@ -990,7 +990,8 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
 
 - **Integrity**: `open_quantity >= 0`, `open_quantity <= original_quantity`,
   `lot_cost_local >= 0`, and `lot_cost_base >= 0`. Combined quantity checks also imply a
-  nonnegative original quantity.
+  nonnegative original quantity. Unique `(lot_id, portfolio_id, security_id)` supports exact-scope
+  references from dependent accounting ledgers.
 
 ## `lot_amortized_cost_profiles`
 
@@ -999,8 +1000,9 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
   exact tenant/legal-book/portfolio/security/lot scope, source references, calculation lineage,
   authority/content hashes, and reconciled monetary summary. This staged ledger does not replace
   original or tax basis in `position_lot_state` and does not by itself enable runtime bookability.
-- **Relationships**: `portfolio_id` -> `portfolios.portfolio_id`; `security_id` ->
-  `instruments.security_id`; `lot_id` -> `position_lot_state.lot_id`.
+- **Relationships**: `(tenant_id, legal_book_id, portfolio_id)` -> the matching scoped portfolio;
+  `(lot_id, portfolio_id, security_id)` -> the matching source lot; `security_id` ->
+  `instruments.security_id`.
 - **Usage (modules/features)**:
   `src/services/portfolio_transaction_processing_service/app/infrastructure/fixed_income_book_cost/profile_repository.py`.
 - **Typical access patterns**: Locked contiguous append by stable `profile_id`; latest exact-scope
@@ -1008,7 +1010,8 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
 - **Integrity**: Unique `(profile_id, profile_version)`; normalized nonblank scope; positive
   versions; governed lifecycle/direction/currency; finite and nonnegative monetary boundaries;
   SHA-256 authority/profile hashes; non-empty source array and complete economics/lineage for
-  active profiles; no invented economics for parked/ineligible profiles.
+  active profiles; no invented economics for parked/ineligible profiles. Composite foreign keys
+  prevent a profile from combining a portfolio book scope with a different source lot or security.
 - **Key columns**: `profile_id`, `profile_version`, exact scope fields, `effective_date`, `status`,
   `eligibility_reason`, policy/schedule identity, currency/direction, initial/redemption/final cost,
   residual, authority hash, source references, calculation lineage, profile hash, and `created_at`.
