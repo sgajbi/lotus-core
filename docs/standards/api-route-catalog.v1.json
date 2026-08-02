@@ -2602,6 +2602,61 @@
     {
       "service_app": "ingestion_service",
       "method": "POST",
+      "path": "/ingest/fixed-income-book-cost-authorities",
+      "route_key": "POST /ingest/fixed-income-book-cost-authorities",
+      "operation_id": "ingest_fixed_income_book_cost_authorities_ingest_fixed_income_book_cost_authorities_post",
+      "summary": "Ingest fixed-income book-cost authority",
+      "tags": [
+        "Fixed-Income Book Cost"
+      ],
+      "route_family": "Write Ingress",
+      "api_version": "unversioned-current",
+      "api_status": "active",
+      "owner": "ingestion_service",
+      "auth_requirement": "governed-enterprise-readiness",
+      "audit_requirement": "audit-required",
+      "request_schema": "FixedIncomeBookCostAuthorityIngestionRequest",
+      "response_schemas": [
+        {
+          "status_code": "202",
+          "schema": "BatchIngestionAcceptedResponse",
+          "description": "Successful Response"
+        }
+      ],
+      "error_models": [
+        {
+          "status_code": "409",
+          "schema": "none",
+          "description": "The idempotency key conflicts with another payload, or the matching request has not reached a replay-safe state."
+        },
+        {
+          "status_code": "422",
+          "schema": "HTTPValidationError",
+          "description": "Validation Error"
+        },
+        {
+          "status_code": "503",
+          "schema": "none",
+          "description": "Ingestion is unavailable because operating mode blocks writes or Kafka publish failed."
+        }
+      ],
+      "pagination": [],
+      "filtering": [],
+      "sorting": [],
+      "idempotency_behavior": "idempotency-key-aware",
+      "downstream_consumers": [
+        "source-adapters",
+        "operations"
+      ],
+      "deprecated_alias_metadata": {
+        "is_deprecated": false,
+        "sunset": null,
+        "compatibility": "not_applicable"
+      }
+    },
+    {
+      "service_app": "ingestion_service",
+      "method": "POST",
       "path": "/ingest/fx-rates",
       "route_key": "POST /ingest/fx-rates",
       "operation_id": "ingest_fx_rates_ingest_fx_rates_post",
@@ -10022,6 +10077,61 @@
       "filtering": [
         "portfolio_id",
         "security_id"
+      ],
+      "sorting": [],
+      "idempotency_behavior": "safe-read",
+      "downstream_consumers": [
+        "lotus-gateway",
+        "lotus-workbench",
+        "lotus-report"
+      ],
+      "deprecated_alias_metadata": {
+        "is_deprecated": false,
+        "sunset": null,
+        "compatibility": "not_applicable"
+      }
+    },
+    {
+      "service_app": "query_service",
+      "method": "GET",
+      "path": "/portfolios/{portfolio_id}/positions/{security_id}/lots/{lot_id}/book-cost",
+      "route_key": "GET /portfolios/{portfolio_id}/positions/{security_id}/lots/{lot_id}/book-cost",
+      "operation_id": "get_fixed_income_book_cost_as_of_portfolios__portfolio_id__positions__security_id__lots__lot_id__book_cost_get",
+      "summary": "Get fixed-income lot book cost as of a date",
+      "tags": [
+        "Fixed-Income Book Cost"
+      ],
+      "route_family": "Operational Read",
+      "api_version": "unversioned-current",
+      "api_status": "active",
+      "owner": "query_service",
+      "auth_requirement": "not-declared-in-openapi",
+      "audit_requirement": "read-audit-where-policy-requires",
+      "request_schema": null,
+      "response_schemas": [
+        {
+          "status_code": "200",
+          "schema": "FixedIncomeBookCostAsOfResponse",
+          "description": "Successful Response"
+        }
+      ],
+      "error_models": [
+        {
+          "status_code": "404",
+          "schema": "none",
+          "description": "No profile is effective for the exact source-lot scope and date."
+        },
+        {
+          "status_code": "422",
+          "schema": "HTTPValidationError",
+          "description": "Validation Error"
+        }
+      ],
+      "pagination": [],
+      "filtering": [
+        "portfolio_id",
+        "security_id",
+        "as_of_date"
       ],
       "sorting": [],
       "idempotency_behavior": "safe-read",
