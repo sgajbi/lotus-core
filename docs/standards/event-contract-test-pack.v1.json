@@ -82,17 +82,25 @@
     "fixed_income_book_cost_authority_contract": {
       "producer_evidence": [
         "tests/unit/services/ingestion_service/test_fixed_income_book_cost_authority_dto.py",
+        "tests/unit/services/ingestion_service/services/test_fixed_income_book_cost_authority_publisher.py",
         "tests/unit/libs/portfolio-common/event_contracts/test_fixed_income_book_cost.py"
       ],
       "consumer_evidence": [
         "tests/unit/services/portfolio_transaction_processing_service/domain/fixed_income_book_cost/test_source_facts.py",
+        "tests/unit/services/portfolio_transaction_processing_service/application/fixed_income_book_cost/test_authority_event_mapping.py",
+        "tests/unit/services/portfolio_transaction_processing_service/application/fixed_income_book_cost/test_authority_event_orchestration.py",
+        "tests/unit/services/portfolio_transaction_processing_service/delivery/kafka/test_fixed_income_book_cost_authority_consumer.py",
+        "tests/unit/services/portfolio_transaction_processing_service/runtime/test_consumer_composition.py",
         "tests/unit/libs/portfolio-common/test_event_supportability.py"
       ],
       "header_and_lineage_evidence": [
         "tests/unit/libs/portfolio-common/event_contracts/test_fixed_income_book_cost.py",
-        "tests/unit/libs/portfolio-common/domain/eventing/test_partitioning.py"
+        "tests/unit/libs/portfolio-common/domain/eventing/test_partitioning.py",
+        "tests/unit/services/ingestion_service/services/test_fixed_income_book_cost_authority_publisher.py",
+        "tests/unit/services/portfolio_transaction_processing_service/delivery/kafka/test_fixed_income_book_cost_authority_consumer.py"
       ],
       "dlq_replay_evidence": [
+        "tests/unit/services/portfolio_transaction_processing_service/delivery/kafka/test_fixed_income_book_cost_authority_consumer.py",
         "tests/unit/libs/portfolio-common/test_kafka_consumer.py",
         "tests/integration/tools/test_dlq_replayer.py"
       ]
