@@ -9,6 +9,7 @@ from .booked_transaction_replay_request_mapper import (
     map_booked_transaction_replay_request,
     parse_booked_transaction_replay_request,
 )
+from .fixed_income_book_cost_authority_consumer import FixedIncomeBookCostAuthorityConsumer
 from .transaction_event_mapper import map_transaction_event, to_transaction_event
 from .transaction_processing_consumer import TransactionProcessingConsumer
 
@@ -16,6 +17,7 @@ __all__ = [
     "BookedTransactionReplayRequest",
     "BookedTransactionReplayRequestConsumer",
     "BookedTransactionReplayRequestPayloadError",
+    "FixedIncomeBookCostAuthorityConsumer",
     "TransactionProcessingConsumer",
     "map_booked_transaction_replay_request",
     "map_transaction_event",
