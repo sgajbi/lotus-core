@@ -2,7 +2,7 @@
   "schema_version": "2.0.0",
   "model_path": "src/libs/portfolio-common/portfolio_common/database_models.py",
   "expected_inventory": {
-    "numeric_columns": 129,
+    "numeric_columns": 131,
     "tables": 35
   },
   "profiles": {
@@ -270,6 +270,8 @@
       "lot_cost_base": {"profile": "nonnegative-finite", "rollout_status": "orm-enforced"},
       "accrued_interest_paid_local": {"profile": "nonnegative-finite", "rollout_status": "orm-enforced"},
       "amortized_cost_scheduled_local": {"profile": "nullable-nonnegative-finite", "rollout_status": "orm-enforced"},
+      "amortized_book_carrying_local": {"profile": "nullable-nonnegative-finite", "rollout_status": "orm-enforced"},
+      "amortized_book_carrying_base": {"profile": "nullable-nonnegative-finite", "rollout_status": "orm-enforced"},
       "amortized_cost_book_fx_rate_to_base": {"profile": "nullable-positive-finite", "rollout_status": "orm-enforced"}
     },
     "lot_disposal_receipts": {

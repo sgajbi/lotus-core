@@ -124,13 +124,16 @@ period's input/output evidence. The repository serializes profile streams, requi
 versions, treats an exact retry as unchanged, and fails closed on altered persisted evidence.
 An application materializer reloads source authority only after acquiring the profile lock, appends
 active profiles only when complete authority resolves, and persists a parked reason when it does
-not. These internal ledgers do not yet make amortized cost, disposal at current book cost, or
-redemption a supported runtime capability; `position_lot_state` remains the original/tax basis
-authority.
+not. `position_lot_state.lot_cost_local` and `lot_cost_base` remain strategy/tax acquisition basis.
+Optional `amortized_book_carrying_local` and `amortized_book_carrying_base` fields separately retain
+accounting carry with complete profile, recognition-boundary, schedule, FX, and calculation-lineage
+evidence. These internal structures do not yet make amortized cost, disposal at current book cost,
+or redemption a supported runtime capability; production activation remains blocked on governed
+correction replay and certification.
 
 Financial `NUMERIC` persistence has an explicit finite-value policy. The machine-readable inventory
-in `docs/standards/financial-numeric-persistence.v1.json` classifies all 110 ORM numeric columns
-across 33 tables by nullability and signed, positive, or nonnegative semantics; every entry is
+in `docs/standards/financial-numeric-persistence.v1.json` classifies all 131 ORM numeric columns
+across 35 tables by nullability and signed, positive, or nonnegative semantics; every entry is
 enforced. Source facts, client policy, position state, transaction economics, cashflows, derived
 timeseries, and reconciliation reject PostgreSQL `NaN`, `Infinity`, and `-Infinity`. Sign checks
 remain independent so legitimate signed cashflow, return, cost, market-value, and P&L fields are

@@ -963,7 +963,9 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
 ## `position_lot_state`
 
 - **Purpose**: Durable lot inventory state.
-- **Description**: Lot-level state for cost basis/disposition and lifecycle traceability.
+- **Description**: Lot-level state for cost basis/disposition and lifecycle traceability. Strategy
+  and tax acquisition basis remain in `lot_cost_local` and `lot_cost_base`; optional fixed-income
+  accounting carrying amounts are persisted independently and never replace those basis fields.
 - **Relationships**: `source_transaction_id` -> `transactions.transaction_id`; `portfolio_id` -> `portfolios.portfolio_id`
 - **Usage (modules/features)**: `src/services/query_service/app/repositories/buy_state_repository.py`, `src/services/portfolio_transaction_processing_service/app/infrastructure/cost_basis/lot_state_repository.py`
 - **Typical access patterns**: As-of/date-range reads, idempotent upserts for event processing, status-filtered job polling where applicable.
@@ -980,6 +982,14 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
   - `lot_cost_local` (Numeric): Numeric financial measure used in valuation, cost, or analytics calculations.
   - `lot_cost_base` (Numeric): Numeric financial measure used in valuation, cost, or analytics calculations.
   - `accrued_interest_paid_local` (Numeric): Domain attribute used by the owning module.
+  - `amortized_cost_profile_id` (String, nullable): Profile governing the current accounting carry.
+  - `amortized_cost_profile_version` (Integer, nullable): Positive immutable profile version.
+  - `amortized_cost_profile_content_hash` (String, nullable): Verified profile content identity.
+  - `amortized_cost_recognized_through` (Date, nullable): Last recognized schedule boundary.
+  - `amortized_cost_scheduled_local` (Numeric, nullable): Scheduled local carrying amount at that boundary.
+  - `amortized_book_carrying_local` (Numeric, nullable): Residual accounting carrying amount in local currency.
+  - `amortized_book_carrying_base` (Numeric, nullable): Residual accounting carrying amount in book base currency.
+  - `amortized_cost_book_fx_rate_to_base` (Numeric, nullable): Governed book-cost FX rate.
   - `economic_event_id` (String): Identifier for economic event.
   - `linked_transaction_group_id` (String): Identifier for linked transaction group.
   - `calculation_policy_id` (String): Identifier for calculation policy.
@@ -991,7 +1001,9 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
 - **Integrity**: `open_quantity >= 0`, `open_quantity <= original_quantity`,
   `lot_cost_local >= 0`, and `lot_cost_base >= 0`. Combined quantity checks also imply a
   nonnegative original quantity. Unique `(lot_id, portfolio_id, security_id)` supports exact-scope
-  references from dependent accounting ledgers.
+  references from dependent accounting ledgers. Amortized-cost state is all-null or complete;
+  amounts are finite and nonnegative, the FX rate is finite and positive, and closed lots cannot
+  retain accounting carry.
 
 ## `lot_amortized_cost_authority`
 

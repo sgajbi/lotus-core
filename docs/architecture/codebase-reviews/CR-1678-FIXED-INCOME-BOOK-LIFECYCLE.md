@@ -75,6 +75,12 @@ outputs are canonicalized to the governed scale before hashing; derived year fra
 remain exact-unbounded because truncating working-precision evidence would invalidate lineage.
 Composite portfolio-book and source-lot foreign keys prevent cross-book or cross-security scope
 fabrication even through direct database writes.
+The open-lot projection now keeps accounting carrying amount in independent local/base fields.
+Disposal projection and basis-only mutations change or retain that accounting carry without
+rewriting `lot_cost_local` or `lot_cost_base`, which remain strategy/tax acquisition basis. The
+additive migration backfills complete pre-existing carry rows from their former combined amounts;
+production activation still requires the correction-triggered replay and downstream certification
+tracked by #903/#478, so this schema separation does not claim current-book disposal support.
 An additive `lot_amortized_cost_authority` ledger and application port now persist and reload all
 four required source families through one governed pattern. Per-source transaction locks,
 monotonic correction versions, exact-retry neutrality, canonical decimal/date payloads, composite
@@ -210,6 +216,10 @@ Data Models wiki documents the staged ledgers while the capability wiki remains
   neutrality, correction, void, reactivation, predecessor/hash verification, allocation-tamper
   rejection, atomic unit-of-work ordering, and initial-void neutrality; repository-native lint and
   MyPy (273 sources) passed.
+- signed book-carry separation commits `6643a4773` and `68ceb2786`; 121 warning-strict focused
+  domain/application/repository/migration tests cover independent tax and accounting amounts,
+  incremental and terminal disposal, basis-only carry retention, persistence reconstruction,
+  lineage, and reversible migration; migration smoke, Ruff, and MyPy (275 sources) passed.
 
 Protected PR and exact-main evidence remain pending for this tranche. Runtime recovery/replay and
 load proof, verified query reconstruction, transfer/corporate-action lineage, redemption, and final
