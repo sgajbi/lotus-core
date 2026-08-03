@@ -18,6 +18,7 @@ from ...ports import (
     CostBasisPersistenceStatus,
     CostBasisTransactionStatePort,
 )
+from .persistence_scope import affected_transaction_suffix
 
 
 async def persist_cost_basis_transactions(
@@ -31,20 +32,13 @@ async def persist_cost_basis_transactions(
 ) -> tuple[BookedTransaction, ...]:
     """Persist the affected timeline suffix and return newly processed transactions."""
 
-    first_affected_index = next(
-        (
-            index
-            for index, transaction in enumerate(processed)
-            if transaction.transaction_id in incoming_transaction_ids
-        ),
-        None,
-    )
-    if first_affected_index is None:
-        raise ValueError("Processed transaction timeline omitted the incoming transaction")
-
     persistence_observer = observer or _NullCostBasisPersistenceObserver()
     newly_persisted: list[BookedTransaction] = []
-    for transaction in processed[first_affected_index:]:
+    affected_transactions = affected_transaction_suffix(
+        processed=processed,
+        incoming_transaction_ids=incoming_transaction_ids,
+    )
+    for transaction in affected_transactions:
         persisted = await _persist_cost_basis_transaction(
             transaction=transaction,
             transactions=transactions,
