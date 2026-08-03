@@ -431,17 +431,14 @@ class SqlAlchemyAverageCostPoolRepository:
                 ).where(*non_residual_predicates)
             )
         ).one()
-        residual_state = OpenLotState(
-            quantity=after.quantity - allocated_quantity,
-            cost_local=after.cost_local - allocated_cost_local,
-            cost_base=after.cost_base - allocated_cost_base,
+        residual_values = (
+            after.quantity - allocated_quantity,
+            after.cost_local - allocated_cost_local,
+            after.cost_base - allocated_cost_base,
         )
-        if (
-            residual_state.quantity < Decimal(0)
-            or residual_state.cost_local < Decimal(0)
-            or residual_state.cost_base < Decimal(0)
-        ):
+        if any(value < Decimal(0) for value in residual_values):
             raise ValueError("Average cost source allocation exceeds the target pool aggregate")
+        residual_state = OpenLotState(*residual_values)
         residual_result = await self._session.execute(
             update(PositionLotState)
             .where(

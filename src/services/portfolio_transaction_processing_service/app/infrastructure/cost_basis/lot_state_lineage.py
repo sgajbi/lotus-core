@@ -21,6 +21,11 @@ LOT_STATE_LINEAGE_OUTPUT_FIELDS = (
     "calculation_policy_id",
     "calculation_policy_version",
     "source_system",
+    "amortized_cost_profile_id",
+    "amortized_cost_profile_version",
+    "amortized_cost_profile_content_hash",
+    "amortized_cost_recognized_through",
+    "amortized_cost_scheduled_local",
 )
 
 

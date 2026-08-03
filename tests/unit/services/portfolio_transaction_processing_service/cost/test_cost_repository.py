@@ -17,6 +17,7 @@ from portfolio_common.domain.transaction.numeric_policy import (
 from sqlalchemy.dialects import postgresql
 
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (  # noqa: E501  # noqa: E501
+    AmortizedCostCarryState,
     AverageCostPoolCheckpoint,
     AverageCostPoolRebuildPlan,
     AverageCostPoolTransition,
@@ -231,6 +232,11 @@ async def test_get_open_lot_checkpoint_records_returns_only_positive_lots() -> N
         open_quantity=Decimal("4"),
         lot_cost_local=Decimal("400"),
         lot_cost_base=Decimal("420"),
+        amortized_cost_profile_id="PROFILE-1",
+        amortized_cost_profile_version=2,
+        amortized_cost_profile_content_hash="a" * 64,
+        amortized_cost_recognized_through=date(2026, 6, 30),
+        amortized_cost_scheduled_local=Decimal("970"),
     )
     execute_result = MagicMock()
     execute_result.all.return_value = [(lot, transaction)]
@@ -247,6 +253,13 @@ async def test_get_open_lot_checkpoint_records_returns_only_positive_lots() -> N
     assert records[0].quantity == Decimal("4")
     assert records[0].cost_local == Decimal("400")
     assert records[0].cost_base == Decimal("420")
+    assert records[0].amortized_cost == AmortizedCostCarryState(
+        profile_id="PROFILE-1",
+        profile_version=2,
+        profile_content_hash="a" * 64,
+        recognized_through_date=date(2026, 6, 30),
+        scheduled_cost_local=Decimal("970"),
+    )
     compiled_query = str(
         db_session.execute.call_args.args[0].compile(compile_kwargs={"literal_binds": True})
     )
@@ -255,6 +268,39 @@ async def test_get_open_lot_checkpoint_records_returns_only_positive_lots() -> N
         "ORDER BY transactions.transaction_date ASC, transactions.quantity DESC, "
         "transactions.transaction_id ASC"
     ) in compiled_query
+
+
+async def test_get_open_lot_checkpoint_rejects_partial_amortized_carry_state() -> None:
+    db_session = AsyncMock()
+    transaction = DBTransaction(
+        transaction_id="BUY01",
+        portfolio_id="PORT_COST_01",
+        instrument_id="SEC01",
+        security_id="SEC01",
+        transaction_type="BUY",
+        transaction_date=datetime(2026, 1, 1, 10, 0, 0, tzinfo=UTC),
+        quantity=Decimal("10"),
+        price=Decimal("100"),
+        gross_transaction_amount=Decimal("1000"),
+        trade_currency="USD",
+        currency="USD",
+    )
+    lot = _persisted_source_lot(
+        "BUY01",
+        quantity="4",
+        cost_local="400",
+        cost_base="420",
+    )
+    lot.amortized_cost_profile_id = "PROFILE-1"
+    execute_result = MagicMock()
+    execute_result.all.return_value = [(lot, transaction)]
+    db_session.execute.return_value = execute_result
+
+    with pytest.raises(ValueError, match="partial amortized-cost carry state"):
+        await SqlAlchemyCostBasisLotRepository(db_session).get_open_lot_checkpoint_records(
+            portfolio_id="PORT_COST_01",
+            security_id="SEC01",
+        )
 
 
 async def test_get_average_cost_pool_checkpoint_maps_aggregate_and_source_lineage() -> None:
@@ -1073,6 +1119,11 @@ async def test_update_open_lot_states_trims_ids_and_reconciles_quantity_and_cost
         open_quantity=Decimal("5"),
         lot_cost_local=Decimal("500"),
         lot_cost_base=Decimal("500"),
+        amortized_cost_profile_id="PROFILE-OLD",
+        amortized_cost_profile_version=1,
+        amortized_cost_profile_content_hash="b" * 64,
+        amortized_cost_recognized_through=date(2026, 6, 30),
+        amortized_cost_scheduled_local=Decimal("500"),
     )
     execute_result = MagicMock()
     execute_result.scalars.return_value.all.return_value = [lot_row, closed_lot_row]
@@ -1086,6 +1137,13 @@ async def test_update_open_lot_states_trims_ids_and_reconciles_quantity_and_cost
                 quantity=Decimal("4"),
                 cost_local=Decimal("400"),
                 cost_base=Decimal("420"),
+                amortized_cost=AmortizedCostCarryState(
+                    profile_id="PROFILE-1",
+                    profile_version=2,
+                    profile_content_hash="a" * 64,
+                    recognized_through_date=date(2026, 6, 30),
+                    scheduled_cost_local=Decimal("970"),
+                ),
             )
         },
         transition_evidence=_transition_evidence(),
@@ -1094,10 +1152,14 @@ async def test_update_open_lot_states_trims_ids_and_reconciles_quantity_and_cost
     assert lot_row.open_quantity == Decimal("4")
     assert lot_row.lot_cost_local == Decimal("400")
     assert lot_row.lot_cost_base == Decimal("420")
+    assert lot_row.amortized_cost_profile_id == "PROFILE-1"
+    assert lot_row.amortized_cost_scheduled_local == Decimal("970")
     assert lot_row.calculation_lineage["algorithm_id"] == ("cost-basis-complete-lot-snapshot")
     assert closed_lot_row.open_quantity == Decimal("0")
     assert closed_lot_row.lot_cost_local == Decimal("0")
     assert closed_lot_row.lot_cost_base == Decimal("0")
+    assert closed_lot_row.amortized_cost_profile_id is None
+    assert closed_lot_row.amortized_cost_scheduled_local is None
     assert closed_lot_row.calculation_lineage["numeric_output_policy"]["name"] == (
         "cost-basis-state-ledger-output"
     )
