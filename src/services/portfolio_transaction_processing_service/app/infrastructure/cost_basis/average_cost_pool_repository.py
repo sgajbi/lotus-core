@@ -33,6 +33,7 @@ from ...domain.cost_basis.state_lineage import (
 from ...ports import AverageCostPoolCheckpointRecord, AverageCostPoolPersistedSummary
 from ..transaction_mapping.booked_transaction import to_booked_transaction
 from .lot_state_lineage import (
+    LOT_STATE_LINEAGE_OUTPUT_FIELDS,
     lot_state_lineage_output_from_mapping,
     lot_state_lineage_output_from_row,
 )
@@ -281,22 +282,10 @@ class SqlAlchemyAverageCostPoolRepository:
         source_rows = (
             await self._session.execute(
                 select(
-                    PositionLotState.source_transaction_id,
-                    PositionLotState.lot_id,
-                    PositionLotState.portfolio_id,
-                    PositionLotState.instrument_id,
-                    PositionLotState.security_id,
-                    PositionLotState.acquisition_date,
-                    PositionLotState.original_quantity,
-                    PositionLotState.open_quantity,
-                    PositionLotState.lot_cost_local,
-                    PositionLotState.lot_cost_base,
-                    PositionLotState.accrued_interest_paid_local,
-                    PositionLotState.economic_event_id,
-                    PositionLotState.linked_transaction_group_id,
-                    PositionLotState.calculation_policy_id,
-                    PositionLotState.calculation_policy_version,
-                    PositionLotState.source_system,
+                    *(
+                        getattr(PositionLotState, field)
+                        for field in LOT_STATE_LINEAGE_OUTPUT_FIELDS
+                    ),
                     PositionLotState.calculation_lineage,
                 )
                 .where(
