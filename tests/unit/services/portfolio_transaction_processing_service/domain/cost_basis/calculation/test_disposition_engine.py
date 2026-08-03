@@ -217,6 +217,42 @@ def test_successful_disposal_is_recorded_and_filterable(
     assert disposition_engine.disposal_records() == ()
 
 
+def test_disposal_lifecycle_normalizes_transaction_identity(
+    disposition_engine: LotDispositionEngine,
+    mock_strategy: MagicMock,
+    sample_transaction: CostBasisTransaction,
+) -> None:
+    allocation = SourceLotDisposalAllocation(
+        source_lot_id="LOT-BUY_001",
+        source_transaction_id="BUY_001",
+        source_acquisition_date=date(2022, 1, 1),
+        allocation_ordinal=1,
+        consumed_quantity=Decimal("10"),
+        consumed_cost_local=Decimal("105"),
+        consumed_cost_base=Decimal("105"),
+    )
+    result = LotDisposalResult(
+        cost_base=Decimal("105"),
+        cost_local=Decimal("105"),
+        consumed_quantity=Decimal("10"),
+        allocations=(allocation,),
+    )
+    mock_strategy.consume_sell_quantity_with_allocations.return_value = result
+    transaction = sample_transaction.model_copy(update={"transaction_id": "  SELL_001  "})
+
+    disposition_engine.consume_sell_quantity_with_allocations(transaction)
+    disposition_engine.commit_disposal_record(transaction.transaction_id)
+
+    records = disposition_engine.disposal_records(transaction_ids={transaction.transaction_id})
+    assert tuple(record.disposal_transaction_id for record in records) == ("SELL_001",)
+
+    disposition_engine.clear_disposal_records()
+    disposition_engine.consume_sell_quantity_with_allocations(transaction)
+    disposition_engine.discard_pending_disposal(transaction.transaction_id)
+    disposition_engine.commit_disposal_record("SELL_001")
+    assert disposition_engine.disposal_records() == ()
+
+
 def test_set_initial_lots_delegates_to_strategy(
     disposition_engine: LotDispositionEngine,
     mock_strategy: MagicMock,

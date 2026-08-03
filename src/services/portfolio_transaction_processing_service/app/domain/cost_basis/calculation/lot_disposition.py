@@ -15,6 +15,15 @@ def _is_buy_transaction(transaction: CostBasisTransaction) -> bool:
     return str(transaction.transaction_type or "").strip().upper() == "BUY"
 
 
+def _normalized_transaction_id(transaction_id: str) -> str:
+    if not isinstance(transaction_id, str):
+        raise TypeError("transaction_id must be a string")
+    normalized = transaction_id.strip()
+    if not normalized:
+        raise ValueError("transaction_id must be nonblank")
+    return normalized
+
+
 class LotDispositionEngine:
     """
     Manages 'cost lots', delegating calculation logic to a specific strategy.
@@ -67,14 +76,20 @@ class LotDispositionEngine:
     def commit_disposal_record(self, transaction_id: str) -> None:
         """Publish staged evidence only after the complete transaction calculation succeeds."""
 
-        pending = self._pending_disposals_by_transaction_id.pop(transaction_id, None)
+        pending = self._pending_disposals_by_transaction_id.pop(
+            _normalized_transaction_id(transaction_id),
+            None,
+        )
         if pending is not None:
             self._record_disposal(pending)
 
     def discard_pending_disposal(self, transaction_id: str) -> None:
         """Discard evidence for a rejected or interrupted transaction calculation."""
 
-        self._pending_disposals_by_transaction_id.pop(transaction_id, None)
+        self._pending_disposals_by_transaction_id.pop(
+            _normalized_transaction_id(transaction_id),
+            None,
+        )
 
     def disposal_records(
         self,
@@ -83,10 +98,15 @@ class LotDispositionEngine:
     ) -> tuple[TransactionLotDisposal, ...]:
         """Return recorded successful disposals in calculation order."""
 
+        normalized_transaction_ids = (
+            None
+            if transaction_ids is None
+            else {_normalized_transaction_id(transaction_id) for transaction_id in transaction_ids}
+        )
         return tuple(
             disposal
             for transaction_id, disposal in self._disposals_by_transaction_id.items()
-            if transaction_ids is None or transaction_id in transaction_ids
+            if normalized_transaction_ids is None or transaction_id in normalized_transaction_ids
         )
 
     def clear_disposal_records(self) -> None:
