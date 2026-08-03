@@ -43,6 +43,7 @@ from ..cost_basis import (
     SqlAlchemyCostBasisTransactionRepository,
     TransactionalCostProcessingEffectStager,
 )
+from ..fixed_income_book_cost import SqlAlchemyLotAmortizedCostProfileRepository
 from ..idempotency import SqlAlchemyTransactionIdempotencyAdapter
 from ..income import SqlAlchemyAccruedIncomeOffsetRepository
 from ..position import (
@@ -128,6 +129,7 @@ class SqlAlchemyTransactionProcessingUnitOfWork:
             average_cost_pools=SqlAlchemyAverageCostPoolRepository(session),
             lot_disposals=SqlAlchemyCostBasisLotDisposalRepository(session),
             lot_states=SqlAlchemyCostBasisLotRepository(session),
+            amortized_cost_profiles=SqlAlchemyLotAmortizedCostProfileRepository(session),
             income_offsets=SqlAlchemyAccruedIncomeOffsetRepository(session),
             reference_data=SqlAlchemyCostBasisReferenceDataRepository(session),
             fx_rates=SqlAlchemyCostBasisFxRateRepository(session),

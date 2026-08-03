@@ -24,6 +24,7 @@ from ...ports import (
     CostBasisTransactionStatePort,
     CostProcessingEffectStagingPort,
     CostProcessingResult,
+    LotAmortizedCostProfilePort,
 )
 
 
@@ -42,6 +43,7 @@ class CostBasisProcessingAdapter:
         average_cost_pools: CostBasisAverageCostPoolPort,
         lot_disposals: CostBasisLotDisposalPort,
         lot_states: CostBasisLotStatePort,
+        amortized_cost_profiles: LotAmortizedCostProfilePort,
         income_offsets: AccruedIncomeOffsetStatePort,
         reference_data: CostBasisReferenceDataPort,
         fx_rates: CostBasisFxRatePort,
@@ -54,6 +56,7 @@ class CostBasisProcessingAdapter:
         self._average_cost_pools = average_cost_pools
         self._lot_disposals = lot_disposals
         self._lot_states = lot_states
+        self._amortized_cost_profiles = amortized_cost_profiles
         self._income_offsets = income_offsets
         self._reference_data = reference_data
         self._fx_rates = fx_rates
@@ -91,6 +94,7 @@ class CostBasisProcessingAdapter:
             average_cost_pools=self._average_cost_pools,
             lot_disposals=self._lot_disposals,
             lot_states=self._lot_states,
+            amortized_cost_profiles=self._amortized_cost_profiles,
             income_offsets=self._income_offsets,
             fx_rates=self._fx_rates,
             processing_state=self._processing_state,

@@ -28,8 +28,10 @@ from ...ports import (
     CostBasisTransactionStatePort,
     CostProcessingEffectStagingPort,
     CostProcessingResult,
+    LotAmortizedCostProfilePort,
 )
 from ..foreign_exchange_processing import book_foreign_exchange_transaction
+from .amortized_disposal import apply_effective_amortized_cost_to_disposals
 from .calculation import CostBasisCalculationCoordinator
 from .disposal_persistence import persist_current_lot_disposals
 from .effect_coordination import coordinate_cost_processing_effects
@@ -62,6 +64,7 @@ class PreparedCostProcessingUseCase:
         average_cost_pools: CostBasisAverageCostPoolPort,
         lot_disposals: CostBasisLotDisposalPort,
         lot_states: CostBasisLotStatePort,
+        amortized_cost_profiles: LotAmortizedCostProfilePort,
         income_offsets: AccruedIncomeOffsetStatePort,
         fx_rates: CostBasisFxRatePort,
         processing_state: CostBasisProcessingStatePort,
@@ -85,6 +88,7 @@ class PreparedCostProcessingUseCase:
                 average_cost_pools=average_cost_pools,
                 lot_disposals=lot_disposals,
                 lot_states=lot_states,
+                amortized_cost_profiles=amortized_cost_profiles,
                 income_offsets=income_offsets,
                 fx_rates=fx_rates,
                 processing_state=processing_state,
@@ -127,6 +131,7 @@ class PreparedCostProcessingUseCase:
         average_cost_pools: CostBasisAverageCostPoolPort,
         lot_disposals: CostBasisLotDisposalPort,
         lot_states: CostBasisLotStatePort,
+        amortized_cost_profiles: LotAmortizedCostProfilePort,
         income_offsets: AccruedIncomeOffsetStatePort,
         fx_rates: CostBasisFxRatePort,
         processing_state: CostBasisProcessingStatePort,
@@ -151,6 +156,12 @@ class PreparedCostProcessingUseCase:
             cost_basis_method=prepared.cost_basis_method,
         )
         _raise_for_calculation_errors(calculation.errored)
+        calculation = await apply_effective_amortized_cost_to_disposals(
+            calculation,
+            portfolio=portfolio,
+            cost_basis_method=prepared.cost_basis_method,
+            profiles=amortized_cost_profiles,
+        )
         persisted_transactions = await persist_cost_basis_transactions(
             processed=calculation.processed,
             incoming_transaction_ids={transaction.transaction_id},
