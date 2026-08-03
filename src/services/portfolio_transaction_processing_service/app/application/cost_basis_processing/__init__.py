@@ -1,5 +1,6 @@
 """Expose application policy for canonical cost-basis processing."""
 
+from .amortized_disposal import apply_effective_amortized_cost_to_disposals
 from .average_cost_pool_rebuild import AverageCostPoolRebuildPlanner
 from .average_cost_pool_reconciliation import (
     ReconcileAverageCostPoolsCommand,
@@ -22,6 +23,7 @@ from .timeline import CostBasisTimelineProcessor, build_cost_basis_timeline_proc
 from .transaction_persistence import persist_cost_basis_transactions
 
 __all__ = [
+    "apply_effective_amortized_cost_to_disposals",
     "AverageCostPoolRebuildPlanner",
     "CostBasisCalculationCoordinator",
     "CostBasisCalculationResult",

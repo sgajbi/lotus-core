@@ -1219,7 +1219,7 @@ class CostBasisCalculator:
                     algorithm_version=1,
                     intermediate_precision=TRANSACTION_COST_LEDGER_OUTPUT_V1.working_precision,
                     input_payload=lineage_input,
-                    output_payload=_transaction_cost_output(transaction),
+                    output_payload=transaction_cost_output_payload(transaction),
                     numeric_output_policy=TRANSACTION_COST_LEDGER_OUTPUT_V1.lineage_identity(),
                 ),
             )
@@ -1265,7 +1265,7 @@ class CostBasisCalculator:
         return strategy
 
 
-def _transaction_cost_output(transaction: CostBasisTransaction) -> dict[str, object]:
+def transaction_cost_output_payload(transaction: CostBasisTransaction) -> dict[str, object]:
     """Return the complete calculated transaction-cost output persisted atomically."""
 
     return {
