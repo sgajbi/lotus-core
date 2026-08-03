@@ -13,6 +13,11 @@ from portfolio_common.domain.transaction.numeric_policy import (
     COST_BASIS_STATE_LEDGER_OUTPUT_V1,
 )
 
+from ..average_cost_allocation_checkpoint import (
+    AverageCostAllocationCheckpoint,
+    AverageCostSourceAccumulator,
+)
+from ..average_cost_pool_checkpoint import AverageCostPoolCheckpoint
 from .lot_state import OpenLotState
 from .residual_allocation import allocate_nonnegative_storage_share
 
@@ -364,6 +369,112 @@ class AverageCostSourceAllocation:
         return tuple(
             (source_transaction_id, self._contributions[source_transaction_id])
             for source_transaction_id in self._active_source_ids_by_key[book_key]
+        )
+
+    def export_checkpoint(
+        self,
+        *,
+        book_key: BookKey,
+        security_id: str,
+        pool: AverageCostPool,
+    ) -> AverageCostAllocationCheckpoint:
+        """Export the exact lazy accumulator needed for deterministic ordered continuation."""
+
+        active_sources = self.active_source_contributions(book_key)
+        representative_source_transaction_id = (
+            active_sources[-1][0] if pool.quantity > Decimal(0) and active_sources else None
+        )
+        pool_checkpoint = AverageCostPoolCheckpoint(
+            portfolio_id=book_key[0],
+            instrument_id=book_key[1],
+            security_id=security_id,
+            representative_source_transaction_id=representative_source_transaction_id,
+            quantity=pool.quantity,
+            cost_local=pool.cost_local,
+            cost_base=pool.cost_base,
+        )
+        is_closed = pool.quantity.is_zero()
+        return AverageCostAllocationCheckpoint(
+            pool=pool_checkpoint,
+            segment_start_quantity=(Decimal(0) if is_closed else pool.segment_start_quantity),
+            segment_start_cost_local=(Decimal(0) if is_closed else pool.segment_start_cost_local),
+            segment_start_cost_base=(Decimal(0) if is_closed else pool.segment_start_cost_base),
+            allocation_generation=self._generation_by_key[book_key],
+            disposal_scale=self._disposal_scale_by_key[book_key],
+            segment_start_scale=self._segment_start_scale_by_key[book_key],
+            cost_local_scale=self._cost_local_scale_by_key[book_key],
+            cost_base_scale=self._cost_base_scale_by_key[book_key],
+            cost_local_generation=self._cost_local_generation_by_key[book_key],
+            cost_base_generation=self._cost_base_generation_by_key[book_key],
+            sources=tuple(
+                AverageCostSourceAccumulator(
+                    source_transaction_id=source_transaction_id,
+                    source_lot_id=contribution.source_lot_id,
+                    source_acquisition_date=contribution.source_acquisition_date,
+                    source_sequence=source_sequence,
+                    generation=contribution.generation,
+                    quantity=contribution.quantity,
+                    cost_local=contribution.cost_local,
+                    cost_base=contribution.cost_base,
+                    disposal_scale_at_entry=contribution.disposal_scale_at_entry,
+                    cost_local_scale_at_entry=contribution.cost_local_scale_at_entry,
+                    cost_base_scale_at_entry=contribution.cost_base_scale_at_entry,
+                    cost_local_generation=contribution.cost_local_generation,
+                    cost_base_generation=contribution.cost_base_generation,
+                )
+                for source_sequence, (source_transaction_id, contribution) in enumerate(
+                    active_sources,
+                    start=1,
+                )
+            ),
+        )
+
+    def restore_checkpoint(
+        self,
+        checkpoint: AverageCostAllocationCheckpoint,
+    ) -> AverageCostPool:
+        """Restore one validated checkpoint into an otherwise empty allocation engine."""
+
+        if self._contributions:
+            raise ValueError("AVCO source-allocation restore requires an empty engine")
+        book_key = (checkpoint.pool.portfolio_id, checkpoint.pool.instrument_id)
+        if book_key in self._source_ids_by_key or book_key in self._active_source_ids_by_key:
+            raise ValueError("AVCO source-allocation checkpoint book already exists")
+
+        source_ids: list[str] = []
+        for source in checkpoint.sources:
+            self._contributions[source.source_transaction_id] = AverageCostSourceContribution(
+                book_key=book_key,
+                source_lot_id=source.source_lot_id,
+                source_acquisition_date=source.source_acquisition_date,
+                generation=source.generation,
+                quantity=source.quantity,
+                cost_local=source.cost_local,
+                cost_base=source.cost_base,
+                disposal_scale_at_entry=source.disposal_scale_at_entry,
+                cost_local_scale_at_entry=source.cost_local_scale_at_entry,
+                cost_base_scale_at_entry=source.cost_base_scale_at_entry,
+                cost_local_generation=source.cost_local_generation,
+                cost_base_generation=source.cost_base_generation,
+            )
+            source_ids.append(source.source_transaction_id)
+        self._source_ids_by_key[book_key] = list(source_ids)
+        self._active_source_ids_by_key[book_key] = list(source_ids)
+        self._generation_by_key[book_key] = checkpoint.allocation_generation
+        self._disposal_scale_by_key[book_key] = checkpoint.disposal_scale
+        self._segment_start_scale_by_key[book_key] = checkpoint.segment_start_scale
+        self._segment_start_quantity_by_key[book_key] = checkpoint.segment_start_quantity
+        self._cost_local_scale_by_key[book_key] = checkpoint.cost_local_scale
+        self._cost_base_scale_by_key[book_key] = checkpoint.cost_base_scale
+        self._cost_local_generation_by_key[book_key] = checkpoint.cost_local_generation
+        self._cost_base_generation_by_key[book_key] = checkpoint.cost_base_generation
+        return AverageCostPool(
+            quantity=checkpoint.pool.quantity,
+            cost_local=checkpoint.pool.cost_local,
+            cost_base=checkpoint.pool.cost_base,
+            segment_start_quantity=checkpoint.segment_start_quantity,
+            segment_start_cost_local=checkpoint.segment_start_cost_local,
+            segment_start_cost_base=checkpoint.segment_start_cost_base,
         )
 
     def _disposal_factor(self, contribution: AverageCostSourceContribution) -> Decimal:
