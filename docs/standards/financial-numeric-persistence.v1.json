@@ -2,8 +2,8 @@
   "schema_version": "2.0.0",
   "model_path": "src/libs/portfolio-common/portfolio_common/database_models.py",
   "expected_inventory": {
-    "numeric_columns": 110,
-    "tables": 33
+    "numeric_columns": 116,
+    "tables": 35
   },
   "profiles": {
     "finite": {
@@ -134,6 +134,8 @@
     "transaction_costs": "transaction-economics",
     "cashflows": "transaction-economics",
     "position_lot_state": "cost-basis-state",
+    "lot_disposal_receipts": "cost-basis-state",
+    "lot_disposal_allocations": "cost-basis-state",
     "cost_basis_processing_state": "cost-basis-state",
     "average_cost_pool_state": "cost-basis-state",
     "accrued_income_offset_state": "cost-basis-state",
@@ -267,6 +269,16 @@
       "lot_cost_local": {"profile": "nonnegative-finite", "rollout_status": "orm-enforced"},
       "lot_cost_base": {"profile": "nonnegative-finite", "rollout_status": "orm-enforced"},
       "accrued_interest_paid_local": {"profile": "nonnegative-finite", "rollout_status": "orm-enforced"}
+    },
+    "lot_disposal_receipts": {
+      "consumed_quantity": {"profile": "nonnegative-finite", "rollout_status": "orm-enforced"},
+      "consumed_cost_local": {"profile": "nonnegative-finite", "rollout_status": "orm-enforced"},
+      "consumed_cost_base": {"profile": "nonnegative-finite", "rollout_status": "orm-enforced"}
+    },
+    "lot_disposal_allocations": {
+      "consumed_quantity": {"profile": "positive-finite", "rollout_status": "orm-enforced"},
+      "consumed_cost_local": {"profile": "nonnegative-finite", "rollout_status": "orm-enforced"},
+      "consumed_cost_base": {"profile": "nonnegative-finite", "rollout_status": "orm-enforced"}
     },
     "cost_basis_processing_state": {
       "latest_quantity": {"profile": "nonnegative-finite", "rollout_status": "orm-enforced"}
