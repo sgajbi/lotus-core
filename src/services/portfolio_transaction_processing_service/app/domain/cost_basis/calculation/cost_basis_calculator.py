@@ -1206,20 +1206,26 @@ class CostBasisCalculator:
         strategy = self._resolve_strategy(transaction.transaction_type, transaction)
         if strategy is None:
             return
-        strategy.calculate_costs(transaction, self._disposition_engine, self._error_reporter)
-        if self._error_reporter.has_errors_for(transaction.transaction_id):
-            return
-        transaction.set_calculated_field(
-            "calculation_lineage",
-            build_calculation_lineage(
-                algorithm_id="transaction-cost-basis-calculation",
-                algorithm_version=1,
-                intermediate_precision=TRANSACTION_COST_LEDGER_OUTPUT_V1.working_precision,
-                input_payload=lineage_input,
-                output_payload=_transaction_cost_output(transaction),
-                numeric_output_policy=TRANSACTION_COST_LEDGER_OUTPUT_V1.lineage_identity(),
-            ),
-        )
+        transaction_id = transaction.transaction_id
+        self._disposition_engine.discard_pending_disposal(transaction_id)
+        try:
+            strategy.calculate_costs(transaction, self._disposition_engine, self._error_reporter)
+            if self._error_reporter.has_errors_for(transaction_id):
+                return
+            transaction.set_calculated_field(
+                "calculation_lineage",
+                build_calculation_lineage(
+                    algorithm_id="transaction-cost-basis-calculation",
+                    algorithm_version=1,
+                    intermediate_precision=TRANSACTION_COST_LEDGER_OUTPUT_V1.working_precision,
+                    input_payload=lineage_input,
+                    output_payload=_transaction_cost_output(transaction),
+                    numeric_output_policy=TRANSACTION_COST_LEDGER_OUTPUT_V1.lineage_identity(),
+                ),
+            )
+            self._disposition_engine.commit_disposal_record(transaction_id)
+        finally:
+            self._disposition_engine.discard_pending_disposal(transaction_id)
 
     def _resolve_strategy(
         self, transaction_type: str, transaction: CostBasisTransaction

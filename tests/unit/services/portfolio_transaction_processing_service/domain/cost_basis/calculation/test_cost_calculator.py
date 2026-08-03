@@ -584,6 +584,9 @@ def test_cash_in_lieu_reconciles_fractional_basis_and_cross_currency_pnl_compone
     assert transaction.realized_fx_pnl_base == Decimal("3.5")
     assert transaction.realized_total_pnl_base == Decimal("13.50")
     mock_disposition_engine.consume_sell_quantity.assert_called_once_with(transaction)
+    mock_disposition_engine.commit_disposal_record.assert_called_once_with(
+        transaction.transaction_id
+    )
 
 
 @pytest.mark.parametrize(
@@ -629,6 +632,8 @@ def test_cash_in_lieu_rejects_consumed_basis_that_disagrees_with_allocated_basis
     assert "consumed local/base basis must equal allocated fractional basis" in (
         error_reporter.get_errors()[0].error_reason
     )
+    mock_disposition_engine.commit_disposal_record.assert_not_called()
+    mock_disposition_engine.discard_pending_disposal.assert_called_with(transaction.transaction_id)
 
 
 @pytest.mark.parametrize(

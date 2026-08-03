@@ -201,6 +201,8 @@ def test_successful_disposal_is_recorded_and_filterable(
     legacy = disposition_engine.consume_sell_quantity(sample_transaction)
 
     assert legacy == expected.legacy_tuple()
+    assert disposition_engine.disposal_records() == ()
+    disposition_engine.commit_disposal_record(sample_transaction.transaction_id)
     records = disposition_engine.disposal_records(
         transaction_ids={sample_transaction.transaction_id}
     )
@@ -208,6 +210,9 @@ def test_successful_disposal_is_recorded_and_filterable(
     assert records[0].disposal_transaction_id == sample_transaction.transaction_id
     assert records[0].result is expected
     assert disposition_engine.disposal_records(transaction_ids={"OTHER"}) == ()
+    disposition_engine.consume_sell_quantity(sample_transaction)
+    disposition_engine.discard_pending_disposal(sample_transaction.transaction_id)
+    assert disposition_engine.disposal_records() == records
     disposition_engine.clear_disposal_records()
     assert disposition_engine.disposal_records() == ()
 
