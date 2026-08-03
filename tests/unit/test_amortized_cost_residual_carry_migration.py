@@ -6,6 +6,7 @@ import runpy
 from pathlib import Path
 from typing import Any
 
+import pytest
 from sqlalchemy import Column
 
 from alembic import op
@@ -101,6 +102,27 @@ def test_residual_carry_migration_is_additive_and_reversible(monkeypatch) -> Non
     check_conditions = [
         str(operation[3]) for operation in operations if operation[0] == "create_check_constraint"
     ]
+    lot_shape = next(
+        str(operation[3])
+        for operation in operations
+        if operation[:3]
+        == (
+            "create_check_constraint",
+            "ck_position_lot_amortized_cost_shape",
+            "position_lot_state",
+        )
+    )
+    for column_name in (
+        "amortized_cost_profile_id",
+        "amortized_cost_profile_version",
+        "amortized_cost_profile_content_hash",
+        "amortized_cost_recognized_through",
+        "amortized_cost_scheduled_local",
+        "amortized_cost_book_fx_rate_to_base",
+    ):
+        assert f"{column_name} IS NULL" in lot_shape
+        assert f"{column_name} IS NOT NULL" in lot_shape
+    assert "OR ()" not in lot_shape
     assert any("amortized_cost_current_base IS NOT NULL" in item for item in check_conditions)
     assert any("amortized_cost_retained_rounding_local" in item for item in check_conditions)
 
@@ -117,3 +139,20 @@ def test_residual_carry_migration_is_additive_and_reversible(monkeypatch) -> Non
         ("position_lot_state", "amortized_cost_profile_version"),
         ("position_lot_state", "amortized_cost_profile_id"),
     ]
+
+
+def test_all_or_none_materializes_single_pass_iterables() -> None:
+    migration: dict[str, Any] = runpy.run_path(str(MIGRATION))
+
+    condition = migration["_all_or_none"](column for column in ("first", "second"))
+
+    assert condition == (
+        "(first IS NULL AND second IS NULL) OR (first IS NOT NULL AND second IS NOT NULL)"
+    )
+
+
+def test_all_or_none_rejects_an_empty_shape() -> None:
+    migration: dict[str, Any] = runpy.run_path(str(MIGRATION))
+
+    with pytest.raises(ValueError, match="requires at least one column"):
+        migration["_all_or_none"](())
