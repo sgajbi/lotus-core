@@ -41,6 +41,7 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure.co
     SqlAlchemyCostBasisTransactionRepository,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis.lot_state_lineage import (  # noqa: E501
+    LOT_STATE_LINEAGE_OUTPUT_FIELDS,
     lot_state_lineage_output_from_mapping,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis.lot_state_mapper import (  # noqa: E501
@@ -632,6 +633,8 @@ async def test_get_average_cost_pool_persisted_summary_maps_missing_pool_and_sou
     )
     assert "trim(position_lot_state.portfolio_id) = 'P1'" in source_sql
     assert "trim(position_lot_state.security_id) = 'S1'" in source_sql
+    for field_name in LOT_STATE_LINEAGE_OUTPUT_FIELDS:
+        assert f"position_lot_state.{field_name}" in source_sql
 
 
 async def test_get_average_cost_pool_persisted_summary_rejects_unbound_source_receipt() -> None:
