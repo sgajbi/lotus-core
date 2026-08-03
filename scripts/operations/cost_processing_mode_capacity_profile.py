@@ -52,23 +52,23 @@ def _open_lot_checkpoint(
     *,
     cost_basis_method: str,
 ) -> tuple[list[dict[str, object]], int]:
-    processed, errors, states = build_cost_basis_timeline_processor(
-        cost_basis_method
-    ).process_transactions([], timeline)
-    if errors or len(processed) != len(timeline):
+    result = build_cost_basis_timeline_processor(cost_basis_method).process_transactions(
+        [], timeline
+    )
+    if result.errored or len(result.processed) != len(timeline):
         raise RuntimeError("Capacity profile prefix failed financial validation")
 
     source_by_id = {row["transaction_id"]: row for row in timeline}
     checkpoint: list[dict[str, object]] = []
-    for source_transaction_id, state in states.items():
+    for source_transaction_id, state in result.open_lot_states.items():
         if state.quantity <= Decimal(0):
             continue
-        source = dict(source_by_id[source_transaction_id])
+        source: dict[str, object] = dict(source_by_id[source_transaction_id])
         source["quantity"] = state.quantity
         source["net_cost_local"] = state.cost_local
         source["net_cost"] = state.cost_base
         checkpoint.append(source)
-    return checkpoint, len(errors)
+    return checkpoint, len(result.errored)
 
 
 def _appended_sell(timeline: list[dict[str, str]]) -> dict[str, str]:
@@ -180,15 +180,14 @@ def run_processing_mode_profile(
             opening_error_count = prefix_error_count
             opening_states = {}
             for _ in range(append_iterations):
-                processed, errors, opening_states = build_cost_basis_timeline_processor(
-                    method
-                ).process_increment(
+                result = build_cost_basis_timeline_processor(method).process_increment(
                     initial_open_lots_raw=[],
                     new_transactions_raw=[opening_event],
                 )
-                opening_error_count += len(errors)
-                if len(processed) != 1:
+                opening_error_count += len(result.errored)
+                if len(result.processed) != 1:
                     raise RuntimeError("Ordered opening profile did not process exactly one event")
+                opening_states = result.open_lot_states
             opening_duration = max(clock() - opening_started, 0.0)
             measurements.append(
                 _measurement(
@@ -208,15 +207,14 @@ def run_processing_mode_profile(
             append_error_count = prefix_error_count
             append_states = {}
             for _ in range(append_iterations):
-                processed, errors, append_states = build_cost_basis_timeline_processor(
-                    method
-                ).process_increment(
+                result = build_cost_basis_timeline_processor(method).process_increment(
                     initial_open_lots_raw=disposal_checkpoint,
                     new_transactions_raw=[append_event],
                 )
-                append_error_count += len(errors)
-                if len(processed) != 1:
+                append_error_count += len(result.errored)
+                if len(result.processed) != 1:
                     raise RuntimeError("Ordered append profile did not process exactly one event")
+                append_states = result.open_lot_states
             append_duration = max(clock() - append_started, 0.0)
             measurements.append(
                 _measurement(
@@ -233,11 +231,11 @@ def run_processing_mode_profile(
             )
 
             backdated_started = clock()
-            processed, errors, backdated_states = build_cost_basis_timeline_processor(
-                method
-            ).process_transactions([], [*timeline, _backdated_buy(timeline)])
+            result = build_cost_basis_timeline_processor(method).process_transactions(
+                [], [*timeline, _backdated_buy(timeline)]
+            )
             backdated_duration = max(clock() - backdated_started, 0.0)
-            if len(processed) != history_count + 1:
+            if len(result.processed) != history_count + 1:
                 raise RuntimeError("Backdated profile did not rebuild the complete history")
             measurements.append(
                 _measurement(
@@ -248,8 +246,8 @@ def run_processing_mode_profile(
                     recalculated_row_count=history_count + 1,
                     restored_open_lot_count=0,
                     duration_seconds=backdated_duration,
-                    error_count=len(errors),
-                    ending_open_quantity=_total_open_quantity(backdated_states),
+                    error_count=len(result.errored),
+                    ending_open_quantity=_total_open_quantity(result.open_lot_states),
                 )
             )
 
