@@ -7,6 +7,7 @@ from ...domain.cost_basis import (
     CostBasisTransaction,
     CostCalculationError,
     OpenLotState,
+    TransactionLotDisposal,
 )
 from .lot_state_persistence import OpenLotPersistenceScope
 
@@ -21,3 +22,4 @@ class CostBasisCalculationResult:
     incremental: bool
     open_lot_persistence_scope: OpenLotPersistenceScope
     average_cost_pool_transition: AverageCostPoolTransition | None
+    disposals: tuple[TransactionLotDisposal, ...]

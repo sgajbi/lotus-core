@@ -147,12 +147,13 @@ def test_cost_basis_timeline_processor_handles_backdated_insert(
 
     # ACT
     # The engine processes the full list and is responsible for sorting and calculating
-    processed_txns, errored_txns, open_lot_states = (
-        cost_basis_timeline_processor.process_transactions(
-            existing_transactions_raw=[],  # Simulating a full recalculation call
-            new_transactions_raw=all_transactions_raw,
-        )
+    result = cost_basis_timeline_processor.process_transactions(
+        existing_transactions_raw=[],  # Simulating a full recalculation call
+        new_transactions_raw=all_transactions_raw,
     )
+    processed_txns = result.processed
+    errored_txns = result.errored
+    open_lot_states = result.open_lot_states
 
     # ASSERT
     assert not errored_txns
@@ -183,6 +184,11 @@ def test_cost_basis_timeline_processor_handles_backdated_insert(
             cost_base=Decimal("800"),
         ),
     }
+    assert [disposal.disposal_transaction_id for disposal in result.disposals] == ["SELL_1"]
+    assert [
+        allocation.source_transaction_id for allocation in result.disposals[0].result.allocations
+    ] == ["BUY_1"]
+    assert result.disposals[0].result.consumed_quantity == Decimal("50")
 
 
 @pytest.mark.parametrize("cost_basis_method", ["FIFO", "AVCO"])
@@ -195,14 +201,14 @@ def test_increment_from_open_lot_checkpoint_matches_full_history(
         _raw_transaction("SELL-1", "2026-01-03T10:00:00+00:00", "SELL", "5", "75"),
     ]
     appended_sell = _raw_transaction("SELL-2", "2026-01-04T10:00:00+00:00", "SELL", "10", "160")
-    prefix_processed, prefix_errors, prefix_states = build_cost_basis_timeline_processor(
-        cost_basis_method
-    ).process_transactions([], prefix)
-    assert prefix_errors == []
+    prefix_result = build_cost_basis_timeline_processor(cost_basis_method).process_transactions(
+        [], prefix
+    )
+    assert prefix_result.errored == []
 
     source_by_id = {row["transaction_id"]: row for row in prefix}
     checkpoint = []
-    for source_transaction_id, state in prefix_states.items():
+    for source_transaction_id, state in prefix_result.open_lot_states.items():
         source = dict(source_by_id[source_transaction_id])
         source["quantity"] = state.quantity
         source["gross_transaction_amount"] = state.cost_local
@@ -210,41 +216,57 @@ def test_increment_from_open_lot_checkpoint_matches_full_history(
         source["net_cost"] = state.cost_base
         checkpoint.append(source)
 
-    incremental_processed, incremental_errors, incremental_states = (
-        build_cost_basis_timeline_processor(cost_basis_method).process_increment(
-            initial_open_lots_raw=list(reversed(checkpoint)),
-            new_transactions_raw=[appended_sell],
-        )
+    incremental_result = build_cost_basis_timeline_processor(cost_basis_method).process_increment(
+        initial_open_lots_raw=list(reversed(checkpoint)),
+        new_transactions_raw=[appended_sell],
     )
-    full_processed, full_errors, full_states = build_cost_basis_timeline_processor(
-        cost_basis_method
-    ).process_transactions([], [*prefix, appended_sell])
+    full_result = build_cost_basis_timeline_processor(cost_basis_method).process_transactions(
+        [], [*prefix, appended_sell]
+    )
 
-    assert incremental_errors == full_errors == []
-    assert [transaction.transaction_id for transaction in incremental_processed] == ["SELL-2"]
+    assert incremental_result.errored == full_result.errored == []
+    assert [transaction.transaction_id for transaction in incremental_result.processed] == [
+        "SELL-2"
+    ]
     full_sell = next(
-        transaction for transaction in full_processed if transaction.transaction_id == "SELL-2"
+        transaction
+        for transaction in full_result.processed
+        if transaction.transaction_id == "SELL-2"
     )
-    incremental_sell = incremental_processed[0]
+    incremental_sell = incremental_result.processed[0]
     assert incremental_sell.net_cost_local == full_sell.net_cost_local
     assert incremental_sell.net_cost == full_sell.net_cost
     assert incremental_sell.realized_gain_loss_local == full_sell.realized_gain_loss_local
     assert incremental_sell.realized_gain_loss == full_sell.realized_gain_loss
-    assert sum((state.quantity for state in incremental_states.values()), Decimal(0)) == sum(
-        (state.quantity for state in full_states.values()), Decimal(0)
+    full_disposals = tuple(
+        disposal
+        for disposal in full_result.disposals
+        if disposal.disposal_transaction_id == "SELL-2"
     )
-    assert sum((state.cost_local for state in incremental_states.values()), Decimal(0)) == sum(
-        (state.cost_local for state in full_states.values()), Decimal(0)
+    assert [
+        allocation.source_transaction_id
+        for allocation in incremental_result.disposals[0].result.allocations
+    ] == [allocation.source_transaction_id for allocation in full_disposals[0].result.allocations]
+    assert incremental_result.disposals[0].result.consumed_quantity == (
+        full_disposals[0].result.consumed_quantity
     )
-    assert sum((state.cost_base for state in incremental_states.values()), Decimal(0)) == sum(
-        (state.cost_base for state in full_states.values()), Decimal(0)
-    )
-    for source_transaction_id, full_state in full_states.items():
-        incremental_state = incremental_states[source_transaction_id]
+    assert incremental_result.disposals[0].result.cost_local == full_disposals[0].result.cost_local
+    assert incremental_result.disposals[0].result.cost_base == full_disposals[0].result.cost_base
+    assert sum(
+        (state.quantity for state in incremental_result.open_lot_states.values()), Decimal(0)
+    ) == sum((state.quantity for state in full_result.open_lot_states.values()), Decimal(0))
+    assert sum(
+        (state.cost_local for state in incremental_result.open_lot_states.values()), Decimal(0)
+    ) == sum((state.cost_local for state in full_result.open_lot_states.values()), Decimal(0))
+    assert sum(
+        (state.cost_base for state in incremental_result.open_lot_states.values()), Decimal(0)
+    ) == sum((state.cost_base for state in full_result.open_lot_states.values()), Decimal(0))
+    for source_transaction_id, full_state in full_result.open_lot_states.items():
+        incremental_state = incremental_result.open_lot_states[source_transaction_id]
         assert abs(incremental_state.quantity - full_state.quantity) <= Decimal("0.0000000001")
         assert incremental_state.cost_local == full_state.cost_local
         assert incremental_state.cost_base == full_state.cost_base
-    assert len(prefix_processed) == 3
+    assert len(prefix_result.processed) == 3
 
 
 def test_increment_preserves_original_quantity_tiebreak_for_partially_consumed_lots() -> None:
@@ -263,15 +285,17 @@ def test_increment_preserves_original_quantity_tiebreak_for_partially_consumed_l
     }
     sell = _raw_transaction("SELL-1", "2026-01-02T10:00:00+00:00", "SELL", "1", "30")
 
-    processed, errors, states = build_cost_basis_timeline_processor("FIFO").process_increment(
+    result = build_cost_basis_timeline_processor("FIFO").process_increment(
         initial_open_lots_raw=[smaller_original_lot, larger_original_lot],
         new_transactions_raw=[sell],
     )
 
-    assert errors == []
-    assert processed[0].realized_gain_loss == Decimal("20")
-    assert states["BUY-LARGE"].quantity == Decimal(0)
-    assert states["BUY-SMALL"].quantity == Decimal("5")
+    assert result.errored == []
+    assert result.processed[0].realized_gain_loss == Decimal("20")
+    assert result.open_lot_states["BUY-LARGE"].quantity == Decimal(0)
+    assert result.open_lot_states["BUY-SMALL"].quantity == Decimal("5")
+    assert result.disposals[0].disposal_transaction_id == "SELL-1"
+    assert result.disposals[0].result.allocations[0].source_transaction_id == "BUY-LARGE"
 
 
 def test_cost_basis_timeline_processor_records_observation_depth() -> None:
@@ -350,6 +374,13 @@ def test_cost_basis_timeline_processor_reports_unexpected_calculator_errors():
                 raise RuntimeError("calculation failed")
 
     class _DispositionEngine:
+        def clear_disposal_records(self):
+            return None
+
+        def disposal_records(self, *, transaction_ids=None):
+            del transaction_ids
+            return ()
+
         def get_open_lot_states(self):
             return {
                 "NEW_OK": OpenLotState(
@@ -368,7 +399,7 @@ def test_cost_basis_timeline_processor_reports_unexpected_calculator_errors():
         error_reporter=error_reporter,
     )
 
-    processed_txns, errored_txns, open_lot_states = processor.process_transactions(
+    result = processor.process_transactions(
         existing_transactions_raw=[{"transaction_id": "EXISTING_OK"}],
         new_transactions_raw=[
             {"transaction_id": "NEW_OK"},
@@ -376,14 +407,15 @@ def test_cost_basis_timeline_processor_reports_unexpected_calculator_errors():
         ],
     )
 
-    assert [txn.transaction_id for txn in processed_txns] == ["NEW_OK"]
-    assert [(txn.transaction_id, txn.error_reason) for txn in errored_txns] == [
+    assert [txn.transaction_id for txn in result.processed] == ["NEW_OK"]
+    assert [(txn.transaction_id, txn.error_reason) for txn in result.errored] == [
         ("NEW_FAIL", "Unexpected error: calculation failed")
     ]
-    assert open_lot_states == {
+    assert result.open_lot_states == {
         "NEW_OK": OpenLotState(
             quantity=Decimal("1"),
             cost_local=Decimal("10"),
             cost_base=Decimal("10"),
         )
     }
+    assert result.disposals == ()
