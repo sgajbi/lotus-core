@@ -253,6 +253,23 @@ def test_disposal_lifecycle_normalizes_transaction_identity(
     assert disposition_engine.disposal_records() == ()
 
 
+@pytest.mark.parametrize(
+    ("transaction_id", "expected_error", "message"),
+    [
+        (None, TypeError, "must be a string"),
+        ("   ", ValueError, "must be nonblank"),
+    ],
+)
+def test_disposal_lifecycle_rejects_invalid_transaction_identity(
+    disposition_engine: LotDispositionEngine,
+    transaction_id: object,
+    expected_error: type[Exception],
+    message: str,
+) -> None:
+    with pytest.raises(expected_error, match=message):
+        disposition_engine.commit_disposal_record(transaction_id)  # type: ignore[arg-type]
+
+
 def test_set_initial_lots_delegates_to_strategy(
     disposition_engine: LotDispositionEngine,
     mock_strategy: MagicMock,
