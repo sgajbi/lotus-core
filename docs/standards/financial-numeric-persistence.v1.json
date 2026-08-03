@@ -2,7 +2,7 @@
   "schema_version": "2.0.0",
   "model_path": "src/libs/portfolio-common/portfolio_common/database_models.py",
   "expected_inventory": {
-    "numeric_columns": 123,
+    "numeric_columns": 129,
     "tables": 35
   },
   "profiles": {
@@ -268,7 +268,9 @@
       "open_quantity": {"profile": "nonnegative-finite", "rollout_status": "orm-enforced"},
       "lot_cost_local": {"profile": "nonnegative-finite", "rollout_status": "orm-enforced"},
       "lot_cost_base": {"profile": "nonnegative-finite", "rollout_status": "orm-enforced"},
-      "accrued_interest_paid_local": {"profile": "nonnegative-finite", "rollout_status": "orm-enforced"}
+      "accrued_interest_paid_local": {"profile": "nonnegative-finite", "rollout_status": "orm-enforced"},
+      "amortized_cost_scheduled_local": {"profile": "nullable-nonnegative-finite", "rollout_status": "orm-enforced"},
+      "amortized_cost_book_fx_rate_to_base": {"profile": "nullable-positive-finite", "rollout_status": "orm-enforced"}
     },
     "lot_disposal_receipts": {
       "consumed_quantity": {"profile": "nonnegative-finite", "rollout_status": "orm-enforced"},
@@ -282,10 +284,14 @@
       "amortized_cost_original_quantity": {"profile": "nullable-positive-finite", "rollout_status": "orm-enforced"},
       "amortized_cost_open_quantity_before": {"profile": "nullable-positive-finite", "rollout_status": "orm-enforced"},
       "amortized_cost_residual_quantity": {"profile": "nullable-nonnegative-finite", "rollout_status": "orm-enforced"},
+      "amortized_cost_scheduled_local": {"profile": "nullable-nonnegative-finite", "rollout_status": "orm-enforced"},
       "amortized_cost_current_local": {"profile": "nullable-nonnegative-finite", "rollout_status": "orm-enforced"},
+      "amortized_cost_current_base": {"profile": "nullable-nonnegative-finite", "rollout_status": "orm-enforced"},
       "amortized_cost_residual_local": {"profile": "nullable-nonnegative-finite", "rollout_status": "orm-enforced"},
       "amortized_cost_book_fx_rate_to_base": {"profile": "nullable-positive-finite", "rollout_status": "orm-enforced"},
-      "amortized_cost_residual_base": {"profile": "nullable-nonnegative-finite", "rollout_status": "orm-enforced"}
+      "amortized_cost_residual_base": {"profile": "nullable-nonnegative-finite", "rollout_status": "orm-enforced"},
+      "amortized_cost_retained_rounding_local": {"profile": "nullable-finite", "rollout_status": "orm-enforced"},
+      "amortized_cost_retained_rounding_base": {"profile": "nullable-finite", "rollout_status": "orm-enforced"}
     },
     "cost_basis_processing_state": {
       "latest_quantity": {"profile": "nonnegative-finite", "rollout_status": "orm-enforced"}

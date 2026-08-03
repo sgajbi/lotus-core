@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
+from typing import cast
 
 from portfolio_common.domain.calculation_lineage import (
     CalculationLineage,
@@ -323,7 +324,7 @@ def _proportional_local_cost(
     policy = COST_BASIS_STATE_LEDGER_OUTPUT_V1
     with policy.arithmetic_context():
         raw_cost = scheduled_cost_local * quantity / original_quantity
-    return policy.normalize(raw_cost, field_name=field_name)
+    return cast(Decimal, policy.normalize(raw_cost, field_name=field_name))
 
 
 def _recognized_cost_local(
