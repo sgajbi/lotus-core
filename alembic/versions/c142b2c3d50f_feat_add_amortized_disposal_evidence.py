@@ -46,6 +46,8 @@ def upgrade() -> None:
         "AND amortized_cost_profile_content_hash ~ '^[0-9a-f]{64}$' "
         "AND amortized_cost_currency ~ '^[A-Z]{3}$' "
         "AND amortized_cost_original_quantity > 0 "
+        "AND amortized_cost_open_quantity_before > 0 "
+        "AND amortized_cost_open_quantity_before <= amortized_cost_original_quantity "
         "AND amortized_cost_residual_quantity >= 0 "
         "AND amortized_cost_current_local >= 0 "
         "AND amortized_cost_residual_local >= 0 "
@@ -58,6 +60,8 @@ def upgrade() -> None:
         _ALLOCATION_TABLE,
         "(amortized_cost_profile_id IS NULL) OR ("
         "CAST(amortized_cost_original_quantity AS TEXT) "
+        "NOT IN ('NaN', 'Infinity', '-Infinity') "
+        "AND CAST(amortized_cost_open_quantity_before AS TEXT) "
         "NOT IN ('NaN', 'Infinity', '-Infinity') "
         "AND CAST(amortized_cost_residual_quantity AS TEXT) "
         "NOT IN ('NaN', 'Infinity', '-Infinity') "
@@ -117,6 +121,7 @@ def _evidence_columns() -> tuple[sa.Column[object], ...]:
         sa.Column("amortized_cost_currency", sa.String(length=3), nullable=True),
         sa.Column("amortized_cost_recognized_through", sa.Date(), nullable=True),
         sa.Column("amortized_cost_original_quantity", sa.Numeric(18, 10), nullable=True),
+        sa.Column("amortized_cost_open_quantity_before", sa.Numeric(18, 10), nullable=True),
         sa.Column("amortized_cost_residual_quantity", sa.Numeric(18, 10), nullable=True),
         sa.Column("amortized_cost_current_local", sa.Numeric(18, 10), nullable=True),
         sa.Column("amortized_cost_residual_local", sa.Numeric(18, 10), nullable=True),

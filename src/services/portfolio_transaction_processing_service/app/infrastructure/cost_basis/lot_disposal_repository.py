@@ -331,6 +331,7 @@ def _amortized_cost_evidence(
         "amortized_cost_currency",
         "amortized_cost_recognized_through",
         "amortized_cost_original_quantity",
+        "amortized_cost_open_quantity_before",
         "amortized_cost_residual_quantity",
         "amortized_cost_current_local",
         "amortized_cost_residual_local",
@@ -351,6 +352,7 @@ def _amortized_cost_evidence(
         disposal_date=receipt.disposal_timestamp.date(),
         recognized_through_date=record.amortized_cost_recognized_through,
         original_quantity=record.amortized_cost_original_quantity,
+        open_quantity_before=record.amortized_cost_open_quantity_before,
         consumed_quantity=record.consumed_quantity,
         residual_quantity=record.amortized_cost_residual_quantity,
         current_cost_local=record.amortized_cost_current_local,
@@ -456,6 +458,9 @@ def _allocation_values(
                 ),
                 "amortized_cost_original_quantity": (
                     evidence.original_quantity if evidence is not None else None
+                ),
+                "amortized_cost_open_quantity_before": (
+                    evidence.open_quantity_before if evidence is not None else None
                 ),
                 "amortized_cost_residual_quantity": (
                     evidence.residual_quantity if evidence is not None else None

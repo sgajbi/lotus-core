@@ -32,6 +32,7 @@ class AmortizedCostAllocationEvidence:
     disposal_date: date
     recognized_through_date: date
     original_quantity: Decimal
+    open_quantity_before: Decimal
     consumed_quantity: Decimal
     residual_quantity: Decimal
     current_cost_local: Decimal
@@ -63,6 +64,7 @@ class AmortizedCostAllocationEvidence:
             raise ValueError("recognized_through_date must not be after disposal_date")
         for field_name in (
             "original_quantity",
+            "open_quantity_before",
             "consumed_quantity",
             "residual_quantity",
             "current_cost_local",
@@ -76,10 +78,17 @@ class AmortizedCostAllocationEvidence:
                 getattr(self, field_name),
                 field_name,
                 positive=field_name
-                in {"original_quantity", "consumed_quantity", "fx_rate_to_base"},
+                in {
+                    "original_quantity",
+                    "open_quantity_before",
+                    "consumed_quantity",
+                    "fx_rate_to_base",
+                },
             )
-        if self.consumed_quantity + self.residual_quantity != self.original_quantity:
-            raise ValueError("amortized-cost quantity does not conserve original lot quantity")
+        if self.open_quantity_before > self.original_quantity:
+            raise ValueError("open_quantity_before must not exceed original_quantity")
+        if self.consumed_quantity + self.residual_quantity != self.open_quantity_before:
+            raise ValueError("amortized-cost quantity does not conserve the pre-disposal lot")
         if self.consumed_cost_local + self.residual_cost_local != self.current_cost_local:
             raise ValueError("amortized local cost does not conserve current lot cost")
         if not isinstance(self.calculation_lineage, CalculationLineage):
@@ -98,6 +107,7 @@ class AmortizedCostAllocationEvidence:
             "consumed_cost_local": self.consumed_cost_local,
             "consumed_quantity": self.consumed_quantity,
             "current_cost_local": self.current_cost_local,
+            "open_quantity_before": self.open_quantity_before,
             "recognized_through_date": self.recognized_through_date,
             "residual_cost_base": self.residual_cost_base,
             "residual_cost_local": self.residual_cost_local,
@@ -117,6 +127,7 @@ class AmortizedCostAllocationEvidence:
             "disposal_date": self.disposal_date,
             "fx_rate_to_base": self.fx_rate_to_base,
             "original_quantity": self.original_quantity,
+            "open_quantity_before": self.open_quantity_before,
             "profile_content_hash": self.profile_content_hash,
             "profile_id": self.profile_id,
             "profile_version": self.profile_version,

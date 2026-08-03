@@ -36,6 +36,7 @@ class RecognizedLotBookCost:
     disposal_date: date
     recognized_through_date: date
     original_quantity: Decimal
+    open_quantity_before: Decimal
     consumed_quantity: Decimal
     residual_quantity: Decimal
     current_cost_local: Decimal
@@ -52,6 +53,7 @@ def allocate_recognized_lot_book_cost(
     *,
     disposal_date: date,
     original_quantity: Decimal,
+    open_quantity_before: Decimal,
     consumed_quantity: Decimal,
     fx_rate_to_base: Decimal,
 ) -> RecognizedLotBookCost:
@@ -70,18 +72,26 @@ def allocate_recognized_lot_book_cost(
             "disposal_date must not precede the effective amortized-cost profile"
         )
     _require_positive_decimal(original_quantity, "original_quantity")
+    _require_positive_decimal(open_quantity_before, "open_quantity_before")
     _require_positive_decimal(consumed_quantity, "consumed_quantity")
     _require_positive_decimal(fx_rate_to_base, "fx_rate_to_base")
-    if consumed_quantity > original_quantity:
-        raise AmortizedCostDisposalError("consumed_quantity must not exceed original_quantity")
+    if open_quantity_before > original_quantity:
+        raise AmortizedCostDisposalError("open_quantity_before must not exceed original_quantity")
+    if consumed_quantity > open_quantity_before:
+        raise AmortizedCostDisposalError("consumed_quantity must not exceed open_quantity_before")
 
-    current_cost_local, recognized_through_date = _recognized_cost_local(
+    scheduled_cost_local, recognized_through_date = _recognized_cost_local(
         profile,
         disposal_date=disposal_date,
     )
     numeric_policy = COST_BASIS_STATE_LEDGER_OUTPUT_V1
     with numeric_policy.arithmetic_context():
-        raw_consumed_cost_local = current_cost_local * consumed_quantity / original_quantity
+        raw_current_cost_local = scheduled_cost_local * open_quantity_before / original_quantity
+        raw_consumed_cost_local = scheduled_cost_local * consumed_quantity / original_quantity
+    current_cost_local = numeric_policy.normalize(
+        raw_current_cost_local,
+        field_name="amortized_open_cost_local",
+    )
     consumed_cost_local = numeric_policy.normalize(
         raw_consumed_cost_local,
         field_name="amortized_disposal_cost_local",
@@ -92,7 +102,7 @@ def allocate_recognized_lot_book_cost(
         field_name="amortized_residual_cost_local",
     )
     residual_quantity = numeric_policy.subtract(
-        original_quantity,
+        open_quantity_before,
         consumed_quantity,
         field_name="amortized_residual_quantity",
     )
@@ -112,6 +122,7 @@ def allocate_recognized_lot_book_cost(
         "consumed_cost_local": consumed_cost_local,
         "consumed_quantity": consumed_quantity,
         "current_cost_local": current_cost_local,
+        "open_quantity_before": open_quantity_before,
         "recognized_through_date": recognized_through_date,
         "residual_cost_base": residual_cost_base,
         "residual_cost_local": residual_cost_local,
@@ -126,6 +137,7 @@ def allocate_recognized_lot_book_cost(
             "disposal_date": disposal_date,
             "fx_rate_to_base": fx_rate_to_base,
             "original_quantity": original_quantity,
+            "open_quantity_before": open_quantity_before,
             "profile_content_hash": profile_content_hash,
             "profile_id": profile.profile_id,
             "profile_version": profile.profile_version,
@@ -146,6 +158,7 @@ def allocate_recognized_lot_book_cost(
         disposal_date=disposal_date,
         recognized_through_date=recognized_through_date,
         original_quantity=original_quantity,
+        open_quantity_before=open_quantity_before,
         consumed_quantity=consumed_quantity,
         residual_quantity=residual_quantity,
         current_cost_local=current_cost_local,

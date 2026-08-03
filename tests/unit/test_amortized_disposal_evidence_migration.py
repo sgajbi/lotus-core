@@ -82,6 +82,7 @@ def test_amortized_disposal_evidence_migration_is_reversible(monkeypatch) -> Non
         "amortized_cost_currency",
         "amortized_cost_recognized_through",
         "amortized_cost_original_quantity",
+        "amortized_cost_open_quantity_before",
         "amortized_cost_residual_quantity",
         "amortized_cost_current_local",
         "amortized_cost_residual_local",
