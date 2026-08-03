@@ -10,6 +10,7 @@ from services.portfolio_transaction_processing_service.app.domain.fixed_income_b
     AMORTIZED_COST_DISPOSAL_ALGORITHM_ID,
     AmortizedCostDisposalError,
     AmortizedCostEligibilityReason,
+    CarriedLotBookCost,
     allocate_recognized_lot_book_cost,
     materialize_active_lot_amortized_cost_profile,
     materialize_parked_lot_amortized_cost_profile,
@@ -54,7 +55,7 @@ def test_allocates_last_recognized_periodic_carrying_amount(
     assert result.consumed_cost_local + result.residual_cost_local == expected_current
     assert result.consumed_quantity + result.residual_quantity == Decimal("100.0000000000")
     assert result.consumed_cost_base == result.consumed_cost_local * Decimal("1.5")
-    assert result.residual_cost_base == result.residual_cost_local * Decimal("1.5")
+    assert result.consumed_cost_base + result.residual_cost_base == result.current_cost_base
 
 
 def test_absorbs_all_rounding_residual_into_the_retained_lot() -> None:
@@ -70,9 +71,64 @@ def test_absorbs_all_rounding_residual_into_the_retained_lot() -> None:
     assert result.consumed_cost_local == Decimal("32.3333333333")
     assert result.residual_cost_local == Decimal("64.6666666667")
     assert result.consumed_cost_local + result.residual_cost_local == Decimal("97.0000000000")
+    assert result.retained_rounding_residual_local == Decimal("0.0000000000")
 
 
-def test_repeated_partial_disposal_uses_pre_disposal_open_quantity() -> None:
+def test_carries_rounding_residual_into_terminal_disposal() -> None:
+    first = allocate_recognized_lot_book_cost(
+        _active_profile(),
+        disposal_date=date(2026, 6, 30),
+        original_quantity=Decimal("3"),
+        open_quantity_before=Decimal("3"),
+        consumed_quantity=Decimal("1"),
+        book_cost_fx_rate_to_base=Decimal("1.2345678912"),
+    )
+    second = allocate_recognized_lot_book_cost(
+        _active_profile(),
+        disposal_date=date(2026, 7, 1),
+        original_quantity=Decimal("3"),
+        open_quantity_before=first.residual_quantity,
+        consumed_quantity=Decimal("1"),
+        book_cost_fx_rate_to_base=Decimal("1.2345678912"),
+        carried_book_cost=first.carry_forward(),
+    )
+    terminal = allocate_recognized_lot_book_cost(
+        _active_profile(),
+        disposal_date=date(2026, 7, 2),
+        original_quantity=Decimal("3"),
+        open_quantity_before=second.residual_quantity,
+        consumed_quantity=Decimal("1"),
+        book_cost_fx_rate_to_base=Decimal("1.2345678912"),
+        carried_book_cost=second.carry_forward(),
+    )
+
+    assert [
+        first.consumed_cost_local,
+        second.consumed_cost_local,
+        terminal.consumed_cost_local,
+    ] == [
+        Decimal("32.3333333333"),
+        Decimal("32.3333333333"),
+        Decimal("32.3333333334"),
+    ]
+    assert sum(
+        (item.consumed_cost_local for item in (first, second, terminal)),
+        Decimal(0),
+    ) == Decimal("97.0000000000")
+    assert (
+        sum(
+            (item.consumed_cost_base for item in (first, second, terminal)),
+            Decimal(0),
+        )
+        == first.current_cost_base
+    )
+    assert terminal.residual_quantity == Decimal("0E-10")
+    assert terminal.residual_cost_local == Decimal("0E-10")
+    assert terminal.residual_cost_base == Decimal("0E-10")
+    assert terminal.carry_forward() is None
+
+
+def test_carried_basis_applies_only_newly_recognized_schedule_movement() -> None:
     first = allocate_recognized_lot_book_cost(
         _active_profile(),
         disposal_date=date(2026, 6, 30),
@@ -88,6 +144,32 @@ def test_repeated_partial_disposal_uses_pre_disposal_open_quantity() -> None:
         open_quantity_before=first.residual_quantity,
         consumed_quantity=Decimal("20"),
         book_cost_fx_rate_to_base=Decimal("1"),
+        carried_book_cost=first.carry_forward(),
+    )
+
+    assert first.residual_cost_local == Decimal("58.2000000000")
+    assert second.current_cost_local == Decimal("60.0000000000")
+    assert second.consumed_cost_local == Decimal("20.0000000000")
+    assert second.residual_cost_local == Decimal("40.0000000000")
+
+
+def test_repeated_partial_disposal_is_deterministic_from_carried_state() -> None:
+    first = allocate_recognized_lot_book_cost(
+        _active_profile(),
+        disposal_date=date(2026, 6, 30),
+        original_quantity=Decimal("100"),
+        open_quantity_before=Decimal("100"),
+        consumed_quantity=Decimal("40"),
+        book_cost_fx_rate_to_base=Decimal("1"),
+    )
+    second = allocate_recognized_lot_book_cost(
+        _active_profile(),
+        disposal_date=date(2027, 1, 1),
+        original_quantity=Decimal("100"),
+        open_quantity_before=first.residual_quantity,
+        consumed_quantity=Decimal("20"),
+        book_cost_fx_rate_to_base=Decimal("1"),
+        carried_book_cost=first.carry_forward(),
     )
     restarted = allocate_recognized_lot_book_cost(
         _active_profile(),
@@ -96,6 +178,7 @@ def test_repeated_partial_disposal_uses_pre_disposal_open_quantity() -> None:
         open_quantity_before=Decimal("60"),
         consumed_quantity=Decimal("20"),
         book_cost_fx_rate_to_base=Decimal("1"),
+        carried_book_cost=first.carry_forward(),
     )
 
     assert second == restarted
@@ -123,14 +206,37 @@ def test_lineage_binds_profile_identity_inputs_and_outputs() -> None:
             "consumed_cost_base": result.consumed_cost_base,
             "consumed_cost_local": result.consumed_cost_local,
             "consumed_quantity": result.consumed_quantity,
+            "current_cost_base": result.current_cost_base,
             "current_cost_local": result.current_cost_local,
             "open_quantity_before": result.open_quantity_before,
             "recognized_through_date": result.recognized_through_date,
             "residual_cost_base": result.residual_cost_base,
             "residual_cost_local": result.residual_cost_local,
             "residual_quantity": result.residual_quantity,
+            "retained_rounding_residual_base": result.retained_rounding_residual_base,
+            "retained_rounding_residual_local": result.retained_rounding_residual_local,
+            "scheduled_cost_local": result.scheduled_cost_local,
         },
     )
+
+
+def test_rejects_invalid_carried_basis() -> None:
+    with pytest.raises(ValueError, match="non-negative"):
+        CarriedLotBookCost(
+            scheduled_cost_local=Decimal("97"),
+            residual_cost_local=Decimal("-0.01"),
+            residual_cost_base=Decimal("1"),
+        )
+    with pytest.raises(TypeError, match="CarriedLotBookCost"):
+        allocate_recognized_lot_book_cost(
+            _active_profile(),
+            disposal_date=date(2026, 6, 30),
+            original_quantity=Decimal("100"),
+            open_quantity_before=Decimal("100"),
+            consumed_quantity=Decimal("10"),
+            book_cost_fx_rate_to_base=Decimal("1"),
+            carried_book_cost=object(),  # type: ignore[arg-type]
+        )
 
 
 @pytest.mark.parametrize(
