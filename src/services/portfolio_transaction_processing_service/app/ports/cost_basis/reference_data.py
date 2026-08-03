@@ -15,6 +15,25 @@ class CostBasisPortfolioReference:
     portfolio_id: str
     base_currency: str
     cost_basis_method: CostBasisMethod
+    tenant_id: str | None = None
+    legal_book_id: str | None = None
+
+    def __post_init__(self) -> None:
+        for field_name in ("portfolio_id", "base_currency"):
+            value = getattr(self, field_name)
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"{field_name} must be a nonblank string")
+            object.__setattr__(self, field_name, value.strip())
+        if not isinstance(self.cost_basis_method, CostBasisMethod):
+            raise TypeError("cost_basis_method must be a CostBasisMethod")
+        if (self.tenant_id is None) != (self.legal_book_id is None):
+            raise ValueError("tenant_id and legal_book_id must be supplied together")
+        for field_name in ("tenant_id", "legal_book_id"):
+            value = getattr(self, field_name)
+            if value is not None:
+                if not isinstance(value, str) or not value.strip():
+                    raise ValueError(f"{field_name} must be a nonblank string when supplied")
+                object.__setattr__(self, field_name, value.strip())
 
 
 @dataclass(frozen=True, slots=True)

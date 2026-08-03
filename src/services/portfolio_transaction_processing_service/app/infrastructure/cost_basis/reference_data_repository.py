@@ -33,6 +33,8 @@ class SqlAlchemyCostBasisReferenceDataRepository:
                 Portfolio.portfolio_id.label("portfolio_id"),
                 Portfolio.base_currency.label("base_currency"),
                 Portfolio.cost_basis_method.label("cost_basis_method"),
+                Portfolio.tenant_id.label("tenant_id"),
+                Portfolio.legal_book_id.label("legal_book_id"),
                 Instrument.security_id.label("instrument_security_id"),
                 Instrument.product_type.label("instrument_product_type"),
                 Instrument.asset_class.label("instrument_asset_class"),
@@ -64,6 +66,8 @@ class SqlAlchemyCostBasisReferenceDataRepository:
                 portfolio_id=row["portfolio_id"],
                 base_currency=row["base_currency"],
                 cost_basis_method=normalize_cost_basis_method(row["cost_basis_method"]),
+                tenant_id=row["tenant_id"],
+                legal_book_id=row["legal_book_id"],
             ),
             instrument=instrument,
         )
