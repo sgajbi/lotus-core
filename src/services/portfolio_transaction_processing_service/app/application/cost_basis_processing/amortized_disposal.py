@@ -53,8 +53,14 @@ async def apply_effective_amortized_cost_to_disposals(
 ) -> CostBasisCalculationResult:
     """Replace original-cost disposal economics only when an exact profile decision exists."""
 
+    open_lot_states = _preserve_existing_amortized_carry(
+        calculation.open_lot_states,
+        calculation.source_transactions.values(),
+    )
     if not calculation.disposals or portfolio.tenant_id is None:
-        return calculation
+        if open_lot_states is calculation.open_lot_states:
+            return calculation
+        return replace(calculation, open_lot_states=open_lot_states)
     if portfolio.legal_book_id is None:
         raise ValueError("portfolio accounting scope is incomplete")
 
@@ -97,7 +103,6 @@ async def apply_effective_amortized_cost_to_disposals(
     carried_book_cost_by_source = _initial_carried_book_costs(
         calculation.source_transactions.values()
     )
-    open_lot_states = dict(calculation.open_lot_states)
     decorated_disposals: list[TransactionLotDisposal] = []
     for disposal in calculation.disposals:
         transaction = _required_transaction(transactions_by_id, disposal.disposal_transaction_id)
@@ -283,6 +288,30 @@ def _initial_carried_book_costs(
             residual_cost_base=state.carrying_amount_base,
         )
     return carried
+
+
+def _preserve_existing_amortized_carry(
+    open_lot_states: dict[str, OpenLotState],
+    source_transactions: Iterable[CostBasisTransaction],
+) -> dict[str, OpenLotState]:
+    """Retain accounting carry across tax-basis-only and otherwise neutral mutations."""
+
+    preserved = open_lot_states
+    for transaction in source_transactions:
+        carry = getattr(transaction, "amortized_cost_carry_state", None)
+        if carry is None:
+            continue
+        if not isinstance(carry, AmortizedCostCarryState):
+            raise ValueError("source lot carries invalid amortized-cost state")
+        state = open_lot_states.get(transaction.transaction_id)
+        if state is None or state.quantity == Decimal(0):
+            continue
+        if state.amortized_cost == carry:
+            continue
+        if preserved is open_lot_states:
+            preserved = dict(open_lot_states)
+        preserved[transaction.transaction_id] = replace(state, amortized_cost=carry)
+    return preserved
 
 
 def _replace_amortized_carry(

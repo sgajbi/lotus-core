@@ -15,6 +15,7 @@ from services.portfolio_transaction_processing_service.app.application.cost_basi
 )
 from services.portfolio_transaction_processing_service.app.domain.cost_basis import (
     AmortizedCostCarryState,
+    OpenLotState,
 )
 from services.portfolio_transaction_processing_service.app.domain.fixed_income_book_cost import (
     lot_amortized_cost_profile_id,
@@ -367,6 +368,64 @@ async def test_incremental_sell_uses_persisted_residual_and_original_book_fx() -
     assert remaining_lot.amortized_cost is not None
     assert remaining_lot.amortized_cost.carrying_amount_local == Decimal("32.3333333334")
     assert remaining_lot.amortized_cost.carrying_amount_base == Decimal("39.9176950776")
+
+
+@pytest.mark.asyncio
+async def test_basis_only_lot_change_preserves_independent_book_carry() -> None:
+    restored_buy = _raw_transaction(
+        "BUY_1",
+        "2026-01-01T00:00:00Z",
+        "BUY",
+        "2",
+        "97",
+    )
+    restored_buy["net_cost_local"] = Decimal("70")
+    restored_buy["net_cost"] = Decimal("85")
+    carry = AmortizedCostCarryState(
+        profile_id="PROFILE-1",
+        profile_version=1,
+        profile_content_hash="a" * 64,
+        recognized_through_date=resolved_fixed_income_book_cost_inputs().assignment.valid_from,
+        scheduled_cost_local=Decimal("97.0000000000"),
+        carrying_amount_local=Decimal("64.6666666667"),
+        carrying_amount_base=Decimal("79.8353902264"),
+        book_cost_fx_rate_to_base=Decimal("1.2345678912"),
+    )
+    restored_buy["amortized_cost_carry_state"] = carry
+    timeline = build_cost_basis_timeline_processor().process_increment(
+        initial_open_lots_raw=[restored_buy],
+        new_transactions_raw=[],
+    )
+    calculation = CostBasisCalculationResult(
+        processed=timeline.processed,
+        errored=timeline.errored,
+        open_lot_states={
+            "BUY_1": OpenLotState(
+                quantity=Decimal("2"),
+                cost_local=Decimal("50"),
+                cost_base=Decimal("60"),
+            )
+        },
+        incremental=True,
+        open_lot_persistence_scope=OpenLotPersistenceScope.SELECTED_LOTS,
+        average_cost_pool_transition=None,
+        disposals=timeline.disposals,
+        source_transactions=timeline.source_transactions,
+    )
+
+    result = await apply_effective_amortized_cost_to_disposals(
+        calculation,
+        portfolio=_accounting_portfolio(),
+        cost_basis_method=CostBasisMethod.FIFO,
+        profiles=_NoEffectiveProfiles(),  # type: ignore[arg-type]
+    )
+
+    assert result.open_lot_states["BUY_1"] == OpenLotState(
+        quantity=Decimal("2"),
+        cost_local=Decimal("50"),
+        cost_base=Decimal("60"),
+        amortized_cost=carry,
+    )
 
 
 @pytest.mark.asyncio
