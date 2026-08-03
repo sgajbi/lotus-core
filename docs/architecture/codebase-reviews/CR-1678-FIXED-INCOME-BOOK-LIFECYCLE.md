@@ -123,6 +123,9 @@ discards pending evidence.
 AVCO disposal materialization is also bounded to the current open generation. Historical source
 identities remain available to explicit state expansion, but repeated buy/full-dispose cycles no
 longer rescan closed generations in the calculation hot path.
+Pending-disposal commit, discard, and record filtering also normalize transaction identity at the
+engine boundary, matching the immutable evidence key and preventing whitespace variants from
+leaking staged evidence or suppressing an accepted record.
 
 ## Same-Pattern Review
 
@@ -190,6 +193,9 @@ Data Models wiki documents the staged ledgers while the capability wiki remains
   structural closed-generation scan guard; repeated full-close measurements were 0.019s for 100,
   0.038s for 200, and 0.083s for 400 cycles; repository-native MyPy (267 sources), scoped Ruff,
   and diff checks passed.
+- transaction-identity fix-forward proof: 104 warning-strict disposition/calculator tests cover
+  normalized commit, filter, and discard behavior; repository-native MyPy (267 sources), scoped
+  Ruff, and diff checks passed.
 
 Protected PR, exact-main, runtime recovery/replay and load proof, verified query reconstruction,
 disposal, redemption, and issue-closure evidence remain pending until their corresponding
