@@ -35,6 +35,7 @@ from src.services.portfolio_transaction_processing_service.app.ports import (
     CostBasisTransactionStatePort,
     CostProcessingEffectStagingPort,
     CostProcessingResult,
+    LotAmortizedCostProfilePort,
 )
 
 
@@ -81,6 +82,7 @@ def _dependencies() -> dict[str, object]:
         "average_cost_pools": AsyncMock(spec=CostBasisAverageCostPoolPort),
         "lot_disposals": AsyncMock(spec=CostBasisLotDisposalPort),
         "lot_states": AsyncMock(spec=CostBasisLotStatePort),
+        "amortized_cost_profiles": AsyncMock(spec=LotAmortizedCostProfilePort),
         "income_offsets": AsyncMock(spec=AccruedIncomeOffsetStatePort),
         "fx_rates": AsyncMock(spec=CostBasisFxRatePort),
         "processing_state": AsyncMock(spec=CostBasisProcessingStatePort),
@@ -153,6 +155,7 @@ async def test_cost_basis_execution_acquires_key_lock_before_calculation(
         average_cost_pools=AsyncMock(spec=CostBasisAverageCostPoolPort),
         lot_disposals=AsyncMock(spec=CostBasisLotDisposalPort),
         lot_states=AsyncMock(spec=CostBasisLotStatePort),
+        amortized_cost_profiles=AsyncMock(spec=LotAmortizedCostProfilePort),
         income_offsets=AsyncMock(spec=AccruedIncomeOffsetStatePort),
         fx_rates=AsyncMock(spec=CostBasisFxRatePort),
         processing_state=processing_state,
