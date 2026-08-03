@@ -26,6 +26,9 @@ from ...domain.cost_basis import (
     LotDisposalReceiptStatus,
     SourceLotDisposalAllocation,
 )
+from ...domain.cost_basis.calculation.disposal_allocation import (
+    source_lot_disposal_allocation_payload,
+)
 from ...domain.cost_basis.state_lineage import canonical_cost_basis_output_payload
 
 
@@ -419,14 +422,8 @@ def _allocation_content_hash(
     allocation: SourceLotDisposalAllocation,
 ) -> str:
     payload: dict[str, Any] = {
-        "allocation_ordinal": allocation.allocation_ordinal,
-        "consumed_cost_base": allocation.consumed_cost_base,
-        "consumed_cost_local": allocation.consumed_cost_local,
-        "consumed_quantity": allocation.consumed_quantity,
+        **source_lot_disposal_allocation_payload(allocation),
         "receipt_id": receipt_id,
-        "source_acquisition_date": allocation.source_acquisition_date,
-        "source_lot_id": allocation.source_lot_id,
-        "source_transaction_id": allocation.source_transaction_id,
     }
     return cast(
         str,

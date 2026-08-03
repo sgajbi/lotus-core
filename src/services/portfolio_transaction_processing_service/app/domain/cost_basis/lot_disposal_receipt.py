@@ -14,7 +14,10 @@ from portfolio_common.domain.calculation_lineage import (
 )
 from portfolio_common.domain.cost_basis_method import CostBasisMethod
 
-from .calculation.disposal_allocation import SourceLotDisposalAllocation
+from .calculation.disposal_allocation import (
+    SourceLotDisposalAllocation,
+    source_lot_disposal_allocation_payload,
+)
 from .state_lineage import canonical_cost_basis_output_payload
 
 
@@ -117,15 +120,7 @@ class LotDisposalReceiptState:
             canonical_cost_basis_output_payload(
                 {
                     "allocations": [
-                        {
-                            "allocation_ordinal": allocation.allocation_ordinal,
-                            "consumed_cost_base": allocation.consumed_cost_base,
-                            "consumed_cost_local": allocation.consumed_cost_local,
-                            "consumed_quantity": allocation.consumed_quantity,
-                            "source_acquisition_date": allocation.source_acquisition_date,
-                            "source_lot_id": allocation.source_lot_id,
-                            "source_transaction_id": allocation.source_transaction_id,
-                        }
+                        source_lot_disposal_allocation_payload(allocation)
                         for allocation in self.allocations
                     ],
                     "calculation_policy_id": self.calculation_policy_id,

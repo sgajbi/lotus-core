@@ -30,9 +30,11 @@ from .calculation.cost_basis_strategies import (
     FIFOBasisStrategy,
 )
 from .calculation.disposal_allocation import (
+    AmortizedCostAllocationEvidence,
     LotDisposalResult,
     SourceLotDisposalAllocation,
     TransactionLotDisposal,
+    source_lot_disposal_allocation_payload,
 )
 from .calculation.engine_input import build_cost_basis_engine_input, normalize_cost_fee_amount
 from .calculation.lot_disposition import LotDispositionEngine
@@ -87,6 +89,7 @@ __all__ = [
     "AverageCostSourceAllocation",
     "AverageCostSourceAccumulator",
     "AverageCostSourceContribution",
+    "AmortizedCostAllocationEvidence",
     "AverageCostPoolTransition",
     "build_average_cost_pool_rebuild_lineage",
     "AVERAGE_COST_POOL_STATE_VERSION",
@@ -128,6 +131,7 @@ __all__ = [
     "missing_corporate_action_dependencies",
     "normalize_cost_fee_amount",
     "reconcile_corporate_action_basis",
+    "source_lot_disposal_allocation_payload",
     "transaction_order_key",
     "transaction_lot_behavior",
 ]
