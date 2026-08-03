@@ -120,6 +120,9 @@ transaction rejected by later allocated-basis reconciliation. Disposal evidence 
 the engine stages it during lot consumption, the complete transaction calculator commits it only
 after all strategy validation and transaction lineage succeed, and every rejection or exception
 discards pending evidence.
+AVCO disposal materialization is also bounded to the current open generation. Historical source
+identities remain available to explicit state expansion, but repeated buy/full-dispose cycles no
+longer rescan closed generations in the calculation hot path.
 
 ## Same-Pattern Review
 
@@ -183,6 +186,10 @@ Data Models wiki documents the staged ledgers while the capability wiki remains
 - review fix-forward proof: 103 warning-strict calculator/disposition tests cover accepted commit,
   rejected cash-in-lieu discard, explicit pending discard, filtering, and cleanup; scoped MyPy and
   Ruff passed.
+- final AVCO performance fix-forward proof: 201 warning-strict calculation tests include a
+  structural closed-generation scan guard; repeated full-close measurements were 0.019s for 100,
+  0.038s for 200, and 0.083s for 400 cycles; repository-native MyPy (267 sources), scoped Ruff,
+  and diff checks passed.
 
 Protected PR, exact-main, runtime recovery/replay and load proof, verified query reconstruction,
 disposal, redemption, and issue-closure evidence remain pending until their corresponding

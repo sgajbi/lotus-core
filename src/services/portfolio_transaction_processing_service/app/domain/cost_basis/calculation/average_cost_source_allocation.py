@@ -128,6 +128,7 @@ class AverageCostSourceAllocation:
     def __init__(self) -> None:
         self._contributions: dict[str, AverageCostSourceContribution] = {}
         self._source_ids_by_key: dict[BookKey, list[str]] = defaultdict(list)
+        self._active_source_ids_by_key: dict[BookKey, list[str]] = defaultdict(list)
         self._generation_by_key: dict[BookKey, int] = defaultdict(int)
         self._disposal_scale_by_key: dict[BookKey, Decimal] = defaultdict(lambda: Decimal(1))
         self._segment_start_scale_by_key: dict[BookKey, Decimal] = defaultdict(lambda: Decimal(1))
@@ -166,6 +167,7 @@ class AverageCostSourceAllocation:
             cost_base_generation=self._cost_base_generation_by_key[book_key],
         )
         self._source_ids_by_key[book_key].append(source_transaction_id)
+        self._active_source_ids_by_key[book_key].append(source_transaction_id)
         self._segment_start_scale_by_key[book_key] = self._disposal_scale_by_key[book_key]
         self._segment_start_quantity_by_key[book_key] = pool_quantity_after
 
@@ -182,6 +184,7 @@ class AverageCostSourceAllocation:
             raise ValueError("AVCO source allocation quantity_after is outside the pool")
 
         if quantity_after.is_zero():
+            self._active_source_ids_by_key[book_key].clear()
             self._generation_by_key[book_key] += 1
             self._disposal_scale_by_key[book_key] = Decimal(1)
             self._segment_start_scale_by_key[book_key] = Decimal(1)
@@ -234,7 +237,16 @@ class AverageCostSourceAllocation:
     ) -> dict[str, OpenLotState]:
         states: dict[str, OpenLotState] = {}
         for book_key in self._source_ids_by_key:
-            states.update(self.materialize_book(book_key=book_key, pool=pools[book_key]))
+            active_states = self.materialize_book(book_key=book_key, pool=pools[book_key])
+            for source_transaction_id in self._source_ids_by_key[book_key]:
+                states[source_transaction_id] = active_states.get(
+                    source_transaction_id,
+                    OpenLotState(
+                        quantity=Decimal(0),
+                        cost_local=Decimal(0),
+                        cost_base=Decimal(0),
+                    ),
+                )
         return states
 
     def materialize_book(
@@ -247,7 +259,7 @@ class AverageCostSourceAllocation:
 
         contributions = tuple(
             (source_transaction_id, self._contributions[source_transaction_id])
-            for source_transaction_id in self._source_ids_by_key[book_key]
+            for source_transaction_id in self._active_source_ids_by_key[book_key]
         )
         last_quantity_source_id = next(
             (
@@ -341,6 +353,17 @@ class AverageCostSourceAllocation:
         return tuple(
             (source_transaction_id, self._contributions[source_transaction_id])
             for source_transaction_id in self._source_ids_by_key[book_key]
+        )
+
+    def active_source_contributions(
+        self,
+        book_key: BookKey,
+    ) -> tuple[tuple[str, AverageCostSourceContribution], ...]:
+        """Return only current-generation source metadata for disposal allocation."""
+
+        return tuple(
+            (source_transaction_id, self._contributions[source_transaction_id])
+            for source_transaction_id in self._active_source_ids_by_key[book_key]
         )
 
     def _disposal_factor(self, contribution: AverageCostSourceContribution) -> Decimal:

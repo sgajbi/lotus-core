@@ -467,6 +467,7 @@ class AverageCostBasisStrategy(CostBasisStrategy):
         if required_quantity == Decimal(0):
             return LotDisposalResult.empty()
 
+        source_contributions = self._source_allocation.active_source_contributions(key)
         states_before = self._source_allocation.materialize_book(book_key=key, pool=pool)
         cogs_base, cogs_local = pool.dispose(required_quantity)
         self._source_allocation.apply_disposal(
@@ -476,11 +477,16 @@ class AverageCostBasisStrategy(CostBasisStrategy):
         )
         states_after = self._source_allocation.materialize_book(book_key=key, pool=pool)
         allocations: list[_UnreconciledSourceDisposalAllocation] = []
-        for source_transaction_id, contribution in self._source_allocation.source_contributions(
-            key
-        ):
+        for source_transaction_id, contribution in source_contributions:
             state_before = states_before[source_transaction_id]
-            state_after = states_after[source_transaction_id]
+            state_after = states_after.get(
+                source_transaction_id,
+                OpenLotState(
+                    quantity=Decimal(0),
+                    cost_local=Decimal(0),
+                    cost_base=Decimal(0),
+                ),
+            )
             consumed_quantity = COST_BASIS_STATE_LEDGER_OUTPUT_V1.subtract(
                 state_before.quantity,
                 state_after.quantity,
