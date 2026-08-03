@@ -93,7 +93,7 @@ def run_capacity_profile(
             timeline = build_capacity_timeline(transaction_count)
             processor = build_cost_basis_timeline_processor(method)
             started = clock()
-            processed, errors, open_lot_states = processor.process_transactions([], timeline)
+            result = processor.process_transactions([], timeline)
             duration_seconds = max(clock() - started, 0.0)
             throughput = transaction_count / duration_seconds if duration_seconds > 0 else 0.0
             measurements.append(
@@ -102,9 +102,9 @@ def run_capacity_profile(
                     transaction_count=transaction_count,
                     duration_seconds=round(duration_seconds, 6),
                     transactions_per_second=round(throughput, 3),
-                    processed_count=len(processed),
-                    error_count=len(errors),
-                    open_lot_state_count=len(open_lot_states),
+                    processed_count=len(result.processed),
+                    error_count=len(result.errored),
+                    open_lot_state_count=len(result.open_lot_states),
                 )
             )
 
