@@ -340,6 +340,8 @@ TABLES_TO_TRUNCATE = [
     "instrument_reprocessing_state",  # <-- ADD NEW TABLE HERE
     "reprocessing_jobs",
     "accrued_income_offset_state",
+    "lot_disposal_allocations",
+    "lot_disposal_receipts",
     "position_lot_state",
     "position_state",
     "business_dates",
