@@ -75,7 +75,14 @@ class CostBasisCalculationCoordinator:
             security_id=transaction.security_id,
         )
         lot_behavior = transaction_lot_behavior(transaction_type)
-        if checkpoint is not None and lot_behavior in INCREMENTAL_SAFE_LOT_BEHAVIORS:
+        requires_full_source_history = (
+            cost_basis_method is CostBasisMethod.AVCO and lot_behavior == "consume_lot"
+        )
+        if (
+            checkpoint is not None
+            and lot_behavior in INCREMENTAL_SAFE_LOT_BEHAVIORS
+            and not requires_full_source_history
+        ):
             incoming_raw = await self._load_incoming_transaction(
                 transaction=transaction,
                 portfolio_base_currency=portfolio_base_currency,
