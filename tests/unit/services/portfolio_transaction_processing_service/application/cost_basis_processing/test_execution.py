@@ -139,6 +139,7 @@ async def test_cost_basis_execution_acquires_key_lock_before_calculation(
         AsyncMock(side_effect=lambda **_kwargs: persistence_order.append("checkpoint")),
     )
 
+    amortized_cost_profiles = AsyncMock(spec=LotAmortizedCostProfilePort)
     result = await PreparedCostProcessingUseCase()._calculate_cost_basis(
         prepared=prepared,
         portfolio=CostBasisPortfolioReference(
@@ -155,7 +156,7 @@ async def test_cost_basis_execution_acquires_key_lock_before_calculation(
         average_cost_pools=AsyncMock(spec=CostBasisAverageCostPoolPort),
         lot_disposals=AsyncMock(spec=CostBasisLotDisposalPort),
         lot_states=AsyncMock(spec=CostBasisLotStatePort),
-        amortized_cost_profiles=AsyncMock(spec=LotAmortizedCostProfilePort),
+        amortized_cost_profiles=amortized_cost_profiles,
         income_offsets=AsyncMock(spec=AccruedIncomeOffsetStatePort),
         fx_rates=AsyncMock(spec=CostBasisFxRatePort),
         processing_state=processing_state,
@@ -167,12 +168,17 @@ async def test_cost_basis_execution_acquires_key_lock_before_calculation(
         "SECURITY-01",
     )
     persist_disposals.assert_awaited_once()
+    amortized_cost_profiles.effective_as_of_many.assert_not_awaited()
     assert persistence_order == [
         "transactions",
         "disposal-receipts",
         "lot-state",
         "checkpoint",
     ]
+
+
+def test_amortized_disposal_runtime_is_gated_pending_correction_replay() -> None:
+    assert execution_module._AMORTIZED_DISPOSAL_RUNTIME_ENABLED is False
 
 
 @pytest.mark.asyncio

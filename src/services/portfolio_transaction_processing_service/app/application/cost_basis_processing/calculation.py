@@ -196,6 +196,7 @@ class CostBasisCalculationCoordinator:
             open_lot_persistence_scope=persistence_scope,
             average_cost_pool_transition=average_cost_pool_transition,
             disposals=timeline_result.disposals,
+            source_transactions=timeline_result.source_transactions,
         )
 
     async def _calculate_full_rebuild(
@@ -234,6 +235,7 @@ class CostBasisCalculationCoordinator:
             open_lot_persistence_scope=persistence_scope,
             average_cost_pool_transition=None,
             disposals=timeline_result.disposals,
+            source_transactions=timeline_result.source_transactions,
         )
 
     async def _load_incoming_transaction(

@@ -23,3 +23,4 @@ class CostBasisCalculationResult:
     open_lot_persistence_scope: OpenLotPersistenceScope
     average_cost_pool_transition: AverageCostPoolTransition | None
     disposals: tuple[TransactionLotDisposal, ...]
+    source_transactions: dict[str, CostBasisTransaction]
