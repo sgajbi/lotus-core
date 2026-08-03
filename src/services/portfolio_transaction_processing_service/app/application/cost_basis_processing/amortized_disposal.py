@@ -19,13 +19,16 @@ from portfolio_common.domain.transaction.numeric_policy import (
 
 from ...domain.cost_basis import (
     AmortizedCostAllocationEvidence,
+    AmortizedCostCarryState,
     CostBasisTransaction,
     LotDisposalResult,
+    OpenLotState,
     SourceLotDisposalAllocation,
     TransactionLotDisposal,
     transaction_cost_output_payload,
 )
 from ...domain.fixed_income_book_cost import (
+    CarriedLotBookCost,
     LotAmortizedCostProfileVersion,
     LotBookCostAuthorityScope,
     allocate_recognized_lot_book_cost,
@@ -91,6 +94,10 @@ async def apply_effective_amortized_cost_to_disposals(
     remaining_quantity_by_source = _initial_open_quantities(
         calculation.source_transactions.values()
     )
+    carried_book_cost_by_source = _initial_carried_book_costs(
+        calculation.source_transactions.values()
+    )
+    open_lot_states = dict(calculation.open_lot_states)
     decorated_disposals: list[TransactionLotDisposal] = []
     for disposal in calculation.disposals:
         transaction = _required_transaction(transactions_by_id, disposal.disposal_transaction_id)
@@ -109,6 +116,8 @@ async def apply_effective_amortized_cost_to_disposals(
                     transactions_by_id, allocation.source_transaction_id
                 ),
                 remaining_quantity_by_source=remaining_quantity_by_source,
+                carried_book_cost_by_source=carried_book_cost_by_source,
+                open_lot_states=open_lot_states,
             )
             for allocation in disposal.result.allocations
         )
@@ -134,6 +143,7 @@ async def apply_effective_amortized_cost_to_disposals(
         calculation,
         processed=processed,
         disposals=tuple(decorated_disposals),
+        open_lot_states=open_lot_states,
     )
 
 
@@ -144,6 +154,8 @@ def _decorate_allocation(
     profile: LotAmortizedCostProfileVersion | None,
     source_transaction: CostBasisTransaction,
     remaining_quantity_by_source: dict[str, Decimal],
+    carried_book_cost_by_source: dict[str, CarriedLotBookCost],
+    open_lot_states: dict[str, OpenLotState],
 ) -> SourceLotDisposalAllocation:
     open_quantity_before = remaining_quantity_by_source.get(allocation.source_transaction_id)
     if open_quantity_before is None:
@@ -159,6 +171,8 @@ def _decorate_allocation(
         )
     )
     if profile is None:
+        if allocation.source_transaction_id in carried_book_cost_by_source:
+            raise ValueError("amortized-cost profile gap follows persisted carry state")
         return allocation
     if profile.scope != request.scope:
         raise ValueError("effective amortized-cost profile does not match requested lot scope")
@@ -170,13 +184,23 @@ def _decorate_allocation(
         "source_lot_order_quantity",
         source_transaction.quantity,
     )
+    carried_book_cost = carried_book_cost_by_source.get(allocation.source_transaction_id)
+    book_cost_fx_rate = _book_cost_fx_rate(
+        source_transaction,
+        carried_book_cost_state=getattr(
+            source_transaction,
+            "amortized_cost_carry_state",
+            None,
+        ),
+    )
     projection = allocate_recognized_lot_book_cost(
         profile,
         disposal_date=request.effective_date,
         original_quantity=original_quantity,
         open_quantity_before=open_quantity_before,
         consumed_quantity=allocation.consumed_quantity,
-        book_cost_fx_rate_to_base=_book_cost_fx_rate(source_transaction),
+        book_cost_fx_rate_to_base=book_cost_fx_rate,
+        carried_book_cost=carried_book_cost,
     )
     evidence = AmortizedCostAllocationEvidence(
         profile_id=projection.profile_id,
@@ -201,6 +225,29 @@ def _decorate_allocation(
         retained_rounding_residual_base=projection.retained_rounding_residual_base,
         calculation_lineage=projection.calculation_lineage,
     )
+    next_carry = projection.carry_forward()
+    if next_carry is None:
+        carried_book_cost_by_source.pop(allocation.source_transaction_id, None)
+        open_lot_states[allocation.source_transaction_id] = OpenLotState(
+            quantity=Decimal(0),
+            cost_local=Decimal(0),
+            cost_base=Decimal(0),
+        )
+    else:
+        carried_book_cost_by_source[allocation.source_transaction_id] = next_carry
+        open_lot_states[allocation.source_transaction_id] = OpenLotState(
+            quantity=evidence.residual_quantity,
+            cost_local=evidence.residual_cost_local,
+            cost_base=evidence.residual_cost_base,
+            amortized_cost=AmortizedCostCarryState(
+                profile_id=evidence.profile_id,
+                profile_version=evidence.profile_version,
+                profile_content_hash=evidence.profile_content_hash,
+                recognized_through_date=evidence.recognized_through_date,
+                scheduled_cost_local=evidence.scheduled_cost_local,
+                book_cost_fx_rate_to_base=evidence.book_cost_fx_rate_to_base,
+            ),
+        )
     return replace(
         allocation,
         consumed_cost_local=evidence.consumed_cost_local,
@@ -219,7 +266,37 @@ def _initial_open_quantities(
     }
 
 
-def _book_cost_fx_rate(source_transaction: CostBasisTransaction) -> Decimal:
+def _initial_carried_book_costs(
+    source_transactions: Iterable[CostBasisTransaction],
+) -> dict[str, CarriedLotBookCost]:
+    carried: dict[str, CarriedLotBookCost] = {}
+    for transaction in source_transactions:
+        state = getattr(transaction, "amortized_cost_carry_state", None)
+        if state is None:
+            continue
+        if not isinstance(state, AmortizedCostCarryState):
+            raise ValueError("source lot carries invalid amortized-cost state")
+        local_cost = transaction.net_cost_local
+        base_cost = transaction.net_cost
+        if local_cost is None or base_cost is None:
+            raise ValueError("source lot carry state is missing residual local/base cost")
+        carried[transaction.transaction_id] = CarriedLotBookCost(
+            scheduled_cost_local=state.scheduled_cost_local,
+            residual_cost_local=local_cost,
+            residual_cost_base=base_cost,
+        )
+    return carried
+
+
+def _book_cost_fx_rate(
+    source_transaction: CostBasisTransaction,
+    *,
+    carried_book_cost_state: object,
+) -> Decimal:
+    if isinstance(carried_book_cost_state, AmortizedCostCarryState):
+        return carried_book_cost_state.book_cost_fx_rate_to_base
+    if carried_book_cost_state is not None:
+        raise ValueError("source lot carries invalid amortized-cost state")
     local_cost = source_transaction.net_cost_local
     base_cost = source_transaction.net_cost
     if (

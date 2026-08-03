@@ -92,6 +92,11 @@ class AmortizedCostAllocationEvidence:
                     "consumed_quantity",
                     "book_cost_fx_rate_to_base",
                 },
+                allow_negative=field_name
+                in {
+                    "retained_rounding_residual_local",
+                    "retained_rounding_residual_base",
+                },
             )
         if self.open_quantity_before > self.original_quantity:
             raise ValueError("open_quantity_before must not exceed original_quantity")
@@ -365,11 +370,17 @@ def _disposal_output_payload(result: LotDisposalResult) -> dict[str, Decimal]:
     }
 
 
-def _require_decimal(value: object, field_name: str, *, positive: bool = False) -> None:
+def _require_decimal(
+    value: object,
+    field_name: str,
+    *,
+    positive: bool = False,
+    allow_negative: bool = False,
+) -> None:
     if not isinstance(value, Decimal):
         raise TypeError(f"{field_name} must be a Decimal")
     if not value.is_finite():
         raise ValueError(f"{field_name} must be finite")
-    if value < Decimal(0) or (positive and value == Decimal(0)):
+    if (not allow_negative and value < Decimal(0)) or (positive and value == Decimal(0)):
         requirement = "positive" if positive else "non-negative"
         raise ValueError(f"{field_name} must be {requirement}")
