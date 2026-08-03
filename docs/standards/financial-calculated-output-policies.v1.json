@@ -84,7 +84,7 @@
       ],
       "lineage_boundary_covered_callsites": {
         "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/disposal_allocation.py::_build_conserved_allocation_lineage": [
-          "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_strategies.py::_reconcile_disposal_allocation_residuals"
+          "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_strategies.py::_apportion_nonnegative_disposal_values"
         ],
         "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/state_lineage.py::build_cost_basis_state_lineage": [
           "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/average_cost_pool_checkpoint.py::AverageCostPoolTransition.after",
