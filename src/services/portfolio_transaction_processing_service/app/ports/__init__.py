@@ -41,6 +41,7 @@ from .cost_basis import (
     OpenLotCheckpointRecord,
 )
 from .fixed_income_book_cost import (
+    EffectiveLotAmortizedCostProfileRequest,
     LotAmortizedCostAuthority,
     LotAmortizedCostAuthorityAppendOutcome,
     LotAmortizedCostAuthorityBundle,
@@ -86,6 +87,7 @@ from .transaction_readiness import (
 from .transaction_replay import BookedTransactionReplayPort
 
 __all__ = [
+    "EffectiveLotAmortizedCostProfileRequest",
     "AccruedIncomeOffsetStatePort",
     "AverageCostPoolCheckpointRecord",
     "AverageCostPoolPersistedSummary",

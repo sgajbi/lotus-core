@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from datetime import date, datetime
 
 from portfolio_common.database_models import (
@@ -14,7 +14,7 @@ from portfolio_common.domain.calculation_lineage import (
     FinancialSourceReference,
     calculation_lineage_from_payload,
 )
-from sqlalchemy import select, text
+from sqlalchemy import select, text, tuple_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -28,6 +28,7 @@ from ...domain.fixed_income_book_cost import (
     lot_amortized_cost_profile_id,
 )
 from ...ports.fixed_income_book_cost import (
+    EffectiveLotAmortizedCostProfileRequest,
     LotAmortizedCostProfileAppendOutcome,
     LotAmortizedCostProfileHead,
 )
@@ -239,6 +240,94 @@ class SqlAlchemyLotAmortizedCostProfileRepository:
         record = (await self._session.scalars(statement)).first()
         return await self._profile_from_record(record) if record is not None else None
 
+    async def effective_as_of_many(
+        self,
+        requests: Sequence[EffectiveLotAmortizedCostProfileRequest],
+    ) -> dict[EffectiveLotAmortizedCostProfileRequest, LotAmortizedCostProfileVersion]:
+        """Load many effective profiles in one header and one period query."""
+
+        normalized_requests = tuple(dict.fromkeys(requests))
+        if not normalized_requests:
+            return {}
+        for request in normalized_requests:
+            if not isinstance(request, EffectiveLotAmortizedCostProfileRequest):
+                raise TypeError(
+                    "requests must contain EffectiveLotAmortizedCostProfileRequest values"
+                )
+
+        scope_keys = tuple(dict.fromkeys(request.scope.key for request in normalized_requests))
+        latest_requested_date = max(request.effective_date for request in normalized_requests)
+        records = (
+            await self._session.scalars(
+                select(LotAmortizedCostProfileRecord).where(
+                    tuple_(
+                        LotAmortizedCostProfileRecord.tenant_id,
+                        LotAmortizedCostProfileRecord.legal_book_id,
+                        LotAmortizedCostProfileRecord.portfolio_id,
+                        LotAmortizedCostProfileRecord.security_id,
+                        LotAmortizedCostProfileRecord.lot_id,
+                    ).in_(scope_keys),
+                    LotAmortizedCostProfileRecord.effective_date <= latest_requested_date,
+                )
+            )
+        ).all()
+        records_by_scope: dict[
+            tuple[str, str, str, str, str], list[LotAmortizedCostProfileRecord]
+        ] = {}
+        for record in records:
+            records_by_scope.setdefault(_record_scope_key(record), []).append(record)
+
+        selected: dict[EffectiveLotAmortizedCostProfileRequest, LotAmortizedCostProfileRecord] = {}
+        for request in normalized_requests:
+            eligible = (
+                record
+                for record in records_by_scope.get(request.scope.key, ())
+                if record.effective_date <= request.effective_date
+            )
+            record = max(
+                eligible,
+                key=lambda candidate: (candidate.effective_date, candidate.profile_version),
+                default=None,
+            )
+            if record is not None:
+                selected[request] = record
+        if not selected:
+            return {}
+
+        selected_identities = tuple(
+            dict.fromkeys(
+                (record.profile_id, record.profile_version) for record in selected.values()
+            )
+        )
+        period_records = (
+            await self._session.scalars(
+                select(LotAmortizedCostPeriodRecord)
+                .where(
+                    tuple_(
+                        LotAmortizedCostPeriodRecord.profile_id,
+                        LotAmortizedCostPeriodRecord.profile_version,
+                    ).in_(selected_identities)
+                )
+                .order_by(
+                    LotAmortizedCostPeriodRecord.profile_id.asc(),
+                    LotAmortizedCostPeriodRecord.profile_version.asc(),
+                    LotAmortizedCostPeriodRecord.period_ordinal.asc(),
+                )
+            )
+        ).all()
+        periods_by_identity: dict[tuple[str, int], list[LotAmortizedCostPeriodRecord]] = {}
+        for period in period_records:
+            periods_by_identity.setdefault((period.profile_id, period.profile_version), []).append(
+                period
+            )
+        return {
+            request: _profile_from_record_and_periods(
+                record,
+                periods_by_identity.get((record.profile_id, record.profile_version), ()),
+            )
+            for request, record in selected.items()
+        }
+
     async def _classify_conflicting_insert(
         self,
         profile: LotAmortizedCostProfileVersion,
@@ -299,52 +388,69 @@ class SqlAlchemyLotAmortizedCostProfileRepository:
                 .order_by(LotAmortizedCostPeriodRecord.period_ordinal.asc())
             )
         ).all()
-        profile = LotAmortizedCostProfileVersion(
-            profile_id=record.profile_id,
-            profile_version=record.profile_version,
-            scope=LotBookCostAuthorityScope(
-                tenant_id=record.tenant_id,
-                legal_book_id=record.legal_book_id,
-                portfolio_id=record.portfolio_id,
-                security_id=record.security_id,
-                lot_id=record.lot_id,
-            ),
-            effective_date=record.effective_date,
-            status=AmortizedCostProfileStatus(record.status),
-            eligibility_reason=(
-                AmortizedCostEligibilityReason(record.eligibility_reason)
-                if record.eligibility_reason is not None
-                else None
-            ),
-            policy_id=record.policy_id,
-            policy_version=record.policy_version,
-            schedule_version=record.schedule_version,
-            currency=record.currency,
-            direction=(
-                AmortizedCostDirection(record.direction) if record.direction is not None else None
-            ),
-            initial_amortized_cost_local=record.initial_amortized_cost_local,
-            redemption_value_local=record.redemption_value_local,
-            final_amortized_cost_local=record.final_amortized_cost_local,
-            residual_local=record.residual_local,
-            authority_content_hash=record.authority_content_hash,
-            source_references=_sources_from_payload(record.source_references),
-            calculation_lineage=calculation_lineage_from_payload(record.calculation_lineage),
-            periods=tuple(_period_from_record(period) for period in period_records),
+        return _profile_from_record_and_periods(record, period_records)
+
+
+def _profile_from_record_and_periods(
+    record: LotAmortizedCostProfileRecord,
+    period_records: Sequence[LotAmortizedCostPeriodRecord],
+) -> LotAmortizedCostProfileVersion:
+    profile = LotAmortizedCostProfileVersion(
+        profile_id=record.profile_id,
+        profile_version=record.profile_version,
+        scope=LotBookCostAuthorityScope(
+            tenant_id=record.tenant_id,
+            legal_book_id=record.legal_book_id,
+            portfolio_id=record.portfolio_id,
+            security_id=record.security_id,
+            lot_id=record.lot_id,
+        ),
+        effective_date=record.effective_date,
+        status=AmortizedCostProfileStatus(record.status),
+        eligibility_reason=(
+            AmortizedCostEligibilityReason(record.eligibility_reason)
+            if record.eligibility_reason is not None
+            else None
+        ),
+        policy_id=record.policy_id,
+        policy_version=record.policy_version,
+        schedule_version=record.schedule_version,
+        currency=record.currency,
+        direction=(
+            AmortizedCostDirection(record.direction) if record.direction is not None else None
+        ),
+        initial_amortized_cost_local=record.initial_amortized_cost_local,
+        redemption_value_local=record.redemption_value_local,
+        final_amortized_cost_local=record.final_amortized_cost_local,
+        residual_local=record.residual_local,
+        authority_content_hash=record.authority_content_hash,
+        source_references=_sources_from_payload(record.source_references),
+        calculation_lineage=calculation_lineage_from_payload(record.calculation_lineage),
+        periods=tuple(_period_from_record(period) for period in period_records),
+    )
+    if profile.profile_id != lot_amortized_cost_profile_id(profile.scope):
+        raise ConflictingLotAmortizedCostProfileError(
+            "persisted profile identity does not match its exact source-lot scope"
         )
-        if profile.profile_id != lot_amortized_cost_profile_id(profile.scope):
-            raise ConflictingLotAmortizedCostProfileError(
-                "persisted profile identity does not match its exact source-lot scope"
-            )
-        if profile.content_hash() != record.profile_content_hash:
-            raise ConflictingLotAmortizedCostProfileError(
-                "persisted profile content does not match its immutable hash"
-            )
-        if not _profile_record_matches(record, profile):
-            raise ConflictingLotAmortizedCostProfileError(
-                "persisted profile does not use its canonical representation"
-            )
-        return profile
+    if profile.content_hash() != record.profile_content_hash:
+        raise ConflictingLotAmortizedCostProfileError(
+            "persisted profile content does not match its immutable hash"
+        )
+    if not _profile_record_matches(record, profile):
+        raise ConflictingLotAmortizedCostProfileError(
+            "persisted profile does not use its canonical representation"
+        )
+    return profile
+
+
+def _record_scope_key(record: LotAmortizedCostProfileRecord) -> tuple[str, str, str, str, str]:
+    return (
+        record.tenant_id,
+        record.legal_book_id,
+        record.portfolio_id,
+        record.security_id,
+        record.lot_id,
+    )
 
 
 def _profile_values(

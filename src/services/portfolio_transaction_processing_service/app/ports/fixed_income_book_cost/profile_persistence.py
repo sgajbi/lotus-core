@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date
 from enum import StrEnum
@@ -21,6 +22,20 @@ class LotAmortizedCostProfileHead:
     profile_version: int
     profile_content_hash: str
     authority_content_hash: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class EffectiveLotAmortizedCostProfileRequest:
+    """Request the profile effective for one exact lot scope and business date."""
+
+    scope: LotBookCostAuthorityScope
+    effective_date: date
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.scope, LotBookCostAuthorityScope):
+            raise TypeError("scope must be a LotBookCostAuthorityScope")
+        if type(self.effective_date) is not date:
+            raise TypeError("effective_date must be a date")
 
 
 class LotAmortizedCostProfileAppendOutcome(StrEnum):
@@ -100,5 +115,13 @@ class LotAmortizedCostProfilePort(Protocol):
         effective_date: date,
     ) -> LotAmortizedCostProfileVersion | None:
         """Return the latest profile effective no later than the requested date."""
+
+        ...
+
+    async def effective_as_of_many(
+        self,
+        requests: Sequence[EffectiveLotAmortizedCostProfileRequest],
+    ) -> dict[EffectiveLotAmortizedCostProfileRequest, LotAmortizedCostProfileVersion]:
+        """Return effective profiles for many exact lot/date requests in bounded queries."""
 
         ...
