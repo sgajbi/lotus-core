@@ -12,13 +12,19 @@ from portfolio_common.domain.transaction.numeric_policy import (
 
 @dataclass(frozen=True, slots=True)
 class AmortizedCostCarryState:
-    """Recognition baseline required to advance a persisted amortized open lot."""
+    """Independent accounting carrying state for one persisted open lot.
+
+    ``OpenLotState.cost_*`` remains the strategy/tax acquisition basis.  These amounts are the
+    residual accounting carrying amount consumed by the fixed-income amortized-cost overlay.
+    """
 
     profile_id: str
     profile_version: int
     profile_content_hash: str
     recognized_through_date: date
     scheduled_cost_local: Decimal
+    carrying_amount_local: Decimal
+    carrying_amount_base: Decimal
     book_cost_fx_rate_to_base: Decimal
 
     def __post_init__(self) -> None:
@@ -36,6 +42,8 @@ class AmortizedCostCarryState:
         if type(self.recognized_through_date) is not date:
             raise TypeError("recognized_through_date must be a date")
         _require_non_negative_decimal(self.scheduled_cost_local, "scheduled_cost_local")
+        _require_non_negative_decimal(self.carrying_amount_local, "carrying_amount_local")
+        _require_non_negative_decimal(self.carrying_amount_base, "carrying_amount_base")
         _require_positive_decimal(
             self.book_cost_fx_rate_to_base,
             "book_cost_fx_rate_to_base",

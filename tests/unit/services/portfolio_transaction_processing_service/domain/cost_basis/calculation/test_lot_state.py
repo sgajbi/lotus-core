@@ -18,6 +18,8 @@ def _carry_state() -> AmortizedCostCarryState:
         profile_content_hash="a" * 64,
         recognized_through_date=date(2026, 6, 30),
         scheduled_cost_local=Decimal("97.0000000000"),
+        carrying_amount_local=Decimal("64.6666666667"),
+        carrying_amount_base=Decimal("79.8353902264"),
         book_cost_fx_rate_to_base=Decimal("1.2345678912"),
     )
 
@@ -75,6 +77,8 @@ def test_carry_state_rejects_incomplete_identity_and_invalid_amount() -> None:
             profile_content_hash="a" * 64,
             recognized_through_date=date(2026, 6, 30),
             scheduled_cost_local=Decimal("97"),
+            carrying_amount_local=Decimal("64"),
+            carrying_amount_base=Decimal("64"),
             book_cost_fx_rate_to_base=Decimal("1"),
         )
     with pytest.raises(ValueError, match="scheduled_cost_local"):
@@ -84,5 +88,19 @@ def test_carry_state_rejects_incomplete_identity_and_invalid_amount() -> None:
             profile_content_hash="a" * 64,
             recognized_through_date=date(2026, 6, 30),
             scheduled_cost_local=Decimal("-0.01"),
+            carrying_amount_local=Decimal("64"),
+            carrying_amount_base=Decimal("64"),
+            book_cost_fx_rate_to_base=Decimal("1"),
+        )
+
+    with pytest.raises(ValueError, match="carrying_amount_local"):
+        AmortizedCostCarryState(
+            profile_id="PROFILE-1",
+            profile_version=1,
+            profile_content_hash="a" * 64,
+            recognized_through_date=date(2026, 6, 30),
+            scheduled_cost_local=Decimal("97"),
+            carrying_amount_local=Decimal("-0.01"),
+            carrying_amount_base=Decimal("64"),
             book_cost_fx_rate_to_base=Decimal("1"),
         )

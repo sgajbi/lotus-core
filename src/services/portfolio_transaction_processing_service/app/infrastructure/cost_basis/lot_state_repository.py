@@ -230,6 +230,8 @@ def _amortized_cost_carry(lot: PositionLotState) -> AmortizedCostCarryState | No
         lot.amortized_cost_profile_content_hash,
         lot.amortized_cost_recognized_through,
         lot.amortized_cost_scheduled_local,
+        lot.amortized_book_carrying_local,
+        lot.amortized_book_carrying_base,
         lot.amortized_cost_book_fx_rate_to_base,
     )
     if all(value is None for value in values):
@@ -242,6 +244,8 @@ def _amortized_cost_carry(lot: PositionLotState) -> AmortizedCostCarryState | No
         profile_content_hash=str(lot.amortized_cost_profile_content_hash),
         recognized_through_date=lot.amortized_cost_recognized_through,
         scheduled_cost_local=lot.amortized_cost_scheduled_local,
+        carrying_amount_local=lot.amortized_book_carrying_local,
+        carrying_amount_base=lot.amortized_book_carrying_base,
         book_cost_fx_rate_to_base=lot.amortized_cost_book_fx_rate_to_base,
     )
 
@@ -259,6 +263,8 @@ def _apply_amortized_cost_carry(
         carry.recognized_through_date if carry is not None else None
     )
     lot.amortized_cost_scheduled_local = carry.scheduled_cost_local if carry is not None else None
+    lot.amortized_book_carrying_local = carry.carrying_amount_local if carry is not None else None
+    lot.amortized_book_carrying_base = carry.carrying_amount_base if carry is not None else None
     lot.amortized_cost_book_fx_rate_to_base = (
         carry.book_cost_fx_rate_to_base if carry is not None else None
     )

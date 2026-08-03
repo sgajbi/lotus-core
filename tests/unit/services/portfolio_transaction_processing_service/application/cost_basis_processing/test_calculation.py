@@ -234,6 +234,8 @@ async def test_later_sell_restores_open_lots_without_loading_full_history() -> N
                 profile_content_hash="a" * 64,
                 recognized_through_date=date(2026, 1, 1),
                 scheduled_cost_local=Decimal("100"),
+                carrying_amount_local=Decimal("100"),
+                carrying_amount_base=Decimal("100"),
                 book_cost_fx_rate_to_base=Decimal("1"),
             ),
         )
