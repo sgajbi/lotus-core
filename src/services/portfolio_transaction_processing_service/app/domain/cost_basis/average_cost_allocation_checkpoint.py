@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import date
-from decimal import Decimal
+from decimal import Context, Decimal, localcontext
 from typing import cast
 
 from portfolio_common.domain.transaction.numeric_policy import (
@@ -154,7 +155,7 @@ class AverageCostAllocationCheckpoint:
         self._validate_materialized_totals()
 
     def _validate_materialized_totals(self) -> None:
-        with COST_BASIS_STATE_LEDGER_OUTPUT_V1.arithmetic_context():
+        with _checkpoint_arithmetic_context():
             expected_disposal_scale = (
                 self.segment_start_scale
                 * self.pool.quantity
@@ -219,7 +220,7 @@ def _materialized_total(
     output_field: str,
 ) -> Decimal:
     total = Decimal(0)
-    with COST_BASIS_STATE_LEDGER_OUTPUT_V1.arithmetic_context():
+    with _checkpoint_arithmetic_context():
         for source in checkpoint.sources:
             if generation_field is not None and (
                 getattr(source, generation_field) != current_generation
@@ -237,10 +238,27 @@ def _materialized_total(
                     / cast(Decimal, getattr(source, scale_at_entry_field))
                 )
             total += materialized
-    return cast(
-        Decimal,
-        COST_BASIS_STATE_LEDGER_OUTPUT_V1.normalize(total, field_name=output_field),
+    return _normalize_checkpoint_value(total, field_name=output_field)
+
+
+def _checkpoint_arithmetic_context() -> AbstractContextManager[Context]:
+    return localcontext(
+        Context(
+            prec=COST_BASIS_STATE_LEDGER_OUTPUT_V1.working_precision,
+            rounding=COST_BASIS_STATE_LEDGER_OUTPUT_V1.rounding,
+        )
     )
+
+
+def _normalize_checkpoint_value(value: Decimal, *, field_name: str) -> Decimal:
+    if not value.is_finite():
+        raise ValueError(f"{field_name} checkpoint total must be finite")
+    quantum = Decimal(1).scaleb(-COST_BASIS_STATE_LEDGER_OUTPUT_V1.scale)
+    with _checkpoint_arithmetic_context():
+        return value.quantize(
+            quantum,
+            rounding=COST_BASIS_STATE_LEDGER_OUTPUT_V1.rounding,
+        )
 
 
 def _require_nonnegative_integer(value: object, *, field_name: str) -> None:

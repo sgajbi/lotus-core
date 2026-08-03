@@ -87,8 +87,6 @@
           "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_strategies.py::_apportion_nonnegative_disposal_values"
         ],
         "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/state_lineage.py::build_cost_basis_state_lineage": [
-          "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/average_cost_allocation_checkpoint.py::AverageCostAllocationCheckpoint._validate_materialized_totals",
-          "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/average_cost_allocation_checkpoint.py::_materialized_total",
           "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/average_cost_pool_checkpoint.py::AverageCostPoolTransition.after",
           "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/average_cost_pool_checkpoint.py::_sum_state_field",
           "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/average_cost_source_allocation.py::AverageCostPool.add",
