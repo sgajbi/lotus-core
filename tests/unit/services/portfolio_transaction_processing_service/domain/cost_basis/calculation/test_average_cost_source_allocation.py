@@ -118,6 +118,62 @@ def test_materialize_book_does_not_scan_unrelated_source_map() -> None:
     assert tuple(states) == ("BUY-1",)
 
 
+def test_closed_generations_are_not_scanned_during_later_disposals() -> None:
+    class HistoricalIterationForbiddenList(list[str]):
+        def __iter__(self):
+            raise AssertionError("disposal materialization must not scan closed generations")
+
+        def __reversed__(self):
+            raise AssertionError("disposal materialization must not scan closed generations")
+
+    allocation = AverageCostSourceAllocation()
+    book_key = ("P1", "I1")
+    pool = AverageCostPool()
+
+    allocation.add_source(
+        book_key=book_key,
+        source_transaction_id="BUY-CLOSED",
+        source_lot_id="LOT-BUY-CLOSED",
+        source_acquisition_date=date(2026, 1, 1),
+        quantity=Decimal("1"),
+        cost_local=Decimal("10"),
+        cost_base=Decimal("12"),
+        pool_quantity_after=Decimal("1"),
+    )
+    allocation.apply_disposal(
+        book_key=book_key,
+        quantity_before=Decimal("1"),
+        quantity_after=Decimal("0"),
+    )
+    allocation._source_ids_by_key[book_key] = HistoricalIterationForbiddenList(
+        allocation._source_ids_by_key[book_key]
+    )
+
+    pool.add(quantity=Decimal("2"), cost_local=Decimal("20"), cost_base=Decimal("24"))
+    allocation.add_source(
+        book_key=book_key,
+        source_transaction_id="BUY-ACTIVE",
+        source_lot_id="LOT-BUY-ACTIVE",
+        source_acquisition_date=date(2026, 1, 2),
+        quantity=Decimal("2"),
+        cost_local=Decimal("20"),
+        cost_base=Decimal("24"),
+        pool_quantity_after=Decimal("2"),
+    )
+
+    assert allocation.materialize_book(book_key=book_key, pool=pool) == {
+        "BUY-ACTIVE": OpenLotState(
+            quantity=Decimal("2"),
+            cost_local=Decimal("20"),
+            cost_base=Decimal("24"),
+        )
+    }
+    active_source_ids = tuple(
+        source_id for source_id, _ in allocation.active_source_contributions(book_key)
+    )
+    assert active_source_ids == ("BUY-ACTIVE",)
+
+
 def test_average_cost_source_identity_must_be_unique() -> None:
     allocation = AverageCostSourceAllocation()
     values = {
