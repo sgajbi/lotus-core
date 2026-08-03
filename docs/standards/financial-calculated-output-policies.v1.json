@@ -78,10 +78,12 @@
       "rounding": "ROUND_HALF_EVEN",
       "lineage_binding": "required",
       "lineage_boundary_callsites": [
+        "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/disposal_allocation.py::_build_conserved_allocation_lineage",
         "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/state_lineage.py::build_cost_basis_state_lineage",
         "src/services/portfolio_transaction_processing_service/app/domain/fixed_income_book_cost/calculation.py::calculate_amortized_cost_schedule"
       ],
       "lineage_boundary_covered_callsites": {
+        "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/disposal_allocation.py::_build_conserved_allocation_lineage": [],
         "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/state_lineage.py::build_cost_basis_state_lineage": [
           "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/average_cost_pool_checkpoint.py::AverageCostPoolTransition.after",
           "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/average_cost_pool_checkpoint.py::_sum_state_field",
@@ -90,12 +92,13 @@
           "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/average_cost_source_allocation.py::AverageCostPool.transfer_basis_out",
           "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/average_cost_source_allocation.py::AverageCostSourceAllocation._disposal_factor",
           "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/average_cost_source_allocation.py::AverageCostSourceAllocation.apply_disposal",
-          "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/average_cost_source_allocation.py::AverageCostSourceAllocation.materialize",
+          "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/average_cost_source_allocation.py::AverageCostSourceAllocation.materialize_book",
           "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/average_cost_source_allocation.py::_materialized_cost",
           "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/average_cost_source_allocation.py::_materialized_quantity",
           "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/average_cost_source_allocation.py::_scaled_basis_factor",
+          "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_strategies.py::AverageCostBasisStrategy.consume_sell_quantity_with_allocations",
           "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_strategies.py::FIFOBasisStrategy.add_buy_lot",
-          "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_strategies.py::FIFOBasisStrategy.consume_sell_quantity",
+          "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_strategies.py::FIFOBasisStrategy.consume_sell_quantity_with_allocations",
           "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_strategies.py::_allocate_fifo_basis_transfer",
           "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_strategies.py::_assign_fifo_lot_costs",
           "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_strategies.py::_consume_next_fifo_lot",

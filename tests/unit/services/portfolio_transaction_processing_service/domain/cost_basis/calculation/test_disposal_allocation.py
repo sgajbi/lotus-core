@@ -4,11 +4,15 @@ from datetime import date
 from decimal import Decimal
 
 import pytest
+from portfolio_common.domain.calculation_lineage import calculation_lineage_binds_output
 
 from services.portfolio_transaction_processing_service.app.domain.cost_basis import (
     LotDisposalResult,
     SourceLotDisposalAllocation,
     TransactionLotDisposal,
+)
+from services.portfolio_transaction_processing_service.app.domain.cost_basis.state_lineage import (
+    canonical_cost_basis_output_payload,
 )
 
 
@@ -59,6 +63,18 @@ def test_result_requires_exact_source_lot_conservation() -> None:
         Decimal("5"),
         None,
     )
+    assert result.calculation_lineage is not None
+    assert result.calculation_lineage.algorithm_id == "cost-basis-lot-disposal-allocation"
+    assert calculation_lineage_binds_output(
+        result.calculation_lineage,
+        output_payload=canonical_cost_basis_output_payload(
+            {
+                "consumed_cost_base": result.cost_base,
+                "consumed_cost_local": result.cost_local,
+                "consumed_quantity": result.consumed_quantity,
+            }
+        ),
+    )
 
 
 @pytest.mark.parametrize(
@@ -97,6 +113,9 @@ def test_failed_result_cannot_carry_economics() -> None:
             allocations=(),
             error_reason="insufficient quantity",
         )
+
+    assert LotDisposalResult.failed("insufficient quantity").calculation_lineage is None
+    assert LotDisposalResult.empty().calculation_lineage is None
 
 
 def test_allocation_requires_contiguous_positive_ordinals() -> None:

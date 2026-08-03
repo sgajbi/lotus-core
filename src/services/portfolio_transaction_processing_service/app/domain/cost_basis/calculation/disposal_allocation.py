@@ -2,13 +2,21 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
 
+from portfolio_common.domain.calculation_lineage import (
+    CalculationLineage,
+    build_calculation_lineage,
+)
 from portfolio_common.domain.transaction.numeric_policy import (
     COST_BASIS_STATE_LEDGER_OUTPUT_V1,
 )
+
+from ..state_lineage import canonical_cost_basis_output_payload
+
+_DISPOSAL_ALLOCATION_ALGORITHM_ID = "cost-basis-lot-disposal-allocation"
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,6 +62,7 @@ class LotDisposalResult:
     consumed_quantity: Decimal
     allocations: tuple[SourceLotDisposalAllocation, ...]
     error_reason: str | None = None
+    calculation_lineage: CalculationLineage | None = field(init=False, default=None)
 
     def __post_init__(self) -> None:
         _require_decimal(self.cost_base, "cost_base")
@@ -85,7 +94,7 @@ class LotDisposalResult:
             return
         if not self.allocations:
             raise ValueError("successful disposal must carry source-lot allocations")
-        _require_allocation_conservation(self)
+        object.__setattr__(self, "calculation_lineage", _build_conserved_allocation_lineage(self))
 
     @classmethod
     def failed(cls, reason: str) -> LotDisposalResult:
@@ -136,7 +145,7 @@ class TransactionLotDisposal:
             raise ValueError("transaction disposal evidence requires a successful positive result")
 
 
-def _require_allocation_conservation(result: LotDisposalResult) -> None:
+def _build_conserved_allocation_lineage(result: LotDisposalResult) -> CalculationLineage:
     policy = COST_BASIS_STATE_LEDGER_OUTPUT_V1
     quantity = Decimal(0)
     cost_local = Decimal(0)
@@ -163,6 +172,35 @@ def _require_allocation_conservation(result: LotDisposalResult) -> None:
         raise ValueError("source-lot local cost does not reconcile to disposal aggregate")
     if cost_base != result.cost_base:
         raise ValueError("source-lot base cost does not reconcile to disposal aggregate")
+    return build_calculation_lineage(
+        algorithm_id=_DISPOSAL_ALLOCATION_ALGORITHM_ID,
+        algorithm_version=1,
+        intermediate_precision=COST_BASIS_STATE_LEDGER_OUTPUT_V1.working_precision,
+        input_payload={
+            "allocations": [
+                {
+                    "allocation_ordinal": allocation.allocation_ordinal,
+                    "consumed_cost_base": allocation.consumed_cost_base,
+                    "consumed_cost_local": allocation.consumed_cost_local,
+                    "consumed_quantity": allocation.consumed_quantity,
+                    "source_acquisition_date": allocation.source_acquisition_date,
+                    "source_lot_id": allocation.source_lot_id,
+                    "source_transaction_id": allocation.source_transaction_id,
+                }
+                for allocation in result.allocations
+            ]
+        },
+        output_payload=canonical_cost_basis_output_payload(_disposal_output_payload(result)),
+        numeric_output_policy=COST_BASIS_STATE_LEDGER_OUTPUT_V1.lineage_identity(),
+    )
+
+
+def _disposal_output_payload(result: LotDisposalResult) -> dict[str, Decimal]:
+    return {
+        "consumed_cost_base": result.cost_base,
+        "consumed_cost_local": result.cost_local,
+        "consumed_quantity": result.consumed_quantity,
+    }
 
 
 def _require_decimal(value: object, field_name: str, *, positive: bool = False) -> None:

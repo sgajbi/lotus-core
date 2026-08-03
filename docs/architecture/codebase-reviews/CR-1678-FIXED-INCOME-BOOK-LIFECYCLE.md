@@ -108,6 +108,14 @@ parked evidence when a corrected assignment moves later instead of retaining obs
 Persisted query reconstruction integrity, current-book disposal allocation, redemption integration,
 runtime recovery/load proof, and final capability certification remain open.
 
+FIFO and average-cost disposal now return immutable, ordered source-lot allocations while retaining
+the legacy aggregate tuple projection. Allocation construction proves exact quantity and dual-
+currency cost conservation, binds the source-lot inputs and aggregate output to the governed
+numeric policy, and stages only successful positive transaction disposal evidence. The
+calculated-output policy inventory was reconciled to the moved allocation call sites so stale proof
+references cannot pass protected lint. Application transport, append-only persistence, query and
+OpenAPI exposure, recovery/load proof, and redemption consumption remain open under #481/#477.
+
 ## Same-Pattern Review
 
 The review covers both remaining `resolve_valuation_unit_price` call sites, authoritative price and
@@ -163,6 +171,10 @@ Data Models wiki documents the staged ledgers while the capability wiki remains
 - 45 warning-strict fixed-income application tests covering moved-later and moved-earlier assignment
   corrections, exact-duplicate neutrality, superseded-boundary parking, and atomic rollback;
   focused Ruff, format, MyPy, and diff checks passed.
+- signed allocation commits `d3192f3c6`, `8c043a15d9`, and `653462a3b` plus the final lineage-guard
+  fix-forward commit;
+- 194 warning-strict authority and cost-basis allocation tests, plus 113 warning-strict allocation
+  lineage and calculated-output-policy guard tests; scoped MyPy, Ruff, JSON, and diff checks passed.
 
 Protected PR, exact-main, runtime recovery/replay and load proof, verified query reconstruction,
 disposal, redemption, and issue-closure evidence remain pending until their corresponding
