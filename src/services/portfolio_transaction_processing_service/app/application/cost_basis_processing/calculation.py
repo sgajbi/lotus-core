@@ -165,7 +165,7 @@ class CostBasisCalculationCoordinator:
                 lot_count=len(initial_open_lots_raw),
             )
 
-        processed, errored, open_lot_states = build_cost_basis_timeline_processor(
+        timeline_result = build_cost_basis_timeline_processor(
             cost_basis_method,
             observer=self._observer,
         ).process_increment(
@@ -175,19 +175,20 @@ class CostBasisCalculationCoordinator:
         average_cost_pool_transition = (
             self._build_average_cost_pool_transition(
                 checkpoint=average_cost_pool_record.checkpoint,
-                open_lot_states=open_lot_states,
+                open_lot_states=timeline_result.open_lot_states,
             )
-            if average_cost_pool_record is not None and not errored
+            if average_cost_pool_record is not None and not timeline_result.errored
             else None
         )
         self._record_execution(CostBasisExecutionMode.ORDERED_APPEND, cost_basis_method)
         return CostBasisCalculationResult(
-            processed=processed,
-            errored=errored,
-            open_lot_states=open_lot_states,
+            processed=timeline_result.processed,
+            errored=timeline_result.errored,
+            open_lot_states=timeline_result.open_lot_states,
             incremental=True,
             open_lot_persistence_scope=persistence_scope,
             average_cost_pool_transition=average_cost_pool_transition,
+            disposals=timeline_result.disposals,
         )
 
     async def _calculate_full_rebuild(
@@ -204,7 +205,7 @@ class CostBasisCalculationCoordinator:
             portfolio_base_currency=portfolio_base_currency,
             instrument=instrument,
         )
-        processed, errored, open_lot_states = build_cost_basis_timeline_processor(
+        timeline_result = build_cost_basis_timeline_processor(
             cost_basis_method,
             observer=self._observer,
         ).process_transactions(
@@ -219,12 +220,13 @@ class CostBasisCalculationCoordinator:
         )
         self._record_execution(CostBasisExecutionMode.FULL_REBUILD, cost_basis_method)
         return CostBasisCalculationResult(
-            processed=processed,
-            errored=errored,
-            open_lot_states=open_lot_states,
+            processed=timeline_result.processed,
+            errored=timeline_result.errored,
+            open_lot_states=timeline_result.open_lot_states,
             incremental=False,
             open_lot_persistence_scope=persistence_scope,
             average_cost_pool_transition=None,
+            disposals=timeline_result.disposals,
         )
 
     async def _load_incoming_transaction(

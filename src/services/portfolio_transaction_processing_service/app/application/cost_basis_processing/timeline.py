@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from types import TracebackType
 from typing import Any
 
@@ -20,6 +21,7 @@ from ...domain.cost_basis import (
     FIFOBasisStrategy,
     LotDispositionEngine,
     OpenLotState,
+    TransactionLotDisposal,
 )
 from ...ports.cost_basis.observability import (
     CostBasisCalculationObservation,
@@ -28,6 +30,16 @@ from ...ports.cost_basis.observability import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True, slots=True)
+class CostBasisTimelineResult:
+    """Carry one accepted timeline result and its immutable disposal evidence."""
+
+    processed: list[CostBasisTransaction]
+    errored: list[CostCalculationError]
+    open_lot_states: dict[str, OpenLotState]
+    disposals: tuple[TransactionLotDisposal, ...]
 
 
 def build_cost_basis_timeline_processor(
@@ -83,9 +95,10 @@ class CostBasisTimelineProcessor:
         self,
         existing_transactions_raw: list[dict[str, Any]],
         new_transactions_raw: list[dict[str, Any]],
-    ) -> tuple[list[CostBasisTransaction], list[CostCalculationError], dict[str, OpenLotState]]:
+    ) -> CostBasisTimelineResult:
         with self._observer.observe_recalculation() as observation:
             self._error_reporter.clear()
+            self._disposition_engine.clear_disposal_records()
 
             parsed_existing = self._parser.parse_transactions(existing_transactions_raw)
             parsed_new = self._parser.parse_transactions(new_transactions_raw)
@@ -100,10 +113,16 @@ class CostBasisTimelineProcessor:
                 new_transaction_ids=new_transaction_ids,
             )
 
-            return (
-                final_processed_new,
-                self._error_reporter.get_errors(),
-                self._disposition_engine.get_open_lot_states(),
+            accepted_transaction_ids = {
+                transaction.transaction_id for transaction in final_processed_new
+            }
+            return CostBasisTimelineResult(
+                processed=final_processed_new,
+                errored=self._error_reporter.get_errors(),
+                open_lot_states=self._disposition_engine.get_open_lot_states(),
+                disposals=self._disposition_engine.disposal_records(
+                    transaction_ids=accepted_transaction_ids
+                ),
             )
 
     def process_increment(
@@ -111,10 +130,11 @@ class CostBasisTimelineProcessor:
         *,
         initial_open_lots_raw: list[dict[str, Any]],
         new_transactions_raw: list[dict[str, Any]],
-    ) -> tuple[list[CostBasisTransaction], list[CostCalculationError], dict[str, OpenLotState]]:
+    ) -> CostBasisTimelineResult:
         """Calculate an ordered append from a previously validated open-lot checkpoint."""
         with self._observer.observe_recalculation() as observation:
             self._error_reporter.clear()
+            self._disposition_engine.clear_disposal_records()
             parsed_initial_lots = self._parser.parse_transactions(initial_open_lots_raw)
             parsed_new = self._parser.parse_transactions(new_transactions_raw)
             valid_initial_lots = [txn for txn in parsed_initial_lots if not txn.error_reason]
@@ -125,10 +145,14 @@ class CostBasisTimelineProcessor:
             self._disposition_engine.restore_open_lots(sorted_initial_lots)
             sorted_new = self._sorter.sort_transactions([], valid_new)
             processed_new = self._process_sorted_timeline(sorted_new)
-            return (
-                processed_new,
-                self._error_reporter.get_errors(),
-                self._disposition_engine.get_open_lot_states(),
+            accepted_transaction_ids = {transaction.transaction_id for transaction in processed_new}
+            return CostBasisTimelineResult(
+                processed=processed_new,
+                errored=self._error_reporter.get_errors(),
+                open_lot_states=self._disposition_engine.get_open_lot_states(),
+                disposals=self._disposition_engine.disposal_records(
+                    transaction_ids=accepted_transaction_ids
+                ),
             )
 
     @staticmethod

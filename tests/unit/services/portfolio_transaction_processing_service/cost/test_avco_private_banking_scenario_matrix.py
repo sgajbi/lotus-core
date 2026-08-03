@@ -89,7 +89,10 @@ def _seed_buy() -> dict[str, str]:
 
 
 def _process(*transactions: dict[str, str]):
-    return build_cost_basis_timeline_processor("AVCO").process_transactions([], list(transactions))
+    result = build_cost_basis_timeline_processor("AVCO").process_transactions(
+        [], list(transactions)
+    )
+    return result.processed, result.errored, result.open_lot_states
 
 
 def _source_values(states):

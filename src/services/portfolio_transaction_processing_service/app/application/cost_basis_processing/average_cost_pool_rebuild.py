@@ -74,28 +74,28 @@ class AverageCostPoolRebuildPlanner:
             portfolio_base_currency=portfolio.base_currency,
             fx_rates=fx_rates,
         )
-        processed, errored, source_states = build_cost_basis_timeline_processor(
+        timeline_result = build_cost_basis_timeline_processor(
             CostBasisMethod.AVCO,
             observer=self._observer,
         ).process_transactions(existing_transactions_raw=[], new_transactions_raw=enriched_history)
-        if errored:
-            first_error = errored[0]
+        if timeline_result.errored:
+            first_error = timeline_result.errored[0]
             raise ValueError(
                 f"Cost-basis calculation failed for {first_error.transaction_id}: "
                 f"{first_error.error_reason}"
             )
 
-        latest_transaction = max(processed, key=transaction_order_key)
+        latest_transaction = max(timeline_result.processed, key=transaction_order_key)
         source_transactions = tuple(
             transaction
-            for transaction in processed
+            for transaction in timeline_result.processed
             if transaction_lot_behavior(transaction.transaction_type) in LOT_OPENING_BEHAVIORS
         )
         checkpoint = AverageCostPoolCheckpoint.from_open_lot_states(
             portfolio_id=portfolio_id,
             instrument_id=latest_transaction.instrument_id,
             security_id=security_id,
-            states_by_source_transaction_id=source_states,
+            states_by_source_transaction_id=timeline_result.open_lot_states,
         )
         processing_checkpoint = CostBasisProcessingCheckpoint.from_transaction(
             latest_transaction,
@@ -106,12 +106,12 @@ class AverageCostPoolRebuildPlanner:
             processing_checkpoint=processing_checkpoint,
             replay_lineage=_rebuild_replay_lineage(
                 history=history,
-                processed=processed,
+                processed=timeline_result.processed,
                 checkpoint=checkpoint,
                 processing_checkpoint=processing_checkpoint,
             ),
             source_transactions=source_transactions,
-            source_states=source_states,
+            source_states=timeline_result.open_lot_states,
         )
 
 
