@@ -86,7 +86,7 @@ def test_amortized_disposal_evidence_migration_is_reversible(monkeypatch) -> Non
         "amortized_cost_residual_quantity",
         "amortized_cost_current_local",
         "amortized_cost_residual_local",
-        "amortized_cost_fx_rate_to_base",
+        "amortized_cost_book_fx_rate_to_base",
         "amortized_cost_residual_base",
         "amortized_cost_calculation_lineage",
     ]

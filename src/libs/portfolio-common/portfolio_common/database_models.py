@@ -2529,7 +2529,7 @@ class LotDisposalAllocationRecord(Base):
     amortized_cost_residual_quantity = Column(ExactNumeric(18, 10), nullable=True)
     amortized_cost_current_local = Column(ExactNumeric(18, 10), nullable=True)
     amortized_cost_residual_local = Column(ExactNumeric(18, 10), nullable=True)
-    amortized_cost_fx_rate_to_base = Column(ExactNumeric(18, 10), nullable=True)
+    amortized_cost_book_fx_rate_to_base = Column(ExactNumeric(18, 10), nullable=True)
     amortized_cost_residual_base = Column(ExactNumeric(18, 10), nullable=True)
     amortized_cost_calculation_lineage = Column(JSONB(none_as_null=True), nullable=True)
     allocation_content_hash = Column(String(64), nullable=False)
@@ -2631,7 +2631,7 @@ class LotDisposalAllocationRecord(Base):
             "AND amortized_cost_residual_quantity IS NULL "
             "AND amortized_cost_current_local IS NULL "
             "AND amortized_cost_residual_local IS NULL "
-            "AND amortized_cost_fx_rate_to_base IS NULL "
+            "AND amortized_cost_book_fx_rate_to_base IS NULL "
             "AND amortized_cost_residual_base IS NULL "
             "AND amortized_cost_calculation_lineage IS NULL) OR ("
             "amortized_cost_profile_id IS NOT NULL "
@@ -2644,7 +2644,7 @@ class LotDisposalAllocationRecord(Base):
             "AND amortized_cost_residual_quantity IS NOT NULL "
             "AND amortized_cost_current_local IS NOT NULL "
             "AND amortized_cost_residual_local IS NOT NULL "
-            "AND amortized_cost_fx_rate_to_base IS NOT NULL "
+            "AND amortized_cost_book_fx_rate_to_base IS NOT NULL "
             "AND amortized_cost_residual_base IS NOT NULL "
             "AND amortized_cost_calculation_lineage IS NOT NULL)",
             name="ck_lot_disposal_allocation_amort_shape",
@@ -2656,7 +2656,7 @@ class LotDisposalAllocationRecord(Base):
             "amortized_cost_residual_quantity",
             "amortized_cost_current_local",
             "amortized_cost_residual_local",
-            "amortized_cost_fx_rate_to_base",
+            "amortized_cost_book_fx_rate_to_base",
             "amortized_cost_residual_base",
         ),
         CheckConstraint(
@@ -2672,7 +2672,7 @@ class LotDisposalAllocationRecord(Base):
             "AND amortized_cost_residual_quantity >= 0 "
             "AND amortized_cost_current_local >= 0 "
             "AND amortized_cost_residual_local >= 0 "
-            "AND amortized_cost_fx_rate_to_base > 0 "
+            "AND amortized_cost_book_fx_rate_to_base > 0 "
             "AND amortized_cost_residual_base >= 0 "
             "AND jsonb_typeof(amortized_cost_calculation_lineage) = 'object')",
             name="ck_lot_disposal_allocation_amort_values",

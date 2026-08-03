@@ -335,7 +335,7 @@ def _amortized_cost_evidence(
         "amortized_cost_residual_quantity",
         "amortized_cost_current_local",
         "amortized_cost_residual_local",
-        "amortized_cost_fx_rate_to_base",
+        "amortized_cost_book_fx_rate_to_base",
         "amortized_cost_residual_base",
         "amortized_cost_calculation_lineage",
     )
@@ -358,7 +358,7 @@ def _amortized_cost_evidence(
         current_cost_local=record.amortized_cost_current_local,
         consumed_cost_local=record.consumed_cost_local,
         residual_cost_local=record.amortized_cost_residual_local,
-        fx_rate_to_base=record.amortized_cost_fx_rate_to_base,
+        book_cost_fx_rate_to_base=record.amortized_cost_book_fx_rate_to_base,
         consumed_cost_base=record.consumed_cost_base,
         residual_cost_base=record.amortized_cost_residual_base,
         calculation_lineage=_required_lineage(
@@ -471,8 +471,8 @@ def _allocation_values(
                 "amortized_cost_residual_local": (
                     evidence.residual_cost_local if evidence is not None else None
                 ),
-                "amortized_cost_fx_rate_to_base": (
-                    evidence.fx_rate_to_base if evidence is not None else None
+                "amortized_cost_book_fx_rate_to_base": (
+                    evidence.book_cost_fx_rate_to_base if evidence is not None else None
                 ),
                 "amortized_cost_residual_base": (
                     evidence.residual_cost_base if evidence is not None else None

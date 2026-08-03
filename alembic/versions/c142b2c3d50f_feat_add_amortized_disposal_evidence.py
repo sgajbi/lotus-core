@@ -51,7 +51,7 @@ def upgrade() -> None:
         "AND amortized_cost_residual_quantity >= 0 "
         "AND amortized_cost_current_local >= 0 "
         "AND amortized_cost_residual_local >= 0 "
-        "AND amortized_cost_fx_rate_to_base > 0 "
+        "AND amortized_cost_book_fx_rate_to_base > 0 "
         "AND amortized_cost_residual_base >= 0 "
         "AND jsonb_typeof(amortized_cost_calculation_lineage) = 'object')",
     )
@@ -69,7 +69,7 @@ def upgrade() -> None:
         "NOT IN ('NaN', 'Infinity', '-Infinity') "
         "AND CAST(amortized_cost_residual_local AS TEXT) "
         "NOT IN ('NaN', 'Infinity', '-Infinity') "
-        "AND CAST(amortized_cost_fx_rate_to_base AS TEXT) "
+        "AND CAST(amortized_cost_book_fx_rate_to_base AS TEXT) "
         "NOT IN ('NaN', 'Infinity', '-Infinity') "
         "AND CAST(amortized_cost_residual_base AS TEXT) "
         "NOT IN ('NaN', 'Infinity', '-Infinity'))",
@@ -125,7 +125,7 @@ def _evidence_columns() -> tuple[sa.Column[object], ...]:
         sa.Column("amortized_cost_residual_quantity", sa.Numeric(18, 10), nullable=True),
         sa.Column("amortized_cost_current_local", sa.Numeric(18, 10), nullable=True),
         sa.Column("amortized_cost_residual_local", sa.Numeric(18, 10), nullable=True),
-        sa.Column("amortized_cost_fx_rate_to_base", sa.Numeric(18, 10), nullable=True),
+        sa.Column("amortized_cost_book_fx_rate_to_base", sa.Numeric(18, 10), nullable=True),
         sa.Column("amortized_cost_residual_base", sa.Numeric(18, 10), nullable=True),
         sa.Column(
             "amortized_cost_calculation_lineage",

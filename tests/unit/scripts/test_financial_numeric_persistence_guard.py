@@ -917,6 +917,6 @@ def test_repository_contract_classifies_inventory_and_persistence_semantics() ->
         "amortized_cost_residual_quantity": "nullable-nonnegative-finite",
         "amortized_cost_current_local": "nullable-nonnegative-finite",
         "amortized_cost_residual_local": "nullable-nonnegative-finite",
-        "amortized_cost_fx_rate_to_base": "nullable-positive-finite",
+        "amortized_cost_book_fx_rate_to_base": "nullable-positive-finite",
         "amortized_cost_residual_base": "nullable-nonnegative-finite",
     }
