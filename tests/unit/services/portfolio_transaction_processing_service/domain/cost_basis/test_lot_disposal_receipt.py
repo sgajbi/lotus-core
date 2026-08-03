@@ -75,6 +75,13 @@ def test_receipt_identity_is_stable_while_method_changes_semantic_hash() -> None
     assert avco.semantic_content_hash != fifo.semantic_content_hash
 
 
+def test_receipt_semantic_hash_normalizes_persisted_decimal_scale() -> None:
+    compact = _active_receipt(cost_local="10")
+    persisted_scale = _active_receipt(cost_local="10.0000000000")
+
+    assert persisted_scale.semantic_content_hash == compact.semantic_content_hash
+
+
 def test_active_receipt_rejects_nonconserved_allocation_cost() -> None:
     with pytest.raises(
         ValueError,

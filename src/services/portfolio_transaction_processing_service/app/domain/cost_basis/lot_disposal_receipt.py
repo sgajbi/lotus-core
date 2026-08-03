@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
+from typing import cast
 
 from portfolio_common.domain.calculation_lineage import (
     CalculationLineage,
@@ -17,6 +18,7 @@ from portfolio_common.domain.transaction.numeric_policy import (
 )
 
 from .calculation.disposal_allocation import SourceLotDisposalAllocation
+from .state_lineage import canonical_cost_basis_output_payload
 
 
 class LotDisposalReceiptStatus(StrEnum):
@@ -113,42 +115,47 @@ class LotDisposalReceiptState:
     def semantic_payload(self) -> dict[str, object]:
         """Return the closed payload compared for replay and correction semantics."""
 
-        return {
-            "allocations": [
+        return cast(
+            dict[str, object],
+            canonical_cost_basis_output_payload(
                 {
-                    "allocation_ordinal": allocation.allocation_ordinal,
-                    "consumed_cost_base": allocation.consumed_cost_base,
-                    "consumed_cost_local": allocation.consumed_cost_local,
-                    "consumed_quantity": allocation.consumed_quantity,
-                    "source_acquisition_date": allocation.source_acquisition_date,
-                    "source_lot_id": allocation.source_lot_id,
-                    "source_transaction_id": allocation.source_transaction_id,
+                    "allocations": [
+                        {
+                            "allocation_ordinal": allocation.allocation_ordinal,
+                            "consumed_cost_base": allocation.consumed_cost_base,
+                            "consumed_cost_local": allocation.consumed_cost_local,
+                            "consumed_quantity": allocation.consumed_quantity,
+                            "source_acquisition_date": allocation.source_acquisition_date,
+                            "source_lot_id": allocation.source_lot_id,
+                            "source_transaction_id": allocation.source_transaction_id,
+                        }
+                        for allocation in self.allocations
+                    ],
+                    "calculation_policy_id": self.calculation_policy_id,
+                    "calculation_policy_version": self.calculation_policy_version,
+                    "consumed_cost_base": self.consumed_cost_base,
+                    "consumed_cost_local": self.consumed_cost_local,
+                    "consumed_quantity": self.consumed_quantity,
+                    "cost_basis_method": self.cost_basis_method.value,
+                    "disposal_calculation_lineage": (
+                        self.disposal_calculation_lineage.lineage_payload()
+                        if self.disposal_calculation_lineage is not None
+                        else None
+                    ),
+                    "disposal_timestamp": self.disposal_timestamp,
+                    "disposal_transaction_id": self.disposal_transaction_id,
+                    "instrument_id": self.instrument_id,
+                    "portfolio_id": self.portfolio_id,
+                    "security_id": self.security_id,
+                    "status": self.status.value,
+                    "transaction_calculation_lineage": (
+                        self.transaction_calculation_lineage.lineage_payload()
+                    ),
+                    "transaction_type": self.transaction_type,
+                    "void_reason": self.void_reason,
                 }
-                for allocation in self.allocations
-            ],
-            "calculation_policy_id": self.calculation_policy_id,
-            "calculation_policy_version": self.calculation_policy_version,
-            "consumed_cost_base": self.consumed_cost_base,
-            "consumed_cost_local": self.consumed_cost_local,
-            "consumed_quantity": self.consumed_quantity,
-            "cost_basis_method": self.cost_basis_method.value,
-            "disposal_calculation_lineage": (
-                self.disposal_calculation_lineage.lineage_payload()
-                if self.disposal_calculation_lineage is not None
-                else None
             ),
-            "disposal_timestamp": self.disposal_timestamp,
-            "disposal_transaction_id": self.disposal_transaction_id,
-            "instrument_id": self.instrument_id,
-            "portfolio_id": self.portfolio_id,
-            "security_id": self.security_id,
-            "status": self.status.value,
-            "transaction_calculation_lineage": (
-                self.transaction_calculation_lineage.lineage_payload()
-            ),
-            "transaction_type": self.transaction_type,
-            "void_reason": self.void_reason,
-        }
+        )
 
     def _validate_lifecycle_shape(self) -> None:
         if self.status is LotDisposalReceiptStatus.ACTIVE:
