@@ -161,8 +161,33 @@ class AverageCostAllocationCheckpoint:
                 * self.pool.quantity
                 / self.source_allocation_segment_start_quantity
             )
-        if expected_disposal_scale != self.disposal_scale:
+        if _normalize_checkpoint_value(
+            expected_disposal_scale,
+            field_name="disposal_scale",
+        ) != _normalize_checkpoint_value(self.disposal_scale, field_name="disposal_scale"):
             raise ValueError("AVCO disposal scale conflicts with source-allocation segment")
+        if self.pool.quantity > self.segment_start_quantity:
+            raise ValueError("AVCO pool quantity exceeds its disposal segment")
+        with _checkpoint_arithmetic_context():
+            expected_pool_cost_local = (
+                self.segment_start_cost_local * self.pool.quantity / self.segment_start_quantity
+            )
+            expected_pool_cost_base = (
+                self.segment_start_cost_base * self.pool.quantity / self.segment_start_quantity
+            )
+        if (
+            _normalize_checkpoint_value(
+                expected_pool_cost_local,
+                field_name="pool_cost_local",
+            )
+            != self.pool.cost_local
+            or _normalize_checkpoint_value(
+                expected_pool_cost_base,
+                field_name="pool_cost_base",
+            )
+            != self.pool.cost_base
+        ):
+            raise ValueError("AVCO pool costs conflict with disposal segment state")
 
         expected_quantity = _materialized_total(
             self,
