@@ -5,7 +5,7 @@ Revises: c142b2c3d50f
 Create Date: 2026-08-04
 """
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 
 import sqlalchemy as sa
 
@@ -202,7 +202,10 @@ def _create_allocation_evidence_constraints(*, include_conservation: bool) -> No
     )
 
 
-def _all_or_none(columns: Sequence[str]) -> str:
-    all_null = " AND ".join(f"{column} IS NULL" for column in columns)
-    all_present = " AND ".join(f"{column} IS NOT NULL" for column in columns)
+def _all_or_none(columns: Iterable[str]) -> str:
+    materialized_columns = tuple(columns)
+    if not materialized_columns:
+        raise ValueError("all-or-none constraint requires at least one column")
+    all_null = " AND ".join(f"{column} IS NULL" for column in materialized_columns)
+    all_present = " AND ".join(f"{column} IS NOT NULL" for column in materialized_columns)
     return f"({all_null}) OR ({all_present})"
