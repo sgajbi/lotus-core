@@ -41,6 +41,11 @@ def buy_lot_state_payload(transaction: CostBasisTransaction) -> dict[str, object
             None,
         ),
         "source_system": getattr(transaction, "source_system", None),
+        "amortized_cost_profile_id": None,
+        "amortized_cost_profile_version": None,
+        "amortized_cost_profile_content_hash": None,
+        "amortized_cost_recognized_through": None,
+        "amortized_cost_scheduled_local": None,
     }
     parent_lineage = getattr(transaction, "calculation_lineage", None)
     lineage = build_cost_basis_state_lineage(

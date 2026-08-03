@@ -16,7 +16,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import Select
 
-from ...domain.cost_basis import CostBasisTransaction, OpenLotState
+from ...domain.cost_basis import AmortizedCostCarryState, CostBasisTransaction, OpenLotState
 from ...domain.cost_basis.state_lineage import (
     CostBasisStateTransitionEvidence,
     build_cost_basis_state_lineage,
@@ -109,6 +109,7 @@ class SqlAlchemyCostBasisLotRepository:
                 lot_row.open_quantity = Decimal(0)
                 lot_row.lot_cost_local = Decimal(0)
                 lot_row.lot_cost_base = Decimal(0)
+                _apply_amortized_cost_carry(lot_row, None)
                 lot_row.calculation_lineage = _open_lot_state_lineage_payload(
                     lot_row=lot_row,
                     algorithm_id="cost-basis-complete-lot-snapshot",
@@ -119,6 +120,7 @@ class SqlAlchemyCostBasisLotRepository:
             lot_row.open_quantity = state.quantity
             lot_row.lot_cost_local = state.cost_local
             lot_row.lot_cost_base = state.cost_base
+            _apply_amortized_cost_carry(lot_row, state.amortized_cost)
             lot_row.calculation_lineage = _open_lot_state_lineage_payload(
                 lot_row=lot_row,
                 algorithm_id="cost-basis-complete-lot-snapshot",
@@ -156,6 +158,7 @@ class SqlAlchemyCostBasisLotRepository:
             lot_row.open_quantity = state.quantity
             lot_row.lot_cost_local = state.cost_local
             lot_row.lot_cost_base = state.cost_base
+            _apply_amortized_cost_carry(lot_row, state.amortized_cost)
             lot_row.calculation_lineage = _open_lot_state_lineage_payload(
                 lot_row=lot_row,
                 algorithm_id="cost-basis-selected-lot-update",
@@ -216,7 +219,44 @@ class SqlAlchemyCostBasisLotRepository:
             quantity=lot.open_quantity,
             cost_local=lot.lot_cost_local,
             cost_base=lot.lot_cost_base,
+            amortized_cost=_amortized_cost_carry(lot),
         )
+
+
+def _amortized_cost_carry(lot: PositionLotState) -> AmortizedCostCarryState | None:
+    values = (
+        lot.amortized_cost_profile_id,
+        lot.amortized_cost_profile_version,
+        lot.amortized_cost_profile_content_hash,
+        lot.amortized_cost_recognized_through,
+        lot.amortized_cost_scheduled_local,
+    )
+    if all(value is None for value in values):
+        return None
+    if any(value is None for value in values):
+        raise ValueError("persisted lot has partial amortized-cost carry state")
+    return AmortizedCostCarryState(
+        profile_id=str(lot.amortized_cost_profile_id),
+        profile_version=int(lot.amortized_cost_profile_version),
+        profile_content_hash=str(lot.amortized_cost_profile_content_hash),
+        recognized_through_date=lot.amortized_cost_recognized_through,
+        scheduled_cost_local=lot.amortized_cost_scheduled_local,
+    )
+
+
+def _apply_amortized_cost_carry(
+    lot: PositionLotState,
+    carry: AmortizedCostCarryState | None,
+) -> None:
+    lot.amortized_cost_profile_id = carry.profile_id if carry is not None else None
+    lot.amortized_cost_profile_version = carry.profile_version if carry is not None else None
+    lot.amortized_cost_profile_content_hash = (
+        carry.profile_content_hash if carry is not None else None
+    )
+    lot.amortized_cost_recognized_through = (
+        carry.recognized_through_date if carry is not None else None
+    )
+    lot.amortized_cost_scheduled_local = carry.scheduled_cost_local if carry is not None else None
 
 
 def _open_lot_state_lineage_payload(

@@ -5,7 +5,7 @@ from decimal import Decimal
 
 from portfolio_common.domain.calculation_lineage import CalculationLineage
 
-from ...domain.cost_basis import AverageCostPoolCheckpoint
+from ...domain.cost_basis import AmortizedCostCarryState, AverageCostPoolCheckpoint
 from ...domain.transaction import BookedTransaction
 
 
@@ -17,6 +17,7 @@ class OpenLotCheckpointRecord:
     quantity: Decimal
     cost_local: Decimal
     cost_base: Decimal
+    amortized_cost: AmortizedCostCarryState | None = None
 
 
 @dataclass(frozen=True, slots=True)
