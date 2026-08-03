@@ -111,7 +111,7 @@ def _require_non_negative_decimal(value: object, field_name: str) -> None:
     if not isinstance(value, Decimal):
         raise TypeError(f"{field_name} must be a Decimal")
     if not value.is_finite():
-        raise ValueError(f"{field_name} must be finite")
+        raise ValueError(f"{field_name} must be a finite Decimal")
     if value < Decimal(0):
         raise ValueError(f"{field_name} must be non-negative")
 
