@@ -585,6 +585,7 @@ def test_average_cost_checkpoint_restore_preserves_exact_disposal_receipts() -> 
             )
         )
     uninterrupted.consume_sell_quantity_with_allocations("P1", "I1", Decimal("5"))
+    assert uninterrupted.transfer_basis_out("P1", "I1", Decimal("40"), Decimal("40")) is None
     checkpoint = uninterrupted.export_allocation_checkpoint(
         portfolio_id="P1",
         instrument_id="I1",
@@ -1060,6 +1061,23 @@ def test_average_cost_full_basis_transfer_then_new_buy_keeps_old_source_cost_zer
         cost_local=Decimal("300"),
         cost_base=Decimal("300"),
     )
+
+    checkpoint = strategy.export_allocation_checkpoint(
+        portfolio_id="P-BASIS",
+        instrument_id="PARENT-SECURITY",
+        security_id="PARENT-SECURITY",
+    )
+    restored = AverageCostBasisStrategy.from_allocation_checkpoint(checkpoint)
+
+    uninterrupted_result = strategy.consume_sell_quantity_with_allocations(
+        "P-BASIS", "PARENT-SECURITY", Decimal("10")
+    )
+    restored_result = restored.consume_sell_quantity_with_allocations(
+        "P-BASIS", "PARENT-SECURITY", Decimal("10")
+    )
+
+    assert restored_result == uninterrupted_result
+    assert restored.get_open_lot_states() == strategy.get_open_lot_states()
 
 
 @pytest.mark.parametrize("strategy_type", [FIFOBasisStrategy, AverageCostBasisStrategy])

@@ -399,6 +399,9 @@ class AverageCostSourceAllocation:
             segment_start_quantity=(Decimal(0) if is_closed else pool.segment_start_quantity),
             segment_start_cost_local=(Decimal(0) if is_closed else pool.segment_start_cost_local),
             segment_start_cost_base=(Decimal(0) if is_closed else pool.segment_start_cost_base),
+            source_allocation_segment_start_quantity=(
+                Decimal(0) if is_closed else self._segment_start_quantity_by_key[book_key]
+            ),
             allocation_generation=self._generation_by_key[book_key],
             disposal_scale=self._disposal_scale_by_key[book_key],
             segment_start_scale=self._segment_start_scale_by_key[book_key],
@@ -463,7 +466,9 @@ class AverageCostSourceAllocation:
         self._generation_by_key[book_key] = checkpoint.allocation_generation
         self._disposal_scale_by_key[book_key] = checkpoint.disposal_scale
         self._segment_start_scale_by_key[book_key] = checkpoint.segment_start_scale
-        self._segment_start_quantity_by_key[book_key] = checkpoint.segment_start_quantity
+        self._segment_start_quantity_by_key[book_key] = (
+            checkpoint.source_allocation_segment_start_quantity
+        )
         self._cost_local_scale_by_key[book_key] = checkpoint.cost_local_scale
         self._cost_base_scale_by_key[book_key] = checkpoint.cost_base_scale
         self._cost_local_generation_by_key[book_key] = checkpoint.cost_local_generation
