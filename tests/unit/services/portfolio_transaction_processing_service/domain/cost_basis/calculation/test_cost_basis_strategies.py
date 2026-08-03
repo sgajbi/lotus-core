@@ -565,6 +565,82 @@ def test_average_cost_source_allocation_is_independent_of_sell_batching() -> Non
     )
 
 
+def test_average_cost_checkpoint_restore_preserves_exact_disposal_receipts() -> None:
+    uninterrupted = AverageCostBasisStrategy()
+    for index, (quantity, cost) in enumerate((("10", "100"), ("20", "240")), start=1):
+        uninterrupted.add_buy_lot(
+            CostBasisTransaction(
+                transaction_id=f"AVCO-CHECKPOINT-BUY-{index}",
+                portfolio_id="P1",
+                instrument_id="I1",
+                security_id="S1",
+                transaction_type="BUY",
+                transaction_date=datetime(2026, 1, index),
+                quantity=Decimal(quantity),
+                gross_transaction_amount=Decimal(cost),
+                net_cost=Decimal(cost),
+                net_cost_local=Decimal(cost),
+                trade_currency="USD",
+                portfolio_base_currency="USD",
+            )
+        )
+    uninterrupted.consume_sell_quantity_with_allocations("P1", "I1", Decimal("5"))
+    checkpoint = uninterrupted.export_allocation_checkpoint(
+        portfolio_id="P1",
+        instrument_id="I1",
+        security_id="S1",
+    )
+    restored = AverageCostBasisStrategy.from_allocation_checkpoint(checkpoint)
+
+    uninterrupted_result = uninterrupted.consume_sell_quantity_with_allocations(
+        "P1", "I1", Decimal("10")
+    )
+    restored_result = restored.consume_sell_quantity_with_allocations("P1", "I1", Decimal("10"))
+
+    assert restored_result == uninterrupted_result
+    assert restored.get_open_lot_states() == uninterrupted.get_open_lot_states()
+
+
+def test_average_cost_closed_generation_checkpoint_restores_without_stale_sources() -> None:
+    uninterrupted = AverageCostBasisStrategy()
+    uninterrupted.add_buy_lot(
+        CostBasisTransaction(
+            transaction_id="AVCO-CHECKPOINT-CLOSED-BUY",
+            portfolio_id="P1",
+            instrument_id="I1",
+            security_id="S1",
+            transaction_type="BUY",
+            transaction_date=datetime(2026, 1, 1),
+            quantity=Decimal("10"),
+            gross_transaction_amount=Decimal("100"),
+            net_cost=Decimal("100"),
+            net_cost_local=Decimal("100"),
+            trade_currency="USD",
+            portfolio_base_currency="USD",
+        )
+    )
+    uninterrupted.consume_sell_quantity_with_allocations("P1", "I1", Decimal("10"))
+    checkpoint = uninterrupted.export_allocation_checkpoint(
+        portfolio_id="P1",
+        instrument_id="I1",
+        security_id="S1",
+    )
+
+    restored = AverageCostBasisStrategy.from_allocation_checkpoint(checkpoint)
+
+    assert checkpoint.sources == ()
+    assert restored.get_open_lot_states() == {}
+
+
+def test_average_cost_checkpoint_export_requires_existing_book() -> None:
+    with pytest.raises(ValueError, match="checkpoint book was not found"):
+        AverageCostBasisStrategy().export_allocation_checkpoint(
+            portfolio_id="P1",
+            instrument_id="I1",
+            security_id="S1",
+        )
+
+
 def test_average_cost_full_close_and_reopen_does_not_resurrect_prior_sources() -> None:
     strategy = AverageCostBasisStrategy()
     closed_source = CostBasisTransaction(

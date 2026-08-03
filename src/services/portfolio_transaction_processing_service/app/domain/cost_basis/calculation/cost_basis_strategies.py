@@ -1,5 +1,7 @@
 """Implement FIFO and average-cost lot allocation strategies."""
 
+from __future__ import annotations
+
 import logging
 from collections import defaultdict, deque
 from dataclasses import dataclass
@@ -12,6 +14,7 @@ from portfolio_common.domain.transaction.numeric_policy import (
     COST_BASIS_STATE_LEDGER_OUTPUT_V1,
 )
 
+from ..average_cost_allocation_checkpoint import AverageCostAllocationCheckpoint
 from ..models.cost_basis_transaction import CostBasisTransaction
 from .average_cost_source_allocation import (
     AverageCostPool,
@@ -566,6 +569,37 @@ class AverageCostBasisStrategy(CostBasisStrategy):
 
     def get_open_lot_states(self) -> dict[str, OpenLotState]:
         return self._source_allocation.materialize(self._pools)
+
+    def export_allocation_checkpoint(
+        self,
+        *,
+        portfolio_id: str,
+        instrument_id: str,
+        security_id: str,
+    ) -> AverageCostAllocationCheckpoint:
+        """Export exact continuation state for one AVCO book."""
+
+        key = (portfolio_id, instrument_id)
+        pool = self._pools.get(key)
+        if pool is None:
+            raise ValueError("Average cost allocation checkpoint book was not found")
+        return self._source_allocation.export_checkpoint(
+            book_key=key,
+            security_id=security_id,
+            pool=pool,
+        )
+
+    @classmethod
+    def from_allocation_checkpoint(
+        cls,
+        checkpoint: AverageCostAllocationCheckpoint,
+    ) -> AverageCostBasisStrategy:
+        """Create an AVCO strategy from validated persisted continuation state."""
+
+        strategy = cls()
+        key = (checkpoint.pool.portfolio_id, checkpoint.pool.instrument_id)
+        strategy._pools[key] = strategy._source_allocation.restore_checkpoint(checkpoint)
+        return strategy
 
 
 def _basis_transfer_error(
