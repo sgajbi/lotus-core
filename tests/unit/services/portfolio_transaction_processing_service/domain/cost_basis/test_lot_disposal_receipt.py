@@ -1,5 +1,6 @@
 """Verify immutable lot-disposal receipt identity and lifecycle invariants."""
 
+from dataclasses import replace
 from datetime import date, datetime, timezone
 from decimal import Decimal
 
@@ -64,6 +65,28 @@ def _active_receipt(
     )
 
 
+def _voided_receipt() -> LotDisposalReceiptState:
+    return LotDisposalReceiptState(
+        disposal_transaction_id="BUY-RECEIPT-01",
+        portfolio_id="PORT-RECEIPT-01",
+        instrument_id="INSTRUMENT-RECEIPT-01",
+        security_id="SECURITY-RECEIPT-01",
+        disposal_timestamp=datetime(2026, 7, 1, tzinfo=timezone.utc),
+        transaction_type="BUY",
+        cost_basis_method=CostBasisMethod.FIFO,
+        calculation_policy_id=None,
+        calculation_policy_version=None,
+        transaction_calculation_lineage=_lineage("transaction-cost"),
+        status=LotDisposalReceiptStatus.VOIDED,
+        consumed_quantity=Decimal(0),
+        consumed_cost_local=Decimal(0),
+        consumed_cost_base=Decimal(0),
+        allocations=(),
+        disposal_calculation_lineage=None,
+        void_reason="RECALCULATED_WITHOUT_LOT_DISPOSAL",
+    )
+
+
 def test_receipt_identity_is_stable_while_method_changes_semantic_hash() -> None:
     fifo = _active_receipt()
     exact_retry = _active_receipt()
@@ -108,26 +131,151 @@ def test_active_receipt_rejects_nonconserved_allocation_cost() -> None:
 
 
 def test_voided_receipt_is_explicit_zero_economics_evidence() -> None:
-    receipt = LotDisposalReceiptState(
-        disposal_transaction_id="BUY-RECEIPT-01",
-        portfolio_id="PORT-RECEIPT-01",
-        instrument_id="INSTRUMENT-RECEIPT-01",
-        security_id="SECURITY-RECEIPT-01",
-        disposal_timestamp=datetime(2026, 7, 1, tzinfo=timezone.utc),
-        transaction_type="BUY",
-        cost_basis_method=CostBasisMethod.FIFO,
-        calculation_policy_id=None,
-        calculation_policy_version=None,
-        transaction_calculation_lineage=_lineage("transaction-cost"),
-        status=LotDisposalReceiptStatus.VOIDED,
-        consumed_quantity=Decimal(0),
-        consumed_cost_local=Decimal(0),
-        consumed_cost_base=Decimal(0),
-        allocations=(),
-        disposal_calculation_lineage=None,
-        void_reason="RECALCULATED_WITHOUT_LOT_DISPOSAL",
-    )
+    receipt = _voided_receipt()
 
     assert receipt.semantic_payload()["status"] == "VOIDED"
     assert receipt.semantic_payload()["allocations"] == []
     assert receipt.semantic_content_hash != _active_receipt().semantic_content_hash
+
+
+@pytest.mark.parametrize(
+    ("updates", "exception", "message"),
+    [
+        ({"portfolio_id": 17}, TypeError, "portfolio_id must be a string"),
+        ({"portfolio_id": "  "}, ValueError, "portfolio_id must be nonblank"),
+        ({"disposal_timestamp": "2026-07-01"}, TypeError, "must be a datetime"),
+        (
+            {"disposal_timestamp": datetime(2026, 7, 1)},
+            ValueError,
+            "must be timezone-aware",
+        ),
+        ({"cost_basis_method": "FIFO"}, TypeError, "must be a CostBasisMethod"),
+        ({"calculation_policy_id": 1}, TypeError, "must be a string or None"),
+        (
+            {"calculation_policy_id": None},
+            ValueError,
+            "ID and version must be supplied together",
+        ),
+        (
+            {"transaction_calculation_lineage": None},
+            TypeError,
+            "must be a CalculationLineage",
+        ),
+        ({"status": "ACTIVE"}, TypeError, "must be a LotDisposalReceiptStatus"),
+        ({"consumed_quantity": 1}, TypeError, "must be a Decimal"),
+        (
+            {"consumed_quantity": Decimal("NaN")},
+            ValueError,
+            "must be finite and non-negative",
+        ),
+        (
+            {"consumed_cost_base": Decimal("-1")},
+            ValueError,
+            "must be finite and non-negative",
+        ),
+        ({"allocations": []}, TypeError, "allocations must be a tuple"),
+        (
+            {"consumed_quantity": Decimal(0), "allocations": ()},
+            ValueError,
+            "must carry positive allocations",
+        ),
+        (
+            {"disposal_calculation_lineage": None},
+            ValueError,
+            "requires disposal calculation lineage",
+        ),
+        ({"void_reason": "NOT_VOID"}, ValueError, "cannot carry a void reason"),
+    ],
+)
+def test_active_receipt_rejects_invalid_contract_shapes(
+    updates: dict[str, object],
+    exception: type[Exception],
+    message: str,
+) -> None:
+    with pytest.raises(exception, match=message):
+        replace(_active_receipt(), **updates)
+
+
+def test_policy_identity_is_trimmed_as_one_atomic_pair() -> None:
+    receipt = replace(
+        _active_receipt(),
+        calculation_policy_id="  fixed-income-book-cost  ",
+        calculation_policy_version="  2  ",
+    )
+
+    assert receipt.calculation_policy_id == "fixed-income-book-cost"
+    assert receipt.calculation_policy_version == "2"
+
+
+def test_active_receipt_rejects_noncontiguous_or_duplicate_allocations() -> None:
+    first = replace(
+        _allocation(),
+        consumed_quantity=Decimal("0.5"),
+        consumed_cost_local=Decimal("5"),
+        consumed_cost_base=Decimal("5"),
+    )
+    noncontiguous = replace(first, allocation_ordinal=2)
+    duplicate = replace(
+        first,
+        allocation_ordinal=2,
+        source_transaction_id="BUY-RECEIPT-02",
+    )
+
+    with pytest.raises(ValueError, match="ordinals must be contiguous"):
+        replace(
+            _active_receipt(),
+            consumed_quantity=Decimal("0.5"),
+            consumed_cost_local=Decimal("5"),
+            consumed_cost_base=Decimal("5"),
+            allocations=(noncontiguous,),
+        )
+    with pytest.raises(ValueError, match="source lots must be unique"):
+        replace(
+            _active_receipt(),
+            allocations=(first, duplicate),
+        )
+
+
+@pytest.mark.parametrize(
+    ("updates", "message"),
+    [
+        ({"consumed_quantity": Decimal("2")}, "quantity does not reconcile"),
+        ({"consumed_cost_base": Decimal("11")}, "base cost does not reconcile"),
+    ],
+)
+def test_active_receipt_rejects_nonconserved_totals(
+    updates: dict[str, object],
+    message: str,
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        replace(_active_receipt(), **updates)
+
+
+@pytest.mark.parametrize(
+    ("updates", "message"),
+    [
+        ({"consumed_quantity": Decimal("1")}, "cannot carry economics or allocations"),
+        (
+            {"allocations": (_allocation(),)},
+            "cannot carry economics or allocations",
+        ),
+        (
+            {"disposal_calculation_lineage": _lineage("lot-disposal")},
+            "cannot carry disposal lineage",
+        ),
+        ({"void_reason": "  "}, "requires a nonblank reason"),
+        ({"void_reason": None}, "requires a nonblank reason"),
+    ],
+)
+def test_voided_receipt_rejects_inconsistent_evidence(
+    updates: dict[str, object],
+    message: str,
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        replace(_voided_receipt(), **updates)
+
+
+def test_void_reason_is_trimmed_before_hashing() -> None:
+    receipt = replace(_voided_receipt(), void_reason="  DUPLICATE_REPLAY  ")
+
+    assert receipt.void_reason == "DUPLICATE_REPLAY"
