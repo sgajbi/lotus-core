@@ -1,6 +1,6 @@
 """Verify immutable lot-disposal allocation contracts and conservation."""
 
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 
 import pytest
@@ -131,6 +131,92 @@ def test_allocation_requires_contiguous_positive_ordinals() -> None:
         _allocation(quantity="0")
 
 
+@pytest.mark.parametrize(
+    ("overrides", "exception_type", "message"),
+    (
+        ({"source_lot_id": 42}, TypeError, "source_lot_id must be a string"),
+        ({"source_transaction_id": "  "}, ValueError, "source_transaction_id must be nonblank"),
+        (
+            {"source_acquisition_date": datetime(2026, 1, 2)},
+            TypeError,
+            "source_acquisition_date must be a date",
+        ),
+        ({"allocation_ordinal": "1"}, TypeError, "allocation_ordinal must be an integer"),
+        ({"allocation_ordinal": True}, TypeError, "allocation_ordinal must be an integer"),
+        ({"allocation_ordinal": 0}, ValueError, "allocation_ordinal must be positive"),
+        ({"consumed_quantity": "2"}, TypeError, "consumed_quantity must be a Decimal"),
+        ({"consumed_quantity": Decimal("Infinity")}, ValueError, "must be finite"),
+        ({"consumed_cost_local": Decimal("-1")}, ValueError, "must be non-negative"),
+    ),
+)
+def test_source_lot_allocation_rejects_malformed_identity_and_economics(
+    overrides: dict[str, object],
+    exception_type: type[Exception],
+    message: str,
+) -> None:
+    values: dict[str, object] = {
+        "source_lot_id": "LOT-BUY_001",
+        "source_transaction_id": "BUY_001",
+        "source_acquisition_date": date(2026, 1, 2),
+        "allocation_ordinal": 1,
+        "consumed_quantity": Decimal("2"),
+        "consumed_cost_local": Decimal("20"),
+        "consumed_cost_base": Decimal("22"),
+    }
+    values.update(overrides)
+
+    with pytest.raises(exception_type, match=message):
+        SourceLotDisposalAllocation(**values)  # type: ignore[arg-type]
+
+
+def test_result_rejects_invalid_allocation_collection_and_empty_success() -> None:
+    with pytest.raises(TypeError, match="allocations must be a tuple"):
+        LotDisposalResult(
+            cost_base=Decimal("22"),
+            cost_local=Decimal("20"),
+            consumed_quantity=Decimal("2"),
+            allocations=[_allocation()],  # type: ignore[arg-type]
+        )
+
+    with pytest.raises(ValueError, match="zero-quantity disposal results must be empty"):
+        LotDisposalResult(
+            cost_base=Decimal("1"),
+            cost_local=Decimal(0),
+            consumed_quantity=Decimal(0),
+            allocations=(),
+        )
+
+    with pytest.raises(ValueError, match="successful disposal must carry"):
+        LotDisposalResult(
+            cost_base=Decimal("22"),
+            cost_local=Decimal("20"),
+            consumed_quantity=Decimal("2"),
+            allocations=(),
+        )
+
+
+@pytest.mark.parametrize(
+    ("error_reason", "exception_type", "message"),
+    (
+        (7, TypeError, "error_reason must be a string or None"),
+        ("  ", ValueError, "error_reason must be nonblank"),
+    ),
+)
+def test_failed_result_rejects_malformed_error_reason(
+    error_reason: object,
+    exception_type: type[Exception],
+    message: str,
+) -> None:
+    with pytest.raises(exception_type, match=message):
+        LotDisposalResult(
+            cost_base=Decimal(0),
+            cost_local=Decimal(0),
+            consumed_quantity=Decimal(0),
+            allocations=(),
+            error_reason=error_reason,  # type: ignore[arg-type]
+        )
+
+
 def test_result_rejects_duplicate_source_lot_allocations() -> None:
     with pytest.raises(ValueError, match="source lot can appear only once"):
         LotDisposalResult(
@@ -159,4 +245,25 @@ def test_transaction_disposal_requires_successful_positive_result() -> None:
         TransactionLotDisposal(
             disposal_transaction_id="SELL_002",
             result=LotDisposalResult.failed("insufficient holdings"),
+        )
+
+
+@pytest.mark.parametrize(
+    ("transaction_id", "result", "exception_type", "message"),
+    (
+        (7, LotDisposalResult.empty(), TypeError, "must be a string"),
+        ("  ", LotDisposalResult.empty(), ValueError, "must be nonblank"),
+        ("SELL_003", object(), TypeError, "must be a LotDisposalResult"),
+    ),
+)
+def test_transaction_disposal_rejects_malformed_binding(
+    transaction_id: object,
+    result: object,
+    exception_type: type[Exception],
+    message: str,
+) -> None:
+    with pytest.raises(exception_type, match=message):
+        TransactionLotDisposal(
+            disposal_transaction_id=transaction_id,  # type: ignore[arg-type]
+            result=result,  # type: ignore[arg-type]
         )
