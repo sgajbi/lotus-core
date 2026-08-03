@@ -1,5 +1,6 @@
 """Verify immutable lot-disposal receipt reconciliation and corruption handling."""
 
+from dataclasses import replace
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from unittest.mock import AsyncMock
@@ -16,6 +17,7 @@ from portfolio_common.domain.calculation_lineage import (
 from portfolio_common.domain.cost_basis_method import CostBasisMethod
 
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
+    AmortizedCostAllocationEvidence,
     LotDisposalReceiptState,
     LotDisposalReceiptStatus,
     SourceLotDisposalAllocation,
@@ -63,6 +65,56 @@ def _active_state(*, cost_local: str = "10") -> LotDisposalReceiptState:
             ),
         ),
         disposal_calculation_lineage=_lineage("lot-disposal"),
+    )
+
+
+def _active_state_with_amortized_cost() -> LotDisposalReceiptState:
+    state = _active_state(cost_local="11")
+    output_payload = {
+        "consumed_cost_base": Decimal("11"),
+        "consumed_cost_local": Decimal("11"),
+        "consumed_quantity": Decimal("1"),
+        "current_cost_local": Decimal("110"),
+        "recognized_through_date": date(2026, 6, 30),
+        "residual_cost_base": Decimal("99"),
+        "residual_cost_local": Decimal("99"),
+        "residual_quantity": Decimal("9"),
+    }
+    evidence = AmortizedCostAllocationEvidence(
+        profile_id="PROFILE-REPOSITORY-01",
+        profile_version=2,
+        profile_content_hash="a" * 64,
+        currency="USD",
+        disposal_date=date(2026, 7, 1),
+        recognized_through_date=date(2026, 6, 30),
+        original_quantity=Decimal("10"),
+        consumed_quantity=Decimal("1"),
+        residual_quantity=Decimal("9"),
+        current_cost_local=Decimal("110"),
+        consumed_cost_local=Decimal("11"),
+        residual_cost_local=Decimal("99"),
+        fx_rate_to_base=Decimal("1"),
+        consumed_cost_base=Decimal("11"),
+        residual_cost_base=Decimal("99"),
+        calculation_lineage=build_calculation_lineage(
+            algorithm_id="fixed-income-amortized-cost-disposal",
+            algorithm_version=1,
+            intermediate_precision=38,
+            input_payload={"profile_id": "PROFILE-REPOSITORY-01"},
+            output_payload=output_payload,
+        ),
+    )
+    allocation = replace(
+        state.allocations[0],
+        consumed_cost_local=Decimal("11"),
+        consumed_cost_base=Decimal("11"),
+        amortized_cost_evidence=evidence,
+    )
+    return replace(
+        state,
+        consumed_cost_local=Decimal("11"),
+        consumed_cost_base=Decimal("11"),
+        allocations=(allocation,),
     )
 
 
@@ -130,6 +182,36 @@ def test_verified_state_reconstructs_complete_active_receipt() -> None:
     )
 
     assert reconstructed == state
+
+
+def test_verified_state_reconstructs_amortized_cost_evidence() -> None:
+    state = _active_state_with_amortized_cost()
+    record, allocations = _persisted_version(state)
+
+    reconstructed = lot_disposal_repository._verified_state(
+        record,
+        allocations=allocations,
+        previous_record=None,
+    )
+
+    assert reconstructed == state
+    assert reconstructed.allocations[0].amortized_cost_evidence is not None
+
+
+def test_verified_state_fails_closed_for_partial_amortized_cost_evidence() -> None:
+    state = _active_state_with_amortized_cost()
+    record, allocations = _persisted_version(state)
+    allocations[0].amortized_cost_currency = None
+
+    with pytest.raises(
+        lot_disposal_repository.CorruptLotDisposalReceiptError,
+        match="persisted lot-disposal receipt is corrupt",
+    ):
+        lot_disposal_repository._verified_state(
+            record,
+            allocations=allocations,
+            previous_record=None,
+        )
 
 
 def test_verified_state_fails_closed_for_tampered_allocation_hash() -> None:

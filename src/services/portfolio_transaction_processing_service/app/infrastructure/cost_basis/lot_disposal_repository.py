@@ -22,6 +22,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...domain.cost_basis import (
+    AmortizedCostAllocationEvidence,
     LotDisposalReceiptState,
     LotDisposalReceiptStatus,
     SourceLotDisposalAllocation,
@@ -301,6 +302,7 @@ def _verified_allocation(
         consumed_quantity=record.consumed_quantity,
         consumed_cost_local=record.consumed_cost_local,
         consumed_cost_base=record.consumed_cost_base,
+        amortized_cost_evidence=_amortized_cost_evidence(receipt, record),
     )
     expected_hash = _allocation_content_hash(
         receipt_id=str(receipt.receipt_id),
@@ -316,6 +318,52 @@ def _required_lineage(payload: object, context: str) -> CalculationLineage:
     if lineage is None:
         raise ValueError(f"{context} is required")
     return lineage
+
+
+def _amortized_cost_evidence(
+    receipt: LotDisposalReceiptRecord,
+    record: LotDisposalAllocationRecord,
+) -> AmortizedCostAllocationEvidence | None:
+    field_names = (
+        "amortized_cost_profile_id",
+        "amortized_cost_profile_version",
+        "amortized_cost_profile_content_hash",
+        "amortized_cost_currency",
+        "amortized_cost_recognized_through",
+        "amortized_cost_original_quantity",
+        "amortized_cost_residual_quantity",
+        "amortized_cost_current_local",
+        "amortized_cost_residual_local",
+        "amortized_cost_fx_rate_to_base",
+        "amortized_cost_residual_base",
+        "amortized_cost_calculation_lineage",
+    )
+    values = tuple(getattr(record, field_name) for field_name in field_names)
+    if all(value is None for value in values):
+        return None
+    if any(value is None for value in values):
+        raise ValueError("amortized-cost allocation evidence is only partially persisted")
+    return AmortizedCostAllocationEvidence(
+        profile_id=str(record.amortized_cost_profile_id),
+        profile_version=int(record.amortized_cost_profile_version),
+        profile_content_hash=str(record.amortized_cost_profile_content_hash),
+        currency=str(record.amortized_cost_currency),
+        disposal_date=receipt.disposal_timestamp.date(),
+        recognized_through_date=record.amortized_cost_recognized_through,
+        original_quantity=record.amortized_cost_original_quantity,
+        consumed_quantity=record.consumed_quantity,
+        residual_quantity=record.amortized_cost_residual_quantity,
+        current_cost_local=record.amortized_cost_current_local,
+        consumed_cost_local=record.consumed_cost_local,
+        residual_cost_local=record.amortized_cost_residual_local,
+        fx_rate_to_base=record.amortized_cost_fx_rate_to_base,
+        consumed_cost_base=record.consumed_cost_base,
+        residual_cost_base=record.amortized_cost_residual_base,
+        calculation_lineage=_required_lineage(
+            record.amortized_cost_calculation_lineage,
+            "amortized-cost allocation calculation lineage",
+        ),
+    )
 
 
 def _require_same_receipt_identity(
@@ -375,26 +423,61 @@ def _allocation_values(
     state: LotDisposalReceiptState,
     receipt_version: int,
 ) -> list[dict[str, object]]:
-    return [
-        {
-            "allocation_content_hash": _allocation_content_hash(
-                receipt_id=state.receipt_id,
-                allocation=allocation,
-            ),
-            "allocation_ordinal": allocation.allocation_ordinal,
-            "consumed_cost_base": allocation.consumed_cost_base,
-            "consumed_cost_local": allocation.consumed_cost_local,
-            "consumed_quantity": allocation.consumed_quantity,
-            "portfolio_id": state.portfolio_id,
-            "receipt_id": state.receipt_id,
-            "receipt_version": receipt_version,
-            "security_id": state.security_id,
-            "source_acquisition_date": allocation.source_acquisition_date,
-            "source_lot_id": allocation.source_lot_id,
-            "source_transaction_id": allocation.source_transaction_id,
-        }
-        for allocation in state.allocations
-    ]
+    values: list[dict[str, object]] = []
+    for allocation in state.allocations:
+        evidence = allocation.amortized_cost_evidence
+        values.append(
+            {
+                "allocation_content_hash": _allocation_content_hash(
+                    receipt_id=state.receipt_id,
+                    allocation=allocation,
+                ),
+                "allocation_ordinal": allocation.allocation_ordinal,
+                "consumed_cost_base": allocation.consumed_cost_base,
+                "consumed_cost_local": allocation.consumed_cost_local,
+                "consumed_quantity": allocation.consumed_quantity,
+                "portfolio_id": state.portfolio_id,
+                "receipt_id": state.receipt_id,
+                "receipt_version": receipt_version,
+                "security_id": state.security_id,
+                "source_acquisition_date": allocation.source_acquisition_date,
+                "source_lot_id": allocation.source_lot_id,
+                "source_transaction_id": allocation.source_transaction_id,
+                "amortized_cost_profile_id": evidence.profile_id if evidence is not None else None,
+                "amortized_cost_profile_version": (
+                    evidence.profile_version if evidence is not None else None
+                ),
+                "amortized_cost_profile_content_hash": (
+                    evidence.profile_content_hash if evidence is not None else None
+                ),
+                "amortized_cost_currency": evidence.currency if evidence is not None else None,
+                "amortized_cost_recognized_through": (
+                    evidence.recognized_through_date if evidence is not None else None
+                ),
+                "amortized_cost_original_quantity": (
+                    evidence.original_quantity if evidence is not None else None
+                ),
+                "amortized_cost_residual_quantity": (
+                    evidence.residual_quantity if evidence is not None else None
+                ),
+                "amortized_cost_current_local": (
+                    evidence.current_cost_local if evidence is not None else None
+                ),
+                "amortized_cost_residual_local": (
+                    evidence.residual_cost_local if evidence is not None else None
+                ),
+                "amortized_cost_fx_rate_to_base": (
+                    evidence.fx_rate_to_base if evidence is not None else None
+                ),
+                "amortized_cost_residual_base": (
+                    evidence.residual_cost_base if evidence is not None else None
+                ),
+                "amortized_cost_calculation_lineage": (
+                    evidence.calculation_lineage.lineage_payload() if evidence is not None else None
+                ),
+            }
+        )
+    return values
 
 
 def _receipt_content_hash(
