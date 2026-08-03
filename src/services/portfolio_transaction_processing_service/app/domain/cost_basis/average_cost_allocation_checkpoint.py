@@ -65,6 +65,7 @@ class AverageCostAllocationCheckpoint:
     segment_start_quantity: Decimal
     segment_start_cost_local: Decimal
     segment_start_cost_base: Decimal
+    source_allocation_segment_start_quantity: Decimal
     allocation_generation: int
     disposal_scale: Decimal
     segment_start_scale: Decimal
@@ -82,6 +83,7 @@ class AverageCostAllocationCheckpoint:
             "segment_start_quantity",
             "segment_start_cost_local",
             "segment_start_cost_base",
+            "source_allocation_segment_start_quantity",
         ):
             _require_decimal(getattr(self, field_name), field_name=field_name, positive=False)
         for field_name in (
@@ -117,11 +119,11 @@ class AverageCostAllocationCheckpoint:
         if any(source.generation != self.allocation_generation for source in self.sources):
             raise ValueError("active AVCO sources must match the allocation generation")
         if any(
-            source.cost_local_generation != self.cost_local_generation
-            or source.cost_base_generation != self.cost_base_generation
+            source.cost_local_generation > self.cost_local_generation
+            or source.cost_base_generation > self.cost_base_generation
             for source in self.sources
         ):
-            raise ValueError("active AVCO sources must match the cost generations")
+            raise ValueError("active AVCO source cost generation cannot be in the future")
 
         if self.pool.quantity == Decimal(0):
             if self.sources:
@@ -131,6 +133,7 @@ class AverageCostAllocationCheckpoint:
                     self.segment_start_quantity,
                     self.segment_start_cost_local,
                     self.segment_start_cost_base,
+                    self.source_allocation_segment_start_quantity,
                 )
             ):
                 raise ValueError("closed AVCO checkpoint must have zero segment state")
@@ -141,6 +144,8 @@ class AverageCostAllocationCheckpoint:
             raise ValueError("AVCO representative source is absent from the accumulator")
         if self.segment_start_quantity <= Decimal(0):
             raise ValueError("open AVCO checkpoint requires positive segment quantity")
+        if self.source_allocation_segment_start_quantity <= Decimal(0):
+            raise ValueError("open AVCO checkpoint requires positive source-allocation segment")
 
 
 def _require_decimal(value: object, *, field_name: str, positive: bool) -> None:

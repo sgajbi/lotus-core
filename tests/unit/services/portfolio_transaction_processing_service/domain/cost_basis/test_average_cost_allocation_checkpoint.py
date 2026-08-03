@@ -51,6 +51,7 @@ def _open_checkpoint() -> AverageCostAllocationCheckpoint:
         segment_start_quantity=Decimal("24"),
         segment_start_cost_local=Decimal("235.2"),
         segment_start_cost_base=Decimal("240"),
+        source_allocation_segment_start_quantity=Decimal("24"),
         allocation_generation=2,
         disposal_scale=Decimal("0.75"),
         segment_start_scale=Decimal("0.9"),
@@ -73,6 +74,25 @@ def test_open_checkpoint_binds_pool_and_ordered_active_sources() -> None:
     assert checkpoint.pool.representative_source_transaction_id == "BUY-2"
 
 
+def test_open_checkpoint_allows_quantity_sources_from_prior_cost_generation() -> None:
+    checkpoint = _open_checkpoint()
+
+    restored = replace(
+        checkpoint,
+        sources=(
+            replace(
+                checkpoint.sources[0],
+                cost_local_generation=0,
+                cost_base_generation=0,
+            ),
+            checkpoint.sources[1],
+        ),
+    )
+
+    assert restored.sources[0].cost_local_generation == 0
+    assert restored.sources[0].cost_base_generation == 0
+
+
 def test_closed_checkpoint_requires_zero_segment_and_no_sources() -> None:
     checkpoint = AverageCostAllocationCheckpoint(
         pool=AverageCostPoolCheckpoint(
@@ -87,6 +107,7 @@ def test_closed_checkpoint_requires_zero_segment_and_no_sources() -> None:
         segment_start_quantity=Decimal(0),
         segment_start_cost_local=Decimal(0),
         segment_start_cost_base=Decimal(0),
+        source_allocation_segment_start_quantity=Decimal(0),
         allocation_generation=3,
         disposal_scale=Decimal(1),
         segment_start_scale=Decimal(1),
@@ -126,11 +147,11 @@ def test_closed_checkpoint_requires_zero_segment_and_no_sources() -> None:
             lambda value: replace(
                 value,
                 sources=(
-                    replace(value.sources[0], cost_local_generation=0),
+                    replace(value.sources[0], cost_local_generation=2),
                     value.sources[1],
                 ),
             ),
-            "match the cost generations",
+            "generation cannot be in the future",
         ),
         (
             lambda value: replace(
