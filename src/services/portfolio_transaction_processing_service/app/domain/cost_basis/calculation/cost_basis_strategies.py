@@ -147,6 +147,9 @@ class CostBasisStrategy(Protocol):
     def consume_sell_quantity(
         self, portfolio_id: str, instrument_id: str, sell_quantity: Decimal
     ) -> tuple[Decimal, Decimal, Decimal, str | None]: ...
+    def consume_sell_quantity_with_allocations(
+        self, portfolio_id: str, instrument_id: str, sell_quantity: Decimal
+    ) -> LotDisposalResult: ...
     def get_available_quantity(self, portfolio_id: str, instrument_id: str) -> Decimal: ...
     def transfer_basis_out(
         self,
@@ -323,6 +326,8 @@ class AverageCostBasisStrategy(CostBasisStrategy):
         self._source_allocation.add_source(
             book_key=key,
             source_transaction_id=transaction.transaction_id,
+            source_lot_id=f"LOT-{transaction.transaction_id}",
+            source_acquisition_date=transaction.transaction_date.date(),
             quantity=quantity,
             cost_local=net_cost_local,
             cost_base=net_cost,
@@ -332,39 +337,80 @@ class AverageCostBasisStrategy(CostBasisStrategy):
     def consume_sell_quantity(
         self, portfolio_id: str, instrument_id: str, sell_quantity: Decimal
     ) -> tuple[Decimal, Decimal, Decimal, str | None]:
+        return self.consume_sell_quantity_with_allocations(
+            portfolio_id,
+            instrument_id,
+            sell_quantity,
+        ).legacy_tuple()
+
+    def consume_sell_quantity_with_allocations(
+        self, portfolio_id: str, instrument_id: str, sell_quantity: Decimal
+    ) -> LotDisposalResult:
         key = (portfolio_id, instrument_id)
         pool = self._pools[key]
         total_qty = pool.quantity
         required_quantity = sell_quantity
         invalid_quantity_error = _non_positive_sell_quantity_error(required_quantity)
         if invalid_quantity_error is not None:
-            return Decimal(0), Decimal(0), Decimal(0), invalid_quantity_error
+            return LotDisposalResult.failed(invalid_quantity_error)
 
         if required_quantity > total_qty:
-            return (
-                Decimal(0),
-                Decimal(0),
-                Decimal(0),
+            return LotDisposalResult.failed(
                 "Sell quantity "
                 f"({required_quantity}) exceeds available average cost "
-                f"holdings ({total_qty}).",
+                f"holdings ({total_qty})."
             )
         if total_qty.is_zero():
-            return (
-                Decimal(0),
-                Decimal(0),
-                Decimal(0),
-                "No holdings to sell against (Average Cost method).",
-            )
+            return LotDisposalResult.failed("No holdings to sell against (Average Cost method).")
+        if required_quantity == Decimal(0):
+            return LotDisposalResult.empty()
 
+        states_before = self._source_allocation.materialize_book(book_key=key, pool=pool)
         cogs_base, cogs_local = pool.dispose(required_quantity)
         self._source_allocation.apply_disposal(
             book_key=key,
             quantity_before=total_qty,
             quantity_after=pool.quantity,
         )
-
-        return cogs_base, cogs_local, required_quantity, None
+        states_after = self._source_allocation.materialize_book(book_key=key, pool=pool)
+        allocations: list[SourceLotDisposalAllocation] = []
+        for source_transaction_id, contribution in self._source_allocation.source_contributions(
+            key
+        ):
+            state_before = states_before[source_transaction_id]
+            state_after = states_after[source_transaction_id]
+            consumed_quantity = COST_BASIS_STATE_LEDGER_OUTPUT_V1.subtract(
+                state_before.quantity,
+                state_after.quantity,
+                field_name="consumed_quantity",
+            )
+            if consumed_quantity == Decimal(0):
+                continue
+            allocations.append(
+                SourceLotDisposalAllocation(
+                    source_lot_id=contribution.source_lot_id,
+                    source_transaction_id=source_transaction_id,
+                    source_acquisition_date=contribution.source_acquisition_date,
+                    allocation_ordinal=len(allocations) + 1,
+                    consumed_quantity=consumed_quantity,
+                    consumed_cost_local=COST_BASIS_STATE_LEDGER_OUTPUT_V1.subtract(
+                        state_before.cost_local,
+                        state_after.cost_local,
+                        field_name="disposed_cost_local",
+                    ),
+                    consumed_cost_base=COST_BASIS_STATE_LEDGER_OUTPUT_V1.subtract(
+                        state_before.cost_base,
+                        state_after.cost_base,
+                        field_name="disposed_cost_base",
+                    ),
+                )
+            )
+        return LotDisposalResult(
+            cost_base=cogs_base,
+            cost_local=cogs_local,
+            consumed_quantity=required_quantity,
+            allocations=tuple(allocations),
+        )
 
     def get_available_quantity(self, portfolio_id: str, instrument_id: str) -> Decimal:
         key = (portfolio_id, instrument_id)

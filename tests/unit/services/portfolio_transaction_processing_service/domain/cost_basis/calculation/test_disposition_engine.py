@@ -9,6 +9,7 @@ import pytest
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
     CostBasisStrategy,
     CostBasisTransaction,
+    LotDisposalResult,
     LotDispositionEngine,
 )
 
@@ -140,6 +141,24 @@ def test_consume_sell_quantity_normalizes_quantity_once(
     )
     assert quantity.string_call_count == 1
     assert result == (Decimal("105"), Decimal("105"), Decimal("10"), None)
+
+
+def test_consume_sell_quantity_with_allocations_delegates_to_strategy(
+    disposition_engine: LotDispositionEngine,
+    mock_strategy: MagicMock,
+    sample_transaction: CostBasisTransaction,
+) -> None:
+    expected = LotDisposalResult.empty()
+    mock_strategy.consume_sell_quantity_with_allocations.return_value = expected
+
+    result = disposition_engine.consume_sell_quantity_with_allocations(sample_transaction)
+
+    mock_strategy.consume_sell_quantity_with_allocations.assert_called_once_with(
+        sample_transaction.portfolio_id,
+        sample_transaction.instrument_id,
+        sample_transaction.quantity,
+    )
+    assert result is expected
 
 
 def test_set_initial_lots_delegates_to_strategy(

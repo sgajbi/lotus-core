@@ -176,6 +176,80 @@ def test_average_cost_dual_currency(avco_strategy: AverageCostBasisStrategy):
     }
 
 
+def test_average_cost_disposition_exposes_source_contribution_deltas(
+    avco_strategy: AverageCostBasisStrategy,
+) -> None:
+    buys = (
+        CostBasisTransaction(
+            transaction_id="AVCO_ALLOC_BUY_1",
+            portfolio_id="P_USD",
+            instrument_id="EUR_ALLOC_STOCK",
+            security_id="S_EUR",
+            transaction_type="BUY",
+            transaction_date=datetime(2023, 1, 1),
+            quantity=Decimal("100"),
+            gross_transaction_amount=Decimal("1000"),
+            net_cost_local=Decimal("1000"),
+            net_cost=Decimal("1100"),
+            trade_currency="EUR",
+            portfolio_base_currency="USD",
+        ),
+        CostBasisTransaction(
+            transaction_id="AVCO_ALLOC_BUY_2",
+            portfolio_id="P_USD",
+            instrument_id="EUR_ALLOC_STOCK",
+            security_id="S_EUR",
+            transaction_type="BUY",
+            transaction_date=datetime(2023, 1, 5),
+            quantity=Decimal("100"),
+            gross_transaction_amount=Decimal("1200"),
+            net_cost_local=Decimal("1200"),
+            net_cost=Decimal("1380"),
+            trade_currency="EUR",
+            portfolio_base_currency="USD",
+        ),
+    )
+    for buy in buys:
+        avco_strategy.add_buy_lot(buy)
+
+    result = avco_strategy.consume_sell_quantity_with_allocations(
+        "P_USD",
+        "EUR_ALLOC_STOCK",
+        Decimal("50"),
+    )
+
+    assert result.legacy_tuple() == (
+        Decimal("620"),
+        Decimal("550"),
+        Decimal("50"),
+        None,
+    )
+    assert [allocation.source_transaction_id for allocation in result.allocations] == [
+        "AVCO_ALLOC_BUY_1",
+        "AVCO_ALLOC_BUY_2",
+    ]
+    assert [allocation.source_lot_id for allocation in result.allocations] == [
+        "LOT-AVCO_ALLOC_BUY_1",
+        "LOT-AVCO_ALLOC_BUY_2",
+    ]
+    assert [allocation.source_acquisition_date for allocation in result.allocations] == [
+        date(2023, 1, 1),
+        date(2023, 1, 5),
+    ]
+    assert [allocation.consumed_quantity for allocation in result.allocations] == [
+        Decimal("25"),
+        Decimal("25"),
+    ]
+    assert [allocation.consumed_cost_local for allocation in result.allocations] == [
+        Decimal("250"),
+        Decimal("300"),
+    ]
+    assert [allocation.consumed_cost_base for allocation in result.allocations] == [
+        Decimal("275"),
+        Decimal("345"),
+    ]
+
+
 def test_average_cost_source_quantities_remain_exact_after_new_buy_and_disposal(
     avco_strategy: AverageCostBasisStrategy,
 ):
