@@ -327,6 +327,22 @@ def test_guard_accepts_postgresql_text_cast_finiteness_constraint(
     assert evaluate_guard(tmp_path, contract_path).findings == ()
 
 
+def test_guard_accepts_finiteness_as_final_term_in_grouped_constraint(
+    tmp_path: Path,
+) -> None:
+    contract_path = _write_fixture(
+        tmp_path,
+        model=_model(
+            constraint=(
+                "value > 0 AND (CAST(value AS TEXT) NOT IN ('NaN', 'Infinity', '-Infinity'))"
+            )
+        ),
+        contract=_contract(),
+    )
+
+    assert evaluate_guard(tmp_path, contract_path).findings == ()
+
+
 def test_guard_accepts_canonical_finite_constraint_helper(tmp_path: Path) -> None:
     contract_path = _write_fixture(
         tmp_path,
@@ -882,12 +898,12 @@ def test_repository_contract_classifies_inventory_and_persistence_semantics() ->
         for table in ("lot_disposal_receipts", "lot_disposal_allocations")
     }
 
-    assert report.numeric_column_count == 123
+    assert report.numeric_column_count == 129
     assert report.table_count == 35
-    assert report.bounded_numeric_count == 120
+    assert report.bounded_numeric_count == 126
     assert report.unbounded_numeric_count == 3
     assert report.domain_family_count == 11
-    assert report.orm_enforced_count == 123
+    assert report.orm_enforced_count == 129
     assert report.database_enforced_count == 0
     assert report.planned_count == 0
     assert transaction_profiles["quantity"] == "nonnegative-finite"
@@ -915,8 +931,12 @@ def test_repository_contract_classifies_inventory_and_persistence_semantics() ->
         "amortized_cost_original_quantity": "nullable-positive-finite",
         "amortized_cost_open_quantity_before": "nullable-positive-finite",
         "amortized_cost_residual_quantity": "nullable-nonnegative-finite",
+        "amortized_cost_scheduled_local": "nullable-nonnegative-finite",
         "amortized_cost_current_local": "nullable-nonnegative-finite",
+        "amortized_cost_current_base": "nullable-nonnegative-finite",
         "amortized_cost_residual_local": "nullable-nonnegative-finite",
         "amortized_cost_book_fx_rate_to_base": "nullable-positive-finite",
         "amortized_cost_residual_base": "nullable-nonnegative-finite",
+        "amortized_cost_retained_rounding_local": "nullable-finite",
+        "amortized_cost_retained_rounding_base": "nullable-finite",
     }

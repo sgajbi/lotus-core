@@ -86,7 +86,8 @@
       "lineage_boundary_callsites": [
         "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/disposal_allocation.py::_build_conserved_allocation_lineage",
         "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/state_lineage.py::build_cost_basis_state_lineage",
-        "src/services/portfolio_transaction_processing_service/app/domain/fixed_income_book_cost/calculation.py::calculate_amortized_cost_schedule"
+        "src/services/portfolio_transaction_processing_service/app/domain/fixed_income_book_cost/calculation.py::calculate_amortized_cost_schedule",
+        "src/services/portfolio_transaction_processing_service/app/domain/fixed_income_book_cost/disposal_basis.py::allocate_recognized_lot_book_cost"
       ],
       "lineage_boundary_covered_callsites": {
         "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/disposal_allocation.py::_build_conserved_allocation_lineage": [
@@ -116,6 +117,10 @@
         ],
         "src/services/portfolio_transaction_processing_service/app/domain/fixed_income_book_cost/calculation.py::calculate_amortized_cost_schedule": [
           "src/services/portfolio_transaction_processing_service/app/domain/fixed_income_book_cost/calculation.py::_calculate_period"
+        ],
+        "src/services/portfolio_transaction_processing_service/app/domain/fixed_income_book_cost/disposal_basis.py::allocate_recognized_lot_book_cost": [
+          "src/services/portfolio_transaction_processing_service/app/domain/fixed_income_book_cost/disposal_basis.py::_current_carried_cost",
+          "src/services/portfolio_transaction_processing_service/app/domain/fixed_income_book_cost/disposal_basis.py::_proportional_local_cost"
         ]
       },
       "lineage_gap_callsites": []

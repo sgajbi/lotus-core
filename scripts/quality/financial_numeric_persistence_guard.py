@@ -570,7 +570,8 @@ def _explicitly_excludes_special_values(column: NumericColumn) -> bool:
         terms = _constraint_terms(constraint)
         for term in terms:
             not_in_match = re.fullmatch(
-                rf"{finite_operand_pattern}\s+NOT\s+IN\s*\((?P<values>[^)]*)\)",
+                rf"\(*\s*{finite_operand_pattern}\s+NOT\s+IN\s*"
+                rf"\((?P<values>[^)]*)\)\s*\)*",
                 term,
                 flags=re.IGNORECASE,
             )
@@ -581,8 +582,8 @@ def _explicitly_excludes_special_values(column: NumericColumn) -> bool:
         if all(
             any(
                 re.fullmatch(
-                    rf"{finite_operand_pattern}\s*(?:<>|!=)\s*"
-                    rf"['\"]{re.escape(value)}['\"](?:::(?:numeric|text))?",
+                    rf"\(*\s*{finite_operand_pattern}\s*(?:<>|!=)\s*"
+                    rf"['\"]{re.escape(value)}['\"](?:::(?:numeric|text))?\s*\)*",
                     term,
                     flags=re.IGNORECASE,
                 )
