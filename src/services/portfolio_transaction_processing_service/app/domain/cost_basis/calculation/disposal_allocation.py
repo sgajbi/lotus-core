@@ -116,6 +116,26 @@ class LotDisposalResult:
         return self.cost_base, self.cost_local, self.consumed_quantity, self.error_reason
 
 
+@dataclass(frozen=True, slots=True)
+class TransactionLotDisposal:
+    """Bind one successful lot-disposal result to its consuming transaction."""
+
+    disposal_transaction_id: str
+    result: LotDisposalResult
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.disposal_transaction_id, str):
+            raise TypeError("disposal_transaction_id must be a string")
+        normalized = self.disposal_transaction_id.strip()
+        if not normalized:
+            raise ValueError("disposal_transaction_id must be nonblank")
+        object.__setattr__(self, "disposal_transaction_id", normalized)
+        if not isinstance(self.result, LotDisposalResult):
+            raise TypeError("result must be a LotDisposalResult")
+        if self.result.error_reason is not None or self.result.consumed_quantity <= Decimal(0):
+            raise ValueError("transaction disposal evidence requires a successful positive result")
+
+
 def _require_allocation_conservation(result: LotDisposalResult) -> None:
     policy = COST_BASIS_STATE_LEDGER_OUTPUT_V1
     quantity = Decimal(0)

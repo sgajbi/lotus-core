@@ -7,7 +7,7 @@ from portfolio_common.domain.decimal_amount import required_decimal
 
 from ..models.cost_basis_transaction import CostBasisTransaction
 from .cost_basis_strategies import CostBasisStrategy
-from .disposal_allocation import LotDisposalResult
+from .disposal_allocation import LotDisposalResult, TransactionLotDisposal
 from .lot_state import OpenLotState
 
 
@@ -22,6 +22,7 @@ class LotDispositionEngine:
 
     def __init__(self, cost_basis_strategy: CostBasisStrategy) -> None:
         self._cost_basis_strategy = cost_basis_strategy
+        self._disposals_by_transaction_id: dict[str, TransactionLotDisposal] = {}
 
     def add_buy_lot(self, transaction: CostBasisTransaction) -> None:
         if transaction.quantity > Decimal(0):
@@ -36,15 +37,7 @@ class LotDispositionEngine:
     def consume_sell_quantity(
         self, transaction: CostBasisTransaction
     ) -> tuple[Decimal, Decimal, Decimal, str | None]:
-        sell_quantity = required_decimal(transaction.quantity, field_name="quantity")
-        return cast(
-            tuple[Decimal, Decimal, Decimal, str | None],
-            self._cost_basis_strategy.consume_sell_quantity(
-                transaction.portfolio_id,
-                transaction.instrument_id,
-                sell_quantity,
-            ),
-        )
+        return self.consume_sell_quantity_with_allocations(transaction).legacy_tuple()
 
     def consume_sell_quantity_with_allocations(
         self,
@@ -53,11 +46,46 @@ class LotDispositionEngine:
         """Consume quantity and return exact source-lot evidence."""
 
         sell_quantity = required_decimal(transaction.quantity, field_name="quantity")
-        return self._cost_basis_strategy.consume_sell_quantity_with_allocations(
-            transaction.portfolio_id,
-            transaction.instrument_id,
-            sell_quantity,
+        result = cast(
+            LotDisposalResult,
+            self._cost_basis_strategy.consume_sell_quantity_with_allocations(
+                transaction.portfolio_id,
+                transaction.instrument_id,
+                sell_quantity,
+            ),
         )
+        if result.error_reason is None and result.consumed_quantity > Decimal(0):
+            self._record_disposal(
+                TransactionLotDisposal(
+                    disposal_transaction_id=transaction.transaction_id,
+                    result=result,
+                )
+            )
+        return result
+
+    def disposal_records(
+        self,
+        *,
+        transaction_ids: set[str] | None = None,
+    ) -> tuple[TransactionLotDisposal, ...]:
+        """Return recorded successful disposals in calculation order."""
+
+        return tuple(
+            disposal
+            for transaction_id, disposal in self._disposals_by_transaction_id.items()
+            if transaction_ids is None or transaction_id in transaction_ids
+        )
+
+    def clear_disposal_records(self) -> None:
+        """Clear staged disposal evidence before a new timeline execution."""
+
+        self._disposals_by_transaction_id.clear()
+
+    def _record_disposal(self, disposal: TransactionLotDisposal) -> None:
+        existing = self._disposals_by_transaction_id.get(disposal.disposal_transaction_id)
+        if existing is not None and existing != disposal:
+            raise ValueError("one disposal transaction produced conflicting source-lot evidence")
+        self._disposals_by_transaction_id[disposal.disposal_transaction_id] = disposal
 
     def transfer_basis_out(
         self,

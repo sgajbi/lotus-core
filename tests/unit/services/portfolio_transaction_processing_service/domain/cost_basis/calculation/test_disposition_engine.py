@@ -1,6 +1,6 @@
 """Verify domain-owned lot-disposition orchestration."""
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from unittest.mock import MagicMock
 
@@ -11,6 +11,7 @@ from src.services.portfolio_transaction_processing_service.app.domain.cost_basis
     CostBasisTransaction,
     LotDisposalResult,
     LotDispositionEngine,
+    SourceLotDisposalAllocation,
 )
 
 
@@ -34,6 +35,25 @@ def mock_strategy() -> MagicMock:
 def disposition_engine(mock_strategy: MagicMock) -> LotDispositionEngine:
     """Provides a LotDispositionEngine instance initialized with the mock strategy."""
     return LotDispositionEngine(cost_basis_strategy=mock_strategy)
+
+
+def _successful_disposal_result() -> LotDisposalResult:
+    return LotDisposalResult(
+        cost_base=Decimal("105"),
+        cost_local=Decimal("105"),
+        consumed_quantity=Decimal("10"),
+        allocations=(
+            SourceLotDisposalAllocation(
+                source_lot_id="LOT-BUY_001",
+                source_transaction_id="BUY_001",
+                source_acquisition_date=date(2022, 1, 1),
+                allocation_ordinal=1,
+                consumed_quantity=Decimal("10"),
+                consumed_cost_local=Decimal("105"),
+                consumed_cost_base=Decimal("105"),
+            ),
+        ),
+    )
 
 
 @pytest.fixture
@@ -98,18 +118,15 @@ def test_consume_sell_quantity_delegates_to_strategy(
     """
     # Arrange
     sample_transaction.transaction_type = "SELL"
-    mock_strategy.consume_sell_quantity.return_value = (
-        Decimal("105"),
-        Decimal("105"),
-        Decimal("10"),
-        None,
+    mock_strategy.consume_sell_quantity_with_allocations.return_value = (
+        _successful_disposal_result()
     )
 
     # Act
     result = disposition_engine.consume_sell_quantity(sample_transaction)
 
     # Assert
-    mock_strategy.consume_sell_quantity.assert_called_once_with(
+    mock_strategy.consume_sell_quantity_with_allocations.assert_called_once_with(
         sample_transaction.portfolio_id,
         sample_transaction.instrument_id,
         sample_transaction.quantity,
@@ -125,16 +142,13 @@ def test_consume_sell_quantity_normalizes_quantity_once(
     quantity = _StringCountedAmount("10")
     sample_transaction.transaction_type = "SELL"
     sample_transaction.quantity = quantity
-    mock_strategy.consume_sell_quantity.return_value = (
-        Decimal("105"),
-        Decimal("105"),
-        Decimal("10"),
-        None,
+    mock_strategy.consume_sell_quantity_with_allocations.return_value = (
+        _successful_disposal_result()
     )
 
     result = disposition_engine.consume_sell_quantity(sample_transaction)
 
-    mock_strategy.consume_sell_quantity.assert_called_once_with(
+    mock_strategy.consume_sell_quantity_with_allocations.assert_called_once_with(
         sample_transaction.portfolio_id,
         sample_transaction.instrument_id,
         Decimal("10"),
@@ -159,6 +173,43 @@ def test_consume_sell_quantity_with_allocations_delegates_to_strategy(
         sample_transaction.quantity,
     )
     assert result is expected
+    assert disposition_engine.disposal_records() == ()
+
+
+def test_successful_disposal_is_recorded_and_filterable(
+    disposition_engine: LotDispositionEngine,
+    mock_strategy: MagicMock,
+    sample_transaction: CostBasisTransaction,
+) -> None:
+    allocation = SourceLotDisposalAllocation(
+        source_lot_id="LOT-BUY_001",
+        source_transaction_id="BUY_001",
+        source_acquisition_date=date(2022, 1, 1),
+        allocation_ordinal=1,
+        consumed_quantity=Decimal("10"),
+        consumed_cost_local=Decimal("105"),
+        consumed_cost_base=Decimal("105"),
+    )
+    expected = LotDisposalResult(
+        cost_base=Decimal("105"),
+        cost_local=Decimal("105"),
+        consumed_quantity=Decimal("10"),
+        allocations=(allocation,),
+    )
+    mock_strategy.consume_sell_quantity_with_allocations.return_value = expected
+
+    legacy = disposition_engine.consume_sell_quantity(sample_transaction)
+
+    assert legacy == expected.legacy_tuple()
+    records = disposition_engine.disposal_records(
+        transaction_ids={sample_transaction.transaction_id}
+    )
+    assert len(records) == 1
+    assert records[0].disposal_transaction_id == sample_transaction.transaction_id
+    assert records[0].result is expected
+    assert disposition_engine.disposal_records(transaction_ids={"OTHER"}) == ()
+    disposition_engine.clear_disposal_records()
+    assert disposition_engine.disposal_records() == ()
 
 
 def test_set_initial_lots_delegates_to_strategy(

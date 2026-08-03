@@ -27,6 +27,7 @@ from .calculation.cost_basis_strategies import (
 from .calculation.disposal_allocation import (
     LotDisposalResult,
     SourceLotDisposalAllocation,
+    TransactionLotDisposal,
 )
 from .calculation.engine_input import build_cost_basis_engine_input, normalize_cost_fee_amount
 from .calculation.lot_disposition import LotDispositionEngine
@@ -111,6 +112,7 @@ __all__ = [
     "SourceLotDisposalAllocation",
     "CostBasisTransaction",
     "TransactionOrderKey",
+    "TransactionLotDisposal",
     "calculate_corporate_action_cash_economics",
     "missing_corporate_action_dependencies",
     "normalize_cost_fee_amount",
