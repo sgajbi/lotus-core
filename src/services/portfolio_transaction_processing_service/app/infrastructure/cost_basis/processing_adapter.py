@@ -17,6 +17,7 @@ from ...ports import (
     CorporateActionReconciliationRepository,
     CostBasisAverageCostPoolPort,
     CostBasisFxRatePort,
+    CostBasisLotDisposalPort,
     CostBasisLotStatePort,
     CostBasisProcessingStatePort,
     CostBasisReferenceDataPort,
@@ -39,6 +40,7 @@ class CostBasisProcessingAdapter:
         processor: PreparedCostProcessingUseCase,
         repository: CostBasisTransactionStatePort,
         average_cost_pools: CostBasisAverageCostPoolPort,
+        lot_disposals: CostBasisLotDisposalPort,
         lot_states: CostBasisLotStatePort,
         income_offsets: AccruedIncomeOffsetStatePort,
         reference_data: CostBasisReferenceDataPort,
@@ -50,6 +52,7 @@ class CostBasisProcessingAdapter:
         self._processor = processor
         self._repository = repository
         self._average_cost_pools = average_cost_pools
+        self._lot_disposals = lot_disposals
         self._lot_states = lot_states
         self._income_offsets = income_offsets
         self._reference_data = reference_data
@@ -86,6 +89,7 @@ class CostBasisProcessingAdapter:
             instrument=instrument,
             transaction_state=self._repository,
             average_cost_pools=self._average_cost_pools,
+            lot_disposals=self._lot_disposals,
             lot_states=self._lot_states,
             income_offsets=self._income_offsets,
             fx_rates=self._fx_rates,
