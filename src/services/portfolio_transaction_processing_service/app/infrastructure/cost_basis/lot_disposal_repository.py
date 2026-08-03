@@ -333,10 +333,14 @@ def _amortized_cost_evidence(
         "amortized_cost_original_quantity",
         "amortized_cost_open_quantity_before",
         "amortized_cost_residual_quantity",
+        "amortized_cost_scheduled_local",
         "amortized_cost_current_local",
+        "amortized_cost_current_base",
         "amortized_cost_residual_local",
         "amortized_cost_book_fx_rate_to_base",
         "amortized_cost_residual_base",
+        "amortized_cost_retained_rounding_local",
+        "amortized_cost_retained_rounding_base",
         "amortized_cost_calculation_lineage",
     )
     values = tuple(getattr(record, field_name) for field_name in field_names)
@@ -355,12 +359,16 @@ def _amortized_cost_evidence(
         open_quantity_before=record.amortized_cost_open_quantity_before,
         consumed_quantity=record.consumed_quantity,
         residual_quantity=record.amortized_cost_residual_quantity,
+        scheduled_cost_local=record.amortized_cost_scheduled_local,
         current_cost_local=record.amortized_cost_current_local,
+        current_cost_base=record.amortized_cost_current_base,
         consumed_cost_local=record.consumed_cost_local,
         residual_cost_local=record.amortized_cost_residual_local,
         book_cost_fx_rate_to_base=record.amortized_cost_book_fx_rate_to_base,
         consumed_cost_base=record.consumed_cost_base,
         residual_cost_base=record.amortized_cost_residual_base,
+        retained_rounding_residual_local=(record.amortized_cost_retained_rounding_local),
+        retained_rounding_residual_base=record.amortized_cost_retained_rounding_base,
         calculation_lineage=_required_lineage(
             record.amortized_cost_calculation_lineage,
             "amortized-cost allocation calculation lineage",
@@ -465,8 +473,14 @@ def _allocation_values(
                 "amortized_cost_residual_quantity": (
                     evidence.residual_quantity if evidence is not None else None
                 ),
+                "amortized_cost_scheduled_local": (
+                    evidence.scheduled_cost_local if evidence is not None else None
+                ),
                 "amortized_cost_current_local": (
                     evidence.current_cost_local if evidence is not None else None
+                ),
+                "amortized_cost_current_base": (
+                    evidence.current_cost_base if evidence is not None else None
                 ),
                 "amortized_cost_residual_local": (
                     evidence.residual_cost_local if evidence is not None else None
@@ -476,6 +490,12 @@ def _allocation_values(
                 ),
                 "amortized_cost_residual_base": (
                     evidence.residual_cost_base if evidence is not None else None
+                ),
+                "amortized_cost_retained_rounding_local": (
+                    evidence.retained_rounding_residual_local if evidence is not None else None
+                ),
+                "amortized_cost_retained_rounding_base": (
+                    evidence.retained_rounding_residual_base if evidence is not None else None
                 ),
                 "amortized_cost_calculation_lineage": (
                     evidence.calculation_lineage.lineage_payload() if evidence is not None else None
