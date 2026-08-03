@@ -2525,6 +2525,7 @@ class LotDisposalAllocationRecord(Base):
     amortized_cost_currency = Column(String(3), nullable=True)
     amortized_cost_recognized_through = Column(Date, nullable=True)
     amortized_cost_original_quantity = Column(ExactNumeric(18, 10), nullable=True)
+    amortized_cost_open_quantity_before = Column(ExactNumeric(18, 10), nullable=True)
     amortized_cost_residual_quantity = Column(ExactNumeric(18, 10), nullable=True)
     amortized_cost_current_local = Column(ExactNumeric(18, 10), nullable=True)
     amortized_cost_residual_local = Column(ExactNumeric(18, 10), nullable=True)
@@ -2626,6 +2627,7 @@ class LotDisposalAllocationRecord(Base):
             "AND amortized_cost_currency IS NULL "
             "AND amortized_cost_recognized_through IS NULL "
             "AND amortized_cost_original_quantity IS NULL "
+            "AND amortized_cost_open_quantity_before IS NULL "
             "AND amortized_cost_residual_quantity IS NULL "
             "AND amortized_cost_current_local IS NULL "
             "AND amortized_cost_residual_local IS NULL "
@@ -2638,6 +2640,7 @@ class LotDisposalAllocationRecord(Base):
             "AND amortized_cost_currency IS NOT NULL "
             "AND amortized_cost_recognized_through IS NOT NULL "
             "AND amortized_cost_original_quantity IS NOT NULL "
+            "AND amortized_cost_open_quantity_before IS NOT NULL "
             "AND amortized_cost_residual_quantity IS NOT NULL "
             "AND amortized_cost_current_local IS NOT NULL "
             "AND amortized_cost_residual_local IS NOT NULL "
@@ -2649,6 +2652,7 @@ class LotDisposalAllocationRecord(Base):
         _finite_numeric_check_constraint(
             "ck_lot_disposal_allocation_amort_finite",
             "amortized_cost_original_quantity",
+            "amortized_cost_open_quantity_before",
             "amortized_cost_residual_quantity",
             "amortized_cost_current_local",
             "amortized_cost_residual_local",
@@ -2663,6 +2667,8 @@ class LotDisposalAllocationRecord(Base):
             "AND amortized_cost_profile_content_hash ~ '^[0-9a-f]{64}$' "
             "AND amortized_cost_currency ~ '^[A-Z]{3}$' "
             "AND amortized_cost_original_quantity > 0 "
+            "AND amortized_cost_open_quantity_before > 0 "
+            "AND amortized_cost_open_quantity_before <= amortized_cost_original_quantity "
             "AND amortized_cost_residual_quantity >= 0 "
             "AND amortized_cost_current_local >= 0 "
             "AND amortized_cost_residual_local >= 0 "

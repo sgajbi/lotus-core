@@ -2,7 +2,7 @@
   "schema_version": "2.0.0",
   "model_path": "src/libs/portfolio-common/portfolio_common/database_models.py",
   "expected_inventory": {
-    "numeric_columns": 122,
+    "numeric_columns": 123,
     "tables": 35
   },
   "profiles": {
@@ -280,6 +280,7 @@
       "consumed_cost_local": {"profile": "nonnegative-finite", "rollout_status": "orm-enforced"},
       "consumed_cost_base": {"profile": "nonnegative-finite", "rollout_status": "orm-enforced"},
       "amortized_cost_original_quantity": {"profile": "nullable-positive-finite", "rollout_status": "orm-enforced"},
+      "amortized_cost_open_quantity_before": {"profile": "nullable-positive-finite", "rollout_status": "orm-enforced"},
       "amortized_cost_residual_quantity": {"profile": "nullable-nonnegative-finite", "rollout_status": "orm-enforced"},
       "amortized_cost_current_local": {"profile": "nullable-nonnegative-finite", "rollout_status": "orm-enforced"},
       "amortized_cost_residual_local": {"profile": "nullable-nonnegative-finite", "rollout_status": "orm-enforced"},

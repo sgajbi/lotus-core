@@ -51,6 +51,7 @@ def _amortized_cost_evidence() -> AmortizedCostAllocationEvidence:
         profile,
         disposal_date=date(2027, 1, 1),
         original_quantity=Decimal("10"),
+        open_quantity_before=Decimal("10"),
         consumed_quantity=Decimal("2"),
         fx_rate_to_base=Decimal("1.1"),
     )
@@ -62,6 +63,7 @@ def _amortized_cost_evidence() -> AmortizedCostAllocationEvidence:
         disposal_date=projection.disposal_date,
         recognized_through_date=projection.recognized_through_date,
         original_quantity=projection.original_quantity,
+        open_quantity_before=projection.open_quantity_before,
         consumed_quantity=projection.consumed_quantity,
         residual_quantity=projection.residual_quantity,
         current_cost_local=projection.current_cost_local,
