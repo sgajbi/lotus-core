@@ -29,7 +29,7 @@ def _source(
         quantity=Decimal("10"),
         cost_local=Decimal("98"),
         cost_base=Decimal("100"),
-        disposal_scale_at_entry=Decimal("0.875"),
+        disposal_scale_at_entry=Decimal("0.75"),
         cost_local_scale_at_entry=Decimal("1"),
         cost_base_scale_at_entry=Decimal("1"),
         cost_local_generation=1,
@@ -79,6 +79,11 @@ def test_open_checkpoint_allows_quantity_sources_from_prior_cost_generation() ->
 
     restored = replace(
         checkpoint,
+        pool=replace(
+            checkpoint.pool,
+            cost_local=Decimal("98"),
+            cost_base=Decimal("100"),
+        ),
         sources=(
             replace(
                 checkpoint.sources[0],
@@ -91,6 +96,26 @@ def test_open_checkpoint_allows_quantity_sources_from_prior_cost_generation() ->
 
     assert restored.sources[0].cost_local_generation == 0
     assert restored.sources[0].cost_base_generation == 0
+
+
+def test_open_checkpoint_rejects_disposal_scale_inconsistent_with_source_segment() -> None:
+    checkpoint = _open_checkpoint()
+
+    with pytest.raises(ValueError, match="disposal scale conflicts"):
+        replace(checkpoint, disposal_scale=checkpoint.disposal_scale * Decimal(2))
+
+
+def test_open_checkpoint_rejects_source_cost_inconsistent_with_pool() -> None:
+    checkpoint = _open_checkpoint()
+
+    with pytest.raises(ValueError, match="accumulators conflict"):
+        replace(
+            checkpoint,
+            sources=(
+                replace(checkpoint.sources[0], cost_base=Decimal("101")),
+                checkpoint.sources[1],
+            ),
+        )
 
 
 def test_closed_checkpoint_requires_zero_segment_and_no_sources() -> None:
