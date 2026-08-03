@@ -40,10 +40,16 @@
       "rounding": "ROUND_HALF_EVEN",
       "lineage_binding": "required",
       "lineage_boundary_callsites": [
+        "src/services/portfolio_transaction_processing_service/app/application/cost_basis_processing/amortized_disposal.py::_apply_transaction_overlay",
         "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_calculator.py::CostBasisCalculator.calculate_transaction_costs",
         "src/services/portfolio_transaction_processing_service/app/domain/transaction/fx/baseline_processing.py::build_fx_processed_transaction"
       ],
       "lineage_boundary_covered_callsites": {
+        "src/services/portfolio_transaction_processing_service/app/application/cost_basis_processing/amortized_disposal.py::_apply_transaction_overlay": [
+          "src/services/portfolio_transaction_processing_service/app/application/cost_basis_processing/amortized_disposal.py::_adjust_realized_value",
+          "src/services/portfolio_transaction_processing_service/app/application/cost_basis_processing/amortized_disposal.py::_book_cost_fx_rate",
+          "src/services/portfolio_transaction_processing_service/app/application/cost_basis_processing/amortized_disposal.py::_decorate_allocation"
+        ],
         "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_calculator.py::CostBasisCalculator.calculate_transaction_costs": [
           "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_calculator.py::AdjustmentStrategy.calculate_costs",
           "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_calculator.py::CashInflowStrategy.calculate_costs",
