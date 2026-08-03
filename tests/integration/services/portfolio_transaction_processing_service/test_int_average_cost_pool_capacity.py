@@ -47,7 +47,7 @@ pytestmark = [
 ]
 
 
-async def test_ordered_avco_database_work_is_source_count_independent_and_indexed(
+async def test_avco_replay_statement_count_is_bounded_and_lot_read_is_indexed(
     clean_db,
     async_db_session: AsyncSession,
 ) -> None:
@@ -92,9 +92,10 @@ async def test_ordered_avco_database_work_is_source_count_independent_and_indexe
     small_cost_state_statements = _cost_state_statements(small_statements)
     large_cost_state_statements = _cost_state_statements(large_statements)
     assert len(small_statements) == len(large_statements)
-    # The fixed-size state work includes ordered row reads for exact per-source
-    # lineage receipts; its statement count must remain independent of pool size.
-    assert len(small_cost_state_statements) == len(large_cost_state_statements) == 8
+    # Until #481 persists the source-aware checkpoint, AVCO disposal replays canonical
+    # history and writes a complete lot snapshot. SQL statement count stays bounded;
+    # selected and written row volume intentionally scales with the source count.
+    assert len(small_cost_state_statements) == len(large_cost_state_statements) == 3
     assert (
         sum(
             statement.startswith("SELECT position_lot_state.id")
@@ -107,14 +108,14 @@ async def test_ordered_avco_database_work_is_source_count_independent_and_indexe
             statement.startswith("UPDATE position_lot_state")
             for statement in large_cost_state_statements
         )
-        == 3
+        == 1
     )
     assert (
         sum(
             "sum(position_lot_state.open_quantity)" in statement
             for statement in large_cost_state_statements
         )
-        == 1
+        == 0
     )
 
     plan = await async_db_session.scalar(
