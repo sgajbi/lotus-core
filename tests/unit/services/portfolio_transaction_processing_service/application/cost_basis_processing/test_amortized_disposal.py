@@ -29,8 +29,10 @@ from tests.test_support.fixed_income_book_cost import resolved_fixed_income_book
 class _EffectiveProfiles:
     def __init__(self) -> None:
         self.requests = ()
+        self.calls = 0
 
     async def effective_as_of_many(self, requests):
+        self.calls += 1
         self.requests = tuple(requests)
         base = materialize_active_lot_amortized_cost_profile(
             resolved_fixed_income_book_cost_inputs(),
@@ -217,6 +219,46 @@ async def test_one_unit_partials_conserve_terminal_local_and_base_basis() -> Non
     assert sum(base_costs, Decimal(0)) == Decimal("97.0000000000")
     assert result.open_lot_states["BUY_1"].quantity == Decimal(0)
     assert result.open_lot_states["BUY_1"].amortized_cost is None
+
+
+@pytest.mark.asyncio
+async def test_large_disposal_stream_uses_one_bulk_profile_read_and_conserves_basis() -> None:
+    disposal_count = 1001
+    calculation = _calculation(
+        _raw_transaction(
+            "BUY_1",
+            "2026-01-01T00:00:00Z",
+            "BUY",
+            str(disposal_count),
+            "97",
+        ),
+        *(
+            _raw_transaction(
+                f"SELL_{ordinal:04d}",
+                "2026-06-30T00:00:00Z",
+                "SELL",
+                "1",
+                "1",
+            )
+            for ordinal in range(1, disposal_count + 1)
+        ),
+    )
+    profiles = _EffectiveProfiles()
+
+    result = await apply_effective_amortized_cost_to_disposals(
+        calculation,
+        portfolio=_accounting_portfolio(),
+        cost_basis_method=CostBasisMethod.FIFO,
+        profiles=profiles,  # type: ignore[arg-type]
+    )
+
+    assert profiles.calls == 1
+    assert len(profiles.requests) == disposal_count
+    assert sum(
+        (disposal.result.cost_local for disposal in result.disposals),
+        Decimal(0),
+    ) == Decimal("97.0000000000")
+    assert result.open_lot_states["BUY_1"].quantity == Decimal(0)
 
 
 @pytest.mark.asyncio
