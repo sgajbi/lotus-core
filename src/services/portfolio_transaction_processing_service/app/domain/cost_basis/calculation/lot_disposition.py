@@ -22,6 +22,7 @@ class LotDispositionEngine:
 
     def __init__(self, cost_basis_strategy: CostBasisStrategy) -> None:
         self._cost_basis_strategy = cost_basis_strategy
+        self._pending_disposals_by_transaction_id: dict[str, TransactionLotDisposal] = {}
         self._disposals_by_transaction_id: dict[str, TransactionLotDisposal] = {}
 
     def add_buy_lot(self, transaction: CostBasisTransaction) -> None:
@@ -55,13 +56,25 @@ class LotDispositionEngine:
             ),
         )
         if result.error_reason is None and result.consumed_quantity > Decimal(0):
-            self._record_disposal(
+            self._stage_disposal(
                 TransactionLotDisposal(
                     disposal_transaction_id=transaction.transaction_id,
                     result=result,
                 )
             )
         return result
+
+    def commit_disposal_record(self, transaction_id: str) -> None:
+        """Publish staged evidence only after the complete transaction calculation succeeds."""
+
+        pending = self._pending_disposals_by_transaction_id.pop(transaction_id, None)
+        if pending is not None:
+            self._record_disposal(pending)
+
+    def discard_pending_disposal(self, transaction_id: str) -> None:
+        """Discard evidence for a rejected or interrupted transaction calculation."""
+
+        self._pending_disposals_by_transaction_id.pop(transaction_id, None)
 
     def disposal_records(
         self,
@@ -79,7 +92,17 @@ class LotDispositionEngine:
     def clear_disposal_records(self) -> None:
         """Clear staged disposal evidence before a new timeline execution."""
 
+        self._pending_disposals_by_transaction_id.clear()
         self._disposals_by_transaction_id.clear()
+
+    def _stage_disposal(self, disposal: TransactionLotDisposal) -> None:
+        transaction_id = disposal.disposal_transaction_id
+        existing = self._pending_disposals_by_transaction_id.get(
+            transaction_id
+        ) or self._disposals_by_transaction_id.get(transaction_id)
+        if existing is not None and existing != disposal:
+            raise ValueError("one disposal transaction produced conflicting source-lot evidence")
+        self._pending_disposals_by_transaction_id[transaction_id] = disposal
 
     def _record_disposal(self, disposal: TransactionLotDisposal) -> None:
         existing = self._disposals_by_transaction_id.get(disposal.disposal_transaction_id)

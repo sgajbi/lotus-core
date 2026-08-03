@@ -115,6 +115,11 @@ numeric policy, and stages only successful positive transaction disposal evidenc
 calculated-output policy inventory was reconciled to the moved allocation call sites so stale proof
 references cannot pass protected lint. Application transport, append-only persistence, query and
 OpenAPI exposure, recovery/load proof, and redemption consumption remain open under #481/#477.
+PR review then found that immediate engine recording could expose evidence for a cash-in-lieu
+transaction rejected by later allocated-basis reconciliation. Disposal evidence is now two-phase:
+the engine stages it during lot consumption, the complete transaction calculator commits it only
+after all strategy validation and transaction lineage succeed, and every rejection or exception
+discards pending evidence.
 
 ## Same-Pattern Review
 
@@ -175,6 +180,9 @@ Data Models wiki documents the staged ledgers while the capability wiki remains
   fix-forward commit;
 - 194 warning-strict authority and cost-basis allocation tests, plus 113 warning-strict allocation
   lineage and calculated-output-policy guard tests; scoped MyPy, Ruff, JSON, and diff checks passed.
+- review fix-forward proof: 103 warning-strict calculator/disposition tests cover accepted commit,
+  rejected cash-in-lieu discard, explicit pending discard, filtering, and cleanup; scoped MyPy and
+  Ruff passed.
 
 Protected PR, exact-main, runtime recovery/replay and load proof, verified query reconstruction,
 disposal, redemption, and issue-closure evidence remain pending until their corresponding
