@@ -29,6 +29,7 @@ from .disposal_basis import (
     AMORTIZED_COST_DISPOSAL_ALGORITHM_ID,
     AMORTIZED_COST_DISPOSAL_ALGORITHM_VERSION,
     AmortizedCostDisposalError,
+    CarriedLotBookCost,
     RecognizedLotBookCost,
     allocate_recognized_lot_book_cost,
 )
@@ -87,6 +88,7 @@ __all__ = [
     "AmortizedCostAuthorityError",
     "AmortizedCostDirection",
     "AmortizedCostDisposalError",
+    "CarriedLotBookCost",
     "AmortizedCostCalculationError",
     "AmortizedCostEligibilityReason",
     "AmortizedCostInputResolutionError",
