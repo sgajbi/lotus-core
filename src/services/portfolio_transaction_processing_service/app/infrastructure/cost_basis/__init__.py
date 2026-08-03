@@ -11,6 +11,11 @@ from .corporate_action_reconciliation_repository import (
 )
 from .effect_staging import TransactionalCostProcessingEffectStager
 from .fx_rate_repository import SqlAlchemyCostBasisFxRateRepository
+from .lot_disposal_repository import (
+    ConflictingLotDisposalReceiptError,
+    CorruptLotDisposalReceiptError,
+    SqlAlchemyCostBasisLotDisposalRepository,
+)
 from .lot_state_repository import SqlAlchemyCostBasisLotRepository
 from .observability import (
     PROMETHEUS_COST_BASIS_CALCULATION_OBSERVER,
@@ -37,10 +42,13 @@ __all__ = [
     "PrometheusCorporateActionReconciliationObserver",
     "SqlAlchemyCostBasisFxRateRepository",
     "SqlAlchemyCostBasisLotRepository",
+    "SqlAlchemyCostBasisLotDisposalRepository",
     "SqlAlchemyCostBasisProcessingStateRepository",
     "SqlAlchemyCostBasisReferenceDataRepository",
     "SqlAlchemyCostBasisTransactionRepository",
     "CostBasisProcessingAdapter",
+    "ConflictingLotDisposalReceiptError",
+    "CorruptLotDisposalReceiptError",
     "TransactionalCostProcessingEffectStager",
     "PortfolioNotFoundError",
     "PROMETHEUS_COST_BASIS_CALCULATION_OBSERVER",
