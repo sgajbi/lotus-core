@@ -4,6 +4,7 @@ from .average_cost_pool import CostBasisAverageCostPoolPort
 from .average_cost_pool_reconciliation import AverageCostPoolReconciliationPort
 from .effect_staging import CostProcessingEffectStagingPort
 from .fx_rates import CostBasisFxRatePort
+from .lot_disposal import CostBasisLotDisposalPort
 from .lot_state import CostBasisLotStatePort
 from .observability import (
     CostBasisCalculationObservation,
@@ -34,6 +35,7 @@ __all__ = [
     "AverageCostPoolReconciliationPort",
     "CostBasisAverageCostPoolPort",
     "CostBasisFxRatePort",
+    "CostBasisLotDisposalPort",
     "CostBasisLotStatePort",
     "CostBasisCalculationObservation",
     "CostBasisCalculationObserver",
