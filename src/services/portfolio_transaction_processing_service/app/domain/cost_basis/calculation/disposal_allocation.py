@@ -35,12 +35,16 @@ class AmortizedCostAllocationEvidence:
     open_quantity_before: Decimal
     consumed_quantity: Decimal
     residual_quantity: Decimal
+    scheduled_cost_local: Decimal
     current_cost_local: Decimal
+    current_cost_base: Decimal
     consumed_cost_local: Decimal
     residual_cost_local: Decimal
     book_cost_fx_rate_to_base: Decimal
     consumed_cost_base: Decimal
     residual_cost_base: Decimal
+    retained_rounding_residual_local: Decimal
+    retained_rounding_residual_base: Decimal
     calculation_lineage: CalculationLineage
 
     def __post_init__(self) -> None:
@@ -67,12 +71,16 @@ class AmortizedCostAllocationEvidence:
             "open_quantity_before",
             "consumed_quantity",
             "residual_quantity",
+            "scheduled_cost_local",
             "current_cost_local",
+            "current_cost_base",
             "consumed_cost_local",
             "residual_cost_local",
             "book_cost_fx_rate_to_base",
             "consumed_cost_base",
             "residual_cost_base",
+            "retained_rounding_residual_local",
+            "retained_rounding_residual_base",
         ):
             _require_decimal(
                 getattr(self, field_name),
@@ -91,6 +99,8 @@ class AmortizedCostAllocationEvidence:
             raise ValueError("amortized-cost quantity does not conserve the pre-disposal lot")
         if self.consumed_cost_local + self.residual_cost_local != self.current_cost_local:
             raise ValueError("amortized local cost does not conserve current lot cost")
+        if self.consumed_cost_base + self.residual_cost_base != self.current_cost_base:
+            raise ValueError("amortized base cost does not conserve current lot cost")
         if not isinstance(self.calculation_lineage, CalculationLineage):
             raise TypeError("calculation_lineage must be a CalculationLineage")
         if not calculation_lineage_binds_output(
@@ -106,12 +116,16 @@ class AmortizedCostAllocationEvidence:
             "consumed_cost_base": self.consumed_cost_base,
             "consumed_cost_local": self.consumed_cost_local,
             "consumed_quantity": self.consumed_quantity,
+            "current_cost_base": self.current_cost_base,
             "current_cost_local": self.current_cost_local,
             "open_quantity_before": self.open_quantity_before,
             "recognized_through_date": self.recognized_through_date,
             "residual_cost_base": self.residual_cost_base,
             "residual_cost_local": self.residual_cost_local,
             "residual_quantity": self.residual_quantity,
+            "retained_rounding_residual_base": self.retained_rounding_residual_base,
+            "retained_rounding_residual_local": self.retained_rounding_residual_local,
+            "scheduled_cost_local": self.scheduled_cost_local,
         }
 
     def semantic_payload(self) -> dict[str, object]:
@@ -124,6 +138,7 @@ class AmortizedCostAllocationEvidence:
             "consumed_quantity": self.consumed_quantity,
             "currency": self.currency,
             "current_cost_local": self.current_cost_local,
+            "current_cost_base": self.current_cost_base,
             "disposal_date": self.disposal_date,
             "book_cost_fx_rate_to_base": self.book_cost_fx_rate_to_base,
             "original_quantity": self.original_quantity,
@@ -135,6 +150,9 @@ class AmortizedCostAllocationEvidence:
             "residual_cost_base": self.residual_cost_base,
             "residual_cost_local": self.residual_cost_local,
             "residual_quantity": self.residual_quantity,
+            "retained_rounding_residual_base": self.retained_rounding_residual_base,
+            "retained_rounding_residual_local": self.retained_rounding_residual_local,
+            "scheduled_cost_local": self.scheduled_cost_local,
         }
 
 

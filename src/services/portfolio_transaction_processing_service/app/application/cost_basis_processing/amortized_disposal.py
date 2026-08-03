@@ -189,12 +189,16 @@ def _decorate_allocation(
         open_quantity_before=projection.open_quantity_before,
         consumed_quantity=projection.consumed_quantity,
         residual_quantity=projection.residual_quantity,
+        scheduled_cost_local=projection.scheduled_cost_local,
         current_cost_local=projection.current_cost_local,
+        current_cost_base=projection.current_cost_base,
         consumed_cost_local=projection.consumed_cost_local,
         residual_cost_local=projection.residual_cost_local,
         book_cost_fx_rate_to_base=projection.book_cost_fx_rate_to_base,
         consumed_cost_base=projection.consumed_cost_base,
         residual_cost_base=projection.residual_cost_base,
+        retained_rounding_residual_local=projection.retained_rounding_residual_local,
+        retained_rounding_residual_base=projection.retained_rounding_residual_base,
         calculation_lineage=projection.calculation_lineage,
     )
     return replace(
