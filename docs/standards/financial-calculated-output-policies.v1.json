@@ -83,7 +83,9 @@
         "src/services/portfolio_transaction_processing_service/app/domain/fixed_income_book_cost/calculation.py::calculate_amortized_cost_schedule"
       ],
       "lineage_boundary_covered_callsites": {
-        "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/disposal_allocation.py::_build_conserved_allocation_lineage": [],
+        "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/disposal_allocation.py::_build_conserved_allocation_lineage": [
+          "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_strategies.py::_reconcile_disposal_allocation_residuals"
+        ],
         "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/state_lineage.py::build_cost_basis_state_lineage": [
           "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/average_cost_pool_checkpoint.py::AverageCostPoolTransition.after",
           "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/average_cost_pool_checkpoint.py::_sum_state_field",
