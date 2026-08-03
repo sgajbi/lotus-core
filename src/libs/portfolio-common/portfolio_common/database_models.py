@@ -2296,6 +2296,11 @@ class PositionLotState(Base):
     calculation_policy_id = Column(String, nullable=True)
     calculation_policy_version = Column(String, nullable=True)
     source_system = Column(String, nullable=True)
+    amortized_cost_profile_id = Column(String(96), nullable=True)
+    amortized_cost_profile_version = Column(Integer, nullable=True)
+    amortized_cost_profile_content_hash = Column(String(64), nullable=True)
+    amortized_cost_recognized_through = Column(Date, nullable=True)
+    amortized_cost_scheduled_local = Column(ExactNumeric(18, 10), nullable=True)
     calculation_lineage = Column(JSON(none_as_null=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(
@@ -2308,6 +2313,24 @@ class PositionLotState(Base):
             "portfolio_id",
             "security_id",
             name="uq_position_lot_scope_identity",
+        ),
+        ForeignKeyConstraint(
+            [
+                "amortized_cost_profile_id",
+                "amortized_cost_profile_version",
+                "lot_id",
+                "portfolio_id",
+                "security_id",
+            ],
+            [
+                "lot_amortized_cost_profiles.profile_id",
+                "lot_amortized_cost_profiles.profile_version",
+                "lot_amortized_cost_profiles.lot_id",
+                "lot_amortized_cost_profiles.portfolio_id",
+                "lot_amortized_cost_profiles.security_id",
+            ],
+            name="fk_position_lot_amortized_cost_profile",
+            ondelete="RESTRICT",
         ),
         CheckConstraint(
             "CAST(original_quantity AS TEXT) NOT IN ('NaN', 'Infinity', '-Infinity') "
@@ -2341,6 +2364,32 @@ class PositionLotState(Base):
         CheckConstraint(
             "accrued_interest_paid_local >= 0",
             name="ck_position_lot_accrued_interest_nonnegative",
+        ),
+        CheckConstraint(
+            "(amortized_cost_profile_id IS NULL "
+            "AND amortized_cost_profile_version IS NULL "
+            "AND amortized_cost_profile_content_hash IS NULL "
+            "AND amortized_cost_recognized_through IS NULL "
+            "AND amortized_cost_scheduled_local IS NULL) OR ("
+            "amortized_cost_profile_id IS NOT NULL "
+            "AND amortized_cost_profile_version IS NOT NULL "
+            "AND amortized_cost_profile_content_hash IS NOT NULL "
+            "AND amortized_cost_recognized_through IS NOT NULL "
+            "AND amortized_cost_scheduled_local IS NOT NULL)",
+            name="ck_position_lot_amortized_cost_shape",
+        ),
+        CheckConstraint(
+            "amortized_cost_profile_id IS NULL OR ("
+            "open_quantity > 0 "
+            "AND amortized_cost_profile_version >= 1 "
+            "AND amortized_cost_profile_id = btrim(amortized_cost_profile_id) "
+            "AND amortized_cost_profile_id <> '' "
+            "AND amortized_cost_profile_content_hash ~ '^[0-9a-f]{64}$' "
+            "AND amortized_cost_recognized_through >= acquisition_date "
+            "AND amortized_cost_scheduled_local >= 0 "
+            "AND CAST(amortized_cost_scheduled_local AS TEXT) "
+            "NOT IN ('NaN', 'Infinity', '-Infinity'))",
+            name="ck_position_lot_amortized_cost_values",
         ),
         Index(
             "ix_position_lot_norm_port_sec",
@@ -2527,10 +2576,14 @@ class LotDisposalAllocationRecord(Base):
     amortized_cost_original_quantity = Column(ExactNumeric(18, 10), nullable=True)
     amortized_cost_open_quantity_before = Column(ExactNumeric(18, 10), nullable=True)
     amortized_cost_residual_quantity = Column(ExactNumeric(18, 10), nullable=True)
+    amortized_cost_scheduled_local = Column(ExactNumeric(18, 10), nullable=True)
     amortized_cost_current_local = Column(ExactNumeric(18, 10), nullable=True)
+    amortized_cost_current_base = Column(ExactNumeric(18, 10), nullable=True)
     amortized_cost_residual_local = Column(ExactNumeric(18, 10), nullable=True)
     amortized_cost_book_fx_rate_to_base = Column(ExactNumeric(18, 10), nullable=True)
     amortized_cost_residual_base = Column(ExactNumeric(18, 10), nullable=True)
+    amortized_cost_retained_rounding_local = Column(ExactNumeric(18, 10), nullable=True)
+    amortized_cost_retained_rounding_base = Column(ExactNumeric(18, 10), nullable=True)
     amortized_cost_calculation_lineage = Column(JSONB(none_as_null=True), nullable=True)
     allocation_content_hash = Column(String(64), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
@@ -2629,10 +2682,14 @@ class LotDisposalAllocationRecord(Base):
             "AND amortized_cost_original_quantity IS NULL "
             "AND amortized_cost_open_quantity_before IS NULL "
             "AND amortized_cost_residual_quantity IS NULL "
+            "AND amortized_cost_scheduled_local IS NULL "
             "AND amortized_cost_current_local IS NULL "
+            "AND amortized_cost_current_base IS NULL "
             "AND amortized_cost_residual_local IS NULL "
             "AND amortized_cost_book_fx_rate_to_base IS NULL "
             "AND amortized_cost_residual_base IS NULL "
+            "AND amortized_cost_retained_rounding_local IS NULL "
+            "AND amortized_cost_retained_rounding_base IS NULL "
             "AND amortized_cost_calculation_lineage IS NULL) OR ("
             "amortized_cost_profile_id IS NOT NULL "
             "AND amortized_cost_profile_version IS NOT NULL "
@@ -2642,10 +2699,14 @@ class LotDisposalAllocationRecord(Base):
             "AND amortized_cost_original_quantity IS NOT NULL "
             "AND amortized_cost_open_quantity_before IS NOT NULL "
             "AND amortized_cost_residual_quantity IS NOT NULL "
+            "AND amortized_cost_scheduled_local IS NOT NULL "
             "AND amortized_cost_current_local IS NOT NULL "
+            "AND amortized_cost_current_base IS NOT NULL "
             "AND amortized_cost_residual_local IS NOT NULL "
             "AND amortized_cost_book_fx_rate_to_base IS NOT NULL "
             "AND amortized_cost_residual_base IS NOT NULL "
+            "AND amortized_cost_retained_rounding_local IS NOT NULL "
+            "AND amortized_cost_retained_rounding_base IS NOT NULL "
             "AND amortized_cost_calculation_lineage IS NOT NULL)",
             name="ck_lot_disposal_allocation_amort_shape",
         ),
@@ -2654,10 +2715,14 @@ class LotDisposalAllocationRecord(Base):
             "amortized_cost_original_quantity",
             "amortized_cost_open_quantity_before",
             "amortized_cost_residual_quantity",
+            "amortized_cost_scheduled_local",
             "amortized_cost_current_local",
+            "amortized_cost_current_base",
             "amortized_cost_residual_local",
             "amortized_cost_book_fx_rate_to_base",
             "amortized_cost_residual_base",
+            "amortized_cost_retained_rounding_local",
+            "amortized_cost_retained_rounding_base",
         ),
         CheckConstraint(
             "amortized_cost_profile_id IS NULL OR ("
@@ -2670,7 +2735,9 @@ class LotDisposalAllocationRecord(Base):
             "AND amortized_cost_open_quantity_before > 0 "
             "AND amortized_cost_open_quantity_before <= amortized_cost_original_quantity "
             "AND amortized_cost_residual_quantity >= 0 "
+            "AND amortized_cost_scheduled_local >= 0 "
             "AND amortized_cost_current_local >= 0 "
+            "AND amortized_cost_current_base >= 0 "
             "AND amortized_cost_residual_local >= 0 "
             "AND amortized_cost_book_fx_rate_to_base > 0 "
             "AND amortized_cost_residual_base >= 0 "
