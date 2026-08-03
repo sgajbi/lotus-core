@@ -28,6 +28,7 @@ from src.services.portfolio_transaction_processing_service.app.ports import (
     CostBasisAverageCostPoolPort,
     CostBasisFxRatePort,
     CostBasisInstrumentReference,
+    CostBasisLotDisposalPort,
     CostBasisLotStatePort,
     CostBasisPortfolioReference,
     CostBasisProcessingStatePort,
@@ -78,6 +79,7 @@ def _dependencies() -> dict[str, object]:
         ),
         "transaction_state": AsyncMock(spec=CostBasisTransactionStatePort),
         "average_cost_pools": AsyncMock(spec=CostBasisAverageCostPoolPort),
+        "lot_disposals": AsyncMock(spec=CostBasisLotDisposalPort),
         "lot_states": AsyncMock(spec=CostBasisLotStatePort),
         "income_offsets": AsyncMock(spec=AccruedIncomeOffsetStatePort),
         "fx_rates": AsyncMock(spec=CostBasisFxRatePort),
@@ -102,18 +104,38 @@ async def test_cost_basis_execution_acquires_key_lock_before_calculation(
         incremental=True,
         open_lot_persistence_scope=MagicMock(),
         average_cost_pool_transition=None,
+        disposals=(),
     )
     coordinator = MagicMock()
     coordinator.return_value.calculate = AsyncMock(return_value=calculation)
     monkeypatch.setattr(execution_module, "CostBasisCalculationCoordinator", coordinator)
     persisted = (prepared.transaction,)
+    persistence_order: list[str] = []
     monkeypatch.setattr(
         execution_module,
         "persist_cost_basis_transactions",
-        AsyncMock(return_value=persisted),
+        AsyncMock(
+            side_effect=lambda **_kwargs: persistence_order.append("transactions") or persisted
+        ),
     )
-    monkeypatch.setattr(execution_module, "persist_open_lot_state", AsyncMock())
-    monkeypatch.setattr(execution_module, "_persist_processing_checkpoint", AsyncMock())
+    monkeypatch.setattr(
+        execution_module,
+        "persist_open_lot_state",
+        AsyncMock(side_effect=lambda **_kwargs: persistence_order.append("lot-state")),
+    )
+    persist_disposals = AsyncMock(
+        side_effect=lambda **_kwargs: persistence_order.append("disposal-receipts")
+    )
+    monkeypatch.setattr(
+        execution_module,
+        "persist_current_lot_disposals",
+        persist_disposals,
+    )
+    monkeypatch.setattr(
+        execution_module,
+        "_persist_processing_checkpoint",
+        AsyncMock(side_effect=lambda **_kwargs: persistence_order.append("checkpoint")),
+    )
 
     result = await PreparedCostProcessingUseCase()._calculate_cost_basis(
         prepared=prepared,
@@ -129,6 +151,7 @@ async def test_cost_basis_execution_acquires_key_lock_before_calculation(
         ),
         transaction_state=transaction_state,
         average_cost_pools=AsyncMock(spec=CostBasisAverageCostPoolPort),
+        lot_disposals=AsyncMock(spec=CostBasisLotDisposalPort),
         lot_states=AsyncMock(spec=CostBasisLotStatePort),
         income_offsets=AsyncMock(spec=AccruedIncomeOffsetStatePort),
         fx_rates=AsyncMock(spec=CostBasisFxRatePort),
@@ -140,6 +163,13 @@ async def test_cost_basis_execution_acquires_key_lock_before_calculation(
         "PORT-COST-01",
         "SECURITY-01",
     )
+    persist_disposals.assert_awaited_once()
+    assert persistence_order == [
+        "transactions",
+        "disposal-receipts",
+        "lot-state",
+        "checkpoint",
+    ]
 
 
 @pytest.mark.asyncio

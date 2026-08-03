@@ -20,6 +20,7 @@ from ...ports import (
     CostBasisCalculationObserver,
     CostBasisFxRatePort,
     CostBasisInstrumentReference,
+    CostBasisLotDisposalPort,
     CostBasisLotStatePort,
     CostBasisPersistenceObserver,
     CostBasisPortfolioReference,
@@ -30,6 +31,7 @@ from ...ports import (
 )
 from ..foreign_exchange_processing import book_foreign_exchange_transaction
 from .calculation import CostBasisCalculationCoordinator
+from .disposal_persistence import persist_current_lot_disposals
 from .effect_coordination import coordinate_cost_processing_effects
 from .lot_state_persistence import persist_open_lot_state
 from .preparation import CostProcessingRoute, PreparedCostTransaction
@@ -58,6 +60,7 @@ class PreparedCostProcessingUseCase:
         instrument: CostBasisInstrumentReference | None,
         transaction_state: CostBasisTransactionStatePort,
         average_cost_pools: CostBasisAverageCostPoolPort,
+        lot_disposals: CostBasisLotDisposalPort,
         lot_states: CostBasisLotStatePort,
         income_offsets: AccruedIncomeOffsetStatePort,
         fx_rates: CostBasisFxRatePort,
@@ -80,6 +83,7 @@ class PreparedCostProcessingUseCase:
                 instrument=instrument,
                 transaction_state=transaction_state,
                 average_cost_pools=average_cost_pools,
+                lot_disposals=lot_disposals,
                 lot_states=lot_states,
                 income_offsets=income_offsets,
                 fx_rates=fx_rates,
@@ -121,6 +125,7 @@ class PreparedCostProcessingUseCase:
         instrument: CostBasisInstrumentReference | None,
         transaction_state: CostBasisTransactionStatePort,
         average_cost_pools: CostBasisAverageCostPoolPort,
+        lot_disposals: CostBasisLotDisposalPort,
         lot_states: CostBasisLotStatePort,
         income_offsets: AccruedIncomeOffsetStatePort,
         fx_rates: CostBasisFxRatePort,
@@ -153,6 +158,13 @@ class PreparedCostProcessingUseCase:
             lot_states=lot_states,
             income_offsets=income_offsets,
             observer=self._persistence_observer,
+        )
+        await persist_current_lot_disposals(
+            processed=calculation.processed,
+            incoming_transaction_ids={transaction.transaction_id},
+            disposals=calculation.disposals,
+            cost_basis_method=prepared.cost_basis_method,
+            repository=lot_disposals,
         )
         await persist_open_lot_state(
             transaction=transaction,
