@@ -41,7 +41,7 @@ from .calculation.disposal_allocation import (
 )
 from .calculation.engine_input import build_cost_basis_engine_input, normalize_cost_fee_amount
 from .calculation.lot_disposition import LotDispositionEngine
-from .calculation.lot_state import CostLot, OpenLotState
+from .calculation.lot_state import AmortizedCostCarryState, CostLot, OpenLotState
 from .calculation.transaction_ordering import (
     CASH_INFLOW_TRANSACTION_TYPES,
     CASH_OUTFLOW_TRANSACTION_TYPES,
@@ -84,6 +84,7 @@ __all__ = [
     "AverageCostBasisStrategy",
     "AverageCostAllocationCheckpoint",
     "AverageCostPool",
+    "AmortizedCostCarryState",
     "AverageCostPoolCheckpoint",
     "AverageCostPoolRebuildPlan",
     "AverageCostPoolKey",
