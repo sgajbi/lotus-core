@@ -38,6 +38,18 @@ HEAD_MIGRATION = (
     / "versions"
     / "c141b2c3d50e_feat_add_lot_disposal_receipts.py"
 )
+DISPOSAL_EVIDENCE_MIGRATION = (
+    Path(__file__).resolve().parents[2]
+    / "alembic"
+    / "versions"
+    / "c142b2c3d50f_feat_add_amortized_disposal_evidence.py"
+)
+RESIDUAL_CARRY_MIGRATION = (
+    Path(__file__).resolve().parents[2]
+    / "alembic"
+    / "versions"
+    / "c143b2c3d510_fix_conserve_amortized_cost_residual.py"
+)
 
 PORTFOLIO_INSERT = text(
     """
@@ -81,8 +93,26 @@ def _bind_operations(migration: dict[str, Any], connection) -> None:
 def _downgrade_dependent_schema(connection) -> list[dict[str, Any]]:
     """Downgrade later schema that deliberately references valuation-book scope."""
 
-    inspector = inspect(connection)
     dependent_migrations: list[dict[str, Any]] = []
+    inspector = inspect(connection)
+    residual_columns = {column["name"] for column in inspector.get_columns("position_lot_state")}
+    if "amortized_cost_profile_id" in residual_columns:
+        residual_migration: dict[str, Any] = runpy.run_path(str(RESIDUAL_CARRY_MIGRATION))
+        _bind_operations(residual_migration, connection)
+        residual_migration["downgrade"]()
+        dependent_migrations.append(residual_migration)
+        inspector = inspect(connection)
+    disposal_evidence_columns = {
+        column["name"] for column in inspector.get_columns("lot_disposal_allocations")
+    }
+    if "amortized_cost_profile_id" in disposal_evidence_columns:
+        disposal_evidence_migration: dict[str, Any] = runpy.run_path(
+            str(DISPOSAL_EVIDENCE_MIGRATION)
+        )
+        _bind_operations(disposal_evidence_migration, connection)
+        disposal_evidence_migration["downgrade"]()
+        dependent_migrations.append(disposal_evidence_migration)
+        inspector = inspect(connection)
     if inspector.has_table("lot_disposal_receipts"):
         head_migration: dict[str, Any] = runpy.run_path(str(HEAD_MIGRATION))
         _bind_operations(head_migration, connection)
@@ -199,3 +229,11 @@ def test_portfolio_valuation_book_scope_applies_rolls_back_and_enforces_authorit
             if any(migration["revision"] == "c141b2c3d50e" for migration in dependent_migrations):
                 assert inspector.has_table("lot_disposal_receipts")
                 assert inspector.has_table("lot_disposal_allocations")
+            if any(migration["revision"] == "c142b2c3d50f" for migration in dependent_migrations):
+                assert "amortized_cost_profile_id" in {
+                    column["name"] for column in inspector.get_columns("lot_disposal_allocations")
+                }
+            if any(migration["revision"] == "c143b2c3d510" for migration in dependent_migrations):
+                assert "amortized_cost_profile_id" in {
+                    column["name"] for column in inspector.get_columns("position_lot_state")
+                }

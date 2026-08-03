@@ -32,6 +32,18 @@ HEAD_MIGRATION = (
     / "versions"
     / "c141b2c3d50e_feat_add_lot_disposal_receipts.py"
 )
+DISPOSAL_EVIDENCE_MIGRATION = (
+    Path(__file__).resolve().parents[2]
+    / "alembic"
+    / "versions"
+    / "c142b2c3d50f_feat_add_amortized_disposal_evidence.py"
+)
+RESIDUAL_CARRY_MIGRATION = (
+    Path(__file__).resolve().parents[2]
+    / "alembic"
+    / "versions"
+    / "c143b2c3d510_fix_conserve_amortized_cost_residual.py"
+)
 
 PROFILE_INSERT = text(
     """
@@ -155,11 +167,18 @@ def _downgrade_later_revisions(connection) -> list[dict[str, Any]]:
     """Remove dependent revisions newest-first before exercising the profile schema."""
 
     later_migrations: list[dict[str, Any]] = []
-    for table_name, migration_path in (
-        ("lot_disposal_receipts", HEAD_MIGRATION),
-        ("lot_amortized_cost_authority", LATER_MIGRATION),
+    for table_name, marker_column, migration_path in (
+        ("position_lot_state", "amortized_cost_profile_id", RESIDUAL_CARRY_MIGRATION),
+        ("lot_disposal_allocations", "amortized_cost_profile_id", DISPOSAL_EVIDENCE_MIGRATION),
+        ("lot_disposal_receipts", None, HEAD_MIGRATION),
+        ("lot_amortized_cost_authority", None, LATER_MIGRATION),
     ):
-        if not inspect(connection).has_table(table_name):
+        inspector = inspect(connection)
+        if not inspector.has_table(table_name):
+            continue
+        if marker_column is not None and marker_column not in {
+            column["name"] for column in inspector.get_columns(table_name)
+        }:
             continue
         later_migration: dict[str, Any] = runpy.run_path(str(migration_path))
         _bind_operations(later_migration, connection)
@@ -370,3 +389,12 @@ def test_lot_amortized_cost_profiles_apply_roll_back_and_enforce_ledgers(
         if any(migration["revision"] == "c141b2c3d50e" for migration in later_migrations):
             assert inspect(connection).has_table("lot_disposal_receipts")
             assert inspect(connection).has_table("lot_disposal_allocations")
+        if any(migration["revision"] == "c142b2c3d50f" for migration in later_migrations):
+            assert "amortized_cost_profile_id" in {
+                column["name"]
+                for column in inspect(connection).get_columns("lot_disposal_allocations")
+            }
+        if any(migration["revision"] == "c143b2c3d510" for migration in later_migrations):
+            assert "amortized_cost_profile_id" in {
+                column["name"] for column in inspect(connection).get_columns("position_lot_state")
+            }
