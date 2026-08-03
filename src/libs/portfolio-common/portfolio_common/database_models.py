@@ -2363,6 +2363,242 @@ class PositionLotState(Base):
     )
 
 
+class LotDisposalReceiptRecord(Base):
+    """Append-only versioned receipt for one consuming transaction."""
+
+    __tablename__ = "lot_disposal_receipts"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    receipt_id = Column(String(96), nullable=False)
+    receipt_version = Column(Integer, nullable=False)
+    disposal_transaction_id = Column(
+        String,
+        ForeignKey("transactions.transaction_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    portfolio_id = Column(
+        String,
+        ForeignKey("portfolios.portfolio_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    instrument_id = Column(String, nullable=False)
+    security_id = Column(
+        String,
+        ForeignKey("instruments.security_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    disposal_timestamp = Column(DateTime(timezone=True), nullable=False)
+    transaction_type = Column(String, nullable=False)
+    cost_basis_method = Column(String, nullable=False)
+    calculation_policy_id = Column(String, nullable=True)
+    calculation_policy_version = Column(String, nullable=True)
+    status = Column(String, nullable=False)
+    void_reason = Column(String, nullable=True)
+    consumed_quantity = Column(ExactNumeric(18, 10), nullable=False)
+    consumed_cost_local = Column(ExactNumeric(18, 10), nullable=False)
+    consumed_cost_base = Column(ExactNumeric(18, 10), nullable=False)
+    allocation_count = Column(Integer, nullable=False)
+    transaction_calculation_lineage = Column(JSONB(none_as_null=True), nullable=False)
+    disposal_calculation_lineage = Column(JSONB(none_as_null=True), nullable=True)
+    semantic_content_hash = Column(String(64), nullable=False)
+    previous_receipt_content_hash = Column(String(64), nullable=True)
+    receipt_content_hash = Column(String(64), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "receipt_id",
+            "receipt_version",
+            name="uq_lot_disposal_receipt_version",
+        ),
+        UniqueConstraint(
+            "disposal_transaction_id",
+            "receipt_version",
+            name="uq_lot_disposal_transaction_version",
+        ),
+        UniqueConstraint(
+            "receipt_id",
+            "receipt_version",
+            "portfolio_id",
+            "security_id",
+            name="uq_lot_disposal_receipt_scope_version",
+        ),
+        CheckConstraint(
+            "receipt_version >= 1 AND allocation_count >= 0",
+            name="ck_lot_disposal_receipt_counts",
+        ),
+        CheckConstraint(
+            "receipt_id = btrim(receipt_id) AND receipt_id <> '' "
+            "AND disposal_transaction_id = btrim(disposal_transaction_id) "
+            "AND disposal_transaction_id <> '' "
+            "AND portfolio_id = btrim(portfolio_id) AND portfolio_id <> '' "
+            "AND instrument_id = btrim(instrument_id) AND instrument_id <> '' "
+            "AND security_id = btrim(security_id) AND security_id <> '' "
+            "AND transaction_type = btrim(transaction_type) AND transaction_type <> ''",
+            name="ck_lot_disposal_receipt_identity",
+        ),
+        CheckConstraint(
+            "cost_basis_method IN ('FIFO', 'AVCO')",
+            name="ck_lot_disposal_receipt_method",
+        ),
+        CheckConstraint(
+            "(calculation_policy_id IS NULL AND calculation_policy_version IS NULL) "
+            "OR (calculation_policy_id = btrim(calculation_policy_id) "
+            "AND calculation_policy_id <> '' "
+            "AND calculation_policy_version = btrim(calculation_policy_version) "
+            "AND calculation_policy_version <> '')",
+            name="ck_lot_disposal_receipt_policy",
+        ),
+        _finite_numeric_check_constraint(
+            "ck_lot_disposal_receipt_amounts_finite",
+            "consumed_quantity",
+            "consumed_cost_local",
+            "consumed_cost_base",
+        ),
+        CheckConstraint(
+            "consumed_quantity >= 0 AND consumed_cost_local >= 0 AND consumed_cost_base >= 0",
+            name="ck_lot_disposal_receipt_amounts_nonnegative",
+        ),
+        CheckConstraint(
+            "(status = 'ACTIVE' AND void_reason IS NULL "
+            "AND consumed_quantity > 0 AND allocation_count > 0 "
+            "AND disposal_calculation_lineage IS NOT NULL) "
+            "OR (status = 'VOIDED' AND void_reason = btrim(void_reason) "
+            "AND void_reason <> '' AND consumed_quantity = 0 "
+            "AND consumed_cost_local = 0 AND consumed_cost_base = 0 "
+            "AND allocation_count = 0 AND disposal_calculation_lineage IS NULL)",
+            name="ck_lot_disposal_receipt_lifecycle",
+        ),
+        CheckConstraint(
+            "jsonb_typeof(transaction_calculation_lineage) = 'object' "
+            "AND (disposal_calculation_lineage IS NULL "
+            "OR jsonb_typeof(disposal_calculation_lineage) = 'object')",
+            name="ck_lot_disposal_receipt_lineage",
+        ),
+        CheckConstraint(
+            "semantic_content_hash ~ '^[0-9a-f]{64}$' "
+            "AND receipt_content_hash ~ '^[0-9a-f]{64}$' "
+            "AND (previous_receipt_content_hash IS NULL "
+            "OR previous_receipt_content_hash ~ '^[0-9a-f]{64}$')",
+            name="ck_lot_disposal_receipt_hashes",
+        ),
+        CheckConstraint(
+            "(receipt_version = 1 AND previous_receipt_content_hash IS NULL) "
+            "OR (receipt_version > 1 AND previous_receipt_content_hash IS NOT NULL)",
+            name="ck_lot_disposal_receipt_chain",
+        ),
+        Index(
+            "ix_lot_disposal_receipt_scope_time",
+            "portfolio_id",
+            "security_id",
+            disposal_timestamp.desc(),
+            receipt_version.desc(),
+        ),
+        Index(
+            "ix_lot_disposal_receipt_tx_version",
+            "disposal_transaction_id",
+            receipt_version.desc(),
+        ),
+    )
+
+
+class LotDisposalAllocationRecord(Base):
+    """Immutable ordered source-lot contribution to one receipt version."""
+
+    __tablename__ = "lot_disposal_allocations"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    receipt_id = Column(String(96), nullable=False)
+    receipt_version = Column(Integer, nullable=False)
+    portfolio_id = Column(String, nullable=False)
+    security_id = Column(String, nullable=False)
+    allocation_ordinal = Column(Integer, nullable=False)
+    source_lot_id = Column(String, nullable=False)
+    source_transaction_id = Column(String, nullable=False)
+    source_acquisition_date = Column(Date, nullable=False)
+    consumed_quantity = Column(ExactNumeric(18, 10), nullable=False)
+    consumed_cost_local = Column(ExactNumeric(18, 10), nullable=False)
+    consumed_cost_base = Column(ExactNumeric(18, 10), nullable=False)
+    allocation_content_hash = Column(String(64), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["receipt_id", "receipt_version", "portfolio_id", "security_id"],
+            [
+                "lot_disposal_receipts.receipt_id",
+                "lot_disposal_receipts.receipt_version",
+                "lot_disposal_receipts.portfolio_id",
+                "lot_disposal_receipts.security_id",
+            ],
+            name="fk_lot_disposal_allocation_receipt",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["source_transaction_id"],
+            ["transactions.transaction_id"],
+            name="fk_lot_disposal_allocation_source_tx",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["source_lot_id", "portfolio_id", "security_id"],
+            [
+                "position_lot_state.lot_id",
+                "position_lot_state.portfolio_id",
+                "position_lot_state.security_id",
+            ],
+            name="fk_lot_disposal_allocation_lot_scope",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "receipt_id",
+            "receipt_version",
+            "allocation_ordinal",
+            name="uq_lot_disposal_allocation_ordinal",
+        ),
+        UniqueConstraint(
+            "receipt_id",
+            "receipt_version",
+            "source_lot_id",
+            name="uq_lot_disposal_allocation_source_lot",
+        ),
+        CheckConstraint(
+            "receipt_version >= 1 AND allocation_ordinal >= 1",
+            name="ck_lot_disposal_allocation_identity",
+        ),
+        CheckConstraint(
+            "receipt_id = btrim(receipt_id) AND receipt_id <> '' "
+            "AND portfolio_id = btrim(portfolio_id) AND portfolio_id <> '' "
+            "AND security_id = btrim(security_id) AND security_id <> '' "
+            "AND source_lot_id = btrim(source_lot_id) AND source_lot_id <> '' "
+            "AND source_transaction_id = btrim(source_transaction_id) "
+            "AND source_transaction_id <> ''",
+            name="ck_lot_disposal_allocation_scope",
+        ),
+        _finite_numeric_check_constraint(
+            "ck_lot_disposal_allocation_amounts_finite",
+            "consumed_quantity",
+            "consumed_cost_local",
+            "consumed_cost_base",
+        ),
+        CheckConstraint(
+            "consumed_quantity > 0 AND consumed_cost_local >= 0 AND consumed_cost_base >= 0",
+            name="ck_lot_disposal_allocation_amounts",
+        ),
+        CheckConstraint(
+            "allocation_content_hash ~ '^[0-9a-f]{64}$'",
+            name="ck_lot_disposal_allocation_hash",
+        ),
+        Index(
+            "ix_lot_disposal_allocation_source",
+            "portfolio_id",
+            "security_id",
+            "source_lot_id",
+            "source_acquisition_date",
+        ),
+    )
+
+
 class LotAmortizedCostAuthorityRecord(Base):
     """Append-only source authority used to calculate lot amortized cost."""
 

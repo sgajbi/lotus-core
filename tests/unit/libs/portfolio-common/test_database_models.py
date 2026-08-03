@@ -25,6 +25,8 @@ from portfolio_common.database_models import (
     LiquidityReserveRequirement,
     LotAmortizedCostPeriodRecord,
     LotAmortizedCostProfileRecord,
+    LotDisposalAllocationRecord,
+    LotDisposalReceiptRecord,
     MarketPrice,
     MarketPriceSourceFactRecord,
     ModelPortfolioDefinition,
@@ -166,6 +168,54 @@ def test_lot_amortized_cost_records_declare_append_only_integrity_contract() -> 
     assert period_table.columns.year_fraction.type.scale is None
     assert period_table.columns.period_rate.type.precision is None
     assert period_table.columns.period_rate.type.scale is None
+
+
+def test_lot_disposal_records_declare_versioned_immutable_integrity_contract() -> None:
+    receipt_table = LotDisposalReceiptRecord.__table__
+    allocation_table = LotDisposalAllocationRecord.__table__
+    receipt_constraints = {constraint.name for constraint in receipt_table.constraints}
+    allocation_constraints = {constraint.name for constraint in allocation_table.constraints}
+    receipt_indexes = {index.name for index in receipt_table.indexes}
+    allocation_indexes = {index.name for index in allocation_table.indexes}
+
+    assert {
+        "uq_lot_disposal_receipt_version",
+        "uq_lot_disposal_receipt_scope_version",
+        "uq_lot_disposal_transaction_version",
+        "ck_lot_disposal_receipt_lifecycle",
+        "ck_lot_disposal_receipt_chain",
+        "ck_lot_disposal_receipt_hashes",
+        "ck_lot_disposal_receipt_amounts_finite",
+    } <= receipt_constraints
+    assert {
+        "fk_lot_disposal_allocation_receipt",
+        "fk_lot_disposal_allocation_source_tx",
+        "fk_lot_disposal_allocation_lot_scope",
+        "uq_lot_disposal_allocation_ordinal",
+        "uq_lot_disposal_allocation_source_lot",
+        "ck_lot_disposal_allocation_amounts_finite",
+    } <= allocation_constraints
+    assert {
+        "ix_lot_disposal_receipt_scope_time",
+        "ix_lot_disposal_receipt_tx_version",
+    } <= receipt_indexes
+    assert "ix_lot_disposal_allocation_source" in allocation_indexes
+    assert all(
+        isinstance(receipt_table.columns[column_name].type, ExactNumeric)
+        for column_name in (
+            "consumed_quantity",
+            "consumed_cost_local",
+            "consumed_cost_base",
+        )
+    )
+    assert all(
+        isinstance(allocation_table.columns[column_name].type, ExactNumeric)
+        for column_name in (
+            "consumed_quantity",
+            "consumed_cost_local",
+            "consumed_cost_base",
+        )
+    )
 
 
 def test_reprocessing_job_declares_pending_reset_watermarks_uniqueness_index():
