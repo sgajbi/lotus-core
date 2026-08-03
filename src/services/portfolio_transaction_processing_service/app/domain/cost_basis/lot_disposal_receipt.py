@@ -13,9 +13,6 @@ from portfolio_common.domain.calculation_lineage import (
     canonical_content_hash,
 )
 from portfolio_common.domain.cost_basis_method import CostBasisMethod
-from portfolio_common.domain.transaction.numeric_policy import (
-    COST_BASIS_STATE_LEDGER_OUTPUT_V1,
-)
 
 from .calculation.disposal_allocation import SourceLotDisposalAllocation
 from .state_lineage import canonical_cost_basis_output_payload
@@ -191,26 +188,18 @@ class LotDisposalReceiptState:
         source_lot_ids = tuple(allocation.source_lot_id for allocation in self.allocations)
         if len(set(source_lot_ids)) != len(source_lot_ids):
             raise ValueError("receipt source lots must be unique")
-        policy = COST_BASIS_STATE_LEDGER_OUTPUT_V1
-        quantity = Decimal(0)
-        cost_local = Decimal(0)
-        cost_base = Decimal(0)
-        for allocation in self.allocations:
-            quantity = policy.add(
-                quantity,
-                allocation.consumed_quantity,
-                field_name="receipt_allocated_quantity",
-            )
-            cost_local = policy.add(
-                cost_local,
-                allocation.consumed_cost_local,
-                field_name="receipt_allocated_cost_local",
-            )
-            cost_base = policy.add(
-                cost_base,
-                allocation.consumed_cost_base,
-                field_name="receipt_allocated_cost_base",
-            )
+        quantity = sum(
+            (allocation.consumed_quantity for allocation in self.allocations),
+            start=Decimal(0),
+        )
+        cost_local = sum(
+            (allocation.consumed_cost_local for allocation in self.allocations),
+            start=Decimal(0),
+        )
+        cost_base = sum(
+            (allocation.consumed_cost_base for allocation in self.allocations),
+            start=Decimal(0),
+        )
         if quantity != self.consumed_quantity:
             raise ValueError("receipt allocation quantity does not reconcile")
         if cost_local != self.consumed_cost_local:
