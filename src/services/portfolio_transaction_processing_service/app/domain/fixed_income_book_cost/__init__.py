@@ -25,6 +25,13 @@ from .calculation import (
     amortized_cost_calculation_identity,
     calculate_amortized_cost_schedule,
 )
+from .disposal_basis import (
+    AMORTIZED_COST_DISPOSAL_ALGORITHM_ID,
+    AMORTIZED_COST_DISPOSAL_ALGORITHM_VERSION,
+    AmortizedCostDisposalError,
+    RecognizedLotBookCost,
+    allocate_recognized_lot_book_cost,
+)
 from .policy import (
     AmortizedCostDirection,
     AmortizedCostEligibilityReason,
@@ -72,11 +79,14 @@ from .source_facts import (
 __all__ = [
     "AMORTIZED_COST_SCHEDULE_ALGORITHM_ID",
     "AMORTIZED_COST_SCHEDULE_ALGORITHM_VERSION",
+    "AMORTIZED_COST_DISPOSAL_ALGORITHM_ID",
+    "AMORTIZED_COST_DISPOSAL_ALGORITHM_VERSION",
     "LOT_AMORTIZED_COST_PROFILE_ID_VERSION",
     "AmortizedCostAssignmentCacheKey",
     "AmortizedCostAssignmentStatus",
     "AmortizedCostAuthorityError",
     "AmortizedCostDirection",
+    "AmortizedCostDisposalError",
     "AmortizedCostCalculationError",
     "AmortizedCostEligibilityReason",
     "AmortizedCostInputResolutionError",
@@ -108,10 +118,12 @@ __all__ = [
     "OverlappingAmortizedCostAssignmentError",
     "ResolvedAmortizedCostAssignment",
     "ResolvedLotAmortizedCostInputs",
+    "RecognizedLotBookCost",
     "STRAIGHT_LINE_LOCAL_POLICY_ID",
     "YieldApplicationConvention",
     "UnsupportedAmortizedCostPolicyError",
     "amortization_replay_start_for_assignment_correction",
+    "allocate_recognized_lot_book_cost",
     "amortized_cost_calculation_identity",
     "calculate_amortized_cost_schedule",
     "classify_amortized_cost_direction",
