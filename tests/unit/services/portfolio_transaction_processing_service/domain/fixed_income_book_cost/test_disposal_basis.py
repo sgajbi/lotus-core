@@ -1,0 +1,167 @@
+"""Tests for effective-dated amortized book-cost disposal allocation."""
+
+from datetime import date
+from decimal import Decimal
+
+import pytest
+from portfolio_common.domain.calculation_lineage import calculation_lineage_binds_output
+
+from services.portfolio_transaction_processing_service.app.domain.fixed_income_book_cost import (
+    AMORTIZED_COST_DISPOSAL_ALGORITHM_ID,
+    AmortizedCostDisposalError,
+    AmortizedCostEligibilityReason,
+    allocate_recognized_lot_book_cost,
+    materialize_active_lot_amortized_cost_profile,
+    materialize_parked_lot_amortized_cost_profile,
+)
+from tests.test_support.fixed_income_book_cost import resolved_fixed_income_book_cost_inputs
+
+
+def _active_profile():
+    return materialize_active_lot_amortized_cost_profile(
+        resolved_fixed_income_book_cost_inputs(),
+        profile_version=1,
+    )
+
+
+@pytest.mark.parametrize(
+    ("disposal_date", "expected_current", "expected_boundary"),
+    [
+        (date(2026, 1, 1), Decimal("97.0000000000"), date(2026, 1, 1)),
+        (date(2026, 8, 1), Decimal("97.0000000000"), date(2026, 1, 1)),
+        (date(2027, 1, 1), Decimal("100.0000000000"), date(2027, 1, 1)),
+        (date(2028, 1, 1), Decimal("100.0000000000"), date(2027, 1, 1)),
+    ],
+)
+def test_allocates_last_recognized_periodic_carrying_amount(
+    disposal_date: date,
+    expected_current: Decimal,
+    expected_boundary: date,
+) -> None:
+    result = allocate_recognized_lot_book_cost(
+        _active_profile(),
+        disposal_date=disposal_date,
+        original_quantity=Decimal("100"),
+        consumed_quantity=Decimal("40"),
+        fx_rate_to_base=Decimal("1.5"),
+    )
+
+    assert result.current_cost_local == expected_current
+    assert result.recognized_through_date == expected_boundary
+    assert result.consumed_cost_local == expected_current * Decimal("0.4")
+    assert result.residual_cost_local == expected_current * Decimal("0.6")
+    assert result.consumed_cost_local + result.residual_cost_local == expected_current
+    assert result.consumed_quantity + result.residual_quantity == Decimal("100.0000000000")
+    assert result.consumed_cost_base == result.consumed_cost_local * Decimal("1.5")
+    assert result.residual_cost_base == result.residual_cost_local * Decimal("1.5")
+
+
+def test_absorbs_all_rounding_residual_into_the_retained_lot() -> None:
+    result = allocate_recognized_lot_book_cost(
+        _active_profile(),
+        disposal_date=date(2026, 6, 30),
+        original_quantity=Decimal("3"),
+        consumed_quantity=Decimal("1"),
+        fx_rate_to_base=Decimal("1"),
+    )
+
+    assert result.consumed_cost_local == Decimal("32.3333333333")
+    assert result.residual_cost_local == Decimal("64.6666666667")
+    assert result.consumed_cost_local + result.residual_cost_local == Decimal("97.0000000000")
+
+
+def test_lineage_binds_profile_identity_inputs_and_outputs() -> None:
+    result = allocate_recognized_lot_book_cost(
+        _active_profile(),
+        disposal_date=date(2027, 1, 1),
+        original_quantity=Decimal("100"),
+        consumed_quantity=Decimal("25"),
+        fx_rate_to_base=Decimal("1.25"),
+    )
+
+    assert result.calculation_lineage.algorithm_id == AMORTIZED_COST_DISPOSAL_ALGORITHM_ID
+    assert calculation_lineage_binds_output(
+        result.calculation_lineage,
+        output_payload={
+            "consumed_cost_base": result.consumed_cost_base,
+            "consumed_cost_local": result.consumed_cost_local,
+            "consumed_quantity": result.consumed_quantity,
+            "current_cost_local": result.current_cost_local,
+            "recognized_through_date": result.recognized_through_date,
+            "residual_cost_base": result.residual_cost_base,
+            "residual_cost_local": result.residual_cost_local,
+            "residual_quantity": result.residual_quantity,
+        },
+    )
+
+
+@pytest.mark.parametrize(
+    ("field_name", "value", "error_type"),
+    [
+        ("original_quantity", Decimal("0"), ValueError),
+        ("original_quantity", Decimal("NaN"), ValueError),
+        ("original_quantity", 100, TypeError),
+        ("consumed_quantity", Decimal("0"), ValueError),
+        ("consumed_quantity", Decimal("Infinity"), ValueError),
+        ("consumed_quantity", 10, TypeError),
+        ("fx_rate_to_base", Decimal("0"), ValueError),
+        ("fx_rate_to_base", Decimal("-1"), ValueError),
+        ("fx_rate_to_base", "1", TypeError),
+    ],
+)
+def test_rejects_invalid_financial_inputs(
+    field_name: str,
+    value: object,
+    error_type: type[Exception],
+) -> None:
+    inputs = {
+        "original_quantity": Decimal("100"),
+        "consumed_quantity": Decimal("10"),
+        "fx_rate_to_base": Decimal("1"),
+    }
+    inputs[field_name] = value
+
+    with pytest.raises(error_type):
+        allocate_recognized_lot_book_cost(
+            _active_profile(),
+            disposal_date=date(2026, 6, 30),
+            **inputs,  # type: ignore[arg-type]
+        )
+
+
+def test_rejects_overdisposal_and_preprofile_date() -> None:
+    with pytest.raises(AmortizedCostDisposalError, match="must not exceed"):
+        allocate_recognized_lot_book_cost(
+            _active_profile(),
+            disposal_date=date(2026, 6, 30),
+            original_quantity=Decimal("10"),
+            consumed_quantity=Decimal("11"),
+            fx_rate_to_base=Decimal("1"),
+        )
+    with pytest.raises(AmortizedCostDisposalError, match="must not precede"):
+        allocate_recognized_lot_book_cost(
+            _active_profile(),
+            disposal_date=date(2025, 12, 31),
+            original_quantity=Decimal("10"),
+            consumed_quantity=Decimal("1"),
+            fx_rate_to_base=Decimal("1"),
+        )
+
+
+def test_rejects_non_active_profile_instead_of_falling_back_to_original_cost() -> None:
+    resolved = resolved_fixed_income_book_cost_inputs()
+    parked = materialize_parked_lot_amortized_cost_profile(
+        scope=resolved.assignment.scope,
+        effective_date=resolved.assignment.valid_from,
+        profile_version=1,
+        reason=AmortizedCostEligibilityReason.CASHFLOW_SCHEDULE_MISSING,
+    )
+
+    with pytest.raises(AmortizedCostDisposalError, match="ACTIVE profile"):
+        allocate_recognized_lot_book_cost(
+            parked,
+            disposal_date=date(2026, 6, 30),
+            original_quantity=Decimal("100"),
+            consumed_quantity=Decimal("10"),
+            fx_rate_to_base=Decimal("1"),
+        )
