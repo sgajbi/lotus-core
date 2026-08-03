@@ -187,9 +187,12 @@ async def test_full_rebuild_overlays_sequential_partial_sells_and_lineage() -> N
     )
     remaining_lot = decorated.open_lot_states["BUY_1"]
     assert remaining_lot.quantity == Decimal("40.0000000000")
-    assert remaining_lot.cost_local == Decimal("40.0000000000")
+    assert remaining_lot.cost_local == Decimal("38.8000000000")
+    assert remaining_lot.cost_base == Decimal("38.8000000000")
     assert remaining_lot.amortized_cost is not None
     assert remaining_lot.amortized_cost.scheduled_cost_local == Decimal("100.0000000000")
+    assert remaining_lot.amortized_cost.carrying_amount_local == Decimal("40.0000000000")
+    assert remaining_lot.amortized_cost.carrying_amount_base == Decimal("40.0000000000")
 
 
 @pytest.mark.asyncio
@@ -315,14 +318,16 @@ async def test_incremental_sell_uses_persisted_residual_and_original_book_fx() -
         "97",
     )
     restored_buy["source_lot_order_quantity"] = Decimal("3")
-    restored_buy["net_cost_local"] = Decimal("64.6666666667")
-    restored_buy["net_cost"] = Decimal("79.8353902264")
+    restored_buy["net_cost_local"] = Decimal("70.0000000000")
+    restored_buy["net_cost"] = Decimal("85.0000000000")
     restored_buy["amortized_cost_carry_state"] = AmortizedCostCarryState(
         profile_id="PROFILE-1",
         profile_version=1,
         profile_content_hash="a" * 64,
         recognized_through_date=resolved_fixed_income_book_cost_inputs().assignment.valid_from,
         scheduled_cost_local=Decimal("97.0000000000"),
+        carrying_amount_local=Decimal("64.6666666667"),
+        carrying_amount_base=Decimal("79.8353902264"),
         book_cost_fx_rate_to_base=Decimal("1.2345678912"),
     )
     timeline = build_cost_basis_timeline_processor().process_increment(
@@ -356,6 +361,12 @@ async def test_incremental_sell_uses_persisted_residual_and_original_book_fx() -
     assert evidence.residual_cost_local == Decimal("32.3333333334")
     assert evidence.residual_cost_base == Decimal("39.9176950776")
     assert evidence.consumed_cost_base + evidence.residual_cost_base == (evidence.current_cost_base)
+    remaining_lot = result.open_lot_states["BUY_1"]
+    assert remaining_lot.cost_local == Decimal("35.0000000000")
+    assert remaining_lot.cost_base == Decimal("42.5000000000")
+    assert remaining_lot.amortized_cost is not None
+    assert remaining_lot.amortized_cost.carrying_amount_local == Decimal("32.3333333334")
+    assert remaining_lot.amortized_cost.carrying_amount_base == Decimal("39.9176950776")
 
 
 @pytest.mark.asyncio

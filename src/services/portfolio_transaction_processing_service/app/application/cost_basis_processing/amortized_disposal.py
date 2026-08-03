@@ -228,23 +228,24 @@ def _decorate_allocation(
     next_carry = projection.carry_forward()
     if next_carry is None:
         carried_book_cost_by_source.pop(allocation.source_transaction_id, None)
-        open_lot_states[allocation.source_transaction_id] = OpenLotState(
-            quantity=Decimal(0),
-            cost_local=Decimal(0),
-            cost_base=Decimal(0),
+        _replace_amortized_carry(
+            open_lot_states,
+            source_transaction_id=allocation.source_transaction_id,
+            carry=None,
         )
     else:
         carried_book_cost_by_source[allocation.source_transaction_id] = next_carry
-        open_lot_states[allocation.source_transaction_id] = OpenLotState(
-            quantity=evidence.residual_quantity,
-            cost_local=evidence.residual_cost_local,
-            cost_base=evidence.residual_cost_base,
-            amortized_cost=AmortizedCostCarryState(
+        _replace_amortized_carry(
+            open_lot_states,
+            source_transaction_id=allocation.source_transaction_id,
+            carry=AmortizedCostCarryState(
                 profile_id=evidence.profile_id,
                 profile_version=evidence.profile_version,
                 profile_content_hash=evidence.profile_content_hash,
                 recognized_through_date=evidence.recognized_through_date,
                 scheduled_cost_local=evidence.scheduled_cost_local,
+                carrying_amount_local=evidence.residual_cost_local,
+                carrying_amount_base=evidence.residual_cost_base,
                 book_cost_fx_rate_to_base=evidence.book_cost_fx_rate_to_base,
             ),
         )
@@ -276,16 +277,33 @@ def _initial_carried_book_costs(
             continue
         if not isinstance(state, AmortizedCostCarryState):
             raise ValueError("source lot carries invalid amortized-cost state")
-        local_cost = transaction.net_cost_local
-        base_cost = transaction.net_cost
-        if local_cost is None or base_cost is None:
-            raise ValueError("source lot carry state is missing residual local/base cost")
         carried[transaction.transaction_id] = CarriedLotBookCost(
             scheduled_cost_local=state.scheduled_cost_local,
-            residual_cost_local=local_cost,
-            residual_cost_base=base_cost,
+            residual_cost_local=state.carrying_amount_local,
+            residual_cost_base=state.carrying_amount_base,
         )
     return carried
+
+
+def _replace_amortized_carry(
+    open_lot_states: dict[str, OpenLotState],
+    *,
+    source_transaction_id: str,
+    carry: AmortizedCostCarryState | None,
+) -> None:
+    """Change accounting carry without replacing strategy/tax lot basis."""
+
+    tax_basis_state = open_lot_states.get(source_transaction_id)
+    if tax_basis_state is None:
+        raise ValueError(
+            "amortized disposal cannot resolve final tax-basis state for source lot: "
+            f"{source_transaction_id}"
+        )
+    if tax_basis_state.quantity == Decimal(0):
+        carry = None
+    elif carry is None:
+        raise ValueError("open amortized lot cannot discard accounting carrying state")
+    open_lot_states[source_transaction_id] = replace(tax_basis_state, amortized_cost=carry)
 
 
 def _book_cost_fx_rate(

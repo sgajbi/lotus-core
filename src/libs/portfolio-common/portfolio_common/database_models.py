@@ -2301,6 +2301,8 @@ class PositionLotState(Base):
     amortized_cost_profile_content_hash = Column(String(64), nullable=True)
     amortized_cost_recognized_through = Column(Date, nullable=True)
     amortized_cost_scheduled_local = Column(ExactNumeric(18, 10), nullable=True)
+    amortized_book_carrying_local = Column(ExactNumeric(18, 10), nullable=True)
+    amortized_book_carrying_base = Column(ExactNumeric(18, 10), nullable=True)
     amortized_cost_book_fx_rate_to_base = Column(ExactNumeric(18, 10), nullable=True)
     calculation_lineage = Column(JSON(none_as_null=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
@@ -2372,12 +2374,16 @@ class PositionLotState(Base):
             "AND amortized_cost_profile_content_hash IS NULL "
             "AND amortized_cost_recognized_through IS NULL "
             "AND amortized_cost_scheduled_local IS NULL "
+            "AND amortized_book_carrying_local IS NULL "
+            "AND amortized_book_carrying_base IS NULL "
             "AND amortized_cost_book_fx_rate_to_base IS NULL) OR ("
             "amortized_cost_profile_id IS NOT NULL "
             "AND amortized_cost_profile_version IS NOT NULL "
             "AND amortized_cost_profile_content_hash IS NOT NULL "
             "AND amortized_cost_recognized_through IS NOT NULL "
             "AND amortized_cost_scheduled_local IS NOT NULL "
+            "AND amortized_book_carrying_local IS NOT NULL "
+            "AND amortized_book_carrying_base IS NOT NULL "
             "AND amortized_cost_book_fx_rate_to_base IS NOT NULL)",
             name="ck_position_lot_amortized_cost_shape",
         ),
@@ -2390,8 +2396,14 @@ class PositionLotState(Base):
             "AND amortized_cost_profile_content_hash ~ '^[0-9a-f]{64}$' "
             "AND amortized_cost_recognized_through >= acquisition_date "
             "AND amortized_cost_scheduled_local >= 0 "
+            "AND amortized_book_carrying_local >= 0 "
+            "AND amortized_book_carrying_base >= 0 "
             "AND amortized_cost_book_fx_rate_to_base > 0 "
             "AND CAST(amortized_cost_scheduled_local AS TEXT) "
+            "NOT IN ('NaN', 'Infinity', '-Infinity') "
+            "AND CAST(amortized_book_carrying_local AS TEXT) "
+            "NOT IN ('NaN', 'Infinity', '-Infinity') "
+            "AND CAST(amortized_book_carrying_base AS TEXT) "
             "NOT IN ('NaN', 'Infinity', '-Infinity') "
             "AND CAST(amortized_cost_book_fx_rate_to_base AS TEXT) "
             "NOT IN ('NaN', 'Infinity', '-Infinity'))",
