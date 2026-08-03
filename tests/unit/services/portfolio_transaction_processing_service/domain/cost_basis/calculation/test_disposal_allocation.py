@@ -8,6 +8,7 @@ import pytest
 from services.portfolio_transaction_processing_service.app.domain.cost_basis import (
     LotDisposalResult,
     SourceLotDisposalAllocation,
+    TransactionLotDisposal,
 )
 
 
@@ -118,4 +119,25 @@ def test_result_rejects_duplicate_source_lot_allocations() -> None:
             cost_local=Decimal("40"),
             consumed_quantity=Decimal("4"),
             allocations=(_allocation(), _allocation(ordinal=2)),
+        )
+
+
+def test_transaction_disposal_requires_successful_positive_result() -> None:
+    successful = LotDisposalResult(
+        cost_base=Decimal("22"),
+        cost_local=Decimal("20"),
+        consumed_quantity=Decimal("2"),
+        allocations=(_allocation(),),
+    )
+
+    evidence = TransactionLotDisposal(
+        disposal_transaction_id=" SELL_001 ",
+        result=successful,
+    )
+
+    assert evidence.disposal_transaction_id == "SELL_001"
+    with pytest.raises(ValueError, match="successful positive"):
+        TransactionLotDisposal(
+            disposal_transaction_id="SELL_002",
+            result=LotDisposalResult.failed("insufficient holdings"),
         )
