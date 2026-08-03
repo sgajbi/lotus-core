@@ -1029,7 +1029,12 @@ Most relevant current governance:
     manifest. Every Docker-backed consumer must download and run `runtime_image_set.py load-verify`
     against `GITHUB_SHA` before startup. Keep `kafka-topic-creator` and `migration-runner` in the
     runtime image set for Docker smoke, E2E, latency, performance, failure-recovery, and
-    institutional-completion gates. E2E diagnostics should be captured by the pytest fixture
+    institutional-completion gates. Docker-backed pytest stacks use this image-build precedence:
+    an explicit `LOTUS_TESTS_DOCKER_BUILD` value wins; otherwise
+    `LOTUS_RUNTIME_IMAGE_SET_VERIFIED=true` reuses the verified workflow bundle without rebuilding;
+    otherwise `CI=true` builds exact-source images; local execution defaults to reusing available
+    images. This keeps database-backed CI tests source-correct while ensuring runtime gates exercise
+    the exact bundle they verified. E2E diagnostics should be captured by the pytest fixture
     through `LOTUS_TESTS_COMPOSE_LOG_FILE` before compose teardown; workflow-level `docker compose
     logs` capture is only fallback evidence after fixture ownership is gone.
     Service Dockerfiles must keep the governed image provenance block: OCI labels and matching
