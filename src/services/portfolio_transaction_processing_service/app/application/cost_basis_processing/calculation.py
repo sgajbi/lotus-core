@@ -351,6 +351,8 @@ class CostBasisCalculationCoordinator:
             transaction_raw["quantity"] = record.quantity
             transaction_raw["net_cost_local"] = record.cost_local
             transaction_raw["net_cost"] = record.cost_base
+            if record.amortized_cost is not None:
+                transaction_raw["amortized_cost_carry_state"] = record.amortized_cost
             transaction_raw["portfolio_base_currency"] = portfolio_base_currency
             checkpoint_transactions.append(transaction_raw)
         if instrument is not None:

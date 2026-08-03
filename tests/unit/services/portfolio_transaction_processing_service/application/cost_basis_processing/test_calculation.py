@@ -1,6 +1,6 @@
 """Verify deterministic cost-basis calculation coordination through application ports."""
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock
 
@@ -13,6 +13,7 @@ from src.services.portfolio_transaction_processing_service.app.application impor
     cost_basis_processing,
 )
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
+    AmortizedCostCarryState,
     AverageCostPoolCheckpoint,
     CostBasisProcessingCheckpoint,
     OpenLotState,
@@ -227,6 +228,14 @@ async def test_later_sell_restores_open_lots_without_loading_full_history() -> N
             quantity=Decimal("10"),
             cost_local=Decimal("100"),
             cost_base=Decimal("100"),
+            amortized_cost=AmortizedCostCarryState(
+                profile_id="PROFILE-1",
+                profile_version=1,
+                profile_content_hash="a" * 64,
+                recognized_through_date=date(2026, 1, 1),
+                scheduled_cost_local=Decimal("100"),
+                book_cost_fx_rate_to_base=Decimal("1"),
+            ),
         )
     ]
     sell_event, sell_type, method = _prepare_event(
@@ -259,6 +268,9 @@ async def test_later_sell_restores_open_lots_without_loading_full_history() -> N
     assert calculation.processed[0].realized_gain_loss == Decimal("8")
     assert calculation.open_lot_states["BUY-1"].quantity == Decimal("6")
     assert calculation.open_lot_states["BUY-1"].cost_base == Decimal("60")
+    assert calculation.source_transactions["BUY-1"].amortized_cost_carry_state == (
+        lot_states.get_fifo_disposal_lot_checkpoint_records.return_value[0].amortized_cost
+    )
     repo.get_transaction_history.assert_not_awaited()
     lot_states.get_fifo_disposal_lot_checkpoint_records.assert_awaited_once_with(
         portfolio_id="P1",

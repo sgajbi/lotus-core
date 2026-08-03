@@ -13,6 +13,9 @@ from services.portfolio_transaction_processing_service.app.application.cost_basi
     apply_effective_amortized_cost_to_disposals,
     build_cost_basis_timeline_processor,
 )
+from services.portfolio_transaction_processing_service.app.domain.cost_basis import (
+    AmortizedCostCarryState,
+)
 from services.portfolio_transaction_processing_service.app.domain.fixed_income_book_cost import (
     lot_amortized_cost_profile_id,
     materialize_active_lot_amortized_cost_profile,
@@ -180,7 +183,40 @@ async def test_full_rebuild_overlays_sequential_partial_sells_and_lineage() -> N
     assert processed["SELL_2"].calculation_lineage.algorithm_id == (
         "fixed-income-amortized-cost-transaction-overlay"
     )
-    assert decorated.open_lot_states == calculation.open_lot_states
+    remaining_lot = decorated.open_lot_states["BUY_1"]
+    assert remaining_lot.quantity == Decimal("40.0000000000")
+    assert remaining_lot.cost_local == Decimal("40.0000000000")
+    assert remaining_lot.amortized_cost is not None
+    assert remaining_lot.amortized_cost.scheduled_cost_local == Decimal("100.0000000000")
+
+
+@pytest.mark.asyncio
+async def test_one_unit_partials_conserve_terminal_local_and_base_basis() -> None:
+    calculation = _calculation(
+        _raw_transaction("BUY_1", "2026-01-01T00:00:00Z", "BUY", "3", "97"),
+        _raw_transaction("SELL_1", "2026-06-28T00:00:00Z", "SELL", "1", "40"),
+        _raw_transaction("SELL_2", "2026-06-29T00:00:00Z", "SELL", "1", "40"),
+        _raw_transaction("SELL_3", "2026-06-30T00:00:00Z", "SELL", "1", "40"),
+    )
+
+    result = await apply_effective_amortized_cost_to_disposals(
+        calculation,
+        portfolio=_accounting_portfolio(),
+        cost_basis_method=CostBasisMethod.FIFO,
+        profiles=_EffectiveProfiles(),  # type: ignore[arg-type]
+    )
+
+    local_costs = tuple(disposal.result.cost_local for disposal in result.disposals)
+    base_costs = tuple(disposal.result.cost_base for disposal in result.disposals)
+    assert local_costs == (
+        Decimal("32.3333333333"),
+        Decimal("32.3333333333"),
+        Decimal("32.3333333334"),
+    )
+    assert sum(local_costs, Decimal(0)) == Decimal("97.0000000000")
+    assert sum(base_costs, Decimal(0)) == Decimal("97.0000000000")
+    assert result.open_lot_states["BUY_1"].quantity == Decimal(0)
+    assert result.open_lot_states["BUY_1"].amortized_cost is None
 
 
 @pytest.mark.asyncio
@@ -225,6 +261,59 @@ async def test_incremental_sell_resolves_restored_source_lot_economics() -> None
     assert evidence.open_quantity_before == Decimal("60")
     assert evidence.consumed_quantity == Decimal("20")
     assert [transaction.transaction_id for transaction in decorated.processed] == ["SELL_1"]
+
+
+@pytest.mark.asyncio
+async def test_incremental_sell_uses_persisted_residual_and_original_book_fx() -> None:
+    restored_buy = _raw_transaction(
+        "BUY_1",
+        "2026-01-01T00:00:00Z",
+        "BUY",
+        "2",
+        "97",
+    )
+    restored_buy["source_lot_order_quantity"] = Decimal("3")
+    restored_buy["net_cost_local"] = Decimal("64.6666666667")
+    restored_buy["net_cost"] = Decimal("79.8353902264")
+    restored_buy["amortized_cost_carry_state"] = AmortizedCostCarryState(
+        profile_id="PROFILE-1",
+        profile_version=1,
+        profile_content_hash="a" * 64,
+        recognized_through_date=resolved_fixed_income_book_cost_inputs().assignment.valid_from,
+        scheduled_cost_local=Decimal("97.0000000000"),
+        book_cost_fx_rate_to_base=Decimal("1.2345678912"),
+    )
+    timeline = build_cost_basis_timeline_processor().process_increment(
+        initial_open_lots_raw=[restored_buy],
+        new_transactions_raw=[
+            _raw_transaction("SELL_2", "2026-06-30T00:00:00Z", "SELL", "1", "40")
+        ],
+    )
+    calculation = CostBasisCalculationResult(
+        processed=timeline.processed,
+        errored=timeline.errored,
+        open_lot_states=timeline.open_lot_states,
+        incremental=True,
+        open_lot_persistence_scope=OpenLotPersistenceScope.SELECTED_LOTS,
+        average_cost_pool_transition=None,
+        disposals=timeline.disposals,
+        source_transactions=timeline.source_transactions,
+    )
+
+    result = await apply_effective_amortized_cost_to_disposals(
+        calculation,
+        portfolio=_accounting_portfolio(),
+        cost_basis_method=CostBasisMethod.FIFO,
+        profiles=_EffectiveProfiles(),  # type: ignore[arg-type]
+    )
+
+    evidence = result.disposals[0].result.allocations[0].amortized_cost_evidence
+    assert evidence is not None
+    assert evidence.book_cost_fx_rate_to_base == Decimal("1.2345678912")
+    assert evidence.current_cost_base == Decimal("79.8353902264")
+    assert evidence.residual_cost_local == Decimal("32.3333333334")
+    assert evidence.residual_cost_base == Decimal("39.9176950776")
+    assert evidence.consumed_cost_base + evidence.residual_cost_base == (evidence.current_cost_base)
 
 
 @pytest.mark.asyncio
@@ -336,22 +425,20 @@ async def test_active_lot_profile_fails_closed_for_avco() -> None:
 
 
 @pytest.mark.asyncio
-async def test_partial_profile_decision_preserves_unprofiled_disposal() -> None:
+async def test_profile_gap_after_amortized_partial_fails_closed() -> None:
     calculation = _calculation(
         _raw_transaction("BUY_1", "2026-01-01T00:00:00Z", "BUY", "100", "97"),
         _raw_transaction("SELL_1", "2026-06-30T00:00:00Z", "SELL", "40", "60"),
         _raw_transaction("SELL_2", "2027-01-01T00:00:00Z", "SELL", "20", "35"),
     )
 
-    result = await apply_effective_amortized_cost_to_disposals(
-        calculation,
-        portfolio=_accounting_portfolio(),
-        cost_basis_method=CostBasisMethod.FIFO,
-        profiles=_FirstEffectiveProfileOnly(),  # type: ignore[arg-type]
-    )
-
-    assert result.disposals[0].result.allocations[0].amortized_cost_evidence is not None
-    assert result.disposals[1] == calculation.disposals[1]
+    with pytest.raises(ValueError, match="profile gap follows persisted carry state"):
+        await apply_effective_amortized_cost_to_disposals(
+            calculation,
+            portfolio=_accounting_portfolio(),
+            cost_basis_method=CostBasisMethod.FIFO,
+            profiles=_FirstEffectiveProfileOnly(),  # type: ignore[arg-type]
+        )
 
 
 @pytest.mark.asyncio
