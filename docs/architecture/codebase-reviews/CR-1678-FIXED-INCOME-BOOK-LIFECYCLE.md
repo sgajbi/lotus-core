@@ -113,8 +113,17 @@ the legacy aggregate tuple projection. Allocation construction proves exact quan
 currency cost conservation, binds the source-lot inputs and aggregate output to the governed
 numeric policy, and stages only successful positive transaction disposal evidence. The
 calculated-output policy inventory was reconciled to the moved allocation call sites so stale proof
-references cannot pass protected lint. Application transport, append-only persistence, query and
-OpenAPI exposure, recovery/load proof, and redemption consumption remain open under #481/#477.
+references cannot pass protected lint. The application layer now converts accepted disposal
+evidence into complete receipt candidates and persists them through the transaction unit of work
+before lot-state and checkpoint writes. Additive `lot_disposal_receipts` and
+`lot_disposal_allocations` tables retain immutable ACTIVE and VOIDED versions, ordered source
+allocations, transaction and calculation lineage, content hashes, and an immediate-predecessor hash
+chain. Exact retries are write-neutral; semantic corrections, removal, and reactivation append
+auditable versions. Composite foreign keys and reconstruction checks reject cross-book fabrication
+and persisted header/allocation tampering. Governed financial-numeric classification covers all six
+receipt/allocation measures. Public query and OpenAPI exposure, deep-chain recovery/load proof,
+transfer and corporate-action target lineage, and redemption consumption remain open under
+#481/#477.
 PR review then found that immediate engine recording could expose evidence for a cash-in-lieu
 transaction rejected by later allocated-basis reconciliation. Disposal evidence is now two-phase:
 the engine stages it during lot consumption, the complete transaction calculator commits it only
@@ -170,8 +179,8 @@ Data Models wiki documents the staged ledgers while the capability wiki remains
   nested schedule-period boundaries, canonical representation and decimal encoding, and
   persisted-payload tamper rejection;
 - real-PostgreSQL authority migration apply, constraint, rollback, and reapply proof;
-- migration and numeric guards passed at head `c139b2c3d50c`, with 110 governed numeric columns
-  across 33 tables and no planned enforcement gaps;
+- migration and numeric guards passed at head `c141b2c3d50e`, with 116 governed numeric columns
+  across 35 tables and no planned enforcement gaps;
 - scoped Ruff lint/format, MyPy, RFC ledger, architecture-documentation, transaction-capability,
   wiki, JSON, calculated-output-policy, and diff-hygiene guards.
 - signed correction-hardening commits `0a46043bf`, `03499a2c9`, `ed63915df`, and `9038326cb`;
@@ -196,8 +205,14 @@ Data Models wiki documents the staged ledgers while the capability wiki remains
 - transaction-identity fix-forward proof: 104 warning-strict disposition/calculator tests cover
   normalized commit, filter, and discard behavior; repository-native MyPy (267 sources), scoped
   Ruff, and diff checks passed.
+- signed receipt-ledger commits `a7b852dfa` through `1a55584a2`; 135 warning-strict focused
+  unit/migration/model tests and 3 real-PostgreSQL integration tests cover immutable append, retry
+  neutrality, correction, void, reactivation, predecessor/hash verification, allocation-tamper
+  rejection, atomic unit-of-work ordering, and initial-void neutrality; repository-native lint and
+  MyPy (273 sources) passed.
 
-Protected PR, exact-main, runtime recovery/replay and load proof, verified query reconstruction,
-disposal, redemption, and issue-closure evidence remain pending until their corresponding
-implementation slices exist. No capability-wiki change is warranted by the correction hardening
-because fixed-income current-book disposal is still not production-certified.
+Protected PR and exact-main evidence remain pending for this tranche. Runtime recovery/replay and
+load proof, verified query reconstruction, transfer/corporate-action lineage, redemption, and final
+issue closure remain pending until their corresponding implementation slices exist. No
+capability-wiki change is warranted because fixed-income current-book disposal is not yet
+production-certified.
