@@ -250,6 +250,88 @@ def test_average_cost_disposition_exposes_source_contribution_deltas(
     ]
 
 
+def test_average_cost_tiny_disposal_assigns_rounding_residual_deterministically() -> None:
+    strategy = AverageCostBasisStrategy()
+    for transaction_id, cost in (("AVCO-TINY-1", "1"), ("AVCO-TINY-2", "2")):
+        strategy.add_buy_lot(
+            CostBasisTransaction(
+                transaction_id=transaction_id,
+                portfolio_id="P1",
+                instrument_id="AVCO-TINY",
+                security_id="AVCO-TINY",
+                transaction_type="BUY",
+                transaction_date=datetime(2026, 1, 1),
+                quantity=Decimal("1"),
+                gross_transaction_amount=Decimal(cost),
+                net_cost=Decimal(cost),
+                net_cost_local=Decimal(cost),
+                trade_currency="USD",
+                portfolio_base_currency="USD",
+            )
+        )
+
+    result = strategy.consume_sell_quantity_with_allocations(
+        "P1",
+        "AVCO-TINY",
+        Decimal("0.0000000001"),
+    )
+
+    assert result.error_reason is None
+    assert (
+        sum(
+            (allocation.consumed_quantity for allocation in result.allocations),
+            Decimal(0),
+        )
+        == result.consumed_quantity
+    )
+    assert (
+        sum(
+            (allocation.consumed_cost_local for allocation in result.allocations),
+            Decimal(0),
+        )
+        == result.cost_local
+    )
+    assert (
+        sum(
+            (allocation.consumed_cost_base for allocation in result.allocations),
+            Decimal(0),
+        )
+        == result.cost_base
+    )
+    assert strategy.get_available_quantity("P1", "AVCO-TINY") == Decimal("1.9999999999")
+
+
+@pytest.mark.parametrize("strategy_type", (FIFOBasisStrategy, AverageCostBasisStrategy))
+def test_source_acquisition_date_uses_canonical_utc_instant(
+    strategy_type: type[FIFOBasisStrategy] | type[AverageCostBasisStrategy],
+) -> None:
+    strategy = strategy_type()
+    strategy.add_buy_lot(
+        CostBasisTransaction(
+            transaction_id="OFFSET-BUY",
+            portfolio_id="P1",
+            instrument_id="OFFSET-INSTRUMENT",
+            security_id="OFFSET-INSTRUMENT",
+            transaction_type="BUY",
+            transaction_date=datetime.fromisoformat("2026-01-01T23:30:00-05:00"),
+            quantity=Decimal("1"),
+            gross_transaction_amount=Decimal("10"),
+            net_cost=Decimal("10"),
+            net_cost_local=Decimal("10"),
+            trade_currency="USD",
+            portfolio_base_currency="USD",
+        )
+    )
+
+    result = strategy.consume_sell_quantity_with_allocations(
+        "P1",
+        "OFFSET-INSTRUMENT",
+        Decimal("1"),
+    )
+
+    assert result.allocations[0].source_acquisition_date == date(2026, 1, 2)
+
+
 def test_average_cost_source_quantities_remain_exact_after_new_buy_and_disposal(
     avco_strategy: AverageCostBasisStrategy,
 ):

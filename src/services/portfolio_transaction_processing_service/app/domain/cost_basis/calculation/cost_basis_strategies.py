@@ -2,8 +2,10 @@
 
 import logging
 from collections import defaultdict, deque
+from dataclasses import replace
+from datetime import date, timezone
 from decimal import Decimal
-from typing import Protocol
+from typing import Protocol, cast
 
 from portfolio_common.domain.decimal_amount import required_decimal
 from portfolio_common.domain.transaction.numeric_policy import (
@@ -89,6 +91,79 @@ def _non_positive_sell_quantity_error(sell_quantity: Decimal) -> str | None:
     if sell_quantity >= Decimal(0):
         return None
     return f"Sell quantity ({sell_quantity}) must not be negative."
+
+
+def _utc_transaction_date(transaction: CostBasisTransaction) -> date:
+    """Derive the governed acquisition date from the canonical UTC instant."""
+
+    timestamp = transaction.transaction_date
+    if timestamp.tzinfo is None or timestamp.utcoffset() is None:
+        timestamp = timestamp.replace(tzinfo=timezone.utc)
+    return cast(date, timestamp.astimezone(timezone.utc).date())
+
+
+def _reconcile_disposal_allocation_residuals(
+    allocations: list[SourceLotDisposalAllocation],
+    *,
+    cost_base: Decimal,
+    cost_local: Decimal,
+    quantity: Decimal,
+) -> list[SourceLotDisposalAllocation]:
+    """Assign storage-rounding residuals to the final ordered source allocation."""
+
+    if not allocations:
+        return allocations
+    allocated_quantity = Decimal(0)
+    allocated_cost_local = Decimal(0)
+    allocated_cost_base = Decimal(0)
+    for allocation in allocations:
+        allocated_quantity = COST_BASIS_STATE_LEDGER_OUTPUT_V1.add(
+            allocated_quantity,
+            allocation.consumed_quantity,
+            field_name="allocated_disposal_quantity",
+        )
+        allocated_cost_local = COST_BASIS_STATE_LEDGER_OUTPUT_V1.add(
+            allocated_cost_local,
+            allocation.consumed_cost_local,
+            field_name="allocated_disposal_cost_local",
+        )
+        allocated_cost_base = COST_BASIS_STATE_LEDGER_OUTPUT_V1.add(
+            allocated_cost_base,
+            allocation.consumed_cost_base,
+            field_name="allocated_disposal_cost_base",
+        )
+    final = allocations[-1]
+    allocations[-1] = replace(
+        final,
+        consumed_quantity=COST_BASIS_STATE_LEDGER_OUTPUT_V1.add(
+            final.consumed_quantity,
+            COST_BASIS_STATE_LEDGER_OUTPUT_V1.subtract(
+                quantity,
+                allocated_quantity,
+                field_name="disposal_quantity_residual",
+            ),
+            field_name="consumed_quantity",
+        ),
+        consumed_cost_local=COST_BASIS_STATE_LEDGER_OUTPUT_V1.add(
+            final.consumed_cost_local,
+            COST_BASIS_STATE_LEDGER_OUTPUT_V1.subtract(
+                cost_local,
+                allocated_cost_local,
+                field_name="disposal_cost_local_residual",
+            ),
+            field_name="disposed_cost_local",
+        ),
+        consumed_cost_base=COST_BASIS_STATE_LEDGER_OUTPUT_V1.add(
+            final.consumed_cost_base,
+            COST_BASIS_STATE_LEDGER_OUTPUT_V1.subtract(
+                cost_base,
+                allocated_cost_base,
+                field_name="disposal_cost_base_residual",
+            ),
+            field_name="disposed_cost_base",
+        ),
+    )
+    return allocations
 
 
 def _consume_next_fifo_lot(
@@ -187,7 +262,7 @@ class FIFOBasisStrategy:
         new_lot = CostLot(
             transaction_id=transaction.transaction_id,
             lot_id=f"LOT-{transaction.transaction_id}",
-            acquisition_date=transaction.transaction_date.date(),
+            acquisition_date=_utc_transaction_date(transaction),
             quantity=quantity,
             cost_per_share_local=cost_per_share_local,
             cost_per_share_base=cost_per_share_base,
@@ -327,7 +402,7 @@ class AverageCostBasisStrategy(CostBasisStrategy):
             book_key=key,
             source_transaction_id=transaction.transaction_id,
             source_lot_id=f"LOT-{transaction.transaction_id}",
-            source_acquisition_date=transaction.transaction_date.date(),
+            source_acquisition_date=_utc_transaction_date(transaction),
             quantity=quantity,
             cost_local=net_cost_local,
             cost_base=net_cost,
@@ -405,11 +480,17 @@ class AverageCostBasisStrategy(CostBasisStrategy):
                     ),
                 )
             )
+        reconciled_allocations = _reconcile_disposal_allocation_residuals(
+            allocations,
+            cost_base=cogs_base,
+            cost_local=cogs_local,
+            quantity=required_quantity,
+        )
         return LotDisposalResult(
             cost_base=cogs_base,
             cost_local=cogs_local,
             consumed_quantity=required_quantity,
-            allocations=tuple(allocations),
+            allocations=tuple(reconciled_allocations),
         )
 
     def get_available_quantity(self, portfolio_id: str, instrument_id: str) -> Decimal:
