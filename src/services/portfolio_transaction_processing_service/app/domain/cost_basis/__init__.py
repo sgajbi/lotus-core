@@ -23,7 +23,10 @@ from .calculation.average_cost_source_allocation import (
     AverageCostSourceContribution,
 )
 from .calculation.calculation_errors import CostCalculationErrorCollector
-from .calculation.cost_basis_calculator import CostBasisCalculator
+from .calculation.cost_basis_calculator import (
+    CostBasisCalculator,
+    transaction_cost_output_payload,
+)
 from .calculation.cost_basis_strategies import (
     AverageCostBasisStrategy,
     CostBasisStrategy,
@@ -134,4 +137,5 @@ __all__ = [
     "source_lot_disposal_allocation_payload",
     "transaction_order_key",
     "transaction_lot_behavior",
+    "transaction_cost_output_payload",
 ]
