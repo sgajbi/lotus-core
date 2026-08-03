@@ -28,12 +28,32 @@ from tests.test_support.runtime_env import prepare_test_runtime
 
 def test_should_build_images_default_false(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("LOTUS_TESTS_DOCKER_BUILD", raising=False)
+    monkeypatch.delenv("LOTUS_RUNTIME_IMAGE_SET_VERIFIED", raising=False)
     monkeypatch.delenv("CI", raising=False)
     assert should_build_images() is False
 
 
 def test_should_build_images_defaults_true_in_ci(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("LOTUS_TESTS_DOCKER_BUILD", raising=False)
+    monkeypatch.delenv("LOTUS_RUNTIME_IMAGE_SET_VERIFIED", raising=False)
+    monkeypatch.setenv("CI", "true")
+    assert should_build_images() is True
+
+
+def test_should_build_images_reuses_verified_runtime_image_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("LOTUS_TESTS_DOCKER_BUILD", raising=False)
+    monkeypatch.setenv("LOTUS_RUNTIME_IMAGE_SET_VERIFIED", "true")
+    monkeypatch.setenv("CI", "true")
+    assert should_build_images() is False
+
+
+def test_should_build_images_explicit_true_overrides_verified_runtime_image_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LOTUS_TESTS_DOCKER_BUILD", "true")
+    monkeypatch.setenv("LOTUS_RUNTIME_IMAGE_SET_VERIFIED", "true")
     monkeypatch.setenv("CI", "true")
     assert should_build_images() is True
 

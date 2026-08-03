@@ -389,8 +389,20 @@ def _is_host_port_bind_error(stderr: str) -> bool:
 
 
 def should_build_images() -> bool:
-    default = "true" if os.getenv("CI", "").strip().lower() == "true" else "false"
-    return os.getenv("LOTUS_TESTS_DOCKER_BUILD", default).strip().lower() in {
+    explicit_build = os.getenv("LOTUS_TESTS_DOCKER_BUILD")
+    if explicit_build is not None:
+        return explicit_build.strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
+
+    verified_image_set = os.getenv("LOTUS_RUNTIME_IMAGE_SET_VERIFIED", "")
+    if verified_image_set.strip().lower() == "true":
+        return False
+
+    return os.getenv("CI", "").strip().lower() in {
         "1",
         "true",
         "yes",
