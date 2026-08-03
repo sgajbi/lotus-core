@@ -362,7 +362,7 @@ async def test_single_buy_cost_stage_avoids_duplicate_canonical_transaction_read
     finally:
         sqlalchemy_event.remove(sync_engine, "before_cursor_execute", capture_statement)
 
-    assert len(statements) == 9
+    assert len(statements) == 10
     canonical_transaction_writes = [
         statement for statement in statements if statement.startswith("UPDATE transactions SET")
     ]
@@ -381,3 +381,9 @@ async def test_single_buy_cost_stage_avoids_duplicate_canonical_transaction_read
         if statement.startswith("SELECT position_lot_state.lot_id")
     ]
     assert opening_lot_snapshot_reads == []
+    disposal_receipt_reads = [
+        statement
+        for statement in statements
+        if statement.startswith("SELECT lot_disposal_receipts.id")
+    ]
+    assert len(disposal_receipt_reads) == 1
