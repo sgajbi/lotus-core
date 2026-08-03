@@ -53,7 +53,7 @@ def _amortized_cost_evidence() -> AmortizedCostAllocationEvidence:
         original_quantity=Decimal("10"),
         open_quantity_before=Decimal("10"),
         consumed_quantity=Decimal("2"),
-        fx_rate_to_base=Decimal("1.1"),
+        book_cost_fx_rate_to_base=Decimal("1.1"),
     )
     return AmortizedCostAllocationEvidence(
         profile_id=projection.profile_id,
@@ -69,7 +69,7 @@ def _amortized_cost_evidence() -> AmortizedCostAllocationEvidence:
         current_cost_local=projection.current_cost_local,
         consumed_cost_local=projection.consumed_cost_local,
         residual_cost_local=projection.residual_cost_local,
-        fx_rate_to_base=projection.fx_rate_to_base,
+        book_cost_fx_rate_to_base=projection.book_cost_fx_rate_to_base,
         consumed_cost_base=projection.consumed_cost_base,
         residual_cost_base=projection.residual_cost_base,
         calculation_lineage=projection.calculation_lineage,

@@ -38,7 +38,7 @@ class AmortizedCostAllocationEvidence:
     current_cost_local: Decimal
     consumed_cost_local: Decimal
     residual_cost_local: Decimal
-    fx_rate_to_base: Decimal
+    book_cost_fx_rate_to_base: Decimal
     consumed_cost_base: Decimal
     residual_cost_base: Decimal
     calculation_lineage: CalculationLineage
@@ -70,7 +70,7 @@ class AmortizedCostAllocationEvidence:
             "current_cost_local",
             "consumed_cost_local",
             "residual_cost_local",
-            "fx_rate_to_base",
+            "book_cost_fx_rate_to_base",
             "consumed_cost_base",
             "residual_cost_base",
         ):
@@ -82,7 +82,7 @@ class AmortizedCostAllocationEvidence:
                     "original_quantity",
                     "open_quantity_before",
                     "consumed_quantity",
-                    "fx_rate_to_base",
+                    "book_cost_fx_rate_to_base",
                 },
             )
         if self.open_quantity_before > self.original_quantity:
@@ -125,7 +125,7 @@ class AmortizedCostAllocationEvidence:
             "currency": self.currency,
             "current_cost_local": self.current_cost_local,
             "disposal_date": self.disposal_date,
-            "fx_rate_to_base": self.fx_rate_to_base,
+            "book_cost_fx_rate_to_base": self.book_cost_fx_rate_to_base,
             "original_quantity": self.original_quantity,
             "open_quantity_before": self.open_quantity_before,
             "profile_content_hash": self.profile_content_hash,

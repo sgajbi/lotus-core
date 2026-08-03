@@ -42,7 +42,7 @@ class RecognizedLotBookCost:
     current_cost_local: Decimal
     consumed_cost_local: Decimal
     residual_cost_local: Decimal
-    fx_rate_to_base: Decimal
+    book_cost_fx_rate_to_base: Decimal
     consumed_cost_base: Decimal
     residual_cost_base: Decimal
     calculation_lineage: CalculationLineage
@@ -55,14 +55,16 @@ def allocate_recognized_lot_book_cost(
     original_quantity: Decimal,
     open_quantity_before: Decimal,
     consumed_quantity: Decimal,
-    fx_rate_to_base: Decimal,
+    book_cost_fx_rate_to_base: Decimal,
 ) -> RecognizedLotBookCost:
     """Allocate recognized periodic book cost without mutating original or tax-lot basis.
 
     Profiles recognize movement at their authoritative period boundaries. A daily schedule therefore
     produces daily carrying amounts, while a coupon-period schedule retains its opening carrying
     amount until that period closes. Partial disposal allocation is proportional to original lot
-    quantity, with the residual calculated as the exact governed complement.
+    quantity, with the residual calculated as the exact governed complement. Base carrying cost
+    uses the source lot's governed book-cost conversion rate; it must not be substituted with
+    disposal-date FX because capital and FX P&L are separate accounting effects.
     """
 
     _require_active_profile(profile)
@@ -74,7 +76,7 @@ def allocate_recognized_lot_book_cost(
     _require_positive_decimal(original_quantity, "original_quantity")
     _require_positive_decimal(open_quantity_before, "open_quantity_before")
     _require_positive_decimal(consumed_quantity, "consumed_quantity")
-    _require_positive_decimal(fx_rate_to_base, "fx_rate_to_base")
+    _require_positive_decimal(book_cost_fx_rate_to_base, "book_cost_fx_rate_to_base")
     if open_quantity_before > original_quantity:
         raise AmortizedCostDisposalError("open_quantity_before must not exceed original_quantity")
     if consumed_quantity > open_quantity_before:
@@ -108,12 +110,12 @@ def allocate_recognized_lot_book_cost(
     )
     consumed_cost_base = numeric_policy.multiply(
         consumed_cost_local,
-        fx_rate_to_base,
+        book_cost_fx_rate_to_base,
         field_name="amortized_disposal_cost_base",
     )
     residual_cost_base = numeric_policy.multiply(
         residual_cost_local,
-        fx_rate_to_base,
+        book_cost_fx_rate_to_base,
         field_name="amortized_residual_cost_base",
     )
     profile_content_hash = profile.content_hash()
@@ -135,7 +137,7 @@ def allocate_recognized_lot_book_cost(
         input_payload={
             "consumed_quantity": consumed_quantity,
             "disposal_date": disposal_date,
-            "fx_rate_to_base": fx_rate_to_base,
+            "book_cost_fx_rate_to_base": book_cost_fx_rate_to_base,
             "original_quantity": original_quantity,
             "open_quantity_before": open_quantity_before,
             "profile_content_hash": profile_content_hash,
@@ -164,7 +166,7 @@ def allocate_recognized_lot_book_cost(
         current_cost_local=current_cost_local,
         consumed_cost_local=consumed_cost_local,
         residual_cost_local=residual_cost_local,
-        fx_rate_to_base=fx_rate_to_base,
+        book_cost_fx_rate_to_base=book_cost_fx_rate_to_base,
         consumed_cost_base=consumed_cost_base,
         residual_cost_base=residual_cost_base,
         calculation_lineage=lineage,

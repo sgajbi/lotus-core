@@ -95,7 +95,7 @@ def _active_state_with_amortized_cost() -> LotDisposalReceiptState:
         current_cost_local=Decimal("110"),
         consumed_cost_local=Decimal("11"),
         residual_cost_local=Decimal("99"),
-        fx_rate_to_base=Decimal("1"),
+        book_cost_fx_rate_to_base=Decimal("1"),
         consumed_cost_base=Decimal("11"),
         residual_cost_base=Decimal("99"),
         calculation_lineage=build_calculation_lineage(

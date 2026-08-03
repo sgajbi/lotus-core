@@ -44,7 +44,7 @@ def test_allocates_last_recognized_periodic_carrying_amount(
         original_quantity=Decimal("100"),
         open_quantity_before=Decimal("100"),
         consumed_quantity=Decimal("40"),
-        fx_rate_to_base=Decimal("1.5"),
+        book_cost_fx_rate_to_base=Decimal("1.5"),
     )
 
     assert result.current_cost_local == expected_current
@@ -64,7 +64,7 @@ def test_absorbs_all_rounding_residual_into_the_retained_lot() -> None:
         original_quantity=Decimal("3"),
         open_quantity_before=Decimal("3"),
         consumed_quantity=Decimal("1"),
-        fx_rate_to_base=Decimal("1"),
+        book_cost_fx_rate_to_base=Decimal("1"),
     )
 
     assert result.consumed_cost_local == Decimal("32.3333333333")
@@ -79,7 +79,7 @@ def test_repeated_partial_disposal_uses_pre_disposal_open_quantity() -> None:
         original_quantity=Decimal("100"),
         open_quantity_before=Decimal("100"),
         consumed_quantity=Decimal("40"),
-        fx_rate_to_base=Decimal("1"),
+        book_cost_fx_rate_to_base=Decimal("1"),
     )
     second = allocate_recognized_lot_book_cost(
         _active_profile(),
@@ -87,7 +87,7 @@ def test_repeated_partial_disposal_uses_pre_disposal_open_quantity() -> None:
         original_quantity=Decimal("100"),
         open_quantity_before=first.residual_quantity,
         consumed_quantity=Decimal("20"),
-        fx_rate_to_base=Decimal("1"),
+        book_cost_fx_rate_to_base=Decimal("1"),
     )
     restarted = allocate_recognized_lot_book_cost(
         _active_profile(),
@@ -95,7 +95,7 @@ def test_repeated_partial_disposal_uses_pre_disposal_open_quantity() -> None:
         original_quantity=Decimal("100"),
         open_quantity_before=Decimal("60"),
         consumed_quantity=Decimal("20"),
-        fx_rate_to_base=Decimal("1"),
+        book_cost_fx_rate_to_base=Decimal("1"),
     )
 
     assert second == restarted
@@ -113,7 +113,7 @@ def test_lineage_binds_profile_identity_inputs_and_outputs() -> None:
         original_quantity=Decimal("100"),
         open_quantity_before=Decimal("100"),
         consumed_quantity=Decimal("25"),
-        fx_rate_to_base=Decimal("1.25"),
+        book_cost_fx_rate_to_base=Decimal("1.25"),
     )
 
     assert result.calculation_lineage.algorithm_id == AMORTIZED_COST_DISPOSAL_ALGORITHM_ID
@@ -145,9 +145,9 @@ def test_lineage_binds_profile_identity_inputs_and_outputs() -> None:
         ("consumed_quantity", Decimal("0"), ValueError),
         ("consumed_quantity", Decimal("Infinity"), ValueError),
         ("consumed_quantity", 10, TypeError),
-        ("fx_rate_to_base", Decimal("0"), ValueError),
-        ("fx_rate_to_base", Decimal("-1"), ValueError),
-        ("fx_rate_to_base", "1", TypeError),
+        ("book_cost_fx_rate_to_base", Decimal("0"), ValueError),
+        ("book_cost_fx_rate_to_base", Decimal("-1"), ValueError),
+        ("book_cost_fx_rate_to_base", "1", TypeError),
     ],
 )
 def test_rejects_invalid_financial_inputs(
@@ -159,7 +159,7 @@ def test_rejects_invalid_financial_inputs(
         "original_quantity": Decimal("100"),
         "open_quantity_before": Decimal("100"),
         "consumed_quantity": Decimal("10"),
-        "fx_rate_to_base": Decimal("1"),
+        "book_cost_fx_rate_to_base": Decimal("1"),
     }
     inputs[field_name] = value
 
@@ -179,7 +179,7 @@ def test_rejects_overdisposal_and_preprofile_date() -> None:
             original_quantity=Decimal("10"),
             open_quantity_before=Decimal("10"),
             consumed_quantity=Decimal("11"),
-            fx_rate_to_base=Decimal("1"),
+            book_cost_fx_rate_to_base=Decimal("1"),
         )
     with pytest.raises(AmortizedCostDisposalError, match="open_quantity_before"):
         allocate_recognized_lot_book_cost(
@@ -188,7 +188,7 @@ def test_rejects_overdisposal_and_preprofile_date() -> None:
             original_quantity=Decimal("10"),
             open_quantity_before=Decimal("11"),
             consumed_quantity=Decimal("1"),
-            fx_rate_to_base=Decimal("1"),
+            book_cost_fx_rate_to_base=Decimal("1"),
         )
     with pytest.raises(AmortizedCostDisposalError, match="must not precede"):
         allocate_recognized_lot_book_cost(
@@ -197,7 +197,7 @@ def test_rejects_overdisposal_and_preprofile_date() -> None:
             original_quantity=Decimal("10"),
             open_quantity_before=Decimal("10"),
             consumed_quantity=Decimal("1"),
-            fx_rate_to_base=Decimal("1"),
+            book_cost_fx_rate_to_base=Decimal("1"),
         )
 
 
@@ -217,5 +217,5 @@ def test_rejects_non_active_profile_instead_of_falling_back_to_original_cost() -
             original_quantity=Decimal("100"),
             open_quantity_before=Decimal("100"),
             consumed_quantity=Decimal("10"),
-            fx_rate_to_base=Decimal("1"),
+            book_cost_fx_rate_to_base=Decimal("1"),
         )
