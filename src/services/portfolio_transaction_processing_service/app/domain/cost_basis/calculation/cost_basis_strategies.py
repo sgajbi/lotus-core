@@ -2,7 +2,7 @@
 
 import logging
 from collections import defaultdict, deque
-from dataclasses import replace
+from dataclasses import dataclass
 from datetime import date, timezone
 from decimal import Decimal
 from typing import Protocol, cast
@@ -102,68 +102,95 @@ def _utc_transaction_date(transaction: CostBasisTransaction) -> date:
     return cast(date, timestamp.astimezone(timezone.utc).date())
 
 
+@dataclass(frozen=True, slots=True)
+class _UnreconciledSourceDisposalAllocation:
+    source_lot_id: str
+    source_transaction_id: str
+    source_acquisition_date: date
+    consumed_quantity: Decimal
+    consumed_cost_local: Decimal
+    consumed_cost_base: Decimal
+
+
+def _apportion_nonnegative_disposal_values(
+    candidates: list[Decimal],
+    *,
+    aggregate: Decimal,
+    field_name: str,
+) -> list[Decimal]:
+    """Clamp source rounding noise while preserving the exact aggregate."""
+
+    if not candidates:
+        raise ValueError(f"{field_name} disposal requires at least one source allocation")
+    allocated = Decimal(0)
+    apportioned: list[Decimal] = []
+    for candidate in candidates[:-1]:
+        share = allocate_nonnegative_storage_share(
+            max(candidate, Decimal(0)),
+            aggregate=aggregate,
+            allocated=allocated,
+            field_name=field_name,
+        )
+        apportioned.append(share)
+        allocated = COST_BASIS_STATE_LEDGER_OUTPUT_V1.add(
+            allocated,
+            share,
+            field_name=f"allocated_{field_name}",
+        )
+    apportioned.append(
+        COST_BASIS_STATE_LEDGER_OUTPUT_V1.subtract(
+            aggregate,
+            allocated,
+            field_name=field_name,
+        )
+    )
+    return apportioned
+
+
 def _reconcile_disposal_allocation_residuals(
-    allocations: list[SourceLotDisposalAllocation],
+    allocations: list[_UnreconciledSourceDisposalAllocation],
     *,
     cost_base: Decimal,
     cost_local: Decimal,
     quantity: Decimal,
 ) -> list[SourceLotDisposalAllocation]:
-    """Assign storage-rounding residuals to the final ordered source allocation."""
+    """Reconcile raw source deltas before immutable allocation validation."""
 
-    if not allocations:
-        return allocations
-    allocated_quantity = Decimal(0)
-    allocated_cost_local = Decimal(0)
-    allocated_cost_base = Decimal(0)
-    for allocation in allocations:
-        allocated_quantity = COST_BASIS_STATE_LEDGER_OUTPUT_V1.add(
-            allocated_quantity,
-            allocation.consumed_quantity,
-            field_name="allocated_disposal_quantity",
-        )
-        allocated_cost_local = COST_BASIS_STATE_LEDGER_OUTPUT_V1.add(
-            allocated_cost_local,
-            allocation.consumed_cost_local,
-            field_name="allocated_disposal_cost_local",
-        )
-        allocated_cost_base = COST_BASIS_STATE_LEDGER_OUTPUT_V1.add(
-            allocated_cost_base,
-            allocation.consumed_cost_base,
-            field_name="allocated_disposal_cost_base",
-        )
-    final = allocations[-1]
-    allocations[-1] = replace(
-        final,
-        consumed_quantity=COST_BASIS_STATE_LEDGER_OUTPUT_V1.add(
-            final.consumed_quantity,
-            COST_BASIS_STATE_LEDGER_OUTPUT_V1.subtract(
-                quantity,
-                allocated_quantity,
-                field_name="disposal_quantity_residual",
-            ),
-            field_name="consumed_quantity",
-        ),
-        consumed_cost_local=COST_BASIS_STATE_LEDGER_OUTPUT_V1.add(
-            final.consumed_cost_local,
-            COST_BASIS_STATE_LEDGER_OUTPUT_V1.subtract(
-                cost_local,
-                allocated_cost_local,
-                field_name="disposal_cost_local_residual",
-            ),
-            field_name="disposed_cost_local",
-        ),
-        consumed_cost_base=COST_BASIS_STATE_LEDGER_OUTPUT_V1.add(
-            final.consumed_cost_base,
-            COST_BASIS_STATE_LEDGER_OUTPUT_V1.subtract(
-                cost_base,
-                allocated_cost_base,
-                field_name="disposal_cost_base_residual",
-            ),
-            field_name="disposed_cost_base",
-        ),
+    quantity_sources = [
+        allocation for allocation in allocations if allocation.consumed_quantity > 0
+    ]
+    quantities = _apportion_nonnegative_disposal_values(
+        [allocation.consumed_quantity for allocation in quantity_sources],
+        aggregate=quantity,
+        field_name="consumed_quantity",
     )
-    return allocations
+    quantity_allocations = [
+        (allocation, apportioned_quantity)
+        for allocation, apportioned_quantity in zip(quantity_sources, quantities, strict=True)
+        if apportioned_quantity > 0
+    ]
+    local_costs = _apportion_nonnegative_disposal_values(
+        [allocation.consumed_cost_local for allocation, _ in quantity_allocations],
+        aggregate=cost_local,
+        field_name="disposed_cost_local",
+    )
+    base_costs = _apportion_nonnegative_disposal_values(
+        [allocation.consumed_cost_base for allocation, _ in quantity_allocations],
+        aggregate=cost_base,
+        field_name="disposed_cost_base",
+    )
+    return [
+        SourceLotDisposalAllocation(
+            source_lot_id=allocation.source_lot_id,
+            source_transaction_id=allocation.source_transaction_id,
+            source_acquisition_date=allocation.source_acquisition_date,
+            allocation_ordinal=index,
+            consumed_quantity=apportioned_quantity,
+            consumed_cost_local=local_costs[index - 1],
+            consumed_cost_base=base_costs[index - 1],
+        )
+        for index, (allocation, apportioned_quantity) in enumerate(quantity_allocations, start=1)
+    ]
 
 
 def _consume_next_fifo_lot(
@@ -448,7 +475,7 @@ class AverageCostBasisStrategy(CostBasisStrategy):
             quantity_after=pool.quantity,
         )
         states_after = self._source_allocation.materialize_book(book_key=key, pool=pool)
-        allocations: list[SourceLotDisposalAllocation] = []
+        allocations: list[_UnreconciledSourceDisposalAllocation] = []
         for source_transaction_id, contribution in self._source_allocation.source_contributions(
             key
         ):
@@ -459,14 +486,11 @@ class AverageCostBasisStrategy(CostBasisStrategy):
                 state_after.quantity,
                 field_name="consumed_quantity",
             )
-            if consumed_quantity == Decimal(0):
-                continue
             allocations.append(
-                SourceLotDisposalAllocation(
+                _UnreconciledSourceDisposalAllocation(
                     source_lot_id=contribution.source_lot_id,
                     source_transaction_id=source_transaction_id,
                     source_acquisition_date=contribution.source_acquisition_date,
-                    allocation_ordinal=len(allocations) + 1,
                     consumed_quantity=consumed_quantity,
                     consumed_cost_local=COST_BASIS_STATE_LEDGER_OUTPUT_V1.subtract(
                         state_before.cost_local,

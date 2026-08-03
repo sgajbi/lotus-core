@@ -301,6 +301,70 @@ def test_average_cost_tiny_disposal_assigns_rounding_residual_deterministically(
     assert strategy.get_available_quantity("P1", "AVCO-TINY") == Decimal("1.9999999999")
 
 
+def test_average_cost_reconciles_negative_raw_delta_before_allocation_validation() -> None:
+    strategy = AverageCostBasisStrategy()
+
+    def add_buy(transaction_id: str, quantity: str, cost: str) -> None:
+        strategy.add_buy_lot(
+            CostBasisTransaction(
+                transaction_id=transaction_id,
+                portfolio_id="P1",
+                instrument_id="AVCO-SEGMENTED",
+                security_id="AVCO-SEGMENTED",
+                transaction_type="BUY",
+                transaction_date=datetime(2026, 1, 1),
+                quantity=Decimal(quantity),
+                gross_transaction_amount=Decimal(cost),
+                net_cost=Decimal(cost),
+                net_cost_local=Decimal(cost),
+                trade_currency="USD",
+                portfolio_base_currency="USD",
+            )
+        )
+
+    add_buy("AVCO-SEGMENTED-1", "0.3241", "0.0004205")
+    first = strategy.consume_sell_quantity_with_allocations(
+        "P1",
+        "AVCO-SEGMENTED",
+        Decimal("0.0483839337"),
+    )
+    assert first.error_reason is None
+    add_buy("AVCO-SEGMENTED-2", "0.05824", "0")
+
+    second = strategy.consume_sell_quantity_with_allocations(
+        "P1",
+        "AVCO-SEGMENTED",
+        Decimal("0.1154380503"),
+    )
+
+    assert second.error_reason is None
+    assert all(allocation.consumed_quantity > 0 for allocation in second.allocations)
+    assert all(allocation.consumed_cost_local >= 0 for allocation in second.allocations)
+    assert all(allocation.consumed_cost_base >= 0 for allocation in second.allocations)
+    assert (
+        sum(
+            (allocation.consumed_quantity for allocation in second.allocations),
+            Decimal(0),
+        )
+        == second.consumed_quantity
+    )
+    assert (
+        sum(
+            (allocation.consumed_cost_local for allocation in second.allocations),
+            Decimal(0),
+        )
+        == second.cost_local
+    )
+    assert (
+        sum(
+            (allocation.consumed_cost_base for allocation in second.allocations),
+            Decimal(0),
+        )
+        == second.cost_base
+    )
+    assert strategy.get_available_quantity("P1", "AVCO-SEGMENTED") == Decimal("0.2185180160")
+
+
 @pytest.mark.parametrize("strategy_type", (FIFOBasisStrategy, AverageCostBasisStrategy))
 def test_source_acquisition_date_uses_canonical_utc_instant(
     strategy_type: type[FIFOBasisStrategy] | type[AverageCostBasisStrategy],
