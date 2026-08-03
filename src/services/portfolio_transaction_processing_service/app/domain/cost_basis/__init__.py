@@ -1,5 +1,10 @@
 """Public cost-basis domain models, policies, and deterministic calculations."""
 
+from .average_cost_allocation_checkpoint import (
+    AVERAGE_COST_ALLOCATION_STATE_VERSION,
+    AverageCostAllocationCheckpoint,
+    AverageCostSourceAccumulator,
+)
 from .average_cost_pool_checkpoint import (
     AVERAGE_COST_POOL_STATE_VERSION,
     AverageCostPoolCheckpoint,
@@ -69,7 +74,9 @@ from .processing_checkpoint import (
 )
 
 __all__ = [
+    "AVERAGE_COST_ALLOCATION_STATE_VERSION",
     "AverageCostBasisStrategy",
+    "AverageCostAllocationCheckpoint",
     "AverageCostPool",
     "AverageCostPoolCheckpoint",
     "AverageCostPoolRebuildPlan",
@@ -77,6 +84,7 @@ __all__ = [
     "AverageCostPoolReconciliationAssessment",
     "AverageCostPoolReconciliationStatus",
     "AverageCostSourceAllocation",
+    "AverageCostSourceAccumulator",
     "AverageCostSourceContribution",
     "AverageCostPoolTransition",
     "build_average_cost_pool_rebuild_lineage",
