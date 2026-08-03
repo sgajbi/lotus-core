@@ -874,13 +874,20 @@ def test_repository_contract_classifies_inventory_and_persistence_semantics() ->
         for table in ("lot_amortized_cost_profiles", "lot_amortized_cost_periods")
         for column, classification in contract["tables"][table].items()
     }
+    disposal_profiles = {
+        table: {
+            column: classification["profile"]
+            for column, classification in contract["tables"][table].items()
+        }
+        for table in ("lot_disposal_receipts", "lot_disposal_allocations")
+    }
 
-    assert report.numeric_column_count == 110
-    assert report.table_count == 33
-    assert report.bounded_numeric_count == 107
+    assert report.numeric_column_count == 116
+    assert report.table_count == 35
+    assert report.bounded_numeric_count == 113
     assert report.unbounded_numeric_count == 3
     assert report.domain_family_count == 11
-    assert report.orm_enforced_count == 110
+    assert report.orm_enforced_count == 116
     assert report.database_enforced_count == 0
     assert report.planned_count == 0
     assert transaction_profiles["quantity"] == "nonnegative-finite"
@@ -896,3 +903,13 @@ def test_repository_contract_classifies_inventory_and_persistence_semantics() ->
     assert amortized_cost_profiles["year_fraction"] == "positive-finite"
     assert amortized_cost_profiles["period_rate"] == "nullable-finite"
     assert amortized_cost_profiles["rounding_adjustment_local"] == "finite"
+    assert disposal_profiles["lot_disposal_receipts"] == {
+        "consumed_quantity": "nonnegative-finite",
+        "consumed_cost_local": "nonnegative-finite",
+        "consumed_cost_base": "nonnegative-finite",
+    }
+    assert disposal_profiles["lot_disposal_allocations"] == {
+        "consumed_quantity": "positive-finite",
+        "consumed_cost_local": "nonnegative-finite",
+        "consumed_cost_base": "nonnegative-finite",
+    }
