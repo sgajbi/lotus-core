@@ -237,6 +237,7 @@ async def test_get_open_lot_checkpoint_records_returns_only_positive_lots() -> N
         amortized_cost_profile_content_hash="a" * 64,
         amortized_cost_recognized_through=date(2026, 6, 30),
         amortized_cost_scheduled_local=Decimal("970"),
+        amortized_cost_book_fx_rate_to_base=Decimal("1.05"),
     )
     execute_result = MagicMock()
     execute_result.all.return_value = [(lot, transaction)]
@@ -259,6 +260,7 @@ async def test_get_open_lot_checkpoint_records_returns_only_positive_lots() -> N
         profile_content_hash="a" * 64,
         recognized_through_date=date(2026, 6, 30),
         scheduled_cost_local=Decimal("970"),
+        book_cost_fx_rate_to_base=Decimal("1.05"),
     )
     compiled_query = str(
         db_session.execute.call_args.args[0].compile(compile_kwargs={"literal_binds": True})
@@ -1124,6 +1126,7 @@ async def test_update_open_lot_states_trims_ids_and_reconciles_quantity_and_cost
         amortized_cost_profile_content_hash="b" * 64,
         amortized_cost_recognized_through=date(2026, 6, 30),
         amortized_cost_scheduled_local=Decimal("500"),
+        amortized_cost_book_fx_rate_to_base=Decimal("1"),
     )
     execute_result = MagicMock()
     execute_result.scalars.return_value.all.return_value = [lot_row, closed_lot_row]
@@ -1143,6 +1146,7 @@ async def test_update_open_lot_states_trims_ids_and_reconciles_quantity_and_cost
                     profile_content_hash="a" * 64,
                     recognized_through_date=date(2026, 6, 30),
                     scheduled_cost_local=Decimal("970"),
+                    book_cost_fx_rate_to_base=Decimal("1.05"),
                 ),
             )
         },

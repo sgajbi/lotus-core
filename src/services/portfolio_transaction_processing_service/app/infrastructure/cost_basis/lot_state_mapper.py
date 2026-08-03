@@ -46,6 +46,7 @@ def buy_lot_state_payload(transaction: CostBasisTransaction) -> dict[str, object
         "amortized_cost_profile_content_hash": None,
         "amortized_cost_recognized_through": None,
         "amortized_cost_scheduled_local": None,
+        "amortized_cost_book_fx_rate_to_base": None,
     }
     parent_lineage = getattr(transaction, "calculation_lineage", None)
     lineage = build_cost_basis_state_lineage(

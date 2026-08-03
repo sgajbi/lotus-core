@@ -42,7 +42,10 @@ def upgrade() -> None:
         "AND amortized_cost_profile_content_hash ~ '^[0-9a-f]{64}$' "
         "AND amortized_cost_recognized_through >= acquisition_date "
         "AND amortized_cost_scheduled_local >= 0 "
+        "AND amortized_cost_book_fx_rate_to_base > 0 "
         "AND CAST(amortized_cost_scheduled_local AS TEXT) "
+        "NOT IN ('NaN', 'Infinity', '-Infinity') "
+        "AND CAST(amortized_cost_book_fx_rate_to_base AS TEXT) "
         "NOT IN ('NaN', 'Infinity', '-Infinity'))",
     )
     op.create_foreign_key(
@@ -95,6 +98,7 @@ def _lot_carry_columns() -> tuple[sa.Column[object], ...]:
         sa.Column("amortized_cost_profile_content_hash", sa.String(length=64), nullable=True),
         sa.Column("amortized_cost_recognized_through", sa.Date(), nullable=True),
         sa.Column("amortized_cost_scheduled_local", sa.Numeric(18, 10), nullable=True),
+        sa.Column("amortized_cost_book_fx_rate_to_base", sa.Numeric(18, 10), nullable=True),
     )
 
 

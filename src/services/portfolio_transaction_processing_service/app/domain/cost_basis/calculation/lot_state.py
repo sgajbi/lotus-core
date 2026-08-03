@@ -19,6 +19,7 @@ class AmortizedCostCarryState:
     profile_content_hash: str
     recognized_through_date: date
     scheduled_cost_local: Decimal
+    book_cost_fx_rate_to_base: Decimal
 
     def __post_init__(self) -> None:
         if not isinstance(self.profile_id, str):
@@ -35,6 +36,10 @@ class AmortizedCostCarryState:
         if type(self.recognized_through_date) is not date:
             raise TypeError("recognized_through_date must be a date")
         _require_non_negative_decimal(self.scheduled_cost_local, "scheduled_cost_local")
+        _require_positive_decimal(
+            self.book_cost_fx_rate_to_base,
+            "book_cost_fx_rate_to_base",
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -109,3 +114,9 @@ def _require_non_negative_decimal(value: object, field_name: str) -> None:
         raise ValueError(f"{field_name} must be finite")
     if value < Decimal(0):
         raise ValueError(f"{field_name} must be non-negative")
+
+
+def _require_positive_decimal(value: object, field_name: str) -> None:
+    _require_non_negative_decimal(value, field_name)
+    if value == Decimal(0):
+        raise ValueError(f"{field_name} must be positive")
