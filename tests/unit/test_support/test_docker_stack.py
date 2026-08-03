@@ -28,10 +28,26 @@ from tests.test_support.runtime_env import prepare_test_runtime
 
 def test_should_build_images_default_false(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("LOTUS_TESTS_DOCKER_BUILD", raising=False)
+    monkeypatch.delenv("CI", raising=False)
+    assert should_build_images() is False
+
+
+def test_should_build_images_defaults_true_in_ci(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("LOTUS_TESTS_DOCKER_BUILD", raising=False)
+    monkeypatch.setenv("CI", "true")
+    assert should_build_images() is True
+
+
+def test_should_build_images_explicit_false_overrides_ci_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CI", "true")
+    monkeypatch.setenv("LOTUS_TESTS_DOCKER_BUILD", "false")
     assert should_build_images() is False
 
 
 def test_should_build_images_true_values(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("CI", raising=False)
     monkeypatch.setenv("LOTUS_TESTS_DOCKER_BUILD", "true")
     assert should_build_images() is True
 

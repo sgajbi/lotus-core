@@ -389,7 +389,8 @@ def _is_host_port_bind_error(stderr: str) -> bool:
 
 
 def should_build_images() -> bool:
-    return os.getenv("LOTUS_TESTS_DOCKER_BUILD", "false").strip().lower() in {
+    default = "true" if os.getenv("CI", "").strip().lower() == "true" else "false"
+    return os.getenv("LOTUS_TESTS_DOCKER_BUILD", default).strip().lower() in {
         "1",
         "true",
         "yes",
