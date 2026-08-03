@@ -9,6 +9,8 @@ from decimal import Decimal
 from portfolio_common.domain.calculation_lineage import (
     CalculationLineage,
     build_calculation_lineage,
+    calculation_lineage_binds_output,
+    require_sha256_digest,
 )
 from portfolio_common.domain.transaction.numeric_policy import (
     COST_BASIS_STATE_LEDGER_OUTPUT_V1,
@@ -17,6 +19,112 @@ from portfolio_common.domain.transaction.numeric_policy import (
 from ..state_lineage import canonical_cost_basis_output_payload
 
 _DISPOSAL_ALLOCATION_ALGORITHM_ID = "cost-basis-lot-disposal-allocation"
+
+
+@dataclass(frozen=True, slots=True)
+class AmortizedCostAllocationEvidence:
+    """Immutable carrying-amount evidence used for one source-lot allocation."""
+
+    profile_id: str
+    profile_version: int
+    profile_content_hash: str
+    currency: str
+    disposal_date: date
+    recognized_through_date: date
+    original_quantity: Decimal
+    consumed_quantity: Decimal
+    residual_quantity: Decimal
+    current_cost_local: Decimal
+    consumed_cost_local: Decimal
+    residual_cost_local: Decimal
+    fx_rate_to_base: Decimal
+    consumed_cost_base: Decimal
+    residual_cost_base: Decimal
+    calculation_lineage: CalculationLineage
+
+    def __post_init__(self) -> None:
+        for field_name in ("profile_id", "currency"):
+            value = getattr(self, field_name)
+            if not isinstance(value, str):
+                raise TypeError(f"{field_name} must be a string")
+            normalized = value.strip()
+            if not normalized:
+                raise ValueError(f"{field_name} must be nonblank")
+            object.__setattr__(self, field_name, normalized)
+        if not isinstance(self.profile_version, int) or isinstance(self.profile_version, bool):
+            raise TypeError("profile_version must be an integer")
+        if self.profile_version < 1:
+            raise ValueError("profile_version must be positive")
+        require_sha256_digest(self.profile_content_hash, "profile_content_hash")
+        for field_name in ("disposal_date", "recognized_through_date"):
+            if type(getattr(self, field_name)) is not date:
+                raise TypeError(f"{field_name} must be a date")
+        if self.recognized_through_date > self.disposal_date:
+            raise ValueError("recognized_through_date must not be after disposal_date")
+        for field_name in (
+            "original_quantity",
+            "consumed_quantity",
+            "residual_quantity",
+            "current_cost_local",
+            "consumed_cost_local",
+            "residual_cost_local",
+            "fx_rate_to_base",
+            "consumed_cost_base",
+            "residual_cost_base",
+        ):
+            _require_decimal(
+                getattr(self, field_name),
+                field_name,
+                positive=field_name
+                in {"original_quantity", "consumed_quantity", "fx_rate_to_base"},
+            )
+        if self.consumed_quantity + self.residual_quantity != self.original_quantity:
+            raise ValueError("amortized-cost quantity does not conserve original lot quantity")
+        if self.consumed_cost_local + self.residual_cost_local != self.current_cost_local:
+            raise ValueError("amortized local cost does not conserve current lot cost")
+        if not isinstance(self.calculation_lineage, CalculationLineage):
+            raise TypeError("calculation_lineage must be a CalculationLineage")
+        if not calculation_lineage_binds_output(
+            self.calculation_lineage,
+            output_payload=self.output_payload(),
+        ):
+            raise ValueError("amortized-cost evidence does not match calculation lineage")
+
+    def output_payload(self) -> dict[str, object]:
+        """Return the calculation output bound by the amortized-cost lineage."""
+
+        return {
+            "consumed_cost_base": self.consumed_cost_base,
+            "consumed_cost_local": self.consumed_cost_local,
+            "consumed_quantity": self.consumed_quantity,
+            "current_cost_local": self.current_cost_local,
+            "recognized_through_date": self.recognized_through_date,
+            "residual_cost_base": self.residual_cost_base,
+            "residual_cost_local": self.residual_cost_local,
+            "residual_quantity": self.residual_quantity,
+        }
+
+    def semantic_payload(self) -> dict[str, object]:
+        """Return complete profile, allocation, and calculation evidence for persistence."""
+
+        return {
+            "calculation_lineage": self.calculation_lineage.lineage_payload(),
+            "consumed_cost_base": self.consumed_cost_base,
+            "consumed_cost_local": self.consumed_cost_local,
+            "consumed_quantity": self.consumed_quantity,
+            "currency": self.currency,
+            "current_cost_local": self.current_cost_local,
+            "disposal_date": self.disposal_date,
+            "fx_rate_to_base": self.fx_rate_to_base,
+            "original_quantity": self.original_quantity,
+            "profile_content_hash": self.profile_content_hash,
+            "profile_id": self.profile_id,
+            "profile_version": self.profile_version,
+            "recognized_through_date": self.recognized_through_date,
+            "residual_cost_base": self.residual_cost_base,
+            "residual_cost_local": self.residual_cost_local,
+            "residual_quantity": self.residual_quantity,
+        }
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,6 +138,7 @@ class SourceLotDisposalAllocation:
     consumed_quantity: Decimal
     consumed_cost_local: Decimal
     consumed_cost_base: Decimal
+    amortized_cost_evidence: AmortizedCostAllocationEvidence | None = None
 
     def __post_init__(self) -> None:
         for field_name in ("source_lot_id", "source_transaction_id"):
@@ -51,6 +160,38 @@ class SourceLotDisposalAllocation:
         _require_decimal(self.consumed_quantity, "consumed_quantity", positive=True)
         _require_decimal(self.consumed_cost_local, "consumed_cost_local")
         _require_decimal(self.consumed_cost_base, "consumed_cost_base")
+        if self.amortized_cost_evidence is not None:
+            if not isinstance(self.amortized_cost_evidence, AmortizedCostAllocationEvidence):
+                raise TypeError(
+                    "amortized_cost_evidence must be an AmortizedCostAllocationEvidence or None"
+                )
+            if (
+                self.amortized_cost_evidence.consumed_quantity != self.consumed_quantity
+                or self.amortized_cost_evidence.consumed_cost_local != self.consumed_cost_local
+                or self.amortized_cost_evidence.consumed_cost_base != self.consumed_cost_base
+            ):
+                raise ValueError("amortized-cost evidence must match allocated quantity and cost")
+
+
+def source_lot_disposal_allocation_payload(
+    allocation: SourceLotDisposalAllocation,
+) -> dict[str, object]:
+    """Return one canonical allocation payload without changing legacy hash identity."""
+
+    if not isinstance(allocation, SourceLotDisposalAllocation):
+        raise TypeError("allocation must be a SourceLotDisposalAllocation")
+    payload: dict[str, object] = {
+        "allocation_ordinal": allocation.allocation_ordinal,
+        "consumed_cost_base": allocation.consumed_cost_base,
+        "consumed_cost_local": allocation.consumed_cost_local,
+        "consumed_quantity": allocation.consumed_quantity,
+        "source_acquisition_date": allocation.source_acquisition_date,
+        "source_lot_id": allocation.source_lot_id,
+        "source_transaction_id": allocation.source_transaction_id,
+    }
+    if allocation.amortized_cost_evidence is not None:
+        payload["amortized_cost_evidence"] = allocation.amortized_cost_evidence.semantic_payload()
+    return payload
 
 
 @dataclass(frozen=True, slots=True)
@@ -178,15 +319,7 @@ def _build_conserved_allocation_lineage(result: LotDisposalResult) -> Calculatio
         intermediate_precision=COST_BASIS_STATE_LEDGER_OUTPUT_V1.working_precision,
         input_payload={
             "allocations": [
-                {
-                    "allocation_ordinal": allocation.allocation_ordinal,
-                    "consumed_cost_base": allocation.consumed_cost_base,
-                    "consumed_cost_local": allocation.consumed_cost_local,
-                    "consumed_quantity": allocation.consumed_quantity,
-                    "source_acquisition_date": allocation.source_acquisition_date,
-                    "source_lot_id": allocation.source_lot_id,
-                    "source_transaction_id": allocation.source_transaction_id,
-                }
+                source_lot_disposal_allocation_payload(allocation)
                 for allocation in result.allocations
             ]
         },

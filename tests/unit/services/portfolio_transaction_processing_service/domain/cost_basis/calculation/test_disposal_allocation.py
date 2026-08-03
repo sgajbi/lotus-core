@@ -7,13 +7,20 @@ import pytest
 from portfolio_common.domain.calculation_lineage import calculation_lineage_binds_output
 
 from services.portfolio_transaction_processing_service.app.domain.cost_basis import (
+    AmortizedCostAllocationEvidence,
     LotDisposalResult,
     SourceLotDisposalAllocation,
     TransactionLotDisposal,
+    source_lot_disposal_allocation_payload,
 )
 from services.portfolio_transaction_processing_service.app.domain.cost_basis.state_lineage import (
     canonical_cost_basis_output_payload,
 )
+from services.portfolio_transaction_processing_service.app.domain.fixed_income_book_cost import (
+    allocate_recognized_lot_book_cost,
+    materialize_active_lot_amortized_cost_profile,
+)
+from tests.test_support.fixed_income_book_cost import resolved_fixed_income_book_cost_inputs
 
 
 def _allocation(
@@ -32,6 +39,38 @@ def _allocation(
         consumed_quantity=Decimal(quantity),
         consumed_cost_local=Decimal(local),
         consumed_cost_base=Decimal(base),
+    )
+
+
+def _amortized_cost_evidence() -> AmortizedCostAllocationEvidence:
+    profile = materialize_active_lot_amortized_cost_profile(
+        resolved_fixed_income_book_cost_inputs(),
+        profile_version=1,
+    )
+    projection = allocate_recognized_lot_book_cost(
+        profile,
+        disposal_date=date(2027, 1, 1),
+        original_quantity=Decimal("10"),
+        consumed_quantity=Decimal("2"),
+        fx_rate_to_base=Decimal("1.1"),
+    )
+    return AmortizedCostAllocationEvidence(
+        profile_id=projection.profile_id,
+        profile_version=projection.profile_version,
+        profile_content_hash=projection.profile_content_hash,
+        currency=projection.currency,
+        disposal_date=projection.disposal_date,
+        recognized_through_date=projection.recognized_through_date,
+        original_quantity=projection.original_quantity,
+        consumed_quantity=projection.consumed_quantity,
+        residual_quantity=projection.residual_quantity,
+        current_cost_local=projection.current_cost_local,
+        consumed_cost_local=projection.consumed_cost_local,
+        residual_cost_local=projection.residual_cost_local,
+        fx_rate_to_base=projection.fx_rate_to_base,
+        consumed_cost_base=projection.consumed_cost_base,
+        residual_cost_base=projection.residual_cost_base,
+        calculation_lineage=projection.calculation_lineage,
     )
 
 
@@ -75,6 +114,50 @@ def test_result_requires_exact_source_lot_conservation() -> None:
             }
         ),
     )
+
+
+def test_allocation_carries_complete_amortized_cost_evidence_without_changing_legacy_payload() -> (
+    None
+):
+    legacy = _allocation()
+    assert source_lot_disposal_allocation_payload(legacy) == {
+        "allocation_ordinal": 1,
+        "consumed_cost_base": Decimal("22"),
+        "consumed_cost_local": Decimal("20"),
+        "consumed_quantity": Decimal("2"),
+        "source_acquisition_date": date(2026, 1, 2),
+        "source_lot_id": "LOT-BUY_001",
+        "source_transaction_id": "BUY_001",
+    }
+
+    evidence = _amortized_cost_evidence()
+    allocation = SourceLotDisposalAllocation(
+        source_lot_id="LOT-BUY_001",
+        source_transaction_id="BUY_001",
+        source_acquisition_date=date(2026, 1, 2),
+        allocation_ordinal=1,
+        consumed_quantity=evidence.consumed_quantity,
+        consumed_cost_local=evidence.consumed_cost_local,
+        consumed_cost_base=evidence.consumed_cost_base,
+        amortized_cost_evidence=evidence,
+    )
+
+    payload = source_lot_disposal_allocation_payload(allocation)
+    assert payload["amortized_cost_evidence"] == evidence.semantic_payload()
+
+
+def test_allocation_rejects_amortized_cost_evidence_that_does_not_match_consumed_cost() -> None:
+    with pytest.raises(ValueError, match="must match allocated"):
+        SourceLotDisposalAllocation(
+            source_lot_id="LOT-BUY_001",
+            source_transaction_id="BUY_001",
+            source_acquisition_date=date(2026, 1, 2),
+            allocation_ordinal=1,
+            consumed_quantity=Decimal("2"),
+            consumed_cost_local=Decimal("21"),
+            consumed_cost_base=Decimal("22"),
+            amortized_cost_evidence=_amortized_cost_evidence(),
+        )
 
 
 @pytest.mark.parametrize(
