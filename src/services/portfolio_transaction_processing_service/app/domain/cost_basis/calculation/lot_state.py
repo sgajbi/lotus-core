@@ -1,6 +1,7 @@
 """Define immutable and mutable state used during lot calculations."""
 
 from dataclasses import dataclass
+from datetime import date
 from decimal import Decimal
 
 from portfolio_common.domain.transaction.numeric_policy import (
@@ -24,11 +25,15 @@ class CostLot:
     def __init__(
         self,
         transaction_id: str,
+        lot_id: str,
+        acquisition_date: date,
         quantity: Decimal,
         cost_per_share_local: Decimal,
         cost_per_share_base: Decimal,
     ):
         self.transaction_id = transaction_id
+        self.lot_id = lot_id
+        self.acquisition_date = acquisition_date
         self.original_quantity = quantity
         self.remaining_quantity = quantity
         self.cost_per_share_local = cost_per_share_local

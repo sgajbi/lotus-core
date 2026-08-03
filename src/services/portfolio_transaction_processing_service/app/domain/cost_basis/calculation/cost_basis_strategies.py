@@ -15,6 +15,7 @@ from .average_cost_source_allocation import (
     AverageCostPool,
     AverageCostSourceAllocation,
 )
+from .disposal_allocation import LotDisposalResult, SourceLotDisposalAllocation
 from .lot_state import CostLot, OpenLotState
 from .residual_allocation import allocate_nonnegative_storage_share
 
@@ -93,7 +94,9 @@ def _non_positive_sell_quantity_error(sell_quantity: Decimal) -> str | None:
 def _consume_next_fifo_lot(
     lots_for_instrument: deque[CostLot],
     required_quantity: Decimal,
-) -> tuple[Decimal, Decimal, Decimal, Decimal]:
+    *,
+    allocation_ordinal: int,
+) -> tuple[SourceLotDisposalAllocation, Decimal]:
     current_lot = lots_for_instrument[0]
     state_before = current_lot.open_state()
     matched_quantity = min(required_quantity, current_lot.remaining_quantity)
@@ -112,18 +115,25 @@ def _consume_next_fifo_lot(
     else:
         state_after = current_lot.open_state()
 
-    return (
-        COST_BASIS_STATE_LEDGER_OUTPUT_V1.subtract(
+    allocation = SourceLotDisposalAllocation(
+        source_lot_id=current_lot.lot_id,
+        source_transaction_id=current_lot.transaction_id,
+        source_acquisition_date=current_lot.acquisition_date,
+        allocation_ordinal=allocation_ordinal,
+        consumed_cost_base=COST_BASIS_STATE_LEDGER_OUTPUT_V1.subtract(
             state_before.cost_base,
             state_after.cost_base,
             field_name="disposed_cost_base",
         ),
-        COST_BASIS_STATE_LEDGER_OUTPUT_V1.subtract(
+        consumed_cost_local=COST_BASIS_STATE_LEDGER_OUTPUT_V1.subtract(
             state_before.cost_local,
             state_after.cost_local,
             field_name="disposed_cost_local",
         ),
-        matched_quantity,
+        consumed_quantity=matched_quantity,
+    )
+    return (
+        allocation,
         COST_BASIS_STATE_LEDGER_OUTPUT_V1.subtract(
             required_quantity,
             matched_quantity,
@@ -173,6 +183,8 @@ class FIFOBasisStrategy:
 
         new_lot = CostLot(
             transaction_id=transaction.transaction_id,
+            lot_id=f"LOT-{transaction.transaction_id}",
+            acquisition_date=transaction.transaction_date.date(),
             quantity=quantity,
             cost_per_share_local=cost_per_share_local,
             cost_per_share_base=cost_per_share_base,
@@ -189,6 +201,15 @@ class FIFOBasisStrategy:
     def consume_sell_quantity(
         self, portfolio_id: str, instrument_id: str, sell_quantity: Decimal
     ) -> tuple[Decimal, Decimal, Decimal, str | None]:
+        return self.consume_sell_quantity_with_allocations(
+            portfolio_id,
+            instrument_id,
+            sell_quantity,
+        ).legacy_tuple()
+
+    def consume_sell_quantity_with_allocations(
+        self, portfolio_id: str, instrument_id: str, sell_quantity: Decimal
+    ) -> LotDisposalResult:
         key = (portfolio_id, instrument_id)
         required_quantity = sell_quantity
         total_matched_cost_base = Decimal(0)
@@ -197,39 +218,37 @@ class FIFOBasisStrategy:
         available_qty = self.get_available_quantity(portfolio_id=key[0], instrument_id=key[1])
         invalid_quantity_error = _non_positive_sell_quantity_error(required_quantity)
         if invalid_quantity_error is not None:
-            return Decimal(0), Decimal(0), Decimal(0), invalid_quantity_error
+            return LotDisposalResult.failed(invalid_quantity_error)
 
         if required_quantity > available_qty:
-            return (
-                Decimal(0),
-                Decimal(0),
-                Decimal(0),
-                "Sell quantity "
-                f"({required_quantity}) exceeds available holdings "
-                f"({available_qty}).",
+            return LotDisposalResult.failed(
+                f"Sell quantity ({required_quantity}) exceeds available holdings ({available_qty})."
             )
+        if required_quantity == Decimal(0):
+            return LotDisposalResult.empty()
 
         lots_for_instrument = self._open_lots[key]
+        allocations: list[SourceLotDisposalAllocation] = []
         while required_quantity > 0 and lots_for_instrument:
-            matched_cost_base, matched_cost_local, matched_quantity, required_quantity = (
-                _consume_next_fifo_lot(
-                    lots_for_instrument,
-                    required_quantity,
-                )
+            allocation, required_quantity = _consume_next_fifo_lot(
+                lots_for_instrument,
+                required_quantity,
+                allocation_ordinal=len(allocations) + 1,
             )
+            allocations.append(allocation)
             total_matched_cost_base = COST_BASIS_STATE_LEDGER_OUTPUT_V1.add(
                 total_matched_cost_base,
-                matched_cost_base,
+                allocation.consumed_cost_base,
                 field_name="disposed_cost_base",
             )
             total_matched_cost_local = COST_BASIS_STATE_LEDGER_OUTPUT_V1.add(
                 total_matched_cost_local,
-                matched_cost_local,
+                allocation.consumed_cost_local,
                 field_name="disposed_cost_local",
             )
             consumed_quantity = COST_BASIS_STATE_LEDGER_OUTPUT_V1.add(
                 consumed_quantity,
-                matched_quantity,
+                allocation.consumed_quantity,
                 field_name="consumed_quantity",
             )
         self._available_quantities[key] = COST_BASIS_STATE_LEDGER_OUTPUT_V1.subtract(
@@ -237,7 +256,12 @@ class FIFOBasisStrategy:
             consumed_quantity,
             field_name="available_quantity",
         )
-        return total_matched_cost_base, total_matched_cost_local, consumed_quantity, None
+        return LotDisposalResult(
+            cost_base=total_matched_cost_base,
+            cost_local=total_matched_cost_local,
+            consumed_quantity=consumed_quantity,
+            allocations=tuple(allocations),
+        )
 
     def get_available_quantity(self, portfolio_id: str, instrument_id: str) -> Decimal:
         key = (portfolio_id, instrument_id)

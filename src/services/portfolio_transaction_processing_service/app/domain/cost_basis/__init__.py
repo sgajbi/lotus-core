@@ -24,6 +24,10 @@ from .calculation.cost_basis_strategies import (
     CostBasisStrategy,
     FIFOBasisStrategy,
 )
+from .calculation.disposal_allocation import (
+    LotDisposalResult,
+    SourceLotDisposalAllocation,
+)
 from .calculation.engine_input import build_cost_basis_engine_input, normalize_cost_fee_amount
 from .calculation.lot_disposition import LotDispositionEngine
 from .calculation.lot_state import CostLot, OpenLotState
@@ -99,10 +103,12 @@ __all__ = [
     "INCREMENTAL_SAFE_LOT_BEHAVIORS",
     "Fees",
     "LotDispositionEngine",
+    "LotDisposalResult",
     "LOT_OPENING_BEHAVIORS",
     "LOT_STATE_MUTATING_BEHAVIORS",
     "OpenLotState",
     "STATE_DEPENDENT_LOT_BEHAVIORS",
+    "SourceLotDisposalAllocation",
     "CostBasisTransaction",
     "TransactionOrderKey",
     "calculate_corporate_action_cash_economics",

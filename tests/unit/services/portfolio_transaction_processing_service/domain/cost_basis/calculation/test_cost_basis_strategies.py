@@ -1,7 +1,7 @@
 """Verify domain-owned FIFO and average-cost strategy behavior."""
 
 from collections import deque
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
 import pytest
@@ -1123,6 +1123,75 @@ def test_fifo_multi_lot_disposition(fifo_strategy: FIFOBasisStrategy):
     lot_key = ("P1", "FIFO_STOCK")
     assert len(fifo_strategy._open_lots[lot_key]) == 1
     assert fifo_strategy._open_lots[lot_key][0].remaining_quantity == Decimal("30")
+
+
+def test_fifo_disposition_exposes_ordered_source_lot_allocations(
+    fifo_strategy: FIFOBasisStrategy,
+) -> None:
+    buy1 = CostBasisTransaction(
+        transaction_id="FIFO_ALLOC_BUY_01",
+        portfolio_id="P1",
+        instrument_id="FIFO_ALLOC_STOCK",
+        security_id="S1",
+        transaction_type="BUY",
+        transaction_date=datetime(2023, 1, 1),
+        quantity=Decimal("100"),
+        gross_transaction_amount=Decimal("1000"),
+        net_cost=Decimal("1100"),
+        net_cost_local=Decimal("1000"),
+        trade_currency="EUR",
+        portfolio_base_currency="USD",
+    )
+    buy2 = buy1.model_copy(
+        update={
+            "transaction_id": "FIFO_ALLOC_BUY_02",
+            "transaction_date": datetime(2023, 1, 2),
+            "quantity": Decimal("50"),
+            "gross_transaction_amount": Decimal("600"),
+            "net_cost": Decimal("690"),
+            "net_cost_local": Decimal("600"),
+        }
+    )
+    fifo_strategy.add_buy_lot(buy1)
+    fifo_strategy.add_buy_lot(buy2)
+
+    result = fifo_strategy.consume_sell_quantity_with_allocations(
+        "P1",
+        "FIFO_ALLOC_STOCK",
+        Decimal("120"),
+    )
+
+    assert result.legacy_tuple() == (
+        Decimal("1376"),
+        Decimal("1240"),
+        Decimal("120"),
+        None,
+    )
+    assert [allocation.source_transaction_id for allocation in result.allocations] == [
+        "FIFO_ALLOC_BUY_01",
+        "FIFO_ALLOC_BUY_02",
+    ]
+    assert [allocation.source_lot_id for allocation in result.allocations] == [
+        "LOT-FIFO_ALLOC_BUY_01",
+        "LOT-FIFO_ALLOC_BUY_02",
+    ]
+    assert [allocation.source_acquisition_date for allocation in result.allocations] == [
+        date(2023, 1, 1),
+        date(2023, 1, 2),
+    ]
+    assert [allocation.allocation_ordinal for allocation in result.allocations] == [1, 2]
+    assert [allocation.consumed_quantity for allocation in result.allocations] == [
+        Decimal("100"),
+        Decimal("20"),
+    ]
+    assert [allocation.consumed_cost_local for allocation in result.allocations] == [
+        Decimal("1000"),
+        Decimal("240"),
+    ]
+    assert [allocation.consumed_cost_base for allocation in result.allocations] == [
+        Decimal("1100"),
+        Decimal("276"),
+    ]
 
 
 def test_fifo_available_quantity_does_not_scan_open_lots(
