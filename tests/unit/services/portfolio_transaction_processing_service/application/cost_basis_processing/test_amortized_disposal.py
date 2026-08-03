@@ -114,6 +114,7 @@ def _calculation(*transactions: dict[str, object]) -> CostBasisCalculationResult
         open_lot_persistence_scope=OpenLotPersistenceScope.COMPLETE_SNAPSHOT,
         average_cost_pool_transition=None,
         disposals=timeline.disposals,
+        source_transactions=timeline.source_transactions,
     )
 
 
@@ -145,6 +146,7 @@ async def test_full_rebuild_overlays_sequential_partial_sells_and_lineage() -> N
         open_lot_persistence_scope=OpenLotPersistenceScope.COMPLETE_SNAPSHOT,
         average_cost_pool_transition=None,
         disposals=timeline.disposals,
+        source_transactions=timeline.source_transactions,
     )
     profiles = _EffectiveProfiles()
 
@@ -182,6 +184,50 @@ async def test_full_rebuild_overlays_sequential_partial_sells_and_lineage() -> N
 
 
 @pytest.mark.asyncio
+async def test_incremental_sell_resolves_restored_source_lot_economics() -> None:
+    restored_buy = _raw_transaction(
+        "BUY_1",
+        "2026-01-01T00:00:00Z",
+        "BUY",
+        "60",
+        "58.2",
+    )
+    restored_buy["source_lot_order_quantity"] = Decimal("100")
+    restored_buy["net_cost_local"] = "58.2"
+    restored_buy["net_cost"] = "58.2"
+    timeline = build_cost_basis_timeline_processor().process_increment(
+        initial_open_lots_raw=[restored_buy],
+        new_transactions_raw=[
+            _raw_transaction("SELL_1", "2026-06-30T00:00:00Z", "SELL", "20", "35")
+        ],
+    )
+    calculation = CostBasisCalculationResult(
+        processed=timeline.processed,
+        errored=timeline.errored,
+        open_lot_states=timeline.open_lot_states,
+        incremental=True,
+        open_lot_persistence_scope=OpenLotPersistenceScope.SELECTED_LOTS,
+        average_cost_pool_transition=None,
+        disposals=timeline.disposals,
+        source_transactions=timeline.source_transactions,
+    )
+
+    decorated = await apply_effective_amortized_cost_to_disposals(
+        calculation,
+        portfolio=_accounting_portfolio(),
+        cost_basis_method=CostBasisMethod.FIFO,
+        profiles=_EffectiveProfiles(),  # type: ignore[arg-type]
+    )
+
+    evidence = decorated.disposals[0].result.allocations[0].amortized_cost_evidence
+    assert evidence is not None
+    assert evidence.original_quantity == Decimal("100")
+    assert evidence.open_quantity_before == Decimal("60")
+    assert evidence.consumed_quantity == Decimal("20")
+    assert [transaction.transaction_id for transaction in decorated.processed] == ["SELL_1"]
+
+
+@pytest.mark.asyncio
 async def test_missing_accounting_scope_preserves_legacy_calculation_without_query() -> None:
     timeline = build_cost_basis_timeline_processor().process_transactions(
         existing_transactions_raw=[],
@@ -198,6 +244,7 @@ async def test_missing_accounting_scope_preserves_legacy_calculation_without_que
         open_lot_persistence_scope=OpenLotPersistenceScope.COMPLETE_SNAPSHOT,
         average_cost_pool_transition=None,
         disposals=timeline.disposals,
+        source_transactions=timeline.source_transactions,
     )
     profiles = _EffectiveProfiles()
 
@@ -388,21 +435,26 @@ async def test_missing_disposal_transaction_fails_closed() -> None:
 
 
 @pytest.mark.asyncio
-async def test_naive_booking_timestamp_uses_utc_business_date() -> None:
+async def test_naive_booking_timestamp_fails_closed() -> None:
     calculation = _calculation(
         _raw_transaction("BUY_1", "2026-01-01T00:00:00", "BUY", "100", "97"),
         _raw_transaction("SELL_1", "2026-06-30T00:00:00", "SELL", "40", "60"),
     )
-    profiles = _EffectiveProfiles()
-
-    await apply_effective_amortized_cost_to_disposals(
-        calculation,
-        portfolio=_accounting_portfolio(),
-        cost_basis_method=CostBasisMethod.FIFO,
-        profiles=profiles,  # type: ignore[arg-type]
-    )
-
-    assert profiles.requests[0].effective_date.isoformat() == "2026-06-30"
+    processed = [
+        transaction.model_copy(
+            update={"transaction_date": transaction.transaction_date.replace(tzinfo=None)}
+        )
+        if transaction.transaction_id == "SELL_1"
+        else transaction
+        for transaction in calculation.processed
+    ]
+    with pytest.raises(ValueError, match="timezone-aware transaction timestamp"):
+        await apply_effective_amortized_cost_to_disposals(
+            replace(calculation, processed=processed),
+            portfolio=_accounting_portfolio(),
+            cost_basis_method=CostBasisMethod.FIFO,
+            profiles=_EffectiveProfiles(),  # type: ignore[arg-type]
+        )
 
 
 @pytest.mark.asyncio

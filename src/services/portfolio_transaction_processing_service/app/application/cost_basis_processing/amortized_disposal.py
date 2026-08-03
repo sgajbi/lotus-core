@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import replace
 from datetime import date, timezone
 from decimal import Decimal
@@ -55,7 +56,8 @@ async def apply_effective_amortized_cost_to_disposals(
         raise ValueError("portfolio accounting scope is incomplete")
 
     transactions_by_id = {
-        transaction.transaction_id: transaction for transaction in calculation.processed
+        **calculation.source_transactions,
+        **{transaction.transaction_id: transaction for transaction in calculation.processed},
     }
     requests_by_allocation: dict[tuple[str, int], EffectiveLotAmortizedCostProfileRequest] = {}
     for disposal in calculation.disposals:
@@ -82,8 +84,13 @@ async def apply_effective_amortized_cost_to_disposals(
         raise ValueError("lot-level amortized cost requires FIFO source-lot identity")
 
     processed = [transaction.model_copy() for transaction in calculation.processed]
-    transactions_by_id = {transaction.transaction_id: transaction for transaction in processed}
-    remaining_quantity_by_source = _initial_open_quantities(processed)
+    transactions_by_id = {
+        **calculation.source_transactions,
+        **{transaction.transaction_id: transaction for transaction in processed},
+    }
+    remaining_quantity_by_source = _initial_open_quantities(
+        calculation.source_transactions.values()
+    )
     decorated_disposals: list[TransactionLotDisposal] = []
     for disposal in calculation.disposals:
         transaction = _required_transaction(transactions_by_id, disposal.disposal_transaction_id)
@@ -199,11 +206,11 @@ def _decorate_allocation(
 
 
 def _initial_open_quantities(
-    processed: list[CostBasisTransaction],
+    source_transactions: Iterable[CostBasisTransaction],
 ) -> dict[str, Decimal]:
     return {
         transaction.transaction_id: transaction.quantity
-        for transaction in processed
+        for transaction in source_transactions
         if transaction.transaction_type == "BUY" and transaction.quantity > Decimal(0)
     }
 
@@ -345,5 +352,5 @@ def _required_transaction(
 def _utc_business_date(transaction: CostBasisTransaction) -> date:
     timestamp = transaction.transaction_date
     if timestamp.tzinfo is None or timestamp.utcoffset() is None:
-        timestamp = timestamp.replace(tzinfo=timezone.utc)
+        raise ValueError("amortized disposal requires a timezone-aware transaction timestamp")
     return cast(date, timestamp.astimezone(timezone.utc).date())

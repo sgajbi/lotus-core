@@ -39,6 +39,10 @@ from .lot_state_persistence import persist_open_lot_state
 from .preparation import CostProcessingRoute, PreparedCostTransaction
 from .transaction_persistence import persist_cost_basis_transactions
 
+# Authority corrections currently rematerialize profiles without replaying affected booked
+# disposals. Keep production composition fail-closed until issue #903 supplies durable replay.
+_AMORTIZED_DISPOSAL_RUNTIME_ENABLED = False
+
 
 class PreparedCostProcessingUseCase:
     """Persist one prepared transaction and stage all resulting domain effects."""
@@ -156,12 +160,13 @@ class PreparedCostProcessingUseCase:
             cost_basis_method=prepared.cost_basis_method,
         )
         _raise_for_calculation_errors(calculation.errored)
-        calculation = await apply_effective_amortized_cost_to_disposals(
-            calculation,
-            portfolio=portfolio,
-            cost_basis_method=prepared.cost_basis_method,
-            profiles=amortized_cost_profiles,
-        )
+        if _AMORTIZED_DISPOSAL_RUNTIME_ENABLED:
+            calculation = await apply_effective_amortized_cost_to_disposals(
+                calculation,
+                portfolio=portfolio,
+                cost_basis_method=prepared.cost_basis_method,
+                profiles=amortized_cost_profiles,
+            )
         persisted_transactions = await persist_cost_basis_transactions(
             processed=calculation.processed,
             incoming_transaction_ids={transaction.transaction_id},

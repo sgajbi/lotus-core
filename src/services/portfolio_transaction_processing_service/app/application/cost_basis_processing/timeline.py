@@ -40,6 +40,7 @@ class CostBasisTimelineResult:
     errored: list[CostCalculationError]
     open_lot_states: dict[str, OpenLotState]
     disposals: tuple[TransactionLotDisposal, ...]
+    source_transactions: dict[str, CostBasisTransaction]
 
 
 def build_cost_basis_timeline_processor(
@@ -123,6 +124,9 @@ class CostBasisTimelineProcessor:
                 disposals=self._disposition_engine.disposal_records(
                     transaction_ids=accepted_transaction_ids
                 ),
+                source_transactions={
+                    transaction.transaction_id: transaction for transaction in processed_timeline
+                },
             )
 
     def process_increment(
@@ -153,6 +157,10 @@ class CostBasisTimelineProcessor:
                 disposals=self._disposition_engine.disposal_records(
                     transaction_ids=accepted_transaction_ids
                 ),
+                source_transactions={
+                    transaction.transaction_id: transaction
+                    for transaction in (*valid_initial_lots, *processed_new)
+                },
             )
 
     @staticmethod
