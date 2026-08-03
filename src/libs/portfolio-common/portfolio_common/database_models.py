@@ -2519,6 +2519,18 @@ class LotDisposalAllocationRecord(Base):
     consumed_quantity = Column(ExactNumeric(18, 10), nullable=False)
     consumed_cost_local = Column(ExactNumeric(18, 10), nullable=False)
     consumed_cost_base = Column(ExactNumeric(18, 10), nullable=False)
+    amortized_cost_profile_id = Column(String(96), nullable=True)
+    amortized_cost_profile_version = Column(Integer, nullable=True)
+    amortized_cost_profile_content_hash = Column(String(64), nullable=True)
+    amortized_cost_currency = Column(String(3), nullable=True)
+    amortized_cost_recognized_through = Column(Date, nullable=True)
+    amortized_cost_original_quantity = Column(ExactNumeric(18, 10), nullable=True)
+    amortized_cost_residual_quantity = Column(ExactNumeric(18, 10), nullable=True)
+    amortized_cost_current_local = Column(ExactNumeric(18, 10), nullable=True)
+    amortized_cost_residual_local = Column(ExactNumeric(18, 10), nullable=True)
+    amortized_cost_fx_rate_to_base = Column(ExactNumeric(18, 10), nullable=True)
+    amortized_cost_residual_base = Column(ExactNumeric(18, 10), nullable=True)
+    amortized_cost_calculation_lineage = Column(JSONB(none_as_null=True), nullable=True)
     allocation_content_hash = Column(String(64), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
@@ -2532,6 +2544,24 @@ class LotDisposalAllocationRecord(Base):
                 "lot_disposal_receipts.security_id",
             ],
             name="fk_lot_disposal_allocation_receipt",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            [
+                "amortized_cost_profile_id",
+                "amortized_cost_profile_version",
+                "source_lot_id",
+                "portfolio_id",
+                "security_id",
+            ],
+            [
+                "lot_amortized_cost_profiles.profile_id",
+                "lot_amortized_cost_profiles.profile_version",
+                "lot_amortized_cost_profiles.lot_id",
+                "lot_amortized_cost_profiles.portfolio_id",
+                "lot_amortized_cost_profiles.security_id",
+            ],
+            name="fk_lot_disposal_allocation_amort_profile",
             ondelete="RESTRICT",
         ),
         ForeignKeyConstraint(
@@ -2588,6 +2618,58 @@ class LotDisposalAllocationRecord(Base):
         CheckConstraint(
             "allocation_content_hash ~ '^[0-9a-f]{64}$'",
             name="ck_lot_disposal_allocation_hash",
+        ),
+        CheckConstraint(
+            "(amortized_cost_profile_id IS NULL "
+            "AND amortized_cost_profile_version IS NULL "
+            "AND amortized_cost_profile_content_hash IS NULL "
+            "AND amortized_cost_currency IS NULL "
+            "AND amortized_cost_recognized_through IS NULL "
+            "AND amortized_cost_original_quantity IS NULL "
+            "AND amortized_cost_residual_quantity IS NULL "
+            "AND amortized_cost_current_local IS NULL "
+            "AND amortized_cost_residual_local IS NULL "
+            "AND amortized_cost_fx_rate_to_base IS NULL "
+            "AND amortized_cost_residual_base IS NULL "
+            "AND amortized_cost_calculation_lineage IS NULL) OR ("
+            "amortized_cost_profile_id IS NOT NULL "
+            "AND amortized_cost_profile_version IS NOT NULL "
+            "AND amortized_cost_profile_content_hash IS NOT NULL "
+            "AND amortized_cost_currency IS NOT NULL "
+            "AND amortized_cost_recognized_through IS NOT NULL "
+            "AND amortized_cost_original_quantity IS NOT NULL "
+            "AND amortized_cost_residual_quantity IS NOT NULL "
+            "AND amortized_cost_current_local IS NOT NULL "
+            "AND amortized_cost_residual_local IS NOT NULL "
+            "AND amortized_cost_fx_rate_to_base IS NOT NULL "
+            "AND amortized_cost_residual_base IS NOT NULL "
+            "AND amortized_cost_calculation_lineage IS NOT NULL)",
+            name="ck_lot_disposal_allocation_amort_shape",
+        ),
+        _finite_numeric_check_constraint(
+            "ck_lot_disposal_allocation_amort_finite",
+            "amortized_cost_original_quantity",
+            "amortized_cost_residual_quantity",
+            "amortized_cost_current_local",
+            "amortized_cost_residual_local",
+            "amortized_cost_fx_rate_to_base",
+            "amortized_cost_residual_base",
+        ),
+        CheckConstraint(
+            "amortized_cost_profile_id IS NULL OR ("
+            "amortized_cost_profile_version >= 1 "
+            "AND amortized_cost_profile_id = btrim(amortized_cost_profile_id) "
+            "AND amortized_cost_profile_id <> '' "
+            "AND amortized_cost_profile_content_hash ~ '^[0-9a-f]{64}$' "
+            "AND amortized_cost_currency ~ '^[A-Z]{3}$' "
+            "AND amortized_cost_original_quantity > 0 "
+            "AND amortized_cost_residual_quantity >= 0 "
+            "AND amortized_cost_current_local >= 0 "
+            "AND amortized_cost_residual_local >= 0 "
+            "AND amortized_cost_fx_rate_to_base > 0 "
+            "AND amortized_cost_residual_base >= 0 "
+            "AND jsonb_typeof(amortized_cost_calculation_lineage) = 'object')",
+            name="ck_lot_disposal_allocation_amort_values",
         ),
         Index(
             "ix_lot_disposal_allocation_source",
@@ -2751,6 +2833,14 @@ class LotAmortizedCostProfileRecord(Base):
             "profile_id",
             "profile_version",
             name="uq_lot_amort_profile_version",
+        ),
+        UniqueConstraint(
+            "profile_id",
+            "profile_version",
+            "lot_id",
+            "portfolio_id",
+            "security_id",
+            name="uq_lot_amort_profile_allocation_scope",
         ),
         ForeignKeyConstraint(
             ["tenant_id", "legal_book_id", "portfolio_id"],
