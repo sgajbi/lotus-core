@@ -2,23 +2,22 @@
 
 from typing import Protocol
 
-from ...domain.cost_basis import TransactionLotDisposal
+from ...domain.cost_basis import LotDisposalReceiptState
 
 
 class CostBasisLotDisposalPort(Protocol):
     """Append disposal receipts and reconcile their current transaction pointers."""
 
-    async def reconcile_current_disposals(
+    async def reconcile_disposal_receipts(
         self,
         *,
-        affected_transaction_ids: tuple[str, ...],
-        disposals: tuple[TransactionLotDisposal, ...],
+        receipt_states: tuple[LotDisposalReceiptState, ...],
     ) -> None:
-        """Persist current receipts for one deterministic recalculation suffix.
+        """Reconcile one immutable state for every affected transaction.
 
-        Implementations must retain previously recorded receipt versions, classify an
-        exact retry as neutral, reject conflicting receipt content, and atomically move
-        or clear the current pointer for every affected transaction.
+        Implementations must retain all prior versions, classify an exact semantic retry
+        as neutral, append changed recalculations contiguously, and represent removal of
+        prior disposal evidence with an explicit VOIDED version.
         """
 
         ...
