@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import defaultdict
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import date
 from decimal import ROUND_DOWN, Decimal
 from typing import cast
 
@@ -108,6 +109,8 @@ class AverageCostPool:
 @dataclass(frozen=True, slots=True)
 class AverageCostSourceContribution:
     book_key: BookKey
+    source_lot_id: str
+    source_acquisition_date: date
     generation: int
     quantity: Decimal
     cost_local: Decimal
@@ -124,6 +127,7 @@ class AverageCostSourceAllocation:
 
     def __init__(self) -> None:
         self._contributions: dict[str, AverageCostSourceContribution] = {}
+        self._source_ids_by_key: dict[BookKey, list[str]] = defaultdict(list)
         self._generation_by_key: dict[BookKey, int] = defaultdict(int)
         self._disposal_scale_by_key: dict[BookKey, Decimal] = defaultdict(lambda: Decimal(1))
         self._segment_start_scale_by_key: dict[BookKey, Decimal] = defaultdict(lambda: Decimal(1))
@@ -138,13 +142,19 @@ class AverageCostSourceAllocation:
         *,
         book_key: BookKey,
         source_transaction_id: str,
+        source_lot_id: str,
+        source_acquisition_date: date,
         quantity: Decimal,
         cost_local: Decimal,
         cost_base: Decimal,
         pool_quantity_after: Decimal,
     ) -> None:
+        if source_transaction_id in self._contributions:
+            raise ValueError("AVCO source transaction identity must be unique")
         self._contributions[source_transaction_id] = AverageCostSourceContribution(
             book_key=book_key,
+            source_lot_id=source_lot_id,
+            source_acquisition_date=source_acquisition_date,
             generation=self._generation_by_key[book_key],
             quantity=quantity,
             cost_local=cost_local,
@@ -155,6 +165,7 @@ class AverageCostSourceAllocation:
             cost_local_generation=self._cost_local_generation_by_key[book_key],
             cost_base_generation=self._cost_base_generation_by_key[book_key],
         )
+        self._source_ids_by_key[book_key].append(source_transaction_id)
         self._segment_start_scale_by_key[book_key] = self._disposal_scale_by_key[book_key]
         self._segment_start_quantity_by_key[book_key] = pool_quantity_after
 
@@ -221,23 +232,40 @@ class AverageCostSourceAllocation:
         self,
         pools: Mapping[BookKey, AverageCostPool],
     ) -> dict[str, OpenLotState]:
-        last_quantity_source_by_key: dict[BookKey, str] = {}
-        for source_transaction_id, contribution in self._contributions.items():
-            if contribution.generation == self._generation_by_key[contribution.book_key]:
-                last_quantity_source_by_key[contribution.book_key] = source_transaction_id
+        states: dict[str, OpenLotState] = {}
+        for book_key in self._source_ids_by_key:
+            states.update(self.materialize_book(book_key=book_key, pool=pools[book_key]))
+        return states
 
-        allocated_by_key: dict[BookKey, AverageCostPool] = defaultdict(AverageCostPool)
+    def materialize_book(
+        self,
+        *,
+        book_key: BookKey,
+        pool: AverageCostPool,
+    ) -> dict[str, OpenLotState]:
+        """Materialize only one book in source order for bounded disposal evidence."""
+
+        contributions = tuple(
+            (source_transaction_id, self._contributions[source_transaction_id])
+            for source_transaction_id in self._source_ids_by_key[book_key]
+        )
+        last_quantity_source_id = next(
+            (
+                source_transaction_id
+                for source_transaction_id, contribution in reversed(contributions)
+                if contribution.generation == self._generation_by_key[book_key]
+            ),
+            None,
+        )
+        allocated = AverageCostPool()
         quantities: dict[str, Decimal] = {}
-        for source_transaction_id, contribution in self._contributions.items():
-            book_key = contribution.book_key
-            allocated = allocated_by_key[book_key]
-            pool = pools[book_key]
+        for source_transaction_id, contribution in contributions:
             disposal_factor = self._disposal_factor(contribution)
             quantity = _materialized_quantity(
                 contribution=contribution,
                 source_transaction_id=source_transaction_id,
                 current_generation=self._generation_by_key[book_key],
-                last_source_id=last_quantity_source_by_key.get(book_key),
+                last_source_id=last_quantity_source_id,
                 disposal_factor=disposal_factor,
                 aggregate=pool.quantity,
                 allocated=allocated.quantity,
@@ -249,23 +277,19 @@ class AverageCostSourceAllocation:
                 field_name="allocated_quantity",
             )
 
-        last_local_cost_source_by_key: dict[BookKey, str] = {}
-        last_base_cost_source_by_key: dict[BookKey, str] = {}
-        for source_transaction_id, contribution in self._contributions.items():
+        last_local_cost_source_id: str | None = None
+        last_base_cost_source_id: str | None = None
+        for source_transaction_id, contribution in contributions:
             if quantities[source_transaction_id] <= Decimal(0):
                 continue
-            book_key = contribution.book_key
             if contribution.cost_local_generation == self._cost_local_generation_by_key[book_key]:
-                last_local_cost_source_by_key[book_key] = source_transaction_id
+                last_local_cost_source_id = source_transaction_id
             if contribution.cost_base_generation == self._cost_base_generation_by_key[book_key]:
-                last_base_cost_source_by_key[book_key] = source_transaction_id
+                last_base_cost_source_id = source_transaction_id
 
-        allocated_by_key = defaultdict(AverageCostPool)
+        allocated = AverageCostPool()
         states: dict[str, OpenLotState] = {}
-        for source_transaction_id, contribution in self._contributions.items():
-            book_key = contribution.book_key
-            allocated = allocated_by_key[book_key]
-            pool = pools[book_key]
+        for source_transaction_id, contribution in contributions:
             disposal_factor = self._disposal_factor(contribution)
             quantity = quantities[source_transaction_id]
             state = OpenLotState(
@@ -276,7 +300,7 @@ class AverageCostSourceAllocation:
                     source_generation=contribution.cost_local_generation,
                     current_generation=self._cost_local_generation_by_key[book_key],
                     source_transaction_id=source_transaction_id,
-                    last_source_id=last_local_cost_source_by_key.get(book_key),
+                    last_source_id=last_local_cost_source_id,
                     scale=self._cost_local_scale_by_key[book_key],
                     scale_at_entry=contribution.cost_local_scale_at_entry,
                     disposal_factor=disposal_factor,
@@ -290,7 +314,7 @@ class AverageCostSourceAllocation:
                     source_generation=contribution.cost_base_generation,
                     current_generation=self._cost_base_generation_by_key[book_key],
                     source_transaction_id=source_transaction_id,
-                    last_source_id=last_base_cost_source_by_key.get(book_key),
+                    last_source_id=last_base_cost_source_id,
                     scale=self._cost_base_scale_by_key[book_key],
                     scale_at_entry=contribution.cost_base_scale_at_entry,
                     disposal_factor=disposal_factor,
@@ -307,6 +331,17 @@ class AverageCostSourceAllocation:
             )
 
         return states
+
+    def source_contributions(
+        self,
+        book_key: BookKey,
+    ) -> tuple[tuple[str, AverageCostSourceContribution], ...]:
+        """Return immutable source metadata for one book in allocation order."""
+
+        return tuple(
+            (source_transaction_id, self._contributions[source_transaction_id])
+            for source_transaction_id in self._source_ids_by_key[book_key]
+        )
 
     def _disposal_factor(self, contribution: AverageCostSourceContribution) -> Decimal:
         if contribution.generation != self._generation_by_key[contribution.book_key]:
@@ -344,11 +379,14 @@ def _materialized_quantity(
             LOT_QUANTITY_QUANTUM,
             rounding=ROUND_DOWN,
         )
-    return allocate_nonnegative_storage_share(
-        quantity,
-        aggregate=aggregate,
-        allocated=allocated,
-        field_name="open_quantity",
+    return cast(
+        Decimal,
+        allocate_nonnegative_storage_share(
+            quantity,
+            aggregate=aggregate,
+            allocated=allocated,
+            field_name="open_quantity",
+        ),
     )
 
 
@@ -380,11 +418,14 @@ def _materialized_cost(
         )
     with COST_BASIS_STATE_LEDGER_OUTPUT_V1.arithmetic_context():
         materialized_cost = source_cost * disposal_factor * scale / scale_at_entry
-    return allocate_nonnegative_storage_share(
-        materialized_cost,
-        aggregate=aggregate,
-        allocated=allocated,
-        field_name=field_name,
+    return cast(
+        Decimal,
+        allocate_nonnegative_storage_share(
+            materialized_cost,
+            aggregate=aggregate,
+            allocated=allocated,
+            field_name=field_name,
+        ),
     )
 
 

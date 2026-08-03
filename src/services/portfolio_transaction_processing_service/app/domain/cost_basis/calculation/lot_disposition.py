@@ -1,11 +1,13 @@
 """Coordinate opening-lot restoration, acquisition, and disposition."""
 
 from decimal import Decimal
+from typing import cast
 
 from portfolio_common.domain.decimal_amount import required_decimal
 
 from ..models.cost_basis_transaction import CostBasisTransaction
 from .cost_basis_strategies import CostBasisStrategy
+from .disposal_allocation import LotDisposalResult
 from .lot_state import OpenLotState
 
 
@@ -26,14 +28,35 @@ class LotDispositionEngine:
             self._cost_basis_strategy.add_buy_lot(transaction)
 
     def get_available_quantity(self, portfolio_id: str, instrument_id: str) -> Decimal:
-        return self._cost_basis_strategy.get_available_quantity(portfolio_id, instrument_id)
+        return cast(
+            Decimal,
+            self._cost_basis_strategy.get_available_quantity(portfolio_id, instrument_id),
+        )
 
     def consume_sell_quantity(
         self, transaction: CostBasisTransaction
     ) -> tuple[Decimal, Decimal, Decimal, str | None]:
         sell_quantity = required_decimal(transaction.quantity, field_name="quantity")
-        return self._cost_basis_strategy.consume_sell_quantity(
-            transaction.portfolio_id, transaction.instrument_id, sell_quantity
+        return cast(
+            tuple[Decimal, Decimal, Decimal, str | None],
+            self._cost_basis_strategy.consume_sell_quantity(
+                transaction.portfolio_id,
+                transaction.instrument_id,
+                sell_quantity,
+            ),
+        )
+
+    def consume_sell_quantity_with_allocations(
+        self,
+        transaction: CostBasisTransaction,
+    ) -> LotDisposalResult:
+        """Consume quantity and return exact source-lot evidence."""
+
+        sell_quantity = required_decimal(transaction.quantity, field_name="quantity")
+        return self._cost_basis_strategy.consume_sell_quantity_with_allocations(
+            transaction.portfolio_id,
+            transaction.instrument_id,
+            sell_quantity,
         )
 
     def transfer_basis_out(
@@ -43,11 +66,14 @@ class LotDispositionEngine:
         cost_base: Decimal,
         cost_local: Decimal,
     ) -> str | None:
-        return self._cost_basis_strategy.transfer_basis_out(
-            transaction.portfolio_id,
-            transaction.instrument_id,
-            cost_base,
-            cost_local,
+        return cast(
+            str | None,
+            self._cost_basis_strategy.transfer_basis_out(
+                transaction.portfolio_id,
+                transaction.instrument_id,
+                cost_base,
+                cost_local,
+            ),
         )
 
     def set_initial_lots(self, transactions: list[CostBasisTransaction]) -> None:
@@ -60,4 +86,4 @@ class LotDispositionEngine:
         self._cost_basis_strategy.restore_open_lots(transactions)
 
     def get_open_lot_states(self) -> dict[str, OpenLotState]:
-        return self._cost_basis_strategy.get_open_lot_states()
+        return cast(dict[str, OpenLotState], self._cost_basis_strategy.get_open_lot_states())
