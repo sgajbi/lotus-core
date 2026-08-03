@@ -26,6 +26,7 @@ LOT_STATE_LINEAGE_OUTPUT_FIELDS = (
     "amortized_cost_profile_content_hash",
     "amortized_cost_recognized_through",
     "amortized_cost_scheduled_local",
+    "amortized_cost_book_fx_rate_to_base",
 )
 
 
