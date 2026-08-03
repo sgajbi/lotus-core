@@ -5,6 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
+from typing import cast
+
+from portfolio_common.domain.transaction.numeric_policy import (
+    COST_BASIS_STATE_LEDGER_OUTPUT_V1,
+)
 
 from .average_cost_pool_checkpoint import AverageCostPoolCheckpoint
 
@@ -146,6 +151,51 @@ class AverageCostAllocationCheckpoint:
             raise ValueError("open AVCO checkpoint requires positive segment quantity")
         if self.source_allocation_segment_start_quantity <= Decimal(0):
             raise ValueError("open AVCO checkpoint requires positive source-allocation segment")
+        self._validate_materialized_totals()
+
+    def _validate_materialized_totals(self) -> None:
+        with COST_BASIS_STATE_LEDGER_OUTPUT_V1.arithmetic_context():
+            expected_disposal_scale = (
+                self.segment_start_scale
+                * self.pool.quantity
+                / self.source_allocation_segment_start_quantity
+            )
+        if expected_disposal_scale != self.disposal_scale:
+            raise ValueError("AVCO disposal scale conflicts with source-allocation segment")
+
+        expected_quantity = _materialized_total(
+            self,
+            value_field="quantity",
+            scale_field=None,
+            scale_at_entry_field=None,
+            generation_field=None,
+            current_generation=None,
+            output_field="open_quantity",
+        )
+        expected_cost_local = _materialized_total(
+            self,
+            value_field="cost_local",
+            scale_field="cost_local_scale",
+            scale_at_entry_field="cost_local_scale_at_entry",
+            generation_field="cost_local_generation",
+            current_generation=self.cost_local_generation,
+            output_field="lot_cost_local",
+        )
+        expected_cost_base = _materialized_total(
+            self,
+            value_field="cost_base",
+            scale_field="cost_base_scale",
+            scale_at_entry_field="cost_base_scale_at_entry",
+            generation_field="cost_base_generation",
+            current_generation=self.cost_base_generation,
+            output_field="lot_cost_base",
+        )
+        if (
+            expected_quantity != self.pool.quantity
+            or expected_cost_local != self.pool.cost_local
+            or expected_cost_base != self.pool.cost_base
+        ):
+            raise ValueError("AVCO source accumulators conflict with aggregate pool state")
 
 
 def _require_decimal(value: object, *, field_name: str, positive: bool) -> None:
@@ -156,6 +206,41 @@ def _require_decimal(value: object, *, field_name: str, positive: bool) -> None:
     if value < Decimal(0) or (positive and value == Decimal(0)):
         requirement = "positive" if positive else "nonnegative"
         raise ValueError(f"{field_name} must be {requirement}")
+
+
+def _materialized_total(
+    checkpoint: AverageCostAllocationCheckpoint,
+    *,
+    value_field: str,
+    scale_field: str | None,
+    scale_at_entry_field: str | None,
+    generation_field: str | None,
+    current_generation: int | None,
+    output_field: str,
+) -> Decimal:
+    total = Decimal(0)
+    with COST_BASIS_STATE_LEDGER_OUTPUT_V1.arithmetic_context():
+        for source in checkpoint.sources:
+            if generation_field is not None and (
+                getattr(source, generation_field) != current_generation
+            ):
+                continue
+            materialized = (
+                cast(Decimal, getattr(source, value_field))
+                * checkpoint.disposal_scale
+                / source.disposal_scale_at_entry
+            )
+            if scale_field is not None and scale_at_entry_field is not None:
+                materialized = (
+                    materialized
+                    * cast(Decimal, getattr(checkpoint, scale_field))
+                    / cast(Decimal, getattr(source, scale_at_entry_field))
+                )
+            total += materialized
+    return cast(
+        Decimal,
+        COST_BASIS_STATE_LEDGER_OUTPUT_V1.normalize(total, field_name=output_field),
+    )
 
 
 def _require_nonnegative_integer(value: object, *, field_name: str) -> None:
