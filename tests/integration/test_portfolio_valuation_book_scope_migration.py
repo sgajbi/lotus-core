@@ -32,6 +32,12 @@ LATEST_MIGRATION = (
     / "versions"
     / "c140b2c3d50d_feat_add_lot_amortized_cost_authority.py"
 )
+HEAD_MIGRATION = (
+    Path(__file__).resolve().parents[2]
+    / "alembic"
+    / "versions"
+    / "c141b2c3d50e_feat_add_lot_disposal_receipts.py"
+)
 
 PORTFOLIO_INSERT = text(
     """
@@ -77,6 +83,12 @@ def _downgrade_dependent_schema(connection) -> list[dict[str, Any]]:
 
     inspector = inspect(connection)
     dependent_migrations: list[dict[str, Any]] = []
+    if inspector.has_table("lot_disposal_receipts"):
+        head_migration: dict[str, Any] = runpy.run_path(str(HEAD_MIGRATION))
+        _bind_operations(head_migration, connection)
+        head_migration["downgrade"]()
+        dependent_migrations.append(head_migration)
+        inspector = inspect(connection)
     if inspector.has_table("lot_amortized_cost_authority"):
         latest_migration: dict[str, Any] = runpy.run_path(str(LATEST_MIGRATION))
         _bind_operations(latest_migration, connection)
@@ -182,5 +194,8 @@ def test_portfolio_valuation_book_scope_applies_rolls_back_and_enforces_authorit
             inspector = inspect(connection)
             assert inspector.has_table("lot_amortized_cost_profiles")
             assert inspector.has_table("lot_amortized_cost_periods")
-            if len(dependent_migrations) == 2:
+            if any(migration["revision"] == "c140b2c3d50d" for migration in dependent_migrations):
                 assert inspector.has_table("lot_amortized_cost_authority")
+            if any(migration["revision"] == "c141b2c3d50e" for migration in dependent_migrations):
+                assert inspector.has_table("lot_disposal_receipts")
+                assert inspector.has_table("lot_disposal_allocations")
