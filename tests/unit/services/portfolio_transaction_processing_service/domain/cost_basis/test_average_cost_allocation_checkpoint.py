@@ -84,6 +84,9 @@ def test_open_checkpoint_allows_quantity_sources_from_prior_cost_generation() ->
             cost_local=Decimal("98"),
             cost_base=Decimal("100"),
         ),
+        segment_start_quantity=Decimal("20"),
+        segment_start_cost_local=Decimal("98"),
+        segment_start_cost_base=Decimal("100"),
         sources=(
             replace(
                 checkpoint.sources[0],
@@ -115,6 +118,17 @@ def test_open_checkpoint_rejects_source_cost_inconsistent_with_pool() -> None:
                 replace(checkpoint.sources[0], cost_base=Decimal("101")),
                 checkpoint.sources[1],
             ),
+        )
+
+
+def test_open_checkpoint_rejects_pool_cost_inconsistent_with_disposal_segment() -> None:
+    checkpoint = _open_checkpoint()
+
+    with pytest.raises(ValueError, match="pool costs conflict"):
+        replace(
+            checkpoint,
+            segment_start_cost_local=Decimal("90"),
+            segment_start_cost_base=Decimal("90"),
         )
 
 

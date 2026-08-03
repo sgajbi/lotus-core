@@ -602,6 +602,49 @@ def test_average_cost_checkpoint_restore_preserves_exact_disposal_receipts() -> 
     assert restored.get_open_lot_states() == uninterrupted.get_open_lot_states()
 
 
+def test_average_cost_checkpoint_accepts_repeating_scale_followed_by_buy() -> None:
+    uninterrupted = AverageCostBasisStrategy()
+    first_buy = CostBasisTransaction(
+        transaction_id="AVCO-REPEATING-SCALE-BUY-1",
+        portfolio_id="P1",
+        instrument_id="I1",
+        security_id="S1",
+        transaction_type="BUY",
+        transaction_date=datetime(2026, 1, 1),
+        quantity=Decimal("3"),
+        gross_transaction_amount=Decimal("30"),
+        net_cost=Decimal("30"),
+        net_cost_local=Decimal("30"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+    )
+    uninterrupted.add_buy_lot(first_buy)
+    uninterrupted.consume_sell_quantity_with_allocations("P1", "I1", Decimal("1"))
+    uninterrupted.add_buy_lot(
+        first_buy.model_copy(
+            update={
+                "transaction_id": "AVCO-REPEATING-SCALE-BUY-2",
+                "transaction_date": datetime(2026, 1, 2),
+            }
+        )
+    )
+
+    checkpoint = uninterrupted.export_allocation_checkpoint(
+        portfolio_id="P1",
+        instrument_id="I1",
+        security_id="S1",
+    )
+    restored = AverageCostBasisStrategy.from_allocation_checkpoint(checkpoint)
+
+    uninterrupted_result = uninterrupted.consume_sell_quantity_with_allocations(
+        "P1", "I1", Decimal("1")
+    )
+    restored_result = restored.consume_sell_quantity_with_allocations("P1", "I1", Decimal("1"))
+
+    assert restored_result == uninterrupted_result
+    assert restored.get_open_lot_states() == uninterrupted.get_open_lot_states()
+
+
 def test_average_cost_closed_generation_checkpoint_restores_without_stale_sources() -> None:
     uninterrupted = AverageCostBasisStrategy()
     uninterrupted.add_buy_lot(
