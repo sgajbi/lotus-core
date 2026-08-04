@@ -92,6 +92,52 @@ def test_calculate_next_position_state_applies_buy_and_sell_net_costs() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    ("transaction_type", "quantity", "net_cost", "expected"),
+    [
+        (
+            "MATURITY_REDEMPTION",
+            "100",
+            "-97",
+            PositionBalanceState(Decimal(0), Decimal(0), Decimal(0)),
+        ),
+        (
+            "CALL_REDEMPTION",
+            "100",
+            "-97",
+            PositionBalanceState(Decimal(0), Decimal(0), Decimal(0)),
+        ),
+        (
+            "PARTIAL_REDEMPTION",
+            "40",
+            "-38.8",
+            PositionBalanceState(Decimal("60"), Decimal("58.2"), Decimal("58.2")),
+        ),
+    ],
+)
+def test_redemption_position_transition_conserves_quantity_and_book_basis(
+    transaction_type: str,
+    quantity: str,
+    net_cost: str,
+    expected: PositionBalanceState,
+) -> None:
+    state = calculate_next_position_state(
+        PositionBalanceState(
+            quantity=Decimal("100"),
+            cost_basis=Decimal("97"),
+            cost_basis_local=Decimal("97"),
+        ),
+        _txn(
+            transaction_type,
+            quantity=Decimal(quantity),
+            net_cost=Decimal(net_cost),
+            net_cost_local=Decimal(net_cost),
+        ),
+    )
+
+    assert state == expected
+
+
 def test_calculate_next_position_state_normalizes_transaction_type() -> None:
     next_state = calculate_next_position_state(
         PositionBalanceState(
