@@ -100,8 +100,25 @@ Basis-only `SPIN_OFF` and `DEMERGER_OUT` processing no longer discards the per-s
 carrying-basis deltas that it applies. FIFO and AVCO emit the same conserved, ordered domain result
 with the source lot and acquisition identity plus the canonical target transaction and target lot.
 The result is transported through the cost-basis calculation boundary; missing target identity fails
-before source-lot mutation. Append-only persistence and query exposure remain prerequisites before
-this internal evidence is a supportable capability.
+before source-lot mutation.
+
+That basis-transfer evidence is now durable in separate append-only receipt and allocation tables;
+it is not aliased into disposal evidence because quantity is retained while basis moves to a target
+lot. Exact retries are neutral, changed evidence appends a new version, removed evidence appends a
+VOIDED version, and later reactivation remains auditable. Source-lot allocation hashes, semantic
+hashes, version hashes, and immediate-predecessor links are verified on reconstruction. The target
+transaction and deterministic target-lot identifiers deliberately remain governed references
+rather than foreign keys because the valid source-out leg can be processed before the target-in leg.
+The transaction-processing unit of work persists these receipts before open-lot and checkpoint
+writes, retaining atomic rollback.
+
+The query read plane now exposes the latest receipt at the distinct source-owned
+`lot-basis-transfer-receipt` endpoint. One bounded query selects the latest scoped version, its
+ordered source allocations, and its immediate predecessor. The query fails closed on identity,
+lifecycle, allocation-count, ordinal, uniqueness, local/base conservation, child-hash,
+semantic-hash, version-hash, or predecessor-chain mismatch. Its response includes source and target
+references, pre-transfer/transferred/retained economics, calculation lineage, and hash-chain
+evidence without claiming a target security identifier that the source event does not own.
 An additive `lot_amortized_cost_authority` ledger and application port now persist and reload all
 four required source families through one governed pattern. Per-source transaction locks,
 monotonic correction versions, exact-retry neutrality, canonical decimal/date payloads, composite
@@ -277,9 +294,18 @@ Data Models wiki documents the staged ledgers while the capability wiki remains
   is mutation-neutral. Repository-native lint, MyPy (285 sources), numeric-persistence,
   calculated-output-lineage, repository-output-shape, route-family, architecture, OpenAPI, and diff
   guards passed.
+- append-only basis-transfer persistence and supportability query proof: 45 focused writer/query
+  tests cover exact retry, correction, VOIDED state, reactivation, source-before-target ordering,
+  missing allocation rows, allocation tampering, conserved source economics, service mapping, and
+  OpenAPI vocabulary, plus 2 real-PostgreSQL cases proving version history and post-restart child
+  tamper rejection. Repository-native MyPy passes across 292 source files; scoped Ruff,
+  generated route catalog, API vocabulary, OpenAPI, and diff checks pass. Remote Feature Lane
+  `30901770196` is green at exact predecessor head `94687ceaef` across all five jobs. The authored
+  capability wiki remains unchanged because complete corporate-action scenario certification and
+  production redemption are still open.
 
 Protected PR and exact-main evidence remain pending for this tranche. Wider runtime recovery/load
-proof, verified query reconstruction, transfer/corporate-action lineage, redemption, and final
-issue closure remain pending until their corresponding implementation slices exist. No
+proof, complete corporate-action scenario coverage, redemption, and final issue closure remain
+pending until their corresponding implementation slices exist. No
 capability-wiki promotion is warranted because fixed-income lifecycle support is not yet
 production-certified.

@@ -1,5 +1,15 @@
 # Codebase Review Ledger
 
+CR-1678 basis-transfer addendum (2026-08-04): basis-only corporate-action evidence is now persisted
+atomically as append-only source-to-target receipt versions and exposed by a distinct operational
+read endpoint. Writer and reader both apply the same narrow canonical scale/hash primitives; the
+read path additionally verifies receipt identity, lifecycle, allocation count/order/uniqueness,
+local/base conservation, child/semantic/version hashes, and the immediate predecessor before
+returning evidence. Source-before-target processing remains valid without false target foreign-key
+or target-security claims. Complete scenario certification, recovery/load proof, production
+redemption, protected PR, and exact-main closure remain open under #481/#477. Evidence is maintained
+in CR-1678; no capability-wiki promotion is warranted yet.
+
 This ledger tracks systematic review work across `lotus-core`.
 
 Companion process document:
