@@ -5,12 +5,22 @@ from portfolio_common.database_models import (
     LotBasisTransferReceiptRecord,
     Portfolio,
 )
-from portfolio_common.domain.calculation_lineage import canonical_content_hash
+from portfolio_common.domain.calculation_lineage import (
+    CalculationLineage,
+    calculation_lineage_binds_output,
+    calculation_lineage_from_payload,
+    canonical_content_hash,
+)
 from portfolio_common.domain.cost_basis_receipt_integrity import (
+    BASIS_TRANSFER_LINEAGE_ALGORITHM_ID,
+    BASIS_TRANSFER_LINEAGE_ALGORITHM_VERSION,
+    basis_transfer_lineage_input_payload,
+    basis_transfer_lineage_output_payload,
     cost_basis_allocation_content_hash,
     cost_basis_receipt_semantic_hash,
     receipt_version_content_hash,
 )
+from portfolio_common.domain.transaction.numeric_policy import COST_BASIS_STATE_LEDGER_OUTPUT_V1
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
@@ -198,6 +208,7 @@ def _verify_receipt_integrity(
             != receipt.transferred_cost_base
         ):
             raise ValueError("receipt basis does not reconcile to allocations")
+        _verify_calculation_lineage(receipt, allocations)
         _verify_lifecycle(receipt, allocations)
         expected_semantic_hash = cost_basis_receipt_semantic_hash(
             _receipt_semantic_payload(receipt, allocations)
@@ -220,6 +231,55 @@ def _verify_receipt_integrity(
         raise CorruptLotBasisTransferReadModelError(
             f"Persisted lot basis-transfer receipt is corrupt: {receipt.receipt_id}"
         ) from exc
+
+
+def _verify_calculation_lineage(
+    receipt: LotBasisTransferReceiptReadRecord,
+    allocations: list[LotBasisTransferAllocationReadRecord],
+) -> None:
+    """Reconstruct strict lineage and bind active transfer evidence to persisted facts."""
+
+    _required_calculation_lineage(
+        receipt.transaction_calculation_lineage,
+        label="transaction calculation lineage",
+    )
+    if receipt.status != "ACTIVE":
+        return
+    lineage = _required_calculation_lineage(
+        receipt.basis_transfer_calculation_lineage,
+        label="basis-transfer calculation lineage",
+    )
+    if (
+        lineage.algorithm_id != BASIS_TRANSFER_LINEAGE_ALGORITHM_ID
+        or lineage.algorithm_version != BASIS_TRANSFER_LINEAGE_ALGORITHM_VERSION
+    ):
+        raise ValueError("basis-transfer lineage algorithm identity is unsupported")
+    expected_numeric_policy = COST_BASIS_STATE_LEDGER_OUTPUT_V1.lineage_identity()
+    if (
+        lineage.intermediate_precision != expected_numeric_policy.working_precision
+        or lineage.numeric_output_policy != expected_numeric_policy
+    ):
+        raise ValueError("basis-transfer lineage numeric policy is unsupported")
+    if lineage.input_content_hash != canonical_content_hash(
+        basis_transfer_lineage_input_payload(allocations)
+    ):
+        raise ValueError("basis-transfer lineage does not bind persisted inputs")
+    if not calculation_lineage_binds_output(
+        lineage,
+        output_payload=basis_transfer_lineage_output_payload(
+            allocations,
+            transferred_cost_base=receipt.transferred_cost_base,
+            transferred_cost_local=receipt.transferred_cost_local,
+        ),
+    ):
+        raise ValueError("basis-transfer lineage does not bind persisted outputs")
+
+
+def _required_calculation_lineage(payload: object, *, label: str) -> CalculationLineage:
+    lineage = calculation_lineage_from_payload(payload)
+    if lineage is None:
+        raise ValueError(f"{label} is required")
+    return lineage
 
 
 def _verify_lifecycle(

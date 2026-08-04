@@ -400,6 +400,16 @@ Data Models wiki documents the staged ledgers while the capability wiki remains
   full MyPy across 294 source files, and the composed architecture guards pass. No API, OpenAPI,
   schema, migration, Kafka, capability, central-context, skill-routing, or additional wiki truth
   changed.
+- final boundary proof: registry-derived ingestion rules require complete target transaction and
+  instrument destinations for `MERGER_OUT`, `EXCHANGE_OUT`, and `REPLACEMENT_OUT` before job
+  creation or publication, while partial-basis spin/demerger and transfer-out external-destination
+  contracts remain unchanged. The basis-transfer supportability reader now strictly reconstructs
+  transaction and transfer lineage, verifies the closed algorithm/numeric-policy identity, and
+  binds active lineage to persisted source allocations and aggregate outputs. Writer and reader
+  share one canonical payload contract to prevent drift. Validation: 334 ingestion/router cases,
+  118 writer/reader unit cases, query verifier 100% line/branch coverage across 99 statements and
+  52 branches, full MyPy, and architecture guards pass. No OpenAPI shape, schema, migration, Kafka,
+  capability, central-context, skill-routing, or additional wiki truth changed.
 
 Protected PR and exact-main evidence remain pending for this tranche. Wider runtime recovery/load
 proof, complete corporate-action scenario coverage, redemption, and final issue closure remain
