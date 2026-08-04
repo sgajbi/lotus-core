@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import date
+from datetime import UTC, date, datetime
 from unittest.mock import AsyncMock
 
 import pytest
@@ -14,10 +14,12 @@ from services.portfolio_transaction_processing_service.app.application.fixed_inc
     HandleFixedIncomeBookCostAuthorityEventUseCase,
 )
 from services.portfolio_transaction_processing_service.app.domain.fixed_income_book_cost import (
+    AffectedLotDisposalReplayAnchor,
     AmortizedCostEligibilityReason,
     AmortizedCostPolicyRegistry,
 )
 from services.portfolio_transaction_processing_service.app.ports import (
+    FixedIncomeBookCostCorrectionReplayPort,
     LotAmortizedCostAuthorityAppendOutcome,
     LotAmortizedCostAuthorityBundle,
     LotAmortizedCostAuthorityPort,
@@ -126,6 +128,8 @@ class _UnitOfWork:
     def __init__(self, authority, profiles) -> None:
         self.authority = authority
         self.profiles = profiles
+        self.correction_replay = AsyncMock(spec=FixedIncomeBookCostCorrectionReplayPort)
+        self.correction_replay.find_earliest_affected_disposal.return_value = None
         self.committed = False
         self.exit_error: BaseException | None = None
 
@@ -137,6 +141,13 @@ class _UnitOfWork:
 
     async def commit(self) -> None:
         self.committed = True
+
+
+def _affected_disposal_anchor() -> AffectedLotDisposalReplayAnchor:
+    return AffectedLotDisposalReplayAnchor(
+        transaction_id="SELL_001",
+        transaction_timestamp=datetime(2026, 3, 1, 9, 30, tzinfo=UTC),
+    )
 
 
 @pytest.mark.asyncio
@@ -281,6 +292,85 @@ async def test_atomic_handler_resolves_exact_policy_and_commits_active_profile()
     assert result.materialization.eligibility_reason is None
     assert profiles.append.await_args.args[0].policy_id == resolved.policy.policy_id
     assert authority.load.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_atomic_handler_stages_one_replay_for_earliest_affected_disposal() -> None:
+    authority, profiles = _dependencies()
+    resolved = resolved_fixed_income_book_cost_inputs()
+    authority.load.return_value = _bundle(basis_facts=(resolved.basis_fact,))
+    unit_of_work = _UnitOfWork(authority, profiles)
+    unit_of_work.correction_replay.find_earliest_affected_disposal.return_value = (
+        _affected_disposal_anchor()
+    )
+
+    result = await HandleFixedIncomeBookCostAuthorityEventUseCase(
+        unit_of_work_factory=lambda: unit_of_work,
+        policies=AmortizedCostPolicyRegistry((resolved.policy,)),
+    ).execute(
+        _basis_event(resolved.basis_fact),
+        correlation_id="correlation-1",
+        traceparent="00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-01",
+    )
+
+    unit_of_work.correction_replay.find_earliest_affected_disposal.assert_awaited_once_with(
+        resolved.basis_fact.scope,
+        effective_date=resolved.basis_fact.valid_from,
+    )
+    unit_of_work.correction_replay.stage_replay_intent.assert_awaited_once()
+    staged = unit_of_work.correction_replay.stage_replay_intent.await_args.args[0]
+    assert staged == result.correction_replay_intent
+    assert staged.anchor == _affected_disposal_anchor()
+    assert (
+        staged.source_authority_event_content_hash
+        == _basis_event(resolved.basis_fact).content_hash()
+    )
+    assert staged.profile_decisions[0].profile_id == result.materialization.profile_id
+    assert unit_of_work.correction_replay.stage_replay_intent.await_args.kwargs == {
+        "correlation_id": "correlation-1",
+        "traceparent": "00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-01",
+    }
+    assert unit_of_work.committed is True
+
+
+@pytest.mark.asyncio
+async def test_atomic_handler_does_not_stage_replay_without_affected_disposal() -> None:
+    authority, profiles = _dependencies()
+    resolved = resolved_fixed_income_book_cost_inputs()
+    authority.load.return_value = _bundle(basis_facts=(resolved.basis_fact,))
+    unit_of_work = _UnitOfWork(authority, profiles)
+
+    result = await HandleFixedIncomeBookCostAuthorityEventUseCase(
+        unit_of_work_factory=lambda: unit_of_work,
+        policies=AmortizedCostPolicyRegistry((resolved.policy,)),
+    ).execute(_basis_event(resolved.basis_fact))
+
+    assert result.correction_replay_intent is None
+    unit_of_work.correction_replay.stage_replay_intent.assert_not_awaited()
+    assert unit_of_work.committed is True
+
+
+@pytest.mark.asyncio
+async def test_atomic_handler_rolls_back_authority_when_replay_staging_fails() -> None:
+    authority, profiles = _dependencies()
+    resolved = resolved_fixed_income_book_cost_inputs()
+    authority.load.return_value = _bundle(basis_facts=(resolved.basis_fact,))
+    unit_of_work = _UnitOfWork(authority, profiles)
+    unit_of_work.correction_replay.find_earliest_affected_disposal.return_value = (
+        _affected_disposal_anchor()
+    )
+    unit_of_work.correction_replay.stage_replay_intent.side_effect = RuntimeError(
+        "outbox unavailable"
+    )
+
+    with pytest.raises(RuntimeError, match="outbox unavailable"):
+        await HandleFixedIncomeBookCostAuthorityEventUseCase(
+            unit_of_work_factory=lambda: unit_of_work,
+            policies=AmortizedCostPolicyRegistry((resolved.policy,)),
+        ).execute(_basis_event(resolved.basis_fact))
+
+    assert unit_of_work.committed is False
+    assert isinstance(unit_of_work.exit_error, RuntimeError)
 
 
 @pytest.mark.asyncio
@@ -439,6 +529,7 @@ async def test_exact_duplicate_assignment_does_not_broaden_replay_or_append_prof
     authority.load.reset_mock()
     profiles.append.reset_mock()
     profiles.effective_boundaries_from.reset_mock()
+    first_unit_of_work.correction_replay.reset_mock()
     duplicate_unit_of_work = _UnitOfWork(authority, profiles)
     duplicate_handler = HandleFixedIncomeBookCostAuthorityEventUseCase(
         unit_of_work_factory=lambda: duplicate_unit_of_work,
@@ -455,6 +546,8 @@ async def test_exact_duplicate_assignment_does_not_broaden_replay_or_append_prof
         effective_date=assignment.valid_from,
     )
     assert authority.load.await_count == 2
+    duplicate_unit_of_work.correction_replay.find_earliest_affected_disposal.assert_not_awaited()
+    duplicate_unit_of_work.correction_replay.stage_replay_intent.assert_not_awaited()
     assert duplicate_unit_of_work.committed is True
 
 

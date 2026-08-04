@@ -15,6 +15,8 @@ from ...domain.fixed_income_book_cost import (
     AmortizedCostEligibilityReason,
     AmortizedCostPolicy,
     AmortizedCostPolicyRegistry,
+    FixedIncomeBookCostCorrectionReplayIntent,
+    FixedIncomeBookCostProfileDecisionEvidence,
     LotAmortizedCostPolicyAssignment,
     LotBookCostAuthorityScope,
     MissingAmortizedCostAssignmentError,
@@ -24,8 +26,10 @@ from ...domain.fixed_income_book_cost import (
     resolve_amortized_cost_assignment,
 )
 from ...ports import (
+    FixedIncomeBookCostCorrectionReplayPort,
     LotAmortizedCostAuthority,
     LotAmortizedCostAuthorityPort,
+    LotAmortizedCostProfileAppendOutcome,
     LotAmortizedCostProfilePort,
 )
 from .authority_event_mapping import map_fixed_income_book_cost_authority_event
@@ -47,6 +51,7 @@ class ApplyFixedIncomeBookCostAuthorityEventResult:
     persistence: PersistLotAmortizedCostAuthorityResult
     materialization: LotAmortizedCostMaterializationResult
     rematerializations: tuple[LotAmortizedCostMaterializationResult, ...] = ()
+    correction_replay_intent: FixedIncomeBookCostCorrectionReplayIntent | None = None
 
 
 class FixedIncomeBookCostAuthorityUnitOfWork(Protocol):
@@ -57,6 +62,9 @@ class FixedIncomeBookCostAuthorityUnitOfWork(Protocol):
 
     @property
     def profiles(self) -> LotAmortizedCostProfilePort: ...
+
+    @property
+    def correction_replay(self) -> FixedIncomeBookCostCorrectionReplayPort: ...
 
     async def __aenter__(self) -> Self: ...
 
@@ -132,6 +140,9 @@ class HandleFixedIncomeBookCostAuthorityEventUseCase:
     async def execute(
         self,
         event: FixedIncomeBookCostAuthorityEvent,
+        *,
+        correlation_id: str | None = None,
+        traceparent: str | None = None,
     ) -> ApplyFixedIncomeBookCostAuthorityEventResult:
         """Persist and atomically rebuild every profile boundary affected by the event."""
 
@@ -176,13 +187,74 @@ class HandleFixedIncomeBookCostAuthorityEventUseCase:
             rematerializations = tuple(
                 result for index, result in enumerate(materializations) if index != primary_index
             )
+            correction_replay_intent = await self._stage_correction_replay(
+                replay=unit_of_work.correction_replay,
+                event=event,
+                scope=mapped.scope,
+                persistence=persistence,
+                replay_start=replay_start,
+                boundaries=tuple(affected_boundaries),
+                materializations=materializations,
+                correlation_id=correlation_id,
+                traceparent=traceparent,
+            )
             await unit_of_work.commit()
         return ApplyFixedIncomeBookCostAuthorityEventResult(
             scope=mapped.scope,
             persistence=persistence,
             materialization=materialization,
             rematerializations=rematerializations,
+            correction_replay_intent=correction_replay_intent,
         )
+
+    async def _stage_correction_replay(
+        self,
+        *,
+        replay: FixedIncomeBookCostCorrectionReplayPort,
+        event: FixedIncomeBookCostAuthorityEvent,
+        scope: LotBookCostAuthorityScope,
+        persistence: PersistLotAmortizedCostAuthorityResult,
+        replay_start: date,
+        boundaries: tuple[date, ...],
+        materializations: tuple[LotAmortizedCostMaterializationResult, ...],
+        correlation_id: str | None,
+        traceparent: str | None,
+    ) -> FixedIncomeBookCostCorrectionReplayIntent | None:
+        """Stage one suffix replay only for a newly committed profile decision."""
+
+        if persistence.appended_count == 0 or not any(
+            result.outcome is LotAmortizedCostProfileAppendOutcome.APPENDED
+            for result in materializations
+        ):
+            return None
+        anchor = await replay.find_earliest_affected_disposal(
+            scope,
+            effective_date=replay_start,
+        )
+        if anchor is None:
+            return None
+        intent = FixedIncomeBookCostCorrectionReplayIntent(
+            scope=scope,
+            earliest_affected_date=replay_start,
+            anchor=anchor,
+            source_authority_event_content_hash=event.content_hash(),
+            profile_decisions=tuple(
+                FixedIncomeBookCostProfileDecisionEvidence(
+                    effective_date=boundary,
+                    profile_id=result.profile_id,
+                    profile_version=result.profile_version,
+                    authority_content_hash=result.authority_content_hash,
+                    eligibility_reason=result.eligibility_reason,
+                )
+                for boundary, result in zip(boundaries, materializations, strict=True)
+            ),
+        )
+        await replay.stage_replay_intent(
+            intent,
+            correlation_id=correlation_id,
+            traceparent=traceparent,
+        )
+        return intent
 
     async def _replay_start(
         self,

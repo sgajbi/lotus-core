@@ -6,9 +6,19 @@ from collections.abc import Callable
 from types import TracebackType
 from typing import TypeVar
 
+from portfolio_common.config import (
+    KAFKA_FIXED_INCOME_BOOK_COST_DISPOSAL_REPLAY_REQUESTED_TOPIC,
+)
 from sqlalchemy.ext.asyncio import AsyncSession, AsyncSessionTransaction
 
-from ...ports import LotAmortizedCostAuthorityPort, LotAmortizedCostProfilePort
+from ...ports import (
+    FixedIncomeBookCostCorrectionReplayPort,
+    LotAmortizedCostAuthorityPort,
+    LotAmortizedCostProfilePort,
+)
+from .correction_replay_repository import (
+    SqlAlchemyFixedIncomeBookCostCorrectionReplayRepository,
+)
 from .profile_repository import SqlAlchemyLotAmortizedCostProfileRepository
 from .source_authority_repository import SqlAlchemyLotAmortizedCostAuthorityRepository
 
@@ -25,6 +35,7 @@ class SqlAlchemyFixedIncomeBookCostAuthorityUnitOfWork:
         self._committed = False
         self._authority: LotAmortizedCostAuthorityPort | None = None
         self._profiles: LotAmortizedCostProfilePort | None = None
+        self._correction_replay: FixedIncomeBookCostCorrectionReplayPort | None = None
 
     @property
     def authority(self) -> LotAmortizedCostAuthorityPort:
@@ -33,6 +44,10 @@ class SqlAlchemyFixedIncomeBookCostAuthorityUnitOfWork:
     @property
     def profiles(self) -> LotAmortizedCostProfilePort:
         return _required_adapter(self._profiles, "profiles")
+
+    @property
+    def correction_replay(self) -> FixedIncomeBookCostCorrectionReplayPort:
+        return _required_adapter(self._correction_replay, "correction replay")
 
     async def __aenter__(self) -> SqlAlchemyFixedIncomeBookCostAuthorityUnitOfWork:
         if self._session is not None:
@@ -45,6 +60,10 @@ class SqlAlchemyFixedIncomeBookCostAuthorityUnitOfWork:
             self._transaction = transaction
             self._authority = SqlAlchemyLotAmortizedCostAuthorityRepository(session)
             self._profiles = SqlAlchemyLotAmortizedCostProfileRepository(session)
+            self._correction_replay = SqlAlchemyFixedIncomeBookCostCorrectionReplayRepository(
+                session,
+                topic=KAFKA_FIXED_INCOME_BOOK_COST_DISPOSAL_REPLAY_REQUESTED_TOPIC,
+            )
         except BaseException:
             if self._transaction is not None:
                 await self._transaction.rollback()
