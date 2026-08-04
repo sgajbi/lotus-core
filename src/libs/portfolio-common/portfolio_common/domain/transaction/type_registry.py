@@ -290,6 +290,33 @@ _REGISTRY: dict[str, TransactionTypeDefinition] = {
         lot_behavior="consume_lot",
         settlement_behavior="requires_cash_leg",
     ),
+    "MATURITY_REDEMPTION": _definition(
+        "MATURITY_REDEMPTION",
+        lifecycle_family="redemption",
+        economic_role="maturity_redemption",
+        position_effect="decrease",
+        cash_effect="inflow",
+        lot_behavior="consume_lot",
+        settlement_behavior="requires_cash_leg",
+    ),
+    "CALL_REDEMPTION": _definition(
+        "CALL_REDEMPTION",
+        lifecycle_family="redemption",
+        economic_role="call_redemption",
+        position_effect="decrease",
+        cash_effect="inflow",
+        lot_behavior="consume_lot",
+        settlement_behavior="requires_cash_leg",
+    ),
+    "PARTIAL_REDEMPTION": _definition(
+        "PARTIAL_REDEMPTION",
+        lifecycle_family="redemption",
+        economic_role="partial_redemption",
+        position_effect="decrease",
+        cash_effect="inflow",
+        lot_behavior="consume_lot",
+        settlement_behavior="requires_cash_leg",
+    ),
     "SPLIT": _definition(
         "SPLIT",
         lifecycle_family="corporate_action",
@@ -464,9 +491,6 @@ _REGISTRY: dict[str, TransactionTypeDefinition] = {
 }
 
 _TARGET_NOT_IMPLEMENTED_TYPES = {
-    "MATURITY_REDEMPTION": ("redemption", "maturity_redemption"),
-    "CALL_REDEMPTION": ("redemption", "call_redemption"),
-    "PARTIAL_REDEMPTION": ("redemption", "partial_redemption"),
     "AMORTIZATION": ("redemption", "principal_amortization"),
     "ACCRETION": ("redemption", "discount_accretion"),
     "CONVERSION_EVENT": ("conversion", "parent_conversion_event"),
