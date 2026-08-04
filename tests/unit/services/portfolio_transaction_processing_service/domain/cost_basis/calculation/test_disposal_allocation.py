@@ -4,7 +4,17 @@ from datetime import date, datetime
 from decimal import Decimal
 
 import pytest
-from portfolio_common.domain.calculation_lineage import calculation_lineage_binds_output
+from portfolio_common.domain.calculation_lineage import (
+    calculation_lineage_binds_output,
+    canonical_content_hash,
+)
+from portfolio_common.domain.cost_basis_receipt_integrity import (
+    LOT_DISPOSAL_LINEAGE_ALGORITHM_ID,
+    LOT_DISPOSAL_LINEAGE_ALGORITHM_VERSION,
+    lot_disposal_lineage_input_payload,
+    lot_disposal_lineage_output_payload,
+)
+from portfolio_common.domain.transaction.numeric_policy import COST_BASIS_STATE_LEDGER_OUTPUT_V1
 
 from services.portfolio_transaction_processing_service.app.domain.cost_basis import (
     AmortizedCostAllocationEvidence,
@@ -12,9 +22,6 @@ from services.portfolio_transaction_processing_service.app.domain.cost_basis imp
     SourceLotDisposalAllocation,
     TransactionLotDisposal,
     source_lot_disposal_allocation_payload,
-)
-from services.portfolio_transaction_processing_service.app.domain.cost_basis.state_lineage import (
-    canonical_cost_basis_output_payload,
 )
 from services.portfolio_transaction_processing_service.app.domain.fixed_income_book_cost import (
     allocate_recognized_lot_book_cost,
@@ -109,15 +116,23 @@ def test_result_requires_exact_source_lot_conservation() -> None:
         None,
     )
     assert result.calculation_lineage is not None
-    assert result.calculation_lineage.algorithm_id == "cost-basis-lot-disposal-allocation"
+    assert result.calculation_lineage.algorithm_id == LOT_DISPOSAL_LINEAGE_ALGORITHM_ID
+    assert result.calculation_lineage.algorithm_version == LOT_DISPOSAL_LINEAGE_ALGORITHM_VERSION
+    assert (
+        result.calculation_lineage.numeric_output_policy
+        == COST_BASIS_STATE_LEDGER_OUTPUT_V1.lineage_identity()
+    )
+    assert result.calculation_lineage.input_content_hash == canonical_content_hash(
+        lot_disposal_lineage_input_payload(
+            [source_lot_disposal_allocation_payload(allocation) for allocation in allocations]
+        )
+    )
     assert calculation_lineage_binds_output(
         result.calculation_lineage,
-        output_payload=canonical_cost_basis_output_payload(
-            {
-                "consumed_cost_base": result.cost_base,
-                "consumed_cost_local": result.cost_local,
-                "consumed_quantity": result.consumed_quantity,
-            }
+        output_payload=lot_disposal_lineage_output_payload(
+            consumed_cost_base=result.cost_base,
+            consumed_cost_local=result.cost_local,
+            consumed_quantity=result.consumed_quantity,
         ),
     )
 

@@ -14,10 +14,15 @@ from portfolio_common.domain.calculation_lineage import (
     canonical_content_hash,
 )
 from portfolio_common.domain.cost_basis_receipt_integrity import (
+    LOT_DISPOSAL_LINEAGE_ALGORITHM_ID,
+    LOT_DISPOSAL_LINEAGE_ALGORITHM_VERSION,
     cost_basis_allocation_content_hash,
     cost_basis_receipt_semantic_hash,
+    lot_disposal_lineage_input_payload,
+    lot_disposal_lineage_output_payload,
     receipt_version_content_hash,
 )
+from portfolio_common.domain.transaction.numeric_policy import COST_BASIS_STATE_LEDGER_OUTPUT_V1
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_service.app.repositories.lot_disposal_records import (
@@ -144,6 +149,81 @@ def test_integrity_fails_closed_when_header_does_not_conserve_allocations() -> N
         _verify_receipt_integrity(receipt, [allocation], predecessor_hash=None)
 
     assert "economics do not reconcile" in str(error.value.__cause__)
+
+
+def test_integrity_rejects_rehashed_allocation_not_bound_to_disposal_lineage() -> None:
+    receipt, allocation = _valid_evidence()
+    allocation.source_transaction_id = "BUY-TAMPERED"
+    allocation.allocation_content_hash = cost_basis_allocation_content_hash(
+        receipt_id=receipt.receipt_id,
+        payload=_allocation_payload(receipt, allocation),
+    )
+    _rehash_receipt(receipt, [allocation])
+
+    _assert_corrupt(receipt, [allocation], "lineage does not bind persisted inputs")
+
+
+def test_integrity_rejects_disposal_lineage_not_bound_to_persisted_outputs() -> None:
+    receipt, allocation = _valid_evidence()
+    receipt.disposal_calculation_lineage = build_calculation_lineage(
+        algorithm_id=LOT_DISPOSAL_LINEAGE_ALGORITHM_ID,
+        algorithm_version=LOT_DISPOSAL_LINEAGE_ALGORITHM_VERSION,
+        intermediate_precision=COST_BASIS_STATE_LEDGER_OUTPUT_V1.working_precision,
+        input_payload=lot_disposal_lineage_input_payload(
+            [_allocation_payload(receipt, allocation)]
+        ),
+        output_payload={"consumed_quantity": Decimal("24")},
+        numeric_output_policy=COST_BASIS_STATE_LEDGER_OUTPUT_V1.lineage_identity(),
+    ).lineage_payload()
+    _rehash_receipt(receipt, [allocation])
+
+    _assert_corrupt(receipt, [allocation], "lineage does not bind persisted outputs")
+
+
+@pytest.mark.parametrize(
+    ("algorithm_id", "algorithm_version", "numeric_policy", "reason"),
+    [
+        ("wrong-disposal", 2, True, "algorithm identity is unsupported"),
+        (
+            LOT_DISPOSAL_LINEAGE_ALGORITHM_ID,
+            1,
+            True,
+            "algorithm identity is unsupported",
+        ),
+        (
+            LOT_DISPOSAL_LINEAGE_ALGORITHM_ID,
+            LOT_DISPOSAL_LINEAGE_ALGORITHM_VERSION,
+            False,
+            "numeric policy is unsupported",
+        ),
+    ],
+)
+def test_integrity_rejects_unsupported_disposal_lineage_contract(
+    algorithm_id: str,
+    algorithm_version: int,
+    numeric_policy: bool,
+    reason: str,
+) -> None:
+    receipt, allocation = _valid_evidence()
+    receipt.disposal_calculation_lineage = build_calculation_lineage(
+        algorithm_id=algorithm_id,
+        algorithm_version=algorithm_version,
+        intermediate_precision=COST_BASIS_STATE_LEDGER_OUTPUT_V1.working_precision,
+        input_payload=lot_disposal_lineage_input_payload(
+            [_allocation_payload(receipt, allocation)]
+        ),
+        output_payload=lot_disposal_lineage_output_payload(
+            consumed_cost_base=receipt.consumed_cost_base,
+            consumed_cost_local=receipt.consumed_cost_local,
+            consumed_quantity=receipt.consumed_quantity,
+        ),
+        numeric_output_policy=(
+            COST_BASIS_STATE_LEDGER_OUTPUT_V1.lineage_identity() if numeric_policy else None
+        ),
+    ).lineage_payload()
+    _rehash_receipt(receipt, [allocation])
+
+    _assert_corrupt(receipt, [allocation], reason)
 
 
 def test_integrity_fails_closed_on_partial_amortized_cost_evidence() -> None:
@@ -388,7 +468,6 @@ def test_amortized_cost_evidence_rejects_unusable_or_unreconciled_values(
 def _valid_evidence() -> tuple[LotDisposalReceiptRecord, LotDisposalAllocationRecord]:
     timestamp = datetime(2026, 8, 4, 10, 30, tzinfo=UTC)
     transaction_lineage = _lineage("transaction-cost", output={"cost": "100"})
-    disposal_lineage = _lineage("lot-disposal", output={"quantity": "25"})
     identity_hash = canonical_content_hash(
         {
             "disposal_transaction_id": "EXCHANGE-OUT-001",
@@ -421,7 +500,7 @@ def _valid_evidence() -> tuple[LotDisposalReceiptRecord, LotDisposalAllocationRe
         consumed_cost_base=Decimal("18.75"),
         allocation_count=1,
         transaction_calculation_lineage=transaction_lineage,
-        disposal_calculation_lineage=disposal_lineage,
+        disposal_calculation_lineage=None,
         semantic_content_hash="",
         previous_receipt_content_hash=None,
         receipt_content_hash="",
@@ -444,15 +523,8 @@ def _valid_evidence() -> tuple[LotDisposalReceiptRecord, LotDisposalAllocationRe
         receipt_id=receipt_id,
         payload=_allocation_payload(receipt, allocation),
     )
-    receipt.semantic_content_hash = cost_basis_receipt_semantic_hash(
-        _receipt_semantic_payload(receipt, [allocation])
-    )
-    receipt.receipt_content_hash = receipt_version_content_hash(
-        receipt_id=receipt_id,
-        semantic_content_hash=receipt.semantic_content_hash,
-        receipt_version=1,
-        previous_receipt_content_hash=None,
-    )
+    receipt.disposal_calculation_lineage = _valid_disposal_lineage(receipt, [allocation])
+    _rehash_receipt(receipt, [allocation])
     return receipt, allocation
 
 
@@ -465,6 +537,41 @@ def _assert_corrupt(
         _verify_receipt_integrity(receipt, allocations, predecessor_hash=None)
 
     assert reason in str(error.value.__cause__)
+
+
+def _valid_disposal_lineage(
+    receipt: LotDisposalReceiptRecord,
+    allocations: list[LotDisposalAllocationRecord],
+) -> dict[str, object]:
+    return build_calculation_lineage(
+        algorithm_id=LOT_DISPOSAL_LINEAGE_ALGORITHM_ID,
+        algorithm_version=LOT_DISPOSAL_LINEAGE_ALGORITHM_VERSION,
+        intermediate_precision=COST_BASIS_STATE_LEDGER_OUTPUT_V1.working_precision,
+        input_payload=lot_disposal_lineage_input_payload(
+            [_allocation_payload(receipt, allocation) for allocation in allocations]
+        ),
+        output_payload=lot_disposal_lineage_output_payload(
+            consumed_cost_base=receipt.consumed_cost_base,
+            consumed_cost_local=receipt.consumed_cost_local,
+            consumed_quantity=receipt.consumed_quantity,
+        ),
+        numeric_output_policy=COST_BASIS_STATE_LEDGER_OUTPUT_V1.lineage_identity(),
+    ).lineage_payload()
+
+
+def _rehash_receipt(
+    receipt: LotDisposalReceiptRecord,
+    allocations: list[LotDisposalAllocationRecord],
+) -> None:
+    receipt.semantic_content_hash = cost_basis_receipt_semantic_hash(
+        _receipt_semantic_payload(receipt, allocations)
+    )
+    receipt.receipt_content_hash = receipt_version_content_hash(
+        receipt_id=receipt.receipt_id,
+        semantic_content_hash=receipt.semantic_content_hash,
+        receipt_version=receipt.receipt_version,
+        previous_receipt_content_hash=receipt.previous_receipt_content_hash,
+    )
 
 
 def _add_valid_amortized_evidence(

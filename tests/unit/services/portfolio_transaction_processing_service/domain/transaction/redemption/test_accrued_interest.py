@@ -8,6 +8,7 @@ import pytest
 from portfolio_common.domain.calculation_lineage import build_calculation_lineage
 
 from src.services.portfolio_transaction_processing_service.app.domain.cashflow import (
+    CashflowCalculationContext,
     CashflowClassification,
     CashflowRule,
     CashflowTiming,
@@ -208,6 +209,72 @@ def test_redemption_and_generated_interest_have_distinct_cashflow_classification
     assert income_cashflow.classification == "INCOME"
     assert principal_cashflow.cashflow_date == income_cashflow.cashflow_date
     assert principal_cashflow.amount + income_cashflow.amount == Decimal("10023.0000000000")
+
+
+@pytest.mark.parametrize(
+    "transaction_type",
+    ["MATURITY_REDEMPTION", "CALL_REDEMPTION", "PARTIAL_REDEMPTION"],
+)
+@pytest.mark.parametrize(
+    ("net_settlement_amount", "trade_fee"),
+    [(Decimal("75"), Decimal("5")), (Decimal(0), Decimal("80"))],
+)
+@pytest.mark.parametrize(
+    "calculation_context",
+    [
+        CashflowCalculationContext.CURRENT_BOOKING,
+        CashflowCalculationContext.HISTORICAL_REBUILD,
+    ],
+)
+def test_deductions_exceeding_principal_are_an_investment_outflow_component(
+    transaction_type: str,
+    net_settlement_amount: Decimal,
+    trade_fee: Decimal,
+    calculation_context: CashflowCalculationContext,
+) -> None:
+    interest_amount = Decimal("100")
+    redemption = replace(
+        _redemption(),
+        transaction_type=transaction_type,
+        quantity=Decimal(1),
+        price=Decimal("10"),
+        principal_proceeds_local=Decimal("10"),
+        accrued_interest_proceeds_local=interest_amount,
+        embedded_fee_amount_local=Decimal("20"),
+        embedded_tax_amount_local=Decimal("10"),
+        trade_fee=trade_fee,
+        external_cash_transaction_id=(
+            "REDEMPTION-001-CASHLEG" if net_settlement_amount > 0 else None
+        ),
+    )
+    interest = build_redemption_accrued_interest_component(redemption)
+
+    assert interest is not None
+    principal_cashflow = calculate_transaction_cashflow(
+        redemption,
+        CashflowRule(
+            classification=CashflowClassification.INVESTMENT_INFLOW,
+            timing=CashflowTiming.EOD,
+            is_position_flow=True,
+            is_portfolio_flow=False,
+        ),
+        calculation_context=calculation_context,
+    )
+    income_cashflow = calculate_transaction_cashflow(
+        interest,
+        CashflowRule(
+            classification=CashflowClassification.INCOME,
+            timing=CashflowTiming.EOD,
+            is_position_flow=True,
+            is_portfolio_flow=False,
+        ),
+    )
+
+    assert principal_cashflow.amount == net_settlement_amount - interest_amount
+    assert principal_cashflow.classification == "INVESTMENT_OUTFLOW"
+    assert income_cashflow.amount == interest_amount
+    assert income_cashflow.classification == "INCOME"
+    assert principal_cashflow.amount + income_cashflow.amount == net_settlement_amount
 
 
 def test_zero_superseding_interest_component_produces_zero_income_cashflow() -> None:

@@ -162,7 +162,11 @@ def calculate_transaction_cashflow(
         economics.amount,
         field_name="cashflows.amount",
     )
-    classification = _normalize_classification(rule.classification)
+    classification = _resolve_cashflow_classification(
+        transaction_type=transaction_type,
+        configured_classification=rule.classification,
+        amount=amount,
+    )
     timing = _normalize_code(rule.timing)
     normalized_epoch = epoch or 0
     calculation_lineage = build_calculation_lineage(
@@ -287,6 +291,24 @@ def _normalize_classification(value: str | CashflowClassification) -> str:
     if isinstance(value, CashflowClassification):
         return value.value
     return _normalize_code(value)
+
+
+def _resolve_cashflow_classification(
+    *,
+    transaction_type: str,
+    configured_classification: str | CashflowClassification,
+    amount: Decimal,
+) -> str:
+    """Keep redemption principal classification consistent with its signed economics.
+
+    A redemption's product cashflow is the principal component after settlement deductions.
+    When those deductions exceed principal, the component is an investment outflow even though
+    accrued interest can keep the authoritative net settlement positive (or exactly zero).
+    """
+
+    if transaction_type in REDEMPTION_TRANSACTION_TYPES and amount < 0:
+        return CashflowClassification.INVESTMENT_OUTFLOW.value
+    return _normalize_classification(configured_classification)
 
 
 def _resolve_cashflow_date(
