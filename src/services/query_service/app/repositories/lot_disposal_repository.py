@@ -1,12 +1,28 @@
-"""Read immutable lot-disposal receipts without transaction-family assumptions."""
+"""Read and verify immutable lot-disposal receipts without family assumptions."""
+
+from collections.abc import Mapping
+from datetime import date
+from decimal import Decimal
 
 from portfolio_common.database_models import (
     LotDisposalAllocationRecord,
     LotDisposalReceiptRecord,
     Portfolio,
 )
+from portfolio_common.domain.calculation_lineage import (
+    calculation_lineage_binds_output,
+    calculation_lineage_from_payload,
+    canonical_content_hash,
+    require_sha256_digest,
+)
+from portfolio_common.domain.cost_basis_receipt_integrity import (
+    cost_basis_allocation_content_hash,
+    cost_basis_receipt_semantic_hash,
+    receipt_version_content_hash,
+)
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from .lot_disposal_records import (
     LotDisposalAllocationReadRecord,
@@ -38,8 +54,13 @@ class LotDisposalRepository:
             )
             .scalar_subquery()
         )
+        predecessor = aliased(LotDisposalReceiptRecord)
         statement = (
-            select(LotDisposalReceiptRecord, LotDisposalAllocationRecord)
+            select(
+                LotDisposalReceiptRecord,
+                LotDisposalAllocationRecord,
+                predecessor.receipt_content_hash,
+            )
             .outerjoin(
                 LotDisposalAllocationRecord,
                 and_(
@@ -49,6 +70,13 @@ class LotDisposalRepository:
                     LotDisposalAllocationRecord.portfolio_id
                     == LotDisposalReceiptRecord.portfolio_id,
                     LotDisposalAllocationRecord.security_id == LotDisposalReceiptRecord.security_id,
+                ),
+            )
+            .outerjoin(
+                predecessor,
+                and_(
+                    predecessor.receipt_id == LotDisposalReceiptRecord.receipt_id,
+                    predecessor.receipt_version == LotDisposalReceiptRecord.receipt_version - 1,
                 ),
             )
             .where(
@@ -61,11 +89,16 @@ class LotDisposalRepository:
         rows = (await self.db.execute(statement)).all()
         if not rows:
             return None
-        receipt = _receipt_record(rows[0][0])
-        allocations = [
-            _allocation_record(allocation) for _, allocation in rows if allocation is not None
+        receipt_record = rows[0][0]
+        allocation_records = [allocation for _, allocation, _ in rows if allocation is not None]
+        _verify_receipt_integrity(
+            receipt_record,
+            allocation_records,
+            predecessor_hash=rows[0][2],
+        )
+        return _receipt_record(receipt_record), [
+            _allocation_record(allocation) for allocation in allocation_records
         ]
-        return receipt, allocations
 
 
 def _receipt_record(record: LotDisposalReceiptRecord) -> LotDisposalReceiptReadRecord:
@@ -91,6 +124,7 @@ def _receipt_record(record: LotDisposalReceiptRecord) -> LotDisposalReceiptReadR
         consumed_quantity=record.consumed_quantity,
         consumed_cost_local=record.consumed_cost_local,
         consumed_cost_base=record.consumed_cost_base,
+        allocation_count=record.allocation_count,
         semantic_content_hash=record.semantic_content_hash,
         previous_receipt_content_hash=record.previous_receipt_content_hash,
         receipt_content_hash=record.receipt_content_hash,
@@ -117,3 +151,394 @@ def _allocation_record(
         amortized_cost_recognized_through=record.amortized_cost_recognized_through,
         amortized_cost_calculation_lineage=record.amortized_cost_calculation_lineage,
     )
+
+
+class CorruptLotDisposalReadModelError(ValueError):
+    """Raised when supportability evidence differs from its durable contract."""
+
+
+def _verify_receipt_integrity(
+    receipt: LotDisposalReceiptRecord,
+    allocations: list[LotDisposalAllocationRecord],
+    *,
+    predecessor_hash: str | None,
+) -> None:
+    """Reconstruct the closed receipt payload and fail closed on any drift."""
+
+    try:
+        _verify_header_shape(receipt)
+        identity_hash = canonical_content_hash(
+            {
+                "disposal_transaction_id": receipt.disposal_transaction_id,
+                "portfolio_id": receipt.portfolio_id,
+                "security_id": receipt.security_id,
+            }
+        )
+        if receipt.receipt_id != f"lot-disposal:{identity_hash}":
+            raise ValueError("receipt identity mismatch")
+        if receipt.allocation_count != len(allocations):
+            raise ValueError("allocation count mismatch")
+        ordinals = [allocation.allocation_ordinal for allocation in allocations]
+        if ordinals != list(range(1, len(allocations) + 1)):
+            raise ValueError("allocation ordinals are not contiguous")
+        if len({allocation.source_lot_id for allocation in allocations}) != len(allocations):
+            raise ValueError("source lot occurs more than once")
+        for allocation in allocations:
+            _verify_allocation(receipt, allocation)
+        if (
+            sum((allocation.consumed_quantity for allocation in allocations), Decimal(0))
+            != receipt.consumed_quantity
+            or sum((allocation.consumed_cost_local for allocation in allocations), Decimal(0))
+            != receipt.consumed_cost_local
+            or sum((allocation.consumed_cost_base for allocation in allocations), Decimal(0))
+            != receipt.consumed_cost_base
+        ):
+            raise ValueError("receipt economics do not reconcile to allocations")
+        _verify_lifecycle(receipt, allocations)
+        expected_semantic_hash = cost_basis_receipt_semantic_hash(
+            _receipt_semantic_payload(receipt, allocations)
+        )
+        if receipt.semantic_content_hash != expected_semantic_hash:
+            raise ValueError("semantic content hash mismatch")
+        if receipt.receipt_version == 1:
+            if receipt.previous_receipt_content_hash is not None or predecessor_hash is not None:
+                raise ValueError("first receipt version has a predecessor")
+        elif predecessor_hash is None or receipt.previous_receipt_content_hash != predecessor_hash:
+            raise ValueError("receipt predecessor chain mismatch")
+        if receipt.receipt_content_hash != receipt_version_content_hash(
+            receipt_id=receipt.receipt_id,
+            semantic_content_hash=receipt.semantic_content_hash,
+            receipt_version=receipt.receipt_version,
+            previous_receipt_content_hash=receipt.previous_receipt_content_hash,
+        ):
+            raise ValueError("receipt content hash mismatch")
+    except (ArithmeticError, TypeError, ValueError) as exc:
+        raise CorruptLotDisposalReadModelError(
+            f"Persisted lot-disposal receipt is corrupt: {receipt.receipt_id}"
+        ) from exc
+
+
+def _verify_header_shape(receipt: LotDisposalReceiptRecord) -> None:
+    for field_name in (
+        "receipt_id",
+        "disposal_transaction_id",
+        "portfolio_id",
+        "instrument_id",
+        "security_id",
+        "transaction_type",
+    ):
+        value = getattr(receipt, field_name)
+        if not isinstance(value, str) or not value.strip() or value != value.strip():
+            raise ValueError(f"{field_name} must be canonical nonblank text")
+    if not isinstance(receipt.receipt_version, int) or receipt.receipt_version < 1:
+        raise ValueError("receipt version must be positive")
+    if receipt.cost_basis_method not in {"FIFO", "AVCO"}:
+        raise ValueError("unsupported cost basis method")
+    if (receipt.calculation_policy_id is None) != (receipt.calculation_policy_version is None):
+        raise ValueError("calculation policy identity is incomplete")
+    if receipt.disposal_timestamp.tzinfo is None or receipt.disposal_timestamp.utcoffset() is None:
+        raise ValueError("disposal timestamp must be timezone-aware")
+    if calculation_lineage_from_payload(receipt.transaction_calculation_lineage) is None:
+        raise ValueError("transaction calculation lineage is required")
+    _verify_destination(receipt)
+
+
+def _verify_destination(receipt: LotDisposalReceiptRecord) -> None:
+    destination_values = (
+        receipt.destination_type,
+        receipt.target_transaction_id,
+        receipt.target_lot_id,
+        receipt.target_instrument_id,
+        receipt.external_destination_reference,
+    )
+    if all(value is None for value in destination_values):
+        return
+    if receipt.destination_type == "INTERNAL_LOT":
+        if not all(
+            isinstance(value, str) and value.strip() == value and value
+            for value in (
+                receipt.target_transaction_id,
+                receipt.target_lot_id,
+                receipt.target_instrument_id,
+            )
+        ):
+            raise ValueError("internal destination identity is incomplete")
+        if receipt.target_lot_id != f"LOT-{receipt.target_transaction_id}":
+            raise ValueError("internal destination lot identity mismatch")
+        if receipt.external_destination_reference is not None:
+            raise ValueError("internal destination has an external reference")
+        return
+    if receipt.destination_type == "EXTERNAL_TRANSFER":
+        reference = receipt.external_destination_reference
+        if not isinstance(reference, str) or not reference or reference.strip() != reference:
+            raise ValueError("external destination reference is missing")
+        if any(
+            value is not None
+            for value in (
+                receipt.target_transaction_id,
+                receipt.target_lot_id,
+                receipt.target_instrument_id,
+            )
+        ):
+            raise ValueError("external destination has internal target identity")
+        return
+    raise ValueError("unknown disposal destination type")
+
+
+def _verify_allocation(
+    receipt: LotDisposalReceiptRecord,
+    allocation: LotDisposalAllocationRecord,
+) -> None:
+    if (
+        allocation.portfolio_id != receipt.portfolio_id
+        or allocation.security_id != receipt.security_id
+        or allocation.receipt_id != receipt.receipt_id
+        or allocation.receipt_version != receipt.receipt_version
+    ):
+        raise ValueError("allocation scope differs from receipt scope")
+    if (
+        not isinstance(allocation.consumed_quantity, Decimal)
+        or not allocation.consumed_quantity.is_finite()
+        or allocation.consumed_quantity <= 0
+    ):
+        raise ValueError("allocation quantity must be finite and positive")
+    for field_name in ("consumed_cost_local", "consumed_cost_base"):
+        value = getattr(allocation, field_name)
+        if not isinstance(value, Decimal) or not value.is_finite() or value < 0:
+            raise ValueError(f"{field_name} must be finite and non-negative")
+    payload = _allocation_payload(receipt, allocation)
+    if allocation.allocation_content_hash != cost_basis_allocation_content_hash(
+        receipt_id=receipt.receipt_id,
+        payload=payload,
+    ):
+        raise ValueError("allocation content hash mismatch")
+
+
+def _verify_lifecycle(
+    receipt: LotDisposalReceiptRecord,
+    allocations: list[LotDisposalAllocationRecord],
+) -> None:
+    if receipt.status == "ACTIVE":
+        if receipt.consumed_quantity <= 0 or not allocations:
+            raise ValueError("active receipt lacks positive allocations")
+        if receipt.disposal_calculation_lineage is None:
+            raise ValueError("active receipt lacks disposal lineage")
+        if calculation_lineage_from_payload(receipt.disposal_calculation_lineage) is None:
+            raise ValueError("active receipt has invalid disposal lineage")
+        if receipt.void_reason is not None:
+            raise ValueError("active receipt has a void reason")
+        return
+    if receipt.status != "VOIDED":
+        raise ValueError("unknown receipt status")
+    if (
+        receipt.consumed_quantity
+        or receipt.consumed_cost_local
+        or receipt.consumed_cost_base
+        or allocations
+        or receipt.disposal_calculation_lineage is not None
+        or not isinstance(receipt.void_reason, str)
+        or not receipt.void_reason.strip()
+    ):
+        raise ValueError("voided receipt carries invalid economics or lineage")
+
+
+def _allocation_payload(
+    receipt: LotDisposalReceiptRecord,
+    allocation: LotDisposalAllocationRecord,
+) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "allocation_ordinal": allocation.allocation_ordinal,
+        "consumed_cost_base": allocation.consumed_cost_base,
+        "consumed_cost_local": allocation.consumed_cost_local,
+        "consumed_quantity": allocation.consumed_quantity,
+        "source_acquisition_date": allocation.source_acquisition_date,
+        "source_lot_id": allocation.source_lot_id,
+        "source_transaction_id": allocation.source_transaction_id,
+    }
+    amortized_evidence = _amortized_cost_evidence_payload(receipt, allocation)
+    if amortized_evidence is not None:
+        payload["amortized_cost_evidence"] = amortized_evidence
+    return payload
+
+
+_AMORTIZED_EVIDENCE_FIELDS = (
+    "amortized_cost_profile_id",
+    "amortized_cost_profile_version",
+    "amortized_cost_profile_content_hash",
+    "amortized_cost_currency",
+    "amortized_cost_recognized_through",
+    "amortized_cost_original_quantity",
+    "amortized_cost_open_quantity_before",
+    "amortized_cost_residual_quantity",
+    "amortized_cost_scheduled_local",
+    "amortized_cost_current_local",
+    "amortized_cost_current_base",
+    "amortized_cost_residual_local",
+    "amortized_cost_book_fx_rate_to_base",
+    "amortized_cost_residual_base",
+    "amortized_cost_retained_rounding_local",
+    "amortized_cost_retained_rounding_base",
+    "amortized_cost_calculation_lineage",
+)
+
+
+def _amortized_cost_evidence_payload(
+    receipt: LotDisposalReceiptRecord,
+    allocation: LotDisposalAllocationRecord,
+) -> dict[str, object] | None:
+    values = tuple(getattr(allocation, field_name) for field_name in _AMORTIZED_EVIDENCE_FIELDS)
+    if all(value is None for value in values):
+        return None
+    if any(value is None for value in values):
+        raise ValueError("amortized-cost allocation evidence is only partially persisted")
+    _verify_amortized_cost_evidence(receipt, allocation)
+    return {
+        "book_cost_fx_rate_to_base": allocation.amortized_cost_book_fx_rate_to_base,
+        "calculation_lineage": allocation.amortized_cost_calculation_lineage,
+        "consumed_cost_base": allocation.consumed_cost_base,
+        "consumed_cost_local": allocation.consumed_cost_local,
+        "consumed_quantity": allocation.consumed_quantity,
+        "currency": allocation.amortized_cost_currency,
+        "current_cost_base": allocation.amortized_cost_current_base,
+        "current_cost_local": allocation.amortized_cost_current_local,
+        "disposal_date": receipt.disposal_timestamp.date(),
+        "open_quantity_before": allocation.amortized_cost_open_quantity_before,
+        "original_quantity": allocation.amortized_cost_original_quantity,
+        "profile_content_hash": allocation.amortized_cost_profile_content_hash,
+        "profile_id": allocation.amortized_cost_profile_id,
+        "profile_version": allocation.amortized_cost_profile_version,
+        "recognized_through_date": allocation.amortized_cost_recognized_through,
+        "residual_cost_base": allocation.amortized_cost_residual_base,
+        "residual_cost_local": allocation.amortized_cost_residual_local,
+        "residual_quantity": allocation.amortized_cost_residual_quantity,
+        "retained_rounding_residual_base": (allocation.amortized_cost_retained_rounding_base),
+        "retained_rounding_residual_local": (allocation.amortized_cost_retained_rounding_local),
+        "scheduled_cost_local": allocation.amortized_cost_scheduled_local,
+    }
+
+
+def _verify_amortized_cost_evidence(
+    receipt: LotDisposalReceiptRecord,
+    allocation: LotDisposalAllocationRecord,
+) -> None:
+    if (
+        not isinstance(allocation.amortized_cost_profile_id, str)
+        or not allocation.amortized_cost_profile_id.strip()
+        or allocation.amortized_cost_profile_id != allocation.amortized_cost_profile_id.strip()
+    ):
+        raise ValueError("amortized-cost profile id is invalid")
+    if (
+        not isinstance(allocation.amortized_cost_profile_version, int)
+        or allocation.amortized_cost_profile_version < 1
+    ):
+        raise ValueError("amortized-cost profile version is invalid")
+    require_sha256_digest(
+        allocation.amortized_cost_profile_content_hash,
+        "amortized_cost_profile_content_hash",
+    )
+    currency = allocation.amortized_cost_currency
+    if not isinstance(currency, str) or len(currency) != 3 or not currency.isupper():
+        raise ValueError("amortized-cost currency is invalid")
+    recognized_through = allocation.amortized_cost_recognized_through
+    if (
+        type(recognized_through) is not date
+        or recognized_through > receipt.disposal_timestamp.date()
+    ):
+        raise ValueError("amortized-cost recognition date is invalid")
+    for field_name in (
+        "amortized_cost_original_quantity",
+        "amortized_cost_open_quantity_before",
+        "amortized_cost_residual_quantity",
+        "amortized_cost_scheduled_local",
+        "amortized_cost_current_local",
+        "amortized_cost_current_base",
+        "amortized_cost_residual_local",
+        "amortized_cost_book_fx_rate_to_base",
+        "amortized_cost_residual_base",
+        "amortized_cost_retained_rounding_local",
+        "amortized_cost_retained_rounding_base",
+    ):
+        value = getattr(allocation, field_name)
+        if not isinstance(value, Decimal) or not value.is_finite():
+            raise ValueError(f"{field_name} must be a finite Decimal")
+    if (
+        allocation.amortized_cost_original_quantity <= 0
+        or allocation.amortized_cost_open_quantity_before <= 0
+        or allocation.amortized_cost_open_quantity_before
+        > allocation.amortized_cost_original_quantity
+        or allocation.amortized_cost_residual_quantity < 0
+        or allocation.amortized_cost_book_fx_rate_to_base <= 0
+    ):
+        raise ValueError("amortized-cost quantity or FX evidence is invalid")
+    if allocation.consumed_quantity + allocation.amortized_cost_residual_quantity != (
+        allocation.amortized_cost_open_quantity_before
+    ):
+        raise ValueError("amortized-cost quantity does not conserve")
+    if allocation.consumed_cost_local + allocation.amortized_cost_residual_local != (
+        allocation.amortized_cost_current_local
+    ):
+        raise ValueError("amortized local cost does not conserve")
+    if allocation.consumed_cost_base + allocation.amortized_cost_residual_base != (
+        allocation.amortized_cost_current_base
+    ):
+        raise ValueError("amortized base cost does not conserve")
+    lineage = calculation_lineage_from_payload(allocation.amortized_cost_calculation_lineage)
+    if lineage is None or not calculation_lineage_binds_output(
+        lineage,
+        output_payload=_amortized_cost_output_payload(allocation),
+    ):
+        raise ValueError("amortized-cost lineage does not bind persisted evidence")
+
+
+def _amortized_cost_output_payload(
+    allocation: LotDisposalAllocationRecord,
+) -> Mapping[str, object]:
+    return {
+        "consumed_cost_base": allocation.consumed_cost_base,
+        "consumed_cost_local": allocation.consumed_cost_local,
+        "consumed_quantity": allocation.consumed_quantity,
+        "current_cost_base": allocation.amortized_cost_current_base,
+        "current_cost_local": allocation.amortized_cost_current_local,
+        "open_quantity_before": allocation.amortized_cost_open_quantity_before,
+        "recognized_through_date": allocation.amortized_cost_recognized_through,
+        "residual_cost_base": allocation.amortized_cost_residual_base,
+        "residual_cost_local": allocation.amortized_cost_residual_local,
+        "residual_quantity": allocation.amortized_cost_residual_quantity,
+        "retained_rounding_residual_base": allocation.amortized_cost_retained_rounding_base,
+        "retained_rounding_residual_local": allocation.amortized_cost_retained_rounding_local,
+        "scheduled_cost_local": allocation.amortized_cost_scheduled_local,
+    }
+
+
+def _receipt_semantic_payload(
+    receipt: LotDisposalReceiptRecord,
+    allocations: list[LotDisposalAllocationRecord],
+) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "allocations": [_allocation_payload(receipt, allocation) for allocation in allocations],
+        "calculation_policy_id": receipt.calculation_policy_id,
+        "calculation_policy_version": receipt.calculation_policy_version,
+        "consumed_cost_base": receipt.consumed_cost_base,
+        "consumed_cost_local": receipt.consumed_cost_local,
+        "consumed_quantity": receipt.consumed_quantity,
+        "cost_basis_method": receipt.cost_basis_method,
+        "disposal_calculation_lineage": receipt.disposal_calculation_lineage,
+        "disposal_timestamp": receipt.disposal_timestamp,
+        "disposal_transaction_id": receipt.disposal_transaction_id,
+        "instrument_id": receipt.instrument_id,
+        "portfolio_id": receipt.portfolio_id,
+        "security_id": receipt.security_id,
+        "status": receipt.status,
+        "transaction_calculation_lineage": receipt.transaction_calculation_lineage,
+        "transaction_type": receipt.transaction_type,
+        "void_reason": receipt.void_reason,
+    }
+    if receipt.destination_type is not None:
+        payload["destination"] = {
+            "destination_type": receipt.destination_type,
+            "external_destination_reference": receipt.external_destination_reference,
+            "target_instrument_id": receipt.target_instrument_id,
+            "target_lot_id": receipt.target_lot_id,
+            "target_transaction_id": receipt.target_transaction_id,
+        }
+    return payload

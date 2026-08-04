@@ -29,6 +29,7 @@ class LotDisposalReceiptReadRecord:
     consumed_quantity: Decimal
     consumed_cost_local: Decimal
     consumed_cost_base: Decimal
+    allocation_count: int
     semantic_content_hash: str
     previous_receipt_content_hash: str | None
     receipt_content_hash: str
