@@ -13,7 +13,7 @@
       "openApiVersion": "3.1.0"
     }
   ],
-  "generatedAt": "2026-08-04T11:33:41.498045+00:00",
+  "generatedAt": "2026-08-04T11:48:45.544709+00:00",
   "attributeCatalog": [
     {
       "semanticId": "lotus.accepted_count",
@@ -9830,6 +9830,7 @@
           "target_instrument_id": "NEW_SEC_001",
           "source_transaction_reference": "CA-CHILD-OUT-001",
           "target_transaction_reference": "CA-CHILD-IN-001",
+          "external_destination_reference": "CUSTODIAN-ACCOUNT-7788",
           "linked_cash_transaction_id": "CA-CIL-CASH-001",
           "redemption_price_type": "PAR",
           "old_factor": 1.0,
@@ -17774,6 +17775,7 @@
           "embedded_tax_amount_local",
           "end_date",
           "external_cash_transaction_id",
+          "external_destination_reference",
           "far_leg_group_id",
           "fee_type",
           "freshness_status",
@@ -19086,6 +19088,14 @@
             "type": "object",
             "semanticId": "lotus.target_transaction_reference",
             "attributeRef": "lotus.target_transaction_reference"
+          },
+          {
+            "name": "transactions[].external_destination_reference",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.external_destination_reference",
+            "attributeRef": "lotus.external_destination_reference"
           },
           {
             "name": "transactions[].linked_cash_transaction_id",
@@ -23449,6 +23459,7 @@
           "entity_type",
           "exchange_fee",
           "external_cash_transaction_id",
+          "external_destination_reference",
           "far_leg_group_id",
           "fx_cash_leg_role",
           "fx_contract_close_transaction_id",
@@ -24168,6 +24179,14 @@
             "attributeRef": "lotus.target_transaction_reference"
           },
           {
+            "name": "external_destination_reference",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.external_destination_reference",
+            "attributeRef": "lotus.external_destination_reference"
+          },
+          {
             "name": "linked_cash_transaction_id",
             "location": "body",
             "required": false,
@@ -24448,6 +24467,7 @@
           "entity_type",
           "exchange_fee",
           "external_cash_transaction_id",
+          "external_destination_reference",
           "far_leg_group_id",
           "fx_cash_leg_role",
           "fx_contract_close_transaction_id",
@@ -25175,6 +25195,14 @@
             "type": "object",
             "semanticId": "lotus.target_transaction_reference",
             "attributeRef": "lotus.target_transaction_reference"
+          },
+          {
+            "name": "transactions[].external_destination_reference",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.external_destination_reference",
+            "attributeRef": "lotus.external_destination_reference"
           },
           {
             "name": "transactions[].linked_cash_transaction_id",
@@ -26691,6 +26719,7 @@
           "entity_type",
           "exchange_fee",
           "external_cash_transaction_id",
+          "external_destination_reference",
           "far_leg_group_id",
           "from_currency",
           "fx_cash_leg_role",
@@ -27851,6 +27880,14 @@
             "type": "object",
             "semanticId": "lotus.target_transaction_reference",
             "attributeRef": "lotus.target_transaction_reference"
+          },
+          {
+            "name": "transactions[].external_destination_reference",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.external_destination_reference",
+            "attributeRef": "lotus.external_destination_reference"
           },
           {
             "name": "transactions[].linked_cash_transaction_id",
