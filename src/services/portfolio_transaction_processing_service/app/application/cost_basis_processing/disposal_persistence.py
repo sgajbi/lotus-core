@@ -167,7 +167,10 @@ def _transfer_out_destination(
             destination_type=LotDisposalDestinationType.EXTERNAL_TRANSFER,
             external_destination_reference=cast(str, external_reference).strip(),
         )
-    return None
+    raise ValueError(
+        "TRANSFER_OUT disposal destination requires exactly one of internal target identity or "
+        f"external_destination_reference: {transaction.transaction_id}"
+    )
 
 
 def _required_internal_lot_destination(
