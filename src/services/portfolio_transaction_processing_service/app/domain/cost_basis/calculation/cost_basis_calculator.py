@@ -4,6 +4,9 @@ from decimal import Decimal
 from typing import Callable, Protocol, cast
 
 from portfolio_common.domain.calculation_lineage import build_calculation_lineage
+from portfolio_common.domain.cost_basis_receipt_integrity import (
+    canonical_cost_basis_output_payload,
+)
 from portfolio_common.domain.decimal_amount import decimal_or_none
 from portfolio_common.domain.transaction.numeric_policy import (
     TRANSACTION_COST_LEDGER_OUTPUT_V1,
@@ -1339,10 +1342,12 @@ class CostBasisCalculator:
                 "calculation_lineage",
                 build_calculation_lineage(
                     algorithm_id="transaction-cost-basis-calculation",
-                    algorithm_version=1,
+                    algorithm_version=2,
                     intermediate_precision=TRANSACTION_COST_LEDGER_OUTPUT_V1.working_precision,
-                    input_payload=lineage_input,
-                    output_payload=transaction_cost_output_payload(transaction),
+                    input_payload=canonical_cost_basis_output_payload(lineage_input),
+                    output_payload=canonical_cost_basis_output_payload(
+                        transaction_cost_output_payload(transaction)
+                    ),
                     numeric_output_policy=TRANSACTION_COST_LEDGER_OUTPUT_V1.lineage_identity(),
                 ),
             )
@@ -1435,8 +1440,16 @@ def _transaction_cost_input(transaction: CostBasisTransaction) -> dict[str, obje
                 "calculation_lineage",
                 "allocated_cost_basis_base",
                 "allocated_cost_basis_local",
+                # Persistence assigns these operational fields after calculation.
+                "created_at",
+                "epoch",
+                # Settlement owns these generated linkage outputs. They may be persisted only
+                # after cost calculation and therefore cannot be cost-basis lineage inputs.
+                "economic_event_id",
                 "error_reason",
+                "external_cash_transaction_id",
                 "gross_cost",
+                "linked_transaction_group_id",
                 "net_cost",
                 "net_cost_local",
                 "realized_gain_loss",

@@ -189,6 +189,67 @@ def test_transaction_cost_lineage_is_deterministic_and_material_input_sensitive(
     )
 
 
+def test_transaction_cost_lineage_is_stable_across_database_decimal_scale(
+    cost_calculator,
+) -> None:
+    def transaction(decimal_scale: str) -> CostBasisTransaction:
+        return CostBasisTransaction(
+            transaction_id="BUY-LINEAGE-SCALE-001",
+            portfolio_id="P1",
+            instrument_id="AAPL",
+            security_id="S1",
+            transaction_type="BUY",
+            transaction_date=datetime(2026, 8, 1),
+            quantity=Decimal(f"10{decimal_scale}"),
+            gross_transaction_amount=Decimal(f"1500{decimal_scale}"),
+            trade_currency="USD",
+            fees=Fees(brokerage=Decimal(f"5{decimal_scale}")),
+            portfolio_base_currency="USD",
+            transaction_fx_rate=Decimal(f"1{decimal_scale}"),
+        )
+
+    source_event = transaction("")
+    database_round_trip = transaction(".0000000000")
+
+    cost_calculator.calculate_transaction_costs(source_event)
+    cost_calculator.calculate_transaction_costs(database_round_trip)
+
+    assert source_event.calculation_lineage == database_round_trip.calculation_lineage
+    assert source_event.calculation_lineage.algorithm_version == 2
+
+
+def test_transaction_cost_lineage_excludes_settlement_owned_generated_linkage(
+    cost_calculator,
+) -> None:
+    source = {
+        "transaction_id": "BUY-LINEAGE-SETTLEMENT-001",
+        "portfolio_id": "P1",
+        "instrument_id": "AAPL",
+        "security_id": "S1",
+        "transaction_type": "BUY",
+        "transaction_date": datetime(2026, 8, 1),
+        "quantity": Decimal("10"),
+        "gross_transaction_amount": Decimal("1500"),
+        "trade_currency": "USD",
+        "portfolio_base_currency": "USD",
+        "transaction_fx_rate": Decimal("1"),
+    }
+    before_settlement = CostBasisTransaction(**source)
+    after_settlement = CostBasisTransaction(
+        **source,
+        created_at=datetime(2026, 8, 1, 1, 2, 3),
+        economic_event_id="ECON-BUY-LINEAGE-SETTLEMENT-001",
+        epoch=42,
+        linked_transaction_group_id="GROUP-BUY-LINEAGE-SETTLEMENT-001",
+        external_cash_transaction_id="BUY-LINEAGE-SETTLEMENT-001-CASHLEG",
+    )
+
+    cost_calculator.calculate_transaction_costs(before_settlement)
+    cost_calculator.calculate_transaction_costs(after_settlement)
+
+    assert before_settlement.calculation_lineage == after_settlement.calculation_lineage
+
+
 @pytest.mark.parametrize(
     "changed_field",
     [
