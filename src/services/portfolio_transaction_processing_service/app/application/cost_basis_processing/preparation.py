@@ -11,7 +11,7 @@ from portfolio_common.domain.transaction_control_codes import (
 )
 
 from ...domain import BookedTransaction
-from ...domain.transaction import enrich_booking_metadata
+from ...domain.transaction import assert_cash_entry_mode_supported, enrich_booking_metadata
 from ...domain.transaction.corporate_action import (
     assert_bundle_a_corporate_action_valid,
     is_bundle_a_corporate_action,
@@ -72,6 +72,7 @@ def prepare_cost_transaction(
     )
     prepared_transaction = enrich_fx_transaction_metadata(prepared_transaction)
     transaction_type = normalize_transaction_control_code(prepared_transaction.transaction_type)
+    assert_cash_entry_mode_supported(prepared_transaction)
 
     if is_bundle_a_corporate_action(transaction_type):
         assert_bundle_a_corporate_action_valid(prepared_transaction)

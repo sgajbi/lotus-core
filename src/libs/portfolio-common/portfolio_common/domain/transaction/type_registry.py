@@ -29,6 +29,7 @@ class TransactionTypeDefinition:
     lot_behavior: str
     settlement_behavior: str
     income_behavior: str
+    default_cash_entry_mode: str | None
     calculation_support_status: str
     production_booking_allowed: bool
 
@@ -43,6 +44,7 @@ def _definition(
     lot_behavior: str,
     settlement_behavior: str,
     income_behavior: str = "none",
+    default_cash_entry_mode: str | None = None,
     calculation_support_status: str = SUPPORTED,
     production_booking_allowed: bool = True,
 ) -> TransactionTypeDefinition:
@@ -55,6 +57,7 @@ def _definition(
         lot_behavior=lot_behavior,
         settlement_behavior=settlement_behavior,
         income_behavior=income_behavior,
+        default_cash_entry_mode=default_cash_entry_mode,
         calculation_support_status=calculation_support_status,
         production_booking_allowed=production_booking_allowed,
     )
@@ -115,6 +118,7 @@ _REGISTRY: dict[str, TransactionTypeDefinition] = {
         lot_behavior="none",
         settlement_behavior="requires_cash_leg",
         income_behavior="interest_income",
+        default_cash_entry_mode="AUTO_GENERATE",
     ),
     "DIVIDEND": _definition(
         "DIVIDEND",
@@ -125,6 +129,7 @@ _REGISTRY: dict[str, TransactionTypeDefinition] = {
         lot_behavior="none",
         settlement_behavior="requires_cash_leg",
         income_behavior="distribution_income",
+        default_cash_entry_mode="AUTO_GENERATE",
     ),
     "DEPOSIT": _definition(
         "DEPOSIT",
@@ -298,6 +303,7 @@ _REGISTRY: dict[str, TransactionTypeDefinition] = {
         cash_effect="inflow",
         lot_behavior="consume_lot",
         settlement_behavior="requires_cash_leg",
+        default_cash_entry_mode="AUTO_GENERATE",
     ),
     "CALL_REDEMPTION": _definition(
         "CALL_REDEMPTION",
@@ -307,6 +313,7 @@ _REGISTRY: dict[str, TransactionTypeDefinition] = {
         cash_effect="inflow",
         lot_behavior="consume_lot",
         settlement_behavior="requires_cash_leg",
+        default_cash_entry_mode="AUTO_GENERATE",
     ),
     "PARTIAL_REDEMPTION": _definition(
         "PARTIAL_REDEMPTION",
@@ -316,6 +323,7 @@ _REGISTRY: dict[str, TransactionTypeDefinition] = {
         cash_effect="inflow",
         lot_behavior="consume_lot",
         settlement_behavior="requires_cash_leg",
+        default_cash_entry_mode="AUTO_GENERATE",
     ),
     "SPLIT": _definition(
         "SPLIT",

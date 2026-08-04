@@ -37,7 +37,7 @@ class SettlementCashValidationError(ValueError):
 
 @dataclass(frozen=True, slots=True)
 class SettlementCashMovement:
-    """Carry one non-zero settlement amount signed from the portfolio perspective."""
+    """Carry one canonical settlement amount signed from the portfolio perspective."""
 
     signed_amount: Decimal
     fee_amount: Decimal
@@ -119,6 +119,19 @@ def _calculate_redemption_movement(
     embedded_fees = transaction.embedded_fee_amount_local or Decimal(0)
     embedded_taxes = transaction.embedded_tax_amount_local or Decimal(0)
     available_proceeds = principal + accrued_interest - embedded_fees - embedded_taxes
+    if (
+        transaction.price == 0
+        and principal == 0
+        and accrued_interest == 0
+        and embedded_fees == 0
+        and embedded_taxes == 0
+        and fee == 0
+    ):
+        return SettlementCashMovement(
+            signed_amount=Decimal(0),
+            fee_amount=fee,
+            adjustment_reason="REDEMPTION_SETTLEMENT",
+        )
     return _calculate_positive_proceeds_movement(
         transaction=transaction,
         available_proceeds=available_proceeds,

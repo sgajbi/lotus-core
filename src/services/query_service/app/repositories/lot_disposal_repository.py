@@ -238,8 +238,9 @@ def _verify_header_shape(receipt: LotDisposalReceiptRecord) -> None:
         raise ValueError("calculation policy identity is incomplete")
     if receipt.disposal_timestamp.tzinfo is None or receipt.disposal_timestamp.utcoffset() is None:
         raise ValueError("disposal timestamp must be timezone-aware")
-    if calculation_lineage_from_payload(receipt.transaction_calculation_lineage) is None:
+    if receipt.transaction_calculation_lineage is None:
         raise ValueError("transaction calculation lineage is required")
+    calculation_lineage_from_payload(receipt.transaction_calculation_lineage)
     _verify_destination(receipt)
 
 
@@ -323,8 +324,7 @@ def _verify_lifecycle(
             raise ValueError("active receipt lacks positive allocations")
         if receipt.disposal_calculation_lineage is None:
             raise ValueError("active receipt lacks disposal lineage")
-        if calculation_lineage_from_payload(receipt.disposal_calculation_lineage) is None:
-            raise ValueError("active receipt has invalid disposal lineage")
+        calculation_lineage_from_payload(receipt.disposal_calculation_lineage)
         if receipt.void_reason is not None:
             raise ValueError("active receipt has a void reason")
         return
@@ -483,7 +483,7 @@ def _verify_amortized_cost_evidence(
     ):
         raise ValueError("amortized base cost does not conserve")
     lineage = calculation_lineage_from_payload(allocation.amortized_cost_calculation_lineage)
-    if lineage is None or not calculation_lineage_binds_output(
+    if not calculation_lineage_binds_output(
         lineage,
         output_payload=_amortized_cost_output_payload(allocation),
     ):

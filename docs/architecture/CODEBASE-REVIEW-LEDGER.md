@@ -1,5 +1,16 @@
 # Codebase Review Ledger
 
+CR-1678 protected-review addendum (2026-08-04): redemption booking now applies the registry-owned
+`AUTO_GENERATE` default before cost processing and fails closed before mutation when a non-zero
+redemption lacks a settlement cash account. A canonical zero-price, zero-proceeds write-off remains
+valid without a synthetic zero adjustment. Full maturity/call quantities accepted within the
+ledger tolerance are canonicalized to the exact available position, preventing residual lot dust.
+Query-side disposal and basis-transfer supportability verifiers now have complete adversarial
+line/branch proof across identity, allocation, lifecycle, economics, lineage, and hash-chain drift.
+This closes the three protected-review findings and the combined-coverage regression without
+weakening the 98% gate; no schema, API/OpenAPI, Kafka, central-context, skill-routing, or capability
+wiki truth changed.
+
 CR-1678 replay-determinism addendum (2026-08-04): redemption repair exposed that economically
 equal source-event and database-scale decimals produced different transaction and source-allocation
 lineage hashes. Persisted operational timestamps and Core-generated settlement linkage also entered

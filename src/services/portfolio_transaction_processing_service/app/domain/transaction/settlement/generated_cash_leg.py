@@ -5,6 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from decimal import Decimal
 
+from portfolio_common.domain.transaction.type_registry import (
+    production_transaction_types_for_lifecycle_families,
+)
 from portfolio_common.domain.transaction_control_codes import (
     normalize_transaction_control_code,
 )
@@ -37,11 +40,16 @@ def should_generate_settlement_cash_leg(transaction: BookedTransaction) -> bool:
         return False
     mode = resolve_cash_entry_mode(transaction.cash_entry_mode)
     transaction_type = normalize_transaction_control_code(transaction.transaction_type)
-    return (
+    should_generate = (
         mode is CashEntryMode.AUTO_GENERATE
         and transaction_type in GENERATED_CASH_LEG_TRANSACTION_TYPES
         and bool((transaction.settlement_cash_account_id or "").strip())
     )
+    if not should_generate:
+        return False
+    if transaction_type in REDEMPTION_SETTLEMENT_TRANSACTION_TYPES:
+        return bool(calculate_settlement_cash_movement(transaction).signed_amount != 0)
+    return True
 
 
 def build_generated_settlement_cash_leg(
@@ -124,3 +132,6 @@ def _resolve_generated_linkage(
 
 
 GENERATED_CASH_LEG_TRANSACTION_TYPES = ORDINARY_SETTLEMENT_TRANSACTION_TYPES
+REDEMPTION_SETTLEMENT_TRANSACTION_TYPES = production_transaction_types_for_lifecycle_families(
+    "redemption"
+)

@@ -5,6 +5,7 @@ from __future__ import annotations
 from enum import StrEnum
 
 from portfolio_common.domain.transaction.type_registry import (
+    get_transaction_type_definition,
     production_transaction_types_for_lifecycle_families,
 )
 from portfolio_common.domain.transaction_control_codes import (
@@ -12,6 +13,7 @@ from portfolio_common.domain.transaction_control_codes import (
 )
 
 from ..booked import BookedTransaction
+from .cash_movement import calculate_settlement_cash_movement
 
 
 class CashEntryMode(StrEnum):
@@ -56,17 +58,33 @@ def is_portfolio_level_cash_flow(transaction_type: str | None) -> bool:
 
 
 def assert_cash_entry_mode_supported(transaction: BookedTransaction) -> None:
-    """Reject generated cash legs for transactions that already represent portfolio cash."""
+    """Reject cash-entry modes that cannot satisfy the registry settlement contract."""
 
-    if transaction.cash_entry_mode is None:
+    definition = get_transaction_type_definition(transaction.transaction_type)
+    default_mode = definition.default_cash_entry_mode if definition is not None else None
+    if transaction.cash_entry_mode is None and default_mode is None:
         return
-    if not is_portfolio_level_cash_flow(transaction.transaction_type):
-        return
-    if resolve_cash_entry_mode(transaction.cash_entry_mode) is not CashEntryMode.AUTO_GENERATE:
-        return
-
-    supported_types = ", ".join(sorted(PORTFOLIO_LEVEL_CASH_FLOW_TRANSACTION_TYPES))
-    raise ValueError(
-        "AUTO_GENERATE cash_entry_mode is not supported for portfolio-level flow "
-        f"transaction types ({supported_types})."
-    )
+    mode = resolve_cash_entry_mode(transaction.cash_entry_mode or default_mode)
+    if is_portfolio_level_cash_flow(transaction.transaction_type):
+        if mode is not CashEntryMode.AUTO_GENERATE:
+            return
+        supported_types = ", ".join(sorted(PORTFOLIO_LEVEL_CASH_FLOW_TRANSACTION_TYPES))
+        raise ValueError(
+            "AUTO_GENERATE cash_entry_mode is not supported for portfolio-level flow "
+            f"transaction types ({supported_types})."
+        )
+    if (
+        default_mode == CashEntryMode.AUTO_GENERATE.value
+        and mode is CashEntryMode.AUTO_GENERATE
+        and not (transaction.settlement_cash_account_id or "").strip()
+    ):
+        if (
+            definition is not None
+            and definition.lifecycle_family == "redemption"
+            and calculate_settlement_cash_movement(transaction).signed_amount == 0
+        ):
+            return
+        raise ValueError(
+            "settlement_cash_account_id is required when cash_entry_mode is AUTO_GENERATE "
+            f"for {transaction.transaction_type.strip().upper()}."
+        )

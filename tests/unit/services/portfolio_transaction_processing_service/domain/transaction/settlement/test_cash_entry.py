@@ -95,5 +95,10 @@ def test_cash_entry_policy_normalizes_control_codes_before_validation() -> None:
 
 def test_cash_entry_policy_allows_upstream_or_non_portfolio_flows() -> None:
     assert_cash_entry_mode_supported(_transaction("FEE", "UPSTREAM_PROVIDED"))
-    assert_cash_entry_mode_supported(_transaction("DIVIDEND", "AUTO_GENERATE"))
+    assert_cash_entry_mode_supported(
+        replace(
+            _transaction("DIVIDEND", "AUTO_GENERATE"),
+            settlement_cash_account_id="CASH-USD-001",
+        )
+    )
     assert_cash_entry_mode_supported(replace(_transaction("FEE"), cash_entry_mode=None))

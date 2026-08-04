@@ -6,6 +6,7 @@ from dataclasses import dataclass, replace
 from typing import Callable
 
 from portfolio_common.domain.cost_basis_method import CostBasisMethod, normalize_cost_basis_method
+from portfolio_common.domain.transaction.type_registry import get_transaction_type_definition
 from portfolio_common.domain.transaction_control_codes import (
     normalize_transaction_control_code,
 )
@@ -33,7 +34,6 @@ class BookingMetadataPolicy:
     linkage_prefix: str
     default_policy_version: str
     policy_id_resolver: PolicyIdResolver
-    resolves_cash_entry_mode: bool = False
 
 
 def enrich_booking_metadata(
@@ -45,8 +45,14 @@ def enrich_booking_metadata(
 
     transaction_type = normalize_transaction_control_code(transaction.transaction_type)
     policy = _BOOKING_METADATA_POLICIES.get(transaction_type)
+    cash_entry_mode = _resolve_default_cash_entry_mode(
+        transaction_type,
+        transaction.cash_entry_mode,
+    )
     if policy is None:
-        return transaction
+        if cash_entry_mode == transaction.cash_entry_mode:
+            return transaction
+        return replace(transaction, cash_entry_mode=cash_entry_mode)
 
     economic_event_id = transaction.economic_event_id or (
         f"EVT-{policy.linkage_prefix}-{transaction.portfolio_id}-{transaction.transaction_id}"
@@ -60,10 +66,6 @@ def enrich_booking_metadata(
     calculation_policy_version = (
         transaction.calculation_policy_version or policy.default_policy_version
     )
-    cash_entry_mode = transaction.cash_entry_mode
-    if policy.resolves_cash_entry_mode:
-        cash_entry_mode = resolve_cash_entry_mode(cash_entry_mode).value
-
     return replace(
         transaction,
         economic_event_id=economic_event_id,
@@ -72,6 +74,17 @@ def enrich_booking_metadata(
         calculation_policy_version=calculation_policy_version,
         cash_entry_mode=cash_entry_mode,
     )
+
+
+def _resolve_default_cash_entry_mode(
+    transaction_type: str,
+    cash_entry_mode: str | None,
+) -> str | None:
+    definition = get_transaction_type_definition(transaction_type)
+    default_mode = definition.default_cash_entry_mode if definition is not None else None
+    if default_mode is None:
+        return cash_entry_mode
+    return str(resolve_cash_entry_mode(cash_entry_mode or default_mode).value)
 
 
 def _constant_policy_id(policy_id: str) -> PolicyIdResolver:
@@ -102,12 +115,10 @@ _BOOKING_METADATA_POLICIES = {
         linkage_prefix="DIVIDEND",
         default_policy_version=DIVIDEND_DEFAULT_POLICY_VERSION,
         policy_id_resolver=_constant_policy_id(DIVIDEND_DEFAULT_POLICY_ID),
-        resolves_cash_entry_mode=True,
     ),
     "INTEREST": BookingMetadataPolicy(
         linkage_prefix="INTEREST",
         default_policy_version=INTEREST_DEFAULT_POLICY_VERSION,
         policy_id_resolver=_constant_policy_id(INTEREST_DEFAULT_POLICY_ID),
-        resolves_cash_entry_mode=True,
     ),
 }

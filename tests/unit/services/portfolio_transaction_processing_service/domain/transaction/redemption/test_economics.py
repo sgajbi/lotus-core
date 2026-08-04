@@ -153,6 +153,37 @@ def test_full_redemption_types_must_close_the_position(transaction_type: str) ->
     assert raised.value.code is RedemptionCalculationReasonCode.FULL_REDEMPTION_QUANTITY_MISMATCH
 
 
+@pytest.mark.parametrize("transaction_type", ["MATURITY_REDEMPTION", "CALL_REDEMPTION"])
+def test_full_redemption_canonicalizes_tolerance_dust_to_the_available_position(
+    transaction_type: str,
+) -> None:
+    result = calculate_redemption_economics(
+        _terms(
+            transaction_type=transaction_type,
+            redeemed_quantity=Decimal("99.99999999995"),
+        )
+    )
+
+    assert result.redeemed_quantity == Decimal("100.0000000000")
+    assert result.remaining_quantity == Decimal("0E-10")
+    assert result.derived_principal_proceeds_local == Decimal("10000.0000000000")
+
+
+@pytest.mark.parametrize("transaction_type", ["MATURITY_REDEMPTION", "CALL_REDEMPTION"])
+def test_full_redemption_rejects_quantity_dust_outside_tolerance(
+    transaction_type: str,
+) -> None:
+    with pytest.raises(RedemptionCalculationError) as raised:
+        calculate_redemption_economics(
+            _terms(
+                transaction_type=transaction_type,
+                redeemed_quantity=Decimal("99.9999999998"),
+            )
+        )
+
+    assert raised.value.code is RedemptionCalculationReasonCode.FULL_REDEMPTION_QUANTITY_MISMATCH
+
+
 def test_partial_redemption_must_leave_a_position() -> None:
     with pytest.raises(RedemptionCalculationError) as raised:
         calculate_redemption_economics(_terms(transaction_type="PARTIAL_REDEMPTION"))

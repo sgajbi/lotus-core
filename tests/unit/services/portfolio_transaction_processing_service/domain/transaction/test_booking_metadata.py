@@ -99,6 +99,34 @@ def test_booking_metadata_preserves_upstream_values() -> None:
     assert enriched.external_cash_transaction_id == "CASH-UPSTREAM-001"
 
 
+@pytest.mark.parametrize(
+    "transaction_type",
+    ["MATURITY_REDEMPTION", "CALL_REDEMPTION", "PARTIAL_REDEMPTION"],
+)
+def test_redemption_booking_metadata_defaults_to_generated_cash(
+    transaction_type: str,
+) -> None:
+    enriched = enrich_booking_metadata(_transaction(transaction_type))
+
+    assert enriched.cash_entry_mode == "AUTO_GENERATE"
+    assert enriched.economic_event_id is None
+    assert enriched.linked_transaction_group_id is None
+
+
+@pytest.mark.parametrize(
+    "transaction_type",
+    ["MATURITY_REDEMPTION", "CALL_REDEMPTION", "PARTIAL_REDEMPTION"],
+)
+def test_redemption_booking_metadata_preserves_upstream_cash_mode(
+    transaction_type: str,
+) -> None:
+    enriched = enrich_booking_metadata(
+        replace(_transaction(transaction_type), cash_entry_mode=" upstream_provided ")
+    )
+
+    assert enriched.cash_entry_mode == "UPSTREAM_PROVIDED"
+
+
 def test_sell_booking_metadata_uses_avco_policy_when_requested() -> None:
     enriched = enrich_booking_metadata(_transaction("SELL"), cost_basis_method="AVCO")
 
