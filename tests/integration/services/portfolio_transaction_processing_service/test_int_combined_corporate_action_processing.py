@@ -200,8 +200,7 @@ async def test_full_exchange_conserves_basis_and_balances_linked_mvt_flows(
         disposal_receipt = (
             await verification_session.execute(
                 select(LotDisposalReceiptRecord).where(
-                    LotDisposalReceiptRecord.disposal_transaction_id
-                    == source_out.transaction_id
+                    LotDisposalReceiptRecord.disposal_transaction_id == source_out.transaction_id
                 )
             )
         ).scalar_one()
@@ -210,8 +209,7 @@ async def test_full_exchange_conserves_basis_and_balances_linked_mvt_flows(
                 await verification_session.execute(
                     select(LotDisposalAllocationRecord)
                     .where(
-                        LotDisposalAllocationRecord.receipt_id
-                        == disposal_receipt.receipt_id,
+                        LotDisposalAllocationRecord.receipt_id == disposal_receipt.receipt_id,
                         LotDisposalAllocationRecord.receipt_version
                         == disposal_receipt.receipt_version,
                     )
