@@ -2,6 +2,7 @@
 import logging
 import os
 from dataclasses import dataclass
+from typing import cast
 
 from dotenv import load_dotenv
 
@@ -31,12 +32,15 @@ class KafkaTopicDefinition:
 def _env_int(name: str, default: int, *, minimum: int | None = None) -> int:
     safe_default = _safe_int_default(default)
     fallback = _minimum_safe_default(safe_default, minimum=minimum)
-    return shared_env_int(
-        name,
-        fallback,
-        service_name=CONFIG_SERVICE_NAME,
-        minimum=minimum,
-        minimum_fallback=fallback,
+    return cast(
+        int,
+        shared_env_int(
+            name,
+            fallback,
+            service_name=CONFIG_SERVICE_NAME,
+            minimum=minimum,
+            minimum_fallback=fallback,
+        ),
     )
 
 
@@ -54,7 +58,7 @@ def _minimum_safe_default(default: int, *, minimum: int | None) -> int:
 
 
 def _env_bool(name: str, default: bool) -> bool:
-    return shared_env_bool(name, default, service_name=CONFIG_SERVICE_NAME)
+    return cast(bool, shared_env_bool(name, default, service_name=CONFIG_SERVICE_NAME))
 
 
 def load_health_probe_bind_host() -> str:
@@ -227,7 +231,7 @@ KAFKA_TOPIC_DEFINITIONS = (
     KafkaTopicDefinition(
         canonical_name="fixed_income.book_cost.disposal_replay.requested",
         runtime_name=KAFKA_FIXED_INCOME_BOOK_COST_DISPOSAL_REPLAY_REQUESTED_TOPIC,
-        lifecycle_status="inactive",
+        lifecycle_status="active",
         semantic_type="command",
         scope="tenant_legal_book_portfolio_security_lot",
         partition_count=12,
