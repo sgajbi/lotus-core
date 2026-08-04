@@ -119,6 +119,17 @@ lifecycle, allocation-count, ordinal, uniqueness, local/base conservation, child
 semantic-hash, version-hash, or predecessor-chain mismatch. Its response includes source and target
 references, pre-transfer/transferred/retained economics, calculation lineage, and hash-chain
 evidence without claiming a target security identifier that the source event does not own.
+
+Quantity-consuming `MERGER_OUT`, `EXCHANGE_OUT`, and `REPLACEMENT_OUT` receipts now carry a
+discriminated `INTERNAL_LOT` destination on the receipt header. The destination binds the governed
+target transaction, its deterministic `LOT-{target_transaction_id}` lot identity, and the target
+instrument while the ordered allocation children retain source-lot ownership. Persistence and the
+existing transaction-neutral query expose this source-to-target evidence additively, and receipt
+hash reconstruction rejects a missing discriminator, mixed internal/external shape, changed target
+identity, or an external reference grafted onto an internal transfer. No target foreign key is
+introduced because source-before-target processing is valid. Ordinary `TRANSFER_OUT` remains
+without fabricated destination evidence until the canonical event and booked-transaction contracts
+carry a governed external destination reference and reciprocal internal-leg validation exists.
 An additive `lot_amortized_cost_authority` ledger and application port now persist and reload all
 four required source families through one governed pattern. Per-source transaction locks,
 monotonic correction versions, exact-retry neutrality, canonical decimal/date payloads, composite
@@ -211,7 +222,9 @@ unscoped history; it cannot govern an authoritative receipt.
 ## Compatibility And Documentation
 
 Existing unit-price results, snapshot fields, tax/original lot basis, and production-bookable
-transaction types remain stable. `FACTOR_ADJUSTED_CURRENT_PRINCIPAL`, supplied current principal,
+transaction types remain stable. The lot-disposal query adds nullable destination fields; legacy
+receipts preserve their exact semantic hash because absent destination evidence is omitted from the
+hashed payload. `FACTOR_ADJUSTED_CURRENT_PRINCIPAL`, supplied current principal,
 accrued-income variants without evidence, and every redemption type remain fail closed. The schema
 change is additive; no public API/OpenAPI, Kafka runtime, or capability claim changed. The authored
 Data Models wiki documents the staged ledgers while the capability wiki remains
@@ -303,6 +316,13 @@ Data Models wiki documents the staged ledgers while the capability wiki remains
   `30901770196` is green at exact predecessor head `94687ceaef` across all five jobs. The authored
   capability wiki remains unchanged because complete corporate-action scenario certification and
   production redemption are still open.
+- quantity-consuming destination proof: signed commits `1f3139c16` through `ad7f7a133`; 27 focused
+  domain, adapter, application, and query tests cover internal/external discrimination, exact legacy
+  hash compatibility, persistence reconstruction, destination tamper rejection, required target
+  identity, and additive response mapping. The exact-source PostgreSQL full-exchange scenario passed
+  in 428.82 seconds with migration head `c147b2c3d514`, source allocation, duplicate neutrality, and
+  target transaction/lot/instrument evidence. Remote Feature Lane `30903554727` is green across all
+  five jobs at predecessor head `3edfdac9f`; exact-current-head CI remains pending.
 
 Protected PR and exact-main evidence remain pending for this tranche. Wider runtime recovery/load
 proof, complete corporate-action scenario coverage, redemption, and final issue closure remain
