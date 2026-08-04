@@ -163,6 +163,7 @@ async def test_redemption_books_linked_principal_cash_and_immutable_lot_evidence
     security_id = f"FO_FI_REDEMPTION_{suffix}_01"
     buy_id = f"BUY-REDEMPTION-{suffix}-01"
     redemption_id = f"{transaction_type}-01"
+    interest_leg_id = f"{redemption_id}-ACCRUED-INTEREST"
     cash_leg_id = f"{redemption_id}-CASHLEG"
 
     acquisition = booked_transaction_event(
@@ -230,7 +231,11 @@ async def test_redemption_books_linked_principal_cash_and_immutable_lot_evidence
 
     assert acquisition_result.status is TransactionProcessingStatus.PROCESSED
     assert redemption_result.status is TransactionProcessingStatus.PROCESSED
-    assert redemption_result.processed_transaction_ids == (redemption_id, cash_leg_id)
+    assert redemption_result.processed_transaction_ids == (
+        redemption_id,
+        interest_leg_id,
+        cash_leg_id,
+    )
     assert duplicate.status is TransactionProcessingStatus.DUPLICATE
 
     async with context.session_factory() as verification_session:
@@ -240,7 +245,9 @@ async def test_redemption_books_linked_principal_cash_and_immutable_lot_evidence
                 (
                     await verification_session.execute(
                         select(DBTransaction).where(
-                            DBTransaction.transaction_id.in_([redemption_id, cash_leg_id])
+                            DBTransaction.transaction_id.in_(
+                                [redemption_id, interest_leg_id, cash_leg_id]
+                            )
                         )
                     )
                 )
@@ -281,7 +288,9 @@ async def test_redemption_books_linked_principal_cash_and_immutable_lot_evidence
             (
                 await verification_session.execute(
                     select(Cashflow)
-                    .where(Cashflow.transaction_id.in_([redemption_id, cash_leg_id]))
+                    .where(
+                        Cashflow.transaction_id.in_([redemption_id, interest_leg_id, cash_leg_id])
+                    )
                     .order_by(Cashflow.transaction_id)
                 )
             )
@@ -302,10 +311,19 @@ async def test_redemption_books_linked_principal_cash_and_immutable_lot_evidence
     assert generated_cash_leg.gross_transaction_amount == Decimal(expected_settlement)
     assert generated_cash_leg.movement_direction == "INFLOW"
     assert generated_cash_leg.originating_transaction_id == redemption_id
-    assert [cashflow.amount for cashflow in cashflows] == [
-        Decimal(expected_settlement),
-        Decimal(expected_settlement),
-    ]
+
+    generated_interest_leg = transactions[interest_leg_id]
+    assert generated_interest_leg.transaction_type == "INTEREST"
+    assert generated_interest_leg.gross_transaction_amount == Decimal(accrued_interest)
+    assert generated_interest_leg.originating_transaction_id == redemption_id
+    assert generated_interest_leg.component_type == "REDEMPTION_ACCRUED_INTEREST"
+
+    cashflows_by_transaction = {cashflow.transaction_id: cashflow for cashflow in cashflows}
+    assert cashflows_by_transaction[redemption_id].amount == Decimal(redeemed_quantity)
+    assert cashflows_by_transaction[redemption_id].classification == "INVESTMENT_INFLOW"
+    assert cashflows_by_transaction[interest_leg_id].amount == Decimal(accrued_interest)
+    assert cashflows_by_transaction[interest_leg_id].classification == "INCOME"
+    assert cashflows_by_transaction[cash_leg_id].amount == Decimal(expected_settlement)
     assert len({cashflow.economic_event_id for cashflow in cashflows}) == 1
     assert len({cashflow.linked_transaction_group_id for cashflow in cashflows}) == 1
 
@@ -343,6 +361,7 @@ async def test_partial_redemption_replay_restores_cash_without_versioning_receip
     portfolio_id = "PORT-REDEMPTION-REPLAY-01"
     security_id = "FO_FI_REDEMPTION_REPLAY_01"
     redemption_id = "PARTIAL_REDEMPTION-REPLAY-01"
+    interest_leg_id = f"{redemption_id}-ACCRUED-INTEREST"
     cash_leg_id = f"{redemption_id}-CASHLEG"
     acquisition = booked_transaction_event(
         transaction_id="BUY-REDEMPTION-REPLAY-01",
@@ -396,7 +415,9 @@ async def test_partial_redemption_replay_restores_cash_without_versioning_receip
         assert result.status is TransactionProcessingStatus.PROCESSED
 
     await async_db_session.execute(
-        delete(Cashflow).where(Cashflow.transaction_id.in_([redemption_id, cash_leg_id]))
+        delete(Cashflow).where(
+            Cashflow.transaction_id.in_([redemption_id, interest_leg_id, cash_leg_id])
+        )
     )
     await async_db_session.commit()
 
@@ -429,13 +450,20 @@ async def test_partial_redemption_replay_restores_cash_without_versioning_receip
     assert replay_event.accrued_interest_proceeds_local == Decimal("2")
     assert replay_event.external_cash_transaction_id == cash_leg_id
     assert repair_result.status is TransactionProcessingStatus.PROCESSED
+    assert repair_result.processed_transaction_ids == (
+        redemption_id,
+        interest_leg_id,
+        cash_leg_id,
+    )
 
     async with restarted_context.session_factory() as verification_session:
         cashflows = (
             (
                 await verification_session.execute(
                     select(Cashflow)
-                    .where(Cashflow.transaction_id.in_([redemption_id, cash_leg_id]))
+                    .where(
+                        Cashflow.transaction_id.in_([redemption_id, interest_leg_id, cash_leg_id])
+                    )
                     .order_by(Cashflow.transaction_id)
                 )
             )
@@ -462,7 +490,12 @@ async def test_partial_redemption_replay_restores_cash_without_versioning_receip
             )
         )
 
-    assert [cashflow.amount for cashflow in cashflows] == [Decimal("42"), Decimal("42")]
+    cashflows_by_transaction = {cashflow.transaction_id: cashflow for cashflow in cashflows}
+    assert cashflows_by_transaction[redemption_id].amount == Decimal("40")
+    assert cashflows_by_transaction[redemption_id].classification == "INVESTMENT_INFLOW"
+    assert cashflows_by_transaction[interest_leg_id].amount == Decimal("2")
+    assert cashflows_by_transaction[interest_leg_id].classification == "INCOME"
+    assert cashflows_by_transaction[cash_leg_id].amount == Decimal("42")
     assert len({cashflow.economic_event_id for cashflow in cashflows}) == 1
     assert len({cashflow.linked_transaction_group_id for cashflow in cashflows}) == 1
     assert len(receipts) == 1
