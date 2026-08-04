@@ -250,6 +250,43 @@ def test_historical_rebuild_preserves_pre_policy_cashflow_economics(
     assert cashflow.amount == expected_amount
 
 
+@pytest.mark.parametrize(
+    "transaction_type",
+    ["MATURITY_REDEMPTION", "CALL_REDEMPTION", "PARTIAL_REDEMPTION"],
+)
+@pytest.mark.parametrize(
+    ("principal_proceeds_local", "expected_amount"),
+    [
+        (None, Decimal("100.0000000000")),
+        (Decimal("100.00000000009"), Decimal("100.0000000001")),
+    ],
+)
+def test_backdated_redemption_suffix_rebuild_uses_canonical_settlement_economics(
+    transaction_type: str,
+    principal_proceeds_local: Decimal | None,
+    expected_amount: Decimal,
+) -> None:
+    transaction = _booked_transaction(
+        transaction_type=transaction_type,
+        quantity=Decimal("2"),
+        price=Decimal("50"),
+        gross_transaction_amount=Decimal("999"),
+        principal_proceeds_local=principal_proceeds_local,
+        accrued_interest_proceeds_local=Decimal("7"),
+        embedded_fee_amount_local=Decimal("2"),
+        embedded_tax_amount_local=Decimal("1"),
+        trade_fee=Decimal("4"),
+    )
+
+    cashflow = calculate_transaction_cashflow(
+        transaction,
+        _rule(CashflowClassification.CORPORATE_ACTION_PROCEEDS),
+        calculation_context=CashflowCalculationContext.HISTORICAL_REBUILD,
+    )
+
+    assert cashflow.amount == expected_amount
+
+
 def test_historical_rebuild_preserves_mismatched_explicit_interest_net() -> None:
     transaction = _booked_transaction(
         transaction_type="INTEREST",
