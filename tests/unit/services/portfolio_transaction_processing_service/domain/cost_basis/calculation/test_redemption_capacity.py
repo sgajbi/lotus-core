@@ -25,6 +25,7 @@ def _transaction(
         "instrument_id": "FO_FI_REDEMPTION_CAPACITY_01",
         "security_id": "FO_FI_REDEMPTION_CAPACITY_01",
         "transaction_date": transaction_date.isoformat(),
+        "settlement_date": transaction_date.isoformat(),
         "transaction_type": transaction_type,
         "quantity": quantity,
         "price": price,
@@ -34,6 +35,8 @@ def _transaction(
         "portfolio_base_currency": "USD",
         "transaction_fx_rate": "1",
         "trade_fee": "0",
+        "product_type": "BOND",
+        "asset_class": "FIXED_INCOME",
     }
 
 
