@@ -84,6 +84,7 @@ TRANSACTION_METADATA_FIELDS = (
     "target_instrument_id",
     "source_transaction_reference",
     "target_transaction_reference",
+    "external_destination_reference",
     "linked_cash_transaction_id",
     "redemption_price_type",
     "old_factor",

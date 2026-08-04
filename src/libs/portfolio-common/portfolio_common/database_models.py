@@ -1971,6 +1971,7 @@ class Transaction(Base):
     target_instrument_id = Column(String, nullable=True, index=True)
     source_transaction_reference = Column(String, nullable=True, index=True)
     target_transaction_reference = Column(String, nullable=True, index=True)
+    external_destination_reference = Column(String, nullable=True)
     linked_cash_transaction_id = Column(String, nullable=True, index=True)
     redemption_price_type = Column(String, nullable=True)
     old_factor = Column(ExactNumeric(18, 10), nullable=True)
