@@ -30,8 +30,9 @@ class LotBasisTransferReceiptState:
     target_transaction_id: str
     target_lot_id: str
     portfolio_id: str
-    instrument_id: str
-    security_id: str
+    source_instrument_id: str
+    source_security_id: str
+    target_instrument_id: str | None
     transfer_timestamp: datetime
     transaction_type: str
     cost_basis_method: CostBasisMethod
@@ -53,8 +54,8 @@ class LotBasisTransferReceiptState:
             "target_transaction_id",
             "target_lot_id",
             "portfolio_id",
-            "instrument_id",
-            "security_id",
+            "source_instrument_id",
+            "source_security_id",
             "transaction_type",
         ):
             value = getattr(self, field_name)
@@ -68,6 +69,15 @@ class LotBasisTransferReceiptState:
             raise ValueError("source and target transaction ids must differ")
         if self.target_lot_id != f"LOT-{self.target_transaction_id}":
             raise ValueError("target_lot_id must derive from target_transaction_id")
+        if self.target_instrument_id is not None:
+            if not isinstance(self.target_instrument_id, str):
+                raise TypeError("target_instrument_id must be a string or None")
+            normalized_target_instrument = self.target_instrument_id.strip()
+            object.__setattr__(
+                self,
+                "target_instrument_id",
+                normalized_target_instrument or None,
+            )
         if not isinstance(self.transfer_timestamp, datetime):
             raise TypeError("transfer_timestamp must be a datetime")
         if self.transfer_timestamp.tzinfo is None or self.transfer_timestamp.utcoffset() is None:
@@ -93,7 +103,7 @@ class LotBasisTransferReceiptState:
         identity_hash = canonical_content_hash(
             {
                 "portfolio_id": self.portfolio_id,
-                "security_id": self.security_id,
+                "source_security_id": self.source_security_id,
                 "source_transaction_id": self.source_transaction_id,
             }
         )
@@ -120,12 +130,13 @@ class LotBasisTransferReceiptState:
                     "calculation_policy_id": self.calculation_policy_id,
                     "calculation_policy_version": self.calculation_policy_version,
                     "cost_basis_method": self.cost_basis_method.value,
-                    "instrument_id": self.instrument_id,
                     "portfolio_id": self.portfolio_id,
-                    "security_id": self.security_id,
+                    "source_instrument_id": self.source_instrument_id,
+                    "source_security_id": self.source_security_id,
                     "source_transaction_id": self.source_transaction_id,
                     "status": self.status.value,
                     "target_lot_id": self.target_lot_id,
+                    "target_instrument_id": self.target_instrument_id,
                     "target_transaction_id": self.target_transaction_id,
                     "transaction_calculation_lineage": (
                         self.transaction_calculation_lineage.lineage_payload()
