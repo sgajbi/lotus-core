@@ -814,6 +814,86 @@ async def test_repair_intent_claims_payload_specific_correction_identity() -> No
 
 
 @pytest.mark.asyncio
+async def test_stable_repair_claim_fences_payload_correction_delivery() -> None:
+    calls: list[str] = []
+    unit_of_work = _UnitOfWork(
+        calls=calls,
+        idempotency_outcome=TransactionIdempotencyOutcome.SEMANTIC_CONFLICT,
+    )
+    unit_of_work.idempotency.outcomes.append(TransactionIdempotencyOutcome.CLAIMED)
+    command = replace(
+        _command(),
+        transaction=replace(
+            _command().transaction,
+            quantity=Decimal("12"),
+            gross_transaction_amount=Decimal("306"),
+        ),
+        metadata=replace(
+            _command().metadata,
+            processing_intent=TransactionProcessingIntent.REPAIR,
+            repair_delivery_id="repair-command-001",
+        ),
+    )
+
+    result = await ProcessTransactionUseCase(
+        lambda: unit_of_work,
+        observer=_RecordingObserver(),
+    ).execute(command)
+
+    assert result.status is TransactionProcessingStatus.PROCESSED
+    assert calls == [
+        "enter",
+        "idempotency",
+        "idempotency",
+        "repair-idempotency",
+        "cost:TX-001",
+        "position:TX-001",
+        "cashflow:TX-001:0",
+        "readiness:TX-001:0",
+        "commit",
+    ]
+    assert unit_of_work.idempotency.repair_claim_kwargs["event_id"] == "repair-command-001"
+
+
+@pytest.mark.asyncio
+async def test_redelivered_stable_payload_correction_skips_financial_work() -> None:
+    calls: list[str] = []
+    unit_of_work = _UnitOfWork(
+        calls=calls,
+        idempotency_outcome=TransactionIdempotencyOutcome.SEMANTIC_CONFLICT,
+    )
+    unit_of_work.idempotency.outcomes.append(TransactionIdempotencyOutcome.CLAIMED)
+    unit_of_work.idempotency.repair_claimed = False
+    command = replace(
+        _command(),
+        transaction=replace(
+            _command().transaction,
+            quantity=Decimal("12"),
+            gross_transaction_amount=Decimal("306"),
+        ),
+        metadata=replace(
+            _command().metadata,
+            processing_intent=TransactionProcessingIntent.REPAIR,
+            repair_delivery_id="repair-command-001",
+        ),
+    )
+
+    result = await ProcessTransactionUseCase(
+        lambda: unit_of_work,
+        observer=_RecordingObserver(),
+    ).execute(command)
+
+    assert result.status is TransactionProcessingStatus.DUPLICATE
+    assert calls == [
+        "enter",
+        "idempotency",
+        "idempotency",
+        "repair-idempotency",
+        "rollback",
+    ]
+
+
+@pytest.mark.asyncio
 async def test_repair_intent_fails_closed_when_correction_identity_conflicts() -> None:
     calls: list[str] = []
     unit_of_work = _UnitOfWork(

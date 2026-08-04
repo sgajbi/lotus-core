@@ -140,31 +140,43 @@ class ProcessTransactionUseCase:
                     correction_claimed = (
                         idempotency_outcome is TransactionIdempotencyOutcome.CLAIMED
                     )
-                repair_delivery_claimed = (
-                    idempotency_outcome is TransactionIdempotencyOutcome.SEMANTIC_DUPLICATE
-                    and metadata.processing_intent is TransactionProcessingIntent.REPAIR
-                    and await unit_of_work.idempotency.claim_repair_delivery(
+                repair_delivery_required = (
+                    metadata.processing_intent is TransactionProcessingIntent.REPAIR
+                    and (
+                        idempotency_outcome is TransactionIdempotencyOutcome.SEMANTIC_DUPLICATE
+                        or (correction_claimed and metadata.repair_delivery_id is not None)
+                    )
+                )
+                repair_delivery_claimed = repair_delivery_required and (
+                    await unit_of_work.idempotency.claim_repair_delivery(
                         event_id=metadata.repair_delivery_id or metadata.event_id,
                         portfolio_id=transaction.portfolio_id,
                         correlation_id=metadata.correlation_id,
                     )
                 )
-                if correction_claimed or repair_delivery_claimed:
+                repair_delivery_rejected = repair_delivery_required and not repair_delivery_claimed
+                if repair_delivery_rejected:
+                    idempotency_observation.set_outcome(TransactionProcessingOutcome.DUPLICATE)
+                elif correction_claimed or repair_delivery_claimed:
                     idempotency_observation.set_outcome(TransactionProcessingOutcome.REPLAYED)
                 elif idempotency_outcome is not TransactionIdempotencyOutcome.CLAIMED:
                     idempotency_observation.set_outcome(
                         TransactionProcessingOutcome(idempotency_outcome.value)
                     )
-            if idempotency_outcome in {
-                TransactionIdempotencyOutcome.PHYSICAL_DUPLICATE,
-                TransactionIdempotencyOutcome.SEMANTIC_DUPLICATE,
-            }:
-                if not repair_delivery_claimed:
-                    transaction_observation.set_outcome(TransactionProcessingOutcome.DUPLICATE)
-                    return ProcessTransactionResult(
-                        status=TransactionProcessingStatus.DUPLICATE,
-                        input_transaction_id=transaction.transaction_id,
-                    )
+            duplicate_without_repair = (
+                idempotency_outcome
+                in {
+                    TransactionIdempotencyOutcome.PHYSICAL_DUPLICATE,
+                    TransactionIdempotencyOutcome.SEMANTIC_DUPLICATE,
+                }
+                and not repair_delivery_claimed
+            )
+            if repair_delivery_rejected or duplicate_without_repair:
+                transaction_observation.set_outcome(TransactionProcessingOutcome.DUPLICATE)
+                return ProcessTransactionResult(
+                    status=TransactionProcessingStatus.DUPLICATE,
+                    input_transaction_id=transaction.transaction_id,
+                )
             if idempotency_outcome is TransactionIdempotencyOutcome.SEMANTIC_CONFLICT:
                 raise TransactionProcessingRejected(
                     reason_code="transaction_semantic_conflict",
