@@ -10,8 +10,10 @@ Companion process document:
 
 CR-1678 addendum (2026-08-04): fixed-income open-lot state now persists accounting carrying
 amount independently from strategy/tax acquisition basis and retains that carry across basis-only
-mutations. Correction-triggered booked-disposal replay and production activation remain open under
-#903/#478. Evidence and validation are maintained in the linked CR-1678 review document.
+mutations. The upgrade retains legacy book carry while reconstructing FIFO tax basis from the
+source BUY's authoritative acquisition cost, and fails closed on missing or inconsistent evidence.
+Correction-triggered booked-disposal replay and production activation remain open under #903/#478.
+Evidence and validation are maintained in the linked CR-1678 review document.
 
 | Review ID | Date | Scope / Pattern | Status | Findings | Actions Taken | Follow-up | Evidence / Sign-off |
 |---|---|---|---|---|---|---|---|

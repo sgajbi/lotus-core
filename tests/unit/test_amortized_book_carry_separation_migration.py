@@ -57,11 +57,23 @@ def test_book_carry_migration_is_additive_backfilled_and_reversible(monkeypatch)
     ]
     assert all(isinstance(operation[2], Column) and operation[2].nullable for operation in added)
     statements = [operation[1] for operation in operations if operation[0] == "execute"]
-    assert len(statements) == 2
-    backfill, rollback_restore = statements
-    assert "amortized_book_carrying_local = lot_cost_local" in backfill
-    assert "amortized_book_carrying_base = lot_cost_base" in backfill
-    assert "WHERE amortized_cost_profile_id IS NOT NULL" in backfill
+    assert len(statements) == 3
+    evidence_guard, backfill, rollback_restore = statements
+    assert "LEFT JOIN transactions AS source" in evidence_guard
+    assert "source.transaction_type <> 'BUY'" in evidence_guard
+    assert "source.quantity IS NULL OR source.quantity <= 0" in evidence_guard
+    assert "source.net_cost_local IS NULL OR source.net_cost IS NULL" in evidence_guard
+    assert "lot.open_quantity > source.quantity" in evidence_guard
+    assert "RAISE EXCEPTION" in evidence_guard
+    assert "amortized_book_carrying_local = lot.lot_cost_local" in backfill
+    assert "amortized_book_carrying_base = lot.lot_cost_base" in backfill
+    assert (
+        "source.net_cost_local * lot.open_quantity / source.quantity AS NUMERIC(18, 10)" in backfill
+    )
+    assert "source.net_cost * lot.open_quantity / source.quantity AS NUMERIC(18, 10)" in backfill
+    assert "FROM transactions AS source" in backfill
+    assert "WHERE lot.amortized_cost_profile_id IS NOT NULL" in backfill
+    assert "source.transaction_id = lot.source_transaction_id" in backfill
     assert "lot_cost_local = amortized_book_carrying_local" in rollback_restore
     assert "lot_cost_base = amortized_book_carrying_base" in rollback_restore
     assert "WHERE amortized_cost_profile_id IS NOT NULL" in rollback_restore
@@ -102,7 +114,10 @@ def test_book_carry_migration_is_additive_backfilled_and_reversible(monkeypatch)
         ("position_lot_state", "amortized_book_carrying_base"),
         ("position_lot_state", "amortized_book_carrying_local"),
     ]
+    guard_index = operations.index(("execute", evidence_guard))
+    backfill_index = operations.index(("execute", backfill))
     restore_index = operations.index(("execute", rollback_restore))
+    assert guard_index < backfill_index
     first_drop_index = next(
         index for index, operation in enumerate(operations) if operation[0] == "drop_column"
     )
