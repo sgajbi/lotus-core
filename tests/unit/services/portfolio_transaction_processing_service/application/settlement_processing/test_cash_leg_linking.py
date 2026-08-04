@@ -61,12 +61,45 @@ async def test_generated_cash_leg_is_persisted_before_linked_product_leg() -> No
     assert result.generated_cash_leg is not None
     assert result.generated_cash_leg.transaction_id == "DIV-GENERATED-01-CASHLEG"
     assert result.generated_cash_leg.originating_transaction_id == product_leg.transaction_id
+    assert result.product_leg.economic_event_id == result.generated_cash_leg.economic_event_id
+    assert (
+        result.product_leg.linked_transaction_group_id
+        == result.generated_cash_leg.linked_transaction_group_id
+    )
     assert product_leg.external_cash_transaction_id is None
     assert persistence.upsert_booked_transaction.await_args_list == [
         call(result.generated_cash_leg),
         call(result.product_leg),
     ]
     lookup.get_booked_transaction.assert_not_awaited()
+
+
+async def test_generated_linkage_identity_is_persisted_on_both_legs() -> None:
+    product_leg = _product_leg(
+        economic_event_id=None,
+        linked_transaction_group_id=None,
+    )
+    lookup = AsyncMock(spec=SettlementTransactionLookupPort)
+    persistence = AsyncMock(spec=SettlementTransactionPersistencePort)
+
+    result = await link_settlement_cash_leg(
+        product_leg=product_leg,
+        transaction_lookup=lookup,
+        transaction_persistence=persistence,
+    )
+
+    assert result.generated_cash_leg is not None
+    assert result.product_leg.economic_event_id == (
+        "EVT-DIVIDEND-PORT-001-DIV-GENERATED-01"
+    )
+    assert result.product_leg.linked_transaction_group_id == (
+        "LTG-DIVIDEND-PORT-001-DIV-GENERATED-01"
+    )
+    assert result.product_leg.economic_event_id == result.generated_cash_leg.economic_event_id
+    assert (
+        result.product_leg.linked_transaction_group_id
+        == result.generated_cash_leg.linked_transaction_group_id
+    )
 
 
 async def test_upstream_provided_product_leg_is_validated_without_generated_writes() -> None:
