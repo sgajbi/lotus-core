@@ -227,7 +227,7 @@ KAFKA_TOPIC_DEFINITIONS = (
     KafkaTopicDefinition(
         canonical_name="fixed_income.book_cost.disposal_replay.requested",
         runtime_name=KAFKA_FIXED_INCOME_BOOK_COST_DISPOSAL_REPLAY_REQUESTED_TOPIC,
-        lifecycle_status="active",
+        lifecycle_status="inactive",
         semantic_type="command",
         scope="tenant_legal_book_portfolio_security_lot",
         partition_count=12,
