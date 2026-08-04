@@ -46,11 +46,9 @@ def _flat_jsonb_array(values: tuple[Any, ...]) -> Any:
         values[offset : offset + _JSONB_BUILD_ARRAY_MAX_ARGUMENTS]
         for offset in range(0, len(values), _JSONB_BUILD_ARRAY_MAX_ARGUMENTS)
     )
-    if not chunks:
-        return func.jsonb_build_array()
-
-    payload = func.jsonb_build_array(*chunks[0])
-    for chunk in chunks[1:]:
+    chunk_iterator = iter(chunks)
+    payload = func.jsonb_build_array(*next(chunk_iterator, ()))
+    for chunk in chunk_iterator:
         payload = payload.op("||")(func.jsonb_build_array(*chunk))
     return payload
 
