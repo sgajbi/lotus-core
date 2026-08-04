@@ -20,12 +20,17 @@
 
 ### 1.2 Implementation Status
 
-The RFC remains draft and redemption production booking remains fail closed. Issue #477 owns the
-acceptance evidence. The implemented foundation currently includes deterministic redemption
-economics and calculation lineage plus additive ingestion, event, ledger, and query fields for
-explicit principal, factor transitions, embedded accrued interest, fees, and taxes. Runtime lot
-consumption, linked cash-leg readiness, replay/recovery, and capacity proof remain required before
-the capability catalog may advertise production support.
+The RFC remains draft while protected-PR and exact-main release certification are pending under
+issue #477. The implementation now registers maturity, call, and partial redemption for production
+booking; applies deterministic economics and calculation lineage; carries explicit principal,
+factor transition, embedded accrued-interest, fee, and tax terms through ingestion/event/ledger/query
+boundaries; consumes FIFO or AVCO lots; persists immutable ordered disposal receipts; updates
+position quantity and local/base basis; and generates an equal, linked principal-cash adjustment.
+PostgreSQL lifecycle proof covers all three types, including factor-based partial redemption,
+duplicate neutrality, principal-versus-interest separation, and shared product/cash event identity.
+A 1,000-redemption FIFO/AVCO cohort proves one bounded source allocation per event. Wider
+multi-acquisition AVCO source-attribution scalability remains explicitly open under #481 and does
+not reduce the bounded redemption capability to an unimplemented state.
 
 ---
 

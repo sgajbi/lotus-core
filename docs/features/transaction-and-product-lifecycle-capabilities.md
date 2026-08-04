@@ -33,12 +33,12 @@ The current registry contains 54 types.
 
 | Registry status | Transaction types |
 | --- | --- |
-| `supported` | `BONUS_ISSUE`, `BUY`, `CASH_CONSIDERATION`, `CASH_IN_LIEU`, `CONSOLIDATION`, `DEMERGER_IN`, `DEMERGER_OUT`, `DEPOSIT`, `DIVIDEND`, `EXCHANGE_IN`, `EXCHANGE_OUT`, `FX_FORWARD`, `FX_SPOT`, `FX_SWAP`, `INTEREST`, `MERGER_IN`, `MERGER_OUT`, `REPLACEMENT_IN`, `REPLACEMENT_OUT`, `REVERSE_SPLIT`, `RIGHTS_ALLOCATE`, `RIGHTS_EXPIRE`, `RIGHTS_OVERSUBSCRIBE`, `RIGHTS_REFUND`, `RIGHTS_SELL`, `RIGHTS_SHARE_DELIVERY`, `RIGHTS_SUBSCRIBE`, `SELL`, `SPIN_IN`, `SPIN_OFF`, `SPLIT`, `STOCK_DIVIDEND`, `TRANSFER_IN`, `TRANSFER_OUT`, `WITHDRAWAL` |
+| `supported` | `BONUS_ISSUE`, `BUY`, `CALL_REDEMPTION`, `CASH_CONSIDERATION`, `CASH_IN_LIEU`, `CONSOLIDATION`, `DEMERGER_IN`, `DEMERGER_OUT`, `DEPOSIT`, `DIVIDEND`, `EXCHANGE_IN`, `EXCHANGE_OUT`, `FX_FORWARD`, `FX_SPOT`, `FX_SWAP`, `INTEREST`, `MATURITY_REDEMPTION`, `MERGER_IN`, `MERGER_OUT`, `PARTIAL_REDEMPTION`, `REPLACEMENT_IN`, `REPLACEMENT_OUT`, `REVERSE_SPLIT`, `RIGHTS_ALLOCATE`, `RIGHTS_EXPIRE`, `RIGHTS_OVERSUBSCRIBE`, `RIGHTS_REFUND`, `RIGHTS_SELL`, `RIGHTS_SHARE_DELIVERY`, `RIGHTS_SUBSCRIBE`, `SELL`, `SPIN_IN`, `SPIN_OFF`, `SPLIT`, `STOCK_DIVIDEND`, `TRANSFER_IN`, `TRANSFER_OUT`, `WITHDRAWAL` |
 | `limited` | `FEE`, `TAX` |
 | `default_strategy` | `ADJUSTMENT`, `RIGHTS_ADJUSTMENT`, `RIGHTS_ANNOUNCE` |
 | `internal_generated` | `FX_CASH_SETTLEMENT_BUY`, `FX_CASH_SETTLEMENT_SELL` |
 | `migration_only` | `OTHER` |
-| `target_not_implemented` | `ACCRETION`, `AMORTIZATION`, `CALL_REDEMPTION`, `CONVERSION_EVENT`, `CONVERSION_IN`, `CONVERSION_OUT`, `EXERCISE_IN`, `EXERCISE_OUT`, `MATURITY_REDEMPTION`, `PARTIAL_REDEMPTION`, `STRIKE_PAYMENT` |
+| `target_not_implemented` | `ACCRETION`, `AMORTIZATION`, `CONVERSION_EVENT`, `CONVERSION_IN`, `CONVERSION_OUT`, `EXERCISE_IN`, `EXERCISE_OUT`, `STRIKE_PAYMENT` |
 
 A registry status describes transaction-engine posture. It is not by itself a claim that every
 instrument using that transaction type has complete lifecycle coverage.
@@ -51,8 +51,8 @@ instrument using that transaction type has complete lifecycle coverage.
 | Cash and deposits | Deposit, withdrawal, and interest through `DEPOSIT`, `WITHDRAWAL`, and `INTEREST` | `supported_via_generic_transaction_semantics` | No separately certified term-deposit maturity event. |
 | Foreign exchange | Spot, forward, and swap | `supported` | Non-zero embedded fees and withholding taxes are rejected; supported fees/taxes are separate postings linked to the FX event/group. |
 | Listed funds | Subscription, redemption, distribution, and reinvestment through generic trade/income legs | `limited` | Mixed income and return-of-capital distribution is owned by [#448](https://github.com/sgajbi/lotus-core/issues/448). |
-| Fixed income | Purchase, sale, coupon, and accrued-interest semantics | `supported_via_generic_transaction_semantics` | Amortized cost and redemption are separate unsupported lifecycles. |
-| Fixed income | Maturity, call, and partial redemption | `target_not_implemented` | [#477](https://github.com/sgajbi/lotus-core/issues/477), [#481](https://github.com/sgajbi/lotus-core/issues/481) |
+| Fixed income | Purchase, sale, coupon, and accrued-interest semantics | `supported_via_generic_transaction_semantics` | Dedicated redemption types exist; broader amortized-cost release certification remains issue-owned. |
+| Fixed income | Maturity, call, and partial redemption | `limited` | Production paths now cover quantity/lot depletion, principal cash linkage, capital/FX P&L, factor-based partials, receipts, replay-safe identity, and bounded single-source load. Protected-PR, exact-main, and wider multi-source AVCO certification remain under [#477](https://github.com/sgajbi/lotus-core/issues/477) and [#481](https://github.com/sgajbi/lotus-core/issues/481). |
 | Fixed income | Premium amortization and discount/OID accretion | `target_not_implemented` | [#478](https://github.com/sgajbi/lotus-core/issues/478) |
 | Equity and fund distributions | Ordinary dividend | `limited` | Source-recorded withholding amount reduces settlement cash; rate derivation, full tax decomposition, return-of-capital, basis reduction, and timing remain under [#448](https://github.com/sgajbi/lotus-core/issues/448). |
 | Equity corporate actions | Split, reverse split, consolidation, bonus issue, and stock dividend | `limited` | Parent-event persistence and complete lot lineage remain under [#480](https://github.com/sgajbi/lotus-core/issues/480) and [#481](https://github.com/sgajbi/lotus-core/issues/481). |

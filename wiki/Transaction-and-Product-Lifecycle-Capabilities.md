@@ -41,8 +41,8 @@ unsupported.
 | Cash and deposit funding, withdrawal, and interest | Generic cash and interest semantics | Core records principal cash movements and interest; no dedicated term-deposit maturity event is certified. | None currently claimed |
 | FX spot, forward, and swap | Supported | Core models linked FX contract/cash legs; non-zero embedded fees and withholding taxes fail closed and supported fees/taxes are separate linked postings. | Future embedded-charge support requires explicit charge currency and charged-leg ownership. |
 | Listed fund subscription/redemption/distribution/reinvestment | Limited | Generic trade and distribution legs work; mixed return-of-capital handling is not complete. | [#448](https://github.com/sgajbi/lotus-core/issues/448) |
-| Bond purchase, sale, coupon, and accrued-interest semantics | Generic support | Core handles generic trade and coupon legs. | Amortized cost and redemption below |
-| Bond maturity, call, or partial redemption | Not implemented | Production booking is disabled. | [#477](https://github.com/sgajbi/lotus-core/issues/477), [#481](https://github.com/sgajbi/lotus-core/issues/481) |
+| Bond purchase, sale, coupon, and accrued-interest semantics | Generic support | Core handles generic trade and coupon legs; dedicated redemption types are described below. | Wider amortized-cost certification remains issue-owned. |
+| Bond maturity, call, or partial redemption | Limited | Core books governed quantity/lot depletion, linked principal cash, capital/FX P&L, explicit or factor-based partials, and immutable source-lot receipts. Release certification and wider multi-source AVCO capacity remain pending. | [#477](https://github.com/sgajbi/lotus-core/issues/477), [#481](https://github.com/sgajbi/lotus-core/issues/481) |
 | Premium amortization and discount/OID accretion | Not implemented | No production amortized-cost schedule is certified. | [#478](https://github.com/sgajbi/lotus-core/issues/478) |
 | Ordinary dividend | Limited | Ordinary income and source-recorded withholding-amount settlement work; withholding-rate derivation, full tax decomposition, return-of-capital, and basis reduction do not. | [#448](https://github.com/sgajbi/lotus-core/issues/448) |
 | Split, reverse split, consolidation, bonus issue, stock dividend | Limited | Transaction semantics exist; complete event and lot-lineage evidence remains open. | [#480](https://github.com/sgajbi/lotus-core/issues/480), [#481](https://github.com/sgajbi/lotus-core/issues/481) |
@@ -60,9 +60,8 @@ unsupported.
 
 These codes are registered for target design but cannot be booked in production:
 
-`ACCRETION`, `AMORTIZATION`, `CALL_REDEMPTION`, `CONVERSION_EVENT`, `CONVERSION_IN`,
-`CONVERSION_OUT`, `EXERCISE_IN`, `EXERCISE_OUT`, `MATURITY_REDEMPTION`, `PARTIAL_REDEMPTION`,
-and `STRIKE_PAYMENT`.
+`ACCRETION`, `AMORTIZATION`, `CONVERSION_EVENT`, `CONVERSION_IN`, `CONVERSION_OUT`, `EXERCISE_IN`,
+`EXERCISE_OUT`, and `STRIKE_PAYMENT`.
 
 ## Corporate Actions Recognized By Core
 
