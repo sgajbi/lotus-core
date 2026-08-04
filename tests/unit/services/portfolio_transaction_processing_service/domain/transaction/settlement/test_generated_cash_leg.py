@@ -81,6 +81,49 @@ def test_generated_cash_leg_preserves_trade_and_income_economics(
     assert cash_leg.instrument_id == "CASH-USD"
 
 
+@pytest.mark.parametrize(
+    "transaction_type",
+    ["MATURITY_REDEMPTION", "CALL_REDEMPTION", "PARTIAL_REDEMPTION"],
+)
+def test_generated_redemption_cash_leg_separates_principal_interest_and_deductions(
+    transaction_type: str,
+) -> None:
+    transaction = replace(
+        _dividend_transaction(),
+        transaction_type=transaction_type,
+        gross_transaction_amount=Decimal("999"),
+        principal_proceeds_local=Decimal("100"),
+        accrued_interest_proceeds_local=Decimal("10"),
+        embedded_fee_amount_local=Decimal("2"),
+        embedded_tax_amount_local=Decimal("3"),
+        trade_fee=Decimal("1"),
+    )
+
+    cash_leg = build_generated_settlement_cash_leg(transaction)
+
+    assert cash_leg.gross_transaction_amount == Decimal("104")
+    assert cash_leg.movement_direction == "INFLOW"
+    assert cash_leg.adjustment_reason == "REDEMPTION_SETTLEMENT"
+    assert cash_leg.originating_transaction_type == transaction_type
+
+
+def test_generated_redemption_cash_leg_rejects_exhausted_proceeds() -> None:
+    transaction = replace(
+        _dividend_transaction(),
+        transaction_type="MATURITY_REDEMPTION",
+        principal_proceeds_local=Decimal("5"),
+        embedded_tax_amount_local=Decimal("4"),
+        trade_fee=Decimal("1"),
+    )
+
+    with pytest.raises(SettlementCashValidationError) as raised:
+        build_generated_settlement_cash_leg(transaction)
+
+    assert raised.value.reason_code is (
+        SettlementCashRejectionReasonCode.REDEMPTION_NON_POSITIVE_NET_SETTLEMENT
+    )
+
+
 @pytest.mark.parametrize("net_interest_amount", [None, Decimal("20.00")])
 def test_generated_interest_cash_leg_is_invariant_to_explicit_net_interest(
     net_interest_amount: Decimal | None,

@@ -12,6 +12,10 @@ from portfolio_common.domain.transaction_control_codes import (
 
 from ..booked import BookedTransaction
 from .cash_entry import is_upstream_provided_cash_entry_mode
+from .cash_movement import (
+    ORDINARY_SETTLEMENT_TRANSACTION_TYPES,
+    calculate_settlement_cash_movement,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,6 +79,19 @@ def validate_upstream_cash_leg_pairing(
                 message="cash leg gross_transaction_amount must be greater than zero.",
             )
         )
+    product_type = normalize_transaction_control_code(product_leg.transaction_type)
+    if product_type in ORDINARY_SETTLEMENT_TRANSACTION_TYPES:
+        expected_amount = calculate_settlement_cash_movement(product_leg).amount
+        if cash_leg.gross_transaction_amount != expected_amount:
+            issues.append(
+                UpstreamCashLegPairingIssue(
+                    field="gross_transaction_amount",
+                    message=(
+                        "cash leg gross_transaction_amount must equal the canonical net "
+                        f"settlement amount {expected_amount}."
+                    ),
+                )
+            )
     _validate_shared_optional_identifier(
         issues,
         field="economic_event_id",

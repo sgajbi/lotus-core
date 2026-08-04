@@ -86,3 +86,27 @@ def test_upstream_pairing_requires_upstream_product_mode() -> None:
 
     with pytest.raises(UpstreamCashLegPairingError):
         assert_upstream_cash_leg_pairing(product_leg, _cash_leg())
+
+
+def test_upstream_pairing_rejects_positive_but_inexact_cash_amount() -> None:
+    issues = validate_upstream_cash_leg_pairing(
+        _product_leg(),
+        replace(_cash_leg(), gross_transaction_amount=Decimal("99")),
+    )
+
+    assert [issue.field for issue in issues] == ["gross_transaction_amount"]
+
+
+def test_upstream_pairing_reconciles_redemption_cash_decomposition() -> None:
+    product_leg = replace(
+        _product_leg(),
+        transaction_type="PARTIAL_REDEMPTION",
+        principal_proceeds_local=Decimal("100"),
+        accrued_interest_proceeds_local=Decimal("10"),
+        embedded_fee_amount_local=Decimal("2"),
+        embedded_tax_amount_local=Decimal("3"),
+        trade_fee=Decimal("1"),
+    )
+    cash_leg = replace(_cash_leg(), gross_transaction_amount=Decimal("104"))
+
+    assert validate_upstream_cash_leg_pairing(product_leg, cash_leg) == []

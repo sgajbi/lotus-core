@@ -102,6 +102,29 @@ def _calculate_sell_movement(
     )
 
 
+def _calculate_redemption_movement(
+    transaction: BookedTransaction,
+    fee: Decimal,
+) -> SettlementCashMovement:
+    principal = (
+        transaction.principal_proceeds_local
+        if transaction.principal_proceeds_local is not None
+        else transaction.gross_transaction_amount
+    )
+    accrued_interest = transaction.accrued_interest_proceeds_local or Decimal(0)
+    embedded_fees = transaction.embedded_fee_amount_local or Decimal(0)
+    embedded_taxes = transaction.embedded_tax_amount_local or Decimal(0)
+    available_proceeds = principal + accrued_interest - embedded_fees - embedded_taxes
+    return _calculate_positive_proceeds_movement(
+        transaction=transaction,
+        available_proceeds=available_proceeds,
+        fee=fee,
+        reason_code=(SettlementCashRejectionReasonCode.REDEMPTION_NON_POSITIVE_NET_SETTLEMENT),
+        adjustment_reason="REDEMPTION_SETTLEMENT",
+        deduction_description="embedded fees, embedded taxes, and transaction fees",
+    )
+
+
 def _calculate_dividend_movement(
     transaction: BookedTransaction,
     fee: Decimal,
@@ -239,6 +262,9 @@ _SETTLEMENT_CASH_RESOLVERS: dict[str, SettlementCashResolver] = {
     "SELL": _calculate_sell_movement,
     "DIVIDEND": _calculate_dividend_movement,
     "INTEREST": _calculate_interest_movement,
+    "MATURITY_REDEMPTION": _calculate_redemption_movement,
+    "CALL_REDEMPTION": _calculate_redemption_movement,
+    "PARTIAL_REDEMPTION": _calculate_redemption_movement,
 }
 
 ORDINARY_SETTLEMENT_TRANSACTION_TYPES = frozenset(_SETTLEMENT_CASH_RESOLVERS)
