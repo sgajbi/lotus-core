@@ -6,6 +6,7 @@ import pytest
 from portfolio_common.domain.transaction.type_registry import (
     INCOME_RECOGNITION_TRANSACTION_TYPES,
     MIGRATION_ONLY,
+    SUPPORTED,
     TARGET_NOT_IMPLEMENTED,
     TARGET_NOT_IMPLEMENTED_TRANSACTION_TYPES,
     TRANSACTION_TYPE_CODES,
@@ -193,20 +194,22 @@ def test_auto_generated_adjustment_cash_leg_types_are_registry_derived_and_imple
         code
         for code, definition in TRANSACTION_TYPE_REGISTRY.items()
         if definition.production_booking_allowed
-        and definition.lifecycle_family in {"trade", "income"}
+        and definition.lifecycle_family in {"trade", "income", "redemption"}
         and definition.cash_effect in {"inflow", "outflow"}
         and definition.settlement_behavior == "requires_cash_leg"
     }
 
     assert registry_auto_generate_types <= GENERATED_CASH_LEG_TRANSACTION_TYPES
-    unpromoted_implemented_types = (
-        GENERATED_CASH_LEG_TRANSACTION_TYPES - registry_auto_generate_types
-    )
-    assert unpromoted_implemented_types == {
+    promoted_redemption_types = {
         "CALL_REDEMPTION",
         "MATURITY_REDEMPTION",
         "PARTIAL_REDEMPTION",
     }
+    assert promoted_redemption_types <= registry_auto_generate_types
+    unpromoted_implemented_types = (
+        GENERATED_CASH_LEG_TRANSACTION_TYPES - registry_auto_generate_types
+    )
+    assert unpromoted_implemented_types == set()
     assert all(
         not TRANSACTION_TYPE_REGISTRY[code].production_booking_allowed
         and TRANSACTION_TYPE_REGISTRY[code].calculation_support_status == "target_not_implemented"
@@ -246,9 +249,6 @@ def test_other_is_registered_only_as_migration_type_not_production_booking() -> 
 
 def test_rfc_target_redemption_and_conversion_types_are_explicitly_not_implemented() -> None:
     expected_target_types = {
-        "MATURITY_REDEMPTION",
-        "CALL_REDEMPTION",
-        "PARTIAL_REDEMPTION",
         "AMORTIZATION",
         "ACCRETION",
         "CONVERSION_EVENT",
@@ -264,6 +264,22 @@ def test_rfc_target_redemption_and_conversion_types_are_explicitly_not_implement
         definition = require_registered_transaction_type(transaction_type)
         assert definition.calculation_support_status == TARGET_NOT_IMPLEMENTED
         assert not definition.production_booking_allowed
+
+
+@pytest.mark.parametrize(
+    "transaction_type",
+    ["MATURITY_REDEMPTION", "CALL_REDEMPTION", "PARTIAL_REDEMPTION"],
+)
+def test_redemption_types_are_registered_for_production_booking(transaction_type: str) -> None:
+    definition = require_registered_transaction_type(transaction_type)
+
+    assert definition.lifecycle_family == "redemption"
+    assert definition.position_effect == "decrease"
+    assert definition.cash_effect == "inflow"
+    assert definition.lot_behavior == "consume_lot"
+    assert definition.settlement_behavior == "requires_cash_leg"
+    assert definition.calculation_support_status == SUPPORTED
+    assert definition.production_booking_allowed
 
 
 def test_registry_definitions_are_normalized_and_complete() -> None:

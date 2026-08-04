@@ -53,8 +53,8 @@
       "code": "CALL_REDEMPTION",
       "lifecycle_family": "redemption",
       "economic_role": "call_redemption",
-      "support_status": "target_not_implemented",
-      "production_booking_allowed": false,
+      "support_status": "supported",
+      "production_booking_allowed": true,
       "gap_issue": 477
     },
     {
@@ -229,8 +229,8 @@
       "code": "MATURITY_REDEMPTION",
       "lifecycle_family": "redemption",
       "economic_role": "maturity_redemption",
-      "support_status": "target_not_implemented",
-      "production_booking_allowed": false,
+      "support_status": "supported",
+      "production_booking_allowed": true,
       "gap_issue": 477
     },
     {
@@ -261,8 +261,8 @@
       "code": "PARTIAL_REDEMPTION",
       "lifecycle_family": "redemption",
       "economic_role": "partial_redemption",
-      "support_status": "target_not_implemented",
-      "production_booking_allowed": false,
+      "support_status": "supported",
+      "production_booking_allowed": true,
       "gap_issue": 477
     },
     {

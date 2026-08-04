@@ -1361,8 +1361,7 @@ def test_redemption_strategy_consumes_fifo_lots_and_calculates_principal_only_pn
         transaction_fx_rate=Decimal(1),
     )
 
-    calculator_module.RedemptionStrategy().calculate_costs(redemption, disposition, errors)
-    disposition.commit_disposal_record(redemption.transaction_id)
+    calculator.calculate_transaction_costs(redemption)
 
     assert not errors.has_errors()
     assert redemption.net_cost_local == -Decimal(expected_cost)
@@ -1438,8 +1437,7 @@ def test_partial_redemption_strategy_consumes_average_cost_pool() -> None:
         transaction_fx_rate=Decimal(1),
     )
 
-    calculator_module.RedemptionStrategy().calculate_costs(redemption, disposition, errors)
-    disposition.commit_disposal_record(redemption.transaction_id)
+    calculator.calculate_transaction_costs(redemption)
 
     assert not errors.has_errors()
     assert redemption.allocated_cost_basis_local == Decimal("25.0000000000")
