@@ -4,6 +4,7 @@ import runpy
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
+from typing import Any
 
 import pytest
 from alembic.migration import MigrationContext
@@ -15,11 +16,18 @@ from portfolio_common.database_models import (
     PositionLotState,
 )
 from portfolio_common.database_models import Transaction as DBTransaction
-from sqlalchemy import select, text
+from portfolio_common.events import TransactionEvent
+from sqlalchemy import delete, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.portfolio_transaction_processing_service.app.application import (
+    BookedTransactionReplayStatus,
+    ReplayBookedTransactionCommand,
+    TransactionProcessingIntent,
     TransactionProcessingStatus,
+)
+from src.services.portfolio_transaction_processing_service.app.runtime.dependency_composition import (  # noqa: E501
+    build_replay_booked_transaction_use_case,
 )
 from tests.test_support.transaction_processing import (
     booked_transaction_event,
@@ -68,6 +76,24 @@ def redemption_cashflow_rules(clean_db, db_engine) -> None:
         migration = runpy.run_path(str(REDEMPTION_CASHFLOW_MIGRATION))
         migration["upgrade"].__globals__["op"] = Operations(MigrationContext.configure(connection))
         migration["upgrade"]()
+
+
+class _CapturingReplayProducer:
+    def __init__(self) -> None:
+        self.messages: list[dict[str, Any]] = []
+
+    def publish_message(
+        self,
+        *,
+        topic: str,
+        key: str,
+        value: dict[str, Any],
+        headers: list[tuple[str, bytes]],
+    ) -> None:
+        self.messages.append({"topic": topic, "key": key, "value": value, "headers": headers})
+
+    def flush(self) -> int:
+        return 0
 
 
 @pytest.mark.parametrize(
@@ -307,3 +333,137 @@ async def test_redemption_books_linked_principal_cash_and_immutable_lot_evidence
             Decimal(expected_consumed_basis),
         )
     ]
+
+
+async def test_partial_redemption_replay_restores_cash_without_versioning_receipt(
+    clean_db,
+    redemption_cashflow_rules,
+    async_db_session: AsyncSession,
+) -> None:
+    portfolio_id = "PORT-REDEMPTION-REPLAY-01"
+    security_id = "FO_FI_REDEMPTION_REPLAY_01"
+    redemption_id = "PARTIAL_REDEMPTION-REPLAY-01"
+    cash_leg_id = f"{redemption_id}-CASHLEG"
+    acquisition = booked_transaction_event(
+        transaction_id="BUY-REDEMPTION-REPLAY-01",
+        portfolio_id=portfolio_id,
+        security_id=security_id,
+        transaction_date=datetime(2026, 1, 2, 10, 0, tzinfo=timezone.utc),
+        transaction_type="BUY",
+        quantity="100",
+        price="0.97",
+        gross_amount="97",
+    )
+    redemption = booked_transaction_event(
+        transaction_id=redemption_id,
+        portfolio_id=portfolio_id,
+        security_id=security_id,
+        transaction_date=datetime(2026, 7, 1, 10, 0, tzinfo=timezone.utc),
+        settlement_date=datetime(2026, 7, 3, 9, 0, tzinfo=timezone.utc),
+        transaction_type="PARTIAL_REDEMPTION",
+        quantity="40",
+        price="1",
+        gross_amount="40",
+        redemption_price_type="PAR",
+        old_factor=Decimal("1"),
+        new_factor=Decimal("0.6"),
+        principal_proceeds_local=Decimal("40"),
+        accrued_interest_proceeds_local=Decimal("2"),
+        cash_entry_mode="AUTO_GENERATE",
+        settlement_cash_account_id="CASH-USD-REDEMPTION-REPLAY-01",
+        settlement_cash_instrument_id="CASH-USD",
+    )
+    async_db_session.add_all(
+        [
+            portfolio_record(portfolio_id, cost_basis_method="FIFO"),
+            instrument_record(
+                security_id,
+                name="Replayable Partial Redemption Note",
+                isin="SG0000007810",
+                currency="USD",
+            ),
+        ]
+    )
+    initial_context = transaction_processing_test_context(async_db_session)
+    for offset, event in enumerate((acquisition, redemption), start=9901):
+        result = await persist_and_process_booked_transaction(
+            session=async_db_session,
+            context=initial_context,
+            event=event,
+            event_id=f"transactions.persisted-0-{offset}",
+            correlation_id=f"corr-{event.transaction_id.lower()}",
+        )
+        assert result.status is TransactionProcessingStatus.PROCESSED
+
+    await async_db_session.execute(
+        delete(Cashflow).where(Cashflow.transaction_id.in_([redemption_id, cash_leg_id]))
+    )
+    await async_db_session.commit()
+
+    producer = _CapturingReplayProducer()
+    restarted_context = transaction_processing_test_context(async_db_session)
+    replay_use_case = build_replay_booked_transaction_use_case(
+        session_factory=restarted_context.session_factory,
+        kafka_producer=producer,
+    )
+    replay_result = await replay_use_case.execute(
+        ReplayBookedTransactionCommand(
+            transaction_id=redemption_id,
+            correlation_id="corr-partial-redemption-replay-01",
+        )
+    )
+    replay_event = TransactionEvent.model_validate(producer.messages[0]["value"])
+    repair_result = await process_booked_transaction(
+        context=restarted_context,
+        event=replay_event,
+        event_id="transactions.persisted-0-9903",
+        correlation_id="corr-partial-redemption-replay-01",
+        processing_intent=TransactionProcessingIntent.REPAIR,
+    )
+
+    assert replay_result.status is BookedTransactionReplayStatus.REPLAYED
+    assert replay_event.redemption_price_type == "PAR"
+    assert replay_event.old_factor == Decimal("1")
+    assert replay_event.new_factor == Decimal("0.6")
+    assert replay_event.principal_proceeds_local == Decimal("40")
+    assert replay_event.accrued_interest_proceeds_local == Decimal("2")
+    assert replay_event.external_cash_transaction_id == cash_leg_id
+    assert repair_result.status is TransactionProcessingStatus.PROCESSED
+
+    async with restarted_context.session_factory() as verification_session:
+        cashflows = (
+            (
+                await verification_session.execute(
+                    select(Cashflow)
+                    .where(Cashflow.transaction_id.in_([redemption_id, cash_leg_id]))
+                    .order_by(Cashflow.transaction_id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        receipts = (
+            (
+                await verification_session.execute(
+                    select(LotDisposalReceiptRecord).where(
+                        LotDisposalReceiptRecord.disposal_transaction_id == redemption_id
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        allocation_count = await verification_session.scalar(
+            select(func.count())
+            .select_from(LotDisposalAllocationRecord)
+            .where(
+                LotDisposalAllocationRecord.receipt_id == receipts[0].receipt_id,
+                LotDisposalAllocationRecord.receipt_version == receipts[0].receipt_version,
+            )
+        )
+
+    assert [cashflow.amount for cashflow in cashflows] == [Decimal("42"), Decimal("42")]
+    assert len({cashflow.economic_event_id for cashflow in cashflows}) == 1
+    assert len({cashflow.linked_transaction_group_id for cashflow in cashflows}) == 1
+    assert len(receipts) == 1
+    assert allocation_count == 1
