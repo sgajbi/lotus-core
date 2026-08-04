@@ -44,6 +44,52 @@ def test_maturity_redemption_separates_principal_interest_and_capital_pnl() -> N
     assert result.realized_capital_pnl_base == Decimal("150.0000000000")
 
 
+def test_zero_price_redemption_records_a_full_principal_write_off() -> None:
+    result = calculate_redemption_economics(
+        _terms(
+            redemption_price=Decimal(0),
+            principal_proceeds_local=None,
+            accrued_interest_proceeds_local=Decimal(0),
+            embedded_fee_amount_local=Decimal(0),
+            embedded_tax_amount_local=Decimal(0),
+        )
+    )
+
+    assert result.derived_principal_proceeds_local == Decimal("0E-10")
+    assert result.principal_proceeds_local == Decimal("0E-10")
+    assert result.total_cash_proceeds_local == Decimal("0E-10")
+    assert result.realized_capital_pnl_local == Decimal("-9800.0000000000")
+    assert result.realized_capital_pnl_base == Decimal("-7350.0000000000")
+
+
+def test_zero_price_redemption_keeps_accrued_interest_outside_principal_pnl() -> None:
+    result = calculate_redemption_economics(
+        _terms(
+            redemption_price=Decimal(0),
+            principal_proceeds_local=Decimal(0),
+            accrued_interest_proceeds_local=Decimal("50"),
+            embedded_fee_amount_local=Decimal("2"),
+            embedded_tax_amount_local=Decimal("3"),
+        )
+    )
+
+    assert result.principal_proceeds_local == Decimal("0E-10")
+    assert result.accrued_interest_proceeds_local == Decimal("50")
+    assert result.total_cash_proceeds_local == Decimal("45.0000000000")
+    assert result.realized_capital_pnl_local == Decimal("-9800.0000000000")
+
+
+@pytest.mark.parametrize("redemption_price", [Decimal("-1"), Decimal("NaN"), Decimal("Infinity")])
+def test_redemption_price_rejects_negative_or_nonfinite_values(
+    redemption_price: Decimal,
+) -> None:
+    with pytest.raises(RedemptionCalculationError) as raised:
+        calculate_redemption_economics(_terms(redemption_price=redemption_price))
+
+    assert raised.value.code is RedemptionCalculationReasonCode.NON_POSITIVE_REDEMPTION_PRICE
+    assert raised.value.field == "redemption_price"
+
+
 def test_partial_redemption_resolves_factor_authority_deterministically() -> None:
     result = calculate_redemption_economics(
         _terms(
