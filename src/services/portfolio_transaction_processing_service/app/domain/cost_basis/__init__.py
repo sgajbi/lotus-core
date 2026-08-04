@@ -80,7 +80,12 @@ from .lot_behavior import (
     STATE_DEPENDENT_LOT_BEHAVIORS,
     transaction_lot_behavior,
 )
-from .lot_disposal_receipt import LotDisposalReceiptState, LotDisposalReceiptStatus
+from .lot_disposal_receipt import (
+    LotDisposalDestination,
+    LotDisposalDestinationType,
+    LotDisposalReceiptState,
+    LotDisposalReceiptStatus,
+)
 from .models.calculation_error import CostCalculationError
 from .models.cost_basis_transaction import CostBasisTransaction, Fees
 from .models.effective_fx_rate import EffectiveFxRate
@@ -135,6 +140,8 @@ __all__ = [
     "LotBasisTransferReceiptState",
     "LotBasisTransferReceiptStatus",
     "LotDisposalResult",
+    "LotDisposalDestination",
+    "LotDisposalDestinationType",
     "LotDisposalReceiptState",
     "LotDisposalReceiptStatus",
     "LOT_OPENING_BEHAVIORS",

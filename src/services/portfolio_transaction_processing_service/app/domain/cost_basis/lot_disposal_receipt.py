@@ -28,6 +28,56 @@ class LotDisposalReceiptStatus(StrEnum):
     VOIDED = "VOIDED"
 
 
+class LotDisposalDestinationType(StrEnum):
+    """Authoritative destination shape for a quantity-transfer disposal."""
+
+    INTERNAL_LOT = "INTERNAL_LOT"
+    EXTERNAL_TRANSFER = "EXTERNAL_TRANSFER"
+
+
+@dataclass(frozen=True, slots=True)
+class LotDisposalDestination:
+    """Discriminate an internal target lot from an opaque external destination."""
+
+    destination_type: LotDisposalDestinationType
+    target_transaction_id: str | None = None
+    target_lot_id: str | None = None
+    target_instrument_id: str | None = None
+    external_destination_reference: str | None = None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.destination_type, LotDisposalDestinationType):
+            raise TypeError("destination_type must be a LotDisposalDestinationType")
+        for field_name in (
+            "target_transaction_id",
+            "target_lot_id",
+            "target_instrument_id",
+            "external_destination_reference",
+        ):
+            _normalize_optional_text(self, field_name)
+        if self.destination_type is LotDisposalDestinationType.INTERNAL_LOT:
+            if not all((self.target_transaction_id, self.target_lot_id, self.target_instrument_id)):
+                raise ValueError("internal lot destination requires complete target identity")
+            if self.target_lot_id != f"LOT-{self.target_transaction_id}":
+                raise ValueError("target_lot_id must derive from target_transaction_id")
+            if self.external_destination_reference is not None:
+                raise ValueError("internal lot destination cannot carry an external reference")
+            return
+        if self.external_destination_reference is None:
+            raise ValueError("external transfer destination requires an external reference")
+        if any((self.target_transaction_id, self.target_lot_id, self.target_instrument_id)):
+            raise ValueError("external transfer destination cannot carry internal target identity")
+
+    def semantic_payload(self) -> dict[str, object]:
+        return {
+            "destination_type": self.destination_type.value,
+            "external_destination_reference": self.external_destination_reference,
+            "target_instrument_id": self.target_instrument_id,
+            "target_lot_id": self.target_lot_id,
+            "target_transaction_id": self.target_transaction_id,
+        }
+
+
 @dataclass(frozen=True, slots=True)
 class LotDisposalReceiptState:
     """Closed semantic payload from which immutable receipt versions are appended."""
@@ -48,6 +98,7 @@ class LotDisposalReceiptState:
     consumed_cost_base: Decimal
     allocations: tuple[SourceLotDisposalAllocation, ...]
     disposal_calculation_lineage: CalculationLineage | None
+    destination: LotDisposalDestination | None = None
     void_reason: str | None = None
     receipt_id: str = field(init=False)
     semantic_content_hash: str = field(init=False)
@@ -81,6 +132,10 @@ class LotDisposalReceiptState:
             raise TypeError("transaction_calculation_lineage must be a CalculationLineage")
         if not isinstance(self.status, LotDisposalReceiptStatus):
             raise TypeError("status must be a LotDisposalReceiptStatus")
+        if self.destination is not None and not isinstance(
+            self.destination, LotDisposalDestination
+        ):
+            raise TypeError("destination must be a LotDisposalDestination or None")
         for field_name in (
             "consumed_quantity",
             "consumed_cost_local",
@@ -115,39 +170,37 @@ class LotDisposalReceiptState:
     def semantic_payload(self) -> dict[str, object]:
         """Return the closed payload compared for replay and correction semantics."""
 
-        return cast(
-            dict[str, object],
-            canonical_cost_basis_output_payload(
-                {
-                    "allocations": [
-                        source_lot_disposal_allocation_payload(allocation)
-                        for allocation in self.allocations
-                    ],
-                    "calculation_policy_id": self.calculation_policy_id,
-                    "calculation_policy_version": self.calculation_policy_version,
-                    "consumed_cost_base": self.consumed_cost_base,
-                    "consumed_cost_local": self.consumed_cost_local,
-                    "consumed_quantity": self.consumed_quantity,
-                    "cost_basis_method": self.cost_basis_method.value,
-                    "disposal_calculation_lineage": (
-                        self.disposal_calculation_lineage.lineage_payload()
-                        if self.disposal_calculation_lineage is not None
-                        else None
-                    ),
-                    "disposal_timestamp": self.disposal_timestamp,
-                    "disposal_transaction_id": self.disposal_transaction_id,
-                    "instrument_id": self.instrument_id,
-                    "portfolio_id": self.portfolio_id,
-                    "security_id": self.security_id,
-                    "status": self.status.value,
-                    "transaction_calculation_lineage": (
-                        self.transaction_calculation_lineage.lineage_payload()
-                    ),
-                    "transaction_type": self.transaction_type,
-                    "void_reason": self.void_reason,
-                }
+        payload: dict[str, object] = {
+            "allocations": [
+                source_lot_disposal_allocation_payload(allocation)
+                for allocation in self.allocations
+            ],
+            "calculation_policy_id": self.calculation_policy_id,
+            "calculation_policy_version": self.calculation_policy_version,
+            "consumed_cost_base": self.consumed_cost_base,
+            "consumed_cost_local": self.consumed_cost_local,
+            "consumed_quantity": self.consumed_quantity,
+            "cost_basis_method": self.cost_basis_method.value,
+            "disposal_calculation_lineage": (
+                self.disposal_calculation_lineage.lineage_payload()
+                if self.disposal_calculation_lineage is not None
+                else None
             ),
-        )
+            "disposal_timestamp": self.disposal_timestamp,
+            "disposal_transaction_id": self.disposal_transaction_id,
+            "instrument_id": self.instrument_id,
+            "portfolio_id": self.portfolio_id,
+            "security_id": self.security_id,
+            "status": self.status.value,
+            "transaction_calculation_lineage": (
+                self.transaction_calculation_lineage.lineage_payload()
+            ),
+            "transaction_type": self.transaction_type,
+            "void_reason": self.void_reason,
+        }
+        if self.destination is not None:
+            payload["destination"] = self.destination.semantic_payload()
+        return cast(dict[str, object], canonical_cost_basis_output_payload(payload))
 
     def _validate_lifecycle_shape(self) -> None:
         if self.status is LotDisposalReceiptStatus.ACTIVE:
@@ -211,6 +264,15 @@ def _normalize_optional_policy(receipt: LotDisposalReceiptState, field_name: str
         raise TypeError(f"{field_name} must be a string or None")
     normalized = value.strip()
     object.__setattr__(receipt, field_name, normalized or None)
+
+
+def _normalize_optional_text(value: object, field_name: str) -> None:
+    raw = getattr(value, field_name)
+    if raw is None:
+        return
+    if not isinstance(raw, str):
+        raise TypeError(f"{field_name} must be a string or None")
+    object.__setattr__(value, field_name, raw.strip() or None)
 
 
 def _require_nonnegative_decimal(value: object, field_name: str) -> None:
