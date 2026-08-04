@@ -113,6 +113,7 @@ These endpoints expose canonical read models and domain drill-downs. They are co
 | `GET /portfolios/{portfolio_id}/transactions/{transaction_id}/cash-linkage` | Operational Read | gateway, support | Correct | BUY cash linkage. |
 | `GET /portfolios/{portfolio_id}/positions/{security_id}/sell-disposals` | Operational Read | gateway, support | Correct | SELL state drill-down. |
 | `GET /portfolios/{portfolio_id}/transactions/{transaction_id}/sell-cash-linkage` | Operational Read | gateway, support | Correct | SELL cash linkage. |
+| `GET /portfolios/{portfolio_id}/transactions/{transaction_id}/lot-disposal-receipt` | Operational Read | gateway, support, accounting control | Correct | Latest immutable transaction-neutral source-lot allocation and calculation-lineage evidence. |
 | `GET /instruments/` | Operational Read | gateway, analytics services, support | Correct | Canonical instrument reference read. |
 | `GET /prices/` | Operational Read | gateway, analytics services, support | Correct | Raw market price read. |
 | `GET /fx-rates/` | Operational Read | gateway, analytics services, support | Correct | FX rate read. |

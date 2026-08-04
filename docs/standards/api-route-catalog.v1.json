@@ -10381,6 +10381,55 @@
     {
       "service_app": "query_service",
       "method": "GET",
+      "path": "/portfolios/{portfolio_id}/transactions/{transaction_id}/lot-disposal-receipt",
+      "route_key": "GET /portfolios/{portfolio_id}/transactions/{transaction_id}/lot-disposal-receipt",
+      "operation_id": "get_latest_lot_disposal_receipt_portfolios__portfolio_id__transactions__transaction_id__lot_disposal_receipt_get",
+      "summary": "Get Latest Immutable Lot-Disposal Receipt",
+      "tags": [
+        "Lot Disposal Receipts"
+      ],
+      "route_family": "Unclassified",
+      "api_version": "unversioned-current",
+      "api_status": "active",
+      "owner": "query_service",
+      "auth_requirement": "not-declared-in-openapi",
+      "audit_requirement": "read-audit-where-policy-requires",
+      "request_schema": null,
+      "response_schemas": [
+        {
+          "status_code": "200",
+          "schema": "LotDisposalReceiptResponse",
+          "description": "Successful Response"
+        }
+      ],
+      "error_models": [
+        {
+          "status_code": "404",
+          "schema": "none",
+          "description": "Portfolio or lot-disposal receipt not found."
+        },
+        {
+          "status_code": "422",
+          "schema": "HTTPValidationError",
+          "description": "Validation Error"
+        }
+      ],
+      "pagination": [],
+      "filtering": [
+        "portfolio_id"
+      ],
+      "sorting": [],
+      "idempotency_behavior": "safe-read",
+      "downstream_consumers": [],
+      "deprecated_alias_metadata": {
+        "is_deprecated": false,
+        "sunset": null,
+        "compatibility": "not_applicable"
+      }
+    },
+    {
+      "service_app": "query_service",
+      "method": "GET",
       "path": "/portfolios/{portfolio_id}/transactions/{transaction_id}/sell-cash-linkage",
       "route_key": "GET /portfolios/{portfolio_id}/transactions/{transaction_id}/sell-cash-linkage",
       "operation_id": "get_sell_cash_linkage_portfolios__portfolio_id__transactions__transaction_id__sell_cash_linkage_get",

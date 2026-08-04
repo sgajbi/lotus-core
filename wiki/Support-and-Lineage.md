@@ -33,6 +33,7 @@ evidence plane for portfolio processing.
 | Lineage | Exposes portfolio and portfolio-security artifact identity, current epoch, watermarks, and adjacent processing evidence without requiring direct table inspection. | Operations, engineering support |
 | Reprocessing evidence | Lists replay keys and jobs so stale or blocked derived state can be diagnosed before downstream services are blamed. | Operations, engineering support |
 | Reconciliation evidence | Exposes reconciliation runs and findings so blocked controls can be explained with durable source evidence. | Operations, client-service escalation |
+| Lot-disposal receipts | Exposes the latest immutable receipt, ordered source-lot allocations, hash chain, transaction/disposal lineage, and amortized-cost authority evidence for any governed lot-consuming transaction. | Operations, accounting control, engineering support |
 
 These features are non-functional as well as functional. They provide auditability, support-safe
 diagnostics, bounded metric labels, and governed drill-through paths for client-facing portfolio
@@ -134,6 +135,7 @@ Drill deeper with:
 - `GET /support/portfolios/{portfolio_id}/analytics-export-jobs`
 - `GET /support/portfolios/{portfolio_id}/reconciliation-runs`
 - `GET /lineage/portfolios/{portfolio_id}/keys`
+- `GET /portfolios/{portfolio_id}/transactions/{transaction_id}/lot-disposal-receipt`
 
 Use these routes before going directly to the database unless rollout mismatch or schema doubt makes
 API evidence insufficient.

@@ -22,6 +22,7 @@ from .services.fx_rate_service import FxRateService
 from .services.instrument_service import InstrumentService
 from .services.liquidity_ladder_service import PortfolioLiquidityLadderService
 from .services.lookup_catalog_service import LookupCatalogService
+from .services.lot_disposal_service import LotDisposalService
 from .services.portfolio_service import PortfolioService
 from .services.position_service import PositionService
 from .services.price_service import MarketPriceService
@@ -133,6 +134,12 @@ def get_liquidity_ladder_service(
     db: AsyncSession = Depends(get_async_db_session),
 ) -> PortfolioLiquidityLadderService:
     return PortfolioLiquidityLadderService(db)
+
+
+def get_lot_disposal_service(
+    db: AsyncSession = Depends(get_async_db_session),
+) -> LotDisposalService:
+    return LotDisposalService(db)
 
 
 def get_portfolio_service(
