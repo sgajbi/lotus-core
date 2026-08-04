@@ -96,6 +96,9 @@ async def apply_effective_amortized_cost_to_disposals(
     if cost_basis_method is not CostBasisMethod.FIFO:
         raise ValueError("lot-level amortized cost requires FIFO source-lot identity")
 
+    # Decoration is fallible after individual allocations acquire carry. Keep the caller's
+    # calculation immutable until the complete overlay has succeeded.
+    open_lot_states = dict(open_lot_states)
     processed = [transaction.model_copy() for transaction in calculation.processed]
     transactions_by_id = {
         **calculation.source_transactions,

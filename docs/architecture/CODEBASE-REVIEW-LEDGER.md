@@ -14,8 +14,9 @@ mutations. The upgrade retains legacy book carry while reconstructing FIFO tax b
 source BUY's authoritative acquisition cost, and fails closed on missing or inconsistent evidence.
 Legacy scopes with zero-quantity spin-off/demerger basis transfers also fail closed because their
 adjusted tax basis cannot be reconstructed from the former combined state. Correction-triggered
-booked-disposal replay and production activation remain open under #903/#478. Evidence and
-validation are maintained in the linked CR-1678 review document.
+booked-disposal replay and production activation remain open under #903/#478. Fallible carry
+decoration now uses a detached lot-state snapshot so failure cannot mutate the input calculation.
+Evidence and validation are maintained in the linked CR-1678 review document.
 
 | Review ID | Date | Scope / Pattern | Status | Findings | Actions Taken | Follow-up | Evidence / Sign-off |
 |---|---|---|---|---|---|---|---|

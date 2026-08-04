@@ -591,6 +591,7 @@ async def test_profile_gap_after_amortized_partial_fails_closed() -> None:
         _raw_transaction("SELL_1", "2026-06-30T00:00:00Z", "SELL", "40", "60"),
         _raw_transaction("SELL_2", "2027-01-01T00:00:00Z", "SELL", "20", "35"),
     )
+    original_open_lot_states = dict(calculation.open_lot_states)
 
     with pytest.raises(ValueError, match="profile gap follows persisted carry state"):
         await apply_effective_amortized_cost_to_disposals(
@@ -599,6 +600,7 @@ async def test_profile_gap_after_amortized_partial_fails_closed() -> None:
             cost_basis_method=CostBasisMethod.FIFO,
             profiles=_FirstEffectiveProfileOnly(),  # type: ignore[arg-type]
         )
+    assert calculation.open_lot_states == original_open_lot_states
 
 
 @pytest.mark.asyncio

@@ -86,6 +86,8 @@ non-BUY, incomplete, inconsistent with the open quantity, or followed by a zero-
 state. Its downgrade first restores accounting carry to the legacy combined lot-cost representation so
 rollback cannot silently substitute a divergent tax basis for carried book economics. A missing
 effective profile now also fails closed whenever a consumed source lot already has persisted carry.
+Carry decoration uses a detached open-lot snapshot, so a later profile gap or transaction
+validation failure cannot leak a partially applied accounting overlay into its input calculation.
 production activation still requires the correction-triggered replay and downstream certification
 tracked by #903/#478, so this schema separation does not claim current-book disposal support.
 An additive `lot_amortized_cost_authority` ledger and application port now persist and reload all
