@@ -85,8 +85,8 @@ class CorporateActionReconciliationObservation:
     net_basis_delta_local: Decimal
     basis_tolerance: Decimal
     missing_dependency_reference_ids: tuple[str, ...]
-    linkage_finding_count: int
     finding_severities: tuple[str, ...]
+    linkage_finding_count: int = 0
 
 
 class CorporateActionReconciliationRepository(Protocol):
