@@ -368,9 +368,11 @@ Data Models wiki documents the staged ledgers while the capability wiki remains
   settlement-owned generated fields, and advance both changed algorithms to version 2. A focused
   unit pack passed 126 warning-strict cases. Exact-source PostgreSQL replay restored the deleted
   product and principal cashflows in 29.76 seconds while retaining exactly one immutable disposal
-  receipt version and one allocation. The compatibility impact is intentional and bounded: lineage
-  hashes/version change where the canonicalization contract changed; financial amounts, booking
-  contracts, schema, API/OpenAPI, Kafka topology, and settlement identities do not.
+  receipt version and one allocation; the complete four-case redemption lifecycle pack passed in
+  44.99 seconds. Repository-native lint and every composed governance guard passed, and full MyPy
+  reported no issues across 292 source files. The compatibility impact is intentional and bounded:
+  lineage hashes/version change where the canonicalization contract changed; financial amounts,
+  booking contracts, schema, API/OpenAPI, Kafka topology, and settlement identities do not.
 
 Protected PR and exact-main evidence remain pending for this tranche. Wider runtime recovery/load
 proof, complete corporate-action scenario coverage, redemption, and final issue closure remain
