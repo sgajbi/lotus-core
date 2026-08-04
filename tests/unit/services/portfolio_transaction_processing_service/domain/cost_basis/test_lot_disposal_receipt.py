@@ -12,10 +12,21 @@ from portfolio_common.domain.calculation_lineage import (
 from portfolio_common.domain.cost_basis_method import CostBasisMethod
 
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
+    LotDisposalDestination,
+    LotDisposalDestinationType,
     LotDisposalReceiptState,
     LotDisposalReceiptStatus,
     SourceLotDisposalAllocation,
 )
+
+
+def _internal_destination() -> LotDisposalDestination:
+    return LotDisposalDestination(
+        destination_type=LotDisposalDestinationType.INTERNAL_LOT,
+        target_transaction_id="EXCHANGE-IN-01",
+        target_lot_id="LOT-EXCHANGE-IN-01",
+        target_instrument_id="TARGET-INSTRUMENT-01",
+    )
 
 
 def _lineage(name: str) -> CalculationLineage:
@@ -96,6 +107,70 @@ def test_receipt_identity_is_stable_while_method_changes_semantic_hash() -> None
     assert exact_retry.semantic_content_hash == fifo.semantic_content_hash
     assert avco.receipt_id == fifo.receipt_id
     assert avco.semantic_content_hash != fifo.semantic_content_hash
+
+
+def test_absent_destination_preserves_legacy_terminal_receipt_hash() -> None:
+    receipt = _active_receipt()
+
+    assert "destination" not in receipt.semantic_payload()
+    assert receipt.semantic_content_hash == (
+        "a0a2afd31f3c3947511100b7ef6f06d0315303a58235e590530ca84d7ac1179a"
+    )
+
+
+def test_internal_destination_is_normalized_and_changes_semantic_identity() -> None:
+    destination = replace(
+        _internal_destination(),
+        target_transaction_id="  EXCHANGE-IN-01  ",
+        target_lot_id="  LOT-EXCHANGE-IN-01  ",
+        target_instrument_id="  TARGET-INSTRUMENT-01  ",
+    )
+    receipt = replace(_active_receipt(), destination=destination)
+
+    assert destination.target_transaction_id == "EXCHANGE-IN-01"
+    assert receipt.receipt_id == _active_receipt().receipt_id
+    assert receipt.semantic_content_hash != _active_receipt().semantic_content_hash
+    assert receipt.semantic_payload()["destination"] == destination.semantic_payload()
+
+
+def test_external_destination_never_fabricates_internal_lot_identity() -> None:
+    destination = LotDisposalDestination(
+        destination_type=LotDisposalDestinationType.EXTERNAL_TRANSFER,
+        external_destination_reference="  CUSTODIAN-ACCOUNT-7788  ",
+    )
+
+    assert destination.external_destination_reference == "CUSTODIAN-ACCOUNT-7788"
+    assert destination.target_transaction_id is None
+    assert destination.target_lot_id is None
+
+
+@pytest.mark.parametrize(
+    ("updates", "message"),
+    [
+        ({"target_transaction_id": None}, "complete target identity"),
+        ({"target_lot_id": "LOT-WRONG"}, "must derive"),
+        ({"external_destination_reference": "EXT"}, "cannot carry an external"),
+    ],
+)
+def test_internal_destination_rejects_incomplete_or_mixed_identity(
+    updates: dict[str, object],
+    message: str,
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        replace(_internal_destination(), **updates)
+
+
+def test_external_destination_requires_exactly_external_identity() -> None:
+    with pytest.raises(ValueError, match="requires an external reference"):
+        LotDisposalDestination(
+            destination_type=LotDisposalDestinationType.EXTERNAL_TRANSFER,
+        )
+    with pytest.raises(ValueError, match="cannot carry internal target identity"):
+        LotDisposalDestination(
+            destination_type=LotDisposalDestinationType.EXTERNAL_TRANSFER,
+            external_destination_reference="EXT-1",
+            target_transaction_id="TRANSFER-IN-1",
+        )
 
 
 def test_receipt_semantic_hash_normalizes_persisted_decimal_scale() -> None:
