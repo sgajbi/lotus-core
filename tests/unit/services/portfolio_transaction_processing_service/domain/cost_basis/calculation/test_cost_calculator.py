@@ -8,12 +8,16 @@ import pytest
 from portfolio_common.domain.transaction.type_registry import PRODUCTION_BOOKING_TRANSACTION_TYPES
 
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
+    AverageCostBasisStrategy,
     CostBasisCalculator,
     CostBasisTransaction,
     CostCalculationErrorCollector,
     Fees,
     FIFOBasisStrategy,
     LotDispositionEngine,
+)
+from src.services.portfolio_transaction_processing_service.app.domain.cost_basis.calculation import (  # noqa: E501
+    cost_basis_calculator as calculator_module,
 )
 
 
@@ -1303,6 +1307,143 @@ def test_sell_strategy_multi_lot_fifo():
     assert sell_txn.realized_gain_loss == Decimal("560")
     assert not error_reporter.has_errors()
     assert disposition_engine.get_available_quantity("P1", "AAPL") == Decimal("30")
+
+
+@pytest.mark.parametrize(
+    ("transaction_type", "quantity", "expected_cost", "expected_pnl"),
+    [
+        ("MATURITY_REDEMPTION", "100", "97", "3"),
+        ("CALL_REDEMPTION", "100", "97", "3"),
+        ("PARTIAL_REDEMPTION", "40", "38.8", "1.2"),
+    ],
+)
+def test_redemption_strategy_consumes_fifo_lots_and_calculates_principal_only_pnl(
+    transaction_type: str,
+    quantity: str,
+    expected_cost: str,
+    expected_pnl: str,
+) -> None:
+    errors = CostCalculationErrorCollector()
+    disposition = LotDispositionEngine(cost_basis_strategy=FIFOBasisStrategy())
+    calculator = CostBasisCalculator(disposition_engine=disposition, error_reporter=errors)
+    buy = CostBasisTransaction(
+        transaction_id="BUY-RED-001",
+        portfolio_id="P1",
+        instrument_id="BOND-1",
+        security_id="BOND-1",
+        transaction_type="BUY",
+        transaction_date=datetime(2026, 1, 1),
+        quantity=Decimal("100"),
+        price=Decimal("0.97"),
+        gross_transaction_amount=Decimal("97"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+        transaction_fx_rate=Decimal(1),
+    )
+    calculator.calculate_transaction_costs(buy)
+    redemption = CostBasisTransaction(
+        transaction_id="RED-001",
+        portfolio_id="P1",
+        instrument_id="BOND-1",
+        security_id="BOND-1",
+        transaction_type=transaction_type,
+        transaction_date=datetime(2026, 6, 30),
+        settlement_date=datetime(2026, 7, 2),
+        quantity=Decimal(quantity),
+        price=Decimal(1),
+        gross_transaction_amount=Decimal(quantity),
+        principal_proceeds_local=Decimal(quantity),
+        accrued_interest_proceeds_local=Decimal("5"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+        transaction_fx_rate=Decimal(1),
+    )
+
+    calculator_module.RedemptionStrategy().calculate_costs(redemption, disposition, errors)
+    disposition.commit_disposal_record(redemption.transaction_id)
+
+    assert not errors.has_errors()
+    assert redemption.net_cost_local == -Decimal(expected_cost)
+    assert redemption.allocated_cost_basis_local == Decimal(expected_cost)
+    assert redemption.realized_capital_pnl_local == Decimal(expected_pnl)
+    assert redemption.realized_total_pnl_local == Decimal(expected_pnl)
+    assert redemption.realized_fx_pnl_local == Decimal(0)
+    assert disposition.get_available_quantity("P1", "BOND-1") == Decimal("100") - Decimal(quantity)
+    assert len(disposition.disposal_records()) == 1
+
+
+def test_redemption_strategy_validates_factor_authority_before_lot_consumption() -> None:
+    errors = CostCalculationErrorCollector()
+    disposition = MagicMock(spec=LotDispositionEngine)
+    disposition.get_available_quantity.return_value = Decimal("100")
+    redemption = CostBasisTransaction(
+        transaction_id="RED-FACTOR-001",
+        portfolio_id="P1",
+        instrument_id="BOND-1",
+        security_id="BOND-1",
+        transaction_type="PARTIAL_REDEMPTION",
+        transaction_date=datetime(2026, 6, 30),
+        quantity=Decimal("20"),
+        price=Decimal(1),
+        gross_transaction_amount=Decimal("20"),
+        old_factor=Decimal(1),
+        new_factor=Decimal("0.75"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+        transaction_fx_rate=Decimal(1),
+    )
+
+    calculator_module.RedemptionStrategy().calculate_costs(redemption, disposition, errors)
+
+    assert errors.has_errors_for("RED-FACTOR-001")
+    disposition.consume_sell_quantity.assert_not_called()
+
+
+def test_partial_redemption_strategy_consumes_average_cost_pool() -> None:
+    errors = CostCalculationErrorCollector()
+    disposition = LotDispositionEngine(cost_basis_strategy=AverageCostBasisStrategy())
+    calculator = CostBasisCalculator(disposition_engine=disposition, error_reporter=errors)
+    for transaction_id, gross_amount in (("BUY-1", "40"), ("BUY-2", "60")):
+        calculator.calculate_transaction_costs(
+            CostBasisTransaction(
+                transaction_id=transaction_id,
+                portfolio_id="P1",
+                instrument_id="BOND-1",
+                security_id="BOND-1",
+                transaction_type="BUY",
+                transaction_date=datetime(2026, 1, 1),
+                quantity=Decimal("50"),
+                price=Decimal(gross_amount) / Decimal("50"),
+                gross_transaction_amount=Decimal(gross_amount),
+                trade_currency="USD",
+                portfolio_base_currency="USD",
+                transaction_fx_rate=Decimal(1),
+            )
+        )
+    redemption = CostBasisTransaction(
+        transaction_id="RED-AVCO-001",
+        portfolio_id="P1",
+        instrument_id="BOND-1",
+        security_id="BOND-1",
+        transaction_type="PARTIAL_REDEMPTION",
+        transaction_date=datetime(2026, 6, 30),
+        quantity=Decimal("25"),
+        price=Decimal("1.2"),
+        gross_transaction_amount=Decimal("30"),
+        principal_proceeds_local=Decimal("30"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+        transaction_fx_rate=Decimal(1),
+    )
+
+    calculator_module.RedemptionStrategy().calculate_costs(redemption, disposition, errors)
+    disposition.commit_disposal_record(redemption.transaction_id)
+
+    assert not errors.has_errors()
+    assert redemption.allocated_cost_basis_local == Decimal("25.0000000000")
+    assert redemption.realized_capital_pnl_local == Decimal("5.0000000000")
+    assert disposition.get_available_quantity("P1", "BOND-1") == Decimal("75.0000000000")
+    assert disposition.disposal_records()[0].result.consumed_quantity == Decimal("25.0000000000")
 
 
 def test_deposit_strategy_creates_cost_lot(cost_calculator, mock_disposition_engine):
