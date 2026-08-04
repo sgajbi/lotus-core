@@ -81,8 +81,9 @@ rewriting `lot_cost_local` or `lot_cost_base`, which remain strategy/tax acquisi
 additive migration backfills complete pre-existing carry rows from their former combined amounts
 and restores the separate FIFO tax basis pro rata from the source BUY's authoritative local/base
 acquisition cost. It fails closed before rewriting any row when that source evidence is missing,
-non-BUY, incomplete, or inconsistent with the open quantity. Its downgrade first restores
-accounting carry to the legacy combined lot-cost representation so
+non-BUY, incomplete, inconsistent with the open quantity, or followed by a zero-quantity
+`SPIN_OFF`/`DEMERGER_OUT` basis transfer that cannot be reconstructed from the legacy combined
+state. Its downgrade first restores accounting carry to the legacy combined lot-cost representation so
 rollback cannot silently substitute a divergent tax basis for carried book economics. A missing
 effective profile now also fails closed whenever a consumed source lot already has persisted carry.
 production activation still requires the correction-triggered replay and downstream certification

@@ -64,6 +64,9 @@ def test_book_carry_migration_is_additive_backfilled_and_reversible(monkeypatch)
     assert "source.quantity IS NULL OR source.quantity <= 0" in evidence_guard
     assert "source.net_cost_local IS NULL OR source.net_cost IS NULL" in evidence_guard
     assert "lot.open_quantity > source.quantity" in evidence_guard
+    assert "basis_mutation.transaction_type IN ('SPIN_OFF', 'DEMERGER_OUT')" in evidence_guard
+    assert "basis_mutation.quantity = 0" in evidence_guard
+    assert "basis_mutation.transaction_date >= source.transaction_date" in evidence_guard
     assert "RAISE EXCEPTION" in evidence_guard
     assert "amortized_book_carrying_local = lot.lot_cost_local" in backfill
     assert "amortized_book_carrying_base = lot.lot_cost_base" in backfill

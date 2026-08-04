@@ -67,7 +67,16 @@ def test_upgrade_restores_fifo_basis_and_downgrade_restores_combined_carry(
         )
 
 
-def test_upgrade_fails_closed_without_buy_acquisition_evidence(db_engine, clean_db) -> None:
+@pytest.mark.parametrize(
+    ("source_transaction_type", "has_basis_mutation"),
+    (("SELL", False), ("BUY", True)),
+)
+def test_upgrade_fails_closed_without_reconstructible_acquisition_basis(
+    db_engine,
+    clean_db,
+    source_transaction_type: str,
+    has_basis_mutation: bool,
+) -> None:
     migration: dict[str, Any] = runpy.run_path(str(MIGRATION))
 
     with db_engine.begin() as connection:
@@ -78,7 +87,12 @@ def test_upgrade_fails_closed_without_buy_acquisition_evidence(db_engine, clean_
             column["name"] for column in inspect(connection).get_columns("position_lot_state")
         }:
             migration["downgrade"]()
-        _seed_legacy_carry_row(connection, source_transaction_type="SELL")
+        _seed_legacy_carry_row(
+            connection,
+            source_transaction_type=source_transaction_type,
+        )
+        if has_basis_mutation:
+            _seed_basis_mutation(connection)
 
         with (
             pytest.raises(
@@ -188,4 +202,23 @@ def _seed_legacy_carry_row(connection, *, source_transaction_type: str = "BUY") 
             """
         ),
         {"profile_hash": "b" * 64},
+    )
+
+
+def _seed_basis_mutation(connection) -> None:
+    connection.execute(
+        text(
+            """
+            INSERT INTO transactions (
+                transaction_id, portfolio_id, instrument_id, security_id,
+                transaction_type, quantity, price, gross_transaction_amount,
+                trade_currency, currency, transaction_date
+            ) VALUES (
+                'AMORT_SEPARATION_DEMERGER', 'AMORT_SEPARATION_PORTFOLIO',
+                'AMORT_SEPARATION_BOND', 'AMORT_SEPARATION_BOND',
+                'DEMERGER_OUT', 0, 0, 300, 'SGD', 'SGD',
+                TIMESTAMPTZ '2026-03-01 08:00:00+00'
+            )
+            """
+        )
     )
