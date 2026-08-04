@@ -1,5 +1,16 @@
 # Codebase Review Ledger
 
+CR-1678 partial-transfer addendum (2026-08-04): an exact-source PostgreSQL lifecycle now proves a
+partial internal securities transfer across distinct source and target portfolios. Moving 40 of 100
+units preserves total 1,000 local/base basis as a 60/600 source residual and a 40/400 target lot;
+the immutable disposal receipt binds the reciprocal target transaction, deterministic target lot,
+target instrument, and exact 40/400 source allocation. Both legs retain the shared economic/group
+identity, emit no realized capital or FX P&L, and exact duplicate delivery is neutral. This is a
+bounded #481 scenario contribution. #476 remains open for its complete pair-query, restatement,
+FIFO/AVCO, and external-pair acceptance, while #480 retains the reusable parent/dependency graph.
+No production, schema/migration, API/OpenAPI, runtime topology, README, central context, skill, or
+wiki capability truth changed.
+
 CR-1678 reciprocal-leg addendum (2026-08-04): quantity-consuming merger, exchange, and replacement
 groups now validate exact source/target type, reciprocal transaction references, and both instrument
 identities through one order-independent domain policy. The existing reconciliation repository
