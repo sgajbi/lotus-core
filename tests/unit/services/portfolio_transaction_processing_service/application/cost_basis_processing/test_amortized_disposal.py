@@ -214,6 +214,33 @@ async def test_full_rebuild_overlays_sequential_partial_sells_and_lineage() -> N
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "transaction_type",
+    ["MATURITY_REDEMPTION", "CALL_REDEMPTION", "PARTIAL_REDEMPTION"],
+)
+async def test_redemption_disposals_share_authoritative_book_cost_overlay(
+    transaction_type: str,
+) -> None:
+    calculation = _calculation(
+        _raw_transaction("BUY_1", "2026-01-01T00:00:00Z", "BUY", "100", "97"),
+        _raw_transaction("DISPOSAL_1", "2026-06-30T00:00:00Z", "SELL", "40", "60"),
+    )
+    redemption = calculation.processed[-1].model_copy(update={"transaction_type": transaction_type})
+
+    decorated = await apply_effective_amortized_cost_to_disposals(
+        replace(calculation, processed=[*calculation.processed[:-1], redemption]),
+        portfolio=_accounting_portfolio(),
+        cost_basis_method=CostBasisMethod.FIFO,
+        profiles=_EffectiveProfiles(),  # type: ignore[arg-type]
+    )
+
+    processed = {transaction.transaction_id: transaction for transaction in decorated.processed}
+    assert processed["DISPOSAL_1"].net_cost_local == Decimal("-38.8000000000")
+    assert processed["DISPOSAL_1"].realized_gain_loss_local == Decimal("21.2000000000")
+    assert decorated.disposals[0].result.allocations[0].amortized_cost_evidence is not None
+
+
+@pytest.mark.asyncio
 async def test_one_unit_partials_conserve_terminal_local_and_base_basis() -> None:
     calculation = _calculation(
         _raw_transaction("BUY_1", "2026-01-01T00:00:00Z", "BUY", "3", "97"),
@@ -802,7 +829,7 @@ async def test_disposal_without_open_source_lot_fails_closed() -> None:
 
 
 @pytest.mark.asyncio
-async def test_non_sell_disposal_overlay_fails_closed() -> None:
+async def test_non_governed_disposal_overlay_fails_closed() -> None:
     calculation = _calculation(
         _raw_transaction("BUY_1", "2026-01-01T00:00:00Z", "BUY", "100", "97"),
         _raw_transaction("SELL_1", "2026-06-30T00:00:00Z", "SELL", "40", "60"),
@@ -812,7 +839,7 @@ async def test_non_sell_disposal_overlay_fails_closed() -> None:
         disposal_transaction_id="BUY_1",
     )
 
-    with pytest.raises(ValueError, match="currently supports SELL only"):
+    with pytest.raises(ValueError, match="requires a governed fixed-income disposal"):
         await apply_effective_amortized_cost_to_disposals(
             replace(calculation, disposals=(invalid,)),
             portfolio=_accounting_portfolio(),

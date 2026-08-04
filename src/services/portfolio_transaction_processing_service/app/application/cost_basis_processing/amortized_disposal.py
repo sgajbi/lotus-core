@@ -43,6 +43,9 @@ from .calculation_result import CostBasisCalculationResult
 
 _TRANSACTION_OVERLAY_ALGORITHM_ID = "fixed-income-amortized-cost-transaction-overlay"
 _TRANSACTION_OVERLAY_ALGORITHM_VERSION = 1
+_AMORTIZED_COST_DISPOSAL_TRANSACTION_TYPES = frozenset(
+    {"SELL", "MATURITY_REDEMPTION", "CALL_REDEMPTION", "PARTIAL_REDEMPTION"}
+)
 
 
 async def apply_effective_amortized_cost_to_disposals(
@@ -392,7 +395,7 @@ def _book_cost_fx_rate(
     carried_book_cost_state: object,
 ) -> Decimal:
     if isinstance(carried_book_cost_state, AmortizedCostCarryState):
-        return carried_book_cost_state.book_cost_fx_rate_to_base
+        return cast(Decimal, carried_book_cost_state.book_cost_fx_rate_to_base)
     if carried_book_cost_state is not None:
         raise ValueError("source lot carries invalid amortized-cost state")
     local_cost = source_transaction.net_cost_local
@@ -421,11 +424,13 @@ def _apply_transaction_overlay(
     previous: TransactionLotDisposal,
     current: TransactionLotDisposal,
 ) -> None:
-    if transaction.transaction_type != "SELL":
-        raise ValueError("amortized-cost transaction overlay currently supports SELL only")
+    if transaction.transaction_type not in _AMORTIZED_COST_DISPOSAL_TRANSACTION_TYPES:
+        raise ValueError(
+            "amortized-cost transaction overlay requires a governed fixed-income disposal"
+        )
     previous_lineage = getattr(transaction, "calculation_lineage", None)
     if not isinstance(previous_lineage, CalculationLineage):
-        raise ValueError("calculated SELL is missing transaction calculation lineage")
+        raise ValueError("calculated disposal is missing transaction calculation lineage")
     policy = TRANSACTION_COST_LEDGER_OUTPUT_V1
     transaction.realized_gain_loss_local = _adjust_realized_value(
         transaction.realized_gain_loss_local,
@@ -479,7 +484,7 @@ def _adjust_realized_value(
     field_name: str,
 ) -> Decimal:
     if value is None:
-        raise ValueError(f"calculated SELL is missing {field_name}")
+        raise ValueError(f"calculated disposal is missing {field_name}")
     policy = TRANSACTION_COST_LEDGER_OUTPUT_V1
     return cast(
         Decimal,
