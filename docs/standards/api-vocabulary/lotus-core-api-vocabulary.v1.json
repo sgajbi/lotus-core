@@ -13,7 +13,7 @@
       "openApiVersion": "3.1.0"
     }
   ],
-  "generatedAt": "2026-08-02T20:28:58.162426+00:00",
+  "generatedAt": "2026-08-04T10:19:52.569158+00:00",
   "attributeCatalog": [
     {
       "semanticId": "lotus.accepted_count",
@@ -69,6 +69,20 @@
       ],
       "observedTypes": [
         "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.accrued_interest_proceeds_local",
+      "canonicalTerm": "accrued_interest_proceeds_local",
+      "preferredName": "accrued_interest_proceeds_local",
+      "description": "Accrued-interest proceeds embedded in redemption settlement.",
+      "example": 50.0,
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
       ]
     },
     {
@@ -178,6 +192,138 @@
       "preferredName": "allocated_cost_basis_local",
       "description": "Cost basis allocated to a corporate-action cash product leg in local currency.",
       "example": 50.0,
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.allocation_content_hash",
+      "canonicalTerm": "allocation_content_hash",
+      "preferredName": "allocation_content_hash",
+      "description": "lot disposal allocation response field: allocation content hash.",
+      "example": "example_allocation_content_hash",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.allocation_ordinal",
+      "canonicalTerm": "allocation_ordinal",
+      "preferredName": "allocation_ordinal",
+      "description": "lot disposal allocation response field: allocation ordinal.",
+      "example": 10,
+      "type": "integer",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "integer"
+      ]
+    },
+    {
+      "semanticId": "lotus.allocations",
+      "canonicalTerm": "allocations",
+      "preferredName": "allocations",
+      "description": "lot disposal receipt response field: allocations.",
+      "example": [
+        {
+          "allocation_ordinal": 10,
+          "source_lot_id": "SOURCE_LOT_001",
+          "source_transaction_id": "SOURCE_TRANSACTION_001",
+          "source_acquisition_date": "2026-02-27",
+          "consumed_quantity": "example_consumed_quantity",
+          "consumed_cost_local": "example_consumed_cost_local",
+          "consumed_cost_base": "example_consumed_cost_base",
+          "allocation_content_hash": "example_allocation_content_hash",
+          "amortized_cost_profile_id": "example_value",
+          "amortized_cost_profile_version": 10,
+          "amortized_cost_profile_content_hash": "example_value",
+          "amortized_cost_recognized_through": "2026-02-27",
+          "amortized_cost_calculation_lineage": {}
+        }
+      ],
+      "type": "array",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "array"
+      ]
+    },
+    {
+      "semanticId": "lotus.amortized_cost_calculation_lineage",
+      "canonicalTerm": "amortized_cost_calculation_lineage",
+      "preferredName": "amortized_cost_calculation_lineage",
+      "description": "lot disposal allocation response field: amortized cost calculation lineage.",
+      "example": {},
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.amortized_cost_profile_content_hash",
+      "canonicalTerm": "amortized_cost_profile_content_hash",
+      "preferredName": "amortized_cost_profile_content_hash",
+      "description": "lot disposal allocation response field: amortized cost profile content hash.",
+      "example": {
+        "id": "OBJ_001"
+      },
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.amortized_cost_profile_id",
+      "canonicalTerm": "amortized_cost_profile_id",
+      "preferredName": "amortized_cost_profile_id",
+      "description": "Unique amortized cost profile identifier.",
+      "example": {
+        "id": "OBJ_001"
+      },
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.amortized_cost_profile_version",
+      "canonicalTerm": "amortized_cost_profile_version",
+      "preferredName": "amortized_cost_profile_version",
+      "description": "lot disposal allocation response field: amortized cost profile version.",
+      "example": 10,
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.amortized_cost_recognized_through",
+      "canonicalTerm": "amortized_cost_recognized_through",
+      "preferredName": "amortized_cost_recognized_through",
+      "description": "lot disposal allocation response field: amortized cost recognized through.",
+      "example": "2026-02-27",
       "type": "object",
       "locations": [
         "body"
@@ -1193,8 +1339,10 @@
       "semanticId": "lotus.calculation_policy_id",
       "canonicalTerm": "calculation_policy_id",
       "preferredName": "calculation_policy_id",
-      "description": "Calculation policy identifier used for BUY processing.",
-      "example": "BUY_DEFAULT_POLICY",
+      "description": "Unique calculation policy identifier.",
+      "example": {
+        "id": "OBJ_001"
+      },
       "type": "object",
       "locations": [
         "body"
@@ -1207,8 +1355,10 @@
       "semanticId": "lotus.calculation_policy_version",
       "canonicalTerm": "calculation_policy_version",
       "preferredName": "calculation_policy_version",
-      "description": "Version of calculation policy used.",
-      "example": "1.0.0",
+      "description": "lot disposal receipt response field: calculation policy version.",
+      "example": {
+        "id": "OBJ_001"
+      },
       "type": "object",
       "locations": [
         "body"
@@ -1820,6 +1970,48 @@
       ]
     },
     {
+      "semanticId": "lotus.consumed_cost_base",
+      "canonicalTerm": "consumed_cost_base",
+      "preferredName": "consumed_cost_base",
+      "description": "lot disposal receipt response field: consumed cost base.",
+      "example": "example_consumed_cost_base",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.consumed_cost_local",
+      "canonicalTerm": "consumed_cost_local",
+      "preferredName": "consumed_cost_local",
+      "description": "lot disposal receipt response field: consumed cost local.",
+      "example": "example_consumed_cost_local",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.consumed_quantity",
+      "canonicalTerm": "consumed_quantity",
+      "preferredName": "consumed_quantity",
+      "description": "Quantity value for consumed quantity.",
+      "example": "example_consumed_quantity",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
       "semanticId": "lotus.content_hash",
       "canonicalTerm": "content_hash",
       "preferredName": "content_hash",
@@ -1983,12 +2175,13 @@
       "preferredName": "cost_basis_method",
       "description": "Portfolio-level cost-basis accounting method used by lot accounting.",
       "example": "FIFO",
-      "type": "object",
+      "type": "string",
       "locations": [
         "body"
       ],
       "observedTypes": [
-        "object"
+        "object",
+        "string"
       ]
     },
     {
@@ -2366,6 +2559,20 @@
       ]
     },
     {
+      "semanticId": "lotus.disposal_calculation_lineage",
+      "canonicalTerm": "disposal_calculation_lineage",
+      "preferredName": "disposal_calculation_lineage",
+      "description": "lot disposal receipt response field: disposal calculation lineage.",
+      "example": {},
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
       "semanticId": "lotus.disposal_cost_basis_base",
       "canonicalTerm": "disposal_cost_basis_base",
       "preferredName": "disposal_cost_basis_base",
@@ -2391,6 +2598,34 @@
       ],
       "observedTypes": [
         "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.disposal_timestamp",
+      "canonicalTerm": "disposal_timestamp",
+      "preferredName": "disposal_timestamp",
+      "description": "Timestamp for disposal timestamp.",
+      "example": "2026-02-27T10:30:00Z",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.disposal_transaction_id",
+      "canonicalTerm": "disposal_transaction_id",
+      "preferredName": "disposal_transaction_id",
+      "description": "Unique disposal transaction identifier.",
+      "example": "DISPOSAL_TRANSACTION_001",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
       ]
     },
     {
@@ -2535,6 +2770,34 @@
       ],
       "observedTypes": [
         "array"
+      ]
+    },
+    {
+      "semanticId": "lotus.embedded_fee_amount_local",
+      "canonicalTerm": "embedded_fee_amount_local",
+      "preferredName": "embedded_fee_amount_local",
+      "description": "Fees embedded in redemption settlement.",
+      "example": 2.0,
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.embedded_tax_amount_local",
+      "canonicalTerm": "embedded_tax_amount_local",
+      "preferredName": "embedded_tax_amount_local",
+      "description": "Taxes embedded in redemption settlement.",
+      "example": 3.0,
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
       ]
     },
     {
@@ -4830,6 +5093,20 @@
       ]
     },
     {
+      "semanticId": "lotus.new_factor",
+      "canonicalTerm": "new_factor",
+      "preferredName": "new_factor",
+      "description": "Instrument factor immediately after a partial redemption.",
+      "example": 0.75,
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
       "semanticId": "lotus.next_maturity_date",
       "canonicalTerm": "next_maturity_date",
       "preferredName": "next_maturity_date",
@@ -5019,6 +5296,20 @@
       ],
       "observedTypes": [
         "array"
+      ]
+    },
+    {
+      "semanticId": "lotus.old_factor",
+      "canonicalTerm": "old_factor",
+      "preferredName": "old_factor",
+      "description": "Instrument factor immediately before a partial redemption.",
+      "example": 1.0,
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
       ]
     },
     {
@@ -5699,6 +5990,22 @@
       ]
     },
     {
+      "semanticId": "lotus.previous_receipt_content_hash",
+      "canonicalTerm": "previous_receipt_content_hash",
+      "preferredName": "previous_receipt_content_hash",
+      "description": "lot disposal receipt response field: previous receipt content hash.",
+      "example": {
+        "id": "OBJ_001"
+      },
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
       "semanticId": "lotus.price",
       "canonicalTerm": "price",
       "preferredName": "price",
@@ -5745,6 +6052,20 @@
       ],
       "observedTypes": [
         "array"
+      ]
+    },
+    {
+      "semanticId": "lotus.principal_proceeds_local",
+      "canonicalTerm": "principal_proceeds_local",
+      "preferredName": "principal_proceeds_local",
+      "description": "Principal proceeds excluding accrued interest and deductions.",
+      "example": 2500.0,
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
       ]
     },
     {
@@ -6439,6 +6760,48 @@
       ]
     },
     {
+      "semanticId": "lotus.receipt_content_hash",
+      "canonicalTerm": "receipt_content_hash",
+      "preferredName": "receipt_content_hash",
+      "description": "lot disposal receipt response field: receipt content hash.",
+      "example": "example_receipt_content_hash",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.receipt_id",
+      "canonicalTerm": "receipt_id",
+      "preferredName": "receipt_id",
+      "description": "Unique receipt identifier.",
+      "example": "RECEIPT_001",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.receipt_version",
+      "canonicalTerm": "receipt_version",
+      "preferredName": "receipt_version",
+      "description": "lot disposal receipt response field: receipt version.",
+      "example": 1,
+      "type": "integer",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "integer"
+      ]
+    },
+    {
       "semanticId": "lotus.recognized_period_count",
       "canonicalTerm": "recognized_period_count",
       "preferredName": "recognized_period_count",
@@ -6514,6 +6877,20 @@
       "preferredName": "recurrence_frequency",
       "description": "planned withdrawal schedule record field: recurrence frequency.",
       "example": "ONE_TIME",
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.redemption_price_type",
+      "canonicalTerm": "redemption_price_type",
+      "preferredName": "redemption_price_type",
+      "description": "Authority classification for a fixed-income redemption price.",
+      "example": "PAR",
       "type": "object",
       "locations": [
         "body"
@@ -7438,6 +7815,20 @@
       ]
     },
     {
+      "semanticId": "lotus.semantic_content_hash",
+      "canonicalTerm": "semantic_content_hash",
+      "preferredName": "semantic_content_hash",
+      "description": "lot disposal receipt response field: semantic content hash.",
+      "example": "example_semantic_content_hash",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
       "semanticId": "lotus.series_currency",
       "canonicalTerm": "series_currency",
       "preferredName": "series_currency",
@@ -7739,6 +8130,20 @@
       ]
     },
     {
+      "semanticId": "lotus.source_acquisition_date",
+      "canonicalTerm": "source_acquisition_date",
+      "preferredName": "source_acquisition_date",
+      "description": "Business date for source acquisition date.",
+      "example": "2026-02-27",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
       "semanticId": "lotus.source_as_of_date",
       "canonicalTerm": "source_as_of_date",
       "preferredName": "source_as_of_date",
@@ -7882,6 +8287,20 @@
       ],
       "observedTypes": [
         "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.source_lot_id",
+      "canonicalTerm": "source_lot_id",
+      "preferredName": "source_lot_id",
+      "description": "Unique source lot identifier.",
+      "example": "SOURCE_LOT_001",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
       ]
     },
     {
@@ -8082,7 +8501,7 @@
       "semanticId": "lotus.source_transaction_id",
       "canonicalTerm": "source_transaction_id",
       "preferredName": "source_transaction_id",
-      "description": "Transaction ID that created this lot.",
+      "description": "Unique source transaction identifier.",
       "example": "SOURCE_TRANSACTION_001",
       "type": "string",
       "locations": [
@@ -9030,6 +9449,20 @@
       ]
     },
     {
+      "semanticId": "lotus.transaction_calculation_lineage",
+      "canonicalTerm": "transaction_calculation_lineage",
+      "preferredName": "transaction_calculation_lineage",
+      "description": "lot disposal receipt response field: transaction calculation lineage.",
+      "example": {},
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
       "semanticId": "lotus.transaction_count",
       "canonicalTerm": "transaction_count",
       "preferredName": "transaction_count",
@@ -9107,7 +9540,7 @@
       "semanticId": "lotus.transaction_type",
       "canonicalTerm": "transaction_type",
       "preferredName": "transaction_type",
-      "description": "Transaction type.",
+      "description": "lot disposal receipt response field: transaction type.",
       "example": "BUY",
       "type": "string",
       "locations": [
@@ -9221,6 +9654,13 @@
           "source_transaction_reference": "CA-CHILD-OUT-001",
           "target_transaction_reference": "CA-CHILD-IN-001",
           "linked_cash_transaction_id": "CA-CIL-CASH-001",
+          "redemption_price_type": "PAR",
+          "old_factor": 1.0,
+          "new_factor": 0.75,
+          "principal_proceeds_local": 2500.0,
+          "accrued_interest_proceeds_local": 50.0,
+          "embedded_fee_amount_local": 2.0,
+          "embedded_tax_amount_local": 3.0,
           "has_synthetic_flow": true,
           "synthetic_flow_effective_date": "2026-03-15",
           "synthetic_flow_amount_local": -10000.0,
@@ -9528,6 +9968,22 @@
       ],
       "observedTypes": [
         "array"
+      ]
+    },
+    {
+      "semanticId": "lotus.void_reason",
+      "canonicalTerm": "void_reason",
+      "preferredName": "void_reason",
+      "description": "lot disposal receipt response field: void reason.",
+      "example": {
+        "id": "OBJ_001"
+      },
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
       ]
     },
     {
@@ -10081,6 +10537,36 @@
       "exposure": "consumer_visible",
       "canonicalTerm": "include_projected",
       "semanticId": "lotus.include_projected"
+    },
+    {
+      "name": "portfolio_id",
+      "kind": "request_option",
+      "location": "path",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Portfolio identifier.",
+      "example": "DEMO_DPM_EUR_001",
+      "behaviorImpact": "Affects get_latest_lot_disposal_receipt_portfolios__portfolio_id__transactions__transaction_id__lot_disposal_receipt_get request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "portfolio_id",
+      "semanticId": "lotus.portfolio_id"
+    },
+    {
+      "name": "transaction_id",
+      "kind": "request_option",
+      "location": "path",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Lot-consuming transaction identifier.",
+      "example": "TXN_0001",
+      "behaviorImpact": "Affects get_latest_lot_disposal_receipt_portfolios__portfolio_id__transactions__transaction_id__lot_disposal_receipt_get request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "transaction_id",
+      "semanticId": "lotus.transaction_id"
     },
     {
       "name": "portfolio_id",
@@ -14686,6 +15172,362 @@
       }
     },
     {
+      "operationId": "get_latest_lot_disposal_receipt_portfolios__portfolio_id__transactions__transaction_id__lot_disposal_receipt_get",
+      "method": "GET",
+      "path": "/portfolios/{portfolio_id}/transactions/{transaction_id}/lot-disposal-receipt",
+      "domain": "lot_disposal_receipts",
+      "serviceGroup": "query",
+      "tags": [
+        "Lot Disposal Receipts"
+      ],
+      "summary": "Get Latest Immutable Lot-Disposal Receipt",
+      "description": "Returns the latest versioned receipt and ordered source-lot allocations for any governed lot-consuming transaction family, including SELL and fixed-income redemption.",
+      "naming": {
+        "boundedContext": "lot_disposal_receipts",
+        "canonicalTerms": [
+          "allocation_content_hash",
+          "allocation_ordinal",
+          "allocations",
+          "amortized_cost_calculation_lineage",
+          "amortized_cost_profile_content_hash",
+          "amortized_cost_profile_id",
+          "amortized_cost_profile_version",
+          "amortized_cost_recognized_through",
+          "calculation_policy_id",
+          "calculation_policy_version",
+          "consumed_cost_base",
+          "consumed_cost_local",
+          "consumed_quantity",
+          "cost_basis_method",
+          "disposal_calculation_lineage",
+          "disposal_timestamp",
+          "disposal_transaction_id",
+          "instrument_id",
+          "portfolio_id",
+          "previous_receipt_content_hash",
+          "receipt_content_hash",
+          "receipt_id",
+          "receipt_version",
+          "security_id",
+          "semantic_content_hash",
+          "source_acquisition_date",
+          "source_lot_id",
+          "source_transaction_id",
+          "status",
+          "transaction_calculation_lineage",
+          "transaction_id",
+          "transaction_type",
+          "void_reason"
+        ]
+      },
+      "request": {
+        "fields": [
+          {
+            "name": "portfolio_id",
+            "location": "path",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.portfolio_id",
+            "attributeRef": "lotus.portfolio_id"
+          },
+          {
+            "name": "transaction_id",
+            "location": "path",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.transaction_id",
+            "attributeRef": "lotus.transaction_id"
+          }
+        ]
+      },
+      "response": {
+        "httpStatus": 200,
+        "model": "LotDisposalReceiptResponse",
+        "fields": [
+          {
+            "name": "receipt_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.receipt_id",
+            "attributeRef": "lotus.receipt_id"
+          },
+          {
+            "name": "receipt_version",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.receipt_version",
+            "attributeRef": "lotus.receipt_version"
+          },
+          {
+            "name": "disposal_transaction_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.disposal_transaction_id",
+            "attributeRef": "lotus.disposal_transaction_id"
+          },
+          {
+            "name": "portfolio_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.portfolio_id",
+            "attributeRef": "lotus.portfolio_id"
+          },
+          {
+            "name": "instrument_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.instrument_id",
+            "attributeRef": "lotus.instrument_id"
+          },
+          {
+            "name": "security_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.security_id",
+            "attributeRef": "lotus.security_id"
+          },
+          {
+            "name": "disposal_timestamp",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.disposal_timestamp",
+            "attributeRef": "lotus.disposal_timestamp"
+          },
+          {
+            "name": "transaction_type",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.transaction_type",
+            "attributeRef": "lotus.transaction_type"
+          },
+          {
+            "name": "cost_basis_method",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.cost_basis_method",
+            "attributeRef": "lotus.cost_basis_method"
+          },
+          {
+            "name": "calculation_policy_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.calculation_policy_id",
+            "attributeRef": "lotus.calculation_policy_id"
+          },
+          {
+            "name": "calculation_policy_version",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.calculation_policy_version",
+            "attributeRef": "lotus.calculation_policy_version"
+          },
+          {
+            "name": "status",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.status",
+            "attributeRef": "lotus.status"
+          },
+          {
+            "name": "void_reason",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.void_reason",
+            "attributeRef": "lotus.void_reason"
+          },
+          {
+            "name": "consumed_quantity",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.consumed_quantity",
+            "attributeRef": "lotus.consumed_quantity"
+          },
+          {
+            "name": "consumed_cost_local",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.consumed_cost_local",
+            "attributeRef": "lotus.consumed_cost_local"
+          },
+          {
+            "name": "consumed_cost_base",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.consumed_cost_base",
+            "attributeRef": "lotus.consumed_cost_base"
+          },
+          {
+            "name": "semantic_content_hash",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.semantic_content_hash",
+            "attributeRef": "lotus.semantic_content_hash"
+          },
+          {
+            "name": "previous_receipt_content_hash",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.previous_receipt_content_hash",
+            "attributeRef": "lotus.previous_receipt_content_hash"
+          },
+          {
+            "name": "receipt_content_hash",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.receipt_content_hash",
+            "attributeRef": "lotus.receipt_content_hash"
+          },
+          {
+            "name": "transaction_calculation_lineage",
+            "location": "body",
+            "required": true,
+            "type": "object",
+            "semanticId": "lotus.transaction_calculation_lineage",
+            "attributeRef": "lotus.transaction_calculation_lineage"
+          },
+          {
+            "name": "disposal_calculation_lineage",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.disposal_calculation_lineage",
+            "attributeRef": "lotus.disposal_calculation_lineage"
+          },
+          {
+            "name": "allocations",
+            "location": "body",
+            "required": true,
+            "type": "array",
+            "semanticId": "lotus.allocations",
+            "attributeRef": "lotus.allocations"
+          },
+          {
+            "name": "allocations[].allocation_ordinal",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.allocation_ordinal",
+            "attributeRef": "lotus.allocation_ordinal"
+          },
+          {
+            "name": "allocations[].source_lot_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.source_lot_id",
+            "attributeRef": "lotus.source_lot_id"
+          },
+          {
+            "name": "allocations[].source_transaction_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.source_transaction_id",
+            "attributeRef": "lotus.source_transaction_id"
+          },
+          {
+            "name": "allocations[].source_acquisition_date",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.source_acquisition_date",
+            "attributeRef": "lotus.source_acquisition_date"
+          },
+          {
+            "name": "allocations[].consumed_quantity",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.consumed_quantity",
+            "attributeRef": "lotus.consumed_quantity"
+          },
+          {
+            "name": "allocations[].consumed_cost_local",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.consumed_cost_local",
+            "attributeRef": "lotus.consumed_cost_local"
+          },
+          {
+            "name": "allocations[].consumed_cost_base",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.consumed_cost_base",
+            "attributeRef": "lotus.consumed_cost_base"
+          },
+          {
+            "name": "allocations[].allocation_content_hash",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.allocation_content_hash",
+            "attributeRef": "lotus.allocation_content_hash"
+          },
+          {
+            "name": "allocations[].amortized_cost_profile_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.amortized_cost_profile_id",
+            "attributeRef": "lotus.amortized_cost_profile_id"
+          },
+          {
+            "name": "allocations[].amortized_cost_profile_version",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.amortized_cost_profile_version",
+            "attributeRef": "lotus.amortized_cost_profile_version"
+          },
+          {
+            "name": "allocations[].amortized_cost_profile_content_hash",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.amortized_cost_profile_content_hash",
+            "attributeRef": "lotus.amortized_cost_profile_content_hash"
+          },
+          {
+            "name": "allocations[].amortized_cost_recognized_through",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.amortized_cost_recognized_through",
+            "attributeRef": "lotus.amortized_cost_recognized_through"
+          },
+          {
+            "name": "allocations[].amortized_cost_calculation_lineage",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.amortized_cost_calculation_lineage",
+            "attributeRef": "lotus.amortized_cost_calculation_lineage"
+          }
+        ]
+      }
+    },
+    {
       "operationId": "get_cash_movement_summary_portfolios__portfolio_id__cash_movement_summary_get",
       "method": "GET",
       "path": "/portfolios/{portfolio_id}/cash-movement-summary",
@@ -16234,6 +17076,7 @@
       "naming": {
         "boundedContext": "transactions",
         "canonicalTerms": [
+          "accrued_interest_proceeds_local",
           "adjustment_reason",
           "affected_fields",
           "allocated_cost_basis_base",
@@ -16260,6 +17103,8 @@
           "dependency_reference_ids",
           "details",
           "economic_event_id",
+          "embedded_fee_amount_local",
+          "embedded_tax_amount_local",
           "end_date",
           "external_cash_transaction_id",
           "far_leg_group_id",
@@ -16297,6 +17142,8 @@
           "net_cost_reporting_currency",
           "net_interest_amount",
           "net_interest_amount_reporting_currency",
+          "new_factor",
+          "old_factor",
           "originating_transaction_id",
           "originating_transaction_type",
           "other_interest_deductions_amount",
@@ -16308,6 +17155,7 @@
           "policy_version",
           "portfolio_id",
           "price",
+          "principal_proceeds_local",
           "product_name",
           "product_version",
           "quantity",
@@ -16328,6 +17176,7 @@
           "reconciliation_key",
           "reconciliation_status",
           "record_key",
+          "redemption_price_type",
           "reporting_currency",
           "restatement_version",
           "section",
@@ -17578,6 +18427,62 @@
             "type": "object",
             "semanticId": "lotus.linked_cash_transaction_id",
             "attributeRef": "lotus.linked_cash_transaction_id"
+          },
+          {
+            "name": "transactions[].redemption_price_type",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.redemption_price_type",
+            "attributeRef": "lotus.redemption_price_type"
+          },
+          {
+            "name": "transactions[].old_factor",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.old_factor",
+            "attributeRef": "lotus.old_factor"
+          },
+          {
+            "name": "transactions[].new_factor",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.new_factor",
+            "attributeRef": "lotus.new_factor"
+          },
+          {
+            "name": "transactions[].principal_proceeds_local",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.principal_proceeds_local",
+            "attributeRef": "lotus.principal_proceeds_local"
+          },
+          {
+            "name": "transactions[].accrued_interest_proceeds_local",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.accrued_interest_proceeds_local",
+            "attributeRef": "lotus.accrued_interest_proceeds_local"
+          },
+          {
+            "name": "transactions[].embedded_fee_amount_local",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.embedded_fee_amount_local",
+            "attributeRef": "lotus.embedded_fee_amount_local"
+          },
+          {
+            "name": "transactions[].embedded_tax_amount_local",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.embedded_tax_amount_local",
+            "attributeRef": "lotus.embedded_tax_amount_local"
           },
           {
             "name": "transactions[].has_synthetic_flow",
@@ -21852,6 +22757,7 @@
         "boundedContext": "transactions",
         "canonicalTerms": [
           "accepted_count",
+          "accrued_interest_proceeds_local",
           "adjustment_reason",
           "allocated_cost_basis_base",
           "allocated_cost_basis_local",
@@ -21871,6 +22777,8 @@
           "currency",
           "dependency_reference_ids",
           "economic_event_id",
+          "embedded_fee_amount_local",
+          "embedded_tax_amount_local",
           "entity_type",
           "exchange_fee",
           "external_cash_transaction_id",
@@ -21897,6 +22805,8 @@
           "movement_direction",
           "near_leg_group_id",
           "net_interest_amount",
+          "new_factor",
+          "old_factor",
           "originating_transaction_id",
           "originating_transaction_type",
           "other_fees",
@@ -21907,6 +22817,7 @@
           "parent_transaction_reference",
           "portfolio_id",
           "price",
+          "principal_proceeds_local",
           "quantity",
           "realized_capital_pnl_base",
           "realized_capital_pnl_local",
@@ -21915,6 +22826,7 @@
           "realized_total_pnl_base",
           "realized_total_pnl_local",
           "reconciliation_key",
+          "redemption_price_type",
           "request_id",
           "security_id",
           "sell_amount",
@@ -22597,6 +23509,62 @@
             "attributeRef": "lotus.linked_cash_transaction_id"
           },
           {
+            "name": "redemption_price_type",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.redemption_price_type",
+            "attributeRef": "lotus.redemption_price_type"
+          },
+          {
+            "name": "old_factor",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.old_factor",
+            "attributeRef": "lotus.old_factor"
+          },
+          {
+            "name": "new_factor",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.new_factor",
+            "attributeRef": "lotus.new_factor"
+          },
+          {
+            "name": "principal_proceeds_local",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.principal_proceeds_local",
+            "attributeRef": "lotus.principal_proceeds_local"
+          },
+          {
+            "name": "accrued_interest_proceeds_local",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.accrued_interest_proceeds_local",
+            "attributeRef": "lotus.accrued_interest_proceeds_local"
+          },
+          {
+            "name": "embedded_fee_amount_local",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.embedded_fee_amount_local",
+            "attributeRef": "lotus.embedded_fee_amount_local"
+          },
+          {
+            "name": "embedded_tax_amount_local",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.embedded_tax_amount_local",
+            "attributeRef": "lotus.embedded_tax_amount_local"
+          },
+          {
             "name": "has_synthetic_flow",
             "location": "body",
             "required": false,
@@ -22788,6 +23756,7 @@
         "boundedContext": "transactions",
         "canonicalTerms": [
           "accepted_count",
+          "accrued_interest_proceeds_local",
           "adjustment_reason",
           "allocated_cost_basis_base",
           "allocated_cost_basis_local",
@@ -22807,6 +23776,8 @@
           "currency",
           "dependency_reference_ids",
           "economic_event_id",
+          "embedded_fee_amount_local",
+          "embedded_tax_amount_local",
           "entity_type",
           "exchange_fee",
           "external_cash_transaction_id",
@@ -22834,6 +23805,8 @@
           "movement_direction",
           "near_leg_group_id",
           "net_interest_amount",
+          "new_factor",
+          "old_factor",
           "originating_transaction_id",
           "originating_transaction_type",
           "other_fees",
@@ -22844,6 +23817,7 @@
           "parent_transaction_reference",
           "portfolio_id",
           "price",
+          "principal_proceeds_local",
           "quantity",
           "realized_capital_pnl_base",
           "realized_capital_pnl_local",
@@ -22852,6 +23826,7 @@
           "realized_total_pnl_base",
           "realized_total_pnl_local",
           "reconciliation_key",
+          "redemption_price_type",
           "request_id",
           "security_id",
           "sell_amount",
@@ -23541,6 +24516,62 @@
             "type": "object",
             "semanticId": "lotus.linked_cash_transaction_id",
             "attributeRef": "lotus.linked_cash_transaction_id"
+          },
+          {
+            "name": "transactions[].redemption_price_type",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.redemption_price_type",
+            "attributeRef": "lotus.redemption_price_type"
+          },
+          {
+            "name": "transactions[].old_factor",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.old_factor",
+            "attributeRef": "lotus.old_factor"
+          },
+          {
+            "name": "transactions[].new_factor",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.new_factor",
+            "attributeRef": "lotus.new_factor"
+          },
+          {
+            "name": "transactions[].principal_proceeds_local",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.principal_proceeds_local",
+            "attributeRef": "lotus.principal_proceeds_local"
+          },
+          {
+            "name": "transactions[].accrued_interest_proceeds_local",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.accrued_interest_proceeds_local",
+            "attributeRef": "lotus.accrued_interest_proceeds_local"
+          },
+          {
+            "name": "transactions[].embedded_fee_amount_local",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.embedded_fee_amount_local",
+            "attributeRef": "lotus.embedded_fee_amount_local"
+          },
+          {
+            "name": "transactions[].embedded_tax_amount_local",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.embedded_tax_amount_local",
+            "attributeRef": "lotus.embedded_tax_amount_local"
           },
           {
             "name": "transactions[].has_synthetic_flow",
@@ -24957,6 +25988,7 @@
         "boundedContext": "portfolio_bundle",
         "canonicalTerms": [
           "accepted_count",
+          "accrued_interest_proceeds_local",
           "adjustment_reason",
           "advisor_id",
           "allocated_cost_basis_base",
@@ -24987,6 +26019,8 @@
           "currency",
           "dependency_reference_ids",
           "economic_event_id",
+          "embedded_fee_amount_local",
+          "embedded_tax_amount_local",
           "entity_type",
           "exchange_fee",
           "external_cash_transaction_id",
@@ -25029,7 +26063,9 @@
           "name",
           "near_leg_group_id",
           "net_interest_amount",
+          "new_factor",
           "objective",
+          "old_factor",
           "open_date",
           "originating_transaction_id",
           "originating_transaction_type",
@@ -25044,6 +26080,7 @@
           "portfolios",
           "price",
           "price_date",
+          "principal_proceeds_local",
           "product_type",
           "quantity",
           "rate",
@@ -25056,6 +26093,7 @@
           "realized_total_pnl_base",
           "realized_total_pnl_local",
           "reconciliation_key",
+          "redemption_price_type",
           "request_id",
           "risk_exposure",
           "sector",
@@ -26154,6 +27192,62 @@
             "type": "object",
             "semanticId": "lotus.linked_cash_transaction_id",
             "attributeRef": "lotus.linked_cash_transaction_id"
+          },
+          {
+            "name": "transactions[].redemption_price_type",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.redemption_price_type",
+            "attributeRef": "lotus.redemption_price_type"
+          },
+          {
+            "name": "transactions[].old_factor",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.old_factor",
+            "attributeRef": "lotus.old_factor"
+          },
+          {
+            "name": "transactions[].new_factor",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.new_factor",
+            "attributeRef": "lotus.new_factor"
+          },
+          {
+            "name": "transactions[].principal_proceeds_local",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.principal_proceeds_local",
+            "attributeRef": "lotus.principal_proceeds_local"
+          },
+          {
+            "name": "transactions[].accrued_interest_proceeds_local",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.accrued_interest_proceeds_local",
+            "attributeRef": "lotus.accrued_interest_proceeds_local"
+          },
+          {
+            "name": "transactions[].embedded_fee_amount_local",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.embedded_fee_amount_local",
+            "attributeRef": "lotus.embedded_fee_amount_local"
+          },
+          {
+            "name": "transactions[].embedded_tax_amount_local",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.embedded_tax_amount_local",
+            "attributeRef": "lotus.embedded_tax_amount_local"
           },
           {
             "name": "transactions[].has_synthetic_flow",

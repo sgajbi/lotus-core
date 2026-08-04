@@ -10388,7 +10388,7 @@
       "tags": [
         "Lot Disposal Receipts"
       ],
-      "route_family": "Unclassified",
+      "route_family": "Operational Read",
       "api_version": "unversioned-current",
       "api_status": "active",
       "owner": "query_service",
@@ -10420,7 +10420,11 @@
       ],
       "sorting": [],
       "idempotency_behavior": "safe-read",
-      "downstream_consumers": [],
+      "downstream_consumers": [
+        "lotus-gateway",
+        "lotus-workbench",
+        "lotus-report"
+      ],
       "deprecated_alias_metadata": {
         "is_deprecated": false,
         "sunset": null,
