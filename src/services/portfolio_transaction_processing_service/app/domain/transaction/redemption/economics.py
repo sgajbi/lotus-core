@@ -102,10 +102,9 @@ def calculate_redemption_economics(terms: RedemptionTerms) -> RedemptionEconomic
     normalized = _validated_inputs(terms)
     quantity = _resolve_redeemed_quantity(normalized)
     policy = TRANSACTION_COST_LEDGER_OUTPUT_V1
-    derived_principal = policy.multiply(
+    derived_principal = derive_redemption_principal_proceeds_local(
         quantity,
         normalized.redemption_price,
-        field_name="derived_principal_proceeds_local",
     )
     principal = _resolve_principal_proceeds(normalized, derived_principal)
     accrued_interest = policy.normalize(
@@ -189,6 +188,22 @@ def calculate_redemption_economics(terms: RedemptionTerms) -> RedemptionEconomic
         realized_capital_pnl_local=capital_pnl_local,
         realized_capital_pnl_base=capital_pnl_base,
         calculation_lineage=lineage,
+    )
+
+
+def derive_redemption_principal_proceeds_local(
+    redeemed_quantity: Decimal,
+    redemption_price: Decimal,
+) -> Decimal:
+    """Derive principal with the numeric policy bound by redemption economics lineage."""
+
+    return cast(
+        Decimal,
+        TRANSACTION_COST_LEDGER_OUTPUT_V1.multiply(
+            redeemed_quantity,
+            redemption_price,
+            field_name="derived_principal_proceeds_local",
+        ),
     )
 
 

@@ -74,7 +74,8 @@
         "src/services/portfolio_transaction_processing_service/app/domain/transaction/redemption/economics.py::calculate_redemption_economics": [
           "src/services/portfolio_transaction_processing_service/app/domain/transaction/redemption/economics.py::_factor_redeemed_quantity",
           "src/services/portfolio_transaction_processing_service/app/domain/transaction/redemption/economics.py::_resolve_principal_proceeds",
-          "src/services/portfolio_transaction_processing_service/app/domain/transaction/redemption/economics.py::_resolve_redeemed_quantity"
+          "src/services/portfolio_transaction_processing_service/app/domain/transaction/redemption/economics.py::_resolve_redeemed_quantity",
+          "src/services/portfolio_transaction_processing_service/app/domain/transaction/redemption/economics.py::derive_redemption_principal_proceeds_local"
         ]
       },
       "lineage_gap_callsites": []
