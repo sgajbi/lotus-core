@@ -28,7 +28,11 @@ boundaries; consumes FIFO or AVCO lots; persists immutable ordered disposal rece
 position quantity and local/base basis; and generates an equal, linked principal-cash adjustment.
 PostgreSQL lifecycle proof covers all three types, including factor-based partial redemption,
 duplicate neutrality, principal-versus-interest separation, and shared product/cash event identity.
-A 1,000-redemption FIFO/AVCO cohort proves one bounded source allocation per event. Wider
+A replay/repair proof deletes and reconstructs both linked cashflows while preserving one immutable
+disposal-receipt version and allocation. Cost and disposal lineage algorithm version 2 canonicalizes
+database-scale decimals and excludes persistence/settlement-owned generated fields, so an unchanged
+booking replay is evidence-neutral. A 1,000-redemption FIFO/AVCO cohort proves one bounded source
+allocation per event. Wider
 multi-acquisition AVCO source-attribution scalability remains explicitly open under #481 and does
 not reduce the bounded redemption capability to an unimplemented state.
 

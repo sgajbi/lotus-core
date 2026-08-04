@@ -1,5 +1,17 @@
 # Codebase Review Ledger
 
+CR-1678 replay-determinism addendum (2026-08-04): redemption repair exposed that economically
+equal source-event and database-scale decimals produced different transaction and source-allocation
+lineage hashes. Persisted operational timestamps and Core-generated settlement linkage also entered
+the cost lineage even though those values are assigned after cost calculation. Transaction-cost and
+disposal-allocation lineage now canonicalize numeric inputs and outputs at the governed ledger
+scale, exclude persistence/settlement-owned generated fields, and advertise the intentional
+semantic change as algorithm version 2. Unit proof covers Decimal scale and generated-linkage
+neutrality; exact-source PostgreSQL replay restores both linked redemption cashflows while retaining
+one immutable receipt version and one allocation. This is an implementation and evidence correction
+under #477/#481, with no schema, API/OpenAPI, Kafka, capability-wiki, central-context, or skill-routing
+change.
+
 CR-1678 redemption addendum (2026-08-04): maturity, call, and partial redemption now flow through
 the canonical production registry, cost/position engines, reversible investment-inflow rules,
 generated principal-cash linkage, and immutable lot-disposal receipts. Product and cash legs retain
