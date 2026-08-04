@@ -257,6 +257,24 @@ async def test_transfer_out_fails_closed_for_partial_internal_destination() -> N
 
 
 @pytest.mark.asyncio
+async def test_transfer_out_fails_closed_without_any_destination_authority() -> None:
+    outgoing = _transaction("TRANSFER-OUT-MISSING-01", 2)
+    outgoing.transaction_type = "TRANSFER_OUT"
+    repository = AsyncMock(spec=CostBasisLotDisposalPort)
+
+    with pytest.raises(ValueError, match="requires exactly one"):
+        await persist_current_lot_disposals(
+            processed=[outgoing],
+            incoming_transaction_ids={outgoing.transaction_id},
+            disposals=[_disposal(outgoing.transaction_id, "SOURCE-LOT-01")],
+            cost_basis_method=CostBasisMethod.FIFO,
+            repository=repository,
+        )
+
+    repository.reconcile_disposal_receipts.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("transaction_type", "target_transaction_reference", "target_instrument_id", "error"),
     (
