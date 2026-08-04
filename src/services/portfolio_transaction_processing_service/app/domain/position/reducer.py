@@ -9,6 +9,7 @@ from typing import Callable
 
 from ..transaction.booked import BookedTransaction
 from ..transaction.processing_type import resolve_effective_processing_transaction_type
+from ..transaction.redemption import REDEMPTION_TRANSACTION_TYPES
 from .numeric_policy import POSITION_HISTORY_LEDGER_OUTPUT_V1
 
 CASH_POSITION_INFLOW_TRANSACTION_TYPES = {"DEPOSIT"}
@@ -147,7 +148,7 @@ def _position_update_handler(txn_type: str) -> _PositionUpdateHandler | None:
     if txn_type == "BUY":
         return _buy_position_state
 
-    if txn_type in {"SELL", "CASH_IN_LIEU"}:
+    if txn_type in ({"SELL", "CASH_IN_LIEU"} | REDEMPTION_TRANSACTION_TYPES):
         return _sell_position_state
 
     if txn_type in CASH_POSITION_DELTA_TRANSACTION_TYPES:
