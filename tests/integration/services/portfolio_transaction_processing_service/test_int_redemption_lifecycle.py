@@ -203,6 +203,8 @@ async def test_redemption_books_linked_principal_cash_and_immutable_lot_evidence
                 name=f"{suffix.title()} Redemption Note",
                 isin=f"SG0000{suffix[:4]:0<4}01",
                 currency="USD",
+                product_type="BOND",
+                asset_class="FIXED_INCOME",
             ),
         ]
     )
@@ -400,6 +402,8 @@ async def test_partial_redemption_replay_restores_cash_without_versioning_receip
                 name="Replayable Partial Redemption Note",
                 isin="SG0000007810",
                 currency="USD",
+                product_type="BOND",
+                asset_class="FIXED_INCOME",
             ),
         ]
     )
