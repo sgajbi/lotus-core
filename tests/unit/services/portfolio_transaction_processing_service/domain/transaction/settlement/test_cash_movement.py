@@ -165,6 +165,31 @@ def test_zero_price_redemption_with_accrued_interest_remains_positive_settlement
 
 
 @pytest.mark.parametrize(
+    "transaction_type",
+    ["MATURITY_REDEMPTION", "CALL_REDEMPTION", "PARTIAL_REDEMPTION"],
+)
+def test_redemption_accepts_economically_valid_zero_net_settlement(
+    transaction_type: str,
+) -> None:
+    movement = calculate_settlement_cash_movement(
+        _transaction(
+            transaction_type,
+            quantity=Decimal("1"),
+            price=Decimal("100"),
+            principal_proceeds_local=Decimal("100"),
+            accrued_interest_proceeds_local=Decimal("5"),
+            embedded_fee_amount_local=Decimal("3"),
+            embedded_tax_amount_local=Decimal("100"),
+            trade_fee=Decimal("2"),
+        )
+    )
+
+    assert movement.signed_amount == Decimal(0)
+    assert movement.amount == Decimal(0)
+    assert movement.fee_amount == Decimal("2")
+
+
+@pytest.mark.parametrize(
     ("changes", "available_proceeds", "net_settlement"),
     [
         ({"embedded_fee_amount_local": Decimal("0.01")}, Decimal("-0.01"), Decimal("-0.01")),

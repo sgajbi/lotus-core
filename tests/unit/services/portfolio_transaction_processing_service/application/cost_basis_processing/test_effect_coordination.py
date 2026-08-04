@@ -92,6 +92,92 @@ async def test_effect_coordination_links_and_stages_generated_cash_leg() -> None
 
 
 @pytest.mark.asyncio
+async def test_effect_coordination_emits_separate_redemption_interest_income() -> None:
+    product_leg = replace(
+        _transaction(
+            transaction_id="REDEMPTION-INTEREST-01",
+            transaction_type="MATURITY_REDEMPTION",
+            net_cost_local="100",
+            auto_generate_cash_leg=True,
+        ),
+        quantity=Decimal("1"),
+        price=Decimal("100"),
+        principal_proceeds_local=Decimal("100"),
+        accrued_interest_proceeds_local=Decimal("5"),
+    )
+    transaction_state = AsyncMock(spec=CostBasisTransactionStatePort)
+
+    result = await coordinate_cost_processing_effects(
+        processed_transactions=[product_leg],
+        instrument_updates=[],
+        source_epoch=4,
+        transaction_state=transaction_state,
+        reconciliation_repository=AsyncMock(spec=CorporateActionReconciliationRepository),
+        effect_stager=AsyncMock(spec=CostProcessingEffectStagingPort),
+        correlation_id="corr-redemption-interest-01",
+    )
+
+    assert [item.transaction_id for item in result.processed_transactions] == [
+        "REDEMPTION-INTEREST-01",
+        "REDEMPTION-INTEREST-01-ACCRUED-INTEREST",
+        "REDEMPTION-INTEREST-01-CASHLEG",
+    ]
+    product, interest, settlement = result.processed_transactions
+    assert product.principal_proceeds_local == Decimal("100")
+    assert interest.transaction_type == "INTEREST"
+    assert interest.gross_transaction_amount == Decimal("5")
+    assert interest.external_cash_transaction_id == settlement.transaction_id
+    assert settlement.gross_transaction_amount == Decimal("105")
+    assert {item.epoch for item in result.processed_transactions} == {4}
+    assert [
+        call.args[0].transaction_id
+        for call in transaction_state.upsert_booked_transaction.await_args_list
+    ] == [
+        "REDEMPTION-INTEREST-01-CASHLEG",
+        "REDEMPTION-INTEREST-01",
+        "REDEMPTION-INTEREST-01-ACCRUED-INTEREST",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_effect_coordination_supersedes_removed_redemption_interest_with_zero() -> None:
+    product_leg = replace(
+        _transaction(
+            transaction_id="REDEMPTION-CORRECTED-01",
+            transaction_type="MATURITY_REDEMPTION",
+            net_cost_local="100",
+            auto_generate_cash_leg=True,
+        ),
+        quantity=Decimal("1"),
+        price=Decimal("100"),
+        principal_proceeds_local=Decimal("100"),
+        accrued_interest_proceeds_local=Decimal(0),
+    )
+    transaction_state = AsyncMock(spec=CostBasisTransactionStatePort)
+    transaction_state.get_booked_transaction.return_value = replace(
+        product_leg,
+        transaction_id="REDEMPTION-CORRECTED-01-ACCRUED-INTEREST",
+        transaction_type="INTEREST",
+    )
+
+    result = await coordinate_cost_processing_effects(
+        processed_transactions=[product_leg],
+        instrument_updates=[],
+        source_epoch=5,
+        transaction_state=transaction_state,
+        reconciliation_repository=AsyncMock(spec=CorporateActionReconciliationRepository),
+        effect_stager=AsyncMock(spec=CostProcessingEffectStagingPort),
+        correlation_id="corr-redemption-corrected-01",
+    )
+
+    zero_interest = result.processed_transactions[1]
+    assert zero_interest.transaction_id == "REDEMPTION-CORRECTED-01-ACCRUED-INTEREST"
+    assert zero_interest.gross_transaction_amount == Decimal(0)
+    assert zero_interest.net_interest_amount == Decimal(0)
+    assert zero_interest.epoch == 5
+
+
+@pytest.mark.asyncio
 async def test_effect_coordination_reconciles_corporate_action_group_once() -> None:
     source = _transaction(
         transaction_id="CA-OUT-01",

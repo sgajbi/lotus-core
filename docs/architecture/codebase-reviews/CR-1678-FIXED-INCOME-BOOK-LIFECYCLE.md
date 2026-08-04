@@ -381,6 +381,13 @@ Data Models wiki documents the staged ledgers while the capability wiki remains
   settlement, redemption, cashflow, and query-repository tests pass. Repository-native Ruff, full
   MyPy (292 sources), calculated-output-policy, and diff guards pass. Protected exact-head rerun and
   merge evidence remain recorded through PR #910 and issue #477 rather than duplicated here.
+- late-review cashflow hardening: redemption product cashflows are settlement-dated and carry the
+  net principal component; non-zero embedded accrued interest produces a deterministic linked `INTEREST`
+  component with its own `INCOME` cashflow and lineage, while the generated adjustment remains the
+  sole net settlement cash authority. Ingestion now rejects missing, partial, mixed, or unrelated
+  transfer destinations. Exact-zero net redemption settlement omits a synthetic adjustment and
+  negative settlement still fails closed. Linked upstream interest plus embedded redemption
+  interest fails before mutation, with canonical generated components excluded during replay.
 
 Protected PR and exact-main evidence remain pending for this tranche. Wider runtime recovery/load
 proof, complete corporate-action scenario coverage, redemption, and final issue closure remain

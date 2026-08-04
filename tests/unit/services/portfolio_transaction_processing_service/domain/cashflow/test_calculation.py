@@ -157,6 +157,59 @@ def test_calculated_cashflow_binds_inputs_calculation_output_and_numeric_policy(
     assert changed_fee.amount == Decimal("-1005.51")
 
 
+def test_redemption_cashflow_lineage_binds_source_economic_decomposition(
+    base_transaction_event: TransactionEvent,
+) -> None:
+    rule = CashflowRule(
+        classification=CashflowClassification.INVESTMENT_INFLOW,
+        timing=CashflowTiming.EOD,
+        is_position_flow=True,
+        is_portfolio_flow=False,
+    )
+    common = {
+        "transaction_type": "MATURITY_REDEMPTION",
+        "quantity": Decimal("1"),
+        "price": Decimal("100"),
+        "principal_proceeds_local": Decimal("100"),
+        "trade_fee": Decimal(0),
+    }
+    first = _calculate(
+        base_transaction_event.model_copy(
+            update={
+                **common,
+                "accrued_interest_proceeds_local": Decimal("5"),
+                "embedded_fee_amount_local": Decimal("2"),
+                "embedded_tax_amount_local": Decimal("1"),
+            }
+        ),
+        rule,
+    )
+    changed_decomposition = _calculate(
+        base_transaction_event.model_copy(
+            update={
+                **common,
+                "accrued_interest_proceeds_local": Decimal("6"),
+                "embedded_fee_amount_local": Decimal("3"),
+                "embedded_tax_amount_local": Decimal("1"),
+            }
+        ),
+        rule,
+    )
+
+    assert first.amount == Decimal("97.0000000000")
+    assert changed_decomposition.amount == Decimal("96.0000000000")
+    assert first.calculation_lineage is not None
+    assert changed_decomposition.calculation_lineage is not None
+    assert (
+        first.calculation_lineage.input_content_hash
+        != changed_decomposition.calculation_lineage.input_content_hash
+    )
+    assert (
+        first.calculation_lineage.calculation_content_hash
+        != changed_decomposition.calculation_lineage.calculation_content_hash
+    )
+
+
 def test_fx_component_lineage_distinguishes_booked_transaction_family(
     base_transaction_event: TransactionEvent,
 ) -> None:

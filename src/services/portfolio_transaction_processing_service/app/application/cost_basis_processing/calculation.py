@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from decimal import Decimal
 from typing import Any
 
@@ -20,6 +21,7 @@ from ...domain.cost_basis import (
     transaction_lot_behavior,
 )
 from ...domain.transaction import BookedTransaction
+from ...domain.transaction.redemption import is_generated_redemption_accrued_interest
 from ...ports.cost_basis import (
     AverageCostPoolCheckpointRecord,
     CostBasisAverageCostPoolPort,
@@ -67,6 +69,7 @@ class CostBasisCalculationCoordinator:
         portfolio_base_currency: str,
         instrument: CostBasisInstrumentReference | None,
         cost_basis_method: CostBasisMethod,
+        preloaded_transaction_history: Sequence[BookedTransaction] | None = None,
     ) -> CostBasisCalculationResult:
         """Use an ordered append when checkpoints permit it, otherwise rebuild deterministically."""
 
@@ -101,6 +104,7 @@ class CostBasisCalculationCoordinator:
                     portfolio_base_currency=portfolio_base_currency,
                     instrument=instrument,
                     cost_basis_method=cost_basis_method,
+                    preloaded_transaction_history=preloaded_transaction_history,
                 )
 
         return await self._calculate_full_rebuild(
@@ -109,6 +113,7 @@ class CostBasisCalculationCoordinator:
             portfolio_base_currency=portfolio_base_currency,
             instrument=instrument,
             cost_basis_method=cost_basis_method,
+            preloaded_transaction_history=preloaded_transaction_history,
         )
 
     async def _calculate_ordered_append(
@@ -121,6 +126,7 @@ class CostBasisCalculationCoordinator:
         portfolio_base_currency: str,
         instrument: CostBasisInstrumentReference | None,
         cost_basis_method: CostBasisMethod,
+        preloaded_transaction_history: Sequence[BookedTransaction] | None,
     ) -> CostBasisCalculationResult:
         lot_behavior = transaction_lot_behavior(transaction_type)
         average_cost_pool_record = None
@@ -138,6 +144,7 @@ class CostBasisCalculationCoordinator:
                     portfolio_base_currency=portfolio_base_currency,
                     instrument=instrument,
                     cost_basis_method=cost_basis_method,
+                    preloaded_transaction_history=preloaded_transaction_history,
                 )
 
         initial_open_lots_raw: list[dict[str, Any]] = []
@@ -208,11 +215,13 @@ class CostBasisCalculationCoordinator:
         portfolio_base_currency: str,
         instrument: CostBasisInstrumentReference | None,
         cost_basis_method: CostBasisMethod,
+        preloaded_transaction_history: Sequence[BookedTransaction] | None,
     ) -> CostBasisCalculationResult:
         all_transactions_raw = await self._load_cost_basis_transactions(
             transaction=transaction,
             portfolio_base_currency=portfolio_base_currency,
             instrument=instrument,
+            preloaded_transaction_history=preloaded_transaction_history,
         )
         timeline_result = build_cost_basis_timeline_processor(
             cost_basis_method,
@@ -367,14 +376,21 @@ class CostBasisCalculationCoordinator:
         transaction: BookedTransaction,
         portfolio_base_currency: str,
         instrument: CostBasisInstrumentReference | None,
+        preloaded_transaction_history: Sequence[BookedTransaction] | None,
     ) -> list[dict[str, Any]]:
-        history = await self._transactions.get_transaction_history(
-            portfolio_id=transaction.portfolio_id,
-            security_id=transaction.security_id,
-            exclude_id=transaction.transaction_id,
-        )
+        history = preloaded_transaction_history
+        if history is None:
+            history = await self._transactions.get_transaction_history(
+                portfolio_id=transaction.portfolio_id,
+                security_id=transaction.security_id,
+                exclude_id=transaction.transaction_id,
+            )
         all_transactions_raw = [
-            *(build_cost_basis_engine_input(item) for item in history),
+            *(
+                build_cost_basis_engine_input(item)
+                for item in history
+                if not is_generated_redemption_accrued_interest(item)
+            ),
             build_cost_basis_engine_input(transaction),
         ]
         if instrument is not None:
