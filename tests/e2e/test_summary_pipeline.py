@@ -235,6 +235,7 @@ def setup_summary_data(clean_db_module, e2e_api_client: E2EApiClient, poll_db_un
             "gross_transaction_amount": 16500,
             "trade_currency": "USD",
             "currency": "USD",
+            "external_destination_reference": f"CUSTODIAN-{portfolio_id}",
         },
     ]
     e2e_api_client.ingest("/ingest/transactions", {"transactions": transactions})

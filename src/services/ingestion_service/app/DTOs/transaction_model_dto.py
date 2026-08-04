@@ -875,6 +875,11 @@ class Transaction(BaseModel):
                 and definition.position_effect == "decrease"
                 and definition.lot_behavior in {"transfer_basis_out", "partial_basis_transfer"}
             )
+            uses_target_instrument_identity = bool(
+                definition
+                and definition.position_effect == "increase"
+                and definition.lot_behavior == "basis_allocation_in"
+            )
             requires_internal_destination = bool(
                 definition
                 and definition.position_effect == "decrease"
@@ -885,7 +890,13 @@ class Transaction(BaseModel):
                     f"{self.transaction_type} requires target_transaction_reference and "
                     "target_instrument_id"
                 )
-            if has_any_internal and not supports_internal_destination:
+            has_unsupported_target_metadata = (
+                target_transaction is not None and not supports_internal_destination
+            ) or (
+                target_instrument is not None
+                and not (supports_internal_destination or uses_target_instrument_identity)
+            )
+            if has_unsupported_target_metadata:
                 raise ValueError(
                     "target transaction and instrument destination metadata is not valid for "
                     f"{self.transaction_type}"

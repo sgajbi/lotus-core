@@ -70,10 +70,14 @@ def build_transaction_payloads(
     """
     base_ts = datetime(2026, 3, 1, 9, 0, tzinfo=timezone.utc)
     payloads: list[dict] = []
+    transaction_ids = {
+        tx_type: f"{portfolio_id}_{tx_type}_{idx:02d}"
+        for idx, tx_type in enumerate(sorted(SUPPORTED_TRANSACTION_TYPES))
+    }
 
     for idx, tx_type in enumerate(sorted(SUPPORTED_TRANSACTION_TYPES)):
         ts = base_ts + timedelta(minutes=idx)
-        tx_id = f"{portfolio_id}_{tx_type}_{idx:02d}"
+        tx_id = transaction_ids[tx_type]
         resolved_security_id = cash_security_id if tx_type in CASH_INSTRUMENT_TYPES else security_id
         quantity = Decimal("1")
         price = Decimal("10")
@@ -145,6 +149,8 @@ def build_transaction_payloads(
                 event["swap_event_id"] = f"{tx_id}-SWAP"
                 event["near_leg_group_id"] = f"{tx_id}-NEAR"
                 event["far_leg_group_id"] = f"{tx_id}-FAR"
+        if TRANSACTION_TYPE_REGISTRY[tx_type].lifecycle_family == "redemption":
+            event["settlement_date"] = iso_z(ts)
         if tx_type == "ADJUSTMENT":
             event["movement_direction"] = "INFLOW"
             event["adjustment_reason"] = "TEST_COVERAGE"
@@ -154,6 +160,12 @@ def build_transaction_payloads(
             event["source_instrument_id"] = resolved_security_id
         if tx_type in BUNDLE_A_IN_TYPES:
             event["target_instrument_id"] = resolved_security_id
+        if tx_type in corporate_action.QUANTITY_TRANSFER_CORPORATE_ACTION_PAIRS:
+            target_type = corporate_action.QUANTITY_TRANSFER_CORPORATE_ACTION_PAIRS[tx_type]
+            event["target_transaction_reference"] = transaction_ids[target_type]
+            event["target_instrument_id"] = resolved_security_id
+        if tx_type == "TRANSFER_OUT":
+            event["external_destination_reference"] = f"CUSTODIAN-{portfolio_id}"
         if tx_type == corporate_action.CASH_CONSIDERATION_TRANSACTION_TYPE:
             link_ref = f"{portfolio_id}_ADJ_LINK_00"
             event["linked_cash_transaction_id"] = link_ref
