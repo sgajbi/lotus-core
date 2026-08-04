@@ -12,9 +12,7 @@ QUANTITY_TRANSFER_CORPORATE_ACTION_PAIRS = {
     "EXCHANGE_OUT": "EXCHANGE_IN",
     "REPLACEMENT_OUT": "REPLACEMENT_IN",
 }
-SOURCE_QUANTITY_TRANSFER_TRANSACTION_TYPES = frozenset(
-    QUANTITY_TRANSFER_CORPORATE_ACTION_PAIRS
-)
+SOURCE_QUANTITY_TRANSFER_TRANSACTION_TYPES = frozenset(QUANTITY_TRANSFER_CORPORATE_ACTION_PAIRS)
 TARGET_QUANTITY_TRANSFER_TRANSACTION_TYPES = frozenset(
     QUANTITY_TRANSFER_CORPORATE_ACTION_PAIRS.values()
 )
@@ -36,6 +34,7 @@ def normalize_corporate_action_transaction_type(transaction_type: str | None) ->
 def is_reconcilable_corporate_action(transaction_type: str | None) -> bool:
     """Return whether a transaction participates in linked-group reconciliation."""
 
-    return normalize_corporate_action_transaction_type(
-        transaction_type
-    ) in RECONCILABLE_CORPORATE_ACTION_TYPES
+    return (
+        normalize_corporate_action_transaction_type(transaction_type)
+        in RECONCILABLE_CORPORATE_ACTION_TYPES
+    )
