@@ -307,6 +307,7 @@ async def test_atomic_handler_stages_one_replay_for_earliest_affected_disposal()
     result = await HandleFixedIncomeBookCostAuthorityEventUseCase(
         unit_of_work_factory=lambda: unit_of_work,
         policies=AmortizedCostPolicyRegistry((resolved.policy,)),
+        correction_replay_enabled=True,
     ).execute(
         _basis_event(resolved.basis_fact),
         correlation_id="correlation-1",
@@ -334,6 +335,27 @@ async def test_atomic_handler_stages_one_replay_for_earliest_affected_disposal()
 
 
 @pytest.mark.asyncio
+async def test_atomic_handler_keeps_correction_replay_fail_closed_by_default() -> None:
+    authority, profiles = _dependencies()
+    resolved = resolved_fixed_income_book_cost_inputs()
+    authority.load.return_value = _bundle(basis_facts=(resolved.basis_fact,))
+    unit_of_work = _UnitOfWork(authority, profiles)
+    unit_of_work.correction_replay.find_earliest_affected_disposal.return_value = (
+        _affected_disposal_anchor()
+    )
+
+    result = await HandleFixedIncomeBookCostAuthorityEventUseCase(
+        unit_of_work_factory=lambda: unit_of_work,
+        policies=AmortizedCostPolicyRegistry((resolved.policy,)),
+    ).execute(_basis_event(resolved.basis_fact))
+
+    assert result.correction_replay_intent is None
+    unit_of_work.correction_replay.find_earliest_affected_disposal.assert_not_awaited()
+    unit_of_work.correction_replay.stage_replay_intent.assert_not_awaited()
+    assert unit_of_work.committed is True
+
+
+@pytest.mark.asyncio
 async def test_atomic_handler_does_not_stage_replay_without_affected_disposal() -> None:
     authority, profiles = _dependencies()
     resolved = resolved_fixed_income_book_cost_inputs()
@@ -343,6 +365,7 @@ async def test_atomic_handler_does_not_stage_replay_without_affected_disposal() 
     result = await HandleFixedIncomeBookCostAuthorityEventUseCase(
         unit_of_work_factory=lambda: unit_of_work,
         policies=AmortizedCostPolicyRegistry((resolved.policy,)),
+        correction_replay_enabled=True,
     ).execute(_basis_event(resolved.basis_fact))
 
     assert result.correction_replay_intent is None
@@ -367,6 +390,7 @@ async def test_atomic_handler_rolls_back_authority_when_replay_staging_fails() -
         await HandleFixedIncomeBookCostAuthorityEventUseCase(
             unit_of_work_factory=lambda: unit_of_work,
             policies=AmortizedCostPolicyRegistry((resolved.policy,)),
+            correction_replay_enabled=True,
         ).execute(_basis_event(resolved.basis_fact))
 
     assert unit_of_work.committed is False
