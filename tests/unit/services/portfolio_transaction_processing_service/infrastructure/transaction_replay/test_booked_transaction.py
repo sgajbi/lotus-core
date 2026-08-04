@@ -68,6 +68,31 @@ async def test_replay_adapter_rejects_impossible_unique_transaction_cardinality(
 
 
 @pytest.mark.asyncio
+async def test_replay_adapter_forwards_stable_repair_delivery_identity() -> None:
+    session = AsyncMock()
+    session.__aenter__.return_value = session
+    replayer = AsyncMock()
+    replayer.reprocess_transactions_by_ids.return_value = 1
+    adapter = SqlAlchemyBookedTransactionReplayAdapter(
+        session_factory=MagicMock(return_value=session),
+        replayer_factory=MagicMock(return_value=replayer),
+    )
+
+    replayed = await adapter.replay_booked_transaction(
+        transaction_id="TXN-REPLAY-01",
+        correlation_id="corr-replay-01",
+        repair_delivery_id="repair-command-001",
+    )
+
+    assert replayed is True
+    replayer.reprocess_transactions_by_ids.assert_awaited_once_with(
+        ["TXN-REPLAY-01"],
+        correlation_id="corr-replay-01",
+        repair_delivery_id="repair-command-001",
+    )
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "dependency_error",
     [

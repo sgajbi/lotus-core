@@ -12,6 +12,7 @@ from .logging_utils import normalize_lineage_value
 
 TRANSACTION_PROCESSING_INTENT_HEADER = "lotus-transaction-processing-intent"
 TRANSACTION_PROCESSING_REPAIR_VALUE = b"repair"
+TRANSACTION_REPAIR_DELIVERY_ID_HEADER = "lotus-transaction-repair-delivery-id"
 
 
 class ReprocessingReplayError(RuntimeError):
@@ -43,6 +44,7 @@ class TransactionReplayPublisher(Protocol):
 class ReplayCorrelationMetadata:
     correlation_id: str | None = None
     ingestion_job_id: str | None = None
+    repair_delivery_id: str | None = None
 
     @property
     def headers(self) -> list[tuple[str, bytes]]:
@@ -53,6 +55,11 @@ class ReplayCorrelationMetadata:
         ingestion_job_id = normalize_ingestion_job_id(self.ingestion_job_id)
         if ingestion_job_id:
             headers.append((INGESTION_JOB_ID_HEADER, ingestion_job_id.encode("utf-8")))
+        repair_delivery_id = normalize_lineage_value(self.repair_delivery_id)
+        if repair_delivery_id:
+            headers.append(
+                (TRANSACTION_REPAIR_DELIVERY_ID_HEADER, repair_delivery_id.encode("utf-8"))
+            )
         return headers
 
 

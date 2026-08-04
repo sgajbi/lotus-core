@@ -69,6 +69,7 @@ def test_plan_transaction_replay_builds_payloads_and_explicit_headers() -> None:
         correlation=ReplayCorrelationMetadata(
             correlation_id=" corr-001 ",
             ingestion_job_id=" job-001 ",
+            repair_delivery_id=" repair-command-001 ",
         ),
     )
 
@@ -81,6 +82,7 @@ def test_plan_transaction_replay_builds_payloads_and_explicit_headers() -> None:
     assert message.headers == [
         ("correlation_id", b"corr-001"),
         ("ingestion_job_id", b"job-001"),
+        ("lotus-transaction-repair-delivery-id", b"repair-command-001"),
         ("lotus-transaction-processing-intent", b"repair"),
     ]
 

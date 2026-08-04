@@ -78,9 +78,11 @@ def test_mapper_uses_resolved_correlation_id_without_mutating_source_event() -> 
         event,
         event_id="transactions.persisted-0-42",
         correlation_id="corr-resolved",
+        repair_delivery_id="repair-command-001",
     )
 
     assert command.metadata.correlation_id == "corr-resolved"
+    assert command.metadata.repair_delivery_id == "repair-command-001"
     assert event.correlation_id == "corr-source"
 
 

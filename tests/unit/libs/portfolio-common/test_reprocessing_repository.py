@@ -411,6 +411,7 @@ async def test_reprocess_transactions_can_run_through_reader_and_publisher_ports
     count = await repository.reprocess_transactions_by_ids(
         ["TXN_A", "TXN_A"],
         correlation_id=" corr-explicit ",
+        repair_delivery_id=" repair-command-001 ",
     )
 
     assert count == 1
@@ -418,6 +419,7 @@ async def test_reprocess_transactions_can_run_through_reader_and_publisher_ports
     assert publisher.messages[0].payload["transaction_id"] == "TXN_A"
     assert publisher.messages[0].headers == [
         ("correlation_id", b"corr-explicit"),
+        ("lotus-transaction-repair-delivery-id", b"repair-command-001"),
         ("lotus-transaction-processing-intent", b"repair"),
     ]
 

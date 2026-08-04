@@ -21,6 +21,7 @@ class TransactionEventMetadata:
     correlation_id: str | None = None
     traceparent: str | None = None
     processing_intent: TransactionProcessingIntent = TransactionProcessingIntent.STANDARD
+    repair_delivery_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

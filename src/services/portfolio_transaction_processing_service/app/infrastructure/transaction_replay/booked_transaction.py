@@ -24,6 +24,7 @@ class CanonicalTransactionReplayer(Protocol):
         transaction_ids: list[str],
         *,
         correlation_id: str | None = None,
+        repair_delivery_id: str | None = None,
     ) -> int: ...
 
 
@@ -39,13 +40,22 @@ class SqlAlchemyBookedTransactionReplayAdapter:
         *,
         transaction_id: str,
         correlation_id: str | None,
+        repair_delivery_id: str | None = None,
     ) -> bool:
         try:
             async with self.session_factory() as session:
-                replayed_count = await self.replayer_factory(session).reprocess_transactions_by_ids(
-                    [transaction_id],
-                    correlation_id=correlation_id,
-                )
+                replayer = self.replayer_factory(session)
+                if repair_delivery_id is None:
+                    replayed_count = await replayer.reprocess_transactions_by_ids(
+                        [transaction_id],
+                        correlation_id=correlation_id,
+                    )
+                else:
+                    replayed_count = await replayer.reprocess_transactions_by_ids(
+                        [transaction_id],
+                        correlation_id=correlation_id,
+                        repair_delivery_id=repair_delivery_id,
+                    )
         except (DBAPIError, ReprocessingReplayError) as exc:
             raise BookedTransactionReplayDependencyUnavailable(
                 "Canonical booked transaction replay dependency unavailable"

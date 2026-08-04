@@ -144,7 +144,7 @@ class ProcessTransactionUseCase:
                     idempotency_outcome is TransactionIdempotencyOutcome.SEMANTIC_DUPLICATE
                     and metadata.processing_intent is TransactionProcessingIntent.REPAIR
                     and await unit_of_work.idempotency.claim_repair_delivery(
-                        event_id=metadata.event_id,
+                        event_id=metadata.repair_delivery_id or metadata.event_id,
                         portfolio_id=transaction.portfolio_id,
                         correlation_id=metadata.correlation_id,
                     )

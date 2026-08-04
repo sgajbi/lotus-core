@@ -1,6 +1,6 @@
 # src/libs/portfolio-common/portfolio_common/reprocessing_repository.py
 import logging
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import case, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -35,10 +35,12 @@ class ReprocessingRepository:
     """
 
     def __init__(self, db: AsyncSession, kafka_producer: KafkaProducer):
-        self.db = db
-        self.kafka_producer = kafka_producer
-        self._reader = SqlAlchemyTransactionReplayReader(db)
-        self._publisher = KafkaTransactionReplayPublisher(kafka_producer)
+        self.db: AsyncSession | None = db
+        self.kafka_producer: KafkaProducer | None = kafka_producer
+        self._reader: TransactionReplayReader = SqlAlchemyTransactionReplayReader(db)
+        self._publisher: TransactionReplayPublisher = KafkaTransactionReplayPublisher(
+            kafka_producer
+        )
 
     @classmethod
     def from_ports(
@@ -59,6 +61,7 @@ class ReprocessingRepository:
         transaction_ids: list[str],
         *,
         correlation_id: str | None = None,
+        repair_delivery_id: str | None = None,
     ) -> int:
         ordered_unique_ids = ordered_unique_transaction_ids(transaction_ids)
         if not ordered_unique_ids:
@@ -74,6 +77,7 @@ class ReprocessingRepository:
         correlation = ReplayCorrelationMetadata(
             correlation_id=_resolved_replay_correlation_id(correlation_id),
             ingestion_job_id=normalize_ingestion_job_id(ingestion_job_id_var.get()),
+            repair_delivery_id=repair_delivery_id,
         )
         plan = plan_transaction_replay(
             transactions=transactions_to_replay,
@@ -97,7 +101,7 @@ class SqlAlchemyTransactionReplayReader(TransactionReplayReader):
         ordered_transaction_ids: list[str],
     ) -> list[DBTransaction]:
         result = await self._db.execute(_transactions_to_replay_stmt(ordered_transaction_ids))
-        return result.scalars().all()
+        return cast(list[DBTransaction], result.scalars().all())
 
 
 class KafkaTransactionReplayPublisher(TransactionReplayPublisher):
@@ -144,5 +148,5 @@ def _log_no_matching_transactions(ordered_transaction_ids: list[str]) -> None:
 
 def _resolved_replay_correlation_id(correlation_id: str | None) -> str | None:
     if correlation_id is not None:
-        return normalize_lineage_value(correlation_id)
-    return normalize_lineage_value(correlation_id_var.get())
+        return cast(str | None, normalize_lineage_value(correlation_id))
+    return cast(str | None, normalize_lineage_value(correlation_id_var.get()))
