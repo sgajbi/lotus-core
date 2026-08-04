@@ -117,6 +117,10 @@ KAFKA_FIXED_INCOME_BOOK_COST_AUTHORITY_RECEIVED_TOPIC = os.getenv(
     "KAFKA_FIXED_INCOME_BOOK_COST_AUTHORITY_RECEIVED_TOPIC",
     "fixed_income.book_cost.authority.received",
 )
+KAFKA_FIXED_INCOME_BOOK_COST_DISPOSAL_REPLAY_REQUESTED_TOPIC = os.getenv(
+    "KAFKA_FIXED_INCOME_BOOK_COST_DISPOSAL_REPLAY_REQUESTED_TOPIC",
+    "fixed_income.book_cost.disposal_replay.requested",
+)
 KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC = os.getenv(
     "KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC", "dlq.persistence_service"
 )
@@ -217,6 +221,14 @@ KAFKA_TOPIC_DEFINITIONS = (
         runtime_name=KAFKA_FIXED_INCOME_BOOK_COST_AUTHORITY_RECEIVED_TOPIC,
         lifecycle_status="active",
         semantic_type="fact",
+        scope="tenant_legal_book_portfolio_security_lot",
+        partition_count=12,
+    ),
+    KafkaTopicDefinition(
+        canonical_name="fixed_income.book_cost.disposal_replay.requested",
+        runtime_name=KAFKA_FIXED_INCOME_BOOK_COST_DISPOSAL_REPLAY_REQUESTED_TOPIC,
+        lifecycle_status="active",
+        semantic_type="command",
         scope="tenant_legal_book_portfolio_security_lot",
         partition_count=12,
     ),
