@@ -1,5 +1,16 @@
 # Codebase Review Ledger
 
+CR-1678 redemption addendum (2026-08-04): maturity, call, and partial redemption now flow through
+the canonical production registry, cost/position engines, reversible investment-inflow rules,
+generated principal-cash linkage, and immutable lot-disposal receipts. Product and cash legs retain
+one generated economic-event/group identity; embedded accrued interest affects settlement cash but
+not capital P&L. PostgreSQL proves all three lifecycles, factor-based partial depletion, duplicate
+neutrality, exact basis/residuals, and linked non-coupon cash. A 1,000-event FIFO/AVCO cohort keeps
+one allocation per redemption and conserves terminal quantity/basis. The distinct accumulating-buy
+AVCO attribution profile remains unbounded under #481 and is not hidden: FIFO 8,000 completed in
+2.140657 seconds, whereas AVCO 1,000 required 20.662403 seconds. Protected PR, exact-main, and wiki
+publication remain pending; no central context or skill routing change is required.
+
 CR-1678 partial-transfer addendum (2026-08-04): an exact-source PostgreSQL lifecycle now proves a
 partial internal securities transfer across distinct source and target portfolios. Moving 40 of 100
 units preserves total 1,000 local/base basis as a 60/600 source residual and a 40/400 target lot;

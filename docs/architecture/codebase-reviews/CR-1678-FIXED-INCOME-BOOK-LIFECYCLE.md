@@ -353,6 +353,16 @@ Data Models wiki documents the staged ledgers while the capability wiki remains
   passed in 37.26 seconds; nine focused destination/transfer unit cases also passed. This closes the
   partial-transfer scenario required by #481 without claiming #476's complete pair-query,
   restatement, FIFO/AVCO matrix, or the reusable parent/dependency graph retained by #480.
+- production redemption proof: signed commits `4eef191d1` through `2a4bb0ea8` promote maturity,
+  call, and partial redemption through the canonical registry/calculator, add reversible
+  `c149b2c3d516` investment-inflow rules, and persist generated economic-event/group identity on
+  both product and principal-cash legs. Five exact-source PostgreSQL lifecycle/rule cases passed in
+  35.78 seconds, proving full and factor-based partial lot depletion, local/base basis, principal-only
+  capital/FX P&L, equal non-coupon cashflows, immutable allocations, and duplicate neutrality. A
+  warning-strict 1,000-redemption cohort passed for FIFO and AVCO in 1.86 seconds with exactly one
+  source allocation per event and terminal 1,000/970 conservation. The separate accumulating-source
+  AVCO profile remains open under #481: FIFO 8,000 completed in 2.140657 seconds while AVCO 1,000
+  required 20.662403 seconds because proportional source evidence expands across every active buy.
 
 Protected PR and exact-main evidence remain pending for this tranche. Wider runtime recovery/load
 proof, complete corporate-action scenario coverage, redemption, and final issue closure remain
