@@ -189,6 +189,109 @@ async def test_internal_lot_disposal_fails_closed_without_target_identity(
 
 
 @pytest.mark.asyncio
+async def test_transfer_out_records_governed_external_destination_without_internal_identity(
+) -> None:
+    outgoing = _transaction("TRANSFER-OUT-EXTERNAL-01", 2)
+    outgoing.transaction_type = "TRANSFER_OUT"
+    outgoing.external_destination_reference = "  CUSTODIAN-ACCOUNT-7788  "
+    repository = AsyncMock(spec=CostBasisLotDisposalPort)
+
+    await persist_current_lot_disposals(
+        processed=[outgoing],
+        incoming_transaction_ids={outgoing.transaction_id},
+        disposals=[_disposal(outgoing.transaction_id, "SOURCE-LOT-01")],
+        cost_basis_method=CostBasisMethod.FIFO,
+        repository=repository,
+    )
+
+    (state,) = repository.reconcile_disposal_receipts.await_args.kwargs["receipt_states"]
+    assert state.destination is not None
+    assert state.destination.destination_type is LotDisposalDestinationType.EXTERNAL_TRANSFER
+    assert state.destination.external_destination_reference == "CUSTODIAN-ACCOUNT-7788"
+    assert state.destination.target_transaction_id is None
+    assert state.destination.target_lot_id is None
+    assert state.destination.target_instrument_id is None
+
+
+@pytest.mark.asyncio
+async def test_transfer_out_records_explicit_internal_destination() -> None:
+    outgoing = _transaction("TRANSFER-OUT-INTERNAL-01", 2)
+    outgoing.transaction_type = "TRANSFER_OUT"
+    outgoing.target_transaction_reference = "TRANSFER-IN-INTERNAL-01"
+    outgoing.target_instrument_id = "INSTRUMENT-DISPOSAL-01"
+    repository = AsyncMock(spec=CostBasisLotDisposalPort)
+
+    await persist_current_lot_disposals(
+        processed=[outgoing],
+        incoming_transaction_ids={outgoing.transaction_id},
+        disposals=[_disposal(outgoing.transaction_id, "SOURCE-LOT-01")],
+        cost_basis_method=CostBasisMethod.FIFO,
+        repository=repository,
+    )
+
+    (state,) = repository.reconcile_disposal_receipts.await_args.kwargs["receipt_states"]
+    assert state.destination is not None
+    assert state.destination.destination_type is LotDisposalDestinationType.INTERNAL_LOT
+    assert state.destination.target_transaction_id == "TRANSFER-IN-INTERNAL-01"
+    assert state.destination.target_lot_id == "LOT-TRANSFER-IN-INTERNAL-01"
+
+
+@pytest.mark.asyncio
+async def test_transfer_out_fails_closed_for_partial_internal_destination() -> None:
+    outgoing = _transaction("TRANSFER-OUT-PARTIAL-01", 2)
+    outgoing.transaction_type = "TRANSFER_OUT"
+    outgoing.target_transaction_reference = "TRANSFER-IN-PARTIAL-01"
+    outgoing.target_instrument_id = None
+    repository = AsyncMock(spec=CostBasisLotDisposalPort)
+
+    with pytest.raises(ValueError, match="target_instrument_id"):
+        await persist_current_lot_disposals(
+            processed=[outgoing],
+            incoming_transaction_ids={outgoing.transaction_id},
+            disposals=[_disposal(outgoing.transaction_id, "SOURCE-LOT-01")],
+            cost_basis_method=CostBasisMethod.FIFO,
+            repository=repository,
+        )
+
+    repository.reconcile_disposal_receipts.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("transaction_type", "target_transaction_reference", "target_instrument_id", "error"),
+    (
+        ("TRANSFER_OUT", "TRANSFER-IN-01", "INSTRUMENT-02", "exactly one"),
+        ("TRANSFER_OUT", "TRANSFER-IN-01", None, "exactly one"),
+        ("SELL", None, None, "valid only for TRANSFER_OUT"),
+        ("EXCHANGE_OUT", "EXCHANGE-IN-01", "INSTRUMENT-02", "internal lot destination"),
+    ),
+)
+async def test_external_destination_authority_fails_closed_for_ambiguous_or_invalid_shape(
+    transaction_type: str,
+    target_transaction_reference: str | None,
+    target_instrument_id: str | None,
+    error: str,
+) -> None:
+    outgoing = _transaction(f"{transaction_type}-DESTINATION-01", 2)
+    outgoing.transaction_type = transaction_type
+    outgoing.target_transaction_reference = target_transaction_reference
+    outgoing.target_instrument_id = target_instrument_id
+    outgoing.external_destination_reference = "CUSTODIAN-ACCOUNT-7788"
+    repository = AsyncMock(spec=CostBasisLotDisposalPort)
+
+    with pytest.raises(ValueError, match=error):
+        await persist_current_lot_disposals(
+            processed=[outgoing],
+            incoming_transaction_ids={outgoing.transaction_id},
+            disposals=[_disposal(outgoing.transaction_id, "SOURCE-LOT-01")],
+            cost_basis_method=CostBasisMethod.FIFO,
+            repository=repository,
+        )
+
+    repository.reconcile_disposal_receipts.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_persistence_fails_closed_for_duplicate_disposal_evidence() -> None:
     incoming = _transaction("SELL-INCOMING", 2)
     disposal = _disposal(incoming.transaction_id, "LOT-2")
