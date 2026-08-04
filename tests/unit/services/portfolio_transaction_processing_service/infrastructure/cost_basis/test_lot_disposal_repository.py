@@ -18,6 +18,8 @@ from portfolio_common.domain.cost_basis_method import CostBasisMethod
 
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
     AmortizedCostAllocationEvidence,
+    LotDisposalDestination,
+    LotDisposalDestinationType,
     LotDisposalReceiptState,
     LotDisposalReceiptStatus,
     SourceLotDisposalAllocation,
@@ -65,6 +67,19 @@ def _active_state(*, cost_local: str = "10") -> LotDisposalReceiptState:
             ),
         ),
         disposal_calculation_lineage=_lineage("lot-disposal"),
+    )
+
+
+def _internal_transfer_state() -> LotDisposalReceiptState:
+    return replace(
+        _active_state(),
+        transaction_type="TRANSFER_OUT",
+        destination=LotDisposalDestination(
+            destination_type=LotDisposalDestinationType.INTERNAL_LOT,
+            target_transaction_id="TRANSFER-IN-REPOSITORY-01",
+            target_lot_id="LOT-TRANSFER-IN-REPOSITORY-01",
+            target_instrument_id="INSTRUMENT-TARGET-01",
+        ),
     )
 
 
@@ -192,6 +207,48 @@ def test_verified_state_reconstructs_complete_active_receipt() -> None:
     )
 
     assert reconstructed == state
+
+
+def test_verified_state_reconstructs_internal_transfer_destination() -> None:
+    state = _internal_transfer_state()
+    record, allocations = _persisted_version(state)
+
+    reconstructed = lot_disposal_repository._verified_state(
+        record,
+        allocations=allocations,
+        previous_record=None,
+    )
+
+    assert reconstructed == state
+
+
+@pytest.mark.parametrize(
+    ("field_name", "tampered_value"),
+    (
+        ("destination_type", None),
+        ("target_transaction_id", "TRANSFER-IN-TAMPERED"),
+        ("target_lot_id", "LOT-TRANSFER-IN-TAMPERED"),
+        ("target_instrument_id", "INSTRUMENT-TAMPERED"),
+        ("external_destination_reference", "EXTERNAL-ACCOUNT-01"),
+    ),
+)
+def test_verified_state_fails_closed_for_tampered_destination(
+    field_name: str,
+    tampered_value: str | None,
+) -> None:
+    state = _internal_transfer_state()
+    record, allocations = _persisted_version(state)
+    setattr(record, field_name, tampered_value)
+
+    with pytest.raises(
+        lot_disposal_repository.CorruptLotDisposalReceiptError,
+        match="persisted lot-disposal receipt is corrupt",
+    ):
+        lot_disposal_repository._verified_state(
+            record,
+            allocations=allocations,
+            previous_record=None,
+        )
 
 
 def test_verified_state_reconstructs_amortized_cost_evidence() -> None:
