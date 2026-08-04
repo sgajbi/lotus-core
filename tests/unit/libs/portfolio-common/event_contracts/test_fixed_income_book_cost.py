@@ -1,11 +1,12 @@
 """Prove the fixed-income book-cost authority event contract."""
 
 from copy import deepcopy
-from decimal import localcontext
+from decimal import Decimal, localcontext
 
 import pytest
 from portfolio_common.event_contracts.fixed_income_book_cost import (
     FixedIncomeBookCostAuthorityEvent,
+    _canonicalize_hash_decimals,
 )
 from pydantic import ValidationError
 
@@ -94,6 +95,12 @@ def _replace_nested(
             target = target[int(component)]
     assert isinstance(target, dict)
     target[path[-1]] = value
+
+
+@pytest.mark.parametrize("value", ("NaN", "Infinity", "-Infinity"))
+def test_content_hash_decimal_canonicalizer_rejects_nonfinite_values(value: str) -> None:
+    with pytest.raises(ValueError, match="must be finite"):
+        _canonicalize_hash_decimals(Decimal(value))
 
 
 def test_event_normalizes_exact_scope_and_preserves_decimal_strings() -> None:

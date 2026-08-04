@@ -27,6 +27,10 @@ from portfolio_common.pydantic_financial_numeric import (
 
 FIXED_INCOME_BOOK_COST_AUTHORITY_EVENT_TYPE = "fixed_income.book_cost.authority.received"
 FIXED_INCOME_BOOK_COST_AUTHORITY_SCHEMA_VERSION = "1.0.0"
+FIXED_INCOME_BOOK_COST_DISPOSAL_REPLAY_EVENT_TYPE = (
+    "fixed_income.book_cost.disposal_replay.requested"
+)
+FIXED_INCOME_BOOK_COST_DISPOSAL_REPLAY_SCHEMA_VERSION = "1.0.0"
 
 _STRICT_MODEL_CONFIG = ConfigDict(
     extra="forbid",
@@ -37,6 +41,7 @@ _STRICT_MODEL_CONFIG = ConfigDict(
 
 _PositiveStrictVersion = Annotated[int, Field(strict=True, ge=1)]
 _ExactPeriodRate = Annotated[ExactDecimal18_10, Field(gt=Decimal(-1))]
+_Sha256Digest = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
 
 
 def _parse_iso_date(value: object) -> date:
@@ -64,6 +69,8 @@ _IsoDatetime = Annotated[datetime, BeforeValidator(_parse_iso_datetime)]
 def _canonicalize_hash_decimals(value: object) -> object:
     if isinstance(value, Decimal):
         sign, digits, exponent = value.as_tuple()
+        if not isinstance(exponent, int):
+            raise ValueError("content-hash decimals must be finite")
         canonical_digits = list(digits)
         while canonical_digits and canonical_digits[-1] == 0:
             canonical_digits.pop()
@@ -101,6 +108,28 @@ class FixedIncomeYieldApplication(StrEnum):
     ANNUAL_EFFECTIVE = "ANNUAL_EFFECTIVE"
     ANNUAL_NOMINAL_SIMPLE = "ANNUAL_NOMINAL_SIMPLE"
     PER_PERIOD_EFFECTIVE = "PER_PERIOD_EFFECTIVE"
+
+
+class FixedIncomeBookCostReplayEligibilityReason(StrEnum):
+    """Fail-closed profile decision carried into correction replay evidence."""
+
+    ASSIGNMENT_MISSING = "ASSIGNMENT_MISSING"
+    ASSIGNMENT_OVERLAPPING = "ASSIGNMENT_OVERLAPPING"
+    ASSIGNMENT_CONFLICTING = "ASSIGNMENT_CONFLICTING"
+    SOURCE_FACT_OVERLAPPING = "SOURCE_FACT_OVERLAPPING"
+    SOURCE_FACT_CONFLICTING = "SOURCE_FACT_CONFLICTING"
+    AUTHORITY_STALE = "AUTHORITY_STALE"
+    CLEAN_COST_EVIDENCE_MISSING = "CLEAN_COST_EVIDENCE_MISSING"
+    REDEMPTION_VALUE_MISSING = "REDEMPTION_VALUE_MISSING"
+    CASHFLOW_SCHEDULE_MISSING = "CASHFLOW_SCHEDULE_MISSING"
+    EFFECTIVE_YIELD_MISSING = "EFFECTIVE_YIELD_MISSING"
+    YIELD_CONVENTION_MISSING = "YIELD_CONVENTION_MISSING"
+    YIELD_CONVENTION_MISMATCH = "YIELD_CONVENTION_MISMATCH"
+    PERIOD_RATE_MISSING = "PERIOD_RATE_MISSING"
+    POLICY_IDENTITY_MISMATCH = "POLICY_IDENTITY_MISMATCH"
+    POLICY_UNSUPPORTED = "POLICY_UNSUPPORTED"
+    CALCULATION_FAILED = "CALCULATION_FAILED"
+    RESIDUAL_OUTSIDE_TOLERANCE = "RESIDUAL_OUTSIDE_TOLERANCE"
 
 
 class FixedIncomeBookCostAuthorityScope(BaseModel):
@@ -312,5 +341,72 @@ class FixedIncomeBookCostAuthorityEvent(BaseModel):
             for key, value in self.model_dump(mode="python").items()
         }
         return cast(str, canonical_content_hash(payload))
+
+    model_config = _STRICT_MODEL_CONFIG
+
+
+class FixedIncomeBookCostProfileDecisionContract(BaseModel):
+    """One exact profile decision committed before replay was requested."""
+
+    effective_date: _IsoDate
+    profile_id: str = Field(min_length=1, max_length=96)
+    profile_version: _PositiveStrictVersion
+    authority_content_hash: _Sha256Digest
+    eligibility_reason: FixedIncomeBookCostReplayEligibilityReason | None = None
+
+    model_config = _STRICT_MODEL_CONFIG
+
+
+class FixedIncomeBookCostDisposalReplayRequestedEvent(BaseModel):
+    """Durable source-lot command for one deterministic disposal suffix rebuild."""
+
+    event_type: Literal["fixed_income.book_cost.disposal_replay.requested"] = (
+        "fixed_income.book_cost.disposal_replay.requested"
+    )
+    schema_version: Literal["1.0.0"] = "1.0.0"
+    command_id: _Sha256Digest
+    scope: FixedIncomeBookCostAuthorityScope
+    earliest_affected_date: _IsoDate
+    first_affected_transaction_id: str = Field(min_length=1, max_length=200)
+    first_affected_transaction_timestamp: _IsoDatetime
+    source_authority_event_content_hash: _Sha256Digest
+    profile_decisions: tuple[FixedIncomeBookCostProfileDecisionContract, ...] = Field(
+        min_length=1,
+        max_length=1000,
+    )
+    correlation_id: str | None = Field(default=None, min_length=1, max_length=255)
+    traceparent: str | None = Field(default=None, min_length=1, max_length=512)
+
+    @field_validator("first_affected_transaction_timestamp")
+    @classmethod
+    def require_aware_transaction_timestamp(cls, value: datetime) -> datetime:
+        if value.utcoffset() is None:
+            raise ValueError("first_affected_transaction_timestamp must include a timezone offset")
+        return value.astimezone(UTC)
+
+    @model_validator(mode="after")
+    def validate_replay_boundary_and_decisions(
+        self,
+    ) -> FixedIncomeBookCostDisposalReplayRequestedEvent:
+        if self.first_affected_transaction_timestamp.date() < self.earliest_affected_date:
+            raise ValueError(
+                "first_affected_transaction_timestamp cannot precede earliest_affected_date"
+            )
+        decision_order = tuple(
+            (decision.effective_date, decision.profile_version, decision.profile_id)
+            for decision in self.profile_decisions
+        )
+        if decision_order != tuple(sorted(decision_order)):
+            raise ValueError("profile_decisions must use canonical effective-date order")
+        effective_dates = [decision.effective_date for decision in self.profile_decisions]
+        if len(effective_dates) != len(set(effective_dates)):
+            raise ValueError("profile_decisions must have unique effective dates")
+        return self
+
+    @property
+    def partition_key(self) -> str:
+        """Return the exact source-lot stream key required for broker ordering."""
+
+        return self.scope.partition_key()
 
     model_config = _STRICT_MODEL_CONFIG
