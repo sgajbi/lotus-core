@@ -4,7 +4,13 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 
 import pytest
-from portfolio_common.database_models import Cashflow, PositionHistory, PositionLotState
+from portfolio_common.database_models import (
+    Cashflow,
+    LotDisposalAllocationRecord,
+    LotDisposalReceiptRecord,
+    PositionHistory,
+    PositionLotState,
+)
 from portfolio_common.database_models import Transaction as DBTransaction
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -191,6 +197,30 @@ async def test_full_exchange_conserves_basis_and_balances_linked_mvt_flows(
             .scalars()
             .all()
         )
+        disposal_receipt = (
+            await verification_session.execute(
+                select(LotDisposalReceiptRecord).where(
+                    LotDisposalReceiptRecord.disposal_transaction_id
+                    == source_out.transaction_id
+                )
+            )
+        ).scalar_one()
+        disposal_allocations = (
+            (
+                await verification_session.execute(
+                    select(LotDisposalAllocationRecord)
+                    .where(
+                        LotDisposalAllocationRecord.receipt_id
+                        == disposal_receipt.receipt_id,
+                        LotDisposalAllocationRecord.receipt_version
+                        == disposal_receipt.receipt_version,
+                    )
+                    .order_by(LotDisposalAllocationRecord.allocation_ordinal)
+                )
+            )
+            .scalars()
+            .all()
+        )
 
     transaction_by_id = {transaction.transaction_id: transaction for transaction in transactions}
     assert transaction_by_id[source_out.transaction_id].net_cost == Decimal("-1000")
@@ -230,3 +260,11 @@ async def test_full_exchange_conserves_basis_and_balances_linked_mvt_flows(
     ]
     assert sum(flow.amount for flow in transfer_flows) == Decimal("0")
     assert sum(lot.lot_cost_base for lot in lots) == Decimal("1000")
+    assert disposal_receipt.destination_type == "INTERNAL_LOT"
+    assert disposal_receipt.target_transaction_id == target_in.transaction_id
+    assert disposal_receipt.target_lot_id == f"LOT-{target_in.transaction_id}"
+    assert disposal_receipt.target_instrument_id == target_security_id
+    assert disposal_receipt.external_destination_reference is None
+    assert [allocation.source_transaction_id for allocation in disposal_allocations] == [
+        acquisition.transaction_id
+    ]
