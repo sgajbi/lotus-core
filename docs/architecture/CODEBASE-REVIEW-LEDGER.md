@@ -1,5 +1,15 @@
 # Codebase Review Ledger
 
+CR-1678 quantity-transfer addendum (2026-08-04): quantity-consuming merger, exchange, and
+replacement source legs now persist a discriminated internal target transaction, deterministic
+target lot, and target instrument on the immutable lot-disposal receipt while ordered child rows
+retain source-lot lineage. Legacy receipt hashes remain stable when no destination exists; malformed
+or tampered destination shapes fail reconstruction. The existing operational read endpoint exposes
+the nullable evidence additively. An exact-source PostgreSQL exchange scenario proves source
+allocation through target-lot materialization. External `TRANSFER_OUT` destination authority,
+reciprocal-leg validation, protected PR, and exact-main closure remain open under #481. Evidence is
+maintained in CR-1678; capability wiki truth does not change.
+
 CR-1678 basis-transfer addendum (2026-08-04): basis-only corporate-action evidence is now persisted
 atomically as append-only source-to-target receipt versions and exposed by a distinct operational
 read endpoint. Writer and reader both apply the same narrow canonical scale/hash primitives; the
