@@ -10,6 +10,9 @@ from portfolio_common.domain.transaction.fee_components import (
     TRANSACTION_FEE_COMPONENT_FIELDS,
     resolve_transaction_trade_fee,
 )
+from portfolio_common.domain.transaction.numeric_policy import (
+    TRANSACTION_COST_LEDGER_OUTPUT_V1,
+)
 from portfolio_common.domain.transaction_control_codes import (
     normalize_transaction_control_code,
 )
@@ -109,7 +112,11 @@ def _calculate_redemption_movement(
     principal = (
         transaction.principal_proceeds_local
         if transaction.principal_proceeds_local is not None
-        else transaction.gross_transaction_amount
+        else TRANSACTION_COST_LEDGER_OUTPUT_V1.multiply(
+            transaction.quantity,
+            transaction.price,
+            field_name="derived_principal_proceeds_local",
+        )
     )
     accrued_interest = transaction.accrued_interest_proceeds_local or Decimal(0)
     embedded_fees = transaction.embedded_fee_amount_local or Decimal(0)
