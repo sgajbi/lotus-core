@@ -12,6 +12,7 @@ from portfolio_common.domain.transaction.numeric_policy import (
     TRANSACTION_COMMAND_DECIMAL_FIELDS,
     require_transaction_persistence_precision,
 )
+from portfolio_common.domain.transaction.type_registry import get_transaction_type_definition
 from portfolio_common.domain.transaction_control_codes import (
     normalize_optional_transaction_control_code,
     normalize_transaction_control_code,
@@ -803,3 +804,48 @@ class Transaction(BaseModel):
         ):
             raise ValueError("new_factor must be less than old_factor")
         return self
+
+    @model_validator(mode="after")
+    def _validate_disposal_destination(self) -> "Transaction":
+        target_transaction = _normalized_destination_text(self.target_transaction_reference)
+        target_instrument = _normalized_destination_text(self.target_instrument_id)
+        external_destination = _normalized_destination_text(self.external_destination_reference)
+        has_any_internal = target_transaction is not None or target_instrument is not None
+        has_complete_internal = target_transaction is not None and target_instrument is not None
+        has_external = external_destination is not None
+
+        if self.transaction_type == "TRANSFER_OUT":
+            if has_complete_internal == has_external or (
+                has_any_internal and not has_complete_internal
+            ):
+                raise ValueError(
+                    "TRANSFER_OUT requires exactly one complete destination: either "
+                    "target_transaction_reference with target_instrument_id, or "
+                    "external_destination_reference"
+                )
+        else:
+            if has_external:
+                raise ValueError("external_destination_reference is valid only for TRANSFER_OUT")
+            definition = get_transaction_type_definition(self.transaction_type)
+            supports_internal_destination = bool(
+                definition
+                and definition.position_effect == "decrease"
+                and definition.lot_behavior in {"transfer_basis_out", "partial_basis_transfer"}
+            )
+            if has_any_internal and not supports_internal_destination:
+                raise ValueError(
+                    "target transaction and instrument destination metadata is not valid for "
+                    f"{self.transaction_type}"
+                )
+
+        self.target_transaction_reference = target_transaction
+        self.target_instrument_id = target_instrument
+        self.external_destination_reference = external_destination
+        return self
+
+
+def _normalized_destination_text(value: str | None) -> str | None:
+    if value is None:
+        return None
+    normalized = value.strip()
+    return normalized or None
