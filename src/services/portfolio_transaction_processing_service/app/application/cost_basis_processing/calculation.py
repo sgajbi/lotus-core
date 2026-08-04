@@ -196,6 +196,7 @@ class CostBasisCalculationCoordinator:
             open_lot_persistence_scope=persistence_scope,
             average_cost_pool_transition=average_cost_pool_transition,
             disposals=timeline_result.disposals,
+            basis_transfers=timeline_result.basis_transfers,
             source_transactions=timeline_result.source_transactions,
         )
 
@@ -235,6 +236,7 @@ class CostBasisCalculationCoordinator:
             open_lot_persistence_scope=persistence_scope,
             average_cost_pool_transition=None,
             disposals=timeline_result.disposals,
+            basis_transfers=timeline_result.basis_transfers,
             source_transactions=timeline_result.source_transactions,
         )
 

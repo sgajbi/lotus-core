@@ -21,6 +21,7 @@ from ...domain.cost_basis import (
     FIFOBasisStrategy,
     LotDispositionEngine,
     OpenLotState,
+    TransactionLotBasisTransfer,
     TransactionLotDisposal,
 )
 from ...ports.cost_basis.observability import (
@@ -40,6 +41,7 @@ class CostBasisTimelineResult:
     errored: list[CostCalculationError]
     open_lot_states: dict[str, OpenLotState]
     disposals: tuple[TransactionLotDisposal, ...]
+    basis_transfers: tuple[TransactionLotBasisTransfer, ...]
     source_transactions: dict[str, CostBasisTransaction]
 
 
@@ -124,6 +126,9 @@ class CostBasisTimelineProcessor:
                 disposals=self._disposition_engine.disposal_records(
                     transaction_ids=accepted_transaction_ids
                 ),
+                basis_transfers=self._disposition_engine.basis_transfer_records(
+                    transaction_ids=accepted_transaction_ids
+                ),
                 source_transactions={
                     transaction.transaction_id: transaction for transaction in processed_timeline
                 },
@@ -155,6 +160,9 @@ class CostBasisTimelineProcessor:
                 errored=self._error_reporter.get_errors(),
                 open_lot_states=self._disposition_engine.get_open_lot_states(),
                 disposals=self._disposition_engine.disposal_records(
+                    transaction_ids=accepted_transaction_ids
+                ),
+                basis_transfers=self._disposition_engine.basis_transfer_records(
                     transaction_ids=accepted_transaction_ids
                 ),
                 source_transactions={

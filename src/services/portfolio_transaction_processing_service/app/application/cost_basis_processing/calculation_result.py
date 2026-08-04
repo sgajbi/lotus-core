@@ -1,12 +1,13 @@
 """Represent one cost-basis calculation result at the application boundary."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from ...domain.cost_basis import (
     AverageCostPoolTransition,
     CostBasisTransaction,
     CostCalculationError,
     OpenLotState,
+    TransactionLotBasisTransfer,
     TransactionLotDisposal,
 )
 from .lot_state_persistence import OpenLotPersistenceScope
@@ -24,3 +25,4 @@ class CostBasisCalculationResult:
     average_cost_pool_transition: AverageCostPoolTransition | None
     disposals: tuple[TransactionLotDisposal, ...]
     source_transactions: dict[str, CostBasisTransaction]
+    basis_transfers: tuple[TransactionLotBasisTransfer, ...] = field(default_factory=tuple)

@@ -30,9 +30,10 @@ async def get_latest_lot_disposal_receipt(
     service: LotDisposalService = Depends(get_lot_disposal_service),
 ) -> LotDisposalReceiptResponse:
     try:
-        return await service.get_latest_receipt(
+        receipt: LotDisposalReceiptResponse = await service.get_latest_receipt(
             portfolio_id=portfolio_id,
             transaction_id=transaction_id,
         )
+        return receipt
     except LookupError as exc:
         raise lookup_error_to_http(exc) from exc

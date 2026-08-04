@@ -22,6 +22,7 @@ from ...transaction.fx import (
 )
 from ...transaction.redemption import (
     RedemptionCalculationError,
+    RedemptionCalculationReasonCode,
     RedemptionTerms,
     calculate_redemption_economics,
 )
@@ -762,11 +763,18 @@ def _redemption_terms(
     allocated_cost_basis_local: Decimal,
     allocated_cost_basis_base: Decimal,
 ) -> RedemptionTerms:
+    redemption_price = decimal_or_none(getattr(transaction, "price", transaction.average_price))
+    if redemption_price is None:
+        raise RedemptionCalculationError(
+            RedemptionCalculationReasonCode.INVALID_MONETARY_INPUT,
+            field="redemption_price",
+            message="must be a finite decimal",
+        )
     return RedemptionTerms(
         transaction_type=transaction.transaction_type,
         position_quantity=position_quantity,
         redeemed_quantity=transaction.quantity,
-        redemption_price=getattr(transaction, "price", transaction.average_price),
+        redemption_price=redemption_price,
         old_factor=getattr(transaction, "old_factor", None),
         new_factor=getattr(transaction, "new_factor", None),
         principal_proceeds_local=getattr(transaction, "principal_proceeds_local", None),
@@ -931,13 +939,13 @@ class PartialTransferOutStrategy:
             fx_rate,
             field_name="net_cost",
         )
-        error_reason = disposition_engine.transfer_basis_out(
+        basis_transfer = disposition_engine.transfer_basis_out(
             transaction,
             cost_base=basis_out_base,
             cost_local=basis_out_local,
         )
-        if error_reason is not None:
-            error_reporter.add_error(transaction.transaction_id, error_reason)
+        if basis_transfer.error_reason is not None:
+            error_reporter.add_error(transaction.transaction_id, basis_transfer.error_reason)
             return
         transaction.net_cost_local = -basis_out_local
         transaction.net_cost = -basis_out_base

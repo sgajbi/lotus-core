@@ -22,6 +22,11 @@ from .calculation.average_cost_source_allocation import (
     AverageCostSourceAllocation,
     AverageCostSourceContribution,
 )
+from .calculation.basis_transfer_allocation import (
+    LotBasisTransferResult,
+    SourceLotBasisTransferAllocation,
+    TransactionLotBasisTransfer,
+)
 from .calculation.calculation_errors import CostCalculationErrorCollector
 from .calculation.cost_basis_calculator import (
     CostBasisCalculator,
@@ -120,6 +125,7 @@ __all__ = [
     "INCREMENTAL_SAFE_LOT_BEHAVIORS",
     "Fees",
     "LotDispositionEngine",
+    "LotBasisTransferResult",
     "LotDisposalResult",
     "LotDisposalReceiptState",
     "LotDisposalReceiptStatus",
@@ -128,9 +134,11 @@ __all__ = [
     "OpenLotState",
     "STATE_DEPENDENT_LOT_BEHAVIORS",
     "SourceLotDisposalAllocation",
+    "SourceLotBasisTransferAllocation",
     "CostBasisTransaction",
     "TransactionOrderKey",
     "TransactionLotDisposal",
+    "TransactionLotBasisTransfer",
     "calculate_corporate_action_cash_economics",
     "missing_corporate_action_dependencies",
     "normalize_cost_fee_amount",
