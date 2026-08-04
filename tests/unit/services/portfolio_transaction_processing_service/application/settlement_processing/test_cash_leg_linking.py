@@ -89,9 +89,7 @@ async def test_generated_linkage_identity_is_persisted_on_both_legs() -> None:
     )
 
     assert result.generated_cash_leg is not None
-    assert result.product_leg.economic_event_id == (
-        "EVT-DIVIDEND-PORT-001-DIV-GENERATED-01"
-    )
+    assert result.product_leg.economic_event_id == ("EVT-DIVIDEND-PORT-001-DIV-GENERATED-01")
     assert result.product_leg.linked_transaction_group_id == (
         "LTG-DIVIDEND-PORT-001-DIV-GENERATED-01"
     )
