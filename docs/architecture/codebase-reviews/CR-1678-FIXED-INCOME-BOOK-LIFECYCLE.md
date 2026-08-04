@@ -363,6 +363,14 @@ Data Models wiki documents the staged ledgers while the capability wiki remains
   source allocation per event and terminal 1,000/970 conservation. The separate accumulating-source
   AVCO profile remains open under #481: FIFO 8,000 completed in 2.140657 seconds while AVCO 1,000
   required 20.662403 seconds because proportional source evidence expands across every active buy.
+- replay-determinism proof: signed commits `56b1a0a93` and `ff4a95918` canonicalize transaction-cost
+  and disposal-allocation lineage at the governed ledger scale, exclude persistence- and
+  settlement-owned generated fields, and advance both changed algorithms to version 2. A focused
+  unit pack passed 126 warning-strict cases. Exact-source PostgreSQL replay restored the deleted
+  product and principal cashflows in 29.76 seconds while retaining exactly one immutable disposal
+  receipt version and one allocation. The compatibility impact is intentional and bounded: lineage
+  hashes/version change where the canonicalization contract changed; financial amounts, booking
+  contracts, schema, API/OpenAPI, Kafka topology, and settlement identities do not.
 
 Protected PR and exact-main evidence remain pending for this tranche. Wider runtime recovery/load
 proof, complete corporate-action scenario coverage, redemption, and final issue closure remain
