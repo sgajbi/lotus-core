@@ -10,8 +10,10 @@ from portfolio_common.database_models import (
     LotBasisTransferAllocationRecord,
     LotBasisTransferReceiptRecord,
 )
-from portfolio_common.domain.calculation_lineage import canonical_content_hash
 from portfolio_common.domain.cost_basis_method import CostBasisMethod
+from portfolio_common.domain.cost_basis_receipt_integrity import (
+    cost_basis_allocation_content_hash,
+)
 from sqlalchemy import and_, func, select, tuple_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
@@ -23,7 +25,6 @@ from ...domain.cost_basis import (
     LotBasisTransferReconciliationScope,
     SourceLotBasisTransferAllocation,
 )
-from ...domain.cost_basis.state_lineage import canonical_cost_basis_output_payload
 from .receipt_integrity import receipt_version_content_hash, required_calculation_lineage
 
 
@@ -463,7 +464,6 @@ def _allocation_content_hash(
 ) -> str:
     payload = {
         "allocation_ordinal": allocation.allocation_ordinal,
-        "receipt_id": receipt_id,
         "retained_cost_base": allocation.retained_cost_base,
         "retained_cost_local": allocation.retained_cost_local,
         "retained_quantity": allocation.retained_quantity,
@@ -477,5 +477,8 @@ def _allocation_content_hash(
     }
     return cast(
         str,
-        canonical_content_hash(canonical_cost_basis_output_payload(payload)),
+        cost_basis_allocation_content_hash(
+            receipt_id=receipt_id,
+            payload=payload,
+        ),
     )
