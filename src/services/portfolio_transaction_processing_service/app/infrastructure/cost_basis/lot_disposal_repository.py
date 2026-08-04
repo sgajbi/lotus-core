@@ -21,6 +21,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...domain.cost_basis import (
     AmortizedCostAllocationEvidence,
+    LotDisposalDestination,
+    LotDisposalDestinationType,
     LotDisposalReceiptState,
     LotDisposalReceiptStatus,
     SourceLotDisposalAllocation,
@@ -263,6 +265,7 @@ def _verified_state(
                 if record.disposal_calculation_lineage is not None
                 else None
             ),
+            destination=_destination_from_record(record),
             void_reason=cast(str | None, record.void_reason),
         )
         if int(record.allocation_count) != state.allocation_count:
@@ -283,6 +286,32 @@ def _verified_state(
         raise CorruptLotDisposalReceiptError(
             f"persisted lot-disposal receipt is corrupt: {record.receipt_id}"
         ) from exc
+
+
+def _destination_from_record(
+    record: LotDisposalReceiptRecord,
+) -> LotDisposalDestination | None:
+    destination_values = (
+        record.destination_type,
+        record.target_transaction_id,
+        record.target_lot_id,
+        record.target_instrument_id,
+        record.external_destination_reference,
+    )
+    if all(value is None for value in destination_values):
+        return None
+    if record.destination_type is None:
+        raise ValueError("lot-disposal destination discriminator is missing")
+    return LotDisposalDestination(
+        destination_type=LotDisposalDestinationType(str(record.destination_type)),
+        target_transaction_id=cast(str | None, record.target_transaction_id),
+        target_lot_id=cast(str | None, record.target_lot_id),
+        target_instrument_id=cast(str | None, record.target_instrument_id),
+        external_destination_reference=cast(
+            str | None,
+            record.external_destination_reference,
+        ),
+    )
 
 
 def _verified_allocation(
@@ -388,6 +417,7 @@ def _header_values(
     previous_receipt_content_hash: str | None,
     receipt_content_hash: str,
 ) -> dict[str, object]:
+    destination = state.destination
     return {
         "allocation_count": state.allocation_count,
         "calculation_policy_id": state.calculation_policy_id,
@@ -403,6 +433,12 @@ def _header_values(
         ),
         "disposal_timestamp": state.disposal_timestamp,
         "disposal_transaction_id": state.disposal_transaction_id,
+        "destination_type": (
+            destination.destination_type.value if destination is not None else None
+        ),
+        "external_destination_reference": (
+            destination.external_destination_reference if destination is not None else None
+        ),
         "instrument_id": state.instrument_id,
         "portfolio_id": state.portfolio_id,
         "previous_receipt_content_hash": previous_receipt_content_hash,
@@ -412,6 +448,13 @@ def _header_values(
         "security_id": state.security_id,
         "semantic_content_hash": state.semantic_content_hash,
         "status": state.status.value,
+        "target_instrument_id": (
+            destination.target_instrument_id if destination is not None else None
+        ),
+        "target_lot_id": destination.target_lot_id if destination is not None else None,
+        "target_transaction_id": (
+            destination.target_transaction_id if destination is not None else None
+        ),
         "transaction_calculation_lineage": (
             state.transaction_calculation_lineage.lineage_payload()
         ),
@@ -503,11 +546,14 @@ def _receipt_content_hash(
     receipt_version: int,
     previous_receipt_content_hash: str | None,
 ) -> str:
-    return receipt_version_content_hash(
-        receipt_id=state.receipt_id,
-        semantic_content_hash=state.semantic_content_hash,
-        receipt_version=receipt_version,
-        previous_receipt_content_hash=previous_receipt_content_hash,
+    return cast(
+        str,
+        receipt_version_content_hash(
+            receipt_id=state.receipt_id,
+            semantic_content_hash=state.semantic_content_hash,
+            receipt_version=receipt_version,
+            previous_receipt_content_hash=previous_receipt_content_hash,
+        ),
     )
 
 
