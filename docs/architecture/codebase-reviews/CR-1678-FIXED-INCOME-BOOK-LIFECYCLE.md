@@ -375,7 +375,10 @@ Data Models wiki documents the staged ledgers while the capability wiki remains
   booking contracts, schema, API/OpenAPI, Kafka topology, and settlement identities do not.
 - protected-review and coverage proof: registry-owned cash-entry defaults now prevent non-zero
   redemption booking without a settlement account, while canonical zero-price/zero-proceeds
-  write-offs create no synthetic cash adjustment. Tolerance-close maturity/call quantities consume
+  write-offs are accepted at ingestion with truthful zero gross proceeds and create no synthetic
+  cash adjustment. Ordinary transaction families retain their strictly positive gross-amount
+  contract; OpenAPI documents the non-negative transport boundary and conditional family rule.
+  Tolerance-close maturity/call quantities consume
   the exact available position. Query-side disposal and basis-transfer verification has 100% line
   and branch coverage across 252 statements and 146 branches; 253 focused registry, preparation,
   settlement, redemption, cashflow, and query-repository tests pass. Repository-native Ruff, full

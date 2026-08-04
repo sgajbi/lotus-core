@@ -46,6 +46,19 @@ def _document_transaction_numeric_contract(schema: dict[str, Any]) -> None:
         precision=18,
         scale=10,
     )
+    schema.setdefault("allOf", []).append(
+        {
+            "if": {
+                "properties": {
+                    "transaction_type": {"enum": sorted(REDEMPTION_TRANSACTION_TYPES)},
+                    "price": {"const": 0},
+                },
+                "required": ["transaction_type", "price"],
+            },
+            "then": {"properties": {"gross_transaction_amount": {"minimum": 0}}},
+            "else": {"properties": {"gross_transaction_amount": {"exclusiveMinimum": 0}}},
+        }
+    )
 
 
 class Transaction(BaseModel):
@@ -109,8 +122,11 @@ class Transaction(BaseModel):
         description="Per-unit transaction price in the trade currency.",
         json_schema_extra={"example": "150.0"},
     )
-    gross_transaction_amount: PositiveDecimal = Field(
-        description="Gross economic amount before fees, taxes, or deductions.",
+    gross_transaction_amount: NonNegativeDecimal = Field(
+        description=(
+            "Gross economic amount before fees, taxes, or deductions. Must be greater than zero "
+            "except for a governed zero-price redemption."
+        ),
         json_schema_extra={"example": "1500.0"},
     )
     trade_currency: str = Field(
@@ -786,6 +802,22 @@ class Transaction(BaseModel):
                 field_name=info.field_name,
             ),
         )
+
+    @field_validator("gross_transaction_amount")
+    @classmethod
+    def _validate_gross_transaction_amount_for_family(
+        cls,
+        value: Decimal,
+        info: ValidationInfo,
+    ) -> Decimal:
+        transaction_type = info.data.get("transaction_type")
+        price = info.data.get("price")
+        if value == 0 and (transaction_type not in REDEMPTION_TRANSACTION_TYPES or price != 0):
+            raise ValueError(
+                "gross_transaction_amount must be greater than 0 except for a governed "
+                "zero-price redemption"
+            )
+        return value
 
     @model_validator(mode="after")
     def _aggregate_fee_components(self) -> "Transaction":

@@ -137,7 +137,7 @@ A JSON object containing a `transactions` key, which holds a list of transaction
 | `transaction_type` | string | Yes | Type of transaction (e.g., "BUY", "SELL", "DIVIDEND"). |
 | `quantity` | number | Yes | Quantity of the instrument traded. |
 | `price` | number | Yes | Price per unit of the instrument. |
-| `gross_transaction_amount` | number | Yes | Gross amount of the trade (quantity \* price). |
+| `gross_transaction_amount` | number | Yes | Non-negative gross economic amount before fees, taxes, or deductions. It must be greater than zero for ordinary transaction families; a governed zero-price redemption may carry truthful zero gross proceeds. |
 | `trade_currency` | string | Yes | Currency of the trade. |
 | `currency` | string | Yes | Currency of the transaction amounts. |
 | `trade_fee` | number | No | Any fees associated with the trade. |

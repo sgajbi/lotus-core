@@ -4,7 +4,7 @@
 
 - **Document ID:** RFC-REDEMPTION-01
 - **Title:** Canonical Fixed Income Redemption Family Specification (Maturity / Call / Partial Redemption)
-- **Version:** 1.0.1
+- **Version:** 1.0.2
 - **Status:** Draft
 - **Owner:** _TBD_
 - **Reviewers:** _TBD_
@@ -16,6 +16,7 @@
 
 | Version | Date | Author | Summary |
 |---|---|---|---|
+| 1.0.2 | 2026-08-05 | Lotus Engineering | Permit truthful zero gross proceeds for governed zero-price redemption ingestion while retaining positive gross amounts for ordinary families |
 | 1.0.1 | 2026-08-05 | Lotus Engineering | Require source-owned settlement date and fail-closed fixed-income product-family eligibility before lot access |
 | 1.0.0 | _TBD_ | _TBD_ | Initial canonical redemption family specification |
 
@@ -42,6 +43,9 @@ from trade date. Before any lot access, the cost domain also requires an explici
 fixed-income product type and rejects contradictory non-fixed-income asset classification. This is
 a product-family eligibility gate, not a claim that Core owns issuer call schedules or entitlement
 determination; those remain upstream authorities.
+The ingestion contract accepts `gross_transaction_amount = 0` only for the governed redemption
+family, so a zero-price principal write-off is represented without fabricated proceeds. Ordinary
+transaction families retain their strictly positive gross-amount contract.
 
 ---
 
@@ -250,6 +254,8 @@ Must validate:
 - a non-zero quantity supplied with factors is dual authority and must reconcile with the derived
   quantity within tolerance
 - `redemption_price >= 0`
+- `gross_transaction_amount >= 0`; zero is permitted only for a governed redemption, while all
+  ordinary transaction families require a positive gross amount
 - `effective_date` and `settlement_date` present
 - instrument is eligible for redemption (instrument metadata)
 - cash leg exists for cash-settled redemption (unless policy allows late-arriving settlement)

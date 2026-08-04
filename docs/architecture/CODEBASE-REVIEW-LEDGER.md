@@ -1,5 +1,12 @@
 # Codebase Review Ledger
 
+CR-1678 zero-proceeds ingress addendum (2026-08-05): ingestion now represents
+`gross_transaction_amount` as non-negative and applies a transaction-family-aware rule: maturity,
+call, and partial redemption may carry truthful zero gross proceeds for a zero-price write-off,
+while every ordinary family retains the prior strictly positive contract. OpenAPI publishes the
+non-negative numeric boundary and describes the conditional rule. No database schema, migration,
+Kafka, central-context, skill-routing, capability, or additional wiki truth changed.
+
 CR-1678 redemption-contract addendum (2026-08-05): maturity, call, and partial redemption now
 require a source-owned settlement date at ingestion, canonical event, preparation, and cost-domain
 boundaries; no trade-date fallback can create value-date cash evidence. Before lot access, the cost

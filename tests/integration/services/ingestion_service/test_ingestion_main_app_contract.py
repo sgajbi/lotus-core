@@ -898,9 +898,28 @@ async def test_openapi_describes_transaction_core_shared_schema(async_test_clien
     )
     assert transaction["properties"]["gross_transaction_amount"]["description"] == (
         "Gross economic amount before fees, taxes, or deductions. "
+        "Must be greater than zero except for a governed zero-price redemption. "
         "The value must fit PostgreSQL NUMERIC(18,10) exactly; excess scale and "
         "magnitude overflow are rejected, not rounded."
     )
+    gross_amount_property = transaction["properties"]["gross_transaction_amount"]
+    assert gross_amount_property["anyOf"][0] == {"minimum": 0.0, "type": "number"}
+    gross_amount_condition = transaction["allOf"][-1]
+    assert gross_amount_condition["if"] == {
+        "properties": {
+            "transaction_type": {
+                "enum": ["CALL_REDEMPTION", "MATURITY_REDEMPTION", "PARTIAL_REDEMPTION"]
+            },
+            "price": {"const": 0},
+        },
+        "required": ["transaction_type", "price"],
+    }
+    assert gross_amount_condition["then"]["properties"]["gross_transaction_amount"] == {
+        "minimum": 0
+    }
+    assert gross_amount_condition["else"]["properties"]["gross_transaction_amount"] == {
+        "exclusiveMinimum": 0
+    }
     for field_name in TRANSACTION_COMMAND_DECIMAL_FIELDS:
         assert (
             "must fit PostgreSQL NUMERIC(18,10) exactly"
