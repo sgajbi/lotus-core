@@ -922,6 +922,18 @@ def test_partial_basis_transfer_does_not_over_require_disposal_destination(
     assert transaction.target_instrument_id is None
 
 
+@pytest.mark.parametrize("transaction_type", ["SPIN_IN", "DEMERGER_IN"])
+def test_basis_allocation_in_accepts_target_instrument_identity(
+    transaction_type: str,
+) -> None:
+    transaction = Transaction(
+        **_destination_payload(transaction_type, target_instrument_id=" NEW_SEC_001 ")
+    )
+
+    assert transaction.target_transaction_reference is None
+    assert transaction.target_instrument_id == "NEW_SEC_001"
+
+
 @pytest.mark.parametrize(
     "field_name",
     ["allocated_cost_basis_local", "allocated_cost_basis_base"],

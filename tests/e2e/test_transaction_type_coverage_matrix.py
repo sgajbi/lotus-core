@@ -7,6 +7,8 @@ from portfolio_common.domain.transaction.type_registry import (
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from src.services.ingestion_service.app.DTOs.transaction_model_dto import Transaction
+
 from .api_client import E2EApiClient
 from .transaction_type_coverage_support import (
     CASH_INSTRUMENT_TYPES,
@@ -70,6 +72,8 @@ def test_transaction_type_coverage_fixture_is_deduplicated_and_comprehensive():
     assert len(tx_ids) == len(set(tx_ids))
     assert len(tx_types) == len(set(tx_types))
     assert set(tx_types) == SUPPORTED_TRANSACTION_TYPES
+    for payload in tx_payloads:
+        Transaction(**payload)
     tax_payload = next(item for item in tx_payloads if item["transaction_type"] == "TAX")
     assert tax_payload["security_id"] == "CASH_USD_COVER_DRYRUN"
     assert tax_payload["instrument_id"] == "CASH_USD_COVER_DRYRUN"
