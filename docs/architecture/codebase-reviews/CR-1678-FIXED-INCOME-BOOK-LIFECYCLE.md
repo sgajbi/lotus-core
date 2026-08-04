@@ -79,6 +79,9 @@ The open-lot projection now keeps accounting carrying amount in independent loca
 Disposal projection and basis-only mutations change or retain that accounting carry without
 rewriting `lot_cost_local` or `lot_cost_base`, which remain strategy/tax acquisition basis. The
 additive migration backfills complete pre-existing carry rows from their former combined amounts;
+its downgrade first restores accounting carry to the legacy combined lot-cost representation so
+rollback cannot silently substitute a divergent tax basis for carried book economics. A missing
+effective profile now also fails closed whenever a consumed source lot already has persisted carry.
 production activation still requires the correction-triggered replay and downstream certification
 tracked by #903/#478, so this schema separation does not claim current-book disposal support.
 An additive `lot_amortized_cost_authority` ledger and application port now persist and reload all

@@ -56,10 +56,15 @@ def test_book_carry_migration_is_additive_backfilled_and_reversible(monkeypatch)
         ("position_lot_state", "amortized_book_carrying_base"),
     ]
     assert all(isinstance(operation[2], Column) and operation[2].nullable for operation in added)
-    backfill = next(operation[1] for operation in operations if operation[0] == "execute")
+    statements = [operation[1] for operation in operations if operation[0] == "execute"]
+    assert len(statements) == 2
+    backfill, rollback_restore = statements
     assert "amortized_book_carrying_local = lot_cost_local" in backfill
     assert "amortized_book_carrying_base = lot_cost_base" in backfill
     assert "WHERE amortized_cost_profile_id IS NOT NULL" in backfill
+    assert "lot_cost_local = amortized_book_carrying_local" in rollback_restore
+    assert "lot_cost_base = amortized_book_carrying_base" in rollback_restore
+    assert "WHERE amortized_cost_profile_id IS NOT NULL" in rollback_restore
 
     upgraded_shape = next(
         operation[3]
@@ -97,3 +102,8 @@ def test_book_carry_migration_is_additive_backfilled_and_reversible(monkeypatch)
         ("position_lot_state", "amortized_book_carrying_base"),
         ("position_lot_state", "amortized_book_carrying_local"),
     ]
+    restore_index = operations.index(("execute", rollback_restore))
+    first_drop_index = next(
+        index for index, operation in enumerate(operations) if operation[0] == "drop_column"
+    )
+    assert restore_index < first_drop_index
