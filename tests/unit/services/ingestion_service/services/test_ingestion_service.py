@@ -147,6 +147,8 @@ async def test_publish_transactions_keeps_linked_multi_security_legs_together(
         instrument_id="I-SOURCE",
         security_id="S-SOURCE",
         transaction_type="EXCHANGE_OUT",
+        target_transaction_reference="CA-IN-1",
+        target_instrument_id="I-TARGET",
         **common,
     )
     target = Transaction(
