@@ -2,12 +2,15 @@
 
 from collections.abc import Sequence, Set
 from decimal import Decimal
+from typing import cast
 
 from portfolio_common.domain.calculation_lineage import CalculationLineage
 from portfolio_common.domain.cost_basis_method import CostBasisMethod
 
 from ...domain.cost_basis import (
     CostBasisTransaction,
+    LotDisposalDestination,
+    LotDisposalDestinationType,
     LotDisposalReceiptState,
     LotDisposalReceiptStatus,
     TransactionLotDisposal,
@@ -106,4 +109,44 @@ def _receipt_state(
         consumed_cost_base=disposal.result.cost_base,
         allocations=disposal.result.allocations,
         disposal_calculation_lineage=disposal_lineage,
+        destination=_internal_lot_destination(transaction),
+    )
+
+
+_INTERNAL_LOT_DISPOSAL_TYPES = frozenset(
+    {
+        "EXCHANGE_OUT",
+        "MERGER_OUT",
+        "REPLACEMENT_OUT",
+    }
+)
+
+
+def _internal_lot_destination(
+    transaction: CostBasisTransaction,
+) -> LotDisposalDestination | None:
+    if transaction.transaction_type not in _INTERNAL_LOT_DISPOSAL_TYPES:
+        return None
+    target_transaction_id = getattr(transaction, "target_transaction_reference", None)
+    target_instrument_id = transaction.target_instrument_id
+    missing_fields = tuple(
+        field_name
+        for field_name, value in (
+            ("target_transaction_reference", target_transaction_id),
+            ("target_instrument_id", target_instrument_id),
+        )
+        if not isinstance(value, str) or not value.strip()
+    )
+    if missing_fields:
+        raise ValueError(
+            f"{transaction.transaction_type} disposal destination requires "
+            + " and ".join(missing_fields)
+            + f": {transaction.transaction_id}"
+        )
+    normalized_target_transaction_id = cast(str, target_transaction_id).strip()
+    return LotDisposalDestination(
+        destination_type=LotDisposalDestinationType.INTERNAL_LOT,
+        target_transaction_id=normalized_target_transaction_id,
+        target_lot_id=f"LOT-{normalized_target_transaction_id}",
+        target_instrument_id=cast(str, target_instrument_id).strip(),
     )
