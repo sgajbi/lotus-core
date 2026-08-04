@@ -45,6 +45,9 @@ def test_cashflow_rule_contract_for_core_business_flows(db_engine):
     position_level_expectations = {
         "BUY": "INVESTMENT_OUTFLOW",
         "SELL": "INVESTMENT_INFLOW",
+        "MATURITY_REDEMPTION": "INVESTMENT_INFLOW",
+        "CALL_REDEMPTION": "INVESTMENT_INFLOW",
+        "PARTIAL_REDEMPTION": "INVESTMENT_INFLOW",
         "DIVIDEND": "INCOME",
         "INTEREST": "INCOME",
         "ADJUSTMENT": "TRANSFER",
