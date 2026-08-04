@@ -2,8 +2,8 @@
   "schema_version": "2.0.0",
   "model_path": "src/libs/portfolio-common/portfolio_common/database_models.py",
   "expected_inventory": {
-    "numeric_columns": 137,
-    "tables": 35
+    "numeric_columns": 146,
+    "tables": 37
   },
   "profiles": {
     "finite": {
@@ -136,6 +136,8 @@
     "position_lot_state": "cost-basis-state",
     "lot_disposal_receipts": "cost-basis-state",
     "lot_disposal_allocations": "cost-basis-state",
+    "lot_basis_transfer_receipts": "cost-basis-state",
+    "lot_basis_transfer_allocations": "cost-basis-state",
     "cost_basis_processing_state": "cost-basis-state",
     "average_cost_pool_state": "cost-basis-state",
     "accrued_income_offset_state": "cost-basis-state",
@@ -300,6 +302,19 @@
       "amortized_cost_residual_base": {"profile": "nullable-nonnegative-finite", "rollout_status": "orm-enforced"},
       "amortized_cost_retained_rounding_local": {"profile": "nullable-finite", "rollout_status": "orm-enforced"},
       "amortized_cost_retained_rounding_base": {"profile": "nullable-finite", "rollout_status": "orm-enforced"}
+    },
+    "lot_basis_transfer_receipts": {
+      "transferred_cost_local": {"profile": "nonnegative-finite", "rollout_status": "orm-enforced"},
+      "transferred_cost_base": {"profile": "nonnegative-finite", "rollout_status": "orm-enforced"}
+    },
+    "lot_basis_transfer_allocations": {
+      "retained_quantity": {"profile": "positive-finite", "rollout_status": "orm-enforced"},
+      "source_cost_local_before": {"profile": "nonnegative-finite", "rollout_status": "orm-enforced"},
+      "source_cost_base_before": {"profile": "nonnegative-finite", "rollout_status": "orm-enforced"},
+      "transferred_cost_local": {"profile": "nonnegative-finite", "rollout_status": "orm-enforced"},
+      "transferred_cost_base": {"profile": "nonnegative-finite", "rollout_status": "orm-enforced"},
+      "retained_cost_local": {"profile": "nonnegative-finite", "rollout_status": "orm-enforced"},
+      "retained_cost_base": {"profile": "nonnegative-finite", "rollout_status": "orm-enforced"}
     },
     "cost_basis_processing_state": {
       "latest_quantity": {"profile": "nonnegative-finite", "rollout_status": "orm-enforced"}
