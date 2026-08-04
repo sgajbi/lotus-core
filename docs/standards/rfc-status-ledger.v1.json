@@ -6435,7 +6435,7 @@
       "supersedes": [],
       "superseded_by": [],
       "deprecation_relationship": "none",
-      "status_rationale": "Target-state contract under #478. Exact-scope authority, deterministic calculation, append-only source/profile/period schema, governed authority writer/loader, and lock-before-reload profile materialization are implemented foundations. External ingestion contracts, production transaction-boundary composition, correction replay, disposal integration, public query evidence, and production certification remain incomplete; the lifecycle capability catalog remains target_not_implemented."
+      "status_rationale": "Target-state contract under #478. Exact-scope authority, deterministic calculation, append-only source/profile/period schema, governed authority writer/loader, lock-before-reload profile materialization, current-book disposal integration, and one-command correction replay are implemented. Public query evidence, transfer/corporate-action lineage, redemption sequencing, wider recovery/load proof, downstream certification, and production certification remain incomplete; the lifecycle capability catalog remains target_not_implemented."
     },
     {
       "rfc_id": "RFC-CONVERSION-01",

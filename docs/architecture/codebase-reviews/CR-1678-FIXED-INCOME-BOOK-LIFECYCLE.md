@@ -88,8 +88,8 @@ rollback cannot silently substitute a divergent tax basis for carried book econo
 effective profile now also fails closed whenever a consumed source lot already has persisted carry.
 Carry decoration uses a detached open-lot snapshot, so a later profile gap or transaction
 validation failure cannot leak a partially applied accounting overlay into its input calculation.
-production activation still requires the correction-triggered replay and downstream certification
-tracked by #903/#478, so this schema separation does not claim current-book disposal support.
+Production certification still requires protected-PR and exact-main evidence tracked by #903/#478,
+so schema separation alone does not claim complete fixed-income lifecycle support.
 An additive `lot_amortized_cost_authority` ledger and application port now persist and reload all
 four required source families through one governed pattern. Per-source transaction locks,
 monotonic correction versions, exact-retry neutrality, canonical decimal/date payloads, composite
@@ -120,8 +120,20 @@ again at each boundary, and any later-boundary failure rolls back the authority 
 Assignment corrections that move `valid_from` now enumerate from the earlier of the previous and
 current assignment boundaries. The superseded earlier boundary is therefore rematerialized as
 parked evidence when a corrected assignment moves later instead of retaining obsolete economics.
-Persisted query reconstruction integrity, current-book disposal allocation, redemption integration,
-runtime recovery/load proof, and final capability certification remain open.
+Persisted query reconstruction integrity, redemption integration, wider runtime recovery/load proof,
+and final capability certification remain open.
+
+Correction replay is now active through one bounded source-lot command path. Assignment,
+clean-cost-basis, schedule, and yield corrections derive their replay start from the earlier of the
+previous and current validity boundaries. The authority transaction stages at most one command
+whose hash-bound identity excludes diagnostic correlation metadata. A dedicated ordered consumer
+validates the strict event and exact source-lot partition key, then republishes only the earliest
+affected booked transaction. The command id becomes the transaction repair-delivery claim, so
+Kafka redelivery may republish transport work but cannot repeat financial business work. Because
+that booked transaction is older than the current cost-basis checkpoint, canonical processing
+loads complete history, recalculates amortized carrying cost and realized P&L, and reconciles the
+affected disposal-receipt/open-lot/checkpoint/lineage suffix in one transaction. This avoids one
+Kafka command per disposal while retaining deterministic reversal/void evidence.
 
 FIFO and average-cost disposal now return immutable, ordered source-lot allocations while retaining
 the legacy aggregate tuple projection. Allocation construction proves exact quantity and dual-
@@ -229,9 +241,16 @@ Data Models wiki documents the staged ledgers while the capability wiki remains
   domain/application/repository/migration tests cover independent tax and accounting amounts,
   incremental and terminal disposal, basis-only carry retention, persistence reconstruction,
   lineage, and reversible migration; migration smoke, Ruff, and MyPy (275 sources) passed.
+- signed correction-replay commits `9a7720e49`, `5879145bb`, `2824e19ff`, and `41e0c3e8a`;
+  earlier-boundary coverage spans every authority family, stable repair identity is fail-closed at
+  the Kafka boundary, and one-anchor consumer/runtime topology is contract-checked at 12 partitions
+  with 12 maximum in-flight messages. Focused evidence includes 67 replay/idempotency tests, 17
+  correction event/consumer tests, 65 runtime/configuration tests, 41 amortized-disposal and receipt
+  lifecycle tests, 24 real-PostgreSQL authority/profile/receipt cases, focused Ruff, and focused
+  MyPy. The 1,001-disposal cohort retains one bulk profile read and no per-disposal command fan-out.
 
-Protected PR and exact-main evidence remain pending for this tranche. Runtime recovery/replay and
-load proof, verified query reconstruction, transfer/corporate-action lineage, redemption, and final
+Protected PR and exact-main evidence remain pending for this tranche. Wider runtime recovery/load
+proof, verified query reconstruction, transfer/corporate-action lineage, redemption, and final
 issue closure remain pending until their corresponding implementation slices exist. No
-capability-wiki change is warranted because fixed-income current-book disposal is not yet
+capability-wiki promotion is warranted because fixed-income lifecycle support is not yet
 production-certified.

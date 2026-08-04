@@ -8,13 +8,23 @@ Companion process document:
 
 ## Review entries
 
+CR-1678 correction-replay addendum (2026-08-04): assignment, clean-cost, schedule, and yield
+corrections now use the earlier prior/current validity boundary and stage one content-bound,
+source-lot-keyed command. A dedicated 12-partition/12-capacity consumer republishes only the
+earliest booked anchor with the stable command id as repair-delivery identity. Canonical checkpoint
+fencing then rebuilds and atomically reconciles the complete affected transaction/disposal suffix;
+duplicate delivery is a business no-op. The amortized-disposal overlay is active with this path.
+Public query, transfer/corporate-action, redemption, protected-PR, and exact-main certification
+remain open under their existing issues. Evidence is maintained in CR-1678 and #903.
+
 CR-1678 addendum (2026-08-04): fixed-income open-lot state now persists accounting carrying
 amount independently from strategy/tax acquisition basis and retains that carry across basis-only
 mutations. The upgrade retains legacy book carry while reconstructing FIFO tax basis from the
 source BUY's authoritative acquisition cost, and fails closed on missing or inconsistent evidence.
 Legacy scopes with zero-quantity spin-off/demerger basis transfers also fail closed because their
 adjusted tax basis cannot be reconstructed from the former combined state. Correction-triggered
-booked-disposal replay and production activation remain open under #903/#478. Fallible carry
+booked-disposal replay and local runtime activation are now implemented under #903; protected-PR
+and exact-main certification remain open. Fallible carry
 decoration now uses a detached lot-state snapshot so failure cannot mutate the input calculation.
 Evidence and validation are maintained in the linked CR-1678 review document.
 
