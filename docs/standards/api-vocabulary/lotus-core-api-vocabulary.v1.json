@@ -13,7 +13,7 @@
       "openApiVersion": "3.1.0"
     }
   ],
-  "generatedAt": "2026-08-04T10:54:38.261725+00:00",
+  "generatedAt": "2026-08-04T11:33:41.498045+00:00",
   "attributeCatalog": [
     {
       "semanticId": "lotus.accepted_count",
@@ -2438,6 +2438,22 @@
       ]
     },
     {
+      "semanticId": "lotus.destination_type",
+      "canonicalTerm": "destination_type",
+      "preferredName": "destination_type",
+      "description": "lot disposal receipt response field: destination type.",
+      "example": {
+        "id": "OBJ_001"
+      },
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
       "semanticId": "lotus.details",
       "canonicalTerm": "details",
       "preferredName": "details",
@@ -2930,6 +2946,22 @@
       "preferredName": "external_cash_transaction_id",
       "description": "Linked upstream cash transaction id when cash_entry_mode is UPSTREAM_PROVIDED.",
       "example": "CASH-ENTRY-2026-0001",
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.external_destination_reference",
+      "canonicalTerm": "external_destination_reference",
+      "preferredName": "external_destination_reference",
+      "description": "lot disposal receipt response field: external destination reference.",
+      "example": {
+        "id": "OBJ_001"
+      },
       "type": "object",
       "locations": [
         "body"
@@ -9037,6 +9069,7 @@
         "body"
       ],
       "observedTypes": [
+        "object",
         "string"
       ]
     },
@@ -9065,6 +9098,7 @@
         "body"
       ],
       "observedTypes": [
+        "object",
         "string"
       ]
     },
@@ -15787,9 +15821,11 @@
           "consumed_cost_local",
           "consumed_quantity",
           "cost_basis_method",
+          "destination_type",
           "disposal_calculation_lineage",
           "disposal_timestamp",
           "disposal_transaction_id",
+          "external_destination_reference",
           "instrument_id",
           "portfolio_id",
           "previous_receipt_content_hash",
@@ -15802,6 +15838,9 @@
           "source_lot_id",
           "source_transaction_id",
           "status",
+          "target_instrument_id",
+          "target_lot_id",
+          "target_transaction_id",
           "transaction_calculation_lineage",
           "transaction_id",
           "transaction_type",
@@ -15895,6 +15934,46 @@
             "type": "string",
             "semanticId": "lotus.transaction_type",
             "attributeRef": "lotus.transaction_type"
+          },
+          {
+            "name": "destination_type",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.destination_type",
+            "attributeRef": "lotus.destination_type"
+          },
+          {
+            "name": "target_transaction_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.target_transaction_id",
+            "attributeRef": "lotus.target_transaction_id"
+          },
+          {
+            "name": "target_lot_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.target_lot_id",
+            "attributeRef": "lotus.target_lot_id"
+          },
+          {
+            "name": "target_instrument_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.target_instrument_id",
+            "attributeRef": "lotus.target_instrument_id"
+          },
+          {
+            "name": "external_destination_reference",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.external_destination_reference",
+            "attributeRef": "lotus.external_destination_reference"
           },
           {
             "name": "cost_basis_method",
