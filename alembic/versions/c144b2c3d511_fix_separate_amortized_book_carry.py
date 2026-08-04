@@ -41,9 +41,15 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """Remove independent book carrying values and restore the c143 constraints."""
+    """Restore the c143 combined carry representation, then remove independent values."""
 
     _drop_carry_constraints()
+    op.execute(
+        "UPDATE position_lot_state "
+        "SET lot_cost_local = amortized_book_carrying_local, "
+        "lot_cost_base = amortized_book_carrying_base "
+        "WHERE amortized_cost_profile_id IS NOT NULL"
+    )
     for column_name in reversed(_CARRY_COLUMNS):
         op.drop_column(_TABLE, column_name)
     _create_carry_constraints(include_independent_amounts=False)

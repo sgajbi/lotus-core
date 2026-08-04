@@ -88,6 +88,10 @@ async def apply_effective_amortized_cost_to_disposals(
 
     effective_profiles = await profiles.effective_as_of_many(tuple(requests_by_allocation.values()))
     if not effective_profiles:
+        _require_no_persisted_carry_for_disposals(
+            calculation.disposals,
+            calculation.source_transactions,
+        )
         return calculation
     if cost_basis_method is not CostBasisMethod.FIFO:
         raise ValueError("lot-level amortized cost requires FIFO source-lot identity")
@@ -150,6 +154,22 @@ async def apply_effective_amortized_cost_to_disposals(
         disposals=tuple(decorated_disposals),
         open_lot_states=open_lot_states,
     )
+
+
+def _require_no_persisted_carry_for_disposals(
+    disposals: tuple[TransactionLotDisposal, ...],
+    source_transactions: dict[str, CostBasisTransaction],
+) -> None:
+    """Reject a missing profile set when a consumed source lot already owns book carry."""
+
+    for disposal in disposals:
+        for allocation in disposal.result.allocations:
+            source_transaction = _required_transaction(
+                source_transactions,
+                allocation.source_transaction_id,
+            )
+            if getattr(source_transaction, "amortized_cost_carry_state", None) is not None:
+                raise ValueError("amortized-cost profile gap follows persisted carry state")
 
 
 def _decorate_allocation(
