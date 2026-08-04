@@ -16,6 +16,13 @@ from .economics import (
     calculate_redemption_economics,
     derive_redemption_principal_proceeds_local,
 )
+from .eligibility import (
+    REDEMPTION_ELIGIBLE_ASSET_CLASSES,
+    REDEMPTION_ELIGIBLE_PRODUCT_TYPES_BY_TRANSACTION,
+    RedemptionEligibilityError,
+    assert_redemption_command_eligible,
+    assert_redemption_settlement_date,
+)
 from .linked_event_validation import (
     RedemptionLinkedEventValidationError,
     RedemptionLinkedEventValidationReasonCode,
@@ -25,7 +32,10 @@ from .linked_event_validation import (
 
 __all__ = [
     "REDEMPTION_ACCRUED_INTEREST_COMPONENT",
+    "REDEMPTION_ELIGIBLE_ASSET_CLASSES",
+    "REDEMPTION_ELIGIBLE_PRODUCT_TYPES_BY_TRANSACTION",
     "REDEMPTION_TRANSACTION_TYPES",
+    "RedemptionEligibilityError",
     "RedemptionCalculationError",
     "RedemptionCalculationReasonCode",
     "RedemptionEconomics",
@@ -33,6 +43,8 @@ __all__ = [
     "RedemptionLinkedEventValidationReasonCode",
     "RedemptionTerms",
     "assert_linked_redemption_interest_unambiguous",
+    "assert_redemption_command_eligible",
+    "assert_redemption_settlement_date",
     "build_redemption_accrued_interest_component",
     "calculate_redemption_economics",
     "derive_redemption_principal_proceeds_local",

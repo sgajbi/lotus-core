@@ -20,6 +20,7 @@ def _transaction(transaction_type: str = "BUY") -> BookedTransaction:
         instrument_id="INST-001",
         security_id="SEC-001",
         transaction_date=datetime(2026, 4, 10, 9, 30, tzinfo=timezone.utc),
+        settlement_date=datetime(2026, 4, 12, 9, 30, tzinfo=timezone.utc),
         transaction_type=transaction_type,
         quantity=Decimal("10"),
         price=Decimal("25.50"),
@@ -96,6 +97,22 @@ _REDEMPTION_TYPES = (
     "CALL_REDEMPTION",
     "PARTIAL_REDEMPTION",
 )
+
+
+@pytest.mark.parametrize("transaction_type", _REDEMPTION_TYPES)
+def test_prepare_redemption_requires_source_owned_settlement_date(
+    transaction_type: str,
+) -> None:
+    with pytest.raises(ValueError, match="settlement_date is required"):
+        cost_basis_processing.prepare_cost_transaction(
+            replace(
+                _transaction(transaction_type),
+                settlement_date=None,
+                cash_entry_mode="UPSTREAM_PROVIDED",
+            ),
+            cost_basis_method=CostBasisMethod.FIFO,
+            instrument_reference_available=True,
+        )
 
 
 @pytest.mark.parametrize("transaction_type", _REDEMPTION_TYPES)

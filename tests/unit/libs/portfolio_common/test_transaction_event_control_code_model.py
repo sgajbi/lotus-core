@@ -8,6 +8,29 @@ from portfolio_common.events import TransactionEvent
 from pydantic import ValidationError
 
 
+@pytest.mark.parametrize(
+    "transaction_type",
+    ["MATURITY_REDEMPTION", "CALL_REDEMPTION", "PARTIAL_REDEMPTION"],
+)
+def test_transaction_event_requires_redemption_settlement_date(
+    transaction_type: str,
+) -> None:
+    with pytest.raises(ValidationError, match="settlement_date is required"):
+        TransactionEvent(
+            transaction_id="RED-NO-VALUE-DATE",
+            portfolio_id="PORT_META_001",
+            instrument_id="BOND-001",
+            security_id="BOND-001",
+            transaction_date=datetime(2026, 3, 1, 10, 0, tzinfo=timezone.utc),
+            transaction_type=transaction_type,
+            quantity=Decimal("100"),
+            price=Decimal(1),
+            gross_transaction_amount=Decimal("100"),
+            trade_currency="USD",
+            currency="USD",
+        )
+
+
 def test_transaction_event_normalizes_control_codes_without_defaulting() -> None:
     event = TransactionEvent(
         transaction_id="EVENT_CONTROL_001",
