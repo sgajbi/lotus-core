@@ -890,6 +890,10 @@ def test_repository_contract_classifies_inventory_and_persistence_semantics() ->
         for table in ("lot_amortized_cost_profiles", "lot_amortized_cost_periods")
         for column, classification in contract["tables"][table].items()
     }
+    lot_state_profiles = {
+        column: classification["profile"]
+        for column, classification in contract["tables"]["position_lot_state"].items()
+    }
     disposal_profiles = {
         table: {
             column: classification["profile"]
@@ -898,12 +902,12 @@ def test_repository_contract_classifies_inventory_and_persistence_semantics() ->
         for table in ("lot_disposal_receipts", "lot_disposal_allocations")
     }
 
-    assert report.numeric_column_count == 129
+    assert report.numeric_column_count == 131
     assert report.table_count == 35
-    assert report.bounded_numeric_count == 126
+    assert report.bounded_numeric_count == 128
     assert report.unbounded_numeric_count == 3
     assert report.domain_family_count == 11
-    assert report.orm_enforced_count == 129
+    assert report.orm_enforced_count == 131
     assert report.database_enforced_count == 0
     assert report.planned_count == 0
     assert transaction_profiles["quantity"] == "nonnegative-finite"
@@ -919,6 +923,8 @@ def test_repository_contract_classifies_inventory_and_persistence_semantics() ->
     assert amortized_cost_profiles["year_fraction"] == "positive-finite"
     assert amortized_cost_profiles["period_rate"] == "nullable-finite"
     assert amortized_cost_profiles["rounding_adjustment_local"] == "finite"
+    assert lot_state_profiles["amortized_book_carrying_local"] == ("nullable-nonnegative-finite")
+    assert lot_state_profiles["amortized_book_carrying_base"] == ("nullable-nonnegative-finite")
     assert disposal_profiles["lot_disposal_receipts"] == {
         "consumed_quantity": "nonnegative-finite",
         "consumed_cost_local": "nonnegative-finite",
