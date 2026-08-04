@@ -196,6 +196,7 @@ class ProcessTransactionUseCase:
                     transaction,
                     correlation_id=metadata.correlation_id,
                     traceparent=metadata.traceparent,
+                    reconcile_superseded_derived=correction_claimed,
                 )
             position_results = []
             locked_position_epochs: dict[tuple[str, str], int] = {}

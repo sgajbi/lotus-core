@@ -263,6 +263,29 @@ async def test_use_case_maps_missing_linked_cash_leg_to_terminal_error() -> None
     observer.calculated.assert_not_called()
 
 
+async def test_zero_net_upstream_redemption_needs_no_linked_cash_leg() -> None:
+    use_case, rules, _state, persistence, _events, _observer = _use_case()
+    transaction = _transaction(
+        transaction_type="MATURITY_REDEMPTION",
+        cash_entry_mode="UPSTREAM_PROVIDED",
+        principal_proceeds_local=Decimal("5"),
+        embedded_tax_amount_local=Decimal("4"),
+        trade_fee=Decimal("1"),
+    )
+    persistence.create.return_value = _stored_cashflow(transaction)
+
+    result = await use_case.process(
+        transaction,
+        event_id="transactions.persisted-0-43",
+        correlation_id=None,
+        traceparent=None,
+    )
+
+    assert result.cashflow_record_count == 1
+    rules.resolve.assert_awaited_once_with("MATURITY_REDEMPTION")
+    assert persistence.create.await_args.args[0].amount == Decimal(0)
+
+
 async def test_use_case_maps_invalid_settlement_economics_to_governed_rejection() -> None:
     use_case, _rules, _state, persistence, events, observer = _use_case()
 

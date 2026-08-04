@@ -82,6 +82,7 @@ class PreparedCostProcessingUseCase:
         reconciliation_repository: CorporateActionReconciliationRepository,
         effect_stager: CostProcessingEffectStagingPort,
         correlation_id: str,
+        reconcile_superseded_derived: bool = False,
     ) -> CostProcessingResult:
         """Execute the selected route and coordinate its settlement and delivery effects."""
 
@@ -115,6 +116,9 @@ class PreparedCostProcessingUseCase:
             reconciliation_repository=reconciliation_repository,
             effect_stager=effect_stager,
             correlation_id=correlation_id,
+            corrected_transaction_id=(
+                prepared.transaction.transaction_id if reconcile_superseded_derived else None
+            ),
             reconciliation_observer=self._reconciliation_observer,
         )
 

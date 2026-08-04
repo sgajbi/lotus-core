@@ -11,6 +11,7 @@ from src.services.portfolio_transaction_processing_service.app.application.cost_
     coordinate_cost_processing_effects,
 )
 from src.services.portfolio_transaction_processing_service.app.domain import BookedTransaction
+from src.services.portfolio_transaction_processing_service.app.domain.transaction import redemption
 from src.services.portfolio_transaction_processing_service.app.domain.transaction.fx import (
     FxContractInstrument,
 )
@@ -175,6 +176,48 @@ async def test_effect_coordination_supersedes_removed_redemption_interest_with_z
     assert zero_interest.gross_transaction_amount == Decimal(0)
     assert zero_interest.net_interest_amount == Decimal(0)
     assert zero_interest.epoch == 5
+
+
+@pytest.mark.asyncio
+async def test_correction_neutralizes_interest_child_after_leaving_redemption() -> None:
+    corrected = _transaction(
+        transaction_id="REDEMPTION-FAMILY-CORRECTED-01",
+        transaction_type="SELL",
+        epoch=6,
+    )
+    original = replace(
+        corrected,
+        transaction_type="MATURITY_REDEMPTION",
+        principal_proceeds_local=Decimal("100"),
+        accrued_interest_proceeds_local=Decimal("5"),
+        external_cash_transaction_id="REDEMPTION-FAMILY-CORRECTED-01-CASHLEG",
+    )
+    prior_interest = redemption.build_redemption_accrued_interest_component(original)
+    assert prior_interest is not None
+    transaction_state = AsyncMock(spec=CostBasisTransactionStatePort)
+    transaction_state.get_booked_transaction.side_effect = [None, prior_interest]
+
+    result = await coordinate_cost_processing_effects(
+        processed_transactions=[corrected],
+        instrument_updates=[],
+        source_epoch=6,
+        transaction_state=transaction_state,
+        reconciliation_repository=AsyncMock(spec=CorporateActionReconciliationRepository),
+        effect_stager=AsyncMock(spec=CostProcessingEffectStagingPort),
+        correlation_id="corr-redemption-family-corrected-01",
+        corrected_transaction_id=corrected.transaction_id,
+    )
+
+    assert [item.transaction_id for item in result.processed_transactions] == [
+        corrected.transaction_id,
+        prior_interest.transaction_id,
+    ]
+    neutralized = result.processed_transactions[1]
+    assert neutralized.gross_transaction_amount == Decimal(0)
+    assert neutralized.net_interest_amount == Decimal(0)
+    assert neutralized.external_cash_transaction_id is None
+    assert neutralized.epoch == 6
+    assert neutralized.calculation_lineage is not None
 
 
 @pytest.mark.asyncio

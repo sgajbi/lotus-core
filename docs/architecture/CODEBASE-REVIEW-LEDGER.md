@@ -1,5 +1,15 @@
 # Codebase Review Ledger
 
+CR-1678 correction-child addendum (2026-08-05): semantic correction now reconciles stable,
+Core-generated settlement and accrued-interest children only for the corrected source transaction.
+When corrected economics stop producing a child, the prior canonical child is validated, superseded
+with zero-valued evidence, and sent through the existing position/cashflow repair path; unrelated
+bookings gain no additional lookup. Exact-zero `UPSTREAM_PROVIDED` redemption may omit its cash-leg
+reference because no cash occurred, while explicit zero adjustments and every non-zero missing
+pair remain invalid. Focused proof and exact-head CI are maintained in CR-1678 and PR #910. No
+API/OpenAPI shape, schema, migration, Kafka, capability, central-context, skill-routing, or
+additional wiki truth changed.
+
 CR-1678 receipt-integrity addendum (2026-08-05): redemption principal cashflow classification now
 follows the signed principal component after settlement deductions. When deductions exceed
 principal, the component is an `INVESTMENT_OUTFLOW`; the separately linked accrued-interest

@@ -9,6 +9,7 @@ import pytest
 from src.services.portfolio_transaction_processing_service.app.domain.transaction import (
     BookedTransaction,
     CashEntryMode,
+    allows_omitted_upstream_cash_leg,
     assert_cash_entry_mode_supported,
     is_portfolio_level_cash_flow,
     is_upstream_provided_cash_entry_mode,
@@ -49,6 +50,29 @@ def test_resolve_cash_entry_mode_normalizes_known_values() -> None:
 def test_resolve_cash_entry_mode_rejects_unknown_values() -> None:
     with pytest.raises(ValueError, match="Unsupported cash_entry_mode"):
         resolve_cash_entry_mode("MANUAL")
+
+
+@pytest.mark.parametrize(
+    "transaction_type",
+    ["MATURITY_REDEMPTION", "CALL_REDEMPTION", "PARTIAL_REDEMPTION"],
+)
+def test_exact_zero_upstream_redemption_allows_omitted_cash_leg(
+    transaction_type: str,
+) -> None:
+    transaction = replace(
+        _transaction(transaction_type, "UPSTREAM_PROVIDED"),
+        principal_proceeds_local=Decimal("5"),
+        embedded_tax_amount_local=Decimal("4"),
+        trade_fee=Decimal("1"),
+    )
+
+    assert allows_omitted_upstream_cash_leg(transaction)
+    assert not allows_omitted_upstream_cash_leg(
+        replace(transaction, embedded_tax_amount_local=Decimal("3"))
+    )
+    assert not allows_omitted_upstream_cash_leg(
+        replace(transaction, cash_entry_mode="AUTO_GENERATE")
+    )
 
 
 @pytest.mark.parametrize(

@@ -418,6 +418,14 @@ Data Models wiki documents the staged ledgers while the capability wiki remains
   quantity, local cost, and base cost. The producer and reader share one versioned canonical
   payload contract, preventing independent serialization drift. No API/OpenAPI shape, schema,
   migration, Kafka, capability, central-context, skill-routing, or additional wiki truth changed.
+- correction-child proof: correction-only reconciliation now resolves deterministic generated
+  cash and accrued-interest children for the corrected source transaction. A child no longer
+  justified by corrected economics is identity-validated, persisted as zero-valued superseding
+  evidence, and emitted through the established position/cashflow repair path; ordinary bookings
+  incur no new child reads. Exact-zero `UPSTREAM_PROVIDED` redemption may truthfully omit a cash-leg
+  reference, while explicit zero adjustments and non-zero missing pairs remain rejected. No
+  API/OpenAPI shape, schema, migration, Kafka, capability, central-context, skill-routing, or
+  additional wiki truth changed.
 
 Protected PR and exact-main evidence remain pending for this tranche. Wider runtime recovery/load
 proof, complete corporate-action scenario coverage, redemption, and final issue closure remain

@@ -76,6 +76,28 @@ async def test_upstream_product_leg_requires_external_cash_transaction_id() -> N
     transactions.get_booked_transaction.assert_not_awaited()
 
 
+@pytest.mark.parametrize(
+    "transaction_type",
+    ["MATURITY_REDEMPTION", "CALL_REDEMPTION", "PARTIAL_REDEMPTION"],
+)
+async def test_exact_zero_upstream_redemption_omits_cash_leg(
+    transaction_type: str,
+) -> None:
+    transactions = AsyncMock(spec=SettlementTransactionLookupPort)
+    product_leg = replace(
+        _product_leg(),
+        transaction_type=transaction_type,
+        external_cash_transaction_id=None,
+        principal_proceeds_local=Decimal("5"),
+        embedded_tax_amount_local=Decimal("4"),
+        trade_fee=Decimal("1"),
+    )
+
+    await validate_upstream_cash_leg(product_leg=product_leg, transactions=transactions)
+
+    transactions.get_booked_transaction.assert_not_awaited()
+
+
 async def test_upstream_product_leg_fails_retryably_when_cash_leg_is_unavailable() -> None:
     transactions = AsyncMock(spec=SettlementTransactionLookupPort)
     transactions.get_booked_transaction.return_value = None

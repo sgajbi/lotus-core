@@ -12,6 +12,7 @@ from src.services.portfolio_transaction_processing_service.app.application impor
 )
 from src.services.portfolio_transaction_processing_service.app.domain.transaction import (
     BookedTransaction,
+    build_generated_settlement_cash_leg,
 )
 from src.services.portfolio_transaction_processing_service.app.ports import (
     SettlementTransactionLookupPort,
@@ -147,3 +148,37 @@ async def test_non_cash_linking_transaction_remains_unchanged() -> None:
     assert result.generated_cash_leg is None
     lookup.get_booked_transaction.assert_not_awaited()
     persistence.upsert_booked_transaction.assert_not_awaited()
+
+
+async def test_correction_neutralizes_obsolete_generated_cash_leg() -> None:
+    original = _product_leg(
+        transaction_id="REDEMPTION-CORRECTED-01",
+        transaction_type="MATURITY_REDEMPTION",
+        principal_proceeds_local=Decimal("100"),
+    )
+    prior_cash_leg = build_generated_settlement_cash_leg(original)
+    corrected = replace(
+        original,
+        embedded_tax_amount_local=Decimal("99"),
+        trade_fee=Decimal("1"),
+        external_cash_transaction_id=prior_cash_leg.transaction_id,
+    )
+    lookup = AsyncMock(spec=SettlementTransactionLookupPort)
+    lookup.get_booked_transaction.return_value = prior_cash_leg
+    persistence = AsyncMock(spec=SettlementTransactionPersistencePort)
+
+    result = await link_settlement_cash_leg(
+        product_leg=corrected,
+        transaction_lookup=lookup,
+        transaction_persistence=persistence,
+        reconcile_superseded_derived=True,
+    )
+
+    assert result.product_leg.external_cash_transaction_id is None
+    assert result.generated_cash_leg is not None
+    assert result.generated_cash_leg.transaction_id == prior_cash_leg.transaction_id
+    assert result.generated_cash_leg.gross_transaction_amount == Decimal(0)
+    assert persistence.upsert_booked_transaction.await_args_list == [
+        call(result.generated_cash_leg),
+        call(result.product_leg),
+    ]

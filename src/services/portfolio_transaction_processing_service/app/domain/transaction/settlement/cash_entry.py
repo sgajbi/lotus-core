@@ -50,6 +50,23 @@ def is_upstream_provided_cash_entry_mode(value: str | None) -> bool:
     return resolve_cash_entry_mode(value) is CashEntryMode.UPSTREAM_PROVIDED
 
 
+def allows_omitted_upstream_cash_leg(transaction: BookedTransaction) -> bool:
+    """Return whether an upstream-owned redemption truthfully has no cash leg.
+
+    Exact-zero redemption settlement is evidence that no cash movement occurred. The product
+    retains its upstream ownership mode, but must not reference or fabricate a zero adjustment.
+    """
+
+    if not is_upstream_provided_cash_entry_mode(transaction.cash_entry_mode):
+        return False
+    definition = get_transaction_type_definition(transaction.transaction_type)
+    return bool(
+        definition is not None
+        and definition.lifecycle_family == "redemption"
+        and calculate_settlement_cash_movement(transaction).signed_amount == 0
+    )
+
+
 def is_portfolio_level_cash_flow(transaction_type: str | None) -> bool:
     """Return whether a transaction is itself a portfolio-level cash flow."""
 

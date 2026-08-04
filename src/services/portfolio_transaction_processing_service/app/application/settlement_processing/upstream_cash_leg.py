@@ -3,6 +3,7 @@
 from ...domain.transaction import (
     ADJUSTMENT_TRANSACTION_TYPE,
     BookedTransaction,
+    allows_omitted_upstream_cash_leg,
     assert_cash_entry_mode_supported,
     assert_upstream_cash_leg_pairing,
     is_upstream_provided_cash_entry_mode,
@@ -32,6 +33,8 @@ async def validate_upstream_cash_leg(
 
     external_cash_transaction_id = (product_leg.external_cash_transaction_id or "").strip()
     if not external_cash_transaction_id:
+        if allows_omitted_upstream_cash_leg(product_leg):
+            return
         raise ValueError("UPSTREAM_PROVIDED requires external_cash_transaction_id on product leg.")
 
     cash_leg = await transactions.get_booked_transaction(
