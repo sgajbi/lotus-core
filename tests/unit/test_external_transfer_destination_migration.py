@@ -4,9 +4,7 @@ from pathlib import Path
 
 from portfolio_common.database_models import Transaction
 
-MIGRATION = Path(
-    "alembic/versions/c148b2c3d515_feat_add_external_transfer_destination.py"
-)
+MIGRATION = Path("alembic/versions/c148b2c3d515_feat_add_external_transfer_destination.py")
 
 
 def test_transaction_model_exposes_nullable_external_destination_reference() -> None:

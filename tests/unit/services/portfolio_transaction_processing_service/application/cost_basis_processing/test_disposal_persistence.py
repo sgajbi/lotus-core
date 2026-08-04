@@ -189,8 +189,9 @@ async def test_internal_lot_disposal_fails_closed_without_target_identity(
 
 
 @pytest.mark.asyncio
-async def test_transfer_out_records_governed_external_destination_without_internal_identity(
-) -> None:
+async def test_transfer_out_records_governed_external_destination_without_internal_identity() -> (
+    None
+):
     outgoing = _transaction("TRANSFER-OUT-EXTERNAL-01", 2)
     outgoing.transaction_type = "TRANSFER_OUT"
     outgoing.external_destination_reference = "  CUSTODIAN-ACCOUNT-7788  "
