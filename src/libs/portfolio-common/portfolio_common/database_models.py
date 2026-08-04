@@ -2488,6 +2488,11 @@ class LotDisposalReceiptRecord(Base):
     calculation_policy_version = Column(String, nullable=True)
     status = Column(String, nullable=False)
     void_reason = Column(String, nullable=True)
+    destination_type = Column(String, nullable=True)
+    target_transaction_id = Column(String, nullable=True)
+    target_lot_id = Column(String, nullable=True)
+    target_instrument_id = Column(String, nullable=True)
+    external_destination_reference = Column(String, nullable=True)
     consumed_quantity = Column(ExactNumeric(18, 10), nullable=False)
     consumed_cost_local = Column(ExactNumeric(18, 10), nullable=False)
     consumed_cost_base = Column(ExactNumeric(18, 10), nullable=False)
@@ -2534,6 +2539,22 @@ class LotDisposalReceiptRecord(Base):
         CheckConstraint(
             "cost_basis_method IN ('FIFO', 'AVCO')",
             name="ck_lot_disposal_receipt_method",
+        ),
+        CheckConstraint(
+            "(destination_type IS NULL AND target_transaction_id IS NULL "
+            "AND target_lot_id IS NULL AND target_instrument_id IS NULL "
+            "AND external_destination_reference IS NULL) OR "
+            "(destination_type = 'INTERNAL_LOT' "
+            "AND target_transaction_id = btrim(target_transaction_id) "
+            "AND target_transaction_id <> '' "
+            "AND target_lot_id = 'LOT-' || target_transaction_id "
+            "AND target_instrument_id = btrim(target_instrument_id) "
+            "AND target_instrument_id <> '' AND external_destination_reference IS NULL) OR "
+            "(destination_type = 'EXTERNAL_TRANSFER' "
+            "AND external_destination_reference = btrim(external_destination_reference) "
+            "AND external_destination_reference <> '' AND target_transaction_id IS NULL "
+            "AND target_lot_id IS NULL AND target_instrument_id IS NULL)",
+            name="ck_lot_disposal_receipt_destination",
         ),
         CheckConstraint(
             "(calculation_policy_id IS NULL AND calculation_policy_version IS NULL) "
@@ -2592,6 +2613,17 @@ class LotDisposalReceiptRecord(Base):
             "ix_lot_disposal_receipt_tx_version",
             "disposal_transaction_id",
             receipt_version.desc(),
+        ),
+        Index(
+            "ix_lot_disposal_receipt_target_tx_version",
+            "portfolio_id",
+            "target_transaction_id",
+            receipt_version.desc(),
+        ),
+        Index(
+            "ix_lot_disposal_receipt_external_destination",
+            "portfolio_id",
+            "external_destination_reference",
         ),
     )
 
