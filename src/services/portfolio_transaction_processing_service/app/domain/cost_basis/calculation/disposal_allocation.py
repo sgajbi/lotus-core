@@ -349,14 +349,16 @@ def _build_conserved_allocation_lineage(result: LotDisposalResult) -> Calculatio
         raise ValueError("source-lot base cost does not reconcile to disposal aggregate")
     return build_calculation_lineage(
         algorithm_id=_DISPOSAL_ALLOCATION_ALGORITHM_ID,
-        algorithm_version=1,
+        algorithm_version=2,
         intermediate_precision=COST_BASIS_STATE_LEDGER_OUTPUT_V1.working_precision,
-        input_payload={
-            "allocations": [
-                source_lot_disposal_allocation_payload(allocation)
-                for allocation in result.allocations
-            ]
-        },
+        input_payload=canonical_cost_basis_output_payload(
+            {
+                "allocations": [
+                    source_lot_disposal_allocation_payload(allocation)
+                    for allocation in result.allocations
+                ]
+            }
+        ),
         output_payload=canonical_cost_basis_output_payload(_disposal_output_payload(result)),
         numeric_output_policy=COST_BASIS_STATE_LEDGER_OUTPUT_V1.lineage_identity(),
     )
