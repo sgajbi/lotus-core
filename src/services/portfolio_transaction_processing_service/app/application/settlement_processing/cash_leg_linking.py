@@ -45,6 +45,8 @@ async def link_settlement_cash_leg(
     linked_product_leg = replace(
         product_leg,
         external_cash_transaction_id=generated_cash_leg.transaction_id,
+        economic_event_id=generated_cash_leg.economic_event_id,
+        linked_transaction_group_id=generated_cash_leg.linked_transaction_group_id,
     )
     await transaction_persistence.upsert_booked_transaction(linked_product_leg)
     return SettlementCashLegLinkingResult(
