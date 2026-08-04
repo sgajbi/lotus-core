@@ -9,6 +9,7 @@ from src.services.query_service.app.dependencies import (
     get_fx_rate_service,
     get_instrument_service,
     get_liquidity_ladder_service,
+    get_lot_basis_transfer_service,
     get_lot_disposal_service,
     get_market_price_service,
     get_reporting_service,
@@ -23,6 +24,9 @@ from src.services.query_service.app.services.fx_rate_service import FxRateServic
 from src.services.query_service.app.services.instrument_service import InstrumentService
 from src.services.query_service.app.services.liquidity_ladder_service import (
     PortfolioLiquidityLadderService,
+)
+from src.services.query_service.app.services.lot_basis_transfer_service import (
+    LotBasisTransferService,
 )
 from src.services.query_service.app.services.lot_disposal_service import LotDisposalService
 from src.services.query_service.app.services.price_service import MarketPriceService
@@ -84,6 +88,7 @@ def test_sorting_params_rejects_invalid_sort_order():
             ("reporting_repo", "cashflow_repo"),
         ),
         (get_market_price_service, MarketPriceService, ("repo",)),
+        (get_lot_basis_transfer_service, LotBasisTransferService, ("repo",)),
         (get_lot_disposal_service, LotDisposalService, ("repo",)),
         (get_reporting_service, ReportingService, ("repo",)),
         (get_sell_state_service, SellStateService, ("repo",)),
