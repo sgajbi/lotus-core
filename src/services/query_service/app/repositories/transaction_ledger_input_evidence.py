@@ -16,6 +16,7 @@ from .currency_query_expressions import currency_code_sql_expr
 
 _UTC_TIMESTAMP_FORMAT = 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'
 _ISO_DATE_FORMAT = "YYYY-MM-DD"
+_JSONB_BUILD_ARRAY_MAX_ARGUMENTS = 100
 
 
 def _canonical_evidence_value(value: Any, column_type: Any) -> Any:
@@ -38,10 +39,26 @@ def _model_values(model: Any, *, exclude: Iterable[str] = ()) -> tuple[Any, ...]
     )
 
 
+def _flat_jsonb_array(values: tuple[Any, ...]) -> Any:
+    """Build one flat array without exceeding PostgreSQL's function argument limit."""
+
+    chunks = tuple(
+        values[offset : offset + _JSONB_BUILD_ARRAY_MAX_ARGUMENTS]
+        for offset in range(0, len(values), _JSONB_BUILD_ARRAY_MAX_ARGUMENTS)
+    )
+    if not chunks:
+        return func.jsonb_build_array()
+
+    payload = func.jsonb_build_array(*chunks[0])
+    for chunk in chunks[1:]:
+        payload = payload.op("||")(func.jsonb_build_array(*chunk))
+    return payload
+
+
 def _ordered_jsonb_digest(*, values: tuple[Any, ...], order_by: tuple[Any, ...]) -> Any:
     """Return one fixed-width digest without returning source rows to the application."""
 
-    payload = func.jsonb_build_array(*values)
+    payload = _flat_jsonb_array(values)
     row_bytes = func.convert_to(cast(payload, Text), literal("UTF8"))
     row_digest = func.encode(func.sha256(row_bytes), literal("hex"))
     ordered_row_digests = func.string_agg(

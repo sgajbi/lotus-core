@@ -1,5 +1,16 @@
 # Codebase Review Ledger
 
+CR-1678 transaction-evidence addendum (2026-08-05): protected runtime validation exposed that the
+schema-derived transaction digest crossed PostgreSQL's 100-argument function limit after the
+additive redemption fields. Transaction-ledger reads therefore returned HTTP 500 even though
+booking and every focused contract shard passed. Evidence arrays are now built in bounded chunks
+and concatenated into the same flat JSON value before hashing, preserving every field and the
+existing digest contract. The shared helper protects transaction, cost, cashflow, and FX evidence
+as their schemas grow. Focused proof covers 25 repository unit cases, four real-PostgreSQL
+transaction-ledger evidence/snapshot cases, and the exact Docker endpoint smoke with 66 passed and
+zero failed. No API/OpenAPI shape, schema, migration, Kafka,
+capability, central-context, skill-routing, or wiki truth changed.
+
 CR-1678 zero-proceeds ingress addendum (2026-08-05): ingestion now represents
 `gross_transaction_amount` as non-negative and applies a transaction-family-aware rule: maturity,
 call, and partial redemption may carry truthful zero gross proceeds for a zero-price write-off,

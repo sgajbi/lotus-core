@@ -439,6 +439,16 @@ Data Models wiki documents the staged ledgers while the capability wiki remains
   product-family eligibility only; issuer schedules and entitlement determination remain upstream.
   No schema, migration, Kafka topology, capability promotion, central-context, skill-routing, or
   additional wiki truth changed.
+- protected runtime query proof: additive redemption columns pushed the schema-derived transaction
+  evidence payload beyond PostgreSQL's 100-argument function limit, causing the transaction-ledger
+  endpoint to return HTTP 500 and cascading into Docker smoke, latency, canonical validation, and
+  E2E failures. Evidence payloads are now assembled as bounded JSONB-array chunks and concatenated
+  into the same flat array before hashing, so every ledger field remains bound without changing the
+  digest algorithm. The same helper governs transaction, cost, cashflow, and FX evidence as their
+  schemas evolve. Validation: 25 focused repository unit cases and four real-PostgreSQL evidence,
+  mutation, snapshot, and session-format cases pass; the exact Docker endpoint smoke passes 66
+  assertions with zero failures. No API/OpenAPI shape, schema, migration, Kafka, capability,
+  central-context, skill-routing, or wiki truth changed.
 
 Protected PR and exact-main evidence remain pending for this tranche. Wider runtime recovery/load
 proof, complete corporate-action scenario coverage, redemption, and final issue closure remain

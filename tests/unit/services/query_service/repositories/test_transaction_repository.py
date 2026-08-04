@@ -579,7 +579,8 @@ async def test_get_transaction_ledger_input_evidence_applies_complete_scope_filt
     assert "transaction_ledger_cashflow_evidence" in compiled_query
     assert "transaction_ledger_fx_evidence" in compiled_query
     assert "string_agg" in compiled_query.lower()
-    assert "jsonb_build_array" in compiled_query.lower()
+    assert compiled_query.lower().count("jsonb_build_array") >= 5
+    assert " || " in compiled_query
     assert "timezone('UTC', transactions.transaction_date)" in compiled_query
     assert 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"' in compiled_query
     assert "to_char(transaction_ledger_ranked_fx_rates.rate_date, 'YYYY-MM-DD')" in compiled_query
