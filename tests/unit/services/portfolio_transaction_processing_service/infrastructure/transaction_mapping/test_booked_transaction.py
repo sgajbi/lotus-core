@@ -34,6 +34,13 @@ def _transaction() -> BookedTransaction:
         trade_currency="SGD",
         currency="SGD",
         linked_component_ids=("LEG-001", "LEG-002"),
+        redemption_price_type="PAR",
+        old_factor=Decimal("1"),
+        new_factor=Decimal("0.75"),
+        principal_proceeds_local=Decimal("255"),
+        accrued_interest_proceeds_local=Decimal("5"),
+        embedded_fee_amount_local=Decimal("1"),
+        embedded_tax_amount_local=Decimal("2"),
     )
 
 

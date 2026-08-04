@@ -1972,6 +1972,13 @@ class Transaction(Base):
     source_transaction_reference = Column(String, nullable=True, index=True)
     target_transaction_reference = Column(String, nullable=True, index=True)
     linked_cash_transaction_id = Column(String, nullable=True, index=True)
+    redemption_price_type = Column(String, nullable=True)
+    old_factor = Column(ExactNumeric(18, 10), nullable=True)
+    new_factor = Column(ExactNumeric(18, 10), nullable=True)
+    principal_proceeds_local = Column(ExactNumeric(18, 10), nullable=True)
+    accrued_interest_proceeds_local = Column(ExactNumeric(18, 10), nullable=True)
+    embedded_fee_amount_local = Column(ExactNumeric(18, 10), nullable=True)
+    embedded_tax_amount_local = Column(ExactNumeric(18, 10), nullable=True)
     has_synthetic_flow = Column(Boolean, nullable=True)
     synthetic_flow_effective_date = Column(Date, nullable=True, index=True)
     synthetic_flow_amount_local = Column(ExactNumeric(18, 10), nullable=True)
@@ -2054,6 +2061,26 @@ class Transaction(Base):
         CheckConstraint(
             "allocated_cost_basis_local >= 0 AND allocated_cost_basis_base >= 0",
             name="ck_transactions_allocated_basis_nonnegative",
+        ),
+        _finite_numeric_check_constraint(
+            "ck_transactions_redemption_values_finite",
+            "old_factor",
+            "new_factor",
+            "principal_proceeds_local",
+            "accrued_interest_proceeds_local",
+            "embedded_fee_amount_local",
+            "embedded_tax_amount_local",
+        ),
+        CheckConstraint(
+            "(old_factor IS NULL AND new_factor IS NULL) OR "
+            "(old_factor IS NOT NULL AND new_factor IS NOT NULL "
+            "AND old_factor > 0 AND new_factor >= 0 AND new_factor < old_factor)",
+            name="ck_transactions_redemption_factor_transition",
+        ),
+        CheckConstraint(
+            "principal_proceeds_local >= 0 AND accrued_interest_proceeds_local >= 0 "
+            "AND embedded_fee_amount_local >= 0 AND embedded_tax_amount_local >= 0",
+            name="ck_transactions_redemption_amounts_nonnegative",
         ),
         _finite_numeric_check_constraint(
             "ck_transactions_synthetic_flow_values_finite",

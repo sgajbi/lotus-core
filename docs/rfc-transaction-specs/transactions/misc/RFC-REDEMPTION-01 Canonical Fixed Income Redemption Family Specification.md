@@ -9,7 +9,7 @@
 - **Owner:** _TBD_
 - **Reviewers:** _TBD_
 - **Approvers:** _TBD_
-- **Last Updated:** _TBD_
+- **Last Updated:** 2026-08-04
 - **Effective Date:** _TBD_
 
 ### 1.1 Change Log
@@ -17,6 +17,15 @@
 | Version | Date | Author | Summary |
 |---|---|---|---|
 | 1.0.0 | _TBD_ | _TBD_ | Initial canonical redemption family specification |
+
+### 1.2 Implementation Status
+
+The RFC remains draft and redemption production booking remains fail closed. Issue #477 owns the
+acceptance evidence. The implemented foundation currently includes deterministic redemption
+economics and calculation lineage plus additive ingestion, event, ledger, and query fields for
+explicit principal, factor transitions, embedded accrued interest, fees, and taxes. Runtime lot
+consumption, linked cash-leg readiness, replay/recovery, and capacity proof remain required before
+the capability catalog may advertise production support.
 
 ---
 

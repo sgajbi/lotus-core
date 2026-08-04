@@ -350,6 +350,13 @@ class TransactionEvent(CoreEventModel):
     source_transaction_reference: Optional[str] = None
     target_transaction_reference: Optional[str] = None
     linked_cash_transaction_id: Optional[str] = None
+    redemption_price_type: Optional[str] = None
+    old_factor: Optional[Decimal] = None
+    new_factor: Optional[Decimal] = None
+    principal_proceeds_local: Optional[Decimal] = None
+    accrued_interest_proceeds_local: Optional[Decimal] = None
+    embedded_fee_amount_local: Optional[Decimal] = None
+    embedded_tax_amount_local: Optional[Decimal] = None
     has_synthetic_flow: Optional[bool] = None
     synthetic_flow_effective_date: Optional[date] = None
     synthetic_flow_amount_local: Optional[Decimal] = None

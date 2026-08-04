@@ -476,6 +476,41 @@ class TransactionRecord(BaseModel):
         description="Linked cash transaction id for CASH_IN_LIEU settlement.",
         examples=["CA-CIL-CASH-001"],
     )
+    redemption_price_type: Optional[str] = Field(
+        None,
+        description="Authority classification for a fixed-income redemption price.",
+        examples=["PAR"],
+    )
+    old_factor: Optional[Decimal] = Field(
+        None,
+        description="Instrument factor immediately before a partial redemption.",
+        examples=[1.0],
+    )
+    new_factor: Optional[Decimal] = Field(
+        None,
+        description="Instrument factor immediately after a partial redemption.",
+        examples=[0.75],
+    )
+    principal_proceeds_local: Optional[Decimal] = Field(
+        None,
+        description="Principal proceeds excluding accrued interest and deductions.",
+        examples=[2500.0],
+    )
+    accrued_interest_proceeds_local: Optional[Decimal] = Field(
+        None,
+        description="Accrued-interest proceeds embedded in redemption settlement.",
+        examples=[50.0],
+    )
+    embedded_fee_amount_local: Optional[Decimal] = Field(
+        None,
+        description="Fees embedded in redemption settlement.",
+        examples=[2.0],
+    )
+    embedded_tax_amount_local: Optional[Decimal] = Field(
+        None,
+        description="Taxes embedded in redemption settlement.",
+        examples=[3.0],
+    )
     has_synthetic_flow: Optional[bool] = Field(
         None,
         description="Whether this transaction carries position-level synthetic flow details.",

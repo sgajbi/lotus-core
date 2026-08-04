@@ -37,6 +37,13 @@ def _transaction_event() -> TransactionEvent:
         dependency_reference_ids=["DEP-1"],
         allocated_cost_basis_local=Decimal("50"),
         allocated_cost_basis_base=Decimal("55"),
+        redemption_price_type="PAR",
+        old_factor=Decimal("1"),
+        new_factor=Decimal("0.75"),
+        principal_proceeds_local=Decimal("255"),
+        accrued_interest_proceeds_local=Decimal("5"),
+        embedded_fee_amount_local=Decimal("1"),
+        embedded_tax_amount_local=Decimal("2"),
         epoch=7,
     )
 
@@ -62,6 +69,8 @@ def test_mapper_creates_immutable_domain_command_and_round_trips_event() -> None
     assert command.transaction.transaction_id == "TX-001"
     assert command.transaction.trade_currency == "SGD"
     assert command.transaction.linked_component_ids == ("COMP-1", "COMP-2")
+    assert command.transaction.new_factor == Decimal("0.75")
+    assert command.transaction.principal_proceeds_local == Decimal("255")
     assert command.metadata.event_id == "transactions.persisted-0-42"
     assert command.metadata.correlation_id == "corr-source"
     with pytest.raises(FrozenInstanceError):
