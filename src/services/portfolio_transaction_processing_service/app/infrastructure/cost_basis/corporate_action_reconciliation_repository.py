@@ -8,7 +8,7 @@ from portfolio_common.database_models import (
 )
 from portfolio_common.database_models import Transaction as DBTransaction
 from portfolio_common.events import TransactionEvent
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,6 +19,8 @@ from ...ports import (
     CorporateActionReconciliationKey,
 )
 from ..transaction_mapping.booked_transaction import to_booked_transaction
+
+CORPORATE_ACTION_RECONCILIATION_RESOLUTION_ACTOR = "corporate-action-reconciliation"
 
 
 class SqlAlchemyCorporateActionReconciliationRepository:
@@ -59,6 +61,7 @@ class SqlAlchemyCorporateActionReconciliationRepository:
                 },
             )
         )
+        await self._resolve_superseded_findings(evidence)
         for finding in evidence.findings:
             finding_stmt = pg_insert(FinancialReconciliationFinding).values(**asdict(finding))
             await self._session.execute(
@@ -83,3 +86,49 @@ class SqlAlchemyCorporateActionReconciliationRepository:
                     },
                 )
             )
+
+    async def _resolve_superseded_findings(
+        self,
+        evidence: CorporateActionReconciliationEvidence,
+    ) -> None:
+        linked_group = _required_summary_identity(
+            evidence,
+            "linked_transaction_group_id",
+        )
+        parent_reference = _required_summary_identity(
+            evidence,
+            "parent_event_reference",
+        )
+        stmt = (
+            update(FinancialReconciliationFinding)
+            .where(
+                FinancialReconciliationFinding.reconciliation_type
+                == evidence.run.reconciliation_type,
+                FinancialReconciliationFinding.portfolio_id == evidence.run.portfolio_id,
+                FinancialReconciliationFinding.run_id != evidence.run.run_id,
+                FinancialReconciliationFinding.resolution_state.in_(("OPEN", "IN_PROGRESS")),
+                FinancialReconciliationFinding.detail["linked_transaction_group_id"].as_string()
+                == linked_group,
+                FinancialReconciliationFinding.detail["parent_event_reference"].as_string()
+                == parent_reference,
+            )
+            .values(
+                resolution_state="RESOLVED",
+                resolution_actor=CORPORATE_ACTION_RECONCILIATION_RESOLUTION_ACTOR,
+                resolved_at=evidence.run.completed_at,
+            )
+        )
+        await self._session.execute(stmt)
+
+
+def _required_summary_identity(
+    evidence: CorporateActionReconciliationEvidence,
+    field_name: str,
+) -> str:
+    value = evidence.run.summary.get(field_name)
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(
+            f"Corporate-action reconciliation evidence is missing {field_name}: "
+            f"{evidence.run.run_id}"
+        )
+    return value.strip()

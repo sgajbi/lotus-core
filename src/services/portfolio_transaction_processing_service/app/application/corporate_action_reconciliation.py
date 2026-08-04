@@ -253,7 +253,11 @@ def build_corporate_action_reconciliation_evidence(
         dedupe_key=f"auto:{reconciliation_type}:{evidence_signature}",
         correlation_id=correlation_id,
         tolerance=reconciliation.basis_tolerance,
-        summary=_summary(reconciliation, missing_dependencies, linkage_findings),
+        summary={
+            **_summary(reconciliation, missing_dependencies, linkage_findings),
+            "linked_transaction_group_id": linked_transaction_group_id,
+            "parent_event_reference": parent_event_reference,
+        },
         failure_reason=None,
         completed_at=completed_at,
     )
