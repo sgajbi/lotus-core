@@ -198,7 +198,20 @@ def test_auto_generated_adjustment_cash_leg_types_are_registry_derived_and_imple
         and definition.settlement_behavior == "requires_cash_leg"
     }
 
-    assert GENERATED_CASH_LEG_TRANSACTION_TYPES == registry_auto_generate_types
+    assert registry_auto_generate_types <= GENERATED_CASH_LEG_TRANSACTION_TYPES
+    unpromoted_implemented_types = (
+        GENERATED_CASH_LEG_TRANSACTION_TYPES - registry_auto_generate_types
+    )
+    assert unpromoted_implemented_types == {
+        "CALL_REDEMPTION",
+        "MATURITY_REDEMPTION",
+        "PARTIAL_REDEMPTION",
+    }
+    assert all(
+        not TRANSACTION_TYPE_REGISTRY[code].production_booking_allowed
+        and TRANSACTION_TYPE_REGISTRY[code].calculation_support_status == "target_not_implemented"
+        for code in unpromoted_implemented_types
+    )
 
 
 def test_cost_sort_cash_dependency_sets_are_registry_compatible() -> None:

@@ -9,6 +9,7 @@ from ...domain.cost_basis import (
     CostBasisTransaction,
     LotBasisTransferReceiptState,
     LotBasisTransferReceiptStatus,
+    LotBasisTransferReconciliationScope,
     TransactionLotBasisTransfer,
 )
 from ...ports import CostBasisLotBasisTransferPort
@@ -53,7 +54,13 @@ async def persist_current_lot_basis_transfers(
         )
 
     await repository.reconcile_basis_transfer_receipts(
-        affected_source_transaction_ids=affected_ids,
+        reconciliation_scopes=tuple(
+            _reconciliation_scope(
+                transaction=transaction,
+                cost_basis_method=cost_basis_method,
+            )
+            for transaction in affected
+        ),
         receipt_states=tuple(
             _active_receipt_state(
                 source=transactions_by_id[source_id],
@@ -62,6 +69,31 @@ async def persist_current_lot_basis_transfers(
             )
             for source_id, transfer in transfers_by_source.items()
         ),
+    )
+
+
+def _reconciliation_scope(
+    *,
+    transaction: CostBasisTransaction,
+    cost_basis_method: CostBasisMethod,
+) -> LotBasisTransferReconciliationScope:
+    transaction_lineage = getattr(transaction, "calculation_lineage", None)
+    if not isinstance(transaction_lineage, CalculationLineage):
+        raise ValueError(
+            "Calculated transaction is missing governed calculation lineage for basis-transfer "
+            f"reconciliation: {transaction.transaction_id}"
+        )
+    return LotBasisTransferReconciliationScope(
+        source_transaction_id=transaction.transaction_id,
+        portfolio_id=transaction.portfolio_id,
+        source_instrument_id=transaction.instrument_id,
+        source_security_id=transaction.security_id,
+        transfer_timestamp=transaction.transaction_date,
+        transaction_type=transaction.transaction_type,
+        cost_basis_method=cost_basis_method,
+        calculation_policy_id=getattr(transaction, "calculation_policy_id", None),
+        calculation_policy_version=getattr(transaction, "calculation_policy_version", None),
+        transaction_calculation_lineage=transaction_lineage,
     )
 
 

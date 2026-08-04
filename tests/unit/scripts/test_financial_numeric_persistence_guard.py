@@ -901,13 +901,23 @@ def test_repository_contract_classifies_inventory_and_persistence_semantics() ->
         }
         for table in ("lot_disposal_receipts", "lot_disposal_allocations")
     }
+    basis_transfer_profiles = {
+        table: {
+            column: classification["profile"]
+            for column, classification in contract["tables"][table].items()
+        }
+        for table in ("lot_basis_transfer_receipts", "lot_basis_transfer_allocations")
+    }
 
-    assert report.numeric_column_count == 131
-    assert report.table_count == 35
-    assert report.bounded_numeric_count == 128
+    assert report.numeric_column_count == contract["expected_inventory"]["numeric_columns"]
+    assert report.table_count == contract["expected_inventory"]["tables"]
+    unbounded_count = sum(
+        shape == "exact-unbounded" for shape in contract["storage_shape_overrides"].values()
+    )
+    assert report.bounded_numeric_count == report.numeric_column_count - unbounded_count
     assert report.unbounded_numeric_count == 3
     assert report.domain_family_count == 11
-    assert report.orm_enforced_count == 131
+    assert report.orm_enforced_count == report.numeric_column_count
     assert report.database_enforced_count == 0
     assert report.planned_count == 0
     assert transaction_profiles["quantity"] == "nonnegative-finite"
@@ -945,4 +955,17 @@ def test_repository_contract_classifies_inventory_and_persistence_semantics() ->
         "amortized_cost_residual_base": "nullable-nonnegative-finite",
         "amortized_cost_retained_rounding_local": "nullable-finite",
         "amortized_cost_retained_rounding_base": "nullable-finite",
+    }
+    assert basis_transfer_profiles["lot_basis_transfer_receipts"] == {
+        "transferred_cost_local": "nonnegative-finite",
+        "transferred_cost_base": "nonnegative-finite",
+    }
+    assert basis_transfer_profiles["lot_basis_transfer_allocations"] == {
+        "retained_quantity": "positive-finite",
+        "source_cost_local_before": "nonnegative-finite",
+        "source_cost_base_before": "nonnegative-finite",
+        "transferred_cost_local": "nonnegative-finite",
+        "transferred_cost_base": "nonnegative-finite",
+        "retained_cost_local": "nonnegative-finite",
+        "retained_cost_base": "nonnegative-finite",
     }

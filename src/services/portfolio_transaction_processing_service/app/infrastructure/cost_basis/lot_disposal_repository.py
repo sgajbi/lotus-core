@@ -11,8 +11,6 @@ from portfolio_common.database_models import (
     LotDisposalReceiptRecord,
 )
 from portfolio_common.domain.calculation_lineage import (
-    CalculationLineage,
-    calculation_lineage_from_payload,
     canonical_content_hash,
 )
 from portfolio_common.domain.cost_basis_method import CostBasisMethod
@@ -31,6 +29,7 @@ from ...domain.cost_basis.calculation.disposal_allocation import (
     source_lot_disposal_allocation_payload,
 )
 from ...domain.cost_basis.state_lineage import canonical_cost_basis_output_payload
+from .receipt_integrity import receipt_version_content_hash, required_calculation_lineage
 
 
 class CorruptLotDisposalReceiptError(ValueError):
@@ -247,7 +246,7 @@ def _verified_state(
             cost_basis_method=CostBasisMethod(str(record.cost_basis_method)),
             calculation_policy_id=cast(str | None, record.calculation_policy_id),
             calculation_policy_version=cast(str | None, record.calculation_policy_version),
-            transaction_calculation_lineage=_required_lineage(
+            transaction_calculation_lineage=required_calculation_lineage(
                 record.transaction_calculation_lineage,
                 "transaction calculation lineage",
             ),
@@ -257,7 +256,7 @@ def _verified_state(
             consumed_cost_base=record.consumed_cost_base,
             allocations=tuple(_verified_allocation(record, item) for item in allocations),
             disposal_calculation_lineage=(
-                _required_lineage(
+                required_calculation_lineage(
                     record.disposal_calculation_lineage,
                     "disposal calculation lineage",
                 )
@@ -313,13 +312,6 @@ def _verified_allocation(
     return allocation
 
 
-def _required_lineage(payload: object, context: str) -> CalculationLineage:
-    lineage = calculation_lineage_from_payload(payload)
-    if lineage is None:
-        raise ValueError(f"{context} is required")
-    return lineage
-
-
 def _amortized_cost_evidence(
     receipt: LotDisposalReceiptRecord,
     record: LotDisposalAllocationRecord,
@@ -369,7 +361,7 @@ def _amortized_cost_evidence(
         residual_cost_base=record.amortized_cost_residual_base,
         retained_rounding_residual_local=(record.amortized_cost_retained_rounding_local),
         retained_rounding_residual_base=record.amortized_cost_retained_rounding_base,
-        calculation_lineage=_required_lineage(
+        calculation_lineage=required_calculation_lineage(
             record.amortized_cost_calculation_lineage,
             "amortized-cost allocation calculation lineage",
         ),
@@ -511,16 +503,11 @@ def _receipt_content_hash(
     receipt_version: int,
     previous_receipt_content_hash: str | None,
 ) -> str:
-    return cast(
-        str,
-        canonical_content_hash(
-            {
-                "previous_receipt_content_hash": previous_receipt_content_hash,
-                "receipt_id": state.receipt_id,
-                "receipt_version": receipt_version,
-                "semantic_content_hash": state.semantic_content_hash,
-            }
-        ),
+    return receipt_version_content_hash(
+        receipt_id=state.receipt_id,
+        semantic_content_hash=state.semantic_content_hash,
+        receipt_version=receipt_version,
+        previous_receipt_content_hash=previous_receipt_content_hash,
     )
 
 

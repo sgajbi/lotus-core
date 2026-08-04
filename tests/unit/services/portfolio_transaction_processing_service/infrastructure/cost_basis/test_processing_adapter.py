@@ -32,6 +32,7 @@ from src.services.portfolio_transaction_processing_service.app.ports import (
     CostBasisAverageCostPoolPort,
     CostBasisFxRatePort,
     CostBasisInstrumentReference,
+    CostBasisLotBasisTransferPort,
     CostBasisLotDisposalPort,
     CostBasisLotStatePort,
     CostBasisPortfolioReference,
@@ -80,6 +81,7 @@ async def test_cost_adapter_maps_domain_and_returns_every_processed_leg() -> Non
     processing_state = AsyncMock(spec=CostBasisProcessingStatePort)
     average_cost_pools = AsyncMock(spec=CostBasisAverageCostPoolPort)
     lot_disposals = AsyncMock(spec=CostBasisLotDisposalPort)
+    lot_basis_transfers = AsyncMock(spec=CostBasisLotBasisTransferPort)
     lot_states = AsyncMock(spec=CostBasisLotStatePort)
     income_offsets = AsyncMock(spec=AccruedIncomeOffsetStatePort)
     reconciliation_repository = AsyncMock(spec=CorporateActionReconciliationRepository)
@@ -93,6 +95,7 @@ async def test_cost_adapter_maps_domain_and_returns_every_processed_leg() -> Non
         repository=repository,
         average_cost_pools=average_cost_pools,
         lot_disposals=lot_disposals,
+        lot_basis_transfers=lot_basis_transfers,
         lot_states=lot_states,
         amortized_cost_profiles=AsyncMock(spec=LotAmortizedCostProfilePort),
         income_offsets=income_offsets,
@@ -121,6 +124,7 @@ async def test_cost_adapter_maps_domain_and_returns_every_processed_leg() -> Non
     assert build_call["fx_rates"] is fx_rates
     assert build_call["average_cost_pools"] is average_cost_pools
     assert build_call["lot_disposals"] is lot_disposals
+    assert build_call["lot_basis_transfers"] is lot_basis_transfers
     assert build_call["lot_states"] is lot_states
     assert build_call["income_offsets"] is income_offsets
     assert build_call["processing_state"] is processing_state
@@ -148,6 +152,7 @@ async def test_cost_adapter_maps_missing_reference_data_to_retryable_application
     processing_state = AsyncMock(spec=CostBasisProcessingStatePort)
     average_cost_pools = AsyncMock(spec=CostBasisAverageCostPoolPort)
     lot_disposals = AsyncMock(spec=CostBasisLotDisposalPort)
+    lot_basis_transfers = AsyncMock(spec=CostBasisLotBasisTransferPort)
     lot_states = AsyncMock(spec=CostBasisLotStatePort)
     income_offsets = AsyncMock(spec=AccruedIncomeOffsetStatePort)
     reconciliation_repository = AsyncMock(spec=CorporateActionReconciliationRepository)
@@ -157,6 +162,7 @@ async def test_cost_adapter_maps_missing_reference_data_to_retryable_application
         repository=repository,
         average_cost_pools=average_cost_pools,
         lot_disposals=lot_disposals,
+        lot_basis_transfers=lot_basis_transfers,
         lot_states=lot_states,
         amortized_cost_profiles=AsyncMock(spec=LotAmortizedCostProfilePort),
         income_offsets=income_offsets,
@@ -209,6 +215,7 @@ async def test_cost_adapter_maps_settlement_rejection_to_non_retryable_error() -
     processing_state = AsyncMock(spec=CostBasisProcessingStatePort)
     average_cost_pools = AsyncMock(spec=CostBasisAverageCostPoolPort)
     lot_disposals = AsyncMock(spec=CostBasisLotDisposalPort)
+    lot_basis_transfers = AsyncMock(spec=CostBasisLotBasisTransferPort)
     lot_states = AsyncMock(spec=CostBasisLotStatePort)
     income_offsets = AsyncMock(spec=AccruedIncomeOffsetStatePort)
     reconciliation_repository = AsyncMock(spec=CorporateActionReconciliationRepository)
@@ -225,6 +232,7 @@ async def test_cost_adapter_maps_settlement_rejection_to_non_retryable_error() -
         repository=repository,
         average_cost_pools=average_cost_pools,
         lot_disposals=lot_disposals,
+        lot_basis_transfers=lot_basis_transfers,
         lot_states=lot_states,
         amortized_cost_profiles=AsyncMock(spec=LotAmortizedCostProfilePort),
         income_offsets=income_offsets,

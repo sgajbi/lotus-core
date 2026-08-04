@@ -23,6 +23,33 @@ class LotBasisTransferReceiptStatus(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
+class LotBasisTransferReconciliationScope:
+    """Current calculated source context used when prior transfer evidence is removed."""
+
+    source_transaction_id: str
+    portfolio_id: str
+    source_instrument_id: str
+    source_security_id: str
+    transfer_timestamp: datetime
+    transaction_type: str
+    cost_basis_method: CostBasisMethod
+    calculation_policy_id: str | None
+    calculation_policy_version: str | None
+    transaction_calculation_lineage: CalculationLineage
+
+    def __post_init__(self) -> None:
+        for field_name in (
+            "source_transaction_id",
+            "portfolio_id",
+            "source_instrument_id",
+            "source_security_id",
+            "transaction_type",
+        ):
+            _normalize_required_text(self, field_name)
+        _validate_shared_receipt_context(self)
+
+
+@dataclass(frozen=True, slots=True)
 class LotBasisTransferReceiptState:
     """Closed semantic payload used to append one basis-transfer receipt version."""
 
@@ -58,13 +85,7 @@ class LotBasisTransferReceiptState:
             "source_security_id",
             "transaction_type",
         ):
-            value = getattr(self, field_name)
-            if not isinstance(value, str):
-                raise TypeError(f"{field_name} must be a string")
-            normalized = value.strip()
-            if not normalized:
-                raise ValueError(f"{field_name} must be nonblank")
-            object.__setattr__(self, field_name, normalized)
+            _normalize_required_text(self, field_name)
         if self.source_transaction_id == self.target_transaction_id:
             raise ValueError("source and target transaction ids must differ")
         if self.target_lot_id != f"LOT-{self.target_transaction_id}":
@@ -78,18 +99,7 @@ class LotBasisTransferReceiptState:
                 "target_instrument_id",
                 normalized_target_instrument or None,
             )
-        if not isinstance(self.transfer_timestamp, datetime):
-            raise TypeError("transfer_timestamp must be a datetime")
-        if self.transfer_timestamp.tzinfo is None or self.transfer_timestamp.utcoffset() is None:
-            raise ValueError("transfer_timestamp must be timezone-aware")
-        if not isinstance(self.cost_basis_method, CostBasisMethod):
-            raise TypeError("cost_basis_method must be a CostBasisMethod")
-        self._normalize_optional_policy("calculation_policy_id")
-        self._normalize_optional_policy("calculation_policy_version")
-        if (self.calculation_policy_id is None) != (self.calculation_policy_version is None):
-            raise ValueError("calculation policy ID and version must be supplied together")
-        if not isinstance(self.transaction_calculation_lineage, CalculationLineage):
-            raise TypeError("transaction_calculation_lineage must be a CalculationLineage")
+        _validate_shared_receipt_context(self)
         if not isinstance(self.status, LotBasisTransferReceiptStatus):
             raise TypeError("status must be a LotBasisTransferReceiptStatus")
         self._require_nonnegative_decimal(self.transferred_cost_local, "transferred_cost_local")
@@ -150,6 +160,44 @@ class LotBasisTransferReceiptState:
             ),
         )
 
+    @classmethod
+    def voided_from(
+        cls,
+        *,
+        previous: LotBasisTransferReceiptState,
+        scope: LotBasisTransferReconciliationScope,
+        reason: str,
+    ) -> LotBasisTransferReceiptState:
+        """Build a zero-economics successor using current lineage and prior target identity."""
+
+        if (
+            previous.source_transaction_id != scope.source_transaction_id
+            or previous.portfolio_id != scope.portfolio_id
+            or previous.source_security_id != scope.source_security_id
+        ):
+            raise ValueError("basis-transfer reconciliation scope changed receipt identity")
+        return cls(
+            source_transaction_id=scope.source_transaction_id,
+            target_transaction_id=previous.target_transaction_id,
+            target_lot_id=previous.target_lot_id,
+            portfolio_id=scope.portfolio_id,
+            source_instrument_id=scope.source_instrument_id,
+            source_security_id=scope.source_security_id,
+            target_instrument_id=previous.target_instrument_id,
+            transfer_timestamp=scope.transfer_timestamp,
+            transaction_type=scope.transaction_type,
+            cost_basis_method=scope.cost_basis_method,
+            calculation_policy_id=scope.calculation_policy_id,
+            calculation_policy_version=scope.calculation_policy_version,
+            transaction_calculation_lineage=scope.transaction_calculation_lineage,
+            status=LotBasisTransferReceiptStatus.VOIDED,
+            transferred_cost_local=Decimal(0),
+            transferred_cost_base=Decimal(0),
+            allocations=(),
+            basis_transfer_calculation_lineage=None,
+            void_reason=reason,
+        )
+
     def _validate_lifecycle_shape(self) -> None:
         if self.status is LotBasisTransferReceiptStatus.ACTIVE:
             if not self.allocations:
@@ -185,14 +233,6 @@ class LotBasisTransferReceiptState:
             raise ValueError("voided basis-transfer receipt requires a nonblank reason")
         object.__setattr__(self, "void_reason", self.void_reason.strip())
 
-    def _normalize_optional_policy(self, field_name: str) -> None:
-        value = getattr(self, field_name)
-        if value is None:
-            return
-        if not isinstance(value, str):
-            raise TypeError(f"{field_name} must be a string or None")
-        object.__setattr__(self, field_name, value.strip() or None)
-
     @staticmethod
     def _require_nonnegative_decimal(value: object, field_name: str) -> None:
         if not isinstance(value, Decimal):
@@ -215,3 +255,35 @@ class LotBasisTransferReceiptState:
             "transferred_cost_base": allocation.transferred_cost_base,
             "transferred_cost_local": allocation.transferred_cost_local,
         }
+
+
+def _normalize_required_text(value: object, field_name: str) -> None:
+    raw = getattr(value, field_name)
+    if not isinstance(raw, str):
+        raise TypeError(f"{field_name} must be a string")
+    normalized = raw.strip()
+    if not normalized:
+        raise ValueError(f"{field_name} must be nonblank")
+    object.__setattr__(value, field_name, normalized)
+
+
+def _validate_shared_receipt_context(value: object) -> None:
+    transfer_timestamp = getattr(value, "transfer_timestamp")
+    if not isinstance(transfer_timestamp, datetime):
+        raise TypeError("transfer_timestamp must be a datetime")
+    if transfer_timestamp.tzinfo is None or transfer_timestamp.utcoffset() is None:
+        raise ValueError("transfer_timestamp must be timezone-aware")
+    if not isinstance(getattr(value, "cost_basis_method"), CostBasisMethod):
+        raise TypeError("cost_basis_method must be a CostBasisMethod")
+    for field_name in ("calculation_policy_id", "calculation_policy_version"):
+        raw = getattr(value, field_name)
+        if raw is not None:
+            if not isinstance(raw, str):
+                raise TypeError(f"{field_name} must be a string or None")
+            object.__setattr__(value, field_name, raw.strip() or None)
+    if (getattr(value, "calculation_policy_id") is None) != (
+        getattr(value, "calculation_policy_version") is None
+    ):
+        raise ValueError("calculation policy ID and version must be supplied together")
+    if not isinstance(getattr(value, "transaction_calculation_lineage"), CalculationLineage):
+        raise TypeError("transaction_calculation_lineage must be a CalculationLineage")

@@ -2,7 +2,10 @@
 
 from typing import Protocol
 
-from ...domain.cost_basis import LotBasisTransferReceiptState
+from ...domain.cost_basis import (
+    LotBasisTransferReceiptState,
+    LotBasisTransferReconciliationScope,
+)
 
 
 class CostBasisLotBasisTransferPort(Protocol):
@@ -11,7 +14,7 @@ class CostBasisLotBasisTransferPort(Protocol):
     async def reconcile_basis_transfer_receipts(
         self,
         *,
-        affected_source_transaction_ids: tuple[str, ...],
+        reconciliation_scopes: tuple[LotBasisTransferReconciliationScope, ...],
         receipt_states: tuple[LotBasisTransferReceiptState, ...],
     ) -> None:
         """Reconcile versioned evidence without rewriting prior receipt versions."""
