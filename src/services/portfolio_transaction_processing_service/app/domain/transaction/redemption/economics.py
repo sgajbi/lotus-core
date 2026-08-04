@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from decimal import Decimal
 from enum import StrEnum
-from typing import cast
+from typing import Never, cast
 
 from portfolio_common.domain.calculation_lineage import (
     CalculationLineage,
@@ -250,12 +250,6 @@ def _validated_inputs(terms: RedemptionTerms) -> RedemptionTerms:
 def _resolve_redeemed_quantity(terms: RedemptionTerms) -> Decimal:
     explicit = terms.redeemed_quantity
     factor_quantity = _factor_redeemed_quantity(terms)
-    if explicit is None and factor_quantity is None:
-        _fail(
-            RedemptionCalculationReasonCode.MISSING_QUANTITY_AUTHORITY,
-            "redeemed_quantity",
-            "redeemed quantity or a complete old/new factor transition is required.",
-        )
     if explicit is not None and factor_quantity is not None:
         _require_within_tolerance(
             explicit,
@@ -264,8 +258,16 @@ def _resolve_redeemed_quantity(terms: RedemptionTerms) -> Decimal:
             code=RedemptionCalculationReasonCode.QUANTITY_AUTHORITY_MISMATCH,
             field="redeemed_quantity",
         )
-    quantity = explicit if explicit is not None else factor_quantity
-    assert quantity is not None
+    if explicit is None:
+        if factor_quantity is None:
+            _fail(
+                RedemptionCalculationReasonCode.MISSING_QUANTITY_AUTHORITY,
+                "redeemed_quantity",
+                "redeemed quantity or a complete old/new factor transition is required.",
+            )
+        quantity = factor_quantity
+    else:
+        quantity = explicit
     if quantity > terms.position_quantity:
         _fail(
             RedemptionCalculationReasonCode.QUANTITY_EXCEEDS_POSITION,
@@ -296,23 +298,24 @@ def _resolve_redeemed_quantity(terms: RedemptionTerms) -> Decimal:
 
 
 def _factor_redeemed_quantity(terms: RedemptionTerms) -> Decimal | None:
-    if terms.old_factor is None and terms.new_factor is None:
+    old_factor = terms.old_factor
+    new_factor = terms.new_factor
+    if old_factor is None and new_factor is None:
         return None
-    if terms.old_factor is None or terms.new_factor is None:
+    if old_factor is None or new_factor is None:
         _fail(
             RedemptionCalculationReasonCode.INCOMPLETE_FACTOR_AUTHORITY,
             "old_factor",
             "old_factor and new_factor must be supplied together.",
         )
-    assert terms.old_factor is not None and terms.new_factor is not None
     if (
-        not isinstance(terms.old_factor, Decimal)
-        or not isinstance(terms.new_factor, Decimal)
-        or not terms.old_factor.is_finite()
-        or not terms.new_factor.is_finite()
-        or terms.old_factor <= Decimal(0)
-        or terms.new_factor < Decimal(0)
-        or terms.new_factor >= terms.old_factor
+        not isinstance(old_factor, Decimal)
+        or not isinstance(new_factor, Decimal)
+        or not old_factor.is_finite()
+        or not new_factor.is_finite()
+        or old_factor <= Decimal(0)
+        or new_factor < Decimal(0)
+        or new_factor >= old_factor
     ):
         _fail(
             RedemptionCalculationReasonCode.INVALID_FACTOR_TRANSITION,
@@ -321,9 +324,7 @@ def _factor_redeemed_quantity(terms: RedemptionTerms) -> Decimal | None:
         )
     policy = TRANSACTION_COST_LEDGER_OUTPUT_V1
     with policy.arithmetic_context():
-        factor_quantity = (
-            terms.position_quantity * (terms.old_factor - terms.new_factor) / terms.old_factor
-        )
+        factor_quantity = terms.position_quantity * (old_factor - new_factor) / old_factor
     return cast(
         Decimal,
         policy.normalize(
@@ -388,5 +389,5 @@ def _lineage_input(terms: RedemptionTerms) -> dict[str, object]:
     return {field: getattr(terms, field) for field in terms.__dataclass_fields__}
 
 
-def _fail(code: RedemptionCalculationReasonCode, field: str, message: str) -> None:
+def _fail(code: RedemptionCalculationReasonCode, field: str, message: str) -> Never:
     raise RedemptionCalculationError(code, field=field, message=message)
