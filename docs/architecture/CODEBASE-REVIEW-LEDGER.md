@@ -1,5 +1,16 @@
 # Codebase Review Ledger
 
+CR-1678 reciprocal-leg addendum (2026-08-04): quantity-consuming merger, exchange, and replacement
+groups now validate exact source/target type, reciprocal transaction references, and both instrument
+identities through one order-independent domain policy. The existing reconciliation repository
+loads the complete linked group once and writes a distinct quantity-transfer result; a set-based
+supersession update resolves findings from valid source-before-target processing when the complete
+group later passes. A PostgreSQL exchange lifecycle proves initial incomplete evidence, final
+balanced evidence, resolved finding actor/time, immutable source allocations, target-lot identity,
+and duplicate neutrality. No schema, migration, API/OpenAPI, runtime topology, README, central
+context, skill, or wiki truth changed. Partial internal transfer, redemption, protected PR, and
+exact-main closure remain open under #481/#477.
+
 CR-1678 external-transfer addendum (2026-08-04): `TRANSFER_OUT` now requires exactly one explicit
 destination. Internal transfers bind a target transaction/lot/instrument; external transfers carry
 an opaque governed reference through ingestion, event, booked-domain, transaction-ledger, receipt,
