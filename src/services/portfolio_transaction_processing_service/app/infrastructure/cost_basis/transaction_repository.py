@@ -113,9 +113,22 @@ BOOKED_TRANSACTION_FIELD_NAMES = tuple(field.name for field in fields(BookedTran
 BOOKED_TRANSACTION_PERSISTENCE_EXCLUDE_FIELDS = frozenset(
     {"id", "epoch", "brokerage", "stamp_duty", "exchange_fee", "gst", "other_fees"}
 )
+BOOKED_TRANSACTION_EXPLICIT_NULL_FIELDS = frozenset(
+    {"external_cash_transaction_id", "linked_component_ids"}
+)
 
 
-def _booked_transaction_payload(transaction: BookedTransaction) -> dict[str, Any]:
+def _booked_transaction_payload(
+    transaction: BookedTransaction,
+    *,
+    fields_to_clear: frozenset[str] = frozenset(),
+) -> dict[str, Any]:
+    unsupported_clear_fields = fields_to_clear - BOOKED_TRANSACTION_EXPLICIT_NULL_FIELDS
+    if unsupported_clear_fields:
+        raise ValueError(
+            "Unsupported booked-transaction clear fields: "
+            f"{', '.join(sorted(unsupported_clear_fields))}."
+        )
     payload = {
         field_name: value
         for field_name in BOOKED_TRANSACTION_FIELD_NAMES
@@ -126,6 +139,7 @@ def _booked_transaction_payload(transaction: BookedTransaction) -> dict[str, Any
     calculation_lineage = payload.get("calculation_lineage")
     if isinstance(calculation_lineage, CalculationLineage):
         payload["calculation_lineage"] = calculation_lineage.lineage_payload()
+    payload.update(dict.fromkeys(fields_to_clear))
     return payload
 
 
@@ -293,10 +307,18 @@ class SqlAlchemyCostBasisTransactionRepository:
             return None
         return _to_persisted_booked_transaction(transaction)
 
-    async def upsert_booked_transaction(self, transaction: BookedTransaction) -> BookedTransaction:
+    async def upsert_booked_transaction(
+        self,
+        transaction: BookedTransaction,
+        *,
+        fields_to_clear: frozenset[str] = frozenset(),
+    ) -> BookedTransaction:
         """Upsert and return the final canonical booked transaction row."""
 
-        transaction_values = _booked_transaction_payload(transaction)
+        transaction_values = _booked_transaction_payload(
+            transaction,
+            fields_to_clear=fields_to_clear,
+        )
         stmt = pg_insert(DBTransaction).values(**transaction_values)
         update_fields = [
             field_name

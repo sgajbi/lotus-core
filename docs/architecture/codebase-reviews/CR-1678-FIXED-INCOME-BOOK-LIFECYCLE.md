@@ -421,8 +421,10 @@ Data Models wiki documents the staged ledgers while the capability wiki remains
 - correction-child proof: correction-only reconciliation now resolves deterministic generated
   cash and accrued-interest children for the corrected source transaction. A child no longer
   justified by corrected economics is identity-validated, persisted as zero-valued superseding
-  evidence, and emitted through the established position/cashflow repair path; ordinary bookings
-  incur no new child reads. Exact-zero `UPSTREAM_PROVIDED` redemption may truthfully omit a cash-leg
+  evidence, and emitted through the established position/cashflow repair path. Cleared product and
+  component links are explicitly persisted as SQL `NULL`, avoiding sparse-upsert retention of stale
+  references; ordinary bookings incur no new child reads. Exact-zero `UPSTREAM_PROVIDED` redemption
+  may truthfully omit a cash-leg
   reference, while explicit zero adjustments and non-zero missing pairs remain rejected. No
   API/OpenAPI shape, schema, migration, Kafka, capability, central-context, skill-routing, or
   additional wiki truth changed.

@@ -180,5 +180,8 @@ async def test_correction_neutralizes_obsolete_generated_cash_leg() -> None:
     assert result.generated_cash_leg.gross_transaction_amount == Decimal(0)
     assert persistence.upsert_booked_transaction.await_args_list == [
         call(result.generated_cash_leg),
-        call(result.product_leg),
+        call(
+            result.product_leg,
+            fields_to_clear=frozenset({"external_cash_transaction_id"}),
+        ),
     ]

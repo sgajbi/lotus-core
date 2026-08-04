@@ -65,6 +65,7 @@ async def coordinate_cost_processing_effects(
             transaction_type in REDEMPTION_TRANSACTION_TYPES
             or linking.product_leg.transaction_id == corrected_transaction_id
         )
+        prior_interest = None
         if accrued_interest is None and reconcile_prior_interest:
             prior_interest = await transaction_state.get_booked_transaction(
                 redemption_accrued_interest_transaction_id(linking.product_leg.transaction_id),
@@ -83,7 +84,22 @@ async def coordinate_cost_processing_effects(
                     )
                 )
         if accrued_interest is not None:
-            await transaction_state.upsert_booked_transaction(accrued_interest)
+            fields_to_clear = (
+                frozenset(
+                    field_name
+                    for field_name in (
+                        "external_cash_transaction_id",
+                        "linked_component_ids",
+                    )
+                    if getattr(accrued_interest, field_name) is None
+                )
+                if prior_interest is not None
+                else frozenset()
+            )
+            await transaction_state.upsert_booked_transaction(
+                accrued_interest,
+                fields_to_clear=fields_to_clear,
+            )
             emitted_transactions.append(
                 _with_source_epoch(accrued_interest, source_epoch=source_epoch)
             )

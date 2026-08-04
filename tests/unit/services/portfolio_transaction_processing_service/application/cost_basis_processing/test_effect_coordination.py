@@ -218,6 +218,9 @@ async def test_correction_neutralizes_interest_child_after_leaving_redemption() 
     assert neutralized.external_cash_transaction_id is None
     assert neutralized.epoch == 6
     assert neutralized.calculation_lineage is not None
+    assert transaction_state.upsert_booked_transaction.await_args.kwargs == {
+        "fields_to_clear": frozenset({"external_cash_transaction_id", "linked_component_ids"})
+    }
 
 
 @pytest.mark.asyncio

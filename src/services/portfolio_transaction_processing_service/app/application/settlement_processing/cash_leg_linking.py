@@ -54,7 +54,10 @@ async def link_settlement_cash_leg(
             )
         if neutralized_cash_leg is not None:
             unlinked_product_leg = replace(product_leg, external_cash_transaction_id=None)
-            await transaction_persistence.upsert_booked_transaction(unlinked_product_leg)
+            await transaction_persistence.upsert_booked_transaction(
+                unlinked_product_leg,
+                fields_to_clear=frozenset({"external_cash_transaction_id"}),
+            )
             return SettlementCashLegLinkingResult(
                 product_leg=unlinked_product_leg,
                 generated_cash_leg=neutralized_cash_leg,
