@@ -80,7 +80,11 @@ async def test_save_evidence_maps_typed_records() -> None:
             dedupe_key="auto:corporate_action_bundle_a:01",
             correlation_id="corr-ca-01",
             tolerance=Decimal("0.01"),
-            summary={"passed": False},
+            summary={
+                "passed": False,
+                "linked_transaction_group_id": "LTG-CA-01",
+                "parent_event_reference": "CA-PARENT-01",
+            },
             failure_reason=None,
             completed_at=completed_at,
         ),
@@ -110,14 +114,46 @@ async def test_save_evidence_maps_typed_records() -> None:
 
     await repository.save_evidence(evidence)
 
-    assert db_session.execute.await_count == 2
+    assert db_session.execute.await_count == 3
     run_statement = db_session.execute.await_args_list[0].args[0]
-    finding_statement = db_session.execute.await_args_list[1].args[0]
+    resolution_statement = db_session.execute.await_args_list[1].args[0]
+    finding_statement = db_session.execute.await_args_list[2].args[0]
     assert run_statement.compile().params["run_id"] == "recon-ca-01"
     assert run_statement.compile().params["completed_at"] == completed_at
+    compiled_resolution = str(resolution_statement.compile(compile_kwargs={"literal_binds": True}))
+    assert "resolution_state='RESOLVED'" in compiled_resolution.replace(" ", "")
+    assert "LTG-CA-01" in compiled_resolution
+    assert "CA-PARENT-01" in compiled_resolution
     assert finding_statement.compile().params["finding_id"] == "finding-ca-01"
     assert finding_statement.compile().params["severity"] == "ERROR"
     assert finding_statement.compile().params["owner"] == "CORPORATE_ACTION_OPERATIONS"
     assert finding_statement.compile().params["resolution_state"] == "OPEN"
     assert finding_statement.compile().params["tolerance"] == Decimal("0.01")
     assert finding_statement.compile().params["observed_delta"] == Decimal("-40")
+
+
+async def test_save_evidence_rejects_missing_group_identity() -> None:
+    db_session = AsyncMock()
+    repository = SqlAlchemyCorporateActionReconciliationRepository(db_session)
+    completed_at = datetime(2026, 4, 10, 12, 0, tzinfo=UTC)
+    evidence = CorporateActionReconciliationEvidence(
+        run=CorporateActionReconciliationRunEvidence(
+            run_id="recon-ca-invalid",
+            reconciliation_type="corporate_action_bundle_a",
+            portfolio_id="PORT_CA_01",
+            business_date=date(2026, 4, 10),
+            epoch=9,
+            status="COMPLETED",
+            requested_by="cost-calculator",
+            dedupe_key="auto:corporate_action_bundle_a:invalid",
+            correlation_id=None,
+            tolerance=Decimal("0.01"),
+            summary={"passed": True},
+            failure_reason=None,
+            completed_at=completed_at,
+        ),
+        findings=(),
+    )
+
+    with pytest.raises(ValueError, match="linked_transaction_group_id"):
+        await repository.save_evidence(evidence)

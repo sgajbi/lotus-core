@@ -103,6 +103,8 @@ def test_balanced_evidence_has_no_findings_and_preserves_run_contract() -> None:
         "missing_cash_basis_count": 0,
         "missing_dependency_count": 0,
         "linkage_finding_count": 0,
+        "linked_transaction_group_id": "LTG-CA-DEM-01",
+        "parent_event_reference": "CA-PARENT-DEM-01",
     }
     assert evidence.findings == ()
 
