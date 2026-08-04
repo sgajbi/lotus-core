@@ -36,6 +36,63 @@ def test_transaction_model_success():
     assert transaction.created_at.tzinfo is not None
 
 
+def test_transaction_model_preserves_canonical_redemption_terms() -> None:
+    transaction = Transaction(
+        transaction_id="RED-001",
+        portfolio_id="PORT-001",
+        instrument_id="BOND-001",
+        security_id="BOND-001",
+        transaction_date="2026-08-04T00:00:00Z",
+        transaction_type="PARTIAL_REDEMPTION",
+        quantity="25",
+        price="100",
+        gross_transaction_amount="2500",
+        trade_currency="USD",
+        currency="USD",
+        redemption_price_type=" par ",
+        old_factor="1",
+        new_factor="0.75",
+        principal_proceeds_local="2500",
+        accrued_interest_proceeds_local="50",
+        embedded_fee_amount_local="2",
+        embedded_tax_amount_local="3",
+    )
+
+    assert transaction.redemption_price_type == "PAR"
+    assert transaction.old_factor == Decimal("1")
+    assert transaction.new_factor == Decimal("0.75")
+    assert transaction.principal_proceeds_local == Decimal("2500")
+    assert transaction.accrued_interest_proceeds_local == Decimal("50")
+
+
+@pytest.mark.parametrize(
+    ("old_factor", "new_factor"),
+    [("1", None), (None, "0.75"), ("1", "1"), ("1", "1.01")],
+)
+def test_transaction_model_rejects_invalid_redemption_factor_shape(
+    old_factor: str | None,
+    new_factor: str | None,
+) -> None:
+    payload = {
+        "transaction_id": "RED-INVALID",
+        "portfolio_id": "PORT-001",
+        "instrument_id": "BOND-001",
+        "security_id": "BOND-001",
+        "transaction_date": "2026-08-04T00:00:00Z",
+        "transaction_type": "PARTIAL_REDEMPTION",
+        "quantity": "25",
+        "price": "100",
+        "gross_transaction_amount": "2500",
+        "trade_currency": "USD",
+        "currency": "USD",
+        "old_factor": old_factor,
+        "new_factor": new_factor,
+    }
+
+    with pytest.raises(ValidationError, match="factor"):
+        Transaction(**payload)
+
+
 @pytest.mark.parametrize(
     ("field_name", "value"),
     [

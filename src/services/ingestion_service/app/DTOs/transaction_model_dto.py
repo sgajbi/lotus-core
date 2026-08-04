@@ -585,6 +585,37 @@ class Transaction(BaseModel):
             "other corporate-action settlement entries."
         ),
     )
+    redemption_price_type: Optional[str] = Field(
+        default=None,
+        json_schema_extra={"example": "PAR"},
+        description="Authority classification for the fixed-income redemption price.",
+    )
+    old_factor: Optional[PositiveDecimal] = Field(
+        default=None,
+        json_schema_extra={"example": "1.0"},
+        description="Factor immediately before a governed partial-redemption transition.",
+    )
+    new_factor: Optional[NonNegativeDecimal] = Field(
+        default=None,
+        json_schema_extra={"example": "0.75"},
+        description="Factor immediately after a governed partial-redemption transition.",
+    )
+    principal_proceeds_local: Optional[NonNegativeDecimal] = Field(
+        default=None,
+        description="Explicit principal proceeds, excluding accrued interest, fees, and taxes.",
+    )
+    accrued_interest_proceeds_local: Optional[NonNegativeDecimal] = Field(
+        default=None,
+        description="Accrued-interest proceeds embedded in the redemption cash settlement.",
+    )
+    embedded_fee_amount_local: Optional[NonNegativeDecimal] = Field(
+        default=None,
+        description="Fees embedded in the redemption cash settlement.",
+    )
+    embedded_tax_amount_local: Optional[NonNegativeDecimal] = Field(
+        default=None,
+        description="Taxes embedded in the redemption cash settlement.",
+    )
     has_synthetic_flow: Optional[bool] = Field(
         default=None,
         json_schema_extra={"example": True},
@@ -714,6 +745,7 @@ class Transaction(BaseModel):
         "spot_exposure_model",
         "fx_realized_pnl_mode",
         "child_role",
+        "redemption_price_type",
         "synthetic_flow_valuation_method",
         "synthetic_flow_classification",
         "synthetic_flow_price_source",
@@ -732,9 +764,12 @@ class Transaction(BaseModel):
         value: Decimal | None,
         info: ValidationInfo,
     ) -> Decimal | None:
-        return require_transaction_persistence_precision(
-            value,
-            field_name=info.field_name,
+        return cast(
+            Decimal | None,
+            require_transaction_persistence_precision(
+                value,
+                field_name=info.field_name,
+            ),
         )
 
     @model_validator(mode="after")
@@ -746,4 +781,16 @@ class Transaction(BaseModel):
             ),
             field_name="trade_fee",
         )
+        return self
+
+    @model_validator(mode="after")
+    def _validate_redemption_factor_transition(self) -> "Transaction":
+        if (self.old_factor is None) != (self.new_factor is None):
+            raise ValueError("old_factor and new_factor must be supplied together")
+        if (
+            self.old_factor is not None
+            and self.new_factor is not None
+            and self.new_factor >= self.old_factor
+        ):
+            raise ValueError("new_factor must be less than old_factor")
         return self
