@@ -7,6 +7,7 @@ from ...domain.transaction import (
     build_generated_settlement_cash_leg,
     should_generate_settlement_cash_leg,
 )
+from ...domain.transaction.redemption import is_generated_redemption_accrued_interest
 from ...ports.settlement import (
     SettlementTransactionLookupPort,
     SettlementTransactionPersistencePort,
@@ -29,6 +30,9 @@ async def link_settlement_cash_leg(
     transaction_persistence: SettlementTransactionPersistencePort,
 ) -> SettlementCashLegLinkingResult:
     """Validate or generate the product's linked settlement cash transaction."""
+
+    if is_generated_redemption_accrued_interest(product_leg):
+        return SettlementCashLegLinkingResult(product_leg=product_leg, generated_cash_leg=None)
 
     await validate_upstream_cash_leg(
         product_leg=product_leg,

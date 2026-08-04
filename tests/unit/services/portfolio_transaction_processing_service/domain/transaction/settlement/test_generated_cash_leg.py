@@ -107,7 +107,7 @@ def test_generated_redemption_cash_leg_separates_principal_interest_and_deductio
     assert cash_leg.originating_transaction_type == transaction_type
 
 
-def test_generated_redemption_cash_leg_rejects_exhausted_proceeds() -> None:
+def test_generated_redemption_cash_leg_omits_exactly_exhausted_proceeds() -> None:
     transaction = replace(
         _dividend_transaction(),
         transaction_type="MATURITY_REDEMPTION",
@@ -116,12 +116,9 @@ def test_generated_redemption_cash_leg_rejects_exhausted_proceeds() -> None:
         trade_fee=Decimal("1"),
     )
 
-    with pytest.raises(SettlementCashValidationError) as raised:
+    assert not should_generate_settlement_cash_leg(transaction)
+    with pytest.raises(GeneratedCashLegError):
         build_generated_settlement_cash_leg(transaction)
-
-    assert raised.value.reason_code is (
-        SettlementCashRejectionReasonCode.REDEMPTION_NON_POSITIVE_NET_SETTLEMENT
-    )
 
 
 @pytest.mark.parametrize(

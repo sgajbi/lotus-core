@@ -12,6 +12,10 @@ from ...domain.cost_basis import (
 )
 from ...domain.transaction import BookedTransaction
 from ...domain.transaction.fx import FxContractInstrument
+from ...domain.transaction.redemption import (
+    assert_linked_redemption_interest_unambiguous,
+    requires_linked_redemption_interest_history,
+)
 from ...ports import (
     AccruedIncomeOffsetStatePort,
     CorporateActionReconciliationObserver,
@@ -150,6 +154,10 @@ class PreparedCostProcessingUseCase:
             transaction.portfolio_id,
             transaction.security_id,
         )
+        preloaded_transaction_history = await _preload_linked_redemption_history(
+            transaction=transaction,
+            transaction_state=transaction_state,
+        )
         calculation = await CostBasisCalculationCoordinator(
             transactions=transaction_state,
             average_cost_pools=average_cost_pools,
@@ -163,6 +171,7 @@ class PreparedCostProcessingUseCase:
             portfolio_base_currency=portfolio.base_currency,
             instrument=instrument,
             cost_basis_method=prepared.cost_basis_method,
+            preloaded_transaction_history=preloaded_transaction_history,
         )
         _raise_for_calculation_errors(calculation.errored)
         if _AMORTIZED_DISPOSAL_RUNTIME_ENABLED:
@@ -212,6 +221,27 @@ class PreparedCostProcessingUseCase:
             processing_state=processing_state,
         )
         return tuple(persisted_transactions)
+
+
+async def _preload_linked_redemption_history(
+    *,
+    transaction: BookedTransaction,
+    transaction_state: CostBasisTransactionStatePort,
+) -> list[BookedTransaction] | None:
+    """Load once and validate a linked-income group before cost or lot mutation."""
+
+    if not requires_linked_redemption_interest_history(transaction):
+        return None
+    history = await transaction_state.get_transaction_history(
+        portfolio_id=transaction.portfolio_id,
+        security_id=transaction.security_id,
+        exclude_id=transaction.transaction_id,
+    )
+    assert_linked_redemption_interest_unambiguous(
+        incoming=transaction,
+        history=history,
+    )
+    return history
 
 
 async def _persist_processing_checkpoint(

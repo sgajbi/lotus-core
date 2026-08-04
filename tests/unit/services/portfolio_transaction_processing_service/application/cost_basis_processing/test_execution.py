@@ -1,5 +1,6 @@
 """Verify prepared cost-processing execution across calculation and FX routes."""
 
+from dataclasses import replace
 from datetime import datetime, timezone
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock
@@ -19,6 +20,9 @@ from src.services.portfolio_transaction_processing_service.app.domain import Boo
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
     CostCalculationError,
 )
+from src.services.portfolio_transaction_processing_service.app.domain.transaction import (
+    redemption as redemption_domain,
+)
 from src.services.portfolio_transaction_processing_service.app.domain.transaction.fx import (
     FxContractInstrument,
 )
@@ -37,6 +41,11 @@ from src.services.portfolio_transaction_processing_service.app.ports import (
     CostProcessingEffectStagingPort,
     CostProcessingResult,
     LotAmortizedCostProfilePort,
+)
+
+RedemptionLinkedEventValidationError = redemption_domain.RedemptionLinkedEventValidationError
+RedemptionLinkedEventValidationReasonCode = (
+    redemption_domain.RedemptionLinkedEventValidationReasonCode
 )
 
 
@@ -205,6 +214,115 @@ async def test_cost_basis_execution_acquires_key_lock_before_calculation(
         "lot-state",
         "checkpoint",
     ]
+
+
+@pytest.mark.asyncio
+async def test_cost_basis_execution_rejects_linked_interest_before_calculation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    redemption = replace(
+        _transaction(transaction_type="MATURITY_REDEMPTION"),
+        linked_transaction_group_id="GROUP-REDEMPTION-01",
+        accrued_interest_proceeds_local=Decimal("25"),
+    )
+    independent_interest = replace(
+        _transaction(transaction_type="INTEREST"),
+        transaction_id="INTEREST-EXECUTION-01",
+        linked_transaction_group_id="GROUP-REDEMPTION-01",
+    )
+    prepared = PreparedCostTransaction(
+        transaction=redemption,
+        transaction_type="MATURITY_REDEMPTION",
+        cost_basis_method=CostBasisMethod.FIFO,
+        route=CostProcessingRoute.COST_BASIS,
+    )
+    transaction_state = AsyncMock(spec=CostBasisTransactionStatePort)
+    transaction_state.get_transaction_history.return_value = [independent_interest]
+    processing_state = AsyncMock(spec=CostBasisProcessingStatePort)
+    coordinator = MagicMock()
+    monkeypatch.setattr(execution_module, "CostBasisCalculationCoordinator", coordinator)
+
+    with pytest.raises(RedemptionLinkedEventValidationError) as raised:
+        await PreparedCostProcessingUseCase()._calculate_cost_basis(
+            prepared=prepared,
+            portfolio=CostBasisPortfolioReference(
+                portfolio_id="PORT-COST-01",
+                base_currency="SGD",
+                cost_basis_method=CostBasisMethod.FIFO,
+            ),
+            instrument=CostBasisInstrumentReference(
+                security_id="SECURITY-01",
+                product_type="FIXED_INCOME",
+                asset_class="FIXED_INCOME",
+            ),
+            transaction_state=transaction_state,
+            average_cost_pools=AsyncMock(spec=CostBasisAverageCostPoolPort),
+            lot_disposals=AsyncMock(spec=CostBasisLotDisposalPort),
+            lot_basis_transfers=AsyncMock(spec=CostBasisLotBasisTransferPort),
+            lot_states=AsyncMock(spec=CostBasisLotStatePort),
+            amortized_cost_profiles=AsyncMock(spec=LotAmortizedCostProfilePort),
+            income_offsets=AsyncMock(spec=AccruedIncomeOffsetStatePort),
+            fx_rates=AsyncMock(spec=CostBasisFxRatePort),
+            processing_state=processing_state,
+        )
+
+    assert raised.value.reason_code is (
+        RedemptionLinkedEventValidationReasonCode.DUPLICATE_ACCRUED_INTEREST
+    )
+    processing_state.acquire_cost_basis_processing_lock.assert_awaited_once_with(
+        "PORT-COST-01",
+        "SECURITY-01",
+    )
+    transaction_state.get_transaction_history.assert_awaited_once_with(
+        portfolio_id="PORT-COST-01",
+        security_id="SECURITY-01",
+        exclude_id="MATURITY_REDEMPTION-EXECUTION-01",
+    )
+    coordinator.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("incoming_is_redemption", [True, False])
+async def test_linked_income_history_validation_is_symmetric(
+    incoming_is_redemption: bool,
+) -> None:
+    redemption = replace(
+        _transaction(transaction_type="MATURITY_REDEMPTION"),
+        linked_transaction_group_id="GROUP-REDEMPTION-01",
+        accrued_interest_proceeds_local=Decimal("25"),
+    )
+    interest = replace(
+        _transaction(transaction_type="INTEREST"),
+        linked_transaction_group_id="GROUP-REDEMPTION-01",
+    )
+    incoming, peer = (redemption, interest) if incoming_is_redemption else (interest, redemption)
+    transaction_state = AsyncMock(spec=CostBasisTransactionStatePort)
+    transaction_state.get_transaction_history.return_value = [peer]
+
+    with pytest.raises(RedemptionLinkedEventValidationError):
+        await execution_module._preload_linked_redemption_history(
+            transaction=incoming,
+            transaction_state=transaction_state,
+        )
+
+    transaction_state.get_transaction_history.assert_awaited_once_with(
+        portfolio_id=incoming.portfolio_id,
+        security_id=incoming.security_id,
+        exclude_id=incoming.transaction_id,
+    )
+
+
+@pytest.mark.asyncio
+async def test_unrelated_transaction_does_not_read_linked_income_history() -> None:
+    transaction_state = AsyncMock(spec=CostBasisTransactionStatePort)
+
+    history = await execution_module._preload_linked_redemption_history(
+        transaction=_transaction(),
+        transaction_state=transaction_state,
+    )
+
+    assert history is None
+    transaction_state.get_transaction_history.assert_not_awaited()
 
 
 def test_amortized_disposal_runtime_is_enabled_with_correction_replay() -> None:

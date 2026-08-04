@@ -279,8 +279,8 @@ def test_historical_rebuild_preserves_pre_policy_cashflow_economics(
 @pytest.mark.parametrize(
     ("principal_proceeds_local", "expected_amount"),
     [
-        (None, Decimal("100.0000000000")),
-        (Decimal("100.00000000009"), Decimal("100.0000000001")),
+        (None, Decimal("93.0000000000")),
+        (Decimal("100.00000000009"), Decimal("93.0000000001")),
     ],
 )
 def test_backdated_redemption_suffix_rebuild_uses_canonical_settlement_economics(
@@ -290,6 +290,7 @@ def test_backdated_redemption_suffix_rebuild_uses_canonical_settlement_economics
 ) -> None:
     transaction = _booked_transaction(
         transaction_type=transaction_type,
+        settlement_date=datetime(2026, 4, 15, 9, 0),
         quantity=Decimal("2"),
         price=Decimal("50"),
         gross_transaction_amount=Decimal("999"),
@@ -307,6 +308,7 @@ def test_backdated_redemption_suffix_rebuild_uses_canonical_settlement_economics
     )
 
     assert cashflow.amount == expected_amount
+    assert cashflow.cashflow_date == date(2026, 4, 15)
 
 
 def test_historical_rebuild_preserves_mismatched_explicit_interest_net() -> None:

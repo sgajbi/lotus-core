@@ -15,7 +15,10 @@ from portfolio_common.domain.transaction_control_codes import (
 )
 
 from ..booked import BookedTransaction
-from ..redemption import derive_redemption_principal_proceeds_local
+from ..redemption import (
+    derive_redemption_principal_proceeds_local,
+    is_generated_redemption_accrued_interest,
+)
 from .interest import calculate_interest_settlement_economics
 from .reason_codes import SettlementCashRejectionReasonCode
 
@@ -119,14 +122,7 @@ def _calculate_redemption_movement(
     embedded_fees = transaction.embedded_fee_amount_local or Decimal(0)
     embedded_taxes = transaction.embedded_tax_amount_local or Decimal(0)
     available_proceeds = principal + accrued_interest - embedded_fees - embedded_taxes
-    if (
-        transaction.price == 0
-        and principal == 0
-        and accrued_interest == 0
-        and embedded_fees == 0
-        and embedded_taxes == 0
-        and fee == 0
-    ):
+    if available_proceeds - fee == 0:
         return SettlementCashMovement(
             signed_amount=Decimal(0),
             fee_amount=fee,
@@ -222,6 +218,12 @@ def _calculate_interest_movement(
             net_settlement_amount=expected_settlement_amount,
         )
     settlement_amount = economics.settlement_cash_amount
+    if settlement_amount == 0 and is_generated_redemption_accrued_interest(transaction):
+        return SettlementCashMovement(
+            signed_amount=Decimal(0),
+            fee_amount=fee,
+            adjustment_reason="REDEMPTION_ACCRUED_INTEREST",
+        )
     if settlement_amount <= 0:
         raise SettlementCashValidationError(
             reason_code=(SettlementCashRejectionReasonCode.INTEREST_NON_POSITIVE_NET_SETTLEMENT),

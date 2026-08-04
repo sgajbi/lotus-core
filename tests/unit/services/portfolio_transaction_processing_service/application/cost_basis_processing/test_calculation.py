@@ -107,6 +107,7 @@ async def _calculate_cost_basis(
     processing_state: CostBasisProcessingStatePort,
     cost_basis_method: CostBasisMethod,
     observer: CostBasisCalculationObserver | None = None,
+    preloaded_transaction_history: list[BookedTransaction] | None = None,
 ) -> CostBasisCalculationResult:
     """Calculate through the framework-neutral application boundary used in production."""
 
@@ -123,6 +124,7 @@ async def _calculate_cost_basis(
         portfolio_base_currency=portfolio_base_currency,
         instrument=instrument,
         cost_basis_method=cost_basis_method,
+        preloaded_transaction_history=preloaded_transaction_history,
     )
 
 
@@ -504,6 +506,34 @@ async def test_initial_opening_transaction_uses_exact_opening_lot_scope() -> Non
     assert calculation.errored == []
     assert calculation.open_lot_persistence_scope is OpenLotPersistenceScope.INITIAL_OPENING_LOT
     assert set(calculation.open_lot_states) == {"BUY-INITIAL"}
+
+
+async def test_full_rebuild_reuses_preloaded_history_without_second_query() -> None:
+    repo = AsyncMock(spec=CostBasisTransactionStatePort)
+    processing_state = _processing_state_port()
+    processing_state.get_cost_basis_processing_checkpoint.return_value = None
+
+    calculation = await _calculate_cost_basis(
+        event=_event(
+            transaction_id="BUY-PRELOADED",
+            transaction_date=datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc),
+            transaction_type="BUY",
+            quantity="10",
+        ),
+        event_transaction_type="BUY",
+        portfolio_base_currency="USD",
+        instrument=MagicMock(product_type="EQUITY", asset_class="EQUITY"),
+        repo=repo,
+        average_cost_pools=_average_cost_pool_port(),
+        lot_states=_lot_state_port(),
+        fx_rates=_fx_rate_port(),
+        processing_state=processing_state,
+        cost_basis_method=CostBasisMethod.FIFO,
+        preloaded_transaction_history=[],
+    )
+
+    assert calculation.errored == []
+    repo.get_transaction_history.assert_not_awaited()
 
 
 async def test_backdated_transaction_uses_full_deterministic_history() -> None:

@@ -24,7 +24,9 @@ from ..transaction.fx import (
     validate_fx_embedded_tax,
 )
 from ..transaction.processing_type import resolve_effective_processing_transaction_type
-from ..transaction.redemption import REDEMPTION_TRANSACTION_TYPES
+from ..transaction.redemption import (
+    REDEMPTION_TRANSACTION_TYPES,
+)
 from ..transaction.settlement import (
     ORDINARY_SETTLEMENT_TRANSACTION_TYPES,
     SettlementCashValidationError,
@@ -42,15 +44,18 @@ from .types import (
 _TRANSFER_LIFECYCLE_FAMILIES = frozenset({"transfer", "corporate_action", "rights"})
 _TRANSFER_INFLOW_CASH_EFFECT_TYPES = frozenset({"RIGHTS_REFUND"})
 _TRANSFER_SIGNING_FALLBACK_TYPES = frozenset({"CASH_IN_LIEU"})
-_SETTLEMENT_DATED_TRANSACTION_TYPES = frozenset(
-    {
-        "BUY",
-        "SELL",
-        "DEPOSIT",
-        "WITHDRAWAL",
-        "FX_CASH_SETTLEMENT_BUY",
-        "FX_CASH_SETTLEMENT_SELL",
-    }
+_SETTLEMENT_DATED_TRANSACTION_TYPES = (
+    frozenset(
+        {
+            "BUY",
+            "SELL",
+            "DEPOSIT",
+            "WITHDRAWAL",
+            "FX_CASH_SETTLEMENT_BUY",
+            "FX_CASH_SETTLEMENT_SELL",
+        }
+    )
+    | REDEMPTION_TRANSACTION_TYPES
 )
 _PAYMENT_DATED_TRANSACTION_TYPES = frozenset({"DIVIDEND", "INTEREST"})
 _CLASSIFICATION_SIGN_FACTORS = {
@@ -243,6 +248,11 @@ def _cashflow_lineage_input(
             "movement_direction": transaction.movement_direction,
             "net_interest_amount": transaction.net_interest_amount,
             "other_interest_deductions_amount": transaction.other_interest_deductions_amount,
+            "price": transaction.price,
+            "principal_proceeds_local": transaction.principal_proceeds_local,
+            "accrued_interest_proceeds_local": transaction.accrued_interest_proceeds_local,
+            "embedded_fee_amount_local": transaction.embedded_fee_amount_local,
+            "embedded_tax_amount_local": transaction.embedded_tax_amount_local,
             "originating_transaction_id": transaction.originating_transaction_id,
             "originating_transaction_type": transaction.originating_transaction_type,
             "portfolio_id": transaction.portfolio_id,
@@ -336,7 +346,11 @@ def _resolve_cashflow_economics(
 ) -> _CashflowEconomics:
     if transaction.has_synthetic_flow:
         return _synthetic_transfer_economics(transaction, rule)
-    if transaction_type in ORDINARY_SETTLEMENT_TRANSACTION_TYPES:
+    if transaction_type in REDEMPTION_TRANSACTION_TYPES:
+        amount = calculate_settlement_cash_movement(transaction).signed_amount - (
+            transaction.accrued_interest_proceeds_local or Decimal(0)
+        )
+    elif transaction_type in ORDINARY_SETTLEMENT_TRANSACTION_TYPES:
         amount = (
             _historical_rebuild_cashflow_amount(transaction, rule, transaction_type)
             if calculation_context is CashflowCalculationContext.HISTORICAL_REBUILD
@@ -363,7 +377,9 @@ def _historical_rebuild_cashflow_amount(
 ) -> Decimal:
     """Reproduce pre-policy signing for already accepted history during restatement."""
     if transaction_type in REDEMPTION_TRANSACTION_TYPES:
-        return calculate_settlement_cash_movement(transaction).signed_amount
+        return calculate_settlement_cash_movement(transaction).signed_amount - (
+            transaction.accrued_interest_proceeds_local or Decimal(0)
+        )
     if transaction_type == "DIVIDEND" and (transaction.withholding_tax_amount or Decimal(0)) > 0:
         try:
             return calculate_settlement_cash_movement(transaction).signed_amount

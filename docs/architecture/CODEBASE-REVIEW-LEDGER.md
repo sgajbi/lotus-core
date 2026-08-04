@@ -11,6 +11,16 @@ This closes the three protected-review findings and the combined-coverage regres
 weakening the 98% gate; no schema, API/OpenAPI, Kafka, central-context, skill-routing, or capability
 wiki truth changed.
 
+CR-1678 settlement-review addendum (2026-08-04): redemption product cashflows now use settlement
+value date and carry the net principal component; embedded accrued interest is emitted as one deterministic,
+linked `INTEREST` component with separate `INCOME` cashflow lineage, while the adjustment leg
+remains the sole net cash authority. Independent linked interest plus embedded interest fails before
+cost-basis mutation and canonical generated components remain replay-safe. Exact-zero redemption
+settlement produces no adjustment; negative settlement still fails. Ingestion rejects missing,
+partial, mixed, or unrelated transfer destination metadata. Focused validation and final-head CI
+evidence are maintained in CR-1678 and PR #910; the capability remains limited pending merge and
+exact-main certification.
+
 CR-1678 replay-determinism addendum (2026-08-04): redemption repair exposed that economically
 equal source-event and database-scale decimals produced different transaction and source-allocation
 lineage hashes. Persisted operational timestamps and Core-generated settlement linkage also entered

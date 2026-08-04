@@ -338,7 +338,11 @@ If upstream posts a separate `INTEREST` transaction:
 If accrued interest is included in the same settlement:
 
 - must be stored explicitly in `accrued_interest_proceeds_local`
-- must be classified as income for reporting (e.g., `income_classification = INTEREST_INCOME`)
+- Core emits one deterministic linked `INTEREST` component with identity
+  `<redemption_transaction_id>-ACCRUED-INTEREST`; its cashflow is classified as `INCOME`
+- the redemption product cashflow remains the principal component net of settlement deductions,
+  while the linked settlement cash leg
+  remains the authority for net principal, interest, fee, and tax cash movement
 - must not affect `realized_capital_pnl` computation (principal-only)
 
 ### 12.3 No double counting rule
@@ -348,6 +352,8 @@ If both:
 - accrued interest is embedded in redemption cash,
 
 then the event must fail/park unless policy explicitly supports reconciliation and netting rules.
+Core-generated accrued-interest components are recognized by their closed component and origin
+identity and do not constitute a second upstream interest posting during replay.
 
 ---
 

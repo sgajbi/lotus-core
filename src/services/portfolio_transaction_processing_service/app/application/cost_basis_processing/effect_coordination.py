@@ -3,8 +3,15 @@
 from collections.abc import Sequence
 from dataclasses import replace
 
+from portfolio_common.domain.transaction_control_codes import normalize_transaction_control_code
+
 from ...domain.transaction import BookedTransaction
 from ...domain.transaction.fx import FxContractInstrument
+from ...domain.transaction.redemption import (
+    REDEMPTION_TRANSACTION_TYPES,
+    build_redemption_accrued_interest_component,
+    redemption_accrued_interest_transaction_id,
+)
 from ...ports import (
     CorporateActionReconciliationObserver,
     CorporateActionReconciliationRepository,
@@ -47,6 +54,26 @@ async def coordinate_cost_processing_effects(
         emitted_transactions.append(
             _with_source_epoch(linking.product_leg, source_epoch=source_epoch)
         )
+        accrued_interest = build_redemption_accrued_interest_component(linking.product_leg)
+        if (
+            accrued_interest is None
+            and normalize_transaction_control_code(linking.product_leg.transaction_type)
+            in REDEMPTION_TRANSACTION_TYPES
+            and await transaction_state.get_booked_transaction(
+                redemption_accrued_interest_transaction_id(linking.product_leg.transaction_id),
+                portfolio_id=linking.product_leg.portfolio_id,
+            )
+            is not None
+        ):
+            accrued_interest = build_redemption_accrued_interest_component(
+                linking.product_leg,
+                include_zero=True,
+            )
+        if accrued_interest is not None:
+            await transaction_state.upsert_booked_transaction(accrued_interest)
+            emitted_transactions.append(
+                _with_source_epoch(accrued_interest, source_epoch=source_epoch)
+            )
         if linking.generated_cash_leg is not None:
             emitted_transactions.append(
                 _with_source_epoch(linking.generated_cash_leg, source_epoch=source_epoch)
