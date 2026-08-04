@@ -24,6 +24,7 @@ from ..transaction.fx import (
     validate_fx_embedded_tax,
 )
 from ..transaction.processing_type import resolve_effective_processing_transaction_type
+from ..transaction.redemption import REDEMPTION_TRANSACTION_TYPES
 from ..transaction.settlement import (
     ORDINARY_SETTLEMENT_TRANSACTION_TYPES,
     SettlementCashValidationError,
@@ -361,6 +362,8 @@ def _historical_rebuild_cashflow_amount(
     transaction_type: str,
 ) -> Decimal:
     """Reproduce pre-policy signing for already accepted history during restatement."""
+    if transaction_type in REDEMPTION_TRANSACTION_TYPES:
+        return calculate_settlement_cash_movement(transaction).signed_amount
     if transaction_type == "DIVIDEND" and (transaction.withholding_tax_amount or Decimal(0)) > 0:
         try:
             return calculate_settlement_cash_movement(transaction).signed_amount
