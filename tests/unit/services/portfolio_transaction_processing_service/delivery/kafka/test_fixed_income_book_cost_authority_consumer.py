@@ -59,7 +59,13 @@ def _message(*, payload: object | None = None, key: bytes | None = None) -> Magi
         if key is not None
         else b"TENANT_SG|BOOK_SG_PB|AMORT_PORTFOLIO|AMORT_BOND_001|AMORT_LOT_001"
     )
-    message.headers.return_value = [("correlation_id", b"corr-book-cost-001")]
+    message.headers.return_value = [
+        ("correlation_id", b"corr-book-cost-001"),
+        (
+            "traceparent",
+            b"00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+        ),
+    ]
     return message
 
 
@@ -80,6 +86,10 @@ async def test_valid_event_and_exact_partition_key_invoke_atomic_handler() -> No
     event = use_case.execute.await_args.args[0]
     assert event.authority.authority_type == "POLICY_ASSIGNMENT"
     assert event.authority.header.source.source_version == 1
+    assert use_case.execute.await_args.kwargs == {
+        "correlation_id": "corr-book-cost-001",
+        "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+    }
     use_case.execute.assert_awaited_once()
 
 
