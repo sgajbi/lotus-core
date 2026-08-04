@@ -23,12 +23,18 @@ class BookedTransactionReplayInvariantViolation(RuntimeError):
 class ReplayBookedTransactionCommand:
     transaction_id: str
     correlation_id: str | None = None
+    repair_delivery_id: str | None = None
 
     def __post_init__(self) -> None:
         normalized_transaction_id = self.transaction_id.strip()
         if not normalized_transaction_id:
             raise ValueError("Booked transaction replay requires a transaction_id")
         object.__setattr__(self, "transaction_id", normalized_transaction_id)
+        if self.repair_delivery_id is not None:
+            normalized_repair_delivery_id = self.repair_delivery_id.strip()
+            if not normalized_repair_delivery_id:
+                raise ValueError("repair_delivery_id must be nonblank when supplied")
+            object.__setattr__(self, "repair_delivery_id", normalized_repair_delivery_id)
 
 
 class BookedTransactionReplayStatus(StrEnum):
@@ -59,6 +65,7 @@ class ReplayBookedTransactionUseCase:
             replayed = await self._replay.replay_booked_transaction(
                 transaction_id=command.transaction_id,
                 correlation_id=command.correlation_id,
+                repair_delivery_id=command.repair_delivery_id,
             )
             status = (
                 BookedTransactionReplayStatus.REPLAYED

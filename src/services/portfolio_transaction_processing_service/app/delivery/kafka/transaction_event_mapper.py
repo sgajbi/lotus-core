@@ -50,6 +50,7 @@ def map_transaction_event(
     correlation_id: str | None = None,
     traceparent: str | None = None,
     processing_intent: TransactionProcessingIntent = TransactionProcessingIntent.STANDARD,
+    repair_delivery_id: str | None = None,
 ) -> ProcessTransactionCommand:
     payload = event.model_dump(mode="python")
     domain_values = {name: payload[name] for name in _DOMAIN_FIELD_NAMES}
@@ -65,6 +66,7 @@ def map_transaction_event(
             correlation_id=correlation_id or event.correlation_id,
             traceparent=traceparent or event.traceparent,
             processing_intent=processing_intent,
+            repair_delivery_id=repair_delivery_id,
         ),
     )
 

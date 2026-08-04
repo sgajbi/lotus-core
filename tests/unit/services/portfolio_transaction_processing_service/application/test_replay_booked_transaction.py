@@ -40,6 +40,7 @@ async def test_replay_booked_transaction_returns_explicit_status(
         ReplayBookedTransactionCommand(
             transaction_id=" TXN-REPLAY-01 ",
             correlation_id="corr-replay-01",
+            repair_delivery_id=" repair-command-001 ",
         )
     )
 
@@ -48,6 +49,7 @@ async def test_replay_booked_transaction_returns_explicit_status(
     replay_port.replay_booked_transaction.assert_awaited_once_with(
         transaction_id="TXN-REPLAY-01",
         correlation_id="corr-replay-01",
+        repair_delivery_id="repair-command-001",
     )
     observer.observe.assert_called_once_with(TransactionProcessingOperation.REPLAY)
     observation.set_outcome.assert_called_once_with(
@@ -58,3 +60,11 @@ async def test_replay_booked_transaction_returns_explicit_status(
 def test_replay_booked_transaction_rejects_blank_transaction_id() -> None:
     with pytest.raises(ValueError, match="requires a transaction_id"):
         ReplayBookedTransactionCommand(transaction_id="  ")
+
+
+def test_replay_booked_transaction_rejects_blank_repair_delivery_id() -> None:
+    with pytest.raises(ValueError, match="repair_delivery_id must be nonblank"):
+        ReplayBookedTransactionCommand(
+            transaction_id="TXN-REPLAY-01",
+            repair_delivery_id="  ",
+        )

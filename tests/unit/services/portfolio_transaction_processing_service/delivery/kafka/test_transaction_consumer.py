@@ -98,11 +98,60 @@ async def test_consumer_maps_canonical_repair_header_to_application_intent() -> 
     )
     message = _message()
     message.headers.return_value.append(("lotus-transaction-processing-intent", b"repair"))
+    message.headers.return_value.append(
+        ("lotus-transaction-repair-delivery-id", b" repair-command-001 ")
+    )
 
     await _consumer(use_case).process_message(message)
 
     command = use_case.execute.await_args.args[0]
     assert command.metadata.processing_intent is TransactionProcessingIntent.REPAIR
+    assert command.metadata.repair_delivery_id == "repair-command-001"
+
+
+@pytest.mark.parametrize(
+    ("headers", "message"),
+    [
+        (
+            [("lotus-transaction-repair-delivery-id", b"repair-command-001")],
+            "repair delivery id header is invalid",
+        ),
+        (
+            [
+                ("lotus-transaction-processing-intent", b"repair"),
+                ("lotus-transaction-repair-delivery-id", b"repair-command-001"),
+                ("lotus-transaction-repair-delivery-id", b"repair-command-001"),
+            ],
+            "repair delivery id header is invalid",
+        ),
+        (
+            [
+                ("lotus-transaction-processing-intent", b"repair"),
+                ("lotus-transaction-repair-delivery-id", b"  "),
+            ],
+            "repair delivery id header must be nonblank",
+        ),
+        (
+            [
+                ("lotus-transaction-processing-intent", b"repair"),
+                ("lotus-transaction-repair-delivery-id", b"\xff"),
+            ],
+            "repair delivery id header is not UTF-8",
+        ),
+    ],
+)
+async def test_consumer_fails_closed_on_invalid_repair_delivery_identity(
+    headers: list[tuple[str, bytes]],
+    message: str,
+) -> None:
+    use_case = AsyncMock()
+    kafka_message = _message()
+    kafka_message.headers.return_value.extend(headers)
+
+    with pytest.raises(ValueError, match=message):
+        await _consumer(use_case).process_message(kafka_message)
+
+    use_case.execute.assert_not_awaited()
 
 
 async def test_consumer_rejects_unknown_processing_intent_header() -> None:

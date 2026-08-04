@@ -105,6 +105,7 @@ class _Idempotency:
         self.calls = calls
         self.outcomes = [outcome]
         self.claim_kwargs: dict = {}
+        self.repair_claim_kwargs: dict = {}
         self.repair_claimed = True
 
     async def claim(self, **kwargs) -> TransactionIdempotencyOutcome:
@@ -114,8 +115,9 @@ class _Idempotency:
             return self.outcomes.pop(0)
         return self.outcomes[0]
 
-    async def claim_repair_delivery(self, **_kwargs) -> bool:
+    async def claim_repair_delivery(self, **kwargs) -> bool:
         self.calls.append("repair-idempotency")
+        self.repair_claim_kwargs = kwargs
         return self.repair_claimed
 
 
@@ -561,6 +563,31 @@ async def test_use_case_suppresses_redelivered_canonical_repair() -> None:
 
     assert result.status is TransactionProcessingStatus.DUPLICATE
     assert calls == ["enter", "idempotency", "repair-idempotency", "rollback"]
+
+
+@pytest.mark.asyncio
+async def test_repair_redelivery_claim_uses_stable_command_identity() -> None:
+    calls: list[str] = []
+    unit_of_work = _UnitOfWork(
+        calls=calls,
+        idempotency_outcome=TransactionIdempotencyOutcome.SEMANTIC_DUPLICATE,
+    )
+    command = replace(
+        _command(),
+        metadata=replace(
+            _command().metadata,
+            event_id="transactions.persisted-9-987",
+            processing_intent=TransactionProcessingIntent.REPAIR,
+            repair_delivery_id="repair-command-001",
+        ),
+    )
+
+    await ProcessTransactionUseCase(
+        lambda: unit_of_work,
+        observer=_RecordingObserver(),
+    ).execute(command)
+
+    assert unit_of_work.idempotency.repair_claim_kwargs["event_id"] == "repair-command-001"
 
 
 @pytest.mark.asyncio

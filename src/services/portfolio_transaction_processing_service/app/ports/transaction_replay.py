@@ -9,4 +9,5 @@ class BookedTransactionReplayPort(Protocol):
         *,
         transaction_id: str,
         correlation_id: str | None,
+        repair_delivery_id: str | None,
     ) -> bool: ...

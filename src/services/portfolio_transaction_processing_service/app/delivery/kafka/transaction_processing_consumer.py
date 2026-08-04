@@ -16,6 +16,7 @@ from portfolio_common.logging_utils import (
 from portfolio_common.reprocessing_replay import (
     TRANSACTION_PROCESSING_INTENT_HEADER,
     TRANSACTION_PROCESSING_REPAIR_VALUE,
+    TRANSACTION_REPAIR_DELIVERY_ID_HEADER,
 )
 from sqlalchemy.exc import DBAPIError, IntegrityError
 
@@ -70,12 +71,17 @@ class TransactionProcessingConsumer(BaseConsumer):
             fallback_correlation_id=data.get("correlation_id"),
         ) as correlation_id:
             event = TransactionEvent.model_validate(data)
+            processing_intent = _message_processing_intent(msg)
             command = map_transaction_event(
                 event,
                 event_id=event_id,
                 correlation_id=correlation_id,
                 traceparent=_message_traceparent(self, msg),
-                processing_intent=_message_processing_intent(msg),
+                processing_intent=processing_intent,
+                repair_delivery_id=_message_repair_delivery_id(
+                    msg,
+                    processing_intent=processing_intent,
+                ),
             )
             try:
                 result = await self._use_case.execute(command)
@@ -142,6 +148,29 @@ def _message_processing_intent(msg: Message) -> TransactionProcessingIntent:
     if intent_values != [TRANSACTION_PROCESSING_REPAIR_VALUE]:
         raise ValueError("Transaction processing intent header is invalid")
     return TransactionProcessingIntent.REPAIR
+
+
+def _message_repair_delivery_id(
+    msg: Message,
+    *,
+    processing_intent: TransactionProcessingIntent,
+) -> str | None:
+    values = [
+        value
+        for key, value in msg.headers() or []
+        if key.strip().lower() == TRANSACTION_REPAIR_DELIVERY_ID_HEADER
+    ]
+    if not values:
+        return None
+    if processing_intent is not TransactionProcessingIntent.REPAIR or len(values) != 1:
+        raise ValueError("transaction repair delivery id header is invalid")
+    try:
+        normalized = cast(bytes, values[0]).decode("utf-8").strip()
+    except UnicodeDecodeError as exc:
+        raise ValueError("transaction repair delivery id header is not UTF-8") from exc
+    if not normalized:
+        raise ValueError("transaction repair delivery id header must be nonblank")
+    return normalized
 
 
 def _retryable_dependency_reason(error: TransactionProcessingError) -> str:
