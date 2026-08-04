@@ -3,8 +3,13 @@
 from .classification import (
     BASIS_TRANSFER_CORPORATE_ACTION_TYPES,
     CASH_CONSIDERATION_TRANSACTION_TYPE,
+    QUANTITY_TRANSFER_CORPORATE_ACTION_PAIRS,
+    RECONCILABLE_CORPORATE_ACTION_TYPES,
     SOURCE_BASIS_TRANSFER_TRANSACTION_TYPES,
+    SOURCE_QUANTITY_TRANSFER_TRANSACTION_TYPES,
     TARGET_BASIS_TRANSFER_TRANSACTION_TYPES,
+    TARGET_QUANTITY_TRANSFER_TRANSACTION_TYPES,
+    is_reconcilable_corporate_action,
     normalize_corporate_action_transaction_type,
 )
 from .ordering import (
@@ -26,12 +31,17 @@ __all__ = [
     "CorporateActionValidationError",
     "CorporateActionValidationFinding",
     "CorporateActionValidationReasonCode",
+    "QUANTITY_TRANSFER_CORPORATE_ACTION_PAIRS",
+    "RECONCILABLE_CORPORATE_ACTION_TYPES",
     "SOURCE_BASIS_TRANSFER_TRANSACTION_TYPES",
+    "SOURCE_QUANTITY_TRANSFER_TRANSACTION_TYPES",
     "TARGET_BASIS_TRANSFER_TRANSACTION_TYPES",
+    "TARGET_QUANTITY_TRANSFER_TRANSACTION_TYPES",
     "assert_bundle_a_corporate_action_valid",
     "corporate_action_dependency_rank",
     "corporate_action_target_order_key",
     "is_bundle_a_corporate_action",
+    "is_reconcilable_corporate_action",
     "normalize_corporate_action_transaction_type",
     "validate_bundle_a_corporate_action",
 ]

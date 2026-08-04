@@ -64,8 +64,11 @@ from .corporate_action_reconciliation import (
     DEFAULT_CORPORATE_ACTION_BASIS_TOLERANCE,
     CorporateActionBasisReconciliation,
     CorporateActionBasisReconciliationStatus,
+    CorporateActionLegLinkageFinding,
+    CorporateActionLegLinkageFindingType,
     missing_corporate_action_dependencies,
     reconcile_corporate_action_basis,
+    reconcile_corporate_action_leg_linkage,
 )
 from .lot_basis_transfer_receipt import (
     LotBasisTransferReceiptState,
@@ -119,6 +122,8 @@ __all__ = [
     "CorporateActionCashEconomicsError",
     "CorporateActionBasisReconciliation",
     "CorporateActionBasisReconciliationStatus",
+    "CorporateActionLegLinkageFinding",
+    "CorporateActionLegLinkageFindingType",
     "CostBasisCalculator",
     "build_cost_basis_engine_input",
     "COST_BASIS_STATE_VERSION",
@@ -158,6 +163,7 @@ __all__ = [
     "missing_corporate_action_dependencies",
     "normalize_cost_fee_amount",
     "reconcile_corporate_action_basis",
+    "reconcile_corporate_action_leg_linkage",
     "source_lot_disposal_allocation_payload",
     "transaction_order_key",
     "transaction_lot_behavior",
