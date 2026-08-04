@@ -20,6 +20,11 @@ from ...transaction.fx import (
     build_fx_baseline_processing_update,
     validate_fx_transaction,
 )
+from ...transaction.redemption import (
+    RedemptionCalculationError,
+    RedemptionTerms,
+    calculate_redemption_economics,
+)
 from ..corporate_action_cash_economics import (
     CorporateActionCashEconomics,
     CorporateActionCashEconomicsError,
@@ -66,6 +71,17 @@ def _add_sell_invariant_error(
     error_reporter: CostCalculationErrorCollector, transaction: CostBasisTransaction, message: str
 ) -> None:
     error_reporter.add_error(transaction.transaction_id, f"SELL invariant violation: {message}")
+
+
+def _add_redemption_invariant_error(
+    error_reporter: CostCalculationErrorCollector,
+    transaction: CostBasisTransaction,
+    message: str,
+) -> None:
+    error_reporter.add_error(
+        transaction.transaction_id,
+        f"{_normalize_code(transaction.transaction_type)} invariant violation: {message}",
+    )
 
 
 def _add_dividend_invariant_error(
@@ -671,6 +687,102 @@ class SellStrategy:
             cogs_local=cogs_local,
         )
         _validate_sell_disposal_fields(transaction, error_reporter)
+
+
+class RedemptionStrategy:
+    """Consume governed lots and calculate principal-only redemption P&L."""
+
+    def calculate_costs(
+        self,
+        transaction: CostBasisTransaction,
+        disposition_engine: LotDispositionEngine,
+        error_reporter: CostCalculationErrorCollector,
+    ) -> None:
+        available_quantity = disposition_engine.get_available_quantity(
+            transaction.portfolio_id,
+            transaction.instrument_id,
+        )
+        try:
+            preview = calculate_redemption_economics(
+                _redemption_terms(
+                    transaction,
+                    position_quantity=available_quantity,
+                    allocated_cost_basis_local=Decimal(0),
+                    allocated_cost_basis_base=Decimal(0),
+                )
+            )
+        except RedemptionCalculationError as exc:
+            error_reporter.add_error(transaction.transaction_id, str(exc))
+            return
+        transaction.quantity = preview.redeemed_quantity
+        consumed = _consume_disposal_cost_basis(
+            transaction,
+            disposition_engine,
+            error_reporter,
+            add_invariant_error=_add_redemption_invariant_error,
+        )
+        if consumed is None:
+            return
+        cogs_base, cogs_local, _consumed_quantity = consumed
+        try:
+            economics = calculate_redemption_economics(
+                _redemption_terms(
+                    transaction,
+                    position_quantity=available_quantity,
+                    allocated_cost_basis_local=cogs_local,
+                    allocated_cost_basis_base=cogs_base,
+                )
+            )
+        except RedemptionCalculationError as exc:
+            error_reporter.add_error(transaction.transaction_id, str(exc))
+            return
+        policy = TRANSACTION_COST_LEDGER_OUTPUT_V1
+        transaction.net_cost_local = policy.normalize(-cogs_local, field_name="net_cost_local")
+        transaction.net_cost = policy.normalize(-cogs_base, field_name="net_cost")
+        transaction.gross_cost = policy.normalize(-cogs_base, field_name="gross_cost")
+        transaction.realized_gain_loss_local = economics.realized_capital_pnl_local
+        transaction.realized_gain_loss = economics.realized_capital_pnl_base
+        for field_name, value in (
+            ("allocated_cost_basis_local", cogs_local),
+            ("allocated_cost_basis_base", cogs_base),
+            ("realized_capital_pnl_local", economics.realized_capital_pnl_local),
+            ("realized_fx_pnl_local", Decimal(0)),
+            ("realized_total_pnl_local", economics.realized_capital_pnl_local),
+            ("realized_capital_pnl_base", economics.realized_capital_pnl_base),
+            ("realized_fx_pnl_base", Decimal(0)),
+            ("realized_total_pnl_base", economics.realized_capital_pnl_base),
+        ):
+            transaction.set_calculated_field(field_name, value)
+
+
+def _redemption_terms(
+    transaction: CostBasisTransaction,
+    *,
+    position_quantity: Decimal,
+    allocated_cost_basis_local: Decimal,
+    allocated_cost_basis_base: Decimal,
+) -> RedemptionTerms:
+    return RedemptionTerms(
+        transaction_type=transaction.transaction_type,
+        position_quantity=position_quantity,
+        redeemed_quantity=transaction.quantity,
+        redemption_price=getattr(transaction, "price", transaction.average_price),
+        old_factor=getattr(transaction, "old_factor", None),
+        new_factor=getattr(transaction, "new_factor", None),
+        principal_proceeds_local=getattr(transaction, "principal_proceeds_local", None),
+        accrued_interest_proceeds_local=(
+            getattr(transaction, "accrued_interest_proceeds_local", None) or Decimal(0)
+        ),
+        embedded_fee_amount_local=(
+            getattr(transaction, "embedded_fee_amount_local", None) or Decimal(0)
+        ),
+        embedded_tax_amount_local=(
+            getattr(transaction, "embedded_tax_amount_local", None) or Decimal(0)
+        ),
+        allocated_cost_basis_local=allocated_cost_basis_local,
+        allocated_cost_basis_base=allocated_cost_basis_base,
+        fx_rate_to_base=_transaction_fx_rate_or_one(transaction),
+    )
 
 
 class CashInflowStrategy:
