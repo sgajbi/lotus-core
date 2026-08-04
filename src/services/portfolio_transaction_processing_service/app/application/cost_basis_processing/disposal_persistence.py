@@ -109,7 +109,7 @@ def _receipt_state(
         consumed_cost_base=disposal.result.cost_base,
         allocations=disposal.result.allocations,
         disposal_calculation_lineage=disposal_lineage,
-        destination=_internal_lot_destination(transaction),
+        destination=_disposal_destination(transaction),
     )
 
 
@@ -122,11 +122,57 @@ _INTERNAL_LOT_DISPOSAL_TYPES = frozenset(
 )
 
 
-def _internal_lot_destination(
+def _disposal_destination(
     transaction: CostBasisTransaction,
 ) -> LotDisposalDestination | None:
+    external_reference = getattr(transaction, "external_destination_reference", None)
+    if transaction.transaction_type == "TRANSFER_OUT":
+        return _transfer_out_destination(
+            transaction=transaction,
+            external_reference=external_reference,
+        )
     if transaction.transaction_type not in _INTERNAL_LOT_DISPOSAL_TYPES:
+        if _has_text(external_reference):
+            raise ValueError(
+                "external_destination_reference is valid only for TRANSFER_OUT: "
+                f"{transaction.transaction_id}"
+            )
         return None
+    if _has_text(external_reference):
+        raise ValueError(
+            f"{transaction.transaction_type} requires an internal lot destination and cannot "
+            f"carry external_destination_reference: {transaction.transaction_id}"
+        )
+    return _required_internal_lot_destination(transaction)
+
+
+def _transfer_out_destination(
+    *,
+    transaction: CostBasisTransaction,
+    external_reference: object,
+) -> LotDisposalDestination | None:
+    target_transaction_id = getattr(transaction, "target_transaction_reference", None)
+    target_instrument_id = transaction.target_instrument_id
+    has_internal_reference = _has_text(target_transaction_id) or _has_text(target_instrument_id)
+    has_external_reference = _has_text(external_reference)
+    if has_internal_reference and has_external_reference:
+        raise ValueError(
+            "TRANSFER_OUT destination must be exactly one of internal target identity or "
+            f"external_destination_reference: {transaction.transaction_id}"
+        )
+    if has_internal_reference:
+        return _required_internal_lot_destination(transaction)
+    if has_external_reference:
+        return LotDisposalDestination(
+            destination_type=LotDisposalDestinationType.EXTERNAL_TRANSFER,
+            external_destination_reference=cast(str, external_reference).strip(),
+        )
+    return None
+
+
+def _required_internal_lot_destination(
+    transaction: CostBasisTransaction,
+) -> LotDisposalDestination:
     target_transaction_id = getattr(transaction, "target_transaction_reference", None)
     target_instrument_id = transaction.target_instrument_id
     missing_fields = tuple(
@@ -150,3 +196,7 @@ def _internal_lot_destination(
         target_lot_id=f"LOT-{normalized_target_transaction_id}",
         target_instrument_id=cast(str, target_instrument_id).strip(),
     )
+
+
+def _has_text(value: object) -> bool:
+    return isinstance(value, str) and bool(value.strip())
