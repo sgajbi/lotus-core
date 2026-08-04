@@ -1,5 +1,14 @@
 # Codebase Review Ledger
 
+CR-1678 redemption-contract addendum (2026-08-05): maturity, call, and partial redemption now
+require a source-owned settlement date at ingestion, canonical event, preparation, and cost-domain
+boundaries; no trade-date fallback can create value-date cash evidence. Before lot access, the cost
+domain requires an explicit supported fixed-income product type and rejects missing, equity,
+generic structured-product, contradictory asset-class, and perpetual-maturity classifications.
+The gate proves product-family eligibility only; issuer call schedules and entitlement authority
+remain upstream. No schema, migration, Kafka topology, capability promotion, central-context,
+skill-routing, or additional wiki truth changed.
+
 CR-1678 correction-child addendum (2026-08-05): semantic correction now reconciles stable,
 Core-generated settlement and accrued-interest children only for the corrected source transaction.
 When corrected economics stop producing a child, the prior canonical child is validated, superseded

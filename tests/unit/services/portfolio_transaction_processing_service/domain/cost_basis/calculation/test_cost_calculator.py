@@ -1412,6 +1412,8 @@ def test_redemption_strategy_consumes_fifo_lots_and_calculates_principal_only_pn
         transaction_type=transaction_type,
         transaction_date=datetime(2026, 6, 30),
         settlement_date=datetime(2026, 7, 2),
+        product_type="BOND",
+        asset_class="FIXED_INCOME",
         quantity=Decimal(quantity),
         price=Decimal(1),
         gross_transaction_amount=Decimal(quantity),
@@ -1445,6 +1447,9 @@ def test_redemption_strategy_validates_factor_authority_before_lot_consumption()
         security_id="BOND-1",
         transaction_type="PARTIAL_REDEMPTION",
         transaction_date=datetime(2026, 6, 30),
+        settlement_date=datetime(2026, 7, 2),
+        product_type="BOND",
+        asset_class="FIXED_INCOME",
         quantity=Decimal("20"),
         price=Decimal(1),
         gross_transaction_amount=Decimal("20"),
@@ -1458,6 +1463,70 @@ def test_redemption_strategy_validates_factor_authority_before_lot_consumption()
     calculator_module.RedemptionStrategy().calculate_costs(redemption, disposition, errors)
 
     assert errors.has_errors_for("RED-FACTOR-001")
+    disposition.consume_sell_quantity.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("product_type", "asset_class"),
+    [("EQUITY", "EQUITY"), ("", None)],
+)
+def test_redemption_strategy_rejects_ineligible_instrument_before_lot_access(
+    product_type: str,
+    asset_class: str | None,
+) -> None:
+    errors = CostCalculationErrorCollector()
+    disposition = MagicMock(spec=LotDispositionEngine)
+    redemption = CostBasisTransaction(
+        transaction_id="RED-INELIGIBLE-001",
+        portfolio_id="P1",
+        instrument_id="SEC-1",
+        security_id="SEC-1",
+        transaction_type="MATURITY_REDEMPTION",
+        transaction_date=datetime(2026, 6, 30),
+        settlement_date=datetime(2026, 7, 2),
+        product_type=product_type,
+        asset_class=asset_class,
+        quantity=Decimal("100"),
+        price=Decimal(1),
+        gross_transaction_amount=Decimal("100"),
+        principal_proceeds_local=Decimal("100"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+        transaction_fx_rate=Decimal(1),
+    )
+
+    calculator_module.RedemptionStrategy().calculate_costs(redemption, disposition, errors)
+
+    assert errors.has_errors_for(redemption.transaction_id)
+    disposition.get_available_quantity.assert_not_called()
+    disposition.consume_sell_quantity.assert_not_called()
+
+
+def test_redemption_strategy_requires_value_date_before_lot_access() -> None:
+    errors = CostCalculationErrorCollector()
+    disposition = MagicMock(spec=LotDispositionEngine)
+    redemption = CostBasisTransaction(
+        transaction_id="RED-NO-VALUE-DATE-001",
+        portfolio_id="P1",
+        instrument_id="BOND-1",
+        security_id="BOND-1",
+        transaction_type="CALL_REDEMPTION",
+        transaction_date=datetime(2026, 6, 30),
+        product_type="BOND",
+        asset_class="FIXED_INCOME",
+        quantity=Decimal("100"),
+        price=Decimal(1),
+        gross_transaction_amount=Decimal("100"),
+        principal_proceeds_local=Decimal("100"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+        transaction_fx_rate=Decimal(1),
+    )
+
+    calculator_module.RedemptionStrategy().calculate_costs(redemption, disposition, errors)
+
+    assert errors.has_errors_for(redemption.transaction_id)
+    disposition.get_available_quantity.assert_not_called()
     disposition.consume_sell_quantity.assert_not_called()
 
 
@@ -1488,6 +1557,9 @@ def test_redemption_strategy_derives_zero_placeholder_quantity_from_factor_autho
         security_id="BOND-1",
         transaction_type="PARTIAL_REDEMPTION",
         transaction_date=datetime(2026, 6, 30),
+        settlement_date=datetime(2026, 7, 2),
+        product_type="BOND",
+        asset_class="FIXED_INCOME",
         quantity=Decimal(0),
         price=Decimal(1),
         gross_transaction_amount=Decimal("25"),
@@ -1536,6 +1608,9 @@ def test_partial_redemption_strategy_consumes_average_cost_pool() -> None:
         security_id="BOND-1",
         transaction_type="PARTIAL_REDEMPTION",
         transaction_date=datetime(2026, 6, 30),
+        settlement_date=datetime(2026, 7, 2),
+        product_type="BOND",
+        asset_class="FIXED_INCOME",
         quantity=Decimal("25"),
         price=Decimal("1.2"),
         gross_transaction_amount=Decimal("30"),

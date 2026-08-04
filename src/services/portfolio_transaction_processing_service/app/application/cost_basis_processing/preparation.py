@@ -20,6 +20,7 @@ from ...domain.transaction.fx import (
     FX_BUSINESS_TRANSACTION_TYPES,
     enrich_fx_transaction_metadata,
 )
+from ...domain.transaction.redemption import assert_redemption_settlement_date
 
 _INSTRUMENT_REFERENCE_OPTIONAL_TRANSACTION_TYPES = {
     "ADJUSTMENT",
@@ -73,6 +74,10 @@ def prepare_cost_transaction(
     prepared_transaction = enrich_fx_transaction_metadata(prepared_transaction)
     transaction_type = normalize_transaction_control_code(prepared_transaction.transaction_type)
     assert_cash_entry_mode_supported(prepared_transaction)
+    assert_redemption_settlement_date(
+        transaction_type=transaction_type,
+        settlement_date=prepared_transaction.settlement_date,
+    )
 
     if is_bundle_a_corporate_action(transaction_type):
         assert_bundle_a_corporate_action_valid(prepared_transaction)

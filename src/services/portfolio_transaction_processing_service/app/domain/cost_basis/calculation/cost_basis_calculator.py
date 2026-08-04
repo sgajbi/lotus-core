@@ -27,6 +27,7 @@ from ...transaction.redemption import (
     RedemptionCalculationError,
     RedemptionCalculationReasonCode,
     RedemptionTerms,
+    assert_redemption_command_eligible,
     calculate_redemption_economics,
 )
 from ..corporate_action_cash_economics import (
@@ -702,6 +703,16 @@ class RedemptionStrategy:
         disposition_engine: LotDispositionEngine,
         error_reporter: CostCalculationErrorCollector,
     ) -> None:
+        try:
+            assert_redemption_command_eligible(
+                transaction_type=transaction.transaction_type,
+                settlement_date=getattr(transaction, "settlement_date", None),
+                product_type=getattr(transaction, "product_type", None),
+                asset_class=getattr(transaction, "asset_class", None),
+            )
+        except ValueError as exc:
+            error_reporter.add_error(transaction.transaction_id, str(exc))
+            return
         available_quantity = disposition_engine.get_available_quantity(
             transaction.portfolio_id,
             transaction.instrument_id,

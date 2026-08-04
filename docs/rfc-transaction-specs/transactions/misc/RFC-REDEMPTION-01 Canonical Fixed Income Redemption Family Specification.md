@@ -4,18 +4,19 @@
 
 - **Document ID:** RFC-REDEMPTION-01
 - **Title:** Canonical Fixed Income Redemption Family Specification (Maturity / Call / Partial Redemption)
-- **Version:** 1.0.0
+- **Version:** 1.0.1
 - **Status:** Draft
 - **Owner:** _TBD_
 - **Reviewers:** _TBD_
 - **Approvers:** _TBD_
-- **Last Updated:** 2026-08-04
+- **Last Updated:** 2026-08-05
 - **Effective Date:** _TBD_
 
 ### 1.1 Change Log
 
 | Version | Date | Author | Summary |
 |---|---|---|---|
+| 1.0.1 | 2026-08-05 | Lotus Engineering | Require source-owned settlement date and fail-closed fixed-income product-family eligibility before lot access |
 | 1.0.0 | _TBD_ | _TBD_ | Initial canonical redemption family specification |
 
 ### 1.2 Implementation Status
@@ -35,6 +36,12 @@ booking replay is evidence-neutral. A 1,000-redemption FIFO/AVCO cohort proves o
 allocation per event. Wider
 multi-acquisition AVCO source-attribution scalability remains explicitly open under #481 and does
 not reduce the bounded redemption capability to an unimplemented state.
+Ingestion and canonical event boundaries now require `settlement_date` for all three production
+redemption commands; transaction preparation repeats the check so replay cannot infer value date
+from trade date. Before any lot access, the cost domain also requires an explicit supported
+fixed-income product type and rejects contradictory non-fixed-income asset classification. This is
+a product-family eligibility gate, not a claim that Core owns issuer call schedules or entitlement
+determination; those remain upstream authorities.
 
 ---
 

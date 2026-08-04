@@ -17,6 +17,7 @@ from .domain.transaction.numeric_policy import (
     TRANSACTION_EVENT_DECIMAL_FIELDS,
     require_transaction_persistence_precision,
 )
+from .domain.transaction.type_registry import production_transaction_types_for_lifecycle_families
 from .domain.transaction_control_codes import (
     normalize_optional_transaction_control_code,
     normalize_transaction_control_code,
@@ -31,6 +32,9 @@ def _event_decimal_amount(value: object) -> Decimal:
     if amount is None:
         raise ValueError("Amount must be numeric.")
     return amount
+
+
+_REDEMPTION_TRANSACTION_TYPES = production_transaction_types_for_lifecycle_families("redemption")
 
 
 class CoreEventModel(BaseModel):
@@ -473,6 +477,12 @@ class TransactionEvent(CoreEventModel):
             ),
             field_name="trade_fee",
         )
+        return self
+
+    @model_validator(mode="after")
+    def _require_redemption_settlement_date(self) -> "TransactionEvent":
+        if self.transaction_type in _REDEMPTION_TRANSACTION_TYPES and self.settlement_date is None:
+            raise ValueError(f"settlement_date is required for {self.transaction_type}")
         return self
 
 

@@ -426,6 +426,14 @@ Data Models wiki documents the staged ledgers while the capability wiki remains
   reference, while explicit zero adjustments and non-zero missing pairs remain rejected. No
   API/OpenAPI shape, schema, migration, Kafka, capability, central-context, skill-routing, or
   additional wiki truth changed.
+- final redemption-contract proof: all three production redemption commands require a source-owned
+  settlement date at ingestion, canonical-event, preparation, and cost-domain boundaries, blocking
+  every fallback from trade date to cash value date. Before lot access, the cost domain requires a
+  closed, command-aware fixed-income product classification and rejects missing, equity, generic
+  structured-product, contradictory asset-class, and perpetual-maturity classifications. This is
+  product-family eligibility only; issuer schedules and entitlement determination remain upstream.
+  No schema, migration, Kafka topology, capability promotion, central-context, skill-routing, or
+  additional wiki truth changed.
 
 Protected PR and exact-main evidence remain pending for this tranche. Wider runtime recovery/load
 proof, complete corporate-action scenario coverage, redemption, and final issue closure remain

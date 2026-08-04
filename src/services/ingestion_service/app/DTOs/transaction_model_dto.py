@@ -12,7 +12,10 @@ from portfolio_common.domain.transaction.numeric_policy import (
     TRANSACTION_COMMAND_DECIMAL_FIELDS,
     require_transaction_persistence_precision,
 )
-from portfolio_common.domain.transaction.type_registry import get_transaction_type_definition
+from portfolio_common.domain.transaction.type_registry import (
+    get_transaction_type_definition,
+    production_transaction_types_for_lifecycle_families,
+)
 from portfolio_common.domain.transaction_control_codes import (
     normalize_optional_transaction_control_code,
     normalize_transaction_control_code,
@@ -33,6 +36,7 @@ from .ingestion_validation_errors import BLANK_IDENTIFIER, raise_ingestion_valid
 NonNegativeDecimal = Annotated[Decimal, Field(ge=Decimal(0))]
 PositiveDecimal = Annotated[Decimal, Field(gt=Decimal(0))]
 RedemptionPriceType = Literal["PAR", "CALL_PRICE", "MARKET_PRICE"]
+REDEMPTION_TRANSACTION_TYPES = production_transaction_types_for_lifecycle_families("redemption")
 
 
 def _document_transaction_numeric_contract(schema: dict[str, Any]) -> None:
@@ -165,7 +169,8 @@ class Transaction(BaseModel):
     settlement_date: Optional[datetime] = Field(
         default=None,
         description=(
-            "Optional settlement timestamp used for cash-leg timing and operations monitoring."
+            "Settlement timestamp used for cash-leg timing and operations monitoring; required "
+            "for maturity, call, and partial redemption commands."
         ),
         json_schema_extra={"example": "2023-01-17T10:00:00Z"},
     )
@@ -803,6 +808,12 @@ class Transaction(BaseModel):
             and self.new_factor >= self.old_factor
         ):
             raise ValueError("new_factor must be less than old_factor")
+        return self
+
+    @model_validator(mode="after")
+    def _validate_redemption_settlement_date(self) -> "Transaction":
+        if self.transaction_type in REDEMPTION_TRANSACTION_TYPES and self.settlement_date is None:
+            raise ValueError(f"settlement_date is required for {self.transaction_type}")
         return self
 
     @model_validator(mode="after")

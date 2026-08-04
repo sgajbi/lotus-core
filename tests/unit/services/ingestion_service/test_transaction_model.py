@@ -43,6 +43,7 @@ def test_transaction_model_preserves_canonical_redemption_terms() -> None:
         instrument_id="BOND-001",
         security_id="BOND-001",
         transaction_date="2026-08-04T00:00:00Z",
+        settlement_date="2026-08-06T00:00:00Z",
         transaction_type="PARTIAL_REDEMPTION",
         quantity="25",
         price="100",
@@ -66,6 +67,29 @@ def test_transaction_model_preserves_canonical_redemption_terms() -> None:
 
 
 @pytest.mark.parametrize(
+    "transaction_type",
+    ["MATURITY_REDEMPTION", "CALL_REDEMPTION", "PARTIAL_REDEMPTION"],
+)
+def test_transaction_model_requires_redemption_settlement_date(
+    transaction_type: str,
+) -> None:
+    with pytest.raises(ValidationError, match="settlement_date is required"):
+        Transaction(
+            transaction_id="RED-NO-VALUE-DATE",
+            portfolio_id="PORT-001",
+            instrument_id="BOND-001",
+            security_id="BOND-001",
+            transaction_date="2026-08-04T00:00:00Z",
+            transaction_type=transaction_type,
+            quantity="25",
+            price="100",
+            gross_transaction_amount="2500",
+            trade_currency="USD",
+            currency="USD",
+        )
+
+
+@pytest.mark.parametrize(
     ("provided", "expected"),
     [
         (" par ", "PAR"),
@@ -83,6 +107,7 @@ def test_transaction_model_accepts_governed_redemption_price_types(
         "instrument_id": "BOND-001",
         "security_id": "BOND-001",
         "transaction_date": "2026-08-04T00:00:00Z",
+        "settlement_date": "2026-08-06T00:00:00Z",
         "transaction_type": "MATURITY_REDEMPTION",
         "quantity": "25",
         "price": "100",
@@ -103,6 +128,7 @@ def test_transaction_model_rejects_unsupported_redemption_price_types(provided: 
         "instrument_id": "BOND-001",
         "security_id": "BOND-001",
         "transaction_date": "2026-08-04T00:00:00Z",
+        "settlement_date": "2026-08-06T00:00:00Z",
         "transaction_type": "MATURITY_REDEMPTION",
         "quantity": "25",
         "price": "100",
@@ -141,6 +167,7 @@ def test_transaction_model_rejects_invalid_redemption_factor_shape(
         "instrument_id": "BOND-001",
         "security_id": "BOND-001",
         "transaction_date": "2026-08-04T00:00:00Z",
+        "settlement_date": "2026-08-06T00:00:00Z",
         "transaction_type": "PARTIAL_REDEMPTION",
         "quantity": "25",
         "price": "100",
@@ -665,6 +692,7 @@ def _destination_payload(
         "instrument_id": "OLD_SEC_001",
         "security_id": "OLD_SEC_001",
         "transaction_date": "2026-03-15T10:00:00Z",
+        "settlement_date": "2026-03-17T10:00:00Z",
         "transaction_type": transaction_type,
         "quantity": "100.0",
         "price": "1.0",
