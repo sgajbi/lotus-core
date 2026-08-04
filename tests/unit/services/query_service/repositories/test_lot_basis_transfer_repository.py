@@ -79,6 +79,26 @@ def test_latest_receipt_fails_closed_on_tampered_allocation_hash() -> None:
         _verify_receipt_integrity(receipt, [tampered], predecessor_hash=None)
 
 
+def test_latest_receipt_verifies_immediate_predecessor_hash() -> None:
+    receipt, allocation = _valid_evidence()
+    predecessor_hash = "e" * 64
+    receipt = replace(
+        receipt,
+        receipt_version=2,
+        previous_receipt_content_hash=predecessor_hash,
+        receipt_content_hash=receipt_version_content_hash(
+            receipt_id=receipt.receipt_id,
+            semantic_content_hash=receipt.semantic_content_hash,
+            receipt_version=2,
+            previous_receipt_content_hash=predecessor_hash,
+        ),
+    )
+
+    _verify_receipt_integrity(receipt, [allocation], predecessor_hash=predecessor_hash)
+    with pytest.raises(CorruptLotBasisTransferReadModelError, match="corrupt"):
+        _verify_receipt_integrity(receipt, [allocation], predecessor_hash="f" * 64)
+
+
 def _valid_evidence() -> tuple[
     LotBasisTransferReceiptReadRecord,
     LotBasisTransferAllocationReadRecord,
