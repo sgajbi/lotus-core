@@ -6,7 +6,7 @@ from enum import StrEnum
 from typing import Iterable
 
 from ..transaction import BookedTransaction
-from ..transaction.corporate_action import is_bundle_a_corporate_action
+from ..transaction.corporate_action import is_reconcilable_corporate_action
 from ..transaction.corporate_action.classification import (
     CASH_CONSIDERATION_TRANSACTION_TYPE,
     QUANTITY_TRANSFER_CORPORATE_ACTION_PAIRS,
@@ -110,7 +110,7 @@ def missing_corporate_action_dependencies(
 ) -> tuple[str, ...]:
     """Return unresolved dependency references in source order."""
 
-    if not is_bundle_a_corporate_action(transaction.transaction_type):
+    if not is_reconcilable_corporate_action(transaction.transaction_type):
         return ()
     return tuple(
         reference

@@ -3,6 +3,7 @@
 import hashlib
 import json
 from collections.abc import Callable
+from dataclasses import asdict
 from datetime import UTC, datetime
 from decimal import Decimal
 from enum import StrEnum
@@ -12,11 +13,16 @@ from ..domain.cost_basis import (
     DEFAULT_CORPORATE_ACTION_BASIS_TOLERANCE,
     CorporateActionBasisReconciliation,
     CorporateActionBasisReconciliationStatus,
+    CorporateActionLegLinkageFinding,
     missing_corporate_action_dependencies,
     reconcile_corporate_action_basis,
+    reconcile_corporate_action_leg_linkage,
 )
 from ..domain.transaction import BookedTransaction
-from ..domain.transaction.corporate_action import is_bundle_a_corporate_action
+from ..domain.transaction.corporate_action import (
+    is_bundle_a_corporate_action,
+    is_reconcilable_corporate_action,
+)
 from ..ports.corporate_action_reconciliation import (
     CorporateActionReconciliationEvidence,
     CorporateActionReconciliationFindingEvidence,
@@ -27,7 +33,11 @@ from ..ports.corporate_action_reconciliation import (
     CorporateActionReconciliationRunEvidence,
 )
 
-CORPORATE_ACTION_RECONCILIATION_TYPE = "corporate_action_bundle_a"
+CORPORATE_ACTION_BUNDLE_A_RECONCILIATION_TYPE = "corporate_action_bundle_a"
+# Preserve the established Bundle A application export while quantity-transfer groups use their
+# own evidence type.
+CORPORATE_ACTION_RECONCILIATION_TYPE = CORPORATE_ACTION_BUNDLE_A_RECONCILIATION_TYPE
+CORPORATE_ACTION_QUANTITY_TRANSFER_RECONCILIATION_TYPE = "corporate_action_quantity_transfer"
 CORPORATE_ACTION_RECONCILIATION_REQUEST_OWNER = "cost-calculator"
 CORPORATE_ACTION_FINDING_OWNER = "CORPORATE_ACTION_OPERATIONS"
 
@@ -39,6 +49,7 @@ class CorporateActionReconciliationFindingType(StrEnum):
     INSUFFICIENT_CASH_BASIS = "ca_bundle_a_insufficient_cash_basis"
     INSUFFICIENT_LEGS = "ca_bundle_a_insufficient_legs"
     MISSING_DEPENDENCY = "ca_bundle_a_missing_dependency"
+    LEG_LINKAGE_MISMATCH = "ca_linked_leg_mismatch"
 
 
 class CorporateActionReconciliationReasonCode(StrEnum):
@@ -48,6 +59,7 @@ class CorporateActionReconciliationReasonCode(StrEnum):
     INSUFFICIENT_CASH_BASIS = "CA_BUNDLE_A_INSUFFICIENT_CASH_BASIS"
     INSUFFICIENT_LEGS = "CA_BUNDLE_A_INSUFFICIENT_LEGS"
     MISSING_DEPENDENCY = "CA_BUNDLE_A_MISSING_DEPENDENCY"
+    LEG_LINKAGE_MISMATCH = "CA_LINKED_LEG_MISMATCH"
 
 
 _REPAIR_RECOMMENDATIONS = {
@@ -62,6 +74,9 @@ _REPAIR_RECOMMENDATIONS = {
     ),
     CorporateActionReconciliationFindingType.MISSING_DEPENDENCY: (
         "RESTORE_CORPORATE_ACTION_DEPENDENCY"
+    ),
+    CorporateActionReconciliationFindingType.LEG_LINKAGE_MISMATCH: (
+        "REPAIR_CORPORATE_ACTION_LEG_LINKAGE"
     ),
 }
 
@@ -100,16 +115,30 @@ class CorporateActionReconciliationCoordinator:
             group_transactions,
             basis_tolerance=self._basis_tolerance,
         )
-        missing_dependencies = missing_corporate_action_dependencies(
-            processed_transaction,
-            {transaction.transaction_id for transaction in group_transactions},
+        available_transaction_ids = {
+            transaction.transaction_id for transaction in group_transactions
+        }
+        missing_dependencies = tuple(
+            sorted(
+                {
+                    reference
+                    for transaction in group_transactions
+                    for reference in missing_corporate_action_dependencies(
+                        transaction,
+                        available_transaction_ids,
+                    )
+                }
+            )
         )
+        linkage_findings = reconcile_corporate_action_leg_linkage(group_transactions)
         evidence = build_corporate_action_reconciliation_evidence(
             processed_transaction=processed_transaction,
             linked_transaction_group_id=key.linked_transaction_group_id,
             parent_event_reference=key.parent_event_reference,
             reconciliation=reconciliation,
             missing_dependency_reference_ids=missing_dependencies,
+            linkage_findings=linkage_findings,
+            reconciliation_type=_reconciliation_type(processed_transaction),
             correlation_id=correlation_id,
             completed_at=self._clock(),
         )
@@ -121,6 +150,7 @@ class CorporateActionReconciliationCoordinator:
                     processed_transaction=processed_transaction,
                     reconciliation=reconciliation,
                     missing_dependencies=missing_dependencies,
+                    linkage_findings=linkage_findings,
                     evidence=evidence,
                 )
             )
@@ -131,7 +161,7 @@ class CorporateActionReconciliationCoordinator:
 def _reconciliation_key(
     transaction: BookedTransaction,
 ) -> CorporateActionReconciliationKey | None:
-    if not is_bundle_a_corporate_action(transaction.transaction_type):
+    if not is_reconcilable_corporate_action(transaction.transaction_type):
         return None
     linked_group = (transaction.linked_transaction_group_id or "").strip()
     parent_reference = (transaction.parent_event_reference or "").strip()
@@ -144,12 +174,21 @@ def _reconciliation_key(
     )
 
 
+def _reconciliation_type(transaction: BookedTransaction) -> str:
+    return (
+        CORPORATE_ACTION_BUNDLE_A_RECONCILIATION_TYPE
+        if is_bundle_a_corporate_action(transaction.transaction_type)
+        else CORPORATE_ACTION_QUANTITY_TRANSFER_RECONCILIATION_TYPE
+    )
+
+
 def _observation(
     *,
     key: CorporateActionReconciliationKey,
     processed_transaction: BookedTransaction,
     reconciliation: CorporateActionBasisReconciliation,
     missing_dependencies: tuple[str, ...],
+    linkage_findings: tuple[CorporateActionLegLinkageFinding, ...],
     evidence: CorporateActionReconciliationEvidence,
 ) -> CorporateActionReconciliationObservation:
     return CorporateActionReconciliationObservation(
@@ -166,6 +205,7 @@ def _observation(
         net_basis_delta_local=reconciliation.net_basis_delta_local,
         basis_tolerance=reconciliation.basis_tolerance,
         missing_dependency_reference_ids=missing_dependencies,
+        linkage_finding_count=len(linkage_findings),
         finding_severities=tuple(finding.severity for finding in evidence.findings),
     )
 
@@ -177,8 +217,10 @@ def build_corporate_action_reconciliation_evidence(
     parent_event_reference: str,
     reconciliation: CorporateActionBasisReconciliation,
     missing_dependency_reference_ids: Sequence[str],
+    linkage_findings: Sequence[CorporateActionLegLinkageFinding] = (),
     correlation_id: str | None,
     completed_at: datetime,
+    reconciliation_type: str = CORPORATE_ACTION_BUNDLE_A_RECONCILIATION_TYPE,
 ) -> CorporateActionReconciliationEvidence:
     """Build stable run and finding evidence without persistence or telemetry concerns."""
 
@@ -196,21 +238,22 @@ def build_corporate_action_reconciliation_evidence(
             "net_basis_delta_local": str(reconciliation.net_basis_delta_local),
             "basis_tolerance": str(reconciliation.basis_tolerance),
             "missing_dependency_reference_ids": list(missing_dependencies),
+            "linkage_findings": [asdict(finding) for finding in linkage_findings],
         }
     )
-    run_id = f"recon-ca-bundle-a-{evidence_signature}"
+    run_id = f"recon-{reconciliation_type}-{evidence_signature}"
     run = CorporateActionReconciliationRunEvidence(
         run_id=run_id,
-        reconciliation_type=CORPORATE_ACTION_RECONCILIATION_TYPE,
+        reconciliation_type=reconciliation_type,
         portfolio_id=processed_transaction.portfolio_id,
         business_date=processed_transaction.transaction_date.date(),
         epoch=processed_transaction.epoch,
         status="COMPLETED",
         requested_by=CORPORATE_ACTION_RECONCILIATION_REQUEST_OWNER,
-        dedupe_key=f"auto:{CORPORATE_ACTION_RECONCILIATION_TYPE}:{evidence_signature}",
+        dedupe_key=f"auto:{reconciliation_type}:{evidence_signature}",
         correlation_id=correlation_id,
         tolerance=reconciliation.basis_tolerance,
-        summary=_summary(reconciliation, missing_dependencies),
+        summary=_summary(reconciliation, missing_dependencies, linkage_findings),
         failure_reason=None,
         completed_at=completed_at,
     )
@@ -224,6 +267,8 @@ def build_corporate_action_reconciliation_evidence(
             parent_event_reference=parent_event_reference,
             reconciliation=reconciliation,
             missing_dependencies=missing_dependencies,
+            linkage_findings=tuple(linkage_findings),
+            reconciliation_type=reconciliation_type,
         ),
     )
 
@@ -236,10 +281,13 @@ def _stable_digest(payload: dict[str, object]) -> str:
 def _summary(
     reconciliation: CorporateActionBasisReconciliation,
     missing_dependencies: tuple[str, ...],
+    linkage_findings: Sequence[CorporateActionLegLinkageFinding],
 ) -> dict[str, object]:
-    finding_count = int(
-        reconciliation.status is not CorporateActionBasisReconciliationStatus.BALANCED
-    ) + int(bool(missing_dependencies))
+    finding_count = (
+        int(reconciliation.status is not CorporateActionBasisReconciliationStatus.BALANCED)
+        + int(bool(missing_dependencies))
+        + len(linkage_findings)
+    )
     return {
         "examined_count": (
             reconciliation.source_leg_count
@@ -260,6 +308,7 @@ def _summary(
         "net_basis_delta_local": str(reconciliation.net_basis_delta_local),
         "missing_cash_basis_count": reconciliation.missing_cash_basis_count,
         "missing_dependency_count": len(missing_dependencies),
+        "linkage_finding_count": len(linkage_findings),
     }
 
 
@@ -272,6 +321,8 @@ def _findings(
     parent_event_reference: str,
     reconciliation: CorporateActionBasisReconciliation,
     missing_dependencies: tuple[str, ...],
+    linkage_findings: tuple[CorporateActionLegLinkageFinding, ...],
+    reconciliation_type: str,
 ) -> tuple[CorporateActionReconciliationFindingEvidence, ...]:
     findings: list[CorporateActionReconciliationFindingEvidence] = []
     status = reconciliation.status
@@ -295,6 +346,7 @@ def _findings(
                     "cash_basis_local": str(reconciliation.cash_basis_local),
                     "net_basis_delta_local": str(reconciliation.net_basis_delta_local),
                 },
+                reconciliation_type=reconciliation_type,
             )
         )
     elif status is CorporateActionBasisReconciliationStatus.INSUFFICIENT_LEGS:
@@ -313,6 +365,7 @@ def _findings(
                     "source_leg_count": reconciliation.source_leg_count,
                     "target_leg_count": reconciliation.target_leg_count,
                 },
+                reconciliation_type=reconciliation_type,
             )
         )
     elif status is CorporateActionBasisReconciliationStatus.INSUFFICIENT_CASH_BASIS:
@@ -332,6 +385,7 @@ def _findings(
                     "missing_cash_basis_count": reconciliation.missing_cash_basis_count,
                     "cash_basis_local": str(reconciliation.cash_basis_local),
                 },
+                reconciliation_type=reconciliation_type,
             )
         )
     if missing_dependencies:
@@ -345,9 +399,38 @@ def _findings(
                 linked_transaction_group_id=linked_transaction_group_id,
                 parent_event_reference=parent_event_reference,
                 reconciliation=reconciliation,
-                expected_value={"dependency_reference_ids": "present in linked Bundle A group"},
+                expected_value={"dependency_reference_ids": "present in linked action group"},
                 observed_value={"missing_dependency_reference_ids": list(missing_dependencies)},
                 extra_detail={"missing_dependency_reference_ids": list(missing_dependencies)},
+                reconciliation_type=reconciliation_type,
+            )
+        )
+    for ordinal, linkage_finding in enumerate(linkage_findings):
+        findings.append(
+            _finding(
+                run_id=run_id,
+                evidence_signature=evidence_signature,
+                finding_type=CorporateActionReconciliationFindingType.LEG_LINKAGE_MISMATCH,
+                reason_code=CorporateActionReconciliationReasonCode.LEG_LINKAGE_MISMATCH,
+                processed_transaction=processed_transaction,
+                linked_transaction_group_id=linked_transaction_group_id,
+                parent_event_reference=parent_event_reference,
+                reconciliation=reconciliation,
+                expected_value={
+                    "field": linkage_finding.field,
+                    "value": linkage_finding.expected_value,
+                },
+                observed_value={
+                    "field": linkage_finding.field,
+                    "value": linkage_finding.observed_value,
+                },
+                extra_detail={
+                    "linkage_finding_type": linkage_finding.finding_type,
+                    "source_transaction_id": linkage_finding.source_transaction_id,
+                    "target_transaction_id": linkage_finding.target_transaction_id,
+                },
+                finding_discriminator=f"linkage-{ordinal}",
+                reconciliation_type=reconciliation_type,
             )
         )
     return tuple(findings)
@@ -366,6 +449,8 @@ def _finding(
     expected_value: dict[str, object],
     observed_value: dict[str, object],
     extra_detail: dict[str, object] | None = None,
+    finding_discriminator: str | None = None,
+    reconciliation_type: str = CORPORATE_ACTION_BUNDLE_A_RECONCILIATION_TYPE,
 ) -> CorporateActionReconciliationFindingEvidence:
     detail = {
         "reason_code": reason_code,
@@ -381,9 +466,12 @@ def _finding(
         **(extra_detail or {}),
     }
     return CorporateActionReconciliationFindingEvidence(
-        finding_id=f"finding-{finding_type}-{evidence_signature}",
+        finding_id=(
+            f"finding-{finding_type}-{evidence_signature}"
+            + (f"-{finding_discriminator}" if finding_discriminator else "")
+        ),
         run_id=run_id,
-        reconciliation_type=CORPORATE_ACTION_RECONCILIATION_TYPE,
+        reconciliation_type=reconciliation_type,
         finding_type=finding_type,
         severity="ERROR",
         portfolio_id=processed_transaction.portfolio_id,

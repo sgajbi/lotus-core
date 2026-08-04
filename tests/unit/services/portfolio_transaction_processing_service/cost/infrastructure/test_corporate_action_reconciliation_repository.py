@@ -60,6 +60,8 @@ async def test_load_group_maps_rows_to_domain_transactions() -> None:
     assert "transactions.portfolio_id = 'PORT_CA_01'" in compiled_query
     assert "transactions.linked_transaction_group_id = 'LTG-CA-01'" in compiled_query
     assert "transactions.parent_event_reference = 'CA-PARENT-01'" in compiled_query
+    assert "'EXCHANGE_OUT'" in compiled_query
+    assert "'EXCHANGE_IN'" in compiled_query
 
 
 async def test_save_evidence_maps_typed_records() -> None:
