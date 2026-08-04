@@ -16,6 +16,7 @@ from portfolio_common.event_mapping import (
 from portfolio_common.exceptions import RetryableConsumerError
 from portfolio_common.kafka_consumer import BaseConsumer
 from portfolio_common.kafka_consumer_execution import KafkaConsumerExecutionProfile
+from portfolio_common.logging_utils import normalize_traceparent, traceparent_var
 from sqlalchemy.exc import DBAPIError, IntegrityError
 
 from ...application.fixed_income_book_cost import (
@@ -71,9 +72,13 @@ class FixedIncomeBookCostAuthorityConsumer(BaseConsumer):
             raise ValueError(
                 "fixed-income book-cost authority partition key does not match event scope"
             )
-        with self._message_correlation_context(msg):
+        with self._message_correlation_context(msg) as correlation_id:
             try:
-                result = await self._use_case.execute(event)
+                result = await self._use_case.execute(
+                    event,
+                    correlation_id=correlation_id,
+                    traceparent=normalize_traceparent(traceparent_var.get()),
+                )
             except (DBAPIError, IntegrityError) as exc:
                 raise RetryableConsumerError(
                     "Fixed-income book-cost database dependency unavailable"
