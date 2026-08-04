@@ -10,6 +10,8 @@ from .transaction.numeric_policy import COST_BASIS_STATE_LEDGER_OUTPUT_V1
 
 BASIS_TRANSFER_LINEAGE_ALGORITHM_ID = "cost-basis-lot-basis-transfer-allocation"
 BASIS_TRANSFER_LINEAGE_ALGORITHM_VERSION = 1
+LOT_DISPOSAL_LINEAGE_ALGORITHM_ID = "cost-basis-lot-disposal-allocation"
+LOT_DISPOSAL_LINEAGE_ALGORITHM_VERSION = 2
 
 
 class BasisTransferLineageAllocation(Protocol):
@@ -26,6 +28,64 @@ class BasisTransferLineageAllocation(Protocol):
     transferred_cost_local: Decimal
     retained_cost_base: Decimal
     retained_cost_local: Decimal
+
+
+class LotDisposalLineageAllocation(Protocol):
+    """Structural source-lot facts shared by disposal writers and readers."""
+
+    allocation_ordinal: int
+    consumed_cost_base: Decimal
+    consumed_cost_local: Decimal
+    consumed_quantity: Decimal
+    source_acquisition_date: date
+    source_lot_id: str
+    source_transaction_id: str
+
+
+def lot_disposal_allocation_payload(
+    allocation: LotDisposalLineageAllocation,
+    *,
+    amortized_cost_evidence: Mapping[str, object] | None = None,
+) -> dict[str, object]:
+    """Return the closed persisted source-lot contract used by disposal lineage."""
+
+    payload: dict[str, object] = {
+        "allocation_ordinal": allocation.allocation_ordinal,
+        "consumed_cost_base": allocation.consumed_cost_base,
+        "consumed_cost_local": allocation.consumed_cost_local,
+        "consumed_quantity": allocation.consumed_quantity,
+        "source_acquisition_date": allocation.source_acquisition_date,
+        "source_lot_id": allocation.source_lot_id,
+        "source_transaction_id": allocation.source_transaction_id,
+    }
+    if amortized_cost_evidence is not None:
+        payload["amortized_cost_evidence"] = dict(amortized_cost_evidence)
+    return payload
+
+
+def lot_disposal_lineage_input_payload(
+    allocation_payloads: Sequence[Mapping[str, object]],
+) -> dict[str, object]:
+    """Return policy-scale source-lot inputs bound by disposal lineage."""
+
+    return canonical_cost_basis_output_payload({"allocations": list(allocation_payloads)})
+
+
+def lot_disposal_lineage_output_payload(
+    *,
+    consumed_cost_base: Decimal,
+    consumed_cost_local: Decimal,
+    consumed_quantity: Decimal,
+) -> dict[str, object]:
+    """Return policy-scale aggregate economics bound by disposal lineage."""
+
+    return canonical_cost_basis_output_payload(
+        {
+            "consumed_cost_base": consumed_cost_base,
+            "consumed_cost_local": consumed_cost_local,
+            "consumed_quantity": consumed_quantity,
+        }
+    )
 
 
 def basis_transfer_lineage_input_payload(

@@ -12,13 +12,16 @@ from portfolio_common.domain.calculation_lineage import (
     calculation_lineage_binds_output,
     require_sha256_digest,
 )
+from portfolio_common.domain.cost_basis_receipt_integrity import (
+    LOT_DISPOSAL_LINEAGE_ALGORITHM_ID,
+    LOT_DISPOSAL_LINEAGE_ALGORITHM_VERSION,
+    lot_disposal_allocation_payload,
+    lot_disposal_lineage_input_payload,
+    lot_disposal_lineage_output_payload,
+)
 from portfolio_common.domain.transaction.numeric_policy import (
     COST_BASIS_STATE_LEDGER_OUTPUT_V1,
 )
-
-from ..state_lineage import canonical_cost_basis_output_payload
-
-_DISPOSAL_ALLOCATION_ALGORITHM_ID = "cost-basis-lot-disposal-allocation"
 
 
 @dataclass(frozen=True, slots=True)
@@ -214,17 +217,14 @@ def source_lot_disposal_allocation_payload(
 
     if not isinstance(allocation, SourceLotDisposalAllocation):
         raise TypeError("allocation must be a SourceLotDisposalAllocation")
-    payload: dict[str, object] = {
-        "allocation_ordinal": allocation.allocation_ordinal,
-        "consumed_cost_base": allocation.consumed_cost_base,
-        "consumed_cost_local": allocation.consumed_cost_local,
-        "consumed_quantity": allocation.consumed_quantity,
-        "source_acquisition_date": allocation.source_acquisition_date,
-        "source_lot_id": allocation.source_lot_id,
-        "source_transaction_id": allocation.source_transaction_id,
-    }
-    if allocation.amortized_cost_evidence is not None:
-        payload["amortized_cost_evidence"] = allocation.amortized_cost_evidence.semantic_payload()
+    payload: dict[str, object] = lot_disposal_allocation_payload(
+        allocation,
+        amortized_cost_evidence=(
+            allocation.amortized_cost_evidence.semantic_payload()
+            if allocation.amortized_cost_evidence is not None
+            else None
+        ),
+    )
     return payload
 
 
@@ -348,28 +348,22 @@ def _build_conserved_allocation_lineage(result: LotDisposalResult) -> Calculatio
     if cost_base != result.cost_base:
         raise ValueError("source-lot base cost does not reconcile to disposal aggregate")
     return build_calculation_lineage(
-        algorithm_id=_DISPOSAL_ALLOCATION_ALGORITHM_ID,
-        algorithm_version=2,
+        algorithm_id=LOT_DISPOSAL_LINEAGE_ALGORITHM_ID,
+        algorithm_version=LOT_DISPOSAL_LINEAGE_ALGORITHM_VERSION,
         intermediate_precision=COST_BASIS_STATE_LEDGER_OUTPUT_V1.working_precision,
-        input_payload=canonical_cost_basis_output_payload(
-            {
-                "allocations": [
-                    source_lot_disposal_allocation_payload(allocation)
-                    for allocation in result.allocations
-                ]
-            }
+        input_payload=lot_disposal_lineage_input_payload(
+            [
+                source_lot_disposal_allocation_payload(allocation)
+                for allocation in result.allocations
+            ]
         ),
-        output_payload=canonical_cost_basis_output_payload(_disposal_output_payload(result)),
+        output_payload=lot_disposal_lineage_output_payload(
+            consumed_cost_base=result.cost_base,
+            consumed_cost_local=result.cost_local,
+            consumed_quantity=result.consumed_quantity,
+        ),
         numeric_output_policy=COST_BASIS_STATE_LEDGER_OUTPUT_V1.lineage_identity(),
     )
-
-
-def _disposal_output_payload(result: LotDisposalResult) -> dict[str, Decimal]:
-    return {
-        "consumed_cost_base": result.cost_base,
-        "consumed_cost_local": result.cost_local,
-        "consumed_quantity": result.consumed_quantity,
-    }
 
 
 def _require_decimal(

@@ -410,6 +410,14 @@ Data Models wiki documents the staged ledgers while the capability wiki remains
   118 writer/reader unit cases, query verifier 100% line/branch coverage across 99 statements and
   52 branches, full MyPy, and architecture guards pass. No OpenAPI shape, schema, migration, Kafka,
   capability, central-context, skill-routing, or additional wiki truth changed.
+- final receipt-integrity proof: the signed redemption principal component determines its cashflow
+  classification after settlement deductions, so an economically negative component is an
+  `INVESTMENT_OUTFLOW` while separately linked accrued interest remains `INCOME`; the components
+  still reconcile exactly to authoritative net settlement. Disposal supportability now verifies
+  that calculation lineage binds every persisted source allocation and the aggregate consumed
+  quantity, local cost, and base cost. The producer and reader share one versioned canonical
+  payload contract, preventing independent serialization drift. No API/OpenAPI shape, schema,
+  migration, Kafka, capability, central-context, skill-routing, or additional wiki truth changed.
 
 Protected PR and exact-main evidence remain pending for this tranche. Wider runtime recovery/load
 proof, complete corporate-action scenario coverage, redemption, and final issue closure remain

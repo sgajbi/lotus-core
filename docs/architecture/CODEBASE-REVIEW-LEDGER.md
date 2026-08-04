@@ -1,5 +1,15 @@
 # Codebase Review Ledger
 
+CR-1678 receipt-integrity addendum (2026-08-05): redemption principal cashflow classification now
+follows the signed principal component after settlement deductions. When deductions exceed
+principal, the component is an `INVESTMENT_OUTFLOW`; the separately linked accrued-interest
+component remains `INCOME`, and their sum still equals the authoritative net settlement. Disposal
+lineage verification now rejects records whose persisted source allocations or aggregate consumed
+quantity/local/base costs differ from the signed calculation evidence. Writer and reader use one
+shared versioned payload contract to prevent semantic drift. Focused unit, coverage, lint, type, and
+architecture evidence is maintained in CR-1678 and PR #910. No API/OpenAPI shape, schema,
+migration, Kafka, central-context, skill-routing, capability, or additional wiki truth changed.
+
 CR-1678 final-review addendum (2026-08-05): factor-authoritative partial redemptions may use the
 ingestion-required zero quantity as an explicit transport placeholder; the domain derives the
 redeemed quantity from the complete old/new factor pair, while non-zero quantity remains explicit
