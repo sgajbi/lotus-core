@@ -28,6 +28,7 @@ from ...domain.cost_basis import (
     transaction_cost_output_payload,
 )
 from ...domain.fixed_income_book_cost import (
+    AmortizedCostProfileStatus,
     CarriedLotBookCost,
     LotAmortizedCostProfileVersion,
     LotBookCostAuthorityScope,
@@ -204,6 +205,13 @@ def _decorate_allocation(
         return allocation
     if profile.scope != request.scope:
         raise ValueError("effective amortized-cost profile does not match requested lot scope")
+    if profile.status is not AmortizedCostProfileStatus.ACTIVE:
+        carried_book_cost_by_source.pop(allocation.source_transaction_id, None)
+        _clear_amortized_carry_for_unwind(
+            open_lot_states,
+            source_transaction_id=allocation.source_transaction_id,
+        )
+        return allocation
     if profile.currency != source_transaction.trade_currency.strip().upper():
         raise ValueError("amortized-cost profile currency does not match source-lot currency")
 
@@ -356,6 +364,26 @@ def _replace_amortized_carry(
     elif carry is None:
         raise ValueError("open amortized lot cannot discard accounting carrying state")
     open_lot_states[source_transaction_id] = replace(tax_basis_state, amortized_cost=carry)
+
+
+def _clear_amortized_carry_for_unwind(
+    open_lot_states: dict[str, OpenLotState],
+    *,
+    source_transaction_id: str,
+) -> None:
+    """Restore original-cost economics after an explicit non-active profile decision."""
+
+    tax_basis_state = open_lot_states.get(source_transaction_id)
+    if tax_basis_state is None:
+        raise ValueError(
+            "amortized disposal cannot resolve final tax-basis state for source lot: "
+            f"{source_transaction_id}"
+        )
+    if tax_basis_state.amortized_cost is not None:
+        open_lot_states[source_transaction_id] = replace(
+            tax_basis_state,
+            amortized_cost=None,
+        )
 
 
 def _book_cost_fx_rate(

@@ -18,8 +18,10 @@ from services.portfolio_transaction_processing_service.app.domain.cost_basis imp
     OpenLotState,
 )
 from services.portfolio_transaction_processing_service.app.domain.fixed_income_book_cost import (
+    AmortizedCostEligibilityReason,
     lot_amortized_cost_profile_id,
     materialize_active_lot_amortized_cost_profile,
+    materialize_parked_lot_amortized_cost_profile,
 )
 from services.portfolio_transaction_processing_service.app.ports import (
     CostBasisPortfolioReference,
@@ -62,6 +64,21 @@ class _FirstEffectiveProfileOnly(_EffectiveProfiles):
         profiles = await super().effective_as_of_many(requests)
         first_request = self.requests[0]
         return {first_request: profiles[first_request]}
+
+
+class _ParkedProfiles(_EffectiveProfiles):
+    async def effective_as_of_many(self, requests):
+        self.calls += 1
+        self.requests = tuple(requests)
+        return {
+            request: materialize_parked_lot_amortized_cost_profile(
+                scope=request.scope,
+                effective_date=request.effective_date,
+                profile_version=2,
+                reason=AmortizedCostEligibilityReason.ASSIGNMENT_MISSING,
+            )
+            for request in self.requests
+        }
 
 
 class _InvalidEffectiveProfile(_EffectiveProfiles):
@@ -416,6 +433,59 @@ async def test_incremental_carried_sell_without_effective_profile_fails_closed()
             cost_basis_method=CostBasisMethod.FIFO,
             profiles=_NoEffectiveProfiles(),  # type: ignore[arg-type]
         )
+
+
+@pytest.mark.asyncio
+async def test_parked_profile_explicitly_unwinds_persisted_book_carry() -> None:
+    restored_buy = _raw_transaction(
+        "BUY_1",
+        "2026-01-01T00:00:00Z",
+        "BUY",
+        "2",
+        "70",
+    )
+    restored_buy["source_lot_order_quantity"] = Decimal("3")
+    restored_buy["net_cost_local"] = Decimal("70.0000000000")
+    restored_buy["net_cost"] = Decimal("85.0000000000")
+    restored_buy["amortized_cost_carry_state"] = AmortizedCostCarryState(
+        profile_id="PROFILE-1",
+        profile_version=1,
+        profile_content_hash="a" * 64,
+        recognized_through_date=resolved_fixed_income_book_cost_inputs().assignment.valid_from,
+        scheduled_cost_local=Decimal("97.0000000000"),
+        carrying_amount_local=Decimal("64.6666666667"),
+        carrying_amount_base=Decimal("79.8353902264"),
+        book_cost_fx_rate_to_base=Decimal("1.2345678912"),
+    )
+    timeline = build_cost_basis_timeline_processor().process_increment(
+        initial_open_lots_raw=[restored_buy],
+        new_transactions_raw=[
+            _raw_transaction("SELL_2", "2026-07-01T00:00:00Z", "SELL", "1", "40")
+        ],
+    )
+    calculation = CostBasisCalculationResult(
+        processed=timeline.processed,
+        errored=timeline.errored,
+        open_lot_states=timeline.open_lot_states,
+        incremental=True,
+        open_lot_persistence_scope=OpenLotPersistenceScope.SELECTED_LOTS,
+        average_cost_pool_transition=None,
+        disposals=timeline.disposals,
+        source_transactions=timeline.source_transactions,
+    )
+
+    result = await apply_effective_amortized_cost_to_disposals(
+        calculation,
+        portfolio=_accounting_portfolio(),
+        cost_basis_method=CostBasisMethod.FIFO,
+        profiles=_ParkedProfiles(),  # type: ignore[arg-type]
+    )
+
+    disposal = result.disposals[0]
+    assert disposal.result.cost_local == calculation.disposals[0].result.cost_local
+    assert disposal.result.cost_base == calculation.disposals[0].result.cost_base
+    assert disposal.result.allocations[0].amortized_cost_evidence is None
+    assert result.open_lot_states["BUY_1"].amortized_cost is None
 
 
 @pytest.mark.asyncio

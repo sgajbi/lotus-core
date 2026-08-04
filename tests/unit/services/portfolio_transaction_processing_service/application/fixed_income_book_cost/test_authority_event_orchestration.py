@@ -528,6 +528,44 @@ async def test_assignment_correction_moved_earlier_replays_from_new_boundary() -
 
 
 @pytest.mark.asyncio
+async def test_assignment_correction_materializes_prior_and_current_expiry_boundaries() -> None:
+    authority, profiles = _dependencies()
+    resolved = resolved_fixed_income_book_cost_inputs()
+    previous = replace(resolved.assignment, valid_to=date(2026, 12, 31))
+    current = replace(
+        previous,
+        valid_to=date(2026, 6, 30),
+        assignment_version=2,
+        source_revision="revision-2",
+    )
+    authority.load.return_value = replace(
+        _bundle(basis_facts=(resolved.basis_fact,)),
+        assignments=(previous, current),
+    )
+    unit_of_work = _UnitOfWork(authority, profiles)
+
+    result = await HandleFixedIncomeBookCostAuthorityEventUseCase(
+        unit_of_work_factory=lambda: unit_of_work,
+        policies=AmortizedCostPolicyRegistry((resolved.policy,)),
+    ).execute(_assignment_event(current))
+
+    persisted_profiles = [call.args[0] for call in profiles.append.await_args_list]
+    assert [profile.effective_date for profile in persisted_profiles] == [
+        current.valid_from,
+        date(2026, 7, 1),
+        date(2027, 1, 1),
+    ]
+    assert persisted_profiles[0].eligibility_reason is None
+    assert [profile.eligibility_reason for profile in persisted_profiles[1:]] == [
+        AmortizedCostEligibilityReason.ASSIGNMENT_MISSING,
+        AmortizedCostEligibilityReason.ASSIGNMENT_MISSING,
+    ]
+    assert result.materialization.profile_id == persisted_profiles[0].profile_id
+    assert len(result.rematerializations) == 2
+    assert unit_of_work.committed is True
+
+
+@pytest.mark.asyncio
 async def test_basis_correction_moved_later_replays_superseded_boundary() -> None:
     authority, profiles = _dependencies()
     resolved = resolved_fixed_income_book_cost_inputs()
