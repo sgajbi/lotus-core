@@ -143,8 +143,9 @@ def build_fixed_income_book_cost_authority_use_case(
     *,
     session_factory: Callable[[], AsyncSession] | None = None,
     policies: AmortizedCostPolicyRegistry | None = None,
+    correction_replay_enabled: bool = False,
 ) -> HandleFixedIncomeBookCostAuthorityEventUseCase:
-    """Compose the authority handler with one SQL transaction and governed methodology."""
+    """Compose authority handling with replay fail-closed until its consumer is certified."""
 
     resolved_policies = policies or AmortizedCostPolicyRegistry(
         governed_amortized_cost_policy_catalog()
@@ -154,4 +155,5 @@ def build_fixed_income_book_cost_authority_use_case(
             session_factory=session_factory or get_async_session_factory()
         ),
         policies=resolved_policies,
+        correction_replay_enabled=correction_replay_enabled,
     )

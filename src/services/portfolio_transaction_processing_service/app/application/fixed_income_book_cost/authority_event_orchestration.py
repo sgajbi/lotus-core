@@ -133,9 +133,11 @@ class HandleFixedIncomeBookCostAuthorityEventUseCase:
         *,
         unit_of_work_factory: FixedIncomeBookCostAuthorityUnitOfWorkFactory,
         policies: AmortizedCostPolicyRegistry,
+        correction_replay_enabled: bool = False,
     ) -> None:
         self._unit_of_work_factory = unit_of_work_factory
         self._policies = policies
+        self._correction_replay_enabled = correction_replay_enabled
 
     async def execute(
         self,
@@ -222,6 +224,8 @@ class HandleFixedIncomeBookCostAuthorityEventUseCase:
     ) -> FixedIncomeBookCostCorrectionReplayIntent | None:
         """Stage one suffix replay only for a newly committed profile decision."""
 
+        if not self._correction_replay_enabled:
+            return None
         if persistence.appended_count == 0 or not any(
             result.outcome is LotAmortizedCostProfileAppendOutcome.APPENDED
             for result in materializations

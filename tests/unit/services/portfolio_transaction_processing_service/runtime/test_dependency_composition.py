@@ -157,6 +157,16 @@ def test_fixed_income_authority_builder_uses_fresh_unit_of_work_and_governed_cat
     assert isinstance(second, SqlAlchemyFixedIncomeBookCostAuthorityUnitOfWork)
     assert first is not second
     assert first._session_factory is second._session_factory is session_factory
+    assert use_case._correction_replay_enabled is False
     assert tuple(
         (identity.policy_id, identity.policy_version) for identity in use_case._policies.identities
     ) == (("IFRS9_EIR_LOCAL", 1), ("STRAIGHT_LINE_LOCAL", 1))
+
+
+def test_fixed_income_authority_builder_requires_explicit_replay_activation() -> None:
+    use_case = build_fixed_income_book_cost_authority_use_case(
+        session_factory=MagicMock(spec=lambda: AsyncSession()),
+        correction_replay_enabled=True,
+    )
+
+    assert use_case._correction_replay_enabled is True
