@@ -3462,6 +3462,13 @@ Most relevant current governance:
      profile materialization lock. Missing or conflicting authority must create deterministic
      parked evidence; it must never be inferred from transaction quantity, gross cost, product
      classification, or a broad portfolio default.
+     Authority corrections derive the replay boundary from the earlier prior/current validity date
+     for assignment, basis, schedule, and yield source families. Stage at most one source-lot-keyed
+     correction command in the authority transaction. Its content-bound command id must survive
+     Kafka redelivery as the transaction repair-delivery identity. Replay only the earliest affected
+     booked transaction: the checkpoint fence forces one canonical full-history cost rebuild, while
+     suffix persistence atomically reconciles later transactions, disposal receipts, open-lot carry,
+     checkpoints, realized P&L, and lineage without per-disposal command fan-out.
 
 ## Context Maintenance Rule
 

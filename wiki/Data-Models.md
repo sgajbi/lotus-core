@@ -127,9 +127,12 @@ active profiles only when complete authority resolves, and persists a parked rea
 not. `position_lot_state.lot_cost_local` and `lot_cost_base` remain strategy/tax acquisition basis.
 Optional `amortized_book_carrying_local` and `amortized_book_carrying_base` fields separately retain
 accounting carry with complete profile, recognition-boundary, schedule, FX, and calculation-lineage
-evidence. These internal structures do not yet make amortized cost, disposal at current book cost,
-or redemption a supported runtime capability; production activation remains blocked on governed
-correction replay and certification.
+evidence. The transaction runtime applies amortized carrying cost to disposal economics and uses a
+durable source-lot-keyed correction command to replay the earliest affected booked transaction.
+Canonical checkpoint fencing rebuilds the complete affected suffix, and the stable command id
+suppresses duplicate financial work across Kafka redelivery. These internal structures still do
+not make the complete fixed-income lifecycle or redemption a supported capability until protected
+runtime, query, recovery/load, and downstream certification finish.
 
 Financial `NUMERIC` persistence has an explicit finite-value policy. The machine-readable inventory
 in `docs/standards/financial-numeric-persistence.v1.json` classifies all 131 ORM numeric columns
