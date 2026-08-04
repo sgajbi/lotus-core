@@ -90,6 +90,11 @@ Carry decoration uses a detached open-lot snapshot, so a later profile gap or tr
 validation failure cannot leak a partially applied accounting overlay into its input calculation.
 Production certification still requires protected-PR and exact-main evidence tracked by #903/#478,
 so schema separation alone does not claim complete fixed-income lifecycle support.
+The query read plane now exposes the latest immutable lot-disposal receipt through a
+transaction-neutral endpoint. One bounded SQL query selects the latest receipt version and ordered
+allocations, including hash-chain, source-lot, calculation-lineage, and amortized-cost authority
+evidence. Existing SELL-specific projections remain compatible; redemption, transfer, and
+corporate-action support do not require new family-specific receipt APIs.
 An additive `lot_amortized_cost_authority` ledger and application port now persist and reload all
 four required source families through one governed pattern. Per-source transaction locks,
 monotonic correction versions, exact-retry neutrality, canonical decimal/date payloads, composite
