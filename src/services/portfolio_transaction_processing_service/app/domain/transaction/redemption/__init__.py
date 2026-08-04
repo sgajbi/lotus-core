@@ -7,6 +7,7 @@ from .economics import (
     RedemptionEconomics,
     RedemptionTerms,
     calculate_redemption_economics,
+    derive_redemption_principal_proceeds_local,
 )
 
 __all__ = [
@@ -16,4 +17,5 @@ __all__ = [
     "RedemptionEconomics",
     "RedemptionTerms",
     "calculate_redemption_economics",
+    "derive_redemption_principal_proceeds_local",
 ]

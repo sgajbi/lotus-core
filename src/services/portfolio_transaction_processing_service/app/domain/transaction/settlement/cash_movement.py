@@ -10,14 +10,12 @@ from portfolio_common.domain.transaction.fee_components import (
     TRANSACTION_FEE_COMPONENT_FIELDS,
     resolve_transaction_trade_fee,
 )
-from portfolio_common.domain.transaction.numeric_policy import (
-    TRANSACTION_COST_LEDGER_OUTPUT_V1,
-)
 from portfolio_common.domain.transaction_control_codes import (
     normalize_transaction_control_code,
 )
 
 from ..booked import BookedTransaction
+from ..redemption import derive_redemption_principal_proceeds_local
 from .interest import calculate_interest_settlement_economics
 from .reason_codes import SettlementCashRejectionReasonCode
 
@@ -112,10 +110,9 @@ def _calculate_redemption_movement(
     principal = (
         transaction.principal_proceeds_local
         if transaction.principal_proceeds_local is not None
-        else TRANSACTION_COST_LEDGER_OUTPUT_V1.multiply(
+        else derive_redemption_principal_proceeds_local(
             transaction.quantity,
             transaction.price,
-            field_name="derived_principal_proceeds_local",
         )
     )
     accrued_interest = transaction.accrued_interest_proceeds_local or Decimal(0)
