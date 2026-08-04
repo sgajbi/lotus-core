@@ -1558,7 +1558,10 @@ async def test_upsert_booked_transaction_persists_only_canonical_table_fields() 
     execute_result.scalars.return_value.one.return_value = persisted_transaction
     db_session.execute.return_value = execute_result
 
-    result = await repository.upsert_booked_transaction(transaction)
+    result = await repository.upsert_booked_transaction(
+        transaction,
+        fields_to_clear=frozenset({"external_cash_transaction_id", "linked_component_ids"}),
+    )
 
     assert result.transaction_id == transaction.transaction_id
     assert result.calculation_lineage == calculation_lineage
@@ -1567,5 +1570,7 @@ async def test_upsert_booked_transaction_persists_only_canonical_table_fields() 
     parameters = statement.compile().params
     assert parameters["transaction_id"] == "FX-OPEN-001"
     assert parameters["calculation_lineage"] == calculation_lineage.lineage_payload()
+    assert parameters["external_cash_transaction_id"] is None
+    assert parameters["linked_component_ids"] is None
     assert "brokerage" not in parameters
     assert "epoch" not in parameters

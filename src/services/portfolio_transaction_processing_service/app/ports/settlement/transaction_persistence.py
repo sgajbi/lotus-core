@@ -11,4 +11,6 @@ class SettlementTransactionPersistencePort(Protocol):
     async def upsert_booked_transaction(
         self,
         transaction: BookedTransaction,
+        *,
+        fields_to_clear: frozenset[str] = frozenset(),
     ) -> BookedTransaction: ...
