@@ -25,6 +25,12 @@ from .calculation import (
     amortized_cost_calculation_identity,
     calculate_amortized_cost_schedule,
 )
+from .correction_replay import (
+    FIXED_INCOME_BOOK_COST_CORRECTION_REPLAY_ID_VERSION,
+    AffectedLotDisposalReplayAnchor,
+    FixedIncomeBookCostCorrectionReplayIntent,
+    FixedIncomeBookCostProfileDecisionEvidence,
+)
 from .disposal_basis import (
     AMORTIZED_COST_DISPOSAL_ALGORITHM_ID,
     AMORTIZED_COST_DISPOSAL_ALGORITHM_VERSION,
@@ -82,8 +88,10 @@ __all__ = [
     "AMORTIZED_COST_SCHEDULE_ALGORITHM_VERSION",
     "AMORTIZED_COST_DISPOSAL_ALGORITHM_ID",
     "AMORTIZED_COST_DISPOSAL_ALGORITHM_VERSION",
+    "FIXED_INCOME_BOOK_COST_CORRECTION_REPLAY_ID_VERSION",
     "LOT_AMORTIZED_COST_PROFILE_ID_VERSION",
     "AmortizedCostAssignmentCacheKey",
+    "AffectedLotDisposalReplayAnchor",
     "AmortizedCostAssignmentStatus",
     "AmortizedCostAuthorityError",
     "AmortizedCostDirection",
@@ -114,6 +122,8 @@ __all__ = [
     "LotAmortizedCostBasisFact",
     "LotAmortizedCostPolicyAssignment",
     "LotBookCostAuthorityScope",
+    "FixedIncomeBookCostCorrectionReplayIntent",
+    "FixedIncomeBookCostProfileDecisionEvidence",
     "LotEffectiveYieldFact",
     "IFRS9_EIR_LOCAL_POLICY_ID",
     "MissingAmortizedCostAssignmentError",

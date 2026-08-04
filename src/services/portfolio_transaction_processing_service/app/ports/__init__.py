@@ -42,6 +42,7 @@ from .cost_basis import (
 )
 from .fixed_income_book_cost import (
     EffectiveLotAmortizedCostProfileRequest,
+    FixedIncomeBookCostCorrectionReplayPort,
     LotAmortizedCostAuthority,
     LotAmortizedCostAuthorityAppendOutcome,
     LotAmortizedCostAuthorityBundle,
@@ -88,6 +89,7 @@ from .transaction_replay import BookedTransactionReplayPort
 
 __all__ = [
     "EffectiveLotAmortizedCostProfileRequest",
+    "FixedIncomeBookCostCorrectionReplayPort",
     "AccruedIncomeOffsetStatePort",
     "AverageCostPoolCheckpointRecord",
     "AverageCostPoolPersistedSummary",
