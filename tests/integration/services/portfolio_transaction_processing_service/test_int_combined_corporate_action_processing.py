@@ -6,6 +6,8 @@ from decimal import Decimal
 import pytest
 from portfolio_common.database_models import (
     Cashflow,
+    FinancialReconciliationFinding,
+    FinancialReconciliationRun,
     LotDisposalAllocationRecord,
     LotDisposalReceiptRecord,
     PositionHistory,
@@ -219,6 +221,36 @@ async def test_full_exchange_conserves_basis_and_balances_linked_mvt_flows(
             .scalars()
             .all()
         )
+        reconciliation_runs = (
+            (
+                await verification_session.execute(
+                    select(FinancialReconciliationRun)
+                    .where(
+                        FinancialReconciliationRun.portfolio_id == portfolio_id,
+                        FinancialReconciliationRun.reconciliation_type
+                        == "corporate_action_quantity_transfer",
+                    )
+                    .order_by(FinancialReconciliationRun.id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        reconciliation_findings = (
+            (
+                await verification_session.execute(
+                    select(FinancialReconciliationFinding)
+                    .where(
+                        FinancialReconciliationFinding.portfolio_id == portfolio_id,
+                        FinancialReconciliationFinding.reconciliation_type
+                        == "corporate_action_quantity_transfer",
+                    )
+                    .order_by(FinancialReconciliationFinding.id)
+                )
+            )
+            .scalars()
+            .all()
+        )
 
     transaction_by_id = {transaction.transaction_id: transaction for transaction in transactions}
     assert transaction_by_id[source_out.transaction_id].net_cost == Decimal("-1000")
@@ -266,3 +298,14 @@ async def test_full_exchange_conserves_basis_and_balances_linked_mvt_flows(
     assert [allocation.source_transaction_id for allocation in disposal_allocations] == [
         acquisition.transaction_id
     ]
+    assert len(reconciliation_runs) == 2
+    assert reconciliation_runs[-1].summary["passed"] is True
+    assert reconciliation_runs[-1].summary["linkage_finding_count"] == 0
+    assert reconciliation_runs[-1].summary["linked_transaction_group_id"] == linked_group_id
+    assert reconciliation_findings
+    assert all(
+        finding.resolution_state == "RESOLVED"
+        and finding.resolution_actor == "corporate-action-reconciliation"
+        and finding.resolved_at is not None
+        for finding in reconciliation_findings
+    )
