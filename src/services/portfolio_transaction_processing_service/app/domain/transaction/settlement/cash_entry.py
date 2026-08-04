@@ -74,14 +74,14 @@ def assert_cash_entry_mode_supported(transaction: BookedTransaction) -> None:
             f"transaction types ({supported_types})."
         )
     if (
-        default_mode == CashEntryMode.AUTO_GENERATE.value
+        definition is not None
+        and definition.lifecycle_family == "redemption"
+        and default_mode == CashEntryMode.AUTO_GENERATE.value
         and mode is CashEntryMode.AUTO_GENERATE
         and not (transaction.settlement_cash_account_id or "").strip()
     ):
         if (
-            definition is not None
-            and definition.lifecycle_family == "redemption"
-            and calculate_settlement_cash_movement(transaction).signed_amount == 0
+            calculate_settlement_cash_movement(transaction).signed_amount == 0
         ):
             return
         raise ValueError(
