@@ -577,6 +577,14 @@ class Transaction(BaseModel):
             "within the same parent event."
         ),
     )
+    external_destination_reference: Optional[str] = Field(
+        default=None,
+        json_schema_extra={"example": "CUSTODIAN-ACCOUNT-7788"},
+        description=(
+            "Opaque governed destination reference for a securities transfer out of the "
+            "current Lotus book. It must not be interpreted as an internal transaction or lot."
+        ),
+    )
     linked_cash_transaction_id: Optional[str] = Field(
         default=None,
         json_schema_extra={"example": "CA-CIL-CASH-001"},

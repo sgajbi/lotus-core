@@ -349,6 +349,7 @@ class TransactionEvent(CoreEventModel):
     target_instrument_id: Optional[str] = None
     source_transaction_reference: Optional[str] = None
     target_transaction_reference: Optional[str] = None
+    external_destination_reference: Optional[str] = None
     linked_cash_transaction_id: Optional[str] = None
     redemption_price_type: Optional[str] = None
     old_factor: Optional[Decimal] = None

@@ -471,6 +471,13 @@ class TransactionRecord(BaseModel):
         description="Reference to target-side corporate-action child transaction.",
         examples=["CA-CHILD-IN-001"],
     )
+    external_destination_reference: Optional[str] = Field(
+        None,
+        description=(
+            "Opaque destination reference for a securities transfer out of the Lotus book."
+        ),
+        examples=["CUSTODIAN-ACCOUNT-7788"],
+    )
     linked_cash_transaction_id: Optional[str] = Field(
         None,
         description="Linked cash transaction id for CASH_IN_LIEU settlement.",

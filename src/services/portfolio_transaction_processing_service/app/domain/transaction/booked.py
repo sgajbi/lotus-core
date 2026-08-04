@@ -99,6 +99,7 @@ class BookedTransaction:
     target_instrument_id: str | None = None
     source_transaction_reference: str | None = None
     target_transaction_reference: str | None = None
+    external_destination_reference: str | None = None
     linked_cash_transaction_id: str | None = None
     redemption_price_type: str | None = None
     old_factor: Decimal | None = None
