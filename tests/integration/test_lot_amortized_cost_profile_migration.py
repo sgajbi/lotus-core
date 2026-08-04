@@ -44,6 +44,12 @@ RESIDUAL_CARRY_MIGRATION = (
     / "versions"
     / "c143b2c3d510_fix_conserve_amortized_cost_residual.py"
 )
+BASIS_TRANSFER_MIGRATION = (
+    Path(__file__).resolve().parents[2]
+    / "alembic"
+    / "versions"
+    / "c146b2c3d513_feat_add_lot_basis_transfer_receipts.py"
+)
 
 PROFILE_INSERT = text(
     """
@@ -168,6 +174,7 @@ def _downgrade_later_revisions(connection) -> list[dict[str, Any]]:
 
     later_migrations: list[dict[str, Any]] = []
     for table_name, marker_column, migration_path in (
+        ("lot_basis_transfer_allocations", None, BASIS_TRANSFER_MIGRATION),
         ("position_lot_state", "amortized_cost_profile_id", RESIDUAL_CARRY_MIGRATION),
         ("lot_disposal_allocations", "amortized_cost_profile_id", DISPOSAL_EVIDENCE_MIGRATION),
         ("lot_disposal_receipts", None, HEAD_MIGRATION),
@@ -398,3 +405,6 @@ def test_lot_amortized_cost_profiles_apply_roll_back_and_enforce_ledgers(
             assert "amortized_cost_profile_id" in {
                 column["name"] for column in inspect(connection).get_columns("position_lot_state")
             }
+        if any(migration["revision"] == "c146b2c3d513" for migration in later_migrations):
+            assert inspect(connection).has_table("lot_basis_transfer_receipts")
+            assert inspect(connection).has_table("lot_basis_transfer_allocations")

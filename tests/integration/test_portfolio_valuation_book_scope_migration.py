@@ -50,6 +50,12 @@ RESIDUAL_CARRY_MIGRATION = (
     / "versions"
     / "c143b2c3d510_fix_conserve_amortized_cost_residual.py"
 )
+BASIS_TRANSFER_MIGRATION = (
+    Path(__file__).resolve().parents[2]
+    / "alembic"
+    / "versions"
+    / "c146b2c3d513_feat_add_lot_basis_transfer_receipts.py"
+)
 
 PORTFOLIO_INSERT = text(
     """
@@ -95,6 +101,12 @@ def _downgrade_dependent_schema(connection) -> list[dict[str, Any]]:
 
     dependent_migrations: list[dict[str, Any]] = []
     inspector = inspect(connection)
+    if inspector.has_table("lot_basis_transfer_allocations"):
+        basis_transfer_migration: dict[str, Any] = runpy.run_path(str(BASIS_TRANSFER_MIGRATION))
+        _bind_operations(basis_transfer_migration, connection)
+        basis_transfer_migration["downgrade"]()
+        dependent_migrations.append(basis_transfer_migration)
+        inspector = inspect(connection)
     residual_columns = {column["name"] for column in inspector.get_columns("position_lot_state")}
     if "amortized_cost_profile_id" in residual_columns:
         residual_migration: dict[str, Any] = runpy.run_path(str(RESIDUAL_CARRY_MIGRATION))
@@ -237,3 +249,6 @@ def test_portfolio_valuation_book_scope_applies_rolls_back_and_enforces_authorit
                 assert "amortized_cost_profile_id" in {
                     column["name"] for column in inspector.get_columns("position_lot_state")
                 }
+            if any(migration["revision"] == "c146b2c3d513" for migration in dependent_migrations):
+                assert inspector.has_table("lot_basis_transfer_receipts")
+                assert inspector.has_table("lot_basis_transfer_allocations")
