@@ -131,8 +131,18 @@ introduced because source-before-target processing is valid. `TRANSFER_OUT` now 
 one destination: the same explicit internal target identity or a canonical opaque
 `external_destination_reference` carried through ingestion, event, booked-domain, transaction-ledger,
 and query contracts. External transfer evidence never fabricates an internal transaction, lot, or
-instrument. Reciprocal internal-leg validation across separately processed source/target streams
-remains open.
+instrument. Quantity-consuming merger, exchange, and replacement groups now use one domain-owned
+reciprocal-leg policy across every supported pair. It verifies source/target transaction type,
+two-way transaction reference, and source/target instrument identity independently of input order.
+The existing corporate-action reconciliation adapter loads the linked group once, distinguishes
+quantity-transfer evidence from Bundle A evidence, and persists deterministic support findings for
+missing or inconsistent legs. When a valid source-before-target sequence later becomes complete,
+one set-based update resolves superseded open findings with actor and timestamp evidence before the
+current result is stored. A PostgreSQL exchange lifecycle proves the initially incomplete group,
+final balanced group, resolved finding history, source-lot allocation, target-lot materialization,
+and duplicate neutrality together. The same-pattern scan covers merger, exchange, and replacement;
+partial internal `TRANSFER_OUT` proof remains open because portfolio-transfer reciprocity is not a
+corporate-action linked-group contract.
 An additive `lot_amortized_cost_authority` ledger and application port now persist and reload all
 four required source families through one governed pattern. Per-source transaction locks,
 monotonic correction versions, exact-retry neutrality, canonical decimal/date payloads, composite
