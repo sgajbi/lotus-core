@@ -18,6 +18,11 @@ from src.services.query_service.app.repositories.lot_disposal_repository import 
 async def test_latest_receipt_uses_one_scoped_latest_version_query() -> None:
     receipt = MagicMock()
     receipt.receipt_id = "RECEIPT-1"
+    receipt.destination_type = "INTERNAL_LOT"
+    receipt.target_transaction_id = "EXCHANGE-IN-001"
+    receipt.target_lot_id = "LOT-EXCHANGE-IN-001"
+    receipt.target_instrument_id = "BOND-2"
+    receipt.external_destination_reference = None
     first = MagicMock()
     first.source_lot_id = "LOT-1"
     second = MagicMock()
@@ -36,6 +41,9 @@ async def test_latest_receipt_uses_one_scoped_latest_version_query() -> None:
     mapped_receipt, mapped_allocations = resolved
     assert isinstance(mapped_receipt, LotDisposalReceiptReadRecord)
     assert mapped_receipt.receipt_id == "RECEIPT-1"
+    assert mapped_receipt.destination_type == "INTERNAL_LOT"
+    assert mapped_receipt.target_transaction_id == "EXCHANGE-IN-001"
+    assert mapped_receipt.target_lot_id == "LOT-EXCHANGE-IN-001"
     assert all(isinstance(row, LotDisposalAllocationReadRecord) for row in mapped_allocations)
     assert [row.source_lot_id for row in mapped_allocations] == ["LOT-1", "LOT-2"]
     session.execute.assert_awaited_once()

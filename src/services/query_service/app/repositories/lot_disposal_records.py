@@ -16,6 +16,11 @@ class LotDisposalReceiptReadRecord:
     security_id: str
     disposal_timestamp: datetime
     transaction_type: str
+    destination_type: str | None
+    target_transaction_id: str | None
+    target_lot_id: str | None
+    target_instrument_id: str | None
+    external_destination_reference: str | None
     cost_basis_method: str
     calculation_policy_id: str | None
     calculation_policy_version: str | None
