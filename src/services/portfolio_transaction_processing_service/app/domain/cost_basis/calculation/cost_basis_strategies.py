@@ -20,6 +20,10 @@ from .average_cost_source_allocation import (
     AverageCostPool,
     AverageCostSourceAllocation,
 )
+from .basis_transfer_allocation import (
+    LotBasisTransferResult,
+    SourceLotBasisTransferAllocation,
+)
 from .disposal_allocation import LotDisposalResult, SourceLotDisposalAllocation
 from .lot_state import CostLot, OpenLotState
 from .residual_allocation import allocate_nonnegative_storage_share
@@ -263,6 +267,13 @@ class CostBasisStrategy(Protocol):
         cost_base: Decimal,
         cost_local: Decimal,
     ) -> str | None: ...
+    def transfer_basis_out_with_allocations(
+        self,
+        portfolio_id: str,
+        instrument_id: str,
+        cost_base: Decimal,
+        cost_local: Decimal,
+    ) -> LotBasisTransferResult: ...
     def set_initial_lots(self, transactions: list[CostBasisTransaction]) -> None: ...
     def restore_open_lots(self, transactions: list[CostBasisTransaction]) -> None: ...
     def get_open_lot_states(self) -> dict[str, OpenLotState]: ...
@@ -382,12 +393,41 @@ class FIFOBasisStrategy:
         cost_base: Decimal,
         cost_local: Decimal,
     ) -> str | None:
+        return self.transfer_basis_out_with_allocations(
+            portfolio_id,
+            instrument_id,
+            cost_base,
+            cost_local,
+        ).error_reason
+
+    def transfer_basis_out_with_allocations(
+        self,
+        portfolio_id: str,
+        instrument_id: str,
+        cost_base: Decimal,
+        cost_local: Decimal,
+    ) -> LotBasisTransferResult:
         lots = self._open_lots[(portfolio_id, instrument_id)]
         error = _basis_transfer_error(lots, cost_base=cost_base, cost_local=cost_local)
         if error is not None:
-            return error
+            return LotBasisTransferResult.failed(error)
+        open_lots = tuple(lot for lot in lots if lot.remaining_quantity > Decimal(0))
+        states_before = tuple(lot.open_state() for lot in open_lots)
         _allocate_fifo_basis_transfer(lots, cost_base=cost_base, cost_local=cost_local)
-        return None
+        return _basis_transfer_result(
+            source_lots=tuple(
+                (
+                    lot.lot_id,
+                    lot.transaction_id,
+                    lot.acquisition_date,
+                    before,
+                    lot.open_state(),
+                )
+                for lot, before in zip(open_lots, states_before, strict=True)
+            ),
+            transferred_cost_local=cost_local,
+            transferred_cost_base=cost_base,
+        )
 
     def set_initial_lots(self, transactions: list[CostBasisTransaction]) -> None:
         for txn in transactions:
@@ -537,6 +577,20 @@ class AverageCostBasisStrategy(CostBasisStrategy):
         cost_base: Decimal,
         cost_local: Decimal,
     ) -> str | None:
+        return self.transfer_basis_out_with_allocations(
+            portfolio_id,
+            instrument_id,
+            cost_base,
+            cost_local,
+        ).error_reason
+
+    def transfer_basis_out_with_allocations(
+        self,
+        portfolio_id: str,
+        instrument_id: str,
+        cost_base: Decimal,
+        cost_local: Decimal,
+    ) -> LotBasisTransferResult:
         key = (portfolio_id, instrument_id)
         pool = self._pools[key]
         error = _pool_basis_transfer_error(
@@ -545,7 +599,9 @@ class AverageCostBasisStrategy(CostBasisStrategy):
             cost_local=cost_local,
         )
         if error is not None:
-            return error
+            return LotBasisTransferResult.failed(error)
+        states_before = self._source_allocation.materialize_book(book_key=key, pool=pool)
+        contributions = self._source_allocation.active_source_contributions(key)
         cost_local_before = pool.cost_local
         cost_base_before = pool.cost_base
         pool.transfer_basis_out(cost_local=cost_local, cost_base=cost_base)
@@ -556,7 +612,21 @@ class AverageCostBasisStrategy(CostBasisStrategy):
             cost_base_before=cost_base_before,
             cost_base_after=pool.cost_base,
         )
-        return None
+        states_after = self._source_allocation.materialize_book(book_key=key, pool=pool)
+        return _basis_transfer_result(
+            source_lots=tuple(
+                (
+                    contribution.source_lot_id,
+                    source_transaction_id,
+                    contribution.source_acquisition_date,
+                    states_before[source_transaction_id],
+                    states_after[source_transaction_id],
+                )
+                for source_transaction_id, contribution in contributions
+            ),
+            transferred_cost_local=cost_local,
+            transferred_cost_base=cost_base,
+        )
 
     def set_initial_lots(self, transactions: list[CostBasisTransaction]) -> None:
         for txn in transactions:
@@ -650,6 +720,48 @@ def _basis_transfer_amount_error(
     if available_base <= Decimal(0) or available_local <= Decimal(0):
         return "No positive cost basis is available to transfer."
     return None
+
+
+def _basis_transfer_result(
+    *,
+    source_lots: tuple[tuple[str, str, date, OpenLotState, OpenLotState], ...],
+    transferred_cost_local: Decimal,
+    transferred_cost_base: Decimal,
+) -> LotBasisTransferResult:
+    allocations: list[SourceLotBasisTransferAllocation] = []
+    for source_lot_id, source_transaction_id, acquisition_date, before, after in source_lots:
+        local_delta = COST_BASIS_STATE_LEDGER_OUTPUT_V1.subtract(
+            before.cost_local,
+            after.cost_local,
+            field_name="transferred_cost_local",
+        )
+        base_delta = COST_BASIS_STATE_LEDGER_OUTPUT_V1.subtract(
+            before.cost_base,
+            after.cost_base,
+            field_name="transferred_cost_base",
+        )
+        if local_delta.is_zero() and base_delta.is_zero():
+            continue
+        allocations.append(
+            SourceLotBasisTransferAllocation(
+                allocation_ordinal=len(allocations) + 1,
+                source_lot_id=source_lot_id,
+                source_transaction_id=source_transaction_id,
+                source_acquisition_date=acquisition_date,
+                retained_quantity=after.quantity,
+                source_cost_local_before=before.cost_local,
+                source_cost_base_before=before.cost_base,
+                transferred_cost_local=local_delta,
+                transferred_cost_base=base_delta,
+                retained_cost_local=after.cost_local,
+                retained_cost_base=after.cost_base,
+            )
+        )
+    return LotBasisTransferResult(
+        transferred_cost_local=transferred_cost_local,
+        transferred_cost_base=transferred_cost_base,
+        allocations=tuple(allocations),
+    )
 
 
 def _allocate_fifo_basis_transfer(

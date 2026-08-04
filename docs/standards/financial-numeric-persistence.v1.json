@@ -2,7 +2,7 @@
   "schema_version": "2.0.0",
   "model_path": "src/libs/portfolio-common/portfolio_common/database_models.py",
   "expected_inventory": {
-    "numeric_columns": 131,
+    "numeric_columns": 137,
     "tables": 35
   },
   "profiles": {
@@ -251,6 +251,12 @@
       "realized_capital_pnl_base": {"profile": "nullable-finite", "rollout_status": "orm-enforced"},
       "realized_fx_pnl_base": {"profile": "nullable-finite", "rollout_status": "orm-enforced"},
       "realized_total_pnl_base": {"profile": "nullable-finite", "rollout_status": "orm-enforced"},
+      "old_factor": {"profile": "nullable-positive-finite", "rollout_status": "orm-enforced"},
+      "new_factor": {"profile": "nullable-nonnegative-finite", "rollout_status": "orm-enforced"},
+      "principal_proceeds_local": {"profile": "nullable-nonnegative-finite", "rollout_status": "orm-enforced"},
+      "accrued_interest_proceeds_local": {"profile": "nullable-nonnegative-finite", "rollout_status": "orm-enforced"},
+      "embedded_fee_amount_local": {"profile": "nullable-nonnegative-finite", "rollout_status": "orm-enforced"},
+      "embedded_tax_amount_local": {"profile": "nullable-nonnegative-finite", "rollout_status": "orm-enforced"},
       "synthetic_flow_amount_local": {"profile": "nullable-finite", "rollout_status": "orm-enforced"},
       "synthetic_flow_amount_base": {"profile": "nullable-finite", "rollout_status": "orm-enforced"},
       "synthetic_flow_fx_rate_to_base": {"profile": "nullable-positive-finite", "rollout_status": "orm-enforced"},

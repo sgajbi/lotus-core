@@ -93,8 +93,15 @@ so schema separation alone does not claim complete fixed-income lifecycle suppor
 The query read plane now exposes the latest immutable lot-disposal receipt through a
 transaction-neutral endpoint. One bounded SQL query selects the latest receipt version and ordered
 allocations, including hash-chain, source-lot, calculation-lineage, and amortized-cost authority
-evidence. Existing SELL-specific projections remain compatible; redemption, transfer, and
+evidence. Persistence-neutral immutable read records prevent ORM models escaping the repository.
+Existing SELL-specific projections remain compatible; redemption, transfer, and
 corporate-action support do not require new family-specific receipt APIs.
+Basis-only `SPIN_OFF` and `DEMERGER_OUT` processing no longer discards the per-source-lot
+carrying-basis deltas that it applies. FIFO and AVCO emit the same conserved, ordered domain result
+with the source lot and acquisition identity plus the canonical target transaction and target lot.
+The result is transported through the cost-basis calculation boundary; missing target identity fails
+before source-lot mutation. Append-only persistence and query exposure remain prerequisites before
+this internal evidence is a supportable capability.
 An additive `lot_amortized_cost_authority` ledger and application port now persist and reload all
 four required source families through one governed pattern. Per-source transaction locks,
 monotonic correction versions, exact-retry neutrality, canonical decimal/date payloads, composite
@@ -264,6 +271,12 @@ Data Models wiki documents the staged ledgers while the capability wiki remains
 - protected-review fix-forward proof: 44 warning-strict amortized-disposal and authority-event
   orchestration tests cover explicit parked-profile carry unwind plus prior/current day-after-expiry
   materialization; repository-native lint and MyPy (280 sources) passed.
+- transaction-neutral receipt query and basis-transfer lineage proof: 222 focused domain,
+  strategy, timeline, query-repository, service, and API tests passed. FIFO and AVCO conserve
+  pre-transfer, moved, and retained local/base carrying basis per source lot; missing target identity
+  is mutation-neutral. Repository-native lint, MyPy (285 sources), numeric-persistence,
+  calculated-output-lineage, repository-output-shape, route-family, architecture, OpenAPI, and diff
+  guards passed.
 
 Protected PR and exact-main evidence remain pending for this tranche. Wider runtime recovery/load
 proof, verified query reconstruction, transfer/corporate-action lineage, redemption, and final

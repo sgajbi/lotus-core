@@ -42,7 +42,8 @@
       "lineage_boundary_callsites": [
         "src/services/portfolio_transaction_processing_service/app/application/cost_basis_processing/amortized_disposal.py::_apply_transaction_overlay",
         "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_calculator.py::CostBasisCalculator.calculate_transaction_costs",
-        "src/services/portfolio_transaction_processing_service/app/domain/transaction/fx/baseline_processing.py::build_fx_processed_transaction"
+        "src/services/portfolio_transaction_processing_service/app/domain/transaction/fx/baseline_processing.py::build_fx_processed_transaction",
+        "src/services/portfolio_transaction_processing_service/app/domain/transaction/redemption/economics.py::calculate_redemption_economics"
       ],
       "lineage_boundary_covered_callsites": {
         "src/services/portfolio_transaction_processing_service/app/application/cost_basis_processing/amortized_disposal.py::_apply_transaction_overlay": [
@@ -56,6 +57,7 @@
           "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_calculator.py::CashOutflowStrategy.calculate_costs",
           "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_calculator.py::DefaultStrategy.calculate_costs",
           "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_calculator.py::PartialTransferOutStrategy.calculate_costs",
+          "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_calculator.py::RedemptionStrategy.calculate_costs",
           "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_calculator.py::SecurityInflowStrategy.calculate_costs",
           "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_calculator.py::SecurityOutflowStrategy.calculate_costs",
           "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_calculator.py::SellStrategy.calculate_costs",
@@ -68,6 +70,11 @@
         ],
         "src/services/portfolio_transaction_processing_service/app/domain/transaction/fx/baseline_processing.py::build_fx_processed_transaction": [
           "src/services/portfolio_transaction_processing_service/app/domain/transaction/fx/baseline_processing.py::_canonical_fx_lineage_value"
+        ],
+        "src/services/portfolio_transaction_processing_service/app/domain/transaction/redemption/economics.py::calculate_redemption_economics": [
+          "src/services/portfolio_transaction_processing_service/app/domain/transaction/redemption/economics.py::_factor_redeemed_quantity",
+          "src/services/portfolio_transaction_processing_service/app/domain/transaction/redemption/economics.py::_resolve_principal_proceeds",
+          "src/services/portfolio_transaction_processing_service/app/domain/transaction/redemption/economics.py::_resolve_redeemed_quantity"
         ]
       },
       "lineage_gap_callsites": []
@@ -84,12 +91,17 @@
       "rounding": "ROUND_HALF_EVEN",
       "lineage_binding": "required",
       "lineage_boundary_callsites": [
+        "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/basis_transfer_allocation.py::_build_basis_transfer_lineage",
         "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/disposal_allocation.py::_build_conserved_allocation_lineage",
         "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/state_lineage.py::build_cost_basis_state_lineage",
         "src/services/portfolio_transaction_processing_service/app/domain/fixed_income_book_cost/calculation.py::calculate_amortized_cost_schedule",
         "src/services/portfolio_transaction_processing_service/app/domain/fixed_income_book_cost/disposal_basis.py::allocate_recognized_lot_book_cost"
       ],
       "lineage_boundary_covered_callsites": {
+        "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/basis_transfer_allocation.py::_build_basis_transfer_lineage": [
+          "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/basis_transfer_allocation.py::_sum_amounts",
+          "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_strategies.py::_basis_transfer_result"
+        ],
         "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/disposal_allocation.py::_build_conserved_allocation_lineage": [
           "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_strategies.py::_apportion_nonnegative_disposal_values"
         ],

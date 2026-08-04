@@ -5,6 +5,10 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.services.query_service.app.repositories.lot_disposal_records import (
+    LotDisposalAllocationReadRecord,
+    LotDisposalReceiptReadRecord,
+)
 from src.services.query_service.app.repositories.lot_disposal_repository import (
     LotDisposalRepository,
 )
@@ -13,8 +17,11 @@ from src.services.query_service.app.repositories.lot_disposal_repository import 
 @pytest.mark.asyncio
 async def test_latest_receipt_uses_one_scoped_latest_version_query() -> None:
     receipt = MagicMock()
+    receipt.receipt_id = "RECEIPT-1"
     first = MagicMock()
+    first.source_lot_id = "LOT-1"
     second = MagicMock()
+    second.source_lot_id = "LOT-2"
     result = MagicMock()
     result.all.return_value = [(receipt, first), (receipt, second)]
     session = AsyncMock(spec=AsyncSession)
@@ -25,7 +32,12 @@ async def test_latest_receipt_uses_one_scoped_latest_version_query() -> None:
         transaction_id="RED-001",
     )
 
-    assert resolved == (receipt, [first, second])
+    assert resolved is not None
+    mapped_receipt, mapped_allocations = resolved
+    assert isinstance(mapped_receipt, LotDisposalReceiptReadRecord)
+    assert mapped_receipt.receipt_id == "RECEIPT-1"
+    assert all(isinstance(row, LotDisposalAllocationReadRecord) for row in mapped_allocations)
+    assert [row.source_lot_id for row in mapped_allocations] == ["LOT-1", "LOT-2"]
     session.execute.assert_awaited_once()
     statement = session.execute.call_args.args[0]
     compiled = str(statement.compile(compile_kwargs={"literal_binds": True}))

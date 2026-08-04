@@ -192,6 +192,80 @@ def test_cost_basis_timeline_processor_handles_backdated_insert(
 
 
 @pytest.mark.parametrize("cost_basis_method", ["FIFO", "AVCO"])
+def test_basis_only_corporate_action_retains_conserved_source_lot_evidence(
+    cost_basis_method: str,
+) -> None:
+    processor = build_cost_basis_timeline_processor(cost_basis_method)
+    existing = [
+        _raw_transaction("BUY-1", "2026-01-01T00:00:00Z", "BUY", "60", "600"),
+        _raw_transaction("BUY-2", "2026-01-02T00:00:00Z", "BUY", "40", "400"),
+    ]
+    source_out = _raw_transaction(
+        "DEMERGER-OUT-1",
+        "2026-02-01T00:00:00Z",
+        "DEMERGER_OUT",
+        "0",
+        "250",
+    )
+    source_out["target_transaction_reference"] = "DEMERGER-IN-1"
+
+    result = processor.process_transactions(existing, [source_out])
+
+    assert result.errored == []
+    assert result.disposals == ()
+    assert len(result.basis_transfers) == 1
+    transfer = result.basis_transfers[0]
+    assert transfer.source_transaction_id == "DEMERGER-OUT-1"
+    assert transfer.target_transaction_id == "DEMERGER-IN-1"
+    assert transfer.target_lot_id == "LOT-DEMERGER-IN-1"
+    assert [allocation.source_transaction_id for allocation in transfer.result.allocations] == [
+        "BUY-1",
+        "BUY-2",
+    ]
+    assert sum(
+        (allocation.transferred_cost_local for allocation in transfer.result.allocations),
+        Decimal(0),
+    ) == Decimal("250")
+    assert sum(
+        (allocation.transferred_cost_base for allocation in transfer.result.allocations),
+        Decimal(0),
+    ) == Decimal("250")
+    assert all(
+        allocation.retained_quantity > Decimal(0) for allocation in transfer.result.allocations
+    )
+
+
+def test_basis_only_corporate_action_without_target_is_rejected_before_lot_mutation() -> None:
+    processor = build_cost_basis_timeline_processor("FIFO")
+    acquisition = _raw_transaction(
+        "BUY-1",
+        "2026-01-01T00:00:00Z",
+        "BUY",
+        "100",
+        "1000",
+    )
+    source_out = _raw_transaction(
+        "DEMERGER-OUT-1",
+        "2026-02-01T00:00:00Z",
+        "DEMERGER_OUT",
+        "0",
+        "250",
+    )
+
+    result = processor.process_transactions([acquisition], [source_out])
+
+    assert result.processed == []
+    assert result.basis_transfers == ()
+    assert result.open_lot_states["BUY-1"] == OpenLotState(
+        quantity=Decimal("100"),
+        cost_local=Decimal("1000"),
+        cost_base=Decimal("1000"),
+    )
+    assert len(result.errored) == 1
+    assert "target_transaction_reference" in result.errored[0].error_reason
+
+
+@pytest.mark.parametrize("cost_basis_method", ["FIFO", "AVCO"])
 def test_increment_from_open_lot_checkpoint_matches_full_history(
     cost_basis_method: str,
 ) -> None:
@@ -378,6 +452,10 @@ def test_cost_basis_timeline_processor_reports_unexpected_calculator_errors():
             return None
 
         def disposal_records(self, *, transaction_ids=None):
+            del transaction_ids
+            return ()
+
+        def basis_transfer_records(self, *, transaction_ids=None):
             del transaction_ids
             return ()
 

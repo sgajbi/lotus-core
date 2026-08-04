@@ -1,6 +1,6 @@
 """Verify canonical cost-basis calculation policy across transaction families."""
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from unittest.mock import MagicMock
 
@@ -14,7 +14,9 @@ from src.services.portfolio_transaction_processing_service.app.domain.cost_basis
     CostCalculationErrorCollector,
     Fees,
     FIFOBasisStrategy,
+    LotBasisTransferResult,
     LotDispositionEngine,
+    SourceLotBasisTransferAllocation,
 )
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis.calculation import (  # noqa: E501
     cost_basis_calculator as calculator_module,
@@ -2141,7 +2143,25 @@ def test_cash_sell_strategy_avoids_strict_oversell_for_cash_instrument(
 def test_spin_off_basis_only_strategy_reduces_cost_without_lot_consumption(
     cost_calculator, mock_disposition_engine
 ):
-    mock_disposition_engine.transfer_basis_out.return_value = None
+    mock_disposition_engine.transfer_basis_out.return_value = LotBasisTransferResult(
+        transferred_cost_local=Decimal("2500"),
+        transferred_cost_base=Decimal("2500"),
+        allocations=(
+            SourceLotBasisTransferAllocation(
+                allocation_ordinal=1,
+                source_lot_id="LOT-BUY-1",
+                source_transaction_id="BUY-1",
+                source_acquisition_date=date(2023, 1, 1),
+                retained_quantity=Decimal("100"),
+                source_cost_local_before=Decimal("3500"),
+                source_cost_base_before=Decimal("3500"),
+                transferred_cost_local=Decimal("2500"),
+                transferred_cost_base=Decimal("2500"),
+                retained_cost_local=Decimal("1000"),
+                retained_cost_base=Decimal("1000"),
+            ),
+        ),
+    )
     spin_off_transaction = CostBasisTransaction(
         transaction_id="SPIN_OFF_01",
         portfolio_id="P1",

@@ -6,6 +6,7 @@ from typing import cast
 from portfolio_common.domain.decimal_amount import required_decimal
 
 from ..models.cost_basis_transaction import CostBasisTransaction
+from .basis_transfer_allocation import LotBasisTransferResult, TransactionLotBasisTransfer
 from .cost_basis_strategies import CostBasisStrategy
 from .disposal_allocation import LotDisposalResult, TransactionLotDisposal
 from .lot_state import OpenLotState
@@ -33,6 +34,8 @@ class LotDispositionEngine:
         self._cost_basis_strategy = cost_basis_strategy
         self._pending_disposals_by_transaction_id: dict[str, TransactionLotDisposal] = {}
         self._disposals_by_transaction_id: dict[str, TransactionLotDisposal] = {}
+        self._pending_basis_transfers_by_transaction_id: dict[str, TransactionLotBasisTransfer] = {}
+        self._basis_transfers_by_transaction_id: dict[str, TransactionLotBasisTransfer] = {}
 
     def add_buy_lot(self, transaction: CostBasisTransaction) -> None:
         if transaction.quantity > Decimal(0):
@@ -82,11 +85,21 @@ class LotDispositionEngine:
         )
         if pending is not None:
             self._record_disposal(pending)
+        pending_basis_transfer = self._pending_basis_transfers_by_transaction_id.pop(
+            _normalized_transaction_id(transaction_id),
+            None,
+        )
+        if pending_basis_transfer is not None:
+            self._record_basis_transfer(pending_basis_transfer)
 
     def discard_pending_disposal(self, transaction_id: str) -> None:
         """Discard evidence for a rejected or interrupted transaction calculation."""
 
         self._pending_disposals_by_transaction_id.pop(
+            _normalized_transaction_id(transaction_id),
+            None,
+        )
+        self._pending_basis_transfers_by_transaction_id.pop(
             _normalized_transaction_id(transaction_id),
             None,
         )
@@ -114,6 +127,26 @@ class LotDispositionEngine:
 
         self._pending_disposals_by_transaction_id.clear()
         self._disposals_by_transaction_id.clear()
+        self._pending_basis_transfers_by_transaction_id.clear()
+        self._basis_transfers_by_transaction_id.clear()
+
+    def basis_transfer_records(
+        self,
+        *,
+        transaction_ids: set[str] | None = None,
+    ) -> tuple[TransactionLotBasisTransfer, ...]:
+        """Return accepted basis-only source-to-target evidence in calculation order."""
+
+        normalized_transaction_ids = (
+            None
+            if transaction_ids is None
+            else {_normalized_transaction_id(transaction_id) for transaction_id in transaction_ids}
+        )
+        return tuple(
+            transfer
+            for transaction_id, transfer in self._basis_transfers_by_transaction_id.items()
+            if normalized_transaction_ids is None or transaction_id in normalized_transaction_ids
+        )
 
     def _stage_disposal(self, disposal: TransactionLotDisposal) -> None:
         transaction_id = disposal.disposal_transaction_id
@@ -130,22 +163,52 @@ class LotDispositionEngine:
             raise ValueError("one disposal transaction produced conflicting source-lot evidence")
         self._disposals_by_transaction_id[disposal.disposal_transaction_id] = disposal
 
+    def _stage_basis_transfer(self, transfer: TransactionLotBasisTransfer) -> None:
+        transaction_id = transfer.source_transaction_id
+        existing = self._pending_basis_transfers_by_transaction_id.get(
+            transaction_id
+        ) or self._basis_transfers_by_transaction_id.get(transaction_id)
+        if existing is not None and existing != transfer:
+            raise ValueError("one source transaction produced conflicting basis-transfer evidence")
+        self._pending_basis_transfers_by_transaction_id[transaction_id] = transfer
+
+    def _record_basis_transfer(self, transfer: TransactionLotBasisTransfer) -> None:
+        existing = self._basis_transfers_by_transaction_id.get(transfer.source_transaction_id)
+        if existing is not None and existing != transfer:
+            raise ValueError("one source transaction produced conflicting basis-transfer evidence")
+        self._basis_transfers_by_transaction_id[transfer.source_transaction_id] = transfer
+
     def transfer_basis_out(
         self,
         transaction: CostBasisTransaction,
         *,
         cost_base: Decimal,
         cost_local: Decimal,
-    ) -> str | None:
-        return cast(
-            str | None,
-            self._cost_basis_strategy.transfer_basis_out(
+    ) -> LotBasisTransferResult:
+        target_transaction_id = getattr(transaction, "target_transaction_reference", None)
+        if not isinstance(target_transaction_id, str) or not target_transaction_id.strip():
+            return LotBasisTransferResult.failed(
+                "Basis-only transfer requires target_transaction_reference."
+            )
+        result = cast(
+            LotBasisTransferResult,
+            self._cost_basis_strategy.transfer_basis_out_with_allocations(
                 transaction.portfolio_id,
                 transaction.instrument_id,
                 cost_base,
                 cost_local,
             ),
         )
+        if result.error_reason is None:
+            self._stage_basis_transfer(
+                TransactionLotBasisTransfer(
+                    source_transaction_id=transaction.transaction_id,
+                    target_transaction_id=target_transaction_id,
+                    target_lot_id=f"LOT-{target_transaction_id.strip()}",
+                    result=result,
+                )
+            )
+        return result
 
     def set_initial_lots(self, transactions: list[CostBasisTransaction]) -> None:
         filtered_buys = [
