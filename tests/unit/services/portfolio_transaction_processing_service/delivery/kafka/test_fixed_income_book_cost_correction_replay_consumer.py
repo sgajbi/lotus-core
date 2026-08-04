@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import UTC, date, datetime
 from unittest.mock import AsyncMock, MagicMock
@@ -9,6 +10,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from portfolio_common.event_mapping import EventContractValidationError
 from portfolio_common.exceptions import RetryableConsumerError
+from portfolio_common.kafka_consumer_execution import KafkaConsumerExecutionProfile
 
 from services.portfolio_transaction_processing_service.app.application import (
     BookedTransactionReplayDependencyUnavailable,
@@ -90,6 +92,22 @@ def _consumer(use_case: AsyncMock) -> FixedIncomeBookCostCorrectionReplayConsume
     )
 
 
+def _dlq_consumer(
+    use_case: AsyncMock,
+    *,
+    retryable_failure_max_attempts: int | None = None,
+) -> FixedIncomeBookCostCorrectionReplayConsumer:
+    return FixedIncomeBookCostCorrectionReplayConsumer(
+        bootstrap_servers="mock-server",
+        topic="fixed_income.book_cost.disposal_replay.requested",
+        group_id="fixed_income_book_cost_correction_replay_group",
+        dlq_topic="dlq.persistence_service",
+        use_case=use_case,
+        execution_profile=KafkaConsumerExecutionProfile(retryable_failure_backoff_seconds=0.001),
+        retryable_failure_max_attempts=retryable_failure_max_attempts,
+    )
+
+
 async def test_valid_command_replays_only_earliest_anchor_with_stable_identity() -> None:
     use_case = AsyncMock()
     use_case.execute.return_value = ReplayBookedTransactionResult(
@@ -145,6 +163,40 @@ async def test_dependency_failure_is_retryable_for_ordered_redelivery() -> None:
 
     with pytest.raises(RetryableConsumerError, match="dependency unavailable"):
         await _consumer(use_case).process_message(_message())
+
+
+async def test_dependency_retry_exhaustion_publishes_dlq_and_commits_offset() -> None:
+    use_case = AsyncMock()
+    use_case.execute.side_effect = BookedTransactionReplayDependencyUnavailable(
+        "broker unavailable"
+    )
+    consumer = _dlq_consumer(use_case, retryable_failure_max_attempts=2)
+    consumer._consumer = MagicMock()
+    consumer._send_to_dlq_async = AsyncMock(return_value=True)
+    message = _message()
+
+    await consumer._process_polled_message(message, asyncio.get_running_loop())
+
+    assert use_case.execute.await_count == 2
+    consumer._send_to_dlq_async.assert_awaited_once()
+    consumer._consumer.commit.assert_called_once_with(message=message, asynchronous=False)
+    assert consumer._running is True
+
+
+async def test_poison_contract_publishes_dlq_and_commits_offset_without_replay() -> None:
+    use_case = AsyncMock()
+    consumer = _dlq_consumer(use_case)
+    consumer._consumer = MagicMock()
+    consumer._send_to_dlq_async = AsyncMock(return_value=True)
+    payload = _payload()
+    payload["schema_version"] = "2.0.0"
+    message = _message(payload=payload)
+
+    await consumer._process_polled_message(message, asyncio.get_running_loop())
+
+    use_case.execute.assert_not_awaited()
+    consumer._send_to_dlq_async.assert_awaited_once()
+    consumer._consumer.commit.assert_called_once_with(message=message, asynchronous=False)
 
 
 async def test_missing_canonical_anchor_fails_closed_for_dlq_evidence() -> None:
