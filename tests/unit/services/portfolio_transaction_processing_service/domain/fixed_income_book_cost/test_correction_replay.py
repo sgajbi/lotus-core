@@ -13,7 +13,9 @@ from services.portfolio_transaction_processing_service.app.domain.fixed_income_b
     FixedIncomeBookCostCorrectionReplayIntent,
     FixedIncomeBookCostProfileDecisionEvidence,
     LotBookCostAuthorityScope,
+    amortized_cost_authority_replay_start,
 )
+from tests.test_support.fixed_income_book_cost import resolved_fixed_income_book_cost_inputs
 
 _HASH_A = "a" * 64
 _HASH_B = "b" * 64
@@ -150,3 +152,60 @@ def test_intent_rejects_empty_or_duplicate_profile_decisions() -> None:
 def test_intent_rejects_malformed_evidence_hash() -> None:
     with pytest.raises(ValueError, match="SHA-256"):
         replace(_intent(), source_authority_event_content_hash="not-a-hash")
+
+
+@pytest.mark.parametrize(
+    "authority_name", ("assignment", "basis_fact", "schedule_fact", "yield_fact")
+)
+def test_authority_correction_replays_from_earlier_previous_boundary(
+    authority_name: str,
+) -> None:
+    resolved = resolved_fixed_income_book_cost_inputs()
+    previous = getattr(resolved, authority_name)
+    assert previous is not None
+    later_boundary = date(2026, 7, 1)
+    if authority_name == "assignment":
+        current = replace(
+            previous,
+            assignment_version=previous.assignment_version + 1,
+            source_revision="revision-2",
+            valid_from=later_boundary,
+        )
+    else:
+        current = replace(
+            previous,
+            source=replace(
+                previous.source,
+                fact_version=previous.source.fact_version + 1,
+                source_revision="revision-2",
+            ),
+            valid_from=later_boundary,
+        )
+
+    assert amortized_cost_authority_replay_start(previous, current) == previous.valid_from
+
+
+@pytest.mark.parametrize("authority_name", ("basis_fact", "schedule_fact", "yield_fact"))
+def test_metadata_only_source_fact_correction_does_not_replay(
+    authority_name: str,
+) -> None:
+    resolved = resolved_fixed_income_book_cost_inputs()
+    previous = getattr(resolved, authority_name)
+    assert previous is not None
+    current = replace(
+        previous,
+        source=replace(
+            previous.source,
+            fact_version=previous.source.fact_version + 1,
+            source_revision="metadata-revision-2",
+        ),
+    )
+
+    assert amortized_cost_authority_replay_start(previous, current) is None
+
+
+def test_authority_correction_rejects_mixed_source_families() -> None:
+    resolved = resolved_fixed_income_book_cost_inputs()
+
+    with pytest.raises(TypeError, match="same type"):
+        amortized_cost_authority_replay_start(resolved.basis_fact, resolved.schedule_fact)

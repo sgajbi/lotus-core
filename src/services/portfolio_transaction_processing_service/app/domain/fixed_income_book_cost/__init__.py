@@ -30,6 +30,7 @@ from .correction_replay import (
     AffectedLotDisposalReplayAnchor,
     FixedIncomeBookCostCorrectionReplayIntent,
     FixedIncomeBookCostProfileDecisionEvidence,
+    amortized_cost_authority_replay_start,
 )
 from .disposal_basis import (
     AMORTIZED_COST_DISPOSAL_ALGORITHM_ID,
@@ -135,6 +136,7 @@ __all__ = [
     "YieldApplicationConvention",
     "UnsupportedAmortizedCostPolicyError",
     "amortization_replay_start_for_assignment_correction",
+    "amortized_cost_authority_replay_start",
     "allocate_recognized_lot_book_cost",
     "amortized_cost_calculation_identity",
     "calculate_amortized_cost_schedule",
