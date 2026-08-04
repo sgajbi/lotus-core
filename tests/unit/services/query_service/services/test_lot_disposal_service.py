@@ -21,6 +21,11 @@ async def test_latest_receipt_maps_ordered_allocations_and_lineage() -> None:
         security_id="BOND-1",
         disposal_timestamp=datetime(2026, 8, 4, tzinfo=UTC),
         transaction_type="PARTIAL_REDEMPTION",
+        destination_type="INTERNAL_LOT",
+        target_transaction_id="EXCHANGE-IN-001",
+        target_lot_id="LOT-EXCHANGE-IN-001",
+        target_instrument_id="BOND-2",
+        external_destination_reference=None,
         cost_basis_method="FIFO",
         calculation_policy_id="REDEMPTION_FIFO_POLICY",
         calculation_policy_version="1.0.0",
@@ -68,6 +73,11 @@ async def test_latest_receipt_maps_ordered_allocations_and_lineage() -> None:
     assert result.allocations[0].source_lot_id == "LOT-BUY-001"
     assert result.allocations[0].amortized_cost_profile_id == "PROFILE-1"
     assert result.disposal_calculation_lineage == {"algorithm_id": "lot-disposal"}
+    assert result.destination_type == "INTERNAL_LOT"
+    assert result.target_transaction_id == "EXCHANGE-IN-001"
+    assert result.target_lot_id == "LOT-EXCHANGE-IN-001"
+    assert result.target_instrument_id == "BOND-2"
+    assert result.external_destination_reference is None
 
 
 @pytest.mark.asyncio
