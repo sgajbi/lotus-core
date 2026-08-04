@@ -1,6 +1,6 @@
 {
   "schema_version": "lotus-core.kafka-topic-runtime-contract.v1",
-  "contract_version": "1.1.0",
+  "contract_version": "1.2.0",
   "ordering_contract": "Kafka ordering is guaranteed only within a partition. Dates and epochs must not be key components for backdated corrections or restatements.",
   "keyed_partitioner": "consistent_random_crc32",
   "tenant_identity_status": "not_source_owned_in_current_event_family",
@@ -90,6 +90,18 @@
       "replay_contract": "replay_preserves_exact_source_lot_key_and_source_version"
     },
     {
+      "topic": "fixed_income.book_cost.disposal_replay.requested",
+      "partitions": 12,
+      "producer_services": ["portfolio_transaction_processing_service"],
+      "current_key": "tenant_id|legal_book_id|portfolio_id|security_id|lot_id",
+      "ordering_scope": "tenant_legal_book_portfolio_security_source_lot",
+      "consumer_groups": ["fixed_income_book_cost_correction_replay_group"],
+      "consumer_max_in_flight": 12,
+      "state_owner": "portfolio_transaction_processing_service.fixed_income_book_cost_correction_replay",
+      "duplicate_policy": "content_bound_command_id_then_transaction_repair_delivery_claim",
+      "replay_contract": "one earliest affected booked-transaction anchor per source-lot correction; command_id remains stable across Kafka redelivery"
+    },
+    {
       "topic": "transactions.persisted",
       "partitions": 12,
       "producer_services": ["persistence_service", "event_replay_service"],
@@ -99,7 +111,7 @@
       "consumer_max_in_flight": 12,
       "state_owner": "portfolio_transaction_processing_service.transaction_economics",
       "duplicate_policy": "semantic_claim_plus_database_mutation_fence",
-      "replay_contract": "repair_replay_preserves_linked_group_or_position_order_and_original_event_payload"
+      "replay_contract": "repair_replay_preserves_linked_group_or_position_order and original event payload; correction replay carries a stable repair delivery id"
     },
     {
       "topic": "market_prices.persisted",

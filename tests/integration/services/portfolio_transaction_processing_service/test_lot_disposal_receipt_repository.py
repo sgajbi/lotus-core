@@ -47,6 +47,12 @@ MIGRATION = (
     / "versions"
     / "c141b2c3d50e_feat_add_lot_disposal_receipts.py"
 )
+CARRY_MIGRATION = (
+    Path(__file__).resolve().parents[4]
+    / "alembic"
+    / "versions"
+    / "c144b2c3d511_fix_separate_amortized_book_carry.py"
+)
 
 
 @pytest.fixture
@@ -55,20 +61,27 @@ def disposal_receipt_schema(clean_db, db_engine) -> None:
 
     with db_engine.begin() as connection:
         inspector = inspect(connection)
-        if inspector.has_table("lot_disposal_receipts"):
-            return
-        lot_constraints = {
-            item["name"] for item in inspector.get_unique_constraints("position_lot_state")
+        operations = Operations(MigrationContext.configure(connection))
+        if not inspector.has_table("lot_disposal_receipts"):
+            lot_constraints = {
+                item["name"] for item in inspector.get_unique_constraints("position_lot_state")
+            }
+            if "uq_position_lot_scope_identity" not in lot_constraints:
+                operations.create_unique_constraint(
+                    "uq_position_lot_scope_identity",
+                    "position_lot_state",
+                    ["lot_id", "portfolio_id", "security_id"],
+                )
+            migration = runpy.run_path(str(MIGRATION))
+            migration["upgrade"].__globals__["op"] = operations
+            migration["upgrade"]()
+        lot_columns = {
+            item["name"] for item in inspect(connection).get_columns("position_lot_state")
         }
-        if "uq_position_lot_scope_identity" not in lot_constraints:
-            Operations(MigrationContext.configure(connection)).create_unique_constraint(
-                "uq_position_lot_scope_identity",
-                "position_lot_state",
-                ["lot_id", "portfolio_id", "security_id"],
-            )
-        migration = runpy.run_path(str(MIGRATION))
-        migration["upgrade"].__globals__["op"] = Operations(MigrationContext.configure(connection))
-        migration["upgrade"]()
+        if "amortized_book_carrying_local" not in lot_columns:
+            carry_migration = runpy.run_path(str(CARRY_MIGRATION))
+            carry_migration["upgrade"].__globals__["op"] = operations
+            carry_migration["upgrade"]()
 
 
 async def test_repository_preserves_active_correction_void_and_reactivation_history(

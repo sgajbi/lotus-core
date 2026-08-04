@@ -482,9 +482,9 @@ def test_active_topic_registry_has_explicit_source_owned_partition_counts():
         for topic in config_module.KAFKA_TOPIC_DEFINITIONS
         if topic.canonical_name == "fixed_income.book_cost.disposal_replay.requested"
     )
-    assert replay_topic.lifecycle_status == "inactive"
+    assert replay_topic.lifecycle_status == "active"
     assert replay_topic.partition_count == 12
-    assert replay_topic.runtime_name not in config_module.KAFKA_TOPIC_PARTITION_COUNTS
+    assert config_module.KAFKA_TOPIC_PARTITION_COUNTS[replay_topic.runtime_name] == 12
     assert config_module.KAFKA_TOPIC_PARTITION_COUNTS["market_prices.raw.received"] == 12
     assert config_module.KAFKA_TOPIC_PARTITION_COUNTS["market_prices.persisted"] == 12
     assert config_module.KAFKA_TOPIC_PARTITION_COUNTS["transactions.reprocessing.requested"] == 8

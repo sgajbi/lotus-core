@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 from portfolio_common.runtime_settings import env_json_map, invalid_env_setting
 
@@ -22,6 +22,7 @@ GOVERNED_GROUP_MAX_IN_FLIGHT = {
     "persistence_group_business_dates": 1,
     "portfolio_transaction_processing_group": 12,
     "fixed_income_book_cost_authority_group": 12,
+    "fixed_income_book_cost_correction_replay_group": 12,
     "portfolio_transaction_replay_request_group": 8,
     "valuation_orchestrator_group_readiness": 8,
     "valuation_orchestrator_group_price_events": 12,
@@ -163,7 +164,7 @@ def _load_default_execution_override() -> dict[str, object]:
     raw = env_json_map(DEFAULTS_ENV, service_name=CONFIG_SERVICE_NAME)
     if not raw:
         return {}
-    return raw
+    return cast(dict[str, object], raw)
 
 
 def _load_group_execution_override(group_id: str) -> dict[str, object]:

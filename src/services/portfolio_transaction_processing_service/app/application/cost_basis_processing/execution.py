@@ -39,9 +39,9 @@ from .lot_state_persistence import persist_open_lot_state
 from .preparation import CostProcessingRoute, PreparedCostTransaction
 from .transaction_persistence import persist_cost_basis_transactions
 
-# Authority corrections currently rematerialize profiles without replaying affected booked
-# disposals. Keep production composition fail-closed until issue #903 supplies durable replay.
-_AMORTIZED_DISPOSAL_RUNTIME_ENABLED = False
+# Correction commands replay the earliest affected booked transaction; its full cost-basis rebuild
+# recalculates the complete suffix before one unit-of-work commit.
+_AMORTIZED_DISPOSAL_RUNTIME_ENABLED = True
 
 
 class PreparedCostProcessingUseCase:

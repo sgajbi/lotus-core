@@ -37,7 +37,7 @@ def _recording_factory(
     return build
 
 
-def test_composition_builds_transaction_replay_and_authority_consumers() -> None:
+def test_composition_builds_transaction_replay_authority_and_correction_consumers() -> None:
     calls: list[tuple[str, dict[str, Any]]] = []
     process_use_case = MagicMock()
     replay_use_case = MagicMock()
@@ -50,10 +50,18 @@ def test_composition_builds_transaction_replay_and_authority_consumers() -> None
         transaction_consumer_factory=_recording_factory("live", calls),
         replay_request_consumer_factory=_recording_factory("replay_request", calls),
         fixed_income_authority_consumer_factory=_recording_factory("authority", calls),
+        fixed_income_correction_replay_consumer_factory=_recording_factory(
+            "correction_replay", calls
+        ),
     )
 
-    assert len(consumers) == 3
-    assert [family for family, _ in calls] == ["live", "replay_request", "authority"]
+    assert len(consumers) == 4
+    assert [family for family, _ in calls] == [
+        "live",
+        "replay_request",
+        "authority",
+        "correction_replay",
+    ]
     live = calls[0][1]
     assert live["topic"] == "transactions.persisted"
     assert live["group_id"] == "portfolio_transaction_processing_group"
@@ -72,6 +80,12 @@ def test_composition_builds_transaction_replay_and_authority_consumers() -> None
     assert authority["service_prefix"] == "BOOKCOST"
     assert authority["use_case"] is authority_use_case
     assert authority["retryable_failure_max_elapsed_seconds"] == 30
+    correction_replay = calls[3][1]
+    assert correction_replay["topic"] == "fixed_income.book_cost.disposal_replay.requested"
+    assert correction_replay["group_id"] == "fixed_income_book_cost_correction_replay_group"
+    assert correction_replay["service_prefix"] == "BOOKCOSTREPLAY"
+    assert correction_replay["use_case"] is replay_use_case
+    assert correction_replay["retryable_failure_max_elapsed_seconds"] == 30
     assert all(values["dlq_topic"] == "dlq.persistence_service" for _, values in calls)
 
 
@@ -103,14 +117,18 @@ def test_composition_builds_each_application_use_case_once(monkeypatch) -> None:
         transaction_consumer_factory=_recording_factory("live", calls),
         replay_request_consumer_factory=_recording_factory("replay_request", calls),
         fixed_income_authority_consumer_factory=_recording_factory("authority", calls),
+        fixed_income_correction_replay_consumer_factory=_recording_factory(
+            "correction_replay", calls
+        ),
     )
 
     process_builder.assert_called_once_with()
     replay_builder.assert_called_once_with()
-    authority_builder.assert_called_once_with()
+    authority_builder.assert_called_once_with(correction_replay_enabled=True)
     assert calls[0][1]["use_case"] is process_use_case
     assert calls[1][1]["use_case"] is replay_use_case
     assert calls[2][1]["use_case"] is authority_use_case
+    assert calls[3][1]["use_case"] is replay_use_case
 
 
 def test_composition_loads_independent_live_and_replay_execution_profiles() -> None:
@@ -118,7 +136,15 @@ def test_composition_loads_independent_live_and_replay_execution_profiles() -> N
     live_profile = MagicMock(spec=KafkaConsumerExecutionProfile)
     replay_profile = MagicMock(spec=KafkaConsumerExecutionProfile)
     authority_profile = MagicMock(spec=KafkaConsumerExecutionProfile)
-    profile_loader = MagicMock(side_effect=[live_profile, replay_profile, authority_profile])
+    correction_replay_profile = MagicMock(spec=KafkaConsumerExecutionProfile)
+    profile_loader = MagicMock(
+        side_effect=[
+            live_profile,
+            replay_profile,
+            authority_profile,
+            correction_replay_profile,
+        ]
+    )
 
     consumer_composition.build_transaction_processing_consumers(
         process_transaction=MagicMock(),
@@ -127,6 +153,9 @@ def test_composition_loads_independent_live_and_replay_execution_profiles() -> N
         transaction_consumer_factory=_recording_factory("live", calls),
         replay_request_consumer_factory=_recording_factory("replay_request", calls),
         fixed_income_authority_consumer_factory=_recording_factory("authority", calls),
+        fixed_income_correction_replay_consumer_factory=_recording_factory(
+            "correction_replay", calls
+        ),
         execution_profile_loader=profile_loader,
     )
 
@@ -134,7 +163,9 @@ def test_composition_loads_independent_live_and_replay_execution_profiles() -> N
         "portfolio_transaction_processing_group",
         "portfolio_transaction_replay_request_group",
         "fixed_income_book_cost_authority_group",
+        "fixed_income_book_cost_correction_replay_group",
     ]
     assert calls[0][1]["execution_profile"] is live_profile
     assert calls[1][1]["execution_profile"] is replay_profile
     assert calls[2][1]["execution_profile"] is authority_profile
+    assert calls[3][1]["execution_profile"] is correction_replay_profile

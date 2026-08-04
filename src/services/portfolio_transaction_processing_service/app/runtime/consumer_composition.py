@@ -5,6 +5,7 @@ from collections.abc import Callable
 from portfolio_common.config import (
     KAFKA_BOOTSTRAP_SERVERS,
     KAFKA_FIXED_INCOME_BOOK_COST_AUTHORITY_RECEIVED_TOPIC,
+    KAFKA_FIXED_INCOME_BOOK_COST_DISPOSAL_REPLAY_REQUESTED_TOPIC,
     KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC,
     KAFKA_TRANSACTIONS_PERSISTED_TOPIC,
     KAFKA_TRANSACTIONS_REPROCESSING_REQUESTED_TOPIC,
@@ -22,6 +23,7 @@ from ..application.fixed_income_book_cost import (
 from ..delivery.kafka import (
     BookedTransactionReplayRequestConsumer,
     FixedIncomeBookCostAuthorityConsumer,
+    FixedIncomeBookCostCorrectionReplayConsumer,
     TransactionProcessingConsumer,
 )
 from .dependency_composition import (
@@ -33,6 +35,9 @@ from .dependency_composition import (
 TRANSACTION_PROCESSING_CONSUMER_GROUP = "portfolio_transaction_processing_group"
 TRANSACTION_REPLAY_REQUEST_CONSUMER_GROUP = "portfolio_transaction_replay_request_group"
 FIXED_INCOME_BOOK_COST_AUTHORITY_CONSUMER_GROUP = "fixed_income_book_cost_authority_group"
+FIXED_INCOME_BOOK_COST_CORRECTION_REPLAY_CONSUMER_GROUP = (
+    "fixed_income_book_cost_correction_replay_group"
+)
 # Source/reference events arrive on independent topics. Keep the failed partition ordered while
 # allowing that dependency to converge, then use the existing DLQ recovery path instead of
 # restarting this entire service indefinitely behind a permanently unresolved reference.
@@ -54,9 +59,12 @@ def build_transaction_processing_consumers(
     fixed_income_authority_consumer_factory: ConsumerFactory = (
         FixedIncomeBookCostAuthorityConsumer
     ),
+    fixed_income_correction_replay_consumer_factory: ConsumerFactory = (
+        FixedIncomeBookCostCorrectionReplayConsumer
+    ),
     execution_profile_loader: ExecutionProfileLoader = load_kafka_consumer_execution_profile,
-) -> tuple[BaseConsumer, BaseConsumer, BaseConsumer]:
-    """Compose transaction, replay, and fixed-income authority consumers."""
+) -> tuple[BaseConsumer, BaseConsumer, BaseConsumer, BaseConsumer]:
+    """Compose transaction, replay, and fixed-income authority/correction consumers."""
     process_use_case = (
         process_transaction
         if process_transaction is not None
@@ -70,12 +78,15 @@ def build_transaction_processing_consumers(
     authority_use_case = (
         handle_fixed_income_book_cost_authority
         if handle_fixed_income_book_cost_authority is not None
-        else build_fixed_income_book_cost_authority_use_case()
+        else build_fixed_income_book_cost_authority_use_case(correction_replay_enabled=True)
     )
     live_execution_profile = execution_profile_loader(TRANSACTION_PROCESSING_CONSUMER_GROUP)
     replay_execution_profile = execution_profile_loader(TRANSACTION_REPLAY_REQUEST_CONSUMER_GROUP)
     authority_execution_profile = execution_profile_loader(
         FIXED_INCOME_BOOK_COST_AUTHORITY_CONSUMER_GROUP
+    )
+    correction_replay_execution_profile = execution_profile_loader(
+        FIXED_INCOME_BOOK_COST_CORRECTION_REPLAY_CONSUMER_GROUP
     )
     live_consumer = transaction_consumer_factory(
         bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
@@ -107,4 +118,14 @@ def build_transaction_processing_consumers(
         execution_profile=authority_execution_profile,
         retryable_failure_max_elapsed_seconds=(TRANSACTION_DEPENDENCY_RETRY_MAX_ELAPSED_SECONDS),
     )
-    return live_consumer, replay_consumer, authority_consumer
+    correction_replay_consumer = fixed_income_correction_replay_consumer_factory(
+        bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
+        dlq_topic=KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC,
+        topic=KAFKA_FIXED_INCOME_BOOK_COST_DISPOSAL_REPLAY_REQUESTED_TOPIC,
+        group_id=FIXED_INCOME_BOOK_COST_CORRECTION_REPLAY_CONSUMER_GROUP,
+        service_prefix="BOOKCOSTREPLAY",
+        use_case=replay_use_case,
+        execution_profile=correction_replay_execution_profile,
+        retryable_failure_max_elapsed_seconds=(TRANSACTION_DEPENDENCY_RETRY_MAX_ELAPSED_SECONDS),
+    )
+    return live_consumer, replay_consumer, authority_consumer, correction_replay_consumer

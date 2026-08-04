@@ -111,6 +111,12 @@ async def test_cost_basis_execution_acquires_key_lock_before_calculation(
     coordinator = MagicMock()
     coordinator.return_value.calculate = AsyncMock(return_value=calculation)
     monkeypatch.setattr(execution_module, "CostBasisCalculationCoordinator", coordinator)
+    apply_amortized_disposal = AsyncMock(return_value=calculation)
+    monkeypatch.setattr(
+        execution_module,
+        "apply_effective_amortized_cost_to_disposals",
+        apply_amortized_disposal,
+    )
     persisted = (prepared.transaction,)
     persistence_order: list[str] = []
     monkeypatch.setattr(
@@ -168,6 +174,16 @@ async def test_cost_basis_execution_acquires_key_lock_before_calculation(
         "SECURITY-01",
     )
     persist_disposals.assert_awaited_once()
+    apply_amortized_disposal.assert_awaited_once_with(
+        calculation,
+        portfolio=CostBasisPortfolioReference(
+            portfolio_id="PORT-COST-01",
+            base_currency="SGD",
+            cost_basis_method=CostBasisMethod.FIFO,
+        ),
+        cost_basis_method=CostBasisMethod.FIFO,
+        profiles=amortized_cost_profiles,
+    )
     amortized_cost_profiles.effective_as_of_many.assert_not_awaited()
     assert persistence_order == [
         "transactions",
@@ -177,8 +193,8 @@ async def test_cost_basis_execution_acquires_key_lock_before_calculation(
     ]
 
 
-def test_amortized_disposal_runtime_is_gated_pending_correction_replay() -> None:
-    assert execution_module._AMORTIZED_DISPOSAL_RUNTIME_ENABLED is False
+def test_amortized_disposal_runtime_is_enabled_with_correction_replay() -> None:
+    assert execution_module._AMORTIZED_DISPOSAL_RUNTIME_ENABLED is True
 
 
 @pytest.mark.asyncio
