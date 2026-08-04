@@ -2799,6 +2799,272 @@ class LotDisposalAllocationRecord(Base):
     )
 
 
+class LotBasisTransferReceiptRecord(Base):
+    """Append-only versioned receipt for one basis-only lot movement."""
+
+    __tablename__ = "lot_basis_transfer_receipts"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    receipt_id = Column(String(96), nullable=False)
+    receipt_version = Column(Integer, nullable=False)
+    source_transaction_id = Column(
+        String,
+        ForeignKey("transactions.transaction_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    target_transaction_id = Column(String, nullable=False)
+    target_lot_id = Column(String, nullable=False)
+    portfolio_id = Column(
+        String,
+        ForeignKey("portfolios.portfolio_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    source_instrument_id = Column(String, nullable=False)
+    source_security_id = Column(
+        String,
+        ForeignKey("instruments.security_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    target_instrument_id = Column(String, nullable=True)
+    transfer_timestamp = Column(DateTime(timezone=True), nullable=False)
+    transaction_type = Column(String, nullable=False)
+    cost_basis_method = Column(String, nullable=False)
+    calculation_policy_id = Column(String, nullable=True)
+    calculation_policy_version = Column(String, nullable=True)
+    status = Column(String, nullable=False)
+    void_reason = Column(String, nullable=True)
+    transferred_cost_local = Column(ExactNumeric(18, 10), nullable=False)
+    transferred_cost_base = Column(ExactNumeric(18, 10), nullable=False)
+    allocation_count = Column(Integer, nullable=False)
+    transaction_calculation_lineage = Column(JSONB(none_as_null=True), nullable=False)
+    basis_transfer_calculation_lineage = Column(JSONB(none_as_null=True), nullable=True)
+    semantic_content_hash = Column(String(64), nullable=False)
+    previous_receipt_content_hash = Column(String(64), nullable=True)
+    receipt_content_hash = Column(String(64), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "receipt_id",
+            "receipt_version",
+            name="uq_lot_basis_transfer_receipt_version",
+        ),
+        UniqueConstraint(
+            "source_transaction_id",
+            "receipt_version",
+            name="uq_lot_basis_transfer_source_tx_version",
+        ),
+        UniqueConstraint(
+            "receipt_id",
+            "receipt_version",
+            "portfolio_id",
+            "source_security_id",
+            name="uq_lot_basis_transfer_receipt_scope_version",
+        ),
+        CheckConstraint(
+            "receipt_version >= 1 AND allocation_count >= 0",
+            name="ck_lot_basis_transfer_receipt_counts",
+        ),
+        CheckConstraint(
+            "receipt_id = btrim(receipt_id) AND receipt_id <> '' "
+            "AND source_transaction_id = btrim(source_transaction_id) "
+            "AND source_transaction_id <> '' "
+            "AND target_transaction_id = btrim(target_transaction_id) "
+            "AND target_transaction_id <> '' "
+            "AND target_lot_id = 'LOT-' || target_transaction_id "
+            "AND source_transaction_id <> target_transaction_id "
+            "AND portfolio_id = btrim(portfolio_id) AND portfolio_id <> '' "
+            "AND source_instrument_id = btrim(source_instrument_id) "
+            "AND source_instrument_id <> '' "
+            "AND source_security_id = btrim(source_security_id) "
+            "AND source_security_id <> '' "
+            "AND (target_instrument_id IS NULL OR "
+            "(target_instrument_id = btrim(target_instrument_id) AND target_instrument_id <> '')) "
+            "AND transaction_type = btrim(transaction_type) AND transaction_type <> ''",
+            name="ck_lot_basis_transfer_receipt_identity",
+        ),
+        CheckConstraint(
+            "cost_basis_method IN ('FIFO', 'AVCO')",
+            name="ck_lot_basis_transfer_receipt_method",
+        ),
+        CheckConstraint(
+            "(calculation_policy_id IS NULL AND calculation_policy_version IS NULL) "
+            "OR (calculation_policy_id = btrim(calculation_policy_id) "
+            "AND calculation_policy_id <> '' "
+            "AND calculation_policy_version = btrim(calculation_policy_version) "
+            "AND calculation_policy_version <> '')",
+            name="ck_lot_basis_transfer_receipt_policy",
+        ),
+        _finite_numeric_check_constraint(
+            "ck_lot_basis_transfer_receipt_amounts_finite",
+            "transferred_cost_local",
+            "transferred_cost_base",
+        ),
+        CheckConstraint(
+            "transferred_cost_local >= 0 AND transferred_cost_base >= 0",
+            name="ck_lot_basis_transfer_receipt_amounts_nonnegative",
+        ),
+        CheckConstraint(
+            "(status = 'ACTIVE' AND void_reason IS NULL AND allocation_count > 0 "
+            "AND (transferred_cost_local > 0 OR transferred_cost_base > 0) "
+            "AND basis_transfer_calculation_lineage IS NOT NULL) "
+            "OR (status = 'VOIDED' AND void_reason = btrim(void_reason) "
+            "AND void_reason <> '' AND transferred_cost_local = 0 "
+            "AND transferred_cost_base = 0 AND allocation_count = 0 "
+            "AND basis_transfer_calculation_lineage IS NULL)",
+            name="ck_lot_basis_transfer_receipt_lifecycle",
+        ),
+        CheckConstraint(
+            "jsonb_typeof(transaction_calculation_lineage) = 'object' "
+            "AND (basis_transfer_calculation_lineage IS NULL "
+            "OR jsonb_typeof(basis_transfer_calculation_lineage) = 'object')",
+            name="ck_lot_basis_transfer_receipt_lineage",
+        ),
+        CheckConstraint(
+            "semantic_content_hash ~ '^[0-9a-f]{64}$' "
+            "AND receipt_content_hash ~ '^[0-9a-f]{64}$' "
+            "AND (previous_receipt_content_hash IS NULL "
+            "OR previous_receipt_content_hash ~ '^[0-9a-f]{64}$')",
+            name="ck_lot_basis_transfer_receipt_hashes",
+        ),
+        CheckConstraint(
+            "(receipt_version = 1 AND previous_receipt_content_hash IS NULL) "
+            "OR (receipt_version > 1 AND previous_receipt_content_hash IS NOT NULL)",
+            name="ck_lot_basis_transfer_receipt_chain",
+        ),
+        Index(
+            "ix_lot_basis_transfer_receipt_scope_time",
+            "portfolio_id",
+            "source_security_id",
+            transfer_timestamp.desc(),
+            receipt_version.desc(),
+        ),
+        Index(
+            "ix_lot_basis_transfer_receipt_source_tx_version",
+            "source_transaction_id",
+            receipt_version.desc(),
+        ),
+        Index(
+            "ix_lot_basis_transfer_receipt_target_tx_version",
+            "portfolio_id",
+            "target_transaction_id",
+            receipt_version.desc(),
+        ),
+    )
+
+
+class LotBasisTransferAllocationRecord(Base):
+    """Immutable ordered source-lot contribution to one basis transfer version."""
+
+    __tablename__ = "lot_basis_transfer_allocations"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    receipt_id = Column(String(96), nullable=False)
+    receipt_version = Column(Integer, nullable=False)
+    portfolio_id = Column(String, nullable=False)
+    source_security_id = Column(String, nullable=False)
+    allocation_ordinal = Column(Integer, nullable=False)
+    source_lot_id = Column(String, nullable=False)
+    source_transaction_id = Column(String, nullable=False)
+    source_acquisition_date = Column(Date, nullable=False)
+    retained_quantity = Column(ExactNumeric(18, 10), nullable=False)
+    source_cost_local_before = Column(ExactNumeric(18, 10), nullable=False)
+    source_cost_base_before = Column(ExactNumeric(18, 10), nullable=False)
+    transferred_cost_local = Column(ExactNumeric(18, 10), nullable=False)
+    transferred_cost_base = Column(ExactNumeric(18, 10), nullable=False)
+    retained_cost_local = Column(ExactNumeric(18, 10), nullable=False)
+    retained_cost_base = Column(ExactNumeric(18, 10), nullable=False)
+    allocation_content_hash = Column(String(64), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["receipt_id", "receipt_version", "portfolio_id", "source_security_id"],
+            [
+                "lot_basis_transfer_receipts.receipt_id",
+                "lot_basis_transfer_receipts.receipt_version",
+                "lot_basis_transfer_receipts.portfolio_id",
+                "lot_basis_transfer_receipts.source_security_id",
+            ],
+            name="fk_lot_basis_transfer_allocation_receipt",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["source_transaction_id"],
+            ["transactions.transaction_id"],
+            name="fk_lot_basis_transfer_allocation_source_tx",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["source_lot_id", "portfolio_id", "source_security_id"],
+            [
+                "position_lot_state.lot_id",
+                "position_lot_state.portfolio_id",
+                "position_lot_state.security_id",
+            ],
+            name="fk_lot_basis_transfer_allocation_lot_scope",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "receipt_id",
+            "receipt_version",
+            "allocation_ordinal",
+            name="uq_lot_basis_transfer_allocation_ordinal",
+        ),
+        UniqueConstraint(
+            "receipt_id",
+            "receipt_version",
+            "source_lot_id",
+            name="uq_lot_basis_transfer_allocation_source_lot",
+        ),
+        CheckConstraint(
+            "receipt_version >= 1 AND allocation_ordinal >= 1",
+            name="ck_lot_basis_transfer_allocation_identity",
+        ),
+        CheckConstraint(
+            "receipt_id = btrim(receipt_id) AND receipt_id <> '' "
+            "AND portfolio_id = btrim(portfolio_id) AND portfolio_id <> '' "
+            "AND source_security_id = btrim(source_security_id) "
+            "AND source_security_id <> '' "
+            "AND source_lot_id = btrim(source_lot_id) AND source_lot_id <> '' "
+            "AND source_transaction_id = btrim(source_transaction_id) "
+            "AND source_transaction_id <> ''",
+            name="ck_lot_basis_transfer_allocation_scope",
+        ),
+        _finite_numeric_check_constraint(
+            "ck_lot_basis_transfer_allocation_amounts_finite",
+            "retained_quantity",
+            "source_cost_local_before",
+            "source_cost_base_before",
+            "transferred_cost_local",
+            "transferred_cost_base",
+            "retained_cost_local",
+            "retained_cost_base",
+        ),
+        CheckConstraint(
+            "retained_quantity > 0 AND source_cost_local_before >= 0 "
+            "AND source_cost_base_before >= 0 AND transferred_cost_local >= 0 "
+            "AND transferred_cost_base >= 0 AND retained_cost_local >= 0 "
+            "AND retained_cost_base >= 0 "
+            "AND (transferred_cost_local > 0 OR transferred_cost_base > 0) "
+            "AND source_cost_local_before = transferred_cost_local + retained_cost_local "
+            "AND source_cost_base_before = transferred_cost_base + retained_cost_base",
+            name="ck_lot_basis_transfer_allocation_conservation",
+        ),
+        CheckConstraint(
+            "allocation_content_hash ~ '^[0-9a-f]{64}$'",
+            name="ck_lot_basis_transfer_allocation_hash",
+        ),
+        Index(
+            "ix_lot_basis_transfer_allocation_source",
+            "portfolio_id",
+            "source_security_id",
+            "source_lot_id",
+            "source_acquisition_date",
+        ),
+    )
+
+
 class LotAmortizedCostAuthorityRecord(Base):
     """Append-only source authority used to calculate lot amortized cost."""
 
