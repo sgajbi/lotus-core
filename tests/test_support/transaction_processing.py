@@ -69,14 +69,16 @@ def instrument_record(
     name: str,
     isin: str,
     currency: str,
+    product_type: str = "EQUITY",
+    asset_class: str = "Equity",
 ) -> Instrument:
     return Instrument(
         security_id=security_id,
         name=name,
         isin=isin,
         currency=currency,
-        product_type="EQUITY",
-        asset_class="Equity",
+        product_type=product_type,
+        asset_class=asset_class,
     )
 
 
