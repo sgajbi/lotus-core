@@ -127,9 +127,12 @@ instrument while the ordered allocation children retain source-lot ownership. Pe
 existing transaction-neutral query expose this source-to-target evidence additively, and receipt
 hash reconstruction rejects a missing discriminator, mixed internal/external shape, changed target
 identity, or an external reference grafted onto an internal transfer. No target foreign key is
-introduced because source-before-target processing is valid. Ordinary `TRANSFER_OUT` remains
-without fabricated destination evidence until the canonical event and booked-transaction contracts
-carry a governed external destination reference and reciprocal internal-leg validation exists.
+introduced because source-before-target processing is valid. `TRANSFER_OUT` now requires exactly
+one destination: the same explicit internal target identity or a canonical opaque
+`external_destination_reference` carried through ingestion, event, booked-domain, transaction-ledger,
+and query contracts. External transfer evidence never fabricates an internal transaction, lot, or
+instrument. Reciprocal internal-leg validation across separately processed source/target streams
+remains open.
 An additive `lot_amortized_cost_authority` ledger and application port now persist and reload all
 four required source families through one governed pattern. Per-source transaction locks,
 monotonic correction versions, exact-retry neutrality, canonical decimal/date payloads, composite
@@ -224,7 +227,9 @@ unscoped history; it cannot govern an authoritative receipt.
 Existing unit-price results, snapshot fields, tax/original lot basis, and production-bookable
 transaction types remain stable. The lot-disposal query adds nullable destination fields; legacy
 receipts preserve their exact semantic hash because absent destination evidence is omitted from the
-hashed payload. `FACTOR_ADJUSTED_CURRENT_PRINCIPAL`, supplied current principal,
+hashed payload. The transaction contract and ledger add nullable external destination authority;
+`TRANSFER_OUT` without exactly one internal or external destination now fails before persistence by
+intent. `FACTOR_ADJUSTED_CURRENT_PRINCIPAL`, supplied current principal,
 accrued-income variants without evidence, and every redemption type remain fail closed. The schema
 change is additive; no public API/OpenAPI, Kafka runtime, or capability claim changed. The authored
 Data Models wiki documents the staged ledgers while the capability wiki remains
@@ -323,6 +328,13 @@ Data Models wiki documents the staged ledgers while the capability wiki remains
   in 428.82 seconds with migration head `c147b2c3d514`, source allocation, duplicate neutrality, and
   target transaction/lot/instrument evidence. Remote Feature Lane `30903554727` is green across all
   five jobs at predecessor head `3edfdac9f`; exact-current-head CI remains pending.
+- external-transfer destination proof: migration head `c148b2c3d515` adds nullable transaction
+  authority; 17 focused application tests cover internal, external, missing, partial, ambiguous, and
+  wrong-family destination shapes. The exact-source PostgreSQL external-transfer lifecycle passed in
+  417.67 seconds, proving the opaque event value persisted on the transaction and receipt, the
+  source lot was fully consumed without realized P&L, and no internal target identity was invented.
+  Migration, OpenAPI, API-vocabulary, Ruff, format, and focused mapping checks pass. Reciprocal
+  validation for internal legs processed on distinct streams remains open under #481.
 
 Protected PR and exact-main evidence remain pending for this tranche. Wider runtime recovery/load
 proof, complete corporate-action scenario coverage, redemption, and final issue closure remain
