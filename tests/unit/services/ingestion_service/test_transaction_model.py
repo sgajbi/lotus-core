@@ -629,6 +629,7 @@ def test_transaction_model_accepts_corporate_action_synthetic_flow_fields() -> N
         "child_role": "SOURCE_POSITION_CLOSE",
         "source_instrument_id": "OLD_SEC_001",
         "target_instrument_id": "NEW_SEC_001",
+        "target_transaction_reference": "MERGER-IN-001",
         "linked_cash_transaction_id": "CA-CIL-CASH-001",
         "has_synthetic_flow": True,
         "synthetic_flow_effective_date": "2026-03-15",
@@ -741,17 +742,62 @@ def test_non_transfer_destination_metadata_is_rejected(
         Transaction(**_destination_payload(transaction_type, **destination))
 
 
-def test_corporate_action_internal_target_metadata_remains_compatible() -> None:
+@pytest.mark.parametrize(
+    ("transaction_type", "target_transaction_reference"),
+    [
+        ("MERGER_OUT", "MERGER-IN-001"),
+        ("EXCHANGE_OUT", "EXCHANGE-IN-001"),
+        ("REPLACEMENT_OUT", "REPLACEMENT-IN-001"),
+    ],
+)
+def test_internal_lot_disposal_accepts_complete_target_metadata(
+    transaction_type: str,
+    target_transaction_reference: str,
+) -> None:
     transaction = Transaction(
         **_destination_payload(
-            "DEMERGER_OUT",
-            target_transaction_reference="DEMERGER-IN-001",
-            target_instrument_id="NEW_SEC_001",
+            transaction_type,
+            target_transaction_reference=f" {target_transaction_reference} ",
+            target_instrument_id=" NEW_SEC_001 ",
         )
     )
 
-    assert transaction.target_transaction_reference == "DEMERGER-IN-001"
+    assert transaction.target_transaction_reference == target_transaction_reference
     assert transaction.target_instrument_id == "NEW_SEC_001"
+
+
+@pytest.mark.parametrize("transaction_type", ["MERGER_OUT", "EXCHANGE_OUT", "REPLACEMENT_OUT"])
+@pytest.mark.parametrize(
+    "destination",
+    [
+        {},
+        {"target_transaction_reference": "TARGET-IN-001"},
+        {"target_instrument_id": "NEW_SEC_001"},
+        {
+            "target_transaction_reference": "   ",
+            "target_instrument_id": "NEW_SEC_001",
+        },
+    ],
+)
+def test_internal_lot_disposal_rejects_missing_or_partial_target_metadata(
+    transaction_type: str,
+    destination: dict[str, object],
+) -> None:
+    with pytest.raises(
+        ValidationError,
+        match="requires target_transaction_reference and target_instrument_id",
+    ):
+        Transaction(**_destination_payload(transaction_type, **destination))
+
+
+@pytest.mark.parametrize("transaction_type", ["SPIN_OFF", "DEMERGER_OUT"])
+def test_partial_basis_transfer_does_not_over_require_disposal_destination(
+    transaction_type: str,
+) -> None:
+    transaction = Transaction(**_destination_payload(transaction_type))
+
+    assert transaction.target_transaction_reference is None
+    assert transaction.target_instrument_id is None
 
 
 @pytest.mark.parametrize(

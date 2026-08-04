@@ -7,10 +7,15 @@ or dual authority and must reconcile. Duplicate-interest validation now reads on
 portfolio-owned linked group across security boundaries before mutation, without broadening the
 security-scoped cost-basis rebuild history. Positive accrued-interest evidence remains reportable
 when canonical deductions reduce net settlement to exactly zero, without fabricating a cash leg;
-negative settlement and unlinked non-zero settlement still fail closed. Focused validation covers
-177 unit cases, 4 exact-source PostgreSQL redemption lifecycles, full MyPy across 294 source files,
-and the composed architecture guards. No API, OpenAPI, schema, migration, Kafka, central-context,
-skill-routing, capability, or additional wiki truth changed.
+negative settlement and unlinked non-zero settlement still fail closed. Registry-derived ingestion
+validation requires complete internal destinations for merger, exchange, and replacement disposal
+legs before publication. Basis-transfer query supportability now reconstructs both lineage payloads
+strictly and binds active transfer lineage to persisted source allocations and aggregate outputs
+through one shared writer/reader contract. Focused validation covers 177 unit cases, 4 exact-source
+PostgreSQL redemption lifecycles, 334 ingestion/router and 118 writer/reader cases, query-verifier
+100% line/branch coverage, full MyPy across 294 source files, and the composed architecture guards.
+No OpenAPI shape, schema, migration, Kafka, central-context, skill-routing, capability, or additional
+wiki truth changed.
 
 CR-1678 protected-review addendum (2026-08-04): redemption booking now applies the registry-owned
 `AUTO_GENERATE` default before cost processing and fails closed before mutation when a non-zero

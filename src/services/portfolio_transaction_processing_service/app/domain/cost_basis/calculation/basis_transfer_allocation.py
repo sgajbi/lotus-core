@@ -9,6 +9,12 @@ from portfolio_common.domain.calculation_lineage import (
     CalculationLineage,
     build_calculation_lineage,
 )
+from portfolio_common.domain.cost_basis_receipt_integrity import (
+    BASIS_TRANSFER_LINEAGE_ALGORITHM_ID,
+    BASIS_TRANSFER_LINEAGE_ALGORITHM_VERSION,
+    basis_transfer_lineage_input_payload,
+    basis_transfer_lineage_output_payload,
+)
 from portfolio_common.domain.decimal_amount import required_decimal
 from portfolio_common.domain.transaction.numeric_policy import (
     COST_BASIS_STATE_LEDGER_OUTPUT_V1,
@@ -190,39 +196,14 @@ def _build_basis_transfer_lineage(result: LotBasisTransferResult) -> Calculation
     if base_total != result.transferred_cost_base:
         raise ValueError("source-lot base basis does not reconcile to transfer aggregate")
     return build_calculation_lineage(
-        algorithm_id="cost-basis-lot-basis-transfer-allocation",
-        algorithm_version=1,
+        algorithm_id=BASIS_TRANSFER_LINEAGE_ALGORITHM_ID,
+        algorithm_version=BASIS_TRANSFER_LINEAGE_ALGORITHM_VERSION,
         intermediate_precision=COST_BASIS_STATE_LEDGER_OUTPUT_V1.working_precision,
-        input_payload={
-            "allocations": [
-                {
-                    "allocation_ordinal": allocation.allocation_ordinal,
-                    "retained_quantity": allocation.retained_quantity,
-                    "source_cost_base_before": allocation.source_cost_base_before,
-                    "source_cost_local_before": allocation.source_cost_local_before,
-                    "source_acquisition_date": allocation.source_acquisition_date,
-                    "source_lot_id": allocation.source_lot_id,
-                    "source_transaction_id": allocation.source_transaction_id,
-                    "transferred_cost_base": allocation.transferred_cost_base,
-                    "transferred_cost_local": allocation.transferred_cost_local,
-                }
-                for allocation in result.allocations
-            ]
-        },
-        output_payload={
-            "allocations": [
-                {
-                    "allocation_ordinal": allocation.allocation_ordinal,
-                    "retained_cost_base": allocation.retained_cost_base,
-                    "retained_cost_local": allocation.retained_cost_local,
-                    "source_lot_id": allocation.source_lot_id,
-                    "transferred_cost_base": allocation.transferred_cost_base,
-                    "transferred_cost_local": allocation.transferred_cost_local,
-                }
-                for allocation in result.allocations
-            ],
-            "transferred_cost_base": result.transferred_cost_base,
-            "transferred_cost_local": result.transferred_cost_local,
-        },
+        input_payload=basis_transfer_lineage_input_payload(result.allocations),
+        output_payload=basis_transfer_lineage_output_payload(
+            result.allocations,
+            transferred_cost_base=result.transferred_cost_base,
+            transferred_cost_local=result.transferred_cost_local,
+        ),
         numeric_output_policy=COST_BASIS_STATE_LEDGER_OUTPUT_V1.lineage_identity(),
     )

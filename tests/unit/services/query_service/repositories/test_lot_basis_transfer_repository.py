@@ -6,12 +6,19 @@ from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from portfolio_common.domain.calculation_lineage import canonical_content_hash
+from portfolio_common.domain.calculation_lineage import (
+    build_calculation_lineage,
+    canonical_content_hash,
+)
 from portfolio_common.domain.cost_basis_receipt_integrity import (
+    basis_transfer_lineage_input_payload,
+    basis_transfer_lineage_output_payload,
+    canonical_cost_basis_output_payload,
     cost_basis_allocation_content_hash,
     cost_basis_receipt_semantic_hash,
     receipt_version_content_hash,
 )
+from portfolio_common.domain.transaction.numeric_policy import COST_BASIS_STATE_LEDGER_OUTPUT_V1
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_service.app.repositories.lot_basis_transfer_records import (
@@ -26,6 +33,12 @@ from src.services.query_service.app.repositories.lot_basis_transfer_repository i
     _verify_lifecycle,
     _verify_receipt_integrity,
 )
+
+
+def test_shared_cost_basis_payload_canonicalizes_set_members() -> None:
+    assert canonical_cost_basis_output_payload({"amounts": {Decimal("1")}}) == {
+        "amounts": {Decimal("1.0000000000")}
+    }
 
 
 @pytest.mark.asyncio
@@ -90,6 +103,30 @@ def test_latest_receipt_fails_closed_on_missing_allocation_rows() -> None:
 
     with pytest.raises(CorruptLotBasisTransferReadModelError, match="corrupt"):
         _verify_receipt_integrity(receipt, [], predecessor_hash=None)
+
+
+def test_latest_receipt_accepts_strict_lineage_bound_to_persisted_evidence() -> None:
+    receipt, allocation = _valid_evidence()
+
+    _verify_receipt_integrity(receipt, [allocation], predecessor_hash=None)
+
+
+def test_voided_receipt_requires_strict_transaction_lineage_without_transfer_lineage() -> None:
+    receipt, _ = _valid_evidence()
+    voided = _rehash_receipt(
+        replace(
+            receipt,
+            status="VOIDED",
+            void_reason="SUPERSEDED",
+            transferred_cost_local=Decimal(0),
+            transferred_cost_base=Decimal(0),
+            allocation_count=0,
+            basis_transfer_calculation_lineage=None,
+        ),
+        [],
+    )
+
+    _verify_receipt_integrity(voided, [], predecessor_hash=None)
 
 
 def test_latest_receipt_fails_closed_on_tampered_allocation_hash() -> None:
@@ -175,6 +212,129 @@ def test_integrity_rejects_nonconserving_source_lot_basis(
 
 
 @pytest.mark.parametrize(
+    ("lineage_field", "lineage_payload", "reason"),
+    [
+        (
+            "transaction_calculation_lineage",
+            {"algorithm_id": "transaction-cost"},
+            "algorithm_version must be an integer",
+        ),
+        (
+            "basis_transfer_calculation_lineage",
+            {"algorithm_id": "basis-transfer"},
+            "algorithm_version must be an integer",
+        ),
+    ],
+)
+def test_integrity_rejects_malformed_lineage_payloads(
+    lineage_field: str,
+    lineage_payload: dict[str, object],
+    reason: str,
+) -> None:
+    receipt, allocation = _valid_evidence()
+    tampered = _rehash_receipt(
+        replace(receipt, **{lineage_field: lineage_payload}),
+        [allocation],
+    )
+
+    _assert_corrupt(tampered, [allocation], reason)
+
+
+@pytest.mark.parametrize(
+    "lineage_field",
+    ["transaction_calculation_lineage", "basis_transfer_calculation_lineage"],
+)
+def test_integrity_rejects_missing_required_lineage(lineage_field: str) -> None:
+    receipt, allocation = _valid_evidence()
+    tampered = _rehash_receipt(
+        replace(receipt, **{lineage_field: None}),
+        [allocation],
+    )
+
+    _assert_corrupt(tampered, [allocation], "calculation lineage is required")
+
+
+def test_integrity_rejects_rehashed_allocation_not_bound_to_lineage_inputs() -> None:
+    receipt, allocation = _valid_evidence()
+    tampered = replace(allocation, retained_quantity=Decimal("74"))
+    tampered = replace(
+        tampered,
+        allocation_content_hash=cost_basis_allocation_content_hash(
+            receipt_id=receipt.receipt_id,
+            payload=_allocation_payload(tampered),
+        ),
+    )
+    rehashed_receipt = _rehash_receipt(receipt, [tampered])
+
+    _assert_corrupt(
+        rehashed_receipt,
+        [tampered],
+        "basis-transfer lineage does not bind persisted inputs",
+    )
+
+
+def test_integrity_rejects_lineage_not_bound_to_persisted_outputs() -> None:
+    receipt, allocation = _valid_evidence()
+    wrong_output_lineage = build_calculation_lineage(
+        algorithm_id="cost-basis-lot-basis-transfer-allocation",
+        algorithm_version=1,
+        intermediate_precision=COST_BASIS_STATE_LEDGER_OUTPUT_V1.working_precision,
+        input_payload=basis_transfer_lineage_input_payload([allocation]),
+        output_payload={"transferred_cost_local": Decimal(0)},
+        numeric_output_policy=COST_BASIS_STATE_LEDGER_OUTPUT_V1.lineage_identity(),
+    ).lineage_payload()
+    tampered = _rehash_receipt(
+        replace(receipt, basis_transfer_calculation_lineage=wrong_output_lineage),
+        [allocation],
+    )
+
+    _assert_corrupt(
+        tampered,
+        [allocation],
+        "basis-transfer lineage does not bind persisted outputs",
+    )
+
+
+@pytest.mark.parametrize(
+    ("algorithm_id", "include_numeric_policy", "reason"),
+    [
+        ("wrong-basis-transfer", True, "algorithm identity is unsupported"),
+        (
+            "cost-basis-lot-basis-transfer-allocation",
+            False,
+            "numeric policy is unsupported",
+        ),
+    ],
+)
+def test_integrity_rejects_unsupported_basis_transfer_lineage_contract(
+    algorithm_id: str,
+    include_numeric_policy: bool,
+    reason: str,
+) -> None:
+    receipt, allocation = _valid_evidence()
+    lineage = build_calculation_lineage(
+        algorithm_id=algorithm_id,
+        algorithm_version=1,
+        intermediate_precision=COST_BASIS_STATE_LEDGER_OUTPUT_V1.working_precision,
+        input_payload=basis_transfer_lineage_input_payload([allocation]),
+        output_payload=basis_transfer_lineage_output_payload(
+            [allocation],
+            transferred_cost_base=receipt.transferred_cost_base,
+            transferred_cost_local=receipt.transferred_cost_local,
+        ),
+        numeric_output_policy=(
+            COST_BASIS_STATE_LEDGER_OUTPUT_V1.lineage_identity() if include_numeric_policy else None
+        ),
+    ).lineage_payload()
+    tampered = _rehash_receipt(
+        replace(receipt, basis_transfer_calculation_lineage=lineage),
+        [allocation],
+    )
+
+    _assert_corrupt(tampered, [allocation], reason)
+
+
+@pytest.mark.parametrize(
     ("receipt_changes", "reason"),
     [
         ({"basis_transfer_calculation_lineage": None}, "lacks allocations"),
@@ -244,6 +404,13 @@ def _valid_evidence() -> tuple[
             payload=_allocation_payload(allocation),
         ),
     )
+    transaction_lineage = build_calculation_lineage(
+        algorithm_id="transaction-cost",
+        algorithm_version=1,
+        intermediate_precision=38,
+        input_payload={"source_transaction_id": "DEMERGER-OUT-001"},
+        output_payload={"cost": Decimal("100")},
+    ).lineage_payload()
     receipt = LotBasisTransferReceiptReadRecord(
         receipt_id=receipt_id,
         receipt_version=1,
@@ -267,8 +434,23 @@ def _valid_evidence() -> tuple[
         semantic_content_hash="",
         previous_receipt_content_hash=None,
         receipt_content_hash="",
-        transaction_calculation_lineage={"algorithm_id": "transaction-cost"},
-        basis_transfer_calculation_lineage={"algorithm_id": "basis-transfer"},
+        transaction_calculation_lineage=transaction_lineage,
+        basis_transfer_calculation_lineage=None,
+    )
+    receipt = replace(
+        receipt,
+        basis_transfer_calculation_lineage=build_calculation_lineage(
+            algorithm_id="cost-basis-lot-basis-transfer-allocation",
+            algorithm_version=1,
+            intermediate_precision=COST_BASIS_STATE_LEDGER_OUTPUT_V1.working_precision,
+            input_payload=basis_transfer_lineage_input_payload([allocation]),
+            output_payload=basis_transfer_lineage_output_payload(
+                [allocation],
+                transferred_cost_base=receipt.transferred_cost_base,
+                transferred_cost_local=receipt.transferred_cost_local,
+            ),
+            numeric_output_policy=COST_BASIS_STATE_LEDGER_OUTPUT_V1.lineage_identity(),
+        ).lineage_payload(),
     )
     semantic_hash = cost_basis_receipt_semantic_hash(
         _receipt_semantic_payload(receipt, [allocation])
@@ -297,3 +479,22 @@ def _assert_corrupt(
         _verify_receipt_integrity(receipt, allocations, predecessor_hash=None)
 
     assert reason in str(error.value.__cause__)
+
+
+def _rehash_receipt(
+    receipt: LotBasisTransferReceiptReadRecord,
+    allocations: list[LotBasisTransferAllocationReadRecord],
+) -> LotBasisTransferReceiptReadRecord:
+    semantic_hash = cost_basis_receipt_semantic_hash(
+        _receipt_semantic_payload(receipt, allocations)
+    )
+    return replace(
+        receipt,
+        semantic_content_hash=semantic_hash,
+        receipt_content_hash=receipt_version_content_hash(
+            receipt_id=receipt.receipt_id,
+            semantic_content_hash=semantic_hash,
+            receipt_version=receipt.receipt_version,
+            previous_receipt_content_hash=receipt.previous_receipt_content_hash,
+        ),
+    )
