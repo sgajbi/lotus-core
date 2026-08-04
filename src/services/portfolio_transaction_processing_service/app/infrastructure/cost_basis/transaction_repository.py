@@ -207,6 +207,30 @@ class SqlAlchemyCostBasisTransactionRepository:
         result = await self.db.execute(stmt)
         return [_to_persisted_booked_transaction(row) for row in result.scalars().all()]
 
+    async def get_linked_transaction_group(
+        self,
+        portfolio_id: str,
+        linked_transaction_group_id: str,
+        exclude_id: str | None = None,
+    ) -> list[BookedTransaction]:
+        """Load one portfolio-owned linked group across instrument and security boundaries."""
+
+        normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
+        normalized_group_id = normalize_lookup_identifier(linked_transaction_group_id)
+        stmt = select(DBTransaction).where(
+            DBTransaction.portfolio_id == normalized_portfolio_id,
+            DBTransaction.linked_transaction_group_id == normalized_group_id,
+        )
+        if exclude_id:
+            normalized_exclude_id = normalize_lookup_identifier(exclude_id)
+            stmt = stmt.where(DBTransaction.transaction_id != normalized_exclude_id)
+        stmt = stmt.order_by(
+            DBTransaction.transaction_date.asc(),
+            DBTransaction.transaction_id.asc(),
+        )
+        result = await self.db.execute(stmt)
+        return [_to_persisted_booked_transaction(row) for row in result.scalars().all()]
+
     async def apply_transaction_costs_and_replace_breakdown(
         self, transaction_result: CostBasisTransaction
     ) -> BookedTransaction | None:

@@ -773,13 +773,21 @@ def _redemption_terms(
             field="redemption_price",
             message="must be a finite decimal",
         )
+    old_factor = getattr(transaction, "old_factor", None)
+    new_factor = getattr(transaction, "new_factor", None)
+    factor_authority_supplied = old_factor is not None or new_factor is not None
+    redeemed_quantity = (
+        None
+        if transaction.quantity.is_zero() and factor_authority_supplied
+        else transaction.quantity
+    )
     return RedemptionTerms(
         transaction_type=transaction.transaction_type,
         position_quantity=position_quantity,
-        redeemed_quantity=transaction.quantity,
+        redeemed_quantity=redeemed_quantity,
         redemption_price=redemption_price,
-        old_factor=getattr(transaction, "old_factor", None),
-        new_factor=getattr(transaction, "new_factor", None),
+        old_factor=old_factor,
+        new_factor=new_factor,
         principal_proceeds_local=getattr(transaction, "principal_proceeds_local", None),
         accrued_interest_proceeds_local=(
             getattr(transaction, "accrued_interest_proceeds_local", None) or Decimal(0)

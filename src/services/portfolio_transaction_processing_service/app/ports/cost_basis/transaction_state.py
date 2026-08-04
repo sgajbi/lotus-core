@@ -16,6 +16,13 @@ class CostBasisTransactionStatePort(Protocol):
         exclude_id: str | None = None,
     ) -> list[BookedTransaction]: ...
 
+    async def get_linked_transaction_group(
+        self,
+        portfolio_id: str,
+        linked_transaction_group_id: str,
+        exclude_id: str | None = None,
+    ) -> list[BookedTransaction]: ...
+
     async def apply_transaction_costs_and_replace_breakdown(
         self,
         transaction: CostBasisTransaction,

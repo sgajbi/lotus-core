@@ -154,7 +154,7 @@ class PreparedCostProcessingUseCase:
             transaction.portfolio_id,
             transaction.security_id,
         )
-        preloaded_transaction_history = await _preload_linked_redemption_history(
+        await _validate_linked_redemption_group(
             transaction=transaction,
             transaction_state=transaction_state,
         )
@@ -171,7 +171,6 @@ class PreparedCostProcessingUseCase:
             portfolio_base_currency=portfolio.base_currency,
             instrument=instrument,
             cost_basis_method=prepared.cost_basis_method,
-            preloaded_transaction_history=preloaded_transaction_history,
         )
         _raise_for_calculation_errors(calculation.errored)
         if _AMORTIZED_DISPOSAL_RUNTIME_ENABLED:
@@ -223,25 +222,24 @@ class PreparedCostProcessingUseCase:
         return tuple(persisted_transactions)
 
 
-async def _preload_linked_redemption_history(
+async def _validate_linked_redemption_group(
     *,
     transaction: BookedTransaction,
     transaction_state: CostBasisTransactionStatePort,
-) -> list[BookedTransaction] | None:
-    """Load once and validate a linked-income group before cost or lot mutation."""
+) -> None:
+    """Validate one portfolio-owned linked group before cost or lot mutation."""
 
     if not requires_linked_redemption_interest_history(transaction):
-        return None
-    history = await transaction_state.get_transaction_history(
+        return
+    history = await transaction_state.get_linked_transaction_group(
         portfolio_id=transaction.portfolio_id,
-        security_id=transaction.security_id,
+        linked_transaction_group_id=transaction.linked_transaction_group_id or "",
         exclude_id=transaction.transaction_id,
     )
     assert_linked_redemption_interest_unambiguous(
         incoming=transaction,
         history=history,
     )
-    return history
 
 
 async def _persist_processing_checkpoint(

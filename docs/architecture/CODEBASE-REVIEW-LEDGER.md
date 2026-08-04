@@ -1,5 +1,17 @@
 # Codebase Review Ledger
 
+CR-1678 final-review addendum (2026-08-05): factor-authoritative partial redemptions may use the
+ingestion-required zero quantity as an explicit transport placeholder; the domain derives the
+redeemed quantity from the complete old/new factor pair, while non-zero quantity remains explicit
+or dual authority and must reconcile. Duplicate-interest validation now reads one indexed,
+portfolio-owned linked group across security boundaries before mutation, without broadening the
+security-scoped cost-basis rebuild history. Positive accrued-interest evidence remains reportable
+when canonical deductions reduce net settlement to exactly zero, without fabricating a cash leg;
+negative settlement and unlinked non-zero settlement still fail closed. Focused validation covers
+177 unit cases, 4 exact-source PostgreSQL redemption lifecycles, full MyPy across 294 source files,
+and the composed architecture guards. No API, OpenAPI, schema, migration, Kafka, central-context,
+skill-routing, capability, or additional wiki truth changed.
+
 CR-1678 protected-review addendum (2026-08-04): redemption booking now applies the registry-owned
 `AUTO_GENERATE` default before cost processing and fails closed before mutation when a non-zero
 redemption lacks a settlement cash account. A canonical zero-price, zero-proceeds write-off remains

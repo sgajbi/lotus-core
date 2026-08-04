@@ -5,6 +5,7 @@ from datetime import datetime
 from decimal import Decimal
 
 import pytest
+from portfolio_common.domain.calculation_lineage import build_calculation_lineage
 
 from src.services.portfolio_transaction_processing_service.app.domain.cashflow import (
     CashflowClassification,
@@ -14,6 +15,8 @@ from src.services.portfolio_transaction_processing_service.app.domain.cashflow i
 )
 from src.services.portfolio_transaction_processing_service.app.domain.transaction import (
     BookedTransaction,
+    SettlementCashValidationError,
+    should_generate_settlement_cash_leg,
 )
 from src.services.portfolio_transaction_processing_service.app.domain.transaction.redemption import (  # noqa: E501
     REDEMPTION_ACCRUED_INTEREST_COMPONENT,
@@ -83,6 +86,12 @@ def test_omits_zero_interest_and_rejects_unlinked_positive_interest() -> None:
     )
     assert (
         build_redemption_accrued_interest_component(
+            replace(_redemption(), accrued_interest_proceeds_local=None)
+        )
+        is None
+    )
+    assert (
+        build_redemption_accrued_interest_component(
             replace(_redemption(), accrued_interest_proceeds_local=Decimal(0))
         )
         is None
@@ -91,6 +100,82 @@ def test_omits_zero_interest_and_rejects_unlinked_positive_interest() -> None:
         build_redemption_accrued_interest_component(
             replace(_redemption(), external_cash_transaction_id=None)
         )
+
+
+def test_builds_positive_interest_evidence_for_zero_net_settlement_without_cash_leg() -> None:
+    redemption = replace(
+        _redemption(),
+        quantity=Decimal("1"),
+        price=Decimal("100"),
+        principal_proceeds_local=Decimal("100"),
+        accrued_interest_proceeds_local=Decimal("25"),
+        embedded_fee_amount_local=Decimal("20"),
+        embedded_tax_amount_local=Decimal("5"),
+        trade_fee=Decimal("100"),
+        external_cash_transaction_id=None,
+        epoch=7,
+    )
+
+    assert not should_generate_settlement_cash_leg(redemption)
+
+    component = build_redemption_accrued_interest_component(redemption)
+
+    assert component is not None
+    assert component.transaction_id == "REDEMPTION-001-ACCRUED-INTEREST"
+    assert component.component_id == "REDEMPTION-001-ACCRUED-INTEREST:v1"
+    assert component.gross_transaction_amount == Decimal("25")
+    assert component.external_cash_transaction_id is None
+    assert component.linked_component_ids is None
+    assert component.epoch == 7
+    assert component.calculation_lineage == build_calculation_lineage(
+        algorithm_id="redemption-accrued-interest-component",
+        algorithm_version=1,
+        intermediate_precision=64,
+        input_payload={
+            "source_transaction_id": "REDEMPTION-001",
+            "source_transaction_type": "MATURITY_REDEMPTION",
+            "source_calculation_lineage": None,
+            "accrued_interest_proceeds_local": Decimal("25"),
+            "canonical_net_settlement_amount": Decimal(0),
+            "linked_cash_transaction_id": None,
+        },
+        output_payload={
+            "transaction_id": "REDEMPTION-001-ACCRUED-INTEREST",
+            "component_id": "REDEMPTION-001-ACCRUED-INTEREST:v1",
+            "component_type": REDEMPTION_ACCRUED_INTEREST_COMPONENT,
+            "amount": Decimal("25"),
+            "currency": "USD",
+        },
+    )
+
+
+@pytest.mark.parametrize("accrued_interest", [Decimal("-1"), Decimal("NaN"), Decimal("Infinity")])
+def test_rejects_invalid_accrued_interest_evidence(accrued_interest: Decimal) -> None:
+    with pytest.raises(ValueError, match="non-negative finite decimal"):
+        build_redemption_accrued_interest_component(
+            replace(
+                _redemption(),
+                accrued_interest_proceeds_local=accrued_interest,
+                external_cash_transaction_id=None,
+            )
+        )
+
+
+def test_rejects_negative_net_settlement_without_relaxing_cash_policy() -> None:
+    redemption = replace(
+        _redemption(),
+        quantity=Decimal("1"),
+        price=Decimal("100"),
+        principal_proceeds_local=Decimal("100"),
+        accrued_interest_proceeds_local=Decimal("25"),
+        embedded_fee_amount_local=Decimal("20"),
+        embedded_tax_amount_local=Decimal("5"),
+        trade_fee=Decimal("100.01"),
+        external_cash_transaction_id=None,
+    )
+
+    with pytest.raises(SettlementCashValidationError):
+        build_redemption_accrued_interest_component(redemption)
 
 
 def test_redemption_and_generated_interest_have_distinct_cashflow_classifications() -> None:

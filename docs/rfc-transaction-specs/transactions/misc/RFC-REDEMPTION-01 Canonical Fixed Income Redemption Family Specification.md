@@ -237,6 +237,11 @@ Default: `EFFECTIVE_DATE` (typical economic view) unless client requires account
 Must validate:
 
 - `redeemed_quantity >= 0`
+- for factor-authoritative partial redemption, the ingestion-required zero quantity is the
+  transport representation of absent explicit quantity; Core derives quantity from a complete
+  `old_factor`/`new_factor` pair
+- a non-zero quantity supplied with factors is dual authority and must reconcile with the derived
+  quantity within tolerance
 - `redemption_price >= 0`
 - `effective_date` and `settlement_date` present
 - instrument is eligible for redemption (instrument metadata)
@@ -343,6 +348,8 @@ If accrued interest is included in the same settlement:
 - the redemption product cashflow remains the principal component net of settlement deductions,
   while the linked settlement cash leg
   remains the authority for net principal, interest, fee, and tax cash movement
+- when deductions make canonical net settlement exactly zero, the accrued-interest component
+  remains reportable without a fabricated zero cash leg; negative net settlement remains invalid
 - must not affect `realized_capital_pnl` computation (principal-only)
 
 ### 12.3 No double counting rule
@@ -354,6 +361,8 @@ If both:
 then the event must fail/park unless policy explicitly supports reconciliation and netting rules.
 Core-generated accrued-interest components are recognized by their closed component and origin
 identity and do not constitute a second upstream interest posting during replay.
+The check is portfolio/group-owned rather than security-owned because a separate coupon or cash
+interest leg may legitimately carry a different `security_id` from the redeemed instrument.
 
 ---
 

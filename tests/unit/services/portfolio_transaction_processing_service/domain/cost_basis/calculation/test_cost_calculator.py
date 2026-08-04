@@ -1461,6 +1461,53 @@ def test_redemption_strategy_validates_factor_authority_before_lot_consumption()
     disposition.consume_sell_quantity.assert_not_called()
 
 
+def test_redemption_strategy_derives_zero_placeholder_quantity_from_factor_authority() -> None:
+    errors = CostCalculationErrorCollector()
+    disposition = LotDispositionEngine(cost_basis_strategy=FIFOBasisStrategy())
+    calculator = CostBasisCalculator(disposition_engine=disposition, error_reporter=errors)
+    calculator.calculate_transaction_costs(
+        CostBasisTransaction(
+            transaction_id="BUY-FACTOR-001",
+            portfolio_id="P1",
+            instrument_id="BOND-1",
+            security_id="BOND-1",
+            transaction_type="BUY",
+            transaction_date=datetime(2026, 1, 1),
+            quantity=Decimal("100"),
+            price=Decimal(1),
+            gross_transaction_amount=Decimal("100"),
+            trade_currency="USD",
+            portfolio_base_currency="USD",
+            transaction_fx_rate=Decimal(1),
+        )
+    )
+    redemption = CostBasisTransaction(
+        transaction_id="RED-FACTOR-ONLY-001",
+        portfolio_id="P1",
+        instrument_id="BOND-1",
+        security_id="BOND-1",
+        transaction_type="PARTIAL_REDEMPTION",
+        transaction_date=datetime(2026, 6, 30),
+        quantity=Decimal(0),
+        price=Decimal(1),
+        gross_transaction_amount=Decimal("25"),
+        principal_proceeds_local=Decimal("25"),
+        old_factor=Decimal(1),
+        new_factor=Decimal("0.75"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+        transaction_fx_rate=Decimal(1),
+    )
+
+    calculator.calculate_transaction_costs(redemption)
+
+    assert not errors.has_errors()
+    assert redemption.quantity == Decimal("25.0000000000")
+    assert redemption.allocated_cost_basis_local == Decimal("25.0000000000")
+    assert disposition.get_available_quantity("P1", "BOND-1") == Decimal("75.0000000000")
+    assert disposition.disposal_records()[0].result.consumed_quantity == Decimal("25.0000000000")
+
+
 def test_partial_redemption_strategy_consumes_average_cost_pool() -> None:
     errors = CostCalculationErrorCollector()
     disposition = LotDispositionEngine(cost_basis_strategy=AverageCostBasisStrategy())

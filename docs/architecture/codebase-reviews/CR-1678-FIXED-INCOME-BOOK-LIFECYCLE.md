@@ -388,6 +388,18 @@ Data Models wiki documents the staged ledgers while the capability wiki remains
   transfer destinations. Exact-zero net redemption settlement omits a synthetic adjustment and
   negative settlement still fails closed. Linked upstream interest plus embedded redemption
   interest fails before mutation, with canonical generated components excluded during replay.
+- final protected-review hardening: a zero quantity accompanied by factor authority is treated as
+  the ingestion transport placeholder for absent explicit redeemed quantity; complete old/new
+  factors derive the quantity, while non-zero dual authority must still reconcile. Linked-interest
+  ambiguity is evaluated through one indexed portfolio/group read across instrument and security
+  boundaries before mutation; those group rows never enter security-scoped cost-basis rebuild
+  history. A positive accrued-interest component may carry no cash-link identity only when the
+  canonical net settlement is exactly zero, preserving income evidence without inventing a zero
+  adjustment. Negative settlement and unlinked non-zero settlement remain rejected. Consolidated
+  proof: 177 unit cases, 4 exact-source PostgreSQL redemption lifecycle cases, Ruff/format/diff,
+  full MyPy across 294 source files, and the composed architecture guards pass. No API, OpenAPI,
+  schema, migration, Kafka, capability, central-context, skill-routing, or additional wiki truth
+  changed.
 
 Protected PR and exact-main evidence remain pending for this tranche. Wider runtime recovery/load
 proof, complete corporate-action scenario coverage, redemption, and final issue closure remain

@@ -153,6 +153,46 @@ async def test_get_transaction_history_trims_portfolio_security_and_excluded_tra
     )
 
 
+async def test_get_linked_transaction_group_scopes_portfolio_without_security_filter() -> None:
+    db_session = AsyncMock()
+    repository = SqlAlchemyCostBasisTransactionRepository(db_session)
+    persisted_interest = DBTransaction(
+        transaction_id="INTEREST01",
+        portfolio_id="PORT_COST_01",
+        instrument_id="CASH_USD",
+        security_id="CASH_USD",
+        transaction_type="INTEREST",
+        transaction_date=datetime(2026, 1, 2, 10, 0, 0, tzinfo=UTC),
+        quantity=Decimal(0),
+        price=Decimal(0),
+        gross_transaction_amount=Decimal("25"),
+        trade_currency="USD",
+        currency="USD",
+        linked_transaction_group_id="GROUP_REDEMPTION_01",
+    )
+    execute_result = MagicMock()
+    execute_result.scalars.return_value.all.return_value = [persisted_interest]
+    db_session.execute.return_value = execute_result
+
+    transactions = await repository.get_linked_transaction_group(
+        portfolio_id=" PORT_COST_01 ",
+        linked_transaction_group_id=" GROUP_REDEMPTION_01 ",
+        exclude_id=" REDEMPTION01 ",
+    )
+
+    assert [transaction.transaction_id for transaction in transactions] == ["INTEREST01"]
+    statement = db_session.execute.call_args.args[0]
+    compiled_query = str(statement.compile(compile_kwargs={"literal_binds": True}))
+    compiled_predicates = str(statement.whereclause.compile(compile_kwargs={"literal_binds": True}))
+    assert "transactions.portfolio_id = 'PORT_COST_01'" in compiled_query
+    assert "transactions.linked_transaction_group_id = 'GROUP_REDEMPTION_01'" in compiled_query
+    assert "transactions.transaction_id != 'REDEMPTION01'" in compiled_query
+    assert "transactions.security_id" not in compiled_predicates
+    assert "ORDER BY transactions.transaction_date ASC, transactions.transaction_id ASC" in (
+        compiled_query
+    )
+
+
 async def test_get_booked_transaction_maps_domain_transaction_and_scopes_portfolio() -> None:
     db_session = AsyncMock()
     repository = SqlAlchemyCostBasisTransactionRepository(db_session)
