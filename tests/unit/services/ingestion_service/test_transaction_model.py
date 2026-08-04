@@ -66,6 +66,68 @@ def test_transaction_model_preserves_canonical_redemption_terms() -> None:
 
 
 @pytest.mark.parametrize(
+    ("provided", "expected"),
+    [
+        (" par ", "PAR"),
+        ("call_price", "CALL_PRICE"),
+        (" MARKET_PRICE ", "MARKET_PRICE"),
+    ],
+)
+def test_transaction_model_accepts_governed_redemption_price_types(
+    provided: str,
+    expected: str,
+) -> None:
+    payload = {
+        "transaction_id": "RED-PRICE-TYPE",
+        "portfolio_id": "PORT-001",
+        "instrument_id": "BOND-001",
+        "security_id": "BOND-001",
+        "transaction_date": "2026-08-04T00:00:00Z",
+        "transaction_type": "MATURITY_REDEMPTION",
+        "quantity": "25",
+        "price": "100",
+        "gross_transaction_amount": "2500",
+        "trade_currency": "USD",
+        "currency": "USD",
+        "redemption_price_type": provided,
+    }
+
+    assert Transaction(**payload).redemption_price_type == expected
+
+
+@pytest.mark.parametrize("provided", ["FIXED_PRICE", "CALL", "", "  "])
+def test_transaction_model_rejects_unsupported_redemption_price_types(provided: str) -> None:
+    payload = {
+        "transaction_id": "RED-PRICE-TYPE-INVALID",
+        "portfolio_id": "PORT-001",
+        "instrument_id": "BOND-001",
+        "security_id": "BOND-001",
+        "transaction_date": "2026-08-04T00:00:00Z",
+        "transaction_type": "MATURITY_REDEMPTION",
+        "quantity": "25",
+        "price": "100",
+        "gross_transaction_amount": "2500",
+        "trade_currency": "USD",
+        "currency": "USD",
+        "redemption_price_type": provided,
+    }
+
+    with pytest.raises(ValidationError) as exc_info:
+        Transaction(**payload)
+
+    assert exc_info.value.errors(include_input=False)[0]["loc"] == ("redemption_price_type",)
+
+
+def test_transaction_model_documents_governed_redemption_price_types() -> None:
+    schema = Transaction.model_json_schema()["properties"]["redemption_price_type"]
+    enum_values = next(
+        alternative["enum"] for alternative in schema["anyOf"] if "enum" in alternative
+    )
+
+    assert enum_values == ["PAR", "CALL_PRICE", "MARKET_PRICE"]
+
+
+@pytest.mark.parametrize(
     ("old_factor", "new_factor"),
     [("1", None), (None, "0.75"), ("1", "1"), ("1", "1.01")],
 )
