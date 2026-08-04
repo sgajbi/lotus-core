@@ -228,12 +228,12 @@ def reconcile_corporate_action_leg_linkage(
         source_id = _normalized_reference(target.source_transaction_reference)
         if source_id is None or source_id in referenced_source_ids:
             continue
-        source = transaction_by_id.get(source_id)
+        reciprocal_source = transaction_by_id.get(source_id)
         findings.append(
             CorporateActionLegLinkageFinding(
                 finding_type=(
                     CorporateActionLegLinkageFindingType.MISSING_RECIPROCAL_LEG
-                    if source is None
+                    if reciprocal_source is None
                     else CorporateActionLegLinkageFindingType.TRANSACTION_REFERENCE_MISMATCH
                 ),
                 source_transaction_id=source_id,
@@ -241,8 +241,8 @@ def reconcile_corporate_action_leg_linkage(
                 field="target_transaction_reference",
                 expected_value=target.transaction_id.strip(),
                 observed_value=(
-                    _normalized_reference(source.target_transaction_reference)
-                    if source is not None
+                    _normalized_reference(reciprocal_source.target_transaction_reference)
+                    if reciprocal_source is not None
                     else None
                 ),
             )
