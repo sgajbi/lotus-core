@@ -161,6 +161,7 @@ async def test_group_is_loaded_persisted_and_observed_once_per_batch() -> None:
             net_basis_delta_local=Decimal("0"),
             basis_tolerance=Decimal("0.01"),
             missing_dependency_reference_ids=(),
+            linkage_finding_count=0,
             finding_severities=(),
         )
     ]
@@ -185,6 +186,49 @@ async def test_missing_dependency_is_carried_to_evidence_and_observation() -> No
     assert evidence.run.summary["missing_dependency_count"] == 1
     assert evidence.findings[-1].detail["missing_dependency_reference_ids"] == ["CA-IN-MISSING"]
     assert observer.observations[0].missing_dependency_reference_ids == ("CA-IN-MISSING",)
+
+
+async def test_quantity_transfer_group_emits_reciprocal_linkage_evidence() -> None:
+    source = replace(
+        _transaction(
+            transaction_id="EXCHANGE-OUT-01",
+            transaction_type="EXCHANGE_OUT",
+            net_cost_local="-100",
+        ),
+        instrument_id="SOURCE-INSTRUMENT-01",
+        source_instrument_id="SOURCE-INSTRUMENT-01",
+        target_instrument_id="TARGET-INSTRUMENT-01",
+        target_transaction_reference="EXCHANGE-IN-01",
+    )
+    target = replace(
+        _transaction(
+            transaction_id="EXCHANGE-IN-01",
+            transaction_type="EXCHANGE_IN",
+            net_cost_local="100",
+        ),
+        instrument_id="TARGET-INSTRUMENT-01",
+        source_instrument_id="SOURCE-INSTRUMENT-01",
+        target_instrument_id="TARGET-INSTRUMENT-01",
+        source_transaction_reference="WRONG-SOURCE",
+    )
+    repository = _Repository((source, target))
+    observer = _Observer()
+
+    evidence = await CorporateActionReconciliationCoordinator(
+        repository,
+        observer=observer,
+    ).reconcile(source, correlation_id="corr-linkage-01")
+
+    assert evidence is not None
+    assert evidence.run.reconciliation_type == "corporate_action_quantity_transfer"
+    assert evidence.run.summary["linkage_finding_count"] == 2
+    assert evidence.run.summary["passed"] is False
+    assert [finding.finding_type for finding in evidence.findings] == [
+        "ca_linked_leg_mismatch",
+        "ca_linked_leg_mismatch",
+    ]
+    assert evidence.findings[0].detail["linkage_finding_type"] == ("transaction_reference_mismatch")
+    assert observer.observations[0].linkage_finding_count == 2
 
 
 async def test_failed_persistence_is_not_observed_or_deduplicated() -> None:
