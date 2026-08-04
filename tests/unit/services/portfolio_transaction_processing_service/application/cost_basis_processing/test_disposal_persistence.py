@@ -13,6 +13,7 @@ from src.services.portfolio_transaction_processing_service.app.application.cost_
 )
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
     CostBasisTransaction,
+    LotDisposalDestinationType,
     LotDisposalReceiptStatus,
     LotDisposalResult,
     SourceLotDisposalAllocation,
@@ -127,6 +128,64 @@ async def test_persistence_emits_explicit_void_state_when_disposal_is_absent() -
     assert state.void_reason == "RECALCULATED_WITHOUT_LOT_DISPOSAL"
     assert state.allocations == ()
     assert state.cost_basis_method is CostBasisMethod.AVCO
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("transaction_type", ("EXCHANGE_OUT", "MERGER_OUT", "REPLACEMENT_OUT"))
+async def test_persistence_records_internal_target_lot_destination(
+    transaction_type: str,
+) -> None:
+    outgoing = _transaction(f"{transaction_type}-01", 2)
+    outgoing.transaction_type = transaction_type
+    outgoing.target_instrument_id = "TARGET-INSTRUMENT-01"
+    outgoing.target_transaction_reference = "TARGET-TRANSACTION-01"
+    repository = AsyncMock(spec=CostBasisLotDisposalPort)
+
+    await persist_current_lot_disposals(
+        processed=[outgoing],
+        incoming_transaction_ids={outgoing.transaction_id},
+        disposals=[_disposal(outgoing.transaction_id, "SOURCE-LOT-01")],
+        cost_basis_method=CostBasisMethod.FIFO,
+        repository=repository,
+    )
+
+    (state,) = repository.reconcile_disposal_receipts.await_args.kwargs["receipt_states"]
+    assert state.destination is not None
+    assert state.destination.destination_type is LotDisposalDestinationType.INTERNAL_LOT
+    assert state.destination.target_transaction_id == "TARGET-TRANSACTION-01"
+    assert state.destination.target_lot_id == "LOT-TARGET-TRANSACTION-01"
+    assert state.destination.target_instrument_id == "TARGET-INSTRUMENT-01"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("target_transaction_reference", "target_instrument_id", "missing_field"),
+    (
+        (None, "TARGET-INSTRUMENT-01", "target_transaction_reference"),
+        ("TARGET-TRANSACTION-01", None, "target_instrument_id"),
+    ),
+)
+async def test_internal_lot_disposal_fails_closed_without_target_identity(
+    target_transaction_reference: str | None,
+    target_instrument_id: str | None,
+    missing_field: str,
+) -> None:
+    outgoing = _transaction("EXCHANGE-OUT-01", 2)
+    outgoing.transaction_type = "EXCHANGE_OUT"
+    outgoing.target_transaction_reference = target_transaction_reference
+    outgoing.target_instrument_id = target_instrument_id
+    repository = AsyncMock(spec=CostBasisLotDisposalPort)
+
+    with pytest.raises(ValueError, match=missing_field):
+        await persist_current_lot_disposals(
+            processed=[outgoing],
+            incoming_transaction_ids={outgoing.transaction_id},
+            disposals=[_disposal(outgoing.transaction_id, "SOURCE-LOT-01")],
+            cost_basis_method=CostBasisMethod.FIFO,
+            repository=repository,
+        )
+
+    repository.reconcile_disposal_receipts.assert_not_awaited()
 
 
 @pytest.mark.asyncio
