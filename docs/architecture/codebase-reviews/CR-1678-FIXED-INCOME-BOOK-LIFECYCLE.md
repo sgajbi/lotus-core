@@ -345,6 +345,14 @@ Data Models wiki documents the staged ledgers while the capability wiki remains
   source lot was fully consumed without realized P&L, and no internal target identity was invented.
   Migration, OpenAPI, API-vocabulary, Ruff, format, and focused mapping checks pass. Reciprocal
   validation for internal legs processed on distinct streams remains open under #481.
+- partial internal-transfer proof: signed commit `e811398d3` adds an exact-source PostgreSQL
+  lifecycle across distinct source and target portfolios. Moving 40 of 100 units transfers exactly
+  400 of 1,000 local/base basis, leaves the source lot at 60/600, creates the target lot at 40/400,
+  records the reciprocal transaction/lot/instrument destination and ordered source allocation, and
+  emits no realized capital or FX P&L. Exact duplicate delivery is neutral. The integration proof
+  passed in 37.26 seconds; nine focused destination/transfer unit cases also passed. This closes the
+  partial-transfer scenario required by #481 without claiming #476's complete pair-query,
+  restatement, FIFO/AVCO matrix, or the reusable parent/dependency graph retained by #480.
 
 Protected PR and exact-main evidence remain pending for this tranche. Wider runtime recovery/load
 proof, complete corporate-action scenario coverage, redemption, and final issue closure remain
