@@ -1,7 +1,7 @@
 # services/ingestion_service/app/DTOs/transaction_model_dto.py
 from datetime import UTC, date, datetime
 from decimal import Decimal
-from typing import Annotated, Any, Optional, cast
+from typing import Annotated, Any, Literal, Optional, cast
 
 from portfolio_common.domain.currency import normalize_optional_currency_code
 from portfolio_common.domain.transaction.fee_components import (
@@ -31,6 +31,7 @@ from .ingestion_validation_errors import BLANK_IDENTIFIER, raise_ingestion_valid
 
 NonNegativeDecimal = Annotated[Decimal, Field(ge=Decimal(0))]
 PositiveDecimal = Annotated[Decimal, Field(gt=Decimal(0))]
+RedemptionPriceType = Literal["PAR", "CALL_PRICE", "MARKET_PRICE"]
 
 
 def _document_transaction_numeric_contract(schema: dict[str, Any]) -> None:
@@ -593,7 +594,7 @@ class Transaction(BaseModel):
             "other corporate-action settlement entries."
         ),
     )
-    redemption_price_type: Optional[str] = Field(
+    redemption_price_type: Optional[RedemptionPriceType] = Field(
         default=None,
         json_schema_extra={"example": "PAR"},
         description="Authority classification for the fixed-income redemption price.",
