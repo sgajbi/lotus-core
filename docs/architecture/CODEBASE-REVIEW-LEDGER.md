@@ -17,6 +17,13 @@ duplicate delivery is a business no-op. The amortized-disposal overlay is active
 Public query, transfer/corporate-action, redemption, protected-PR, and exact-main certification
 remain open under their existing issues. Evidence is maintained in CR-1678 and #903.
 
+CR-1678 protected-review addendum (2026-08-04): corrected authority windows now materialize the
+first inactive day after both prior and current inclusive `valid_to` boundaries. An explicit
+non-active profile decision unwinds previously persisted accounting carry and restores the
+calculated original-cost disposal economics, while a missing profile without durable parked
+evidence continues to fail closed. This prevents shortened authority windows from retaining stale
+amortized carrying values after deterministic correction replay.
+
 CR-1678 addendum (2026-08-04): fixed-income open-lot state now persists accounting carrying
 amount independently from strategy/tax acquisition basis and retains that carry across basis-only
 mutations. The upgrade retains legacy book carry while reconstructing FIFO tax basis from the

@@ -124,7 +124,10 @@ period's input/output evidence. The repository serializes profile streams, requi
 versions, treats an exact retry as unchanged, and fails closed on altered persisted evidence.
 An application materializer reloads source authority only after acquiring the profile lock, appends
 active profiles only when complete authority resolves, and persists a parked reason when it does
-not. `position_lot_state.lot_cost_local` and `lot_cost_base` remain strategy/tax acquisition basis.
+not. Corrections materialize the first inactive day after both prior and current inclusive
+`valid_to` boundaries. A durable non-active decision explicitly unwinds accounting carry and
+restores original-cost disposal economics; a missing profile remains fail closed.
+`position_lot_state.lot_cost_local` and `lot_cost_base` remain strategy/tax acquisition basis.
 Optional `amortized_book_carrying_local` and `amortized_book_carrying_base` fields separately retain
 accounting carry with complete profile, recognition-boundary, schedule, FX, and calculation-lineage
 evidence. The transaction runtime applies amortized carrying cost to disposal economics and uses a

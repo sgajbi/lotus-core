@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from types import TracebackType
 from typing import Protocol, Self, cast
 
@@ -161,8 +161,9 @@ class HandleFixedIncomeBookCostAuthorityEventUseCase:
                 authority=unit_of_work.authority,
                 profiles=unit_of_work.profiles,
             )
+            previous_authority = _previous_authority_version(authority_bundle, current=mapped)
             replay_start = self._replay_start(
-                bundle=authority_bundle,
+                previous=previous_authority,
                 mapped=mapped,
                 persistence=persistence,
                 default=effective_date,
@@ -172,6 +173,7 @@ class HandleFixedIncomeBookCostAuthorityEventUseCase:
                 {
                     materialization_start,
                     effective_date,
+                    *_expiry_boundaries(previous_authority, mapped),
                     *await unit_of_work.profiles.effective_boundaries_from(
                         mapped.scope,
                         effective_date=materialization_start,
@@ -268,7 +270,7 @@ class HandleFixedIncomeBookCostAuthorityEventUseCase:
     def _replay_start(
         self,
         *,
-        bundle: LotAmortizedCostAuthorityBundle,
+        previous: LotAmortizedCostAuthority | None,
         mapped: LotAmortizedCostAuthority,
         persistence: PersistLotAmortizedCostAuthorityResult,
         default: date,
@@ -277,7 +279,6 @@ class HandleFixedIncomeBookCostAuthorityEventUseCase:
 
         if persistence.appended_count == 0:
             return None
-        previous = _previous_authority_version(bundle, current=mapped)
         if previous is None:
             return default
         return amortized_cost_authority_replay_start(previous, mapped)
@@ -374,3 +375,16 @@ def _authority_version(authority: LotAmortizedCostAuthority) -> int:
     if isinstance(authority, LotAmortizedCostPolicyAssignment):
         return authority.assignment_version
     return cast(int, authority.source.fact_version)
+
+
+def _expiry_boundaries(
+    *authorities: LotAmortizedCostAuthority | None,
+) -> tuple[date, ...]:
+    """Return representable first-inactive dates for corrected authority windows."""
+
+    boundaries: set[date] = set()
+    for authority in authorities:
+        if authority is None or authority.valid_to is None or authority.valid_to == date.max:
+            continue
+        boundaries.add(authority.valid_to + timedelta(days=1))
+    return tuple(sorted(boundaries))

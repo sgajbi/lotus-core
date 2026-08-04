@@ -135,6 +135,14 @@ loads complete history, recalculates amortized carrying cost and realized P&L, a
 affected disposal-receipt/open-lot/checkpoint/lineage suffix in one transaction. This avoids one
 Kafka command per disposal while retaining deterministic reversal/void evidence.
 
+Protected review found two connected expiry defects before merge. A correction that shortened an
+inclusive authority `valid_to` could omit the first inactive day when no later profile boundary
+already existed, and the disposal overlay treated a resulting parked decision as though it were an
+active profile with missing currency. The handler now materializes the day after both prior and
+current expiry boundaries. A durable non-active profile explicitly removes accounting carry and
+retains the calculator's original-cost disposal economics; an absent profile still fails closed so
+transient or corrupt profile gaps cannot silently unwind financial state.
+
 FIFO and average-cost disposal now return immutable, ordered source-lot allocations while retaining
 the legacy aggregate tuple projection. Allocation construction proves exact quantity and dual-
 currency cost conservation, binds the source-lot inputs and aggregate output to the governed
@@ -248,6 +256,9 @@ Data Models wiki documents the staged ledgers while the capability wiki remains
   correction event/consumer tests, 65 runtime/configuration tests, 41 amortized-disposal and receipt
   lifecycle tests, 24 real-PostgreSQL authority/profile/receipt cases, focused Ruff, and focused
   MyPy. The 1,001-disposal cohort retains one bulk profile read and no per-disposal command fan-out.
+- protected-review fix-forward proof: 44 warning-strict amortized-disposal and authority-event
+  orchestration tests cover explicit parked-profile carry unwind plus prior/current day-after-expiry
+  materialization; repository-native lint and MyPy (280 sources) passed.
 
 Protected PR and exact-main evidence remain pending for this tranche. Wider runtime recovery/load
 proof, verified query reconstruction, transfer/corporate-action lineage, redemption, and final
