@@ -13,7 +13,7 @@
       "openApiVersion": "3.1.0"
     }
   ],
-  "generatedAt": "2026-08-04T10:19:52.569158+00:00",
+  "generatedAt": "2026-08-04T10:54:38.261725+00:00",
   "attributeCatalog": [
     {
       "semanticId": "lotus.accepted_count",
@@ -204,7 +204,7 @@
       "semanticId": "lotus.allocation_content_hash",
       "canonicalTerm": "allocation_content_hash",
       "preferredName": "allocation_content_hash",
-      "description": "lot disposal allocation response field: allocation content hash.",
+      "description": "lot basis transfer allocation response field: allocation content hash.",
       "example": "example_allocation_content_hash",
       "type": "string",
       "locations": [
@@ -215,10 +215,24 @@
       ]
     },
     {
+      "semanticId": "lotus.allocation_count",
+      "canonicalTerm": "allocation_count",
+      "preferredName": "allocation_count",
+      "description": "lot basis transfer receipt response field: allocation count.",
+      "example": 10,
+      "type": "integer",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "integer"
+      ]
+    },
+    {
       "semanticId": "lotus.allocation_ordinal",
       "canonicalTerm": "allocation_ordinal",
       "preferredName": "allocation_ordinal",
-      "description": "lot disposal allocation response field: allocation ordinal.",
+      "description": "lot basis transfer allocation response field: allocation ordinal.",
       "example": 10,
       "type": "integer",
       "locations": [
@@ -232,22 +246,21 @@
       "semanticId": "lotus.allocations",
       "canonicalTerm": "allocations",
       "preferredName": "allocations",
-      "description": "lot disposal receipt response field: allocations.",
+      "description": "lot basis transfer receipt response field: allocations.",
       "example": [
         {
           "allocation_ordinal": 10,
           "source_lot_id": "SOURCE_LOT_001",
           "source_transaction_id": "SOURCE_TRANSACTION_001",
           "source_acquisition_date": "2026-02-27",
-          "consumed_quantity": "example_consumed_quantity",
-          "consumed_cost_local": "example_consumed_cost_local",
-          "consumed_cost_base": "example_consumed_cost_base",
-          "allocation_content_hash": "example_allocation_content_hash",
-          "amortized_cost_profile_id": "example_value",
-          "amortized_cost_profile_version": 10,
-          "amortized_cost_profile_content_hash": "example_value",
-          "amortized_cost_recognized_through": "2026-02-27",
-          "amortized_cost_calculation_lineage": {}
+          "retained_quantity": "example_retained_quantity",
+          "source_cost_local_before": "example_source_cost_local_before",
+          "source_cost_base_before": "example_source_cost_base_before",
+          "transferred_cost_local": "example_transferred_cost_local",
+          "transferred_cost_base": "example_transferred_cost_base",
+          "retained_cost_local": "example_retained_cost_local",
+          "retained_cost_base": "example_retained_cost_base",
+          "allocation_content_hash": "example_allocation_content_hash"
         }
       ],
       "type": "array",
@@ -753,6 +766,20 @@
       ],
       "observedTypes": [
         "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.basis_transfer_calculation_lineage",
+      "canonicalTerm": "basis_transfer_calculation_lineage",
+      "preferredName": "basis_transfer_calculation_lineage",
+      "description": "lot basis transfer receipt response field: basis transfer calculation lineage.",
+      "example": {},
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
       ]
     },
     {
@@ -1355,7 +1382,7 @@
       "semanticId": "lotus.calculation_policy_version",
       "canonicalTerm": "calculation_policy_version",
       "preferredName": "calculation_policy_version",
-      "description": "lot disposal receipt response field: calculation policy version.",
+      "description": "lot basis transfer receipt response field: calculation policy version.",
       "example": {
         "id": "OBJ_001"
       },
@@ -5993,7 +6020,7 @@
       "semanticId": "lotus.previous_receipt_content_hash",
       "canonicalTerm": "previous_receipt_content_hash",
       "preferredName": "previous_receipt_content_hash",
-      "description": "lot disposal receipt response field: previous receipt content hash.",
+      "description": "lot basis transfer receipt response field: previous receipt content hash.",
       "example": {
         "id": "OBJ_001"
       },
@@ -6763,7 +6790,7 @@
       "semanticId": "lotus.receipt_content_hash",
       "canonicalTerm": "receipt_content_hash",
       "preferredName": "receipt_content_hash",
-      "description": "lot disposal receipt response field: receipt content hash.",
+      "description": "lot basis transfer receipt response field: receipt content hash.",
       "example": "example_receipt_content_hash",
       "type": "string",
       "locations": [
@@ -6791,7 +6818,7 @@
       "semanticId": "lotus.receipt_version",
       "canonicalTerm": "receipt_version",
       "preferredName": "receipt_version",
-      "description": "lot disposal receipt response field: receipt version.",
+      "description": "lot basis transfer receipt response field: receipt version.",
       "example": 1,
       "type": "integer",
       "locations": [
@@ -7318,6 +7345,48 @@
       ]
     },
     {
+      "semanticId": "lotus.retained_cost_base",
+      "canonicalTerm": "retained_cost_base",
+      "preferredName": "retained_cost_base",
+      "description": "lot basis transfer allocation response field: retained cost base.",
+      "example": "example_retained_cost_base",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.retained_cost_local",
+      "canonicalTerm": "retained_cost_local",
+      "preferredName": "retained_cost_local",
+      "description": "lot basis transfer allocation response field: retained cost local.",
+      "example": "example_retained_cost_local",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.retained_quantity",
+      "canonicalTerm": "retained_quantity",
+      "preferredName": "retained_quantity",
+      "description": "Quantity value for retained quantity.",
+      "example": "example_retained_quantity",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
       "semanticId": "lotus.return_convention",
       "canonicalTerm": "return_convention",
       "preferredName": "return_convention",
@@ -7818,7 +7887,7 @@
       "semanticId": "lotus.semantic_content_hash",
       "canonicalTerm": "semantic_content_hash",
       "preferredName": "semantic_content_hash",
-      "description": "lot disposal receipt response field: semantic content hash.",
+      "description": "lot basis transfer receipt response field: semantic content hash.",
       "example": "example_semantic_content_hash",
       "type": "string",
       "locations": [
@@ -8217,6 +8286,34 @@
       ]
     },
     {
+      "semanticId": "lotus.source_cost_base_before",
+      "canonicalTerm": "source_cost_base_before",
+      "preferredName": "source_cost_base_before",
+      "description": "lot basis transfer allocation response field: source cost base before.",
+      "example": "example_source_cost_base_before",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.source_cost_local_before",
+      "canonicalTerm": "source_cost_local_before",
+      "preferredName": "source_cost_local_before",
+      "description": "lot basis transfer allocation response field: source cost local before.",
+      "example": "example_source_cost_local_before",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
       "semanticId": "lotus.source_digest",
       "canonicalTerm": "source_digest",
       "preferredName": "source_digest",
@@ -8248,14 +8345,15 @@
       "semanticId": "lotus.source_instrument_id",
       "canonicalTerm": "source_instrument_id",
       "preferredName": "source_instrument_id",
-      "description": "Source instrument identifier for transfer-style corporate actions.",
-      "example": "OLD_SEC_001",
-      "type": "object",
+      "description": "Unique source instrument identifier.",
+      "example": "SOURCE_INSTRUMENT_001",
+      "type": "string",
       "locations": [
         "body"
       ],
       "observedTypes": [
-        "object"
+        "object",
+        "string"
       ]
     },
     {
@@ -8455,6 +8553,20 @@
       ]
     },
     {
+      "semanticId": "lotus.source_security_id",
+      "canonicalTerm": "source_security_id",
+      "preferredName": "source_security_id",
+      "description": "Unique source security identifier.",
+      "example": "SOURCE_SECURITY_001",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
       "semanticId": "lotus.source_snapshot_id",
       "canonicalTerm": "source_snapshot_id",
       "preferredName": "source_snapshot_id",
@@ -8501,11 +8613,12 @@
       "semanticId": "lotus.source_transaction_id",
       "canonicalTerm": "source_transaction_id",
       "preferredName": "source_transaction_id",
-      "description": "Unique source transaction identifier.",
+      "description": "Source transaction that transferred lot basis.",
       "example": "SOURCE_TRANSACTION_001",
       "type": "string",
       "locations": [
-        "body"
+        "body",
+        "path"
       ],
       "observedTypes": [
         "string"
@@ -8901,8 +9014,10 @@
       "semanticId": "lotus.target_instrument_id",
       "canonicalTerm": "target_instrument_id",
       "preferredName": "target_instrument_id",
-      "description": "Target instrument identifier for transfer-style corporate actions.",
-      "example": "NEW_SEC_001",
+      "description": "Unique target instrument identifier.",
+      "example": {
+        "id": "OBJ_001"
+      },
       "type": "object",
       "locations": [
         "body"
@@ -8912,11 +9027,39 @@
       ]
     },
     {
+      "semanticId": "lotus.target_lot_id",
+      "canonicalTerm": "target_lot_id",
+      "preferredName": "target_lot_id",
+      "description": "Unique target lot identifier.",
+      "example": "TARGET_LOT_001",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
       "semanticId": "lotus.target_status",
       "canonicalTerm": "target_status",
       "preferredName": "target_status",
       "description": "Target lifecycle status.",
       "example": "active",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.target_transaction_id",
+      "canonicalTerm": "target_transaction_id",
+      "preferredName": "target_transaction_id",
+      "description": "Unique target transaction identifier.",
+      "example": "TARGET_TRANSACTION_001",
       "type": "string",
       "locations": [
         "body"
@@ -9452,7 +9595,7 @@
       "semanticId": "lotus.transaction_calculation_lineage",
       "canonicalTerm": "transaction_calculation_lineage",
       "preferredName": "transaction_calculation_lineage",
-      "description": "lot disposal receipt response field: transaction calculation lineage.",
+      "description": "lot basis transfer receipt response field: transaction calculation lineage.",
       "example": {},
       "type": "object",
       "locations": [
@@ -9540,7 +9683,7 @@
       "semanticId": "lotus.transaction_type",
       "canonicalTerm": "transaction_type",
       "preferredName": "transaction_type",
-      "description": "lot disposal receipt response field: transaction type.",
+      "description": "lot basis transfer receipt response field: transaction type.",
       "example": "BUY",
       "type": "string",
       "locations": [
@@ -9698,6 +9841,48 @@
       ],
       "observedTypes": [
         "array"
+      ]
+    },
+    {
+      "semanticId": "lotus.transfer_timestamp",
+      "canonicalTerm": "transfer_timestamp",
+      "preferredName": "transfer_timestamp",
+      "description": "Timestamp for transfer timestamp.",
+      "example": "2026-02-27T10:30:00Z",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.transferred_cost_base",
+      "canonicalTerm": "transferred_cost_base",
+      "preferredName": "transferred_cost_base",
+      "description": "lot basis transfer receipt response field: transferred cost base.",
+      "example": "example_transferred_cost_base",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.transferred_cost_local",
+      "canonicalTerm": "transferred_cost_local",
+      "preferredName": "transferred_cost_local",
+      "description": "lot basis transfer receipt response field: transferred cost local.",
+      "example": "example_transferred_cost_local",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
       ]
     },
     {
@@ -9974,7 +10159,7 @@
       "semanticId": "lotus.void_reason",
       "canonicalTerm": "void_reason",
       "preferredName": "void_reason",
-      "description": "lot disposal receipt response field: void reason.",
+      "description": "lot basis transfer receipt response field: void reason.",
       "example": {
         "id": "OBJ_001"
       },
@@ -10537,6 +10722,36 @@
       "exposure": "consumer_visible",
       "canonicalTerm": "include_projected",
       "semanticId": "lotus.include_projected"
+    },
+    {
+      "name": "portfolio_id",
+      "kind": "request_option",
+      "location": "path",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Portfolio identifier.",
+      "example": "DEMO_DPM_EUR_001",
+      "behaviorImpact": "Affects get_latest_lot_basis_transfer_receipt_portfolios__portfolio_id__transactions__source_transaction_id__lot_basis_transfer_receipt_get request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "portfolio_id",
+      "semanticId": "lotus.portfolio_id"
+    },
+    {
+      "name": "source_transaction_id",
+      "kind": "request_option",
+      "location": "path",
+      "type": "string",
+      "required": true,
+      "default": "",
+      "allowedValues": [],
+      "description": "Source transaction that transferred lot basis.",
+      "example": "SOURCE_TRANSACTION_001",
+      "behaviorImpact": "Affects get_latest_lot_basis_transfer_receipt_portfolios__portfolio_id__transactions__source_transaction_id__lot_basis_transfer_receipt_get request behavior.",
+      "exposure": "consumer_visible",
+      "canonicalTerm": "source_transaction_id",
+      "semanticId": "lotus.source_transaction_id"
     },
     {
       "name": "portfolio_id",
@@ -15167,6 +15382,379 @@
             "type": "string",
             "semanticId": "lotus.notes",
             "attributeRef": "lotus.notes"
+          }
+        ]
+      }
+    },
+    {
+      "operationId": "get_latest_lot_basis_transfer_receipt_portfolios__portfolio_id__transactions__source_transaction_id__lot_basis_transfer_receipt_get",
+      "method": "GET",
+      "path": "/portfolios/{portfolio_id}/transactions/{source_transaction_id}/lot-basis-transfer-receipt",
+      "domain": "lot_basis_transfer_receipts",
+      "serviceGroup": "query",
+      "tags": [
+        "Lot Basis-Transfer Receipts"
+      ],
+      "summary": "Get Latest Immutable Lot Basis-Transfer Receipt",
+      "description": "Returns the latest versioned source-to-target lot lineage and ordered source-lot basis allocations for a governed basis-only corporate action.",
+      "naming": {
+        "boundedContext": "lot_basis_transfer_receipts",
+        "canonicalTerms": [
+          "allocation_content_hash",
+          "allocation_count",
+          "allocation_ordinal",
+          "allocations",
+          "basis_transfer_calculation_lineage",
+          "calculation_policy_id",
+          "calculation_policy_version",
+          "cost_basis_method",
+          "portfolio_id",
+          "previous_receipt_content_hash",
+          "receipt_content_hash",
+          "receipt_id",
+          "receipt_version",
+          "retained_cost_base",
+          "retained_cost_local",
+          "retained_quantity",
+          "semantic_content_hash",
+          "source_acquisition_date",
+          "source_cost_base_before",
+          "source_cost_local_before",
+          "source_instrument_id",
+          "source_lot_id",
+          "source_security_id",
+          "source_transaction_id",
+          "status",
+          "target_instrument_id",
+          "target_lot_id",
+          "target_transaction_id",
+          "transaction_calculation_lineage",
+          "transaction_type",
+          "transfer_timestamp",
+          "transferred_cost_base",
+          "transferred_cost_local",
+          "void_reason"
+        ]
+      },
+      "request": {
+        "fields": [
+          {
+            "name": "portfolio_id",
+            "location": "path",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.portfolio_id",
+            "attributeRef": "lotus.portfolio_id"
+          },
+          {
+            "name": "source_transaction_id",
+            "location": "path",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.source_transaction_id",
+            "attributeRef": "lotus.source_transaction_id"
+          }
+        ]
+      },
+      "response": {
+        "httpStatus": 200,
+        "model": "LotBasisTransferReceiptResponse",
+        "fields": [
+          {
+            "name": "receipt_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.receipt_id",
+            "attributeRef": "lotus.receipt_id"
+          },
+          {
+            "name": "receipt_version",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.receipt_version",
+            "attributeRef": "lotus.receipt_version"
+          },
+          {
+            "name": "source_transaction_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.source_transaction_id",
+            "attributeRef": "lotus.source_transaction_id"
+          },
+          {
+            "name": "target_transaction_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.target_transaction_id",
+            "attributeRef": "lotus.target_transaction_id"
+          },
+          {
+            "name": "target_lot_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.target_lot_id",
+            "attributeRef": "lotus.target_lot_id"
+          },
+          {
+            "name": "portfolio_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.portfolio_id",
+            "attributeRef": "lotus.portfolio_id"
+          },
+          {
+            "name": "source_instrument_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.source_instrument_id",
+            "attributeRef": "lotus.source_instrument_id"
+          },
+          {
+            "name": "source_security_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.source_security_id",
+            "attributeRef": "lotus.source_security_id"
+          },
+          {
+            "name": "target_instrument_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.target_instrument_id",
+            "attributeRef": "lotus.target_instrument_id"
+          },
+          {
+            "name": "transfer_timestamp",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.transfer_timestamp",
+            "attributeRef": "lotus.transfer_timestamp"
+          },
+          {
+            "name": "transaction_type",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.transaction_type",
+            "attributeRef": "lotus.transaction_type"
+          },
+          {
+            "name": "cost_basis_method",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.cost_basis_method",
+            "attributeRef": "lotus.cost_basis_method"
+          },
+          {
+            "name": "calculation_policy_id",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.calculation_policy_id",
+            "attributeRef": "lotus.calculation_policy_id"
+          },
+          {
+            "name": "calculation_policy_version",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.calculation_policy_version",
+            "attributeRef": "lotus.calculation_policy_version"
+          },
+          {
+            "name": "status",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.status",
+            "attributeRef": "lotus.status"
+          },
+          {
+            "name": "void_reason",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.void_reason",
+            "attributeRef": "lotus.void_reason"
+          },
+          {
+            "name": "transferred_cost_local",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.transferred_cost_local",
+            "attributeRef": "lotus.transferred_cost_local"
+          },
+          {
+            "name": "transferred_cost_base",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.transferred_cost_base",
+            "attributeRef": "lotus.transferred_cost_base"
+          },
+          {
+            "name": "allocation_count",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.allocation_count",
+            "attributeRef": "lotus.allocation_count"
+          },
+          {
+            "name": "semantic_content_hash",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.semantic_content_hash",
+            "attributeRef": "lotus.semantic_content_hash"
+          },
+          {
+            "name": "previous_receipt_content_hash",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.previous_receipt_content_hash",
+            "attributeRef": "lotus.previous_receipt_content_hash"
+          },
+          {
+            "name": "receipt_content_hash",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.receipt_content_hash",
+            "attributeRef": "lotus.receipt_content_hash"
+          },
+          {
+            "name": "transaction_calculation_lineage",
+            "location": "body",
+            "required": true,
+            "type": "object",
+            "semanticId": "lotus.transaction_calculation_lineage",
+            "attributeRef": "lotus.transaction_calculation_lineage"
+          },
+          {
+            "name": "basis_transfer_calculation_lineage",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.basis_transfer_calculation_lineage",
+            "attributeRef": "lotus.basis_transfer_calculation_lineage"
+          },
+          {
+            "name": "allocations",
+            "location": "body",
+            "required": true,
+            "type": "array",
+            "semanticId": "lotus.allocations",
+            "attributeRef": "lotus.allocations"
+          },
+          {
+            "name": "allocations[].allocation_ordinal",
+            "location": "body",
+            "required": true,
+            "type": "integer",
+            "semanticId": "lotus.allocation_ordinal",
+            "attributeRef": "lotus.allocation_ordinal"
+          },
+          {
+            "name": "allocations[].source_lot_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.source_lot_id",
+            "attributeRef": "lotus.source_lot_id"
+          },
+          {
+            "name": "allocations[].source_transaction_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.source_transaction_id",
+            "attributeRef": "lotus.source_transaction_id"
+          },
+          {
+            "name": "allocations[].source_acquisition_date",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.source_acquisition_date",
+            "attributeRef": "lotus.source_acquisition_date"
+          },
+          {
+            "name": "allocations[].retained_quantity",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.retained_quantity",
+            "attributeRef": "lotus.retained_quantity"
+          },
+          {
+            "name": "allocations[].source_cost_local_before",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.source_cost_local_before",
+            "attributeRef": "lotus.source_cost_local_before"
+          },
+          {
+            "name": "allocations[].source_cost_base_before",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.source_cost_base_before",
+            "attributeRef": "lotus.source_cost_base_before"
+          },
+          {
+            "name": "allocations[].transferred_cost_local",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.transferred_cost_local",
+            "attributeRef": "lotus.transferred_cost_local"
+          },
+          {
+            "name": "allocations[].transferred_cost_base",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.transferred_cost_base",
+            "attributeRef": "lotus.transferred_cost_base"
+          },
+          {
+            "name": "allocations[].retained_cost_local",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.retained_cost_local",
+            "attributeRef": "lotus.retained_cost_local"
+          },
+          {
+            "name": "allocations[].retained_cost_base",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.retained_cost_base",
+            "attributeRef": "lotus.retained_cost_base"
+          },
+          {
+            "name": "allocations[].allocation_content_hash",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.allocation_content_hash",
+            "attributeRef": "lotus.allocation_content_hash"
           }
         ]
       }
