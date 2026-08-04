@@ -90,7 +90,9 @@ async def test_persistence_retains_source_scope_and_unmaterialized_target_refere
     )
 
     call = repository.reconcile_basis_transfer_receipts.await_args.kwargs
-    assert call["affected_source_transaction_ids"] == (source.transaction_id,)
+    assert tuple(scope.source_transaction_id for scope in call["reconciliation_scopes"]) == (
+        source.transaction_id,
+    )
     (state,) = call["receipt_states"]
     assert state.source_security_id == "SOURCE"
     assert state.target_instrument_id == "TARGET-INSTRUMENT"
@@ -113,10 +115,11 @@ async def test_persistence_passes_empty_current_state_so_repository_can_void_pri
         repository=repository,
     )
 
-    repository.reconcile_basis_transfer_receipts.assert_awaited_once_with(
-        affected_source_transaction_ids=(source.transaction_id,),
-        receipt_states=(),
-    )
+    call = repository.reconcile_basis_transfer_receipts.await_args.kwargs
+    assert call["receipt_states"] == ()
+    (scope,) = call["reconciliation_scopes"]
+    assert scope.source_transaction_id == source.transaction_id
+    assert scope.transaction_calculation_lineage == source.calculation_lineage
 
 
 @pytest.mark.asyncio

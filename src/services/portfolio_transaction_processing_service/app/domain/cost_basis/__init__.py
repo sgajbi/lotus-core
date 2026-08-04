@@ -70,6 +70,7 @@ from .corporate_action_reconciliation import (
 from .lot_basis_transfer_receipt import (
     LotBasisTransferReceiptState,
     LotBasisTransferReceiptStatus,
+    LotBasisTransferReconciliationScope,
 )
 from .lot_behavior import (
     AVERAGE_COST_POOL_LOT_BEHAVIORS,
@@ -130,6 +131,7 @@ __all__ = [
     "Fees",
     "LotDispositionEngine",
     "LotBasisTransferResult",
+    "LotBasisTransferReconciliationScope",
     "LotBasisTransferReceiptState",
     "LotBasisTransferReceiptStatus",
     "LotDisposalResult",

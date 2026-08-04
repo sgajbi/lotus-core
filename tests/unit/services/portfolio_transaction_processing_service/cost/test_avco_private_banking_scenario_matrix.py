@@ -219,6 +219,7 @@ def test_avco_basis_only_transfers_preserve_source_quantity(transaction_type: st
             transaction_date="2026-01-02T00:00:00Z",
             quantity="0",
             gross_amount="100",
+            target_transaction_reference=f"{transaction_type}-TARGET",
         ),
     )
 

@@ -28,6 +28,7 @@ from src.services.portfolio_transaction_processing_service.app.ports import (
     CostBasisAverageCostPoolPort,
     CostBasisFxRatePort,
     CostBasisInstrumentReference,
+    CostBasisLotBasisTransferPort,
     CostBasisLotDisposalPort,
     CostBasisLotStatePort,
     CostBasisPortfolioReference,
@@ -81,6 +82,7 @@ def _dependencies() -> dict[str, object]:
         "transaction_state": AsyncMock(spec=CostBasisTransactionStatePort),
         "average_cost_pools": AsyncMock(spec=CostBasisAverageCostPoolPort),
         "lot_disposals": AsyncMock(spec=CostBasisLotDisposalPort),
+        "lot_basis_transfers": AsyncMock(spec=CostBasisLotBasisTransferPort),
         "lot_states": AsyncMock(spec=CostBasisLotStatePort),
         "amortized_cost_profiles": AsyncMock(spec=LotAmortizedCostProfilePort),
         "income_offsets": AsyncMock(spec=AccruedIncomeOffsetStatePort),
@@ -107,6 +109,7 @@ async def test_cost_basis_execution_acquires_key_lock_before_calculation(
         open_lot_persistence_scope=MagicMock(),
         average_cost_pool_transition=None,
         disposals=(),
+        basis_transfers=(),
     )
     coordinator = MagicMock()
     coordinator.return_value.calculate = AsyncMock(return_value=calculation)
@@ -139,6 +142,14 @@ async def test_cost_basis_execution_acquires_key_lock_before_calculation(
         "persist_current_lot_disposals",
         persist_disposals,
     )
+    persist_basis_transfers = AsyncMock(
+        side_effect=lambda **_kwargs: persistence_order.append("basis-transfer-receipts")
+    )
+    monkeypatch.setattr(
+        execution_module,
+        "persist_current_lot_basis_transfers",
+        persist_basis_transfers,
+    )
     monkeypatch.setattr(
         execution_module,
         "_persist_processing_checkpoint",
@@ -161,6 +172,7 @@ async def test_cost_basis_execution_acquires_key_lock_before_calculation(
         transaction_state=transaction_state,
         average_cost_pools=AsyncMock(spec=CostBasisAverageCostPoolPort),
         lot_disposals=AsyncMock(spec=CostBasisLotDisposalPort),
+        lot_basis_transfers=AsyncMock(spec=CostBasisLotBasisTransferPort),
         lot_states=AsyncMock(spec=CostBasisLotStatePort),
         amortized_cost_profiles=amortized_cost_profiles,
         income_offsets=AsyncMock(spec=AccruedIncomeOffsetStatePort),
@@ -174,6 +186,7 @@ async def test_cost_basis_execution_acquires_key_lock_before_calculation(
         "SECURITY-01",
     )
     persist_disposals.assert_awaited_once()
+    persist_basis_transfers.assert_awaited_once()
     apply_amortized_disposal.assert_awaited_once_with(
         calculation,
         portfolio=CostBasisPortfolioReference(
@@ -188,6 +201,7 @@ async def test_cost_basis_execution_acquires_key_lock_before_calculation(
     assert persistence_order == [
         "transactions",
         "disposal-receipts",
+        "basis-transfer-receipts",
         "lot-state",
         "checkpoint",
     ]

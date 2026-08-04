@@ -20,6 +20,7 @@ from ...ports import (
     CostBasisCalculationObserver,
     CostBasisFxRatePort,
     CostBasisInstrumentReference,
+    CostBasisLotBasisTransferPort,
     CostBasisLotDisposalPort,
     CostBasisLotStatePort,
     CostBasisPersistenceObserver,
@@ -32,6 +33,7 @@ from ...ports import (
 )
 from ..foreign_exchange_processing import book_foreign_exchange_transaction
 from .amortized_disposal import apply_effective_amortized_cost_to_disposals
+from .basis_transfer_persistence import persist_current_lot_basis_transfers
 from .calculation import CostBasisCalculationCoordinator
 from .disposal_persistence import persist_current_lot_disposals
 from .effect_coordination import coordinate_cost_processing_effects
@@ -67,6 +69,7 @@ class PreparedCostProcessingUseCase:
         transaction_state: CostBasisTransactionStatePort,
         average_cost_pools: CostBasisAverageCostPoolPort,
         lot_disposals: CostBasisLotDisposalPort,
+        lot_basis_transfers: CostBasisLotBasisTransferPort,
         lot_states: CostBasisLotStatePort,
         amortized_cost_profiles: LotAmortizedCostProfilePort,
         income_offsets: AccruedIncomeOffsetStatePort,
@@ -91,6 +94,7 @@ class PreparedCostProcessingUseCase:
                 transaction_state=transaction_state,
                 average_cost_pools=average_cost_pools,
                 lot_disposals=lot_disposals,
+                lot_basis_transfers=lot_basis_transfers,
                 lot_states=lot_states,
                 amortized_cost_profiles=amortized_cost_profiles,
                 income_offsets=income_offsets,
@@ -134,6 +138,7 @@ class PreparedCostProcessingUseCase:
         transaction_state: CostBasisTransactionStatePort,
         average_cost_pools: CostBasisAverageCostPoolPort,
         lot_disposals: CostBasisLotDisposalPort,
+        lot_basis_transfers: CostBasisLotBasisTransferPort,
         lot_states: CostBasisLotStatePort,
         amortized_cost_profiles: LotAmortizedCostProfilePort,
         income_offsets: AccruedIncomeOffsetStatePort,
@@ -181,6 +186,13 @@ class PreparedCostProcessingUseCase:
             disposals=calculation.disposals,
             cost_basis_method=prepared.cost_basis_method,
             repository=lot_disposals,
+        )
+        await persist_current_lot_basis_transfers(
+            processed=calculation.processed,
+            incoming_transaction_ids={transaction.transaction_id},
+            basis_transfers=calculation.basis_transfers,
+            cost_basis_method=prepared.cost_basis_method,
+            repository=lot_basis_transfers,
         )
         await persist_open_lot_state(
             transaction=transaction,
