@@ -80,9 +80,7 @@ def assert_cash_entry_mode_supported(transaction: BookedTransaction) -> None:
         and mode is CashEntryMode.AUTO_GENERATE
         and not (transaction.settlement_cash_account_id or "").strip()
     ):
-        if (
-            calculate_settlement_cash_movement(transaction).signed_amount == 0
-        ):
+        if calculate_settlement_cash_movement(transaction).signed_amount == 0:
             return
         raise ValueError(
             "settlement_cash_account_id is required when cash_entry_mode is AUTO_GENERATE "
