@@ -6,7 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date, datetime
 from types import TracebackType
-from typing import Protocol, Self
+from typing import Protocol, Self, cast
 
 from portfolio_common.event_contracts import FixedIncomeBookCostAuthorityEvent
 
@@ -17,17 +17,20 @@ from ...domain.fixed_income_book_cost import (
     AmortizedCostPolicyRegistry,
     FixedIncomeBookCostCorrectionReplayIntent,
     FixedIncomeBookCostProfileDecisionEvidence,
+    LotAmortizationScheduleFact,
+    LotAmortizedCostBasisFact,
     LotAmortizedCostPolicyAssignment,
     LotBookCostAuthorityScope,
     MissingAmortizedCostAssignmentError,
     OverlappingAmortizedCostAssignmentError,
     UnsupportedAmortizedCostPolicyError,
-    amortization_replay_start_for_assignment_correction,
+    amortized_cost_authority_replay_start,
     resolve_amortized_cost_assignment,
 )
 from ...ports import (
     FixedIncomeBookCostCorrectionReplayPort,
     LotAmortizedCostAuthority,
+    LotAmortizedCostAuthorityBundle,
     LotAmortizedCostAuthorityPort,
     LotAmortizedCostProfileAppendOutcome,
     LotAmortizedCostProfilePort,
@@ -153,23 +156,25 @@ class HandleFixedIncomeBookCostAuthorityEventUseCase:
         async with self._unit_of_work_factory() as unit_of_work:
             writer = PersistLotAmortizedCostAuthorityUseCase(unit_of_work.authority)
             persistence = await writer.execute((mapped,))
+            authority_bundle = await unit_of_work.authority.load(mapped.scope)
             materializer = MaterializeLotAmortizedCostProfileUseCase(
                 authority=unit_of_work.authority,
                 profiles=unit_of_work.profiles,
             )
-            replay_start = await self._replay_start(
-                authority=unit_of_work.authority,
+            replay_start = self._replay_start(
+                bundle=authority_bundle,
                 mapped=mapped,
                 persistence=persistence,
                 default=effective_date,
             )
+            materialization_start = replay_start or effective_date
             affected_boundaries = sorted(
                 {
-                    replay_start,
+                    materialization_start,
                     effective_date,
                     *await unit_of_work.profiles.effective_boundaries_from(
                         mapped.scope,
-                        effective_date=replay_start,
+                        effective_date=materialization_start,
                     ),
                 }
             )
@@ -177,7 +182,7 @@ class HandleFixedIncomeBookCostAuthorityEventUseCase:
             for boundary in affected_boundaries:
                 materialization_results.append(
                     await self._materialize_boundary(
-                        authority=unit_of_work.authority,
+                        bundle=authority_bundle,
                         materializer=materializer,
                         scope=mapped.scope,
                         effective_date=boundary,
@@ -216,7 +221,7 @@ class HandleFixedIncomeBookCostAuthorityEventUseCase:
         event: FixedIncomeBookCostAuthorityEvent,
         scope: LotBookCostAuthorityScope,
         persistence: PersistLotAmortizedCostAuthorityResult,
-        replay_start: date,
+        replay_start: date | None,
         boundaries: tuple[date, ...],
         materializations: tuple[LotAmortizedCostMaterializationResult, ...],
         correlation_id: str | None,
@@ -224,7 +229,7 @@ class HandleFixedIncomeBookCostAuthorityEventUseCase:
     ) -> FixedIncomeBookCostCorrectionReplayIntent | None:
         """Stage one suffix replay only for a newly committed profile decision."""
 
-        if not self._correction_replay_enabled:
+        if not self._correction_replay_enabled or replay_start is None:
             return None
         if persistence.appended_count == 0 or not any(
             result.outcome is LotAmortizedCostProfileAppendOutcome.APPENDED
@@ -260,36 +265,33 @@ class HandleFixedIncomeBookCostAuthorityEventUseCase:
         )
         return intent
 
-    async def _replay_start(
+    def _replay_start(
         self,
         *,
-        authority: LotAmortizedCostAuthorityPort,
+        bundle: LotAmortizedCostAuthorityBundle,
         mapped: LotAmortizedCostAuthority,
         persistence: PersistLotAmortizedCostAuthorityResult,
         default: date,
-    ) -> date:
-        """Return the earliest boundary affected by an appended assignment correction."""
+    ) -> date | None:
+        """Return the earliest boundary affected by an appended authority correction."""
 
-        if not isinstance(mapped, LotAmortizedCostPolicyAssignment):
-            return default
         if persistence.appended_count == 0:
-            return default
-        bundle = await authority.load(mapped.scope)
-        previous = _previous_assignment_version(bundle.assignments, current=mapped)
+            return None
+        previous = _previous_authority_version(bundle, current=mapped)
         if previous is None:
             return default
-        return amortization_replay_start_for_assignment_correction(previous, mapped) or default
+        return amortized_cost_authority_replay_start(previous, mapped)
 
     async def _materialize_boundary(
         self,
         *,
-        authority: LotAmortizedCostAuthorityPort,
+        bundle: LotAmortizedCostAuthorityBundle,
         materializer: MaterializeLotAmortizedCostProfileUseCase,
         scope: LotBookCostAuthorityScope,
         effective_date: date,
     ) -> LotAmortizedCostMaterializationResult:
-        policy, unresolved_reason = await self._resolve_policy(
-            authority=authority,
+        policy, unresolved_reason = self._resolve_policy(
+            bundle=bundle,
             scope=scope,
             effective_date=effective_date,
         )
@@ -307,14 +309,13 @@ class HandleFixedIncomeBookCostAuthorityEventUseCase:
             reason=unresolved_reason,
         )
 
-    async def _resolve_policy(
+    def _resolve_policy(
         self,
         *,
-        authority: LotAmortizedCostAuthorityPort,
+        bundle: LotAmortizedCostAuthorityBundle,
         scope: LotBookCostAuthorityScope,
         effective_date: date,
     ) -> tuple[AmortizedCostPolicy | None, AmortizedCostEligibilityReason | None]:
-        bundle = await authority.load(scope)
         try:
             assignment = resolve_amortized_cost_assignment(
                 list(bundle.assignments),
@@ -339,19 +340,37 @@ class HandleFixedIncomeBookCostAuthorityEventUseCase:
             return None, AmortizedCostEligibilityReason.POLICY_UNSUPPORTED
 
 
-def _previous_assignment_version(
-    assignments: tuple[LotAmortizedCostPolicyAssignment, ...],
+def _previous_authority_version(
+    bundle: LotAmortizedCostAuthorityBundle,
     *,
-    current: LotAmortizedCostPolicyAssignment,
-) -> LotAmortizedCostPolicyAssignment | None:
+    current: LotAmortizedCostAuthority,
+) -> LotAmortizedCostAuthority | None:
+    if isinstance(current, LotAmortizedCostPolicyAssignment):
+        candidates: tuple[LotAmortizedCostAuthority, ...] = bundle.assignments
+        current_version = current.assignment_version
+    elif isinstance(current, LotAmortizedCostBasisFact):
+        candidates = bundle.basis_facts
+        current_version = current.source.fact_version
+    elif isinstance(current, LotAmortizationScheduleFact):
+        candidates = bundle.schedule_facts
+        current_version = current.source.fact_version
+    else:
+        candidates = bundle.yield_facts
+        current_version = current.source.fact_version
     previous_versions = (
-        assignment
-        for assignment in assignments
-        if assignment.source_record_key == current.source_record_key
-        and assignment.assignment_version < current.assignment_version
+        candidate
+        for candidate in candidates
+        if candidate.source_record_key == current.source_record_key
+        and _authority_version(candidate) < current_version
     )
     return max(
         previous_versions,
-        key=lambda assignment: assignment.assignment_version,
+        key=_authority_version,
         default=None,
     )
+
+
+def _authority_version(authority: LotAmortizedCostAuthority) -> int:
+    if isinstance(authority, LotAmortizedCostPolicyAssignment):
+        return authority.assignment_version
+    return cast(int, authority.source.fact_version)

@@ -445,7 +445,8 @@ async def test_atomic_handler_rematerializes_every_later_persisted_boundary() ->
     assert len(result.rematerializations) == 1
     assert result.rematerializations[0].outcome is LotAmortizedCostProfileAppendOutcome.APPENDED
     assert unit_of_work.committed is True
-    assert authority.load.await_count == 4
+    # One shared authority-bundle read plus one materializer reload per boundary.
+    assert authority.load.await_count == 3
 
 
 @pytest.mark.asyncio
@@ -523,6 +524,76 @@ async def test_assignment_correction_moved_earlier_replays_from_new_boundary() -
     ]
     assert result.materialization.profile_id == persisted_profiles[0].profile_id
     assert result.rematerializations[0].profile_id == persisted_profiles[1].profile_id
+    assert unit_of_work.committed is True
+
+
+@pytest.mark.asyncio
+async def test_basis_correction_moved_later_replays_superseded_boundary() -> None:
+    authority, profiles = _dependencies()
+    resolved = resolved_fixed_income_book_cost_inputs()
+    previous = resolved.basis_fact
+    current = replace(
+        previous,
+        valid_from=date(2026, 7, 1),
+        source=replace(
+            previous.source,
+            fact_version=2,
+            source_revision="revision-2",
+        ),
+    )
+    authority.load.return_value = _bundle(basis_facts=(previous, current))
+    profiles.effective_boundaries_from.return_value = (previous.valid_from,)
+    unit_of_work = _UnitOfWork(authority, profiles)
+
+    result = await HandleFixedIncomeBookCostAuthorityEventUseCase(
+        unit_of_work_factory=lambda: unit_of_work,
+        policies=AmortizedCostPolicyRegistry((resolved.policy,)),
+    ).execute(_basis_event(current))
+
+    profiles.effective_boundaries_from.assert_awaited_once_with(
+        current.scope,
+        effective_date=previous.valid_from,
+    )
+    persisted_profiles = [call.args[0] for call in profiles.append.await_args_list]
+    assert [profile.effective_date for profile in persisted_profiles] == [
+        previous.valid_from,
+        current.valid_from,
+    ]
+    assert result.materialization.profile_id == persisted_profiles[1].profile_id
+    assert result.rematerializations[0].profile_id == persisted_profiles[0].profile_id
+    assert unit_of_work.committed is True
+
+
+@pytest.mark.asyncio
+async def test_metadata_only_basis_correction_does_not_stage_business_replay() -> None:
+    authority, profiles = _dependencies()
+    resolved = resolved_fixed_income_book_cost_inputs()
+    previous = resolved.basis_fact
+    current = replace(
+        previous,
+        source=replace(
+            previous.source,
+            fact_version=2,
+            source_revision="metadata-revision-2",
+        ),
+    )
+    authority.load.return_value = _bundle(basis_facts=(previous, current))
+    unit_of_work = _UnitOfWork(authority, profiles)
+    unit_of_work.correction_replay.find_earliest_affected_disposal.return_value = (
+        _affected_disposal_anchor()
+    )
+
+    result = await HandleFixedIncomeBookCostAuthorityEventUseCase(
+        unit_of_work_factory=lambda: unit_of_work,
+        policies=AmortizedCostPolicyRegistry((resolved.policy,)),
+        correction_replay_enabled=True,
+    ).execute(_basis_event(current))
+
+    assert result.persistence.appended_count == 1
+    assert result.materialization.outcome is LotAmortizedCostProfileAppendOutcome.APPENDED
+    assert result.correction_replay_intent is None
+    unit_of_work.correction_replay.find_earliest_affected_disposal.assert_not_awaited()
+    unit_of_work.correction_replay.stage_replay_intent.assert_not_awaited()
     assert unit_of_work.committed is True
 
 

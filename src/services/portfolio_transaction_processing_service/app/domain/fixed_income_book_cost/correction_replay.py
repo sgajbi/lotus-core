@@ -11,10 +11,81 @@ from portfolio_common.domain.calculation_lineage import (
     require_sha256_digest,
 )
 
-from .authority import LotBookCostAuthorityScope
+from .authority import (
+    LotAmortizedCostPolicyAssignment,
+    LotBookCostAuthorityScope,
+    amortization_replay_start_for_assignment_correction,
+)
 from .policy import AmortizedCostEligibilityReason
+from .source_facts import (
+    LotAmortizationScheduleFact,
+    LotAmortizedCostBasisFact,
+    LotEffectiveYieldFact,
+)
 
 FIXED_INCOME_BOOK_COST_CORRECTION_REPLAY_ID_VERSION = 1
+
+FixedIncomeBookCostAuthority = (
+    LotAmortizedCostPolicyAssignment
+    | LotAmortizedCostBasisFact
+    | LotAmortizationScheduleFact
+    | LotEffectiveYieldFact
+)
+
+
+def amortized_cost_authority_replay_start(
+    previous: FixedIncomeBookCostAuthority,
+    current: FixedIncomeBookCostAuthority,
+) -> date | None:
+    """Return the earliest validity boundary changed by one source correction."""
+
+    if type(previous) is not type(current):
+        raise TypeError("authority correction versions must have the same type")
+    if previous.source_record_key != current.source_record_key:
+        raise ValueError("authority correction versions must share one source record")
+    if isinstance(previous, LotAmortizedCostPolicyAssignment):
+        return amortization_replay_start_for_assignment_correction(
+            previous,
+            cast(LotAmortizedCostPolicyAssignment, current),
+        )
+
+    current_fact = cast(
+        LotAmortizedCostBasisFact | LotAmortizationScheduleFact | LotEffectiveYieldFact,
+        current,
+    )
+    if current_fact.source.fact_version <= previous.source.fact_version:
+        raise ValueError("authority correction version must increase")
+    if _source_fact_semantics(previous) == _source_fact_semantics(current_fact):
+        return None
+    return min(previous.valid_from, current_fact.valid_from)
+
+
+def _source_fact_semantics(
+    fact: LotAmortizedCostBasisFact | LotAmortizationScheduleFact | LotEffectiveYieldFact,
+) -> tuple[object, ...]:
+    common = (fact.valid_from, fact.valid_to, fact.fact_status)
+    if isinstance(fact, LotAmortizedCostBasisFact):
+        return (
+            *common,
+            fact.currency,
+            fact.initial_clean_cost_local,
+            fact.fees_in_basis_local,
+            fact.redemption_value_local,
+            fact.discount_origin,
+        )
+    if isinstance(fact, LotAmortizationScheduleFact):
+        return (
+            *common,
+            fact.schedule_version,
+            fact.year_fraction_method_id,
+            fact.year_fraction_method_version,
+            fact.periods,
+        )
+    return (
+        *common,
+        fact.annual_yield,
+        fact.yield_application_convention,
+    )
 
 
 @dataclass(frozen=True, slots=True)
