@@ -31,11 +31,18 @@ def upgrade() -> None:
     _drop_carry_constraints()
     for column_name in _CARRY_COLUMNS:
         op.add_column(_TABLE, sa.Column(column_name, sa.Numeric(18, 10), nullable=True))
+    _require_acquisition_basis_evidence()
     op.execute(
-        "UPDATE position_lot_state "
-        "SET amortized_book_carrying_local = lot_cost_local, "
-        "amortized_book_carrying_base = lot_cost_base "
-        "WHERE amortized_cost_profile_id IS NOT NULL"
+        "UPDATE position_lot_state AS lot "
+        "SET amortized_book_carrying_local = lot.lot_cost_local, "
+        "amortized_book_carrying_base = lot.lot_cost_base, "
+        "lot_cost_local = CAST("
+        "source.net_cost_local * lot.open_quantity / source.quantity AS NUMERIC(18, 10)), "
+        "lot_cost_base = CAST("
+        "source.net_cost * lot.open_quantity / source.quantity AS NUMERIC(18, 10)) "
+        "FROM transactions AS source "
+        "WHERE lot.amortized_cost_profile_id IS NOT NULL "
+        "AND source.transaction_id = lot.source_transaction_id"
     )
     _create_carry_constraints(include_independent_amounts=True)
 
@@ -72,6 +79,29 @@ def _carry_columns(*, include_independent_amounts: bool) -> tuple[str, ...]:
 def _drop_carry_constraints() -> None:
     for constraint_name in (_VALUES_CONSTRAINT, _SHAPE_CONSTRAINT):
         op.drop_constraint(constraint_name, _TABLE, type_="check")
+
+
+def _require_acquisition_basis_evidence() -> None:
+    """Fail closed unless every legacy carry row has exact FIFO acquisition evidence."""
+
+    op.execute(
+        "DO $$ BEGIN "
+        "IF EXISTS ("
+        "SELECT 1 FROM position_lot_state AS lot "
+        "LEFT JOIN transactions AS source "
+        "ON source.transaction_id = lot.source_transaction_id "
+        "WHERE lot.amortized_cost_profile_id IS NOT NULL "
+        "AND (source.transaction_id IS NULL "
+        "OR source.transaction_type <> 'BUY' "
+        "OR source.quantity IS NULL OR source.quantity <= 0 "
+        "OR source.net_cost_local IS NULL OR source.net_cost IS NULL "
+        "OR source.net_cost_local < 0 OR source.net_cost < 0 "
+        "OR lot.open_quantity > source.quantity)"
+        ") THEN "
+        "RAISE EXCEPTION "
+        "'cannot separate amortized book carry without complete FIFO acquisition basis evidence'; "
+        "END IF; END $$"
+    )
 
 
 def _create_carry_constraints(*, include_independent_amounts: bool) -> None:

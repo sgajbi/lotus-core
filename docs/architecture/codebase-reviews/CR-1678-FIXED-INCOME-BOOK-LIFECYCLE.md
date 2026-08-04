@@ -78,8 +78,11 @@ fabrication even through direct database writes.
 The open-lot projection now keeps accounting carrying amount in independent local/base fields.
 Disposal projection and basis-only mutations change or retain that accounting carry without
 rewriting `lot_cost_local` or `lot_cost_base`, which remain strategy/tax acquisition basis. The
-additive migration backfills complete pre-existing carry rows from their former combined amounts;
-its downgrade first restores accounting carry to the legacy combined lot-cost representation so
+additive migration backfills complete pre-existing carry rows from their former combined amounts
+and restores the separate FIFO tax basis pro rata from the source BUY's authoritative local/base
+acquisition cost. It fails closed before rewriting any row when that source evidence is missing,
+non-BUY, incomplete, or inconsistent with the open quantity. Its downgrade first restores
+accounting carry to the legacy combined lot-cost representation so
 rollback cannot silently substitute a divergent tax basis for carried book economics. A missing
 effective profile now also fails closed whenever a consumed source lot already has persisted carry.
 production activation still requires the correction-triggered replay and downstream certification
