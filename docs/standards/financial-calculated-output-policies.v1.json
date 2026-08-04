@@ -106,6 +106,7 @@
           "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_strategies.py::_apportion_nonnegative_disposal_values"
         ],
         "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/state_lineage.py::build_cost_basis_state_lineage": [
+          "src/libs/portfolio-common/portfolio_common/domain/cost_basis_receipt_integrity.py::_canonical_cost_basis_output",
           "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/average_cost_pool_checkpoint.py::AverageCostPoolTransition.after",
           "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/average_cost_pool_checkpoint.py::_sum_state_field",
           "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/average_cost_source_allocation.py::AverageCostPool.add",
@@ -124,8 +125,7 @@
           "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_strategies.py::_assign_fifo_lot_costs",
           "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_strategies.py::_consume_next_fifo_lot",
           "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/lot_state.py::CostLot.open_state",
-          "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/residual_allocation.py::allocate_nonnegative_storage_share",
-          "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/state_lineage.py::_canonical_cost_basis_output"
+          "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/residual_allocation.py::allocate_nonnegative_storage_share"
         ],
         "src/services/portfolio_transaction_processing_service/app/domain/fixed_income_book_cost/calculation.py::calculate_amortized_cost_schedule": [
           "src/services/portfolio_transaction_processing_service/app/domain/fixed_income_book_cost/calculation.py::_calculate_period"
