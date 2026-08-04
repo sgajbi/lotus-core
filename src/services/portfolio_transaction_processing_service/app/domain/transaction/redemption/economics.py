@@ -205,7 +205,7 @@ def _validated_inputs(terms: RedemptionTerms) -> RedemptionTerms:
         code=RedemptionCalculationReasonCode.NON_POSITIVE_POSITION_QUANTITY,
         field="position_quantity",
     )
-    _require_positive(
+    _require_nonnegative(
         terms.redemption_price,
         code=RedemptionCalculationReasonCode.NON_POSITIVE_REDEMPTION_PRICE,
         field="redemption_price",
