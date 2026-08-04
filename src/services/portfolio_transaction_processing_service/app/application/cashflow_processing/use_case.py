@@ -8,6 +8,7 @@ from ...domain import BookedTransaction
 from ...domain.cashflow import CashflowCalculationContext, calculate_transaction_cashflow
 from ...domain.transaction import (
     SettlementCashValidationError,
+    allows_omitted_upstream_cash_leg,
     assert_cash_entry_mode_supported,
     is_upstream_provided_cash_entry_mode,
 )
@@ -162,6 +163,7 @@ def _assert_linked_cash_leg_contract(transaction: BookedTransaction) -> None:
         transaction.cash_entry_mode is not None
         and is_upstream_provided_cash_entry_mode(transaction.cash_entry_mode)
         and not has_linked_cash_leg
+        and not allows_omitted_upstream_cash_leg(transaction)
     ):
         raise TransactionProcessingError(
             reason_code="cashflow_contract_invalid",

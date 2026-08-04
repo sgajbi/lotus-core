@@ -63,6 +63,7 @@ class CostProcessingPort(Protocol):
         *,
         correlation_id: str | None,
         traceparent: str | None,
+        reconcile_superseded_derived: bool = False,
     ) -> CostProcessingResult: ...
 
 

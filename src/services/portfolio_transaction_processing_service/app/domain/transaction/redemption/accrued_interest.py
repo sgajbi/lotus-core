@@ -1,5 +1,6 @@
 """Build the canonical income component embedded in a redemption settlement."""
 
+from dataclasses import replace
 from decimal import Decimal
 
 from portfolio_common.domain.calculation_lineage import build_calculation_lineage
@@ -147,4 +148,60 @@ def is_generated_redemption_accrued_interest(
         and transaction.component_id == f"{expected_transaction_id}:v1"
         and normalize_transaction_control_code(transaction.originating_transaction_type)
         in REDEMPTION_TRANSACTION_TYPES
+    )
+
+
+def neutralize_generated_redemption_accrued_interest(
+    prior_component: BookedTransaction,
+    *,
+    corrected_source: BookedTransaction,
+) -> BookedTransaction:
+    """Return zero-valued evidence that supersedes an obsolete generated income child."""
+
+    if (
+        corrected_source.transaction_id != prior_component.originating_transaction_id
+        or not is_generated_redemption_accrued_interest(prior_component)
+    ):
+        raise ValueError("Prior accrued-interest child is not canonical generated evidence.")
+    lineage = build_calculation_lineage(
+        algorithm_id="redemption-accrued-interest-neutralization",
+        algorithm_version=1,
+        intermediate_precision=64,
+        input_payload={
+            "source_transaction_id": corrected_source.transaction_id,
+            "corrected_source_transaction_type": normalize_transaction_control_code(
+                corrected_source.transaction_type
+            ),
+            "corrected_source_calculation_lineage": (
+                corrected_source.calculation_lineage.lineage_payload()
+                if corrected_source.calculation_lineage is not None
+                else None
+            ),
+            "prior_component_calculation_lineage": (
+                prior_component.calculation_lineage.lineage_payload()
+                if prior_component.calculation_lineage is not None
+                else None
+            ),
+        },
+        output_payload={
+            "transaction_id": prior_component.transaction_id,
+            "component_id": prior_component.component_id,
+            "component_type": REDEMPTION_ACCRUED_INTEREST_COMPONENT,
+            "amount": Decimal(0),
+            "currency": prior_component.currency,
+        },
+    )
+    return replace(
+        prior_component,
+        gross_transaction_amount=Decimal(0),
+        economic_event_id=corrected_source.economic_event_id,
+        linked_transaction_group_id=corrected_source.linked_transaction_group_id,
+        external_cash_transaction_id=None,
+        linked_component_ids=None,
+        withholding_tax_amount=Decimal(0),
+        other_interest_deductions_amount=Decimal(0),
+        net_interest_amount=Decimal(0),
+        parent_event_reference=corrected_source.parent_event_reference,
+        epoch=corrected_source.epoch,
+        calculation_lineage=lineage,
     )

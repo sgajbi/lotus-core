@@ -72,6 +72,7 @@ class CostBasisProcessingAdapter:
         transaction: BookedTransaction,
         *,
         correlation_id: str,
+        reconcile_superseded_derived: bool,
     ) -> CostProcessingResult:
         reference_data = await self._reference_data.get_cost_basis_reference_data(
             portfolio_id=transaction.portfolio_id,
@@ -105,6 +106,7 @@ class CostBasisProcessingAdapter:
             reconciliation_repository=self._reconciliation_repository,
             effect_stager=self._effect_stager,
             correlation_id=correlation_id,
+            reconcile_superseded_derived=reconcile_superseded_derived,
         )
 
     async def process(
@@ -113,11 +115,13 @@ class CostBasisProcessingAdapter:
         *,
         correlation_id: str | None,
         traceparent: str | None,
+        reconcile_superseded_derived: bool = False,
     ) -> CostProcessingResult:
         try:
             return await self._process(
                 transaction,
                 correlation_id=correlation_id or "",
+                reconcile_superseded_derived=reconcile_superseded_derived,
             )
         except SettlementCashValidationError as exc:
             raise build_settlement_cash_rejection(transaction, exc) from exc

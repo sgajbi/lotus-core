@@ -4,6 +4,7 @@ from .accrued_interest import (
     REDEMPTION_ACCRUED_INTEREST_COMPONENT,
     build_redemption_accrued_interest_component,
     is_generated_redemption_accrued_interest,
+    neutralize_generated_redemption_accrued_interest,
     redemption_accrued_interest_transaction_id,
 )
 from .economics import (
@@ -36,6 +37,7 @@ __all__ = [
     "calculate_redemption_economics",
     "derive_redemption_principal_proceeds_local",
     "is_generated_redemption_accrued_interest",
+    "neutralize_generated_redemption_accrued_interest",
     "requires_linked_redemption_interest_history",
     "redemption_accrued_interest_transaction_id",
 ]

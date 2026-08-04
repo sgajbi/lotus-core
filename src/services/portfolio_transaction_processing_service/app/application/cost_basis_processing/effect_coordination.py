@@ -10,6 +10,7 @@ from ...domain.transaction.fx import FxContractInstrument
 from ...domain.transaction.redemption import (
     REDEMPTION_TRANSACTION_TYPES,
     build_redemption_accrued_interest_component,
+    neutralize_generated_redemption_accrued_interest,
     redemption_accrued_interest_transaction_id,
 )
 from ...ports import (
@@ -32,6 +33,7 @@ async def coordinate_cost_processing_effects(
     reconciliation_repository: CorporateActionReconciliationRepository,
     effect_stager: CostProcessingEffectStagingPort,
     correlation_id: str,
+    corrected_transaction_id: str | None = None,
     reconciliation_observer: CorporateActionReconciliationObserver | None = None,
 ) -> CostProcessingResult:
     """Link settlement, reconcile corporate actions, and stage domain-valued effects."""
@@ -46,6 +48,9 @@ async def coordinate_cost_processing_effects(
             product_leg=processed_transaction,
             transaction_lookup=transaction_state,
             transaction_persistence=transaction_state,
+            reconcile_superseded_derived=(
+                processed_transaction.transaction_id == corrected_transaction_id
+            ),
         )
         await reconciliation.reconcile(
             linking.product_leg,
@@ -55,20 +60,28 @@ async def coordinate_cost_processing_effects(
             _with_source_epoch(linking.product_leg, source_epoch=source_epoch)
         )
         accrued_interest = build_redemption_accrued_interest_component(linking.product_leg)
-        if (
-            accrued_interest is None
-            and normalize_transaction_control_code(linking.product_leg.transaction_type)
-            in REDEMPTION_TRANSACTION_TYPES
-            and await transaction_state.get_booked_transaction(
+        transaction_type = normalize_transaction_control_code(linking.product_leg.transaction_type)
+        reconcile_prior_interest = (
+            transaction_type in REDEMPTION_TRANSACTION_TYPES
+            or linking.product_leg.transaction_id == corrected_transaction_id
+        )
+        if accrued_interest is None and reconcile_prior_interest:
+            prior_interest = await transaction_state.get_booked_transaction(
                 redemption_accrued_interest_transaction_id(linking.product_leg.transaction_id),
                 portfolio_id=linking.product_leg.portfolio_id,
             )
-            is not None
-        ):
-            accrued_interest = build_redemption_accrued_interest_component(
-                linking.product_leg,
-                include_zero=True,
-            )
+            if prior_interest is not None:
+                accrued_interest = (
+                    build_redemption_accrued_interest_component(
+                        linking.product_leg,
+                        include_zero=True,
+                    )
+                    if transaction_type in REDEMPTION_TRANSACTION_TYPES
+                    else neutralize_generated_redemption_accrued_interest(
+                        prior_interest,
+                        corrected_source=linking.product_leg,
+                    )
+                )
         if accrued_interest is not None:
             await transaction_state.upsert_booked_transaction(accrued_interest)
             emitted_transactions.append(

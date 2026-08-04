@@ -3,6 +3,7 @@
 from .cash_entry import (
     PORTFOLIO_LEVEL_CASH_FLOW_TRANSACTION_TYPES,
     CashEntryMode,
+    allows_omitted_upstream_cash_leg,
     assert_cash_entry_mode_supported,
     is_portfolio_level_cash_flow,
     is_upstream_provided_cash_entry_mode,
@@ -46,6 +47,7 @@ __all__ = [
     "SettlementCashValidationError",
     "UpstreamCashLegPairingError",
     "UpstreamCashLegPairingIssue",
+    "allows_omitted_upstream_cash_leg",
     "assert_cash_entry_mode_supported",
     "assert_upstream_cash_leg_pairing",
     "build_generated_settlement_cash_leg",
