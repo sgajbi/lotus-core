@@ -28,7 +28,12 @@ from src.services.query_service.app.repositories.lot_disposal_repository import 
     CorruptLotDisposalReadModelError,
     LotDisposalRepository,
     _allocation_payload,
+    _amortized_cost_evidence_payload,
     _receipt_semantic_payload,
+    _verify_allocation,
+    _verify_destination,
+    _verify_header_shape,
+    _verify_lifecycle,
     _verify_receipt_integrity,
 )
 
@@ -77,6 +82,23 @@ async def test_latest_receipt_uses_one_scoped_verified_latest_version_query() ->
     assert "lot_disposal_receipts.disposal_transaction_id = 'RED-001'" in compiled
     assert "ORDER BY lot_disposal_allocations.allocation_ordinal ASC" in compiled
     verify.assert_called_once_with(receipt, [first, second], predecessor_hash=None)
+
+
+@pytest.mark.asyncio
+async def test_portfolio_existence_and_absent_receipt_are_bounded() -> None:
+    scalar_result = MagicMock()
+    scalar_result.scalar_one_or_none.side_effect = ["P1", None]
+    empty_result = MagicMock()
+    empty_result.all.return_value = []
+    session = AsyncMock(spec=AsyncSession)
+    session.execute = AsyncMock(side_effect=[scalar_result, scalar_result, empty_result])
+    repository = LotDisposalRepository(session)
+
+    assert await repository.portfolio_exists("P1") is True
+    assert await repository.portfolio_exists("MISSING") is False
+    assert await repository.get_latest_receipt(portfolio_id="P1", transaction_id="UNKNOWN") is None
+
+    assert session.execute.await_count == 3
 
 
 def test_integrity_accepts_complete_canonical_evidence() -> None:
@@ -154,6 +176,215 @@ def test_integrity_verifies_immediate_predecessor_hash() -> None:
     assert "predecessor chain mismatch" in str(error.value.__cause__)
 
 
+@pytest.mark.parametrize(
+    ("field_name", "value", "reason"),
+    [
+        ("receipt_id", " ", "canonical nonblank text"),
+        ("receipt_version", 0, "receipt version must be positive"),
+        ("cost_basis_method", "LIFO", "unsupported cost basis method"),
+        ("calculation_policy_version", None, "calculation policy identity is incomplete"),
+        ("disposal_timestamp", datetime(2026, 8, 4), "timezone-aware"),
+        ("transaction_calculation_lineage", None, "transaction calculation lineage is required"),
+    ],
+)
+def test_header_shape_rejects_noncanonical_supportability_fields(
+    field_name: str,
+    value: object,
+    reason: str,
+) -> None:
+    receipt, _ = _valid_evidence()
+    setattr(receipt, field_name, value)
+
+    with pytest.raises(ValueError, match=reason):
+        _verify_header_shape(receipt)
+
+
+def test_destination_accepts_absent_and_external_transfer_identity() -> None:
+    receipt, _ = _valid_evidence()
+    receipt.destination_type = None
+    receipt.target_transaction_id = None
+    receipt.target_lot_id = None
+    receipt.target_instrument_id = None
+    _verify_destination(receipt)
+    assert "destination" not in _receipt_semantic_payload(receipt, [])
+
+    receipt.destination_type = "EXTERNAL_TRANSFER"
+    receipt.external_destination_reference = "CUSTODIAN-TRANSFER-1"
+    _verify_destination(receipt)
+
+
+@pytest.mark.parametrize(
+    ("changes", "reason"),
+    [
+        ({"target_transaction_id": None}, "internal destination identity is incomplete"),
+        ({"target_lot_id": "LOT-WRONG"}, "internal destination lot identity mismatch"),
+        (
+            {"external_destination_reference": "EXT"},
+            "internal destination has an external reference",
+        ),
+        (
+            {
+                "destination_type": "EXTERNAL_TRANSFER",
+                "target_transaction_id": None,
+                "target_lot_id": None,
+                "target_instrument_id": None,
+                "external_destination_reference": " ",
+            },
+            "external destination reference is missing",
+        ),
+        (
+            {"destination_type": "EXTERNAL_TRANSFER", "external_destination_reference": "EXT"},
+            "external destination has internal target identity",
+        ),
+        ({"destination_type": "UNKNOWN"}, "unknown disposal destination type"),
+    ],
+)
+def test_destination_rejects_ambiguous_or_incomplete_identity(
+    changes: dict[str, object],
+    reason: str,
+) -> None:
+    receipt, _ = _valid_evidence()
+    for field_name, value in changes.items():
+        setattr(receipt, field_name, value)
+
+    with pytest.raises(ValueError, match=reason):
+        _verify_destination(receipt)
+
+
+@pytest.mark.parametrize(
+    ("field_name", "value", "reason"),
+    [
+        ("portfolio_id", "P2", "allocation scope differs"),
+        ("consumed_quantity", Decimal("0"), "quantity must be finite and positive"),
+        ("consumed_quantity", Decimal("NaN"), "quantity must be finite and positive"),
+        ("consumed_cost_local", Decimal("-1"), "must be finite and non-negative"),
+        ("consumed_cost_base", Decimal("Infinity"), "must be finite and non-negative"),
+    ],
+)
+def test_allocation_rejects_invalid_scope_and_economics(
+    field_name: str,
+    value: object,
+    reason: str,
+) -> None:
+    receipt, allocation = _valid_evidence()
+    setattr(allocation, field_name, value)
+
+    with pytest.raises(ValueError, match=reason):
+        _verify_allocation(receipt, allocation)
+
+
+@pytest.mark.parametrize(
+    ("field_name", "value", "reason"),
+    [
+        ("consumed_quantity", Decimal("0"), "positive allocations"),
+        ("disposal_calculation_lineage", None, "lacks disposal lineage"),
+        ("disposal_calculation_lineage", {}, "algorithm_id must be a string"),
+        ("void_reason", "incorrect", "active receipt has a void reason"),
+        ("status", "UNKNOWN", "unknown receipt status"),
+    ],
+)
+def test_lifecycle_rejects_inconsistent_active_or_unknown_state(
+    field_name: str,
+    value: object,
+    reason: str,
+) -> None:
+    receipt, allocation = _valid_evidence()
+    setattr(receipt, field_name, value)
+
+    with pytest.raises((TypeError, ValueError), match=reason):
+        _verify_lifecycle(receipt, [allocation])
+
+
+def test_lifecycle_accepts_closed_void_and_rejects_void_with_economics() -> None:
+    receipt, allocation = _valid_evidence()
+    receipt.status = "VOIDED"
+    receipt.consumed_quantity = Decimal(0)
+    receipt.consumed_cost_local = Decimal(0)
+    receipt.consumed_cost_base = Decimal(0)
+    receipt.disposal_calculation_lineage = None
+    receipt.void_reason = "SUPERSEDED"
+
+    _verify_lifecycle(receipt, [])
+    with pytest.raises(ValueError, match="voided receipt carries invalid economics"):
+        _verify_lifecycle(receipt, [allocation])
+
+
+def test_integrity_rejects_identity_order_uniqueness_and_version_hash_drift() -> None:
+    receipt, allocation = _valid_evidence()
+    receipt.receipt_id = "lot-disposal:wrong"
+    _assert_corrupt(receipt, [allocation], "receipt identity mismatch")
+
+    receipt, allocation = _valid_evidence()
+    allocation.allocation_ordinal = 2
+    _assert_corrupt(receipt, [allocation], "allocation ordinals are not contiguous")
+
+    receipt, allocation = _valid_evidence()
+    duplicate = _valid_evidence()[1]
+    duplicate.allocation_ordinal = 2
+    receipt.allocation_count = 2
+    _assert_corrupt(receipt, [allocation, duplicate], "source lot occurs more than once")
+
+    receipt, allocation = _valid_evidence()
+    receipt.previous_receipt_content_hash = "e" * 64
+    _assert_corrupt(receipt, [allocation], "first receipt version has a predecessor")
+
+    receipt, allocation = _valid_evidence()
+    receipt.receipt_content_hash = "0" * 64
+    _assert_corrupt(receipt, [allocation], "receipt content hash mismatch")
+
+
+def test_complete_amortized_cost_evidence_is_verified_and_bound_to_lineage() -> None:
+    receipt, allocation = _valid_evidence()
+    _add_valid_amortized_evidence(receipt, allocation)
+
+    payload = _amortized_cost_evidence_payload(receipt, allocation)
+    allocation_payload = _allocation_payload(receipt, allocation)
+
+    assert payload is not None
+    assert payload["profile_id"] == "PROFILE-1"
+    assert payload["consumed_quantity"] == Decimal("25")
+    assert allocation_payload["amortized_cost_evidence"] == payload
+
+
+@pytest.mark.parametrize(
+    ("field_name", "value", "reason"),
+    [
+        ("amortized_cost_profile_id", " ", "profile id is invalid"),
+        ("amortized_cost_profile_version", 0, "profile version is invalid"),
+        ("amortized_cost_profile_content_hash", "bad", "SHA-256"),
+        ("amortized_cost_currency", "usd", "currency is invalid"),
+        ("amortized_cost_recognized_through", date(2027, 1, 1), "recognition date is invalid"),
+        ("amortized_cost_current_local", Decimal("NaN"), "must be a finite Decimal"),
+        ("amortized_cost_original_quantity", Decimal("0"), "quantity or FX evidence is invalid"),
+        ("amortized_cost_open_quantity_before", Decimal("26"), "quantity does not conserve"),
+        ("amortized_cost_residual_local", Decimal("1"), "local cost does not conserve"),
+        ("amortized_cost_residual_base", Decimal("1"), "base cost does not conserve"),
+        (
+            "amortized_cost_calculation_lineage",
+            build_calculation_lineage(
+                algorithm_id="amortized-cost-disposal",
+                algorithm_version=1,
+                intermediate_precision=38,
+                input_payload={"source": "amortized-cost-disposal"},
+                output_payload={"wrong": "output"},
+            ).lineage_payload(),
+            "lineage does not bind",
+        ),
+    ],
+)
+def test_amortized_cost_evidence_rejects_unusable_or_unreconciled_values(
+    field_name: str,
+    value: object,
+    reason: str,
+) -> None:
+    receipt, allocation = _valid_evidence()
+    _add_valid_amortized_evidence(receipt, allocation)
+    setattr(allocation, field_name, value)
+
+    with pytest.raises((TypeError, ValueError), match=reason):
+        _amortized_cost_evidence_payload(receipt, allocation)
+
+
 def _valid_evidence() -> tuple[LotDisposalReceiptRecord, LotDisposalAllocationRecord]:
     timestamp = datetime(2026, 8, 4, 10, 30, tzinfo=UTC)
     transaction_lineage = _lineage("transaction-cost", output={"cost": "100"})
@@ -223,6 +454,57 @@ def _valid_evidence() -> tuple[LotDisposalReceiptRecord, LotDisposalAllocationRe
         previous_receipt_content_hash=None,
     )
     return receipt, allocation
+
+
+def _assert_corrupt(
+    receipt: LotDisposalReceiptRecord,
+    allocations: list[LotDisposalAllocationRecord],
+    reason: str,
+) -> None:
+    with pytest.raises(CorruptLotDisposalReadModelError, match="corrupt") as error:
+        _verify_receipt_integrity(receipt, allocations, predecessor_hash=None)
+
+    assert reason in str(error.value.__cause__)
+
+
+def _add_valid_amortized_evidence(
+    receipt: LotDisposalReceiptRecord,
+    allocation: LotDisposalAllocationRecord,
+) -> None:
+    allocation.amortized_cost_profile_id = "PROFILE-1"
+    allocation.amortized_cost_profile_version = 1
+    allocation.amortized_cost_profile_content_hash = "a" * 64
+    allocation.amortized_cost_currency = "USD"
+    allocation.amortized_cost_recognized_through = receipt.disposal_timestamp.date()
+    allocation.amortized_cost_original_quantity = Decimal("100")
+    allocation.amortized_cost_open_quantity_before = Decimal("25")
+    allocation.amortized_cost_residual_quantity = Decimal("0")
+    allocation.amortized_cost_scheduled_local = Decimal("25")
+    allocation.amortized_cost_current_local = Decimal("25")
+    allocation.amortized_cost_current_base = Decimal("18.75")
+    allocation.amortized_cost_residual_local = Decimal("0")
+    allocation.amortized_cost_book_fx_rate_to_base = Decimal("0.75")
+    allocation.amortized_cost_residual_base = Decimal("0")
+    allocation.amortized_cost_retained_rounding_local = Decimal("0")
+    allocation.amortized_cost_retained_rounding_base = Decimal("0")
+    allocation.amortized_cost_calculation_lineage = _lineage(
+        "amortized-cost-disposal",
+        output={
+            "consumed_cost_base": Decimal("18.75"),
+            "consumed_cost_local": Decimal("25"),
+            "consumed_quantity": Decimal("25"),
+            "current_cost_base": Decimal("18.75"),
+            "current_cost_local": Decimal("25"),
+            "open_quantity_before": Decimal("25"),
+            "recognized_through_date": receipt.disposal_timestamp.date(),
+            "residual_cost_base": Decimal("0"),
+            "residual_cost_local": Decimal("0"),
+            "residual_quantity": Decimal("0"),
+            "retained_rounding_residual_base": Decimal("0"),
+            "retained_rounding_residual_local": Decimal("0"),
+            "scheduled_cost_local": Decimal("25"),
+        },
+    )
 
 
 def _lineage(algorithm_id: str, *, output: dict[str, object]) -> dict[str, object]:

@@ -116,6 +116,90 @@ def test_redemption_explicit_principal_remains_settlement_authority() -> None:
     assert movement.signed_amount == Decimal("96.00000000005")
 
 
+@pytest.mark.parametrize(
+    "transaction_type",
+    ["MATURITY_REDEMPTION", "CALL_REDEMPTION", "PARTIAL_REDEMPTION"],
+)
+@pytest.mark.parametrize("principal_proceeds_local", [None, Decimal(0)])
+def test_zero_price_redemption_write_off_has_no_cash_settlement(
+    transaction_type: str,
+    principal_proceeds_local: Decimal | None,
+) -> None:
+    movement = calculate_settlement_cash_movement(
+        _transaction(
+            transaction_type,
+            quantity=Decimal("100"),
+            price=Decimal(0),
+            gross_transaction_amount=Decimal("999"),
+            principal_proceeds_local=principal_proceeds_local,
+            accrued_interest_proceeds_local=Decimal(0),
+            embedded_fee_amount_local=Decimal(0),
+            embedded_tax_amount_local=Decimal(0),
+            trade_fee=Decimal(0),
+        )
+    )
+
+    assert movement.signed_amount == Decimal(0)
+    assert movement.amount == Decimal(0)
+    assert movement.fee_amount == Decimal(0)
+    assert movement.adjustment_reason == "REDEMPTION_SETTLEMENT"
+
+
+def test_zero_price_redemption_with_accrued_interest_remains_positive_settlement() -> None:
+    movement = calculate_settlement_cash_movement(
+        _transaction(
+            "MATURITY_REDEMPTION",
+            quantity=Decimal("100"),
+            price=Decimal(0),
+            gross_transaction_amount=Decimal(0),
+            principal_proceeds_local=None,
+            accrued_interest_proceeds_local=Decimal("12.50"),
+            embedded_fee_amount_local=Decimal("1.25"),
+            embedded_tax_amount_local=Decimal("0.75"),
+            trade_fee=Decimal("0.50"),
+        )
+    )
+
+    assert movement.signed_amount == Decimal("10.00")
+    assert movement.movement_direction == "INFLOW"
+
+
+@pytest.mark.parametrize(
+    ("changes", "available_proceeds", "net_settlement"),
+    [
+        ({"embedded_fee_amount_local": Decimal("0.01")}, Decimal("-0.01"), Decimal("-0.01")),
+        ({"trade_fee": Decimal("0.01")}, Decimal(0), Decimal("-0.01")),
+    ],
+)
+def test_zero_price_redemption_rejects_negative_cash_settlement(
+    changes: dict[str, object],
+    available_proceeds: Decimal,
+    net_settlement: Decimal,
+) -> None:
+    transaction_changes: dict[str, object] = {
+        "quantity": Decimal("100"),
+        "price": Decimal(0),
+        "gross_transaction_amount": Decimal(0),
+        "principal_proceeds_local": None,
+        "accrued_interest_proceeds_local": Decimal(0),
+        "embedded_fee_amount_local": Decimal(0),
+        "embedded_tax_amount_local": Decimal(0),
+        "trade_fee": Decimal(0),
+    }
+    transaction_changes.update(changes)
+
+    with pytest.raises(SettlementCashValidationError) as raised:
+        calculate_settlement_cash_movement(
+            _transaction("MATURITY_REDEMPTION", **transaction_changes)
+        )
+
+    assert raised.value.reason_code is (
+        SettlementCashRejectionReasonCode.REDEMPTION_NON_POSITIVE_NET_SETTLEMENT
+    )
+    assert raised.value.available_proceeds == available_proceeds
+    assert raised.value.net_settlement_amount == net_settlement
+
+
 def test_dividend_withholding_reduces_available_settlement_proceeds() -> None:
     movement = calculate_settlement_cash_movement(
         _transaction(

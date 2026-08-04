@@ -278,6 +278,7 @@ def test_redemption_types_are_registered_for_production_booking(transaction_type
     assert definition.cash_effect == "inflow"
     assert definition.lot_behavior == "consume_lot"
     assert definition.settlement_behavior == "requires_cash_leg"
+    assert definition.default_cash_entry_mode == "AUTO_GENERATE"
     assert definition.calculation_support_status == SUPPORTED
     assert definition.production_booking_allowed
 
@@ -294,6 +295,7 @@ def test_registry_definitions_are_normalized_and_complete() -> None:
         assert definition.lot_behavior
         assert definition.settlement_behavior
         assert definition.income_behavior
+        assert definition.default_cash_entry_mode in {None, "AUTO_GENERATE"}
         assert definition.calculation_support_status
 
 

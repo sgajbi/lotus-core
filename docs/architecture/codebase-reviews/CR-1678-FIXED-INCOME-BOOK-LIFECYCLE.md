@@ -373,6 +373,14 @@ Data Models wiki documents the staged ledgers while the capability wiki remains
   reported no issues across 292 source files. The compatibility impact is intentional and bounded:
   lineage hashes/version change where the canonicalization contract changed; financial amounts,
   booking contracts, schema, API/OpenAPI, Kafka topology, and settlement identities do not.
+- protected-review and coverage proof: registry-owned cash-entry defaults now prevent non-zero
+  redemption booking without a settlement account, while canonical zero-price/zero-proceeds
+  write-offs create no synthetic cash adjustment. Tolerance-close maturity/call quantities consume
+  the exact available position. Query-side disposal and basis-transfer verification has 100% line
+  and branch coverage across 252 statements and 146 branches; 253 focused registry, preparation,
+  settlement, redemption, cashflow, and query-repository tests pass. Repository-native Ruff, full
+  MyPy (292 sources), calculated-output-policy, and diff guards pass. Protected exact-head rerun and
+  merge evidence remain recorded through PR #910 and issue #477 rather than duplicated here.
 
 Protected PR and exact-main evidence remain pending for this tranche. Wider runtime recovery/load
 proof, complete corporate-action scenario coverage, redemption, and final issue closure remain

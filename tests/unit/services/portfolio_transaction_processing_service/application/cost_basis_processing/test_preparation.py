@@ -89,3 +89,85 @@ def test_prepare_cost_transaction_allows_portfolio_adjustment_without_reference(
 
     assert prepared.transaction_type == "ADJUSTMENT"
     assert prepared.route is cost_basis_processing.CostProcessingRoute.COST_BASIS
+
+
+_REDEMPTION_TYPES = (
+    "MATURITY_REDEMPTION",
+    "CALL_REDEMPTION",
+    "PARTIAL_REDEMPTION",
+)
+
+
+@pytest.mark.parametrize("transaction_type", _REDEMPTION_TYPES)
+def test_prepare_redemption_rejects_omitted_cash_mode_without_account(
+    transaction_type: str,
+) -> None:
+    with pytest.raises(ValueError, match="settlement_cash_account_id is required"):
+        cost_basis_processing.prepare_cost_transaction(
+            _transaction(transaction_type),
+            cost_basis_method=CostBasisMethod.FIFO,
+            instrument_reference_available=True,
+        )
+
+
+@pytest.mark.parametrize("transaction_type", _REDEMPTION_TYPES)
+def test_prepare_redemption_rejects_auto_generate_without_account(
+    transaction_type: str,
+) -> None:
+    with pytest.raises(ValueError, match="settlement_cash_account_id is required"):
+        cost_basis_processing.prepare_cost_transaction(
+            replace(_transaction(transaction_type), cash_entry_mode="AUTO_GENERATE"),
+            cost_basis_method=CostBasisMethod.FIFO,
+            instrument_reference_available=True,
+        )
+
+
+@pytest.mark.parametrize("transaction_type", _REDEMPTION_TYPES)
+@pytest.mark.parametrize(
+    ("cash_entry_mode", "settlement_cash_account_id", "expected_mode"),
+    [
+        (None, "CASH-SGD-001", "AUTO_GENERATE"),
+        ("AUTO_GENERATE", "CASH-SGD-001", "AUTO_GENERATE"),
+        ("UPSTREAM_PROVIDED", None, "UPSTREAM_PROVIDED"),
+    ],
+)
+def test_prepare_redemption_accepts_supported_cash_leg_contracts(
+    transaction_type: str,
+    cash_entry_mode: str | None,
+    settlement_cash_account_id: str | None,
+    expected_mode: str,
+) -> None:
+    prepared = cost_basis_processing.prepare_cost_transaction(
+        replace(
+            _transaction(transaction_type),
+            cash_entry_mode=cash_entry_mode,
+            settlement_cash_account_id=settlement_cash_account_id,
+        ),
+        cost_basis_method=CostBasisMethod.FIFO,
+        instrument_reference_available=True,
+    )
+
+    assert prepared.transaction.cash_entry_mode == expected_mode
+
+
+@pytest.mark.parametrize("transaction_type", _REDEMPTION_TYPES)
+def test_prepare_zero_cash_redemption_allows_omitted_generated_leg_metadata(
+    transaction_type: str,
+) -> None:
+    prepared = cost_basis_processing.prepare_cost_transaction(
+        replace(
+            _transaction(transaction_type),
+            price=Decimal(0),
+            gross_transaction_amount=Decimal(0),
+            principal_proceeds_local=Decimal(0),
+            accrued_interest_proceeds_local=Decimal(0),
+            embedded_fee_amount_local=Decimal(0),
+            embedded_tax_amount_local=Decimal(0),
+            trade_fee=Decimal(0),
+        ),
+        cost_basis_method=CostBasisMethod.FIFO,
+        instrument_reference_available=True,
+    )
+
+    assert prepared.transaction.cash_entry_mode == "AUTO_GENERATE"
+    assert prepared.transaction.settlement_cash_account_id is None

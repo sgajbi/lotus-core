@@ -72,6 +72,28 @@ def test_buy_cashflow_includes_fees_and_uses_settlement_date() -> None:
     assert cashflow.epoch == 7
 
 
+def test_zero_price_redemption_write_off_flows_through_without_cash_proceeds() -> None:
+    transaction = _booked_transaction(
+        transaction_type="MATURITY_REDEMPTION",
+        quantity=Decimal("10"),
+        price=Decimal(0),
+        gross_transaction_amount=Decimal("999"),
+        principal_proceeds_local=None,
+        accrued_interest_proceeds_local=Decimal(0),
+        embedded_fee_amount_local=Decimal(0),
+        embedded_tax_amount_local=Decimal(0),
+        trade_fee=Decimal(0),
+        cash_entry_mode=None,
+    )
+
+    cashflow = calculate_transaction_cashflow(
+        transaction,
+        _rule(CashflowClassification.CORPORATE_ACTION_PROCEEDS),
+    )
+
+    assert cashflow.amount == Decimal("0E-10")
+
+
 @pytest.mark.parametrize("net_interest_amount", [None, Decimal("107")])
 def test_interest_cashflow_is_invariant_to_explicit_net_interest(
     net_interest_amount: Decimal | None,

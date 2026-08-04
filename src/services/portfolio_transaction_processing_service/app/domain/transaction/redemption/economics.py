@@ -297,6 +297,7 @@ def _resolve_redeemed_quantity(terms: RedemptionTerms) -> Decimal:
             code=RedemptionCalculationReasonCode.FULL_REDEMPTION_QUANTITY_MISMATCH,
             field="redeemed_quantity",
         )
+        quantity = terms.position_quantity
     elif quantity >= terms.position_quantity:
         _fail(
             RedemptionCalculationReasonCode.PARTIAL_REDEMPTION_CLOSES_POSITION,

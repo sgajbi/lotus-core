@@ -124,6 +124,31 @@ def test_generated_redemption_cash_leg_rejects_exhausted_proceeds() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    "transaction_type",
+    ["MATURITY_REDEMPTION", "CALL_REDEMPTION", "PARTIAL_REDEMPTION"],
+)
+def test_zero_cash_redemption_does_not_generate_adjustment_leg(
+    transaction_type: str,
+) -> None:
+    transaction = replace(
+        _dividend_transaction(),
+        transaction_type=transaction_type,
+        quantity=Decimal("100"),
+        price=Decimal(0),
+        gross_transaction_amount=Decimal(0),
+        principal_proceeds_local=Decimal(0),
+        accrued_interest_proceeds_local=Decimal(0),
+        embedded_fee_amount_local=Decimal(0),
+        embedded_tax_amount_local=Decimal(0),
+        trade_fee=Decimal(0),
+    )
+
+    assert not should_generate_settlement_cash_leg(transaction)
+    with pytest.raises(GeneratedCashLegError):
+        build_generated_settlement_cash_leg(transaction)
+
+
 @pytest.mark.parametrize("net_interest_amount", [None, Decimal("20.00")])
 def test_generated_interest_cash_leg_is_invariant_to_explicit_net_interest(
     net_interest_amount: Decimal | None,
