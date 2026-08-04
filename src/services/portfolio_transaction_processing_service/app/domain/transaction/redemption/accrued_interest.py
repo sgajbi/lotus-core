@@ -24,15 +24,25 @@ def build_redemption_accrued_interest_component(
     *,
     include_zero: bool = False,
 ) -> BookedTransaction | None:
-    """Return a linked income transaction when redemption interest is non-zero."""
+    """Return the independently reportable interest embedded in a redemption.
+
+    A positive component normally shares an existing net settlement cash leg. When the
+    canonical net settlement is exactly zero, the component remains valid income evidence but
+    must not fabricate a cash leg merely to satisfy linkage metadata.
+    """
 
     transaction_type = normalize_transaction_control_code(redemption.transaction_type)
     if transaction_type not in REDEMPTION_TRANSACTION_TYPES:
         return None
-    accrued_interest = redemption.accrued_interest_proceeds_local or Decimal(0)
+    accrued_interest = redemption.accrued_interest_proceeds_local
+    if accrued_interest is None:
+        accrued_interest = Decimal(0)
+    _require_nonnegative_finite_accrued_interest(accrued_interest)
     if accrued_interest == 0 and not include_zero:
         return None
-    if accrued_interest > 0 and not (redemption.external_cash_transaction_id or "").strip():
+    canonical_net_settlement = _canonical_net_settlement_amount(redemption)
+    linked_cash_transaction_id = (redemption.external_cash_transaction_id or "").strip() or None
+    if canonical_net_settlement != 0 and linked_cash_transaction_id is None:
         raise ValueError(
             "Embedded redemption interest requires a linked settlement cash transaction."
         )
@@ -51,6 +61,8 @@ def build_redemption_accrued_interest_component(
                 else None
             ),
             "accrued_interest_proceeds_local": accrued_interest,
+            "canonical_net_settlement_amount": canonical_net_settlement,
+            "linked_cash_transaction_id": linked_cash_transaction_id,
         },
         output_payload={
             "transaction_id": transaction_id,
@@ -80,7 +92,7 @@ def build_redemption_accrued_interest_component(
         calculation_policy_version=redemption.calculation_policy_version,
         source_system=redemption.source_system,
         cash_entry_mode=None,
-        external_cash_transaction_id=redemption.external_cash_transaction_id,
+        external_cash_transaction_id=linked_cash_transaction_id,
         movement_direction="INFLOW",
         originating_transaction_id=redemption.transaction_id,
         originating_transaction_type=transaction_type,
@@ -92,14 +104,31 @@ def build_redemption_accrued_interest_component(
         net_interest_amount=accrued_interest,
         component_type=REDEMPTION_ACCRUED_INTEREST_COMPONENT,
         component_id=component_id,
-        linked_component_ids=(redemption.external_cash_transaction_id,)
-        if redemption.external_cash_transaction_id
-        else None,
+        linked_component_ids=(linked_cash_transaction_id,) if linked_cash_transaction_id else None,
         parent_transaction_reference=redemption.transaction_id,
         parent_event_reference=redemption.parent_event_reference,
         epoch=redemption.epoch,
         calculation_lineage=lineage,
     )
+
+
+def _canonical_net_settlement_amount(redemption: BookedTransaction) -> Decimal:
+    """Resolve the source-owned net amount without introducing an import cycle."""
+
+    # Redemption is imported by the settlement package during module initialization. Importing
+    # the sibling policy lazily keeps that dependency acyclic while retaining one cash authority.
+    from ..settlement.cash_movement import calculate_settlement_cash_movement
+
+    return calculate_settlement_cash_movement(redemption).signed_amount
+
+
+def _require_nonnegative_finite_accrued_interest(accrued_interest: Decimal) -> None:
+    """Fail closed before comparisons or lineage hashing receive invalid monetary evidence."""
+
+    if not isinstance(accrued_interest, Decimal) or not accrued_interest.is_finite():
+        raise ValueError("accrued_interest_proceeds_local must be a non-negative finite decimal.")
+    if accrued_interest < 0:
+        raise ValueError("accrued_interest_proceeds_local must be a non-negative finite decimal.")
 
 
 def is_generated_redemption_accrued_interest(

@@ -228,6 +228,8 @@ async def test_cost_basis_execution_rejects_linked_interest_before_calculation(
     independent_interest = replace(
         _transaction(transaction_type="INTEREST"),
         transaction_id="INTEREST-EXECUTION-01",
+        instrument_id="INTEREST-CASH-01",
+        security_id="INTEREST-CASH-01",
         linked_transaction_group_id="GROUP-REDEMPTION-01",
     )
     prepared = PreparedCostTransaction(
@@ -237,7 +239,7 @@ async def test_cost_basis_execution_rejects_linked_interest_before_calculation(
         route=CostProcessingRoute.COST_BASIS,
     )
     transaction_state = AsyncMock(spec=CostBasisTransactionStatePort)
-    transaction_state.get_transaction_history.return_value = [independent_interest]
+    transaction_state.get_linked_transaction_group.return_value = [independent_interest]
     processing_state = AsyncMock(spec=CostBasisProcessingStatePort)
     coordinator = MagicMock()
     monkeypatch.setattr(execution_module, "CostBasisCalculationCoordinator", coordinator)
@@ -273,11 +275,12 @@ async def test_cost_basis_execution_rejects_linked_interest_before_calculation(
         "PORT-COST-01",
         "SECURITY-01",
     )
-    transaction_state.get_transaction_history.assert_awaited_once_with(
+    transaction_state.get_linked_transaction_group.assert_awaited_once_with(
         portfolio_id="PORT-COST-01",
-        security_id="SECURITY-01",
+        linked_transaction_group_id="GROUP-REDEMPTION-01",
         exclude_id="MATURITY_REDEMPTION-EXECUTION-01",
     )
+    transaction_state.get_transaction_history.assert_not_awaited()
     coordinator.assert_not_called()
 
 
@@ -293,35 +296,39 @@ async def test_linked_income_history_validation_is_symmetric(
     )
     interest = replace(
         _transaction(transaction_type="INTEREST"),
+        instrument_id="INTEREST-CASH-01",
+        security_id="INTEREST-CASH-01",
         linked_transaction_group_id="GROUP-REDEMPTION-01",
     )
     incoming, peer = (redemption, interest) if incoming_is_redemption else (interest, redemption)
     transaction_state = AsyncMock(spec=CostBasisTransactionStatePort)
-    transaction_state.get_transaction_history.return_value = [peer]
+    transaction_state.get_linked_transaction_group.return_value = [peer]
 
     with pytest.raises(RedemptionLinkedEventValidationError):
-        await execution_module._preload_linked_redemption_history(
+        await execution_module._validate_linked_redemption_group(
             transaction=incoming,
             transaction_state=transaction_state,
         )
 
-    transaction_state.get_transaction_history.assert_awaited_once_with(
+    transaction_state.get_linked_transaction_group.assert_awaited_once_with(
         portfolio_id=incoming.portfolio_id,
-        security_id=incoming.security_id,
+        linked_transaction_group_id="GROUP-REDEMPTION-01",
         exclude_id=incoming.transaction_id,
     )
+    transaction_state.get_transaction_history.assert_not_awaited()
 
 
 @pytest.mark.asyncio
 async def test_unrelated_transaction_does_not_read_linked_income_history() -> None:
     transaction_state = AsyncMock(spec=CostBasisTransactionStatePort)
 
-    history = await execution_module._preload_linked_redemption_history(
+    result = await execution_module._validate_linked_redemption_group(
         transaction=_transaction(),
         transaction_state=transaction_state,
     )
 
-    assert history is None
+    assert result is None
+    transaction_state.get_linked_transaction_group.assert_not_awaited()
     transaction_state.get_transaction_history.assert_not_awaited()
 
 
