@@ -1,5 +1,15 @@
 # Codebase Review Ledger
 
+CR-1678 external-transfer addendum (2026-08-04): `TRANSFER_OUT` now requires exactly one explicit
+destination. Internal transfers bind a target transaction/lot/instrument; external transfers carry
+an opaque governed reference through ingestion, event, booked-domain, transaction-ledger, receipt,
+and query contracts without fabricating internal identity. Missing, partial, ambiguous, and
+wrong-family destination metadata fails before persistence. An exact-source PostgreSQL lifecycle
+proves source-lot consumption, dual-currency basis, no realized P&L, and external-only receipt
+shape. Cross-stream reciprocal validation for separately processed internal legs, protected PR, and
+exact-main closure remain open under #481. Evidence is maintained in CR-1678; capability wiki truth
+does not change.
+
 CR-1678 quantity-transfer addendum (2026-08-04): quantity-consuming merger, exchange, and
 replacement source legs now persist a discriminated internal target transaction, deterministic
 target lot, and target instrument on the immutable lot-disposal receipt while ordered child rows
