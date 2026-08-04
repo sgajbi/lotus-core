@@ -1784,6 +1784,32 @@ async def test_ingest_transactions_endpoint(
     assert dict(publish_kwargs["headers"])["idempotency_key"] == (b"transaction-batch-idem-001")
 
 
+async def test_ingest_transactions_publishes_truthful_zero_price_redemption(
+    async_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+) -> None:
+    mock_kafka_producer.publish_message.reset_mock()
+    payload = _transaction_batch_payload("MATURITY-ZERO-GROSS-001")
+    payload["transactions"][0].update(
+        {
+            "transaction_type": "MATURITY_REDEMPTION",
+            "quantity": 100,
+            "price": 0,
+            "gross_transaction_amount": 0,
+            "settlement_date": "2026-03-17T10:00:00Z",
+        }
+    )
+
+    response = await async_test_client.post("/ingest/transactions", json=payload)
+
+    assert response.status_code == 202
+    assert response.json()["accepted_count"] == 1
+    publish_kwargs = mock_kafka_producer.publish_message.call_args.kwargs
+    assert publish_kwargs["value"]["transaction_type"] == "MATURITY_REDEMPTION"
+    assert publish_kwargs["value"]["price"] == Decimal(0)
+    assert publish_kwargs["value"]["gross_transaction_amount"] == Decimal(0)
+
+
 @pytest.mark.parametrize(
     "field_name",
     ["transaction_id", "portfolio_id", "instrument_id", "security_id"],

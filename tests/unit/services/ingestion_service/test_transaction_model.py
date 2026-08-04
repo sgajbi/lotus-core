@@ -341,6 +341,100 @@ def test_transaction_model_invalid_gross_amount_fails():
     )
 
 
+@pytest.mark.parametrize(
+    "transaction_type",
+    ["MATURITY_REDEMPTION", "CALL_REDEMPTION", "PARTIAL_REDEMPTION"],
+)
+def test_redemption_accepts_truthful_zero_gross_amount(transaction_type: str) -> None:
+    transaction = Transaction(
+        transaction_id=f"{transaction_type}-ZERO-GROSS-001",
+        portfolio_id="PORT-001",
+        instrument_id="BOND-001",
+        security_id="BOND-001",
+        transaction_date="2026-03-15T10:00:00Z",
+        settlement_date="2026-03-17T10:00:00Z",
+        transaction_type=transaction_type,
+        quantity="100",
+        price="0",
+        gross_transaction_amount="0",
+        trade_currency="USD",
+        currency="USD",
+    )
+
+    assert transaction.gross_transaction_amount == Decimal(0)
+
+
+@pytest.mark.parametrize(
+    "transaction_type",
+    ["BUY", "SELL", "DIVIDEND", "INTEREST", "CASH_CONSIDERATION"],
+)
+def test_ordinary_transaction_families_reject_zero_gross_amount(
+    transaction_type: str,
+) -> None:
+    payload = {
+        "transaction_id": f"{transaction_type}-ZERO-GROSS-001",
+        "portfolio_id": "PORT-001",
+        "instrument_id": "SEC-001",
+        "security_id": "SEC-001",
+        "transaction_date": "2026-03-15T10:00:00Z",
+        "transaction_type": transaction_type,
+        "quantity": "1",
+        "price": "1",
+        "gross_transaction_amount": "0",
+        "trade_currency": "USD",
+        "currency": "USD",
+    }
+
+    with pytest.raises(ValidationError) as exc_info:
+        Transaction(**payload)
+
+    assert any("gross_transaction_amount" in error["loc"] for error in exc_info.value.errors())
+
+
+@pytest.mark.parametrize(
+    "transaction_type",
+    ["MATURITY_REDEMPTION", "CALL_REDEMPTION", "PARTIAL_REDEMPTION"],
+)
+def test_positive_price_redemption_rejects_zero_gross_amount(transaction_type: str) -> None:
+    with pytest.raises(ValidationError) as exc_info:
+        Transaction(
+            transaction_id=f"{transaction_type}-INCONSISTENT-GROSS-001",
+            portfolio_id="PORT-001",
+            instrument_id="BOND-001",
+            security_id="BOND-001",
+            transaction_date="2026-03-15T10:00:00Z",
+            settlement_date="2026-03-17T10:00:00Z",
+            transaction_type=transaction_type,
+            quantity="100",
+            price="1",
+            gross_transaction_amount="0",
+            trade_currency="USD",
+            currency="USD",
+        )
+
+    assert any("gross_transaction_amount" in error["loc"] for error in exc_info.value.errors())
+
+
+def test_zero_price_redemption_rejects_negative_gross_amount() -> None:
+    with pytest.raises(ValidationError) as exc_info:
+        Transaction(
+            transaction_id="MATURITY-NEGATIVE-GROSS-001",
+            portfolio_id="PORT-001",
+            instrument_id="BOND-001",
+            security_id="BOND-001",
+            transaction_date="2026-03-15T10:00:00Z",
+            settlement_date="2026-03-17T10:00:00Z",
+            transaction_type="MATURITY_REDEMPTION",
+            quantity="100",
+            price="0",
+            gross_transaction_amount="-0.01",
+            trade_currency="USD",
+            currency="USD",
+        )
+
+    assert any("gross_transaction_amount" in error["loc"] for error in exc_info.value.errors())
+
+
 def test_transaction_model_invalid_trade_fee_fails():
     """
     Tests that the Transaction model fails validation for invalid trade_fee (negative).
