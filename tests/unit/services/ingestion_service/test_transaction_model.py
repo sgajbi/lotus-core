@@ -654,6 +654,106 @@ def test_transaction_model_accepts_corporate_action_synthetic_flow_fields() -> N
     assert model.synthetic_flow_classification == "POSITION_TRANSFER_OUT"
 
 
+def _destination_payload(
+    transaction_type: str,
+    **destination: object,
+) -> dict[str, object]:
+    return {
+        "transaction_id": f"{transaction_type}-DESTINATION-001",
+        "portfolio_id": "PORT_META_001",
+        "instrument_id": "OLD_SEC_001",
+        "security_id": "OLD_SEC_001",
+        "transaction_date": "2026-03-15T10:00:00Z",
+        "transaction_type": transaction_type,
+        "quantity": "100.0",
+        "price": "1.0",
+        "gross_transaction_amount": "100.0",
+        "trade_currency": "USD",
+        "currency": "USD",
+        **destination,
+    }
+
+
+@pytest.mark.parametrize(
+    ("destination", "expected"),
+    [
+        (
+            {
+                "target_transaction_reference": " TRANSFER-IN-001 ",
+                "target_instrument_id": " NEW_SEC_001 ",
+            },
+            ("TRANSFER-IN-001", "NEW_SEC_001", None),
+        ),
+        (
+            {"external_destination_reference": " CUSTODIAN-ACCOUNT-7788 "},
+            (None, None, "CUSTODIAN-ACCOUNT-7788"),
+        ),
+    ],
+)
+def test_transfer_out_accepts_exactly_one_complete_destination(
+    destination: dict[str, object],
+    expected: tuple[str | None, str | None, str | None],
+) -> None:
+    transaction = Transaction(**_destination_payload("TRANSFER_OUT", **destination))
+
+    assert (
+        transaction.target_transaction_reference,
+        transaction.target_instrument_id,
+        transaction.external_destination_reference,
+    ) == expected
+
+
+@pytest.mark.parametrize(
+    "destination",
+    [
+        {},
+        {"target_transaction_reference": "TRANSFER-IN-001"},
+        {"target_instrument_id": "NEW_SEC_001"},
+        {"external_destination_reference": "   "},
+        {
+            "target_transaction_reference": "TRANSFER-IN-001",
+            "target_instrument_id": "NEW_SEC_001",
+            "external_destination_reference": "CUSTODIAN-ACCOUNT-7788",
+        },
+    ],
+)
+def test_transfer_out_rejects_missing_partial_or_ambiguous_destination(
+    destination: dict[str, object],
+) -> None:
+    with pytest.raises(ValidationError, match="exactly one complete destination"):
+        Transaction(**_destination_payload("TRANSFER_OUT", **destination))
+
+
+@pytest.mark.parametrize(
+    ("transaction_type", "destination"),
+    [
+        ("BUY", {"target_transaction_reference": "TRANSFER-IN-001"}),
+        ("BUY", {"target_instrument_id": "NEW_SEC_001"}),
+        ("MATURITY_REDEMPTION", {"external_destination_reference": "CUSTODIAN-7788"}),
+        ("MERGER_OUT", {"external_destination_reference": "CUSTODIAN-7788"}),
+    ],
+)
+def test_non_transfer_destination_metadata_is_rejected(
+    transaction_type: str,
+    destination: dict[str, object],
+) -> None:
+    with pytest.raises(ValidationError, match="destination"):
+        Transaction(**_destination_payload(transaction_type, **destination))
+
+
+def test_corporate_action_internal_target_metadata_remains_compatible() -> None:
+    transaction = Transaction(
+        **_destination_payload(
+            "DEMERGER_OUT",
+            target_transaction_reference="DEMERGER-IN-001",
+            target_instrument_id="NEW_SEC_001",
+        )
+    )
+
+    assert transaction.target_transaction_reference == "DEMERGER-IN-001"
+    assert transaction.target_instrument_id == "NEW_SEC_001"
+
+
 @pytest.mark.parametrize(
     "field_name",
     ["allocated_cost_basis_local", "allocated_cost_basis_base"],
