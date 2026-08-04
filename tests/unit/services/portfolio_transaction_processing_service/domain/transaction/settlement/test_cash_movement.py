@@ -73,6 +73,49 @@ def test_component_fees_take_precedence_over_aggregate_trade_fee() -> None:
     assert movement.signed_amount == Decimal("97.00")
 
 
+@pytest.mark.parametrize(
+    "transaction_type",
+    ["MATURITY_REDEMPTION", "CALL_REDEMPTION", "PARTIAL_REDEMPTION"],
+)
+def test_redemption_without_explicit_principal_uses_governed_derived_principal(
+    transaction_type: str,
+) -> None:
+    movement = calculate_settlement_cash_movement(
+        _transaction(
+            transaction_type,
+            quantity=Decimal("2.55555555555"),
+            price=Decimal("3.33333333333"),
+            gross_transaction_amount=Decimal("999"),
+            accrued_interest_proceeds_local=Decimal("1.25"),
+            embedded_fee_amount_local=Decimal("0.15"),
+            embedded_tax_amount_local=Decimal("0.10"),
+            trade_fee=Decimal("0.50"),
+            principal_proceeds_local=None,
+        )
+    )
+
+    assert movement.signed_amount == Decimal("9.0185185185")
+    assert movement.adjustment_reason == "REDEMPTION_SETTLEMENT"
+
+
+def test_redemption_explicit_principal_remains_settlement_authority() -> None:
+    movement = calculate_settlement_cash_movement(
+        _transaction(
+            "CALL_REDEMPTION",
+            quantity=Decimal("2"),
+            price=Decimal("50"),
+            gross_transaction_amount=Decimal("999"),
+            principal_proceeds_local=Decimal("100.00000000005"),
+            accrued_interest_proceeds_local=Decimal("3"),
+            embedded_fee_amount_local=Decimal("1"),
+            embedded_tax_amount_local=Decimal("2"),
+            trade_fee=Decimal("4"),
+        )
+    )
+
+    assert movement.signed_amount == Decimal("96.00000000005")
+
+
 def test_dividend_withholding_reduces_available_settlement_proceeds() -> None:
     movement = calculate_settlement_cash_movement(
         _transaction(
