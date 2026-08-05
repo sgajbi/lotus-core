@@ -1793,6 +1793,8 @@ async def test_ingest_transactions_publishes_truthful_zero_price_redemption(
     payload["transactions"][0].update(
         {
             "transaction_type": "MATURITY_REDEMPTION",
+            "economic_event_id": "EVENT-MATURITY-ZERO-GROSS-001",
+            "linked_transaction_group_id": "GROUP-MATURITY-ZERO-GROSS-001",
             "quantity": 100,
             "price": 0,
             "gross_transaction_amount": 0,

@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 from portfolio_common.database_models import CostBasisProcessingState, PositionLotState
+from portfolio_common.database_models import Transaction as DBTransaction
 from sqlalchemy import event as sqlalchemy_event
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -17,6 +18,10 @@ from src.services.portfolio_transaction_processing_service.app.application.cost_
 from src.services.portfolio_transaction_processing_service.app.domain.transaction import (
     BUY_DEFAULT_POLICY_ID,
     BUY_DEFAULT_POLICY_VERSION,
+    BookedTransaction,
+)
+from src.services.portfolio_transaction_processing_service.app.domain.transaction import (
+    redemption as redemption_domain,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis import (
     CostBasisProcessingAdapter,
@@ -107,6 +112,59 @@ class _ObservedProcessingStateRepository(SqlAlchemyCostBasisProcessingStateRepos
         self._backend_pid.append(await self._session.scalar(text("SELECT pg_backend_pid()")))
         self._lock_attempted.set()
         await super().acquire_cost_basis_processing_lock(portfolio_id, security_id)
+
+
+class _HeldLinkedGroupCostRepository(SqlAlchemyCostBasisTransactionRepository):
+    def __init__(
+        self,
+        db: AsyncSession,
+        *,
+        group_read: asyncio.Event,
+        release_group_read: asyncio.Event,
+    ) -> None:
+        super().__init__(db)
+        self._group_read = group_read
+        self._release_group_read = release_group_read
+
+    async def get_linked_transaction_group(
+        self,
+        portfolio_id: str,
+        linked_transaction_group_id: str,
+        exclude_id: str | None = None,
+    ) -> list[BookedTransaction]:
+        history = await super().get_linked_transaction_group(
+            portfolio_id,
+            linked_transaction_group_id,
+            exclude_id,
+        )
+        self._group_read.set()
+        await self._release_group_read.wait()
+        return history
+
+
+class _ObservedLinkedGroupProcessingStateRepository(SqlAlchemyCostBasisProcessingStateRepository):
+    def __init__(
+        self,
+        db: AsyncSession,
+        *,
+        group_lock_attempted: asyncio.Event,
+        backend_pid: list[int],
+    ) -> None:
+        super().__init__(db)
+        self._group_lock_attempted = group_lock_attempted
+        self._backend_pid = backend_pid
+
+    async def acquire_linked_redemption_group_lock(
+        self,
+        portfolio_id: str,
+        linked_transaction_group_id: str,
+    ) -> None:
+        self._backend_pid.append(await self._session.scalar(text("SELECT pg_backend_pid()")))
+        self._group_lock_attempted.set()
+        await super().acquire_linked_redemption_group_lock(
+            portfolio_id,
+            linked_transaction_group_id,
+        )
 
 
 async def _stage_cost_calculation(
@@ -314,6 +372,198 @@ async def test_cost_basis_processing_lock_does_not_serialize_other_security_keys
             ),
             timeout=1,
         )
+
+
+async def test_linked_redemption_group_lock_does_not_serialize_other_groups(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    session_factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
+
+    async with (
+        session_factory() as owning_session,
+        owning_session.begin(),
+        session_factory() as other_group_session,
+        other_group_session.begin(),
+    ):
+        await SqlAlchemyCostBasisProcessingStateRepository(
+            owning_session
+        ).acquire_linked_redemption_group_lock(
+            "PORT-COST-LOCK-03",
+            "GROUP-REDEMPTION-01",
+        )
+        await asyncio.wait_for(
+            SqlAlchemyCostBasisProcessingStateRepository(
+                other_group_session
+            ).acquire_linked_redemption_group_lock(
+                "PORT-COST-LOCK-03",
+                "GROUP-REDEMPTION-02",
+            ),
+            timeout=1,
+        )
+
+
+@pytest.mark.parametrize("first_is_redemption", [True, False])
+async def test_linked_redemption_interest_group_serializes_cross_security_authority(
+    clean_db,
+    async_db_session: AsyncSession,
+    first_is_redemption: bool,
+) -> None:
+    portfolio_id = "PORT-REDEMPTION-GROUP-LOCK-01"
+    bond_security_id = "FO_FI_REDEMPTION_GROUP_LOCK_01"
+    interest_security_id = "FO_FI_INTEREST_GROUP_LOCK_01"
+    group_id = "GROUP-REDEMPTION-LOCK-01"
+    acquisition = booked_transaction_event(
+        transaction_id="BUY-REDEMPTION-GROUP-LOCK-01",
+        portfolio_id=portfolio_id,
+        security_id=bond_security_id,
+        transaction_date=datetime(2026, 1, 2, 10, 0, tzinfo=timezone.utc),
+        transaction_type="BUY",
+        quantity="100",
+        price="0.97",
+        gross_amount="97",
+    )
+    redemption = booked_transaction_event(
+        transaction_id="MATURITY-REDEMPTION-GROUP-LOCK-01",
+        portfolio_id=portfolio_id,
+        security_id=bond_security_id,
+        transaction_date=datetime(2026, 7, 1, 10, 0, tzinfo=timezone.utc),
+        settlement_date=datetime(2026, 7, 3, 9, 0, tzinfo=timezone.utc),
+        transaction_type="MATURITY_REDEMPTION",
+        quantity="100",
+        price="1",
+        gross_amount="100",
+        redemption_price_type="PAR",
+        principal_proceeds_local=Decimal("100"),
+        accrued_interest_proceeds_local=Decimal("5"),
+        economic_event_id="EVENT-REDEMPTION-LOCK-01",
+        linked_transaction_group_id=group_id,
+        settlement_cash_account_id="CASH-USD-REDEMPTION-LOCK-01",
+        settlement_cash_instrument_id="CASH-USD",
+    )
+    independent_interest = booked_transaction_event(
+        transaction_id="INTEREST-REDEMPTION-GROUP-LOCK-01",
+        portfolio_id=portfolio_id,
+        security_id=interest_security_id,
+        transaction_date=datetime(2026, 7, 1, 11, 0, tzinfo=timezone.utc),
+        settlement_date=datetime(2026, 7, 3, 9, 0, tzinfo=timezone.utc),
+        transaction_type="INTEREST",
+        quantity="0",
+        price="0",
+        gross_amount="5",
+        interest_direction="INCOME",
+        economic_event_id="EVENT-REDEMPTION-LOCK-01",
+        linked_transaction_group_id=group_id,
+    )
+    async_db_session.add_all(
+        [
+            portfolio_record(portfolio_id, cost_basis_method="FIFO"),
+            instrument_record(
+                bond_security_id,
+                name="Linked Group Redemption Note",
+                isin="SG0000000517",
+                currency="USD",
+                product_type="BOND",
+                asset_class="FIXED_INCOME",
+            ),
+            instrument_record(
+                interest_security_id,
+                name="Linked Group Interest Authority",
+                isin="SG0000000525",
+                currency="USD",
+                product_type="BOND",
+                asset_class="FIXED_INCOME",
+            ),
+            canonical_transaction_record(acquisition),
+        ]
+    )
+    await async_db_session.commit()
+    session_factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
+    await _stage_cost_calculation(
+        session_factory=session_factory,
+        event=acquisition,
+        repository_factory=SqlAlchemyCostBasisTransactionRepository,
+    )
+
+    first, second = (
+        (redemption, independent_interest)
+        if first_is_redemption
+        else (independent_interest, redemption)
+    )
+    async with session_factory() as insert_session, insert_session.begin():
+        insert_session.add(canonical_transaction_record(first))
+
+    group_read = asyncio.Event()
+    release_group_read = asyncio.Event()
+    second_group_lock_attempted = asyncio.Event()
+    second_backend_pid: list[int] = []
+    first_task = asyncio.create_task(
+        _stage_cost_calculation(
+            session_factory=session_factory,
+            event=first,
+            repository_factory=lambda session: _HeldLinkedGroupCostRepository(
+                session,
+                group_read=group_read,
+                release_group_read=release_group_read,
+            ),
+        )
+    )
+    second_task: asyncio.Task[None] | None = None
+    try:
+        await wait_for_task_signal(first_task, group_read, timeout=2)
+        async with session_factory() as insert_session, insert_session.begin():
+            insert_session.add(canonical_transaction_record(second))
+
+        second_task = asyncio.create_task(
+            _stage_cost_calculation(
+                session_factory=session_factory,
+                event=second,
+                repository_factory=SqlAlchemyCostBasisTransactionRepository,
+                processing_state_factory=lambda session: (
+                    _ObservedLinkedGroupProcessingStateRepository(
+                        session,
+                        group_lock_attempted=second_group_lock_attempted,
+                        backend_pid=second_backend_pid,
+                    )
+                ),
+            )
+        )
+        await wait_for_task_signal(second_task, second_group_lock_attempted, timeout=2)
+        assert len(second_backend_pid) == 1
+        await wait_for_postgres_advisory_lock_wait(
+            second_task,
+            session_factory,
+            backend_pid=second_backend_pid[0],
+            timeout=2,
+        )
+
+        release_group_read.set()
+        await asyncio.wait_for(first_task, timeout=8)
+        with pytest.raises(redemption_domain.RedemptionLinkedEventValidationError):
+            await asyncio.wait_for(second_task, timeout=8)
+    finally:
+        release_group_read.set()
+        await cancel_pending_tasks(first_task, second_task)
+
+    async with session_factory() as verification_session:
+        persisted = list(
+            (
+                await verification_session.scalars(
+                    select(DBTransaction).where(
+                        DBTransaction.transaction_id.in_(
+                            (redemption.transaction_id, independent_interest.transaction_id)
+                        )
+                    )
+                )
+            ).all()
+        )
+
+    calculated_ids = {
+        transaction.transaction_id
+        for transaction in persisted
+        if transaction.calculation_lineage is not None
+    }
+    assert calculated_ids == {first.transaction_id}
 
 
 async def test_single_buy_cost_stage_avoids_duplicate_canonical_transaction_reads(

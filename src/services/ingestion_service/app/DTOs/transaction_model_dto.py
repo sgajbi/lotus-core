@@ -59,6 +59,31 @@ def _document_transaction_numeric_contract(schema: dict[str, Any]) -> None:
             "else": {"properties": {"gross_transaction_amount": {"exclusiveMinimum": 0}}},
         }
     )
+    schema["allOf"].extend(
+        [
+            {
+                "if": {
+                    "properties": {
+                        "transaction_type": {"enum": sorted(REDEMPTION_TRANSACTION_TYPES)}
+                    },
+                    "required": ["transaction_type"],
+                },
+                "then": {"required": ["economic_event_id", "linked_transaction_group_id"]},
+            },
+            {
+                "if": {
+                    "anyOf": [
+                        {
+                            "properties": {"cash_entry_mode": {"const": "UPSTREAM_PROVIDED"}},
+                            "required": ["cash_entry_mode"],
+                        },
+                        {"required": ["originating_transaction_id"]},
+                    ]
+                },
+                "then": {"required": ["economic_event_id", "linked_transaction_group_id"]},
+            },
+        ]
+    )
 
 
 class Transaction(BaseModel):
@@ -113,6 +138,13 @@ class Transaction(BaseModel):
                 message="Identifier must not be blank.",
             )
         return identifier
+
+    @field_validator("economic_event_id", "linked_transaction_group_id", mode="before")
+    @classmethod
+    def _normalize_optional_linkage_identifier(cls, value: object) -> object:
+        if not isinstance(value, str):
+            return value
+        return value.strip() or None
 
     quantity: NonNegativeDecimal = Field(
         description="Absolute traded quantity or units moved by the transaction.",
@@ -846,6 +878,22 @@ class Transaction(BaseModel):
     def _validate_redemption_settlement_date(self) -> "Transaction":
         if self.transaction_type in REDEMPTION_TRANSACTION_TYPES and self.settlement_date is None:
             raise ValueError(f"settlement_date is required for {self.transaction_type}")
+        return self
+
+    @model_validator(mode="after")
+    def _validate_linked_economic_authority(self) -> "Transaction":
+        requires_linkage = (
+            self.transaction_type in REDEMPTION_TRANSACTION_TYPES
+            or self.cash_entry_mode == "UPSTREAM_PROVIDED"
+            or self.originating_transaction_id is not None
+        )
+        if requires_linkage and (
+            self.economic_event_id is None or self.linked_transaction_group_id is None
+        ):
+            raise ValueError(
+                "economic_event_id and linked_transaction_group_id are required for governed "
+                "redemptions and upstream-provided cash legs"
+            )
         return self
 
     @model_validator(mode="after")

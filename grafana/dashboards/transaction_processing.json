@@ -472,6 +472,52 @@
       ],
       "title": "Position Recalculation Work p95",
       "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "description": "Five-minute p95 wait for portfolio-owned linked redemption group serialization.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 40
+      },
+      "id": 11,
+      "options": {
+        "legend": {
+          "calcs": ["lastNotNull", "max"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum by (le, outcome) (rate(linked_redemption_group_lock_wait_seconds_bucket[5m])))",
+          "legendFormat": "{{outcome}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Linked Redemption Group Lock Wait p95",
+      "type": "timeseries"
     }
   ],
   "refresh": "30s",

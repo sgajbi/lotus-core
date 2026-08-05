@@ -45,6 +45,8 @@ def test_transaction_model_preserves_canonical_redemption_terms() -> None:
         transaction_date="2026-08-04T00:00:00Z",
         settlement_date="2026-08-06T00:00:00Z",
         transaction_type="PARTIAL_REDEMPTION",
+        economic_event_id=" EVT-RED-001 ",
+        linked_transaction_group_id=" GROUP-RED-001 ",
         quantity="25",
         price="100",
         gross_transaction_amount="2500",
@@ -64,6 +66,8 @@ def test_transaction_model_preserves_canonical_redemption_terms() -> None:
     assert transaction.new_factor == Decimal("0.75")
     assert transaction.principal_proceeds_local == Decimal("2500")
     assert transaction.accrued_interest_proceeds_local == Decimal("50")
+    assert transaction.economic_event_id == "EVT-RED-001"
+    assert transaction.linked_transaction_group_id == "GROUP-RED-001"
 
 
 @pytest.mark.parametrize(
@@ -89,6 +93,77 @@ def test_transaction_model_requires_redemption_settlement_date(
         )
 
 
+@pytest.mark.parametrize("missing_field", ["economic_event_id", "linked_transaction_group_id"])
+def test_transaction_model_requires_redemption_linkage_before_ingestion(
+    missing_field: str,
+) -> None:
+    payload = {
+        "transaction_id": "RED-NO-LINKAGE",
+        "portfolio_id": "PORT-001",
+        "instrument_id": "BOND-001",
+        "security_id": "BOND-001",
+        "transaction_date": "2026-08-04T00:00:00Z",
+        "settlement_date": "2026-08-06T00:00:00Z",
+        "transaction_type": "MATURITY_REDEMPTION",
+        "quantity": "25",
+        "price": "100",
+        "gross_transaction_amount": "2500",
+        "trade_currency": "USD",
+        "currency": "USD",
+        "economic_event_id": "EVT-RED-NO-LINKAGE",
+        "linked_transaction_group_id": "GROUP-RED-NO-LINKAGE",
+    }
+    payload[missing_field] = "   "
+
+    with pytest.raises(
+        ValidationError,
+        match="economic_event_id and linked_transaction_group_id are required",
+    ):
+        Transaction(**payload)
+
+
+@pytest.mark.parametrize(
+    "cash_leg_fields",
+    [
+        {"cash_entry_mode": "UPSTREAM_PROVIDED"},
+        {"transaction_type": "ADJUSTMENT", "originating_transaction_id": "RED-001"},
+    ],
+)
+def test_transaction_model_requires_linkage_for_upstream_cash_authority(
+    cash_leg_fields: dict[str, str],
+) -> None:
+    payload = {
+        "transaction_id": "UPSTREAM-CASH-NO-LINKAGE",
+        "portfolio_id": "PORT-001",
+        "instrument_id": "CASH-USD",
+        "security_id": "CASH-USD",
+        "transaction_date": "2026-08-04T00:00:00Z",
+        "transaction_type": "DIVIDEND",
+        "quantity": "0",
+        "price": "1",
+        "gross_transaction_amount": "100",
+        "trade_currency": "USD",
+        "currency": "USD",
+        **cash_leg_fields,
+    }
+
+    with pytest.raises(
+        ValidationError,
+        match="economic_event_id and linked_transaction_group_id are required",
+    ):
+        Transaction(**payload)
+
+
+def test_transaction_schema_publishes_conditional_linkage_requirements() -> None:
+    linkage_requirements = [
+        clause["then"]["required"]
+        for clause in Transaction.model_json_schema()["allOf"]
+        if "then" in clause and "required" in clause["then"]
+    ]
+
+    assert linkage_requirements.count(["economic_event_id", "linked_transaction_group_id"]) == 2
+
+
 @pytest.mark.parametrize(
     ("provided", "expected"),
     [
@@ -109,6 +184,8 @@ def test_transaction_model_accepts_governed_redemption_price_types(
         "transaction_date": "2026-08-04T00:00:00Z",
         "settlement_date": "2026-08-06T00:00:00Z",
         "transaction_type": "MATURITY_REDEMPTION",
+        "economic_event_id": "EVT-RED-PRICE-TYPE",
+        "linked_transaction_group_id": "GROUP-RED-PRICE-TYPE",
         "quantity": "25",
         "price": "100",
         "gross_transaction_amount": "2500",
@@ -354,6 +431,8 @@ def test_redemption_accepts_truthful_zero_gross_amount(transaction_type: str) ->
         transaction_date="2026-03-15T10:00:00Z",
         settlement_date="2026-03-17T10:00:00Z",
         transaction_type=transaction_type,
+        economic_event_id=f"EVT-{transaction_type}-ZERO-GROSS-001",
+        linked_transaction_group_id=f"GROUP-{transaction_type}-ZERO-GROSS-001",
         quantity="100",
         price="0",
         gross_transaction_amount="0",
@@ -620,6 +699,8 @@ def test_transaction_model_accepts_cash_entry_mode_and_external_cash_link() -> N
         "currency": "USD",
         "cash_entry_mode": "UPSTREAM_PROVIDED",
         "external_cash_transaction_id": "CASH-ENTRY-2026-0001",
+        "economic_event_id": "EVT-DIV-CASH-MODE-001",
+        "linked_transaction_group_id": "GROUP-DIV-CASH-MODE-001",
     }
     model = Transaction(**payload)
     assert model.cash_entry_mode == "UPSTREAM_PROVIDED"
@@ -640,6 +721,8 @@ def test_transaction_model_normalizes_control_codes_without_defaulting() -> None
         "trade_currency": "USD",
         "currency": "USD",
         "cash_entry_mode": " upstream_provided ",
+        "economic_event_id": " EVT-CONTROL-CODE-001 ",
+        "linked_transaction_group_id": " GROUP-CONTROL-CODE-001 ",
         "movement_direction": " inflow ",
         "originating_transaction_type": " buy ",
         "adjustment_reason": " buy_settlement ",
@@ -793,6 +876,8 @@ def _destination_payload(
         "gross_transaction_amount": "100.0",
         "trade_currency": "USD",
         "currency": "USD",
+        "economic_event_id": f"EVT-{transaction_type}-DESTINATION-001",
+        "linked_transaction_group_id": f"GROUP-{transaction_type}-DESTINATION-001",
         **destination,
     }
 

@@ -194,6 +194,7 @@ async def test_cost_basis_execution_acquires_key_lock_before_calculation(
         "PORT-COST-01",
         "SECURITY-01",
     )
+    processing_state.acquire_linked_redemption_group_lock.assert_not_awaited()
     persist_disposals.assert_awaited_once()
     persist_basis_transfers.assert_awaited_once()
     apply_amortized_disposal.assert_awaited_once_with(
@@ -239,8 +240,17 @@ async def test_cost_basis_execution_rejects_linked_interest_before_calculation(
         route=CostProcessingRoute.COST_BASIS,
     )
     transaction_state = AsyncMock(spec=CostBasisTransactionStatePort)
-    transaction_state.get_linked_transaction_group.return_value = [independent_interest]
     processing_state = AsyncMock(spec=CostBasisProcessingStatePort)
+    lock_order: list[str] = []
+    processing_state.acquire_cost_basis_processing_lock.side_effect = lambda *_args: (
+        lock_order.append("security-lock")
+    )
+    processing_state.acquire_linked_redemption_group_lock.side_effect = lambda *_args: (
+        lock_order.append("group-lock")
+    )
+    transaction_state.get_linked_transaction_group.side_effect = lambda **_kwargs: (
+        lock_order.append("group-read") or [independent_interest]
+    )
     coordinator = MagicMock()
     monkeypatch.setattr(execution_module, "CostBasisCalculationCoordinator", coordinator)
 
@@ -275,6 +285,11 @@ async def test_cost_basis_execution_rejects_linked_interest_before_calculation(
         "PORT-COST-01",
         "SECURITY-01",
     )
+    processing_state.acquire_linked_redemption_group_lock.assert_awaited_once_with(
+        "PORT-COST-01",
+        "GROUP-REDEMPTION-01",
+    )
+    assert lock_order == ["security-lock", "group-lock", "group-read"]
     transaction_state.get_linked_transaction_group.assert_awaited_once_with(
         portfolio_id="PORT-COST-01",
         linked_transaction_group_id="GROUP-REDEMPTION-01",

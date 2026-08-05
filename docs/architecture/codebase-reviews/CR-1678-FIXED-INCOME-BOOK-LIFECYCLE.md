@@ -28,6 +28,32 @@ Runtime review found three hard dependencies before redemption can be enabled:
 - linked redemption product/principal-cash/optional-interest legs need a persisted canonical group
   sequence and correction identity; Kafka arrival order alone is not processing order.
 
+Issue #911 later proved that persistence of the group identity was necessary but insufficient:
+portfolio/security serialization does not coordinate a redemption and an independent `INTEREST`
+leg booked on different securities. Both transactions could read an incomplete group and commit
+the same interest economics.
+
+## Linked Redemption Group Serialization
+
+Transaction processing now acquires advisory transaction locks in one explicit order:
+
+1. normalized portfolio/security cost-basis stream;
+2. normalized portfolio/linked-transaction-group, only for a redemption with positive accrued
+   interest proceeds or an `INTEREST` leg carrying a linked group;
+3. linked-group history read and all subsequent mutation within the same unit of work.
+
+No path acquires a second security lock or the two locks in reverse order. Unlinked transactions,
+unrelated groups, and different securities therefore retain their prior concurrency. The losing
+authority receives `REDEMPTION_017_DUPLICATE_LINKED_INTEREST`; its unit of work rolls back without
+calculation lineage or derived economic evidence.
+
+The ingestion command contract now normalizes linkage identifiers and fails closed when either
+identifier is absent for a governed redemption, `UPSTREAM_PROVIDED` product leg, or explicit
+upstream cash leg. Product/cash pairing requires the same non-empty identifiers on both records.
+The conditional requirements are published in the generated schema without changing the wire
+field names. `linked_redemption_group_lock_wait_seconds` and the app-local dashboard expose bounded
+`acquired`/`failed` wait outcomes without portfolio or group identifiers as metric labels.
+
 ## Corrections To Date
 
 The scoped valuation path now keeps position quantity and face principal semantically distinct.

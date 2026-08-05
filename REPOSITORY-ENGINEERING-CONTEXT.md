@@ -2338,6 +2338,12 @@ Most relevant current governance:
      A full AVCO rebuild must refresh the complete persisted source-lot snapshot and the aggregate
      pool checkpoint in the same caller-owned transaction. Persisting only the pool can leave source
      lots stale and corrupt the next incremental allocation.
+     A redemption with positive accrued-interest proceeds or a linked `INTEREST` leg acquires a
+     second transaction-scoped advisory lock for normalized portfolio/linked-transaction-group
+     after the portfolio/security lock and before reading linked history. Never reverse that order
+     or acquire another security lock while holding the group lock. Ingestion must require the
+     source-owned economic-event and linked-group identifiers for governed redemptions and explicit
+     upstream cash legs; upstream product/cash pairing requires exact non-empty identity agreement.
      Any lock-key or mutation-boundary change requires same-key PostgreSQL BUY/SELL/replay overlap
      proof, different-key non-blocking proof, exact lot/checkpoint reconciliation, bounded lock-wait
      telemetry, and deployed pool/latency evidence before cutover.

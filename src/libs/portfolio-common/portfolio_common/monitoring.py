@@ -38,6 +38,13 @@ COST_BASIS_PROCESSING_LOCK_WAIT_SECONDS = Histogram(
     buckets=(0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30),
 )
 
+LINKED_REDEMPTION_GROUP_LOCK_WAIT_SECONDS = Histogram(
+    "linked_redemption_group_lock_wait_seconds",
+    "Wait time for the transaction-scoped linked redemption group lock.",
+    labelnames=("outcome",),
+    buckets=(0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30),
+)
+
 
 def db_timer(operation: str):
     """
@@ -59,6 +66,10 @@ def observe_position_history_replay_lock_wait(*, outcome: str, seconds: float) -
 
 def observe_cost_basis_processing_lock_wait(*, outcome: str, seconds: float) -> None:
     COST_BASIS_PROCESSING_LOCK_WAIT_SECONDS.labels(outcome=outcome).observe(max(0.0, seconds))
+
+
+def observe_linked_redemption_group_lock_wait(*, outcome: str, seconds: float) -> None:
+    LINKED_REDEMPTION_GROUP_LOCK_WAIT_SECONDS.labels(outcome=outcome).observe(max(0.0, seconds))
 
 
 # --------------------------------------------------------------------------------------
