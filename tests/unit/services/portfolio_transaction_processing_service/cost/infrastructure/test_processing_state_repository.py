@@ -13,6 +13,7 @@ from src.services.portfolio_transaction_processing_service.app.domain.cost_basis
 from src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis import (
     SqlAlchemyCostBasisProcessingStateRepository,
     cost_basis_processing_lock_key,
+    linked_redemption_group_lock_key,
 )
 
 pytestmark = pytest.mark.asyncio
@@ -65,6 +66,67 @@ async def test_acquire_processing_lock_records_failure_without_swallowing() -> N
         pytest.raises(RuntimeError, match="lock unavailable"),
     ):
         await repository.acquire_cost_basis_processing_lock("P1", "S1")
+
+    observe_wait.assert_called_once_with(outcome="failed", seconds=0.25)
+
+
+async def test_acquire_linked_group_lock_uses_portfolio_owned_normalized_key() -> None:
+    db_session = AsyncMock()
+    repository = SqlAlchemyCostBasisProcessingStateRepository(
+        db_session,
+        clock=MagicMock(side_effect=[30.0, 30.5]),
+    )
+
+    with (
+        patch(
+            "src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis."
+            "processing_state_repository.observe_linked_redemption_group_lock_wait"
+        ) as observe_wait,
+        patch("portfolio_common.utils.DB_OPERATION_LATENCY_SECONDS") as latency,
+    ):
+        await repository.acquire_linked_redemption_group_lock(
+            " PORT_COST_01 ",
+            " GROUP_REDEMPTION_01 ",
+        )
+
+    statement = db_session.execute.call_args.args[0]
+    assert str(statement) == "SELECT pg_advisory_xact_lock(:lock_key)"
+    assert statement.compile().params == {
+        "lock_key": linked_redemption_group_lock_key(
+            "PORT_COST_01",
+            "GROUP_REDEMPTION_01",
+        )
+    }
+    assert linked_redemption_group_lock_key(
+        " PORT_COST_01 ",
+        " GROUP_REDEMPTION_01 ",
+    ) == linked_redemption_group_lock_key(
+        "PORT_COST_01",
+        "GROUP_REDEMPTION_01",
+    )
+    observe_wait.assert_called_once_with(outcome="acquired", seconds=0.5)
+    latency.labels.assert_called_once_with(
+        repository="CostBasisProcessingStateRepository",
+        method="acquire_linked_redemption_group_lock",
+    )
+
+
+async def test_acquire_linked_group_lock_records_failure_without_swallowing() -> None:
+    db_session = AsyncMock()
+    db_session.execute.side_effect = RuntimeError("group lock unavailable")
+    repository = SqlAlchemyCostBasisProcessingStateRepository(
+        db_session,
+        clock=MagicMock(side_effect=[40.0, 40.25]),
+    )
+
+    with (
+        patch(
+            "src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis."
+            "processing_state_repository.observe_linked_redemption_group_lock_wait"
+        ) as observe_wait,
+        pytest.raises(RuntimeError, match="group lock unavailable"),
+    ):
+        await repository.acquire_linked_redemption_group_lock("P1", "G1")
 
     observe_wait.assert_called_once_with(outcome="failed", seconds=0.25)
 

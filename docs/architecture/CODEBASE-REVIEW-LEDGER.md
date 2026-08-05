@@ -1,5 +1,16 @@
 # Codebase Review Ledger
 
+CR-1678 linked-redemption serialization addendum (2026-08-05): issue #911 proved that the
+portfolio/security cost lock could not serialize redemption accrued-interest authority against a
+separately booked `INTEREST` leg on another security. Transaction processing now acquires one
+portfolio/group advisory transaction lock after the portfolio/security lock and before the linked
+history read. Ingestion requires non-empty economic-event and linked-group identifiers for every
+governed redemption and explicit upstream cash leg; pair validation requires exact identity
+agreement. Two independent PostgreSQL transactions prove both arrival orders, a server-visible
+wait, exactly one calculated authority, and the stable duplicate-interest rejection. The dedicated
+low-cardinality wait metric and dashboard panel distinguish group contention from security-stream
+contention. No database migration, Kafka shape/topology, or service boundary changed.
+
 CR-1678 transaction-evidence addendum (2026-08-05): protected runtime validation exposed that the
 schema-derived transaction digest crossed PostgreSQL's 100-argument function limit after the
 additive redemption fields. Transaction-ledger reads therefore returned HTTP 500 even though

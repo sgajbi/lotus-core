@@ -79,6 +79,7 @@ def test_transaction_processing_dashboard_covers_cutover_signals() -> None:
         "Position Lock Wait p95",
         "Position Coordination Rate",
         "Cost Basis Lock Wait p95",
+        "Linked Redemption Group Lock Wait p95",
         "Position Recalculation Work p95",
     }
     assert "portfolio_transaction_processing_group" in expressions
@@ -92,6 +93,7 @@ def test_transaction_processing_dashboard_covers_cutover_signals() -> None:
     assert "position_history_replay_lock_wait_seconds_bucket" in expressions
     assert "position_recalculation_coordination_total" in expressions
     assert "cost_basis_processing_lock_wait_seconds_bucket" in expressions
+    assert "linked_redemption_group_lock_wait_seconds_bucket" in expressions
     assert "position_recalculation_work_items_bucket" in expressions
     assert not {
         "portfolio_id",

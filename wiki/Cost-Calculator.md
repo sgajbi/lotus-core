@@ -117,8 +117,14 @@ For an eligible persisted transaction event, the service:
 The same key lock protects FIFO, AVCO, backdated rebuild, replay, first-write, and historical AVCO
 repair paths. A waiting calculation reads canonical state only after the prior transaction commits,
 so it cannot overwrite newer lot quantities with a stale in-memory result. Different securities
-retain independent concurrency. `cost_basis_processing_lock_wait_seconds` and the `Cost Basis Lock
-Wait p95` dashboard panel expose bounded contention without business identifiers in metric labels.
+retain independent concurrency. Linked redemption-interest authority follows one additional,
+transaction-scoped portfolio/group lock after the portfolio/security lock and before the linked
+history read. This prevents redemption accrued-interest proceeds and a separately booked
+`INTEREST` leg on another security from both committing for the same economic group. No path may
+acquire the locks in reverse order. Unlinked transactions and different groups remain independent.
+`cost_basis_processing_lock_wait_seconds` and
+`linked_redemption_group_lock_wait_seconds`, with their dedicated p95 dashboard panels, expose
+bounded contention without business identifiers in metric labels.
 
 Because the service recalculates the governed transaction timeline rather than only patching the
 latest row, it remains authoritative when late or out-of-order history is introduced. A timeline

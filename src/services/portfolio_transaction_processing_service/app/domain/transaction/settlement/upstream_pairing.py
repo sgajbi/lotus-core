@@ -92,13 +92,13 @@ def validate_upstream_cash_leg_pairing(
                     ),
                 )
             )
-    _validate_shared_optional_identifier(
+    _validate_shared_identifier(
         issues,
         field="economic_event_id",
         product_value=product_leg.economic_event_id,
         cash_value=cash_leg.economic_event_id,
     )
-    _validate_shared_optional_identifier(
+    _validate_shared_identifier(
         issues,
         field="linked_transaction_group_id",
         product_value=product_leg.linked_transaction_group_id,
@@ -118,18 +118,20 @@ def assert_upstream_cash_leg_pairing(
         raise UpstreamCashLegPairingError(issues)
 
 
-def _validate_shared_optional_identifier(
+def _validate_shared_identifier(
     issues: list[UpstreamCashLegPairingIssue],
     *,
     field: str,
     product_value: str | None,
     cash_value: str | None,
 ) -> None:
-    if not product_value or not cash_value or product_value == cash_value:
+    normalized_product_value = (product_value or "").strip()
+    normalized_cash_value = (cash_value or "").strip()
+    if normalized_product_value and normalized_product_value == normalized_cash_value:
         return
     issues.append(
         UpstreamCashLegPairingIssue(
             field=field,
-            message=f"product and cash legs must share {field} when present.",
+            message=f"product and cash legs must carry the same non-empty {field}.",
         )
     )

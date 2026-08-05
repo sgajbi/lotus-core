@@ -14,6 +14,12 @@ class CostBasisProcessingStatePort(Protocol):
         security_id: str,
     ) -> None: ...
 
+    async def acquire_linked_redemption_group_lock(
+        self,
+        portfolio_id: str,
+        linked_transaction_group_id: str,
+    ) -> None: ...
+
     async def get_cost_basis_processing_checkpoint(
         self,
         *,

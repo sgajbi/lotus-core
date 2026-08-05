@@ -110,3 +110,25 @@ def test_upstream_pairing_reconciles_redemption_cash_decomposition() -> None:
     cash_leg = replace(_cash_leg(), gross_transaction_amount=Decimal("104"))
 
     assert validate_upstream_cash_leg_pairing(product_leg, cash_leg) == []
+
+
+@pytest.mark.parametrize("missing_on", ["product", "cash"])
+def test_upstream_pairing_requires_matching_non_empty_linkage(missing_on: str) -> None:
+    product_leg = _product_leg()
+    cash_leg = _cash_leg()
+    if missing_on == "product":
+        product_leg = replace(
+            product_leg,
+            economic_event_id=None,
+            linked_transaction_group_id=None,
+        )
+    else:
+        cash_leg = replace(
+            cash_leg,
+            economic_event_id=None,
+            linked_transaction_group_id=None,
+        )
+
+    fields = {issue.field for issue in validate_upstream_cash_leg_pairing(product_leg, cash_leg)}
+
+    assert fields == {"economic_event_id", "linked_transaction_group_id"}

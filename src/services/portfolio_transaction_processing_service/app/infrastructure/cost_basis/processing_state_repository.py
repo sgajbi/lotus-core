@@ -4,10 +4,14 @@ import hashlib
 import logging
 from collections.abc import Callable
 from time import monotonic
+from typing import Protocol
 
 from portfolio_common.database_models import CostBasisProcessingState
 from portfolio_common.identifiers import normalize_lookup_identifier
-from portfolio_common.monitoring import observe_cost_basis_processing_lock_wait
+from portfolio_common.monitoring import (
+    observe_cost_basis_processing_lock_wait,
+    observe_linked_redemption_group_lock_wait,
+)
 from portfolio_common.utils import async_timed
 from sqlalchemy import select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -18,12 +22,31 @@ from ...domain.cost_basis import CostBasisProcessingCheckpoint
 logger = logging.getLogger(__name__)
 
 
+class LockWaitObserver(Protocol):
+    """Observe one bounded advisory-lock wait outcome."""
+
+    def __call__(self, *, outcome: str, seconds: float) -> None: ...
+
+
 def cost_basis_processing_lock_key(portfolio_id: str, security_id: str) -> int:
     """Return the stable signed PostgreSQL advisory-lock key for one cost-basis stream."""
 
     normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
     normalized_security_id = normalize_lookup_identifier(security_id)
     lock_scope = f"cost-basis-processing:{normalized_portfolio_id}:{normalized_security_id}"
+    digest = hashlib.blake2b(lock_scope.encode("utf-8"), digest_size=8).digest()
+    return int.from_bytes(digest, byteorder="big", signed=True)
+
+
+def linked_redemption_group_lock_key(
+    portfolio_id: str,
+    linked_transaction_group_id: str,
+) -> int:
+    """Return the stable advisory-lock key for one portfolio-owned redemption group."""
+
+    normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
+    normalized_group_id = normalize_lookup_identifier(linked_transaction_group_id)
+    lock_scope = f"linked-redemption-group:{normalized_portfolio_id}:{normalized_group_id}"
     digest = hashlib.blake2b(lock_scope.encode("utf-8"), digest_size=8).digest()
     return int.from_bytes(digest, byteorder="big", signed=True)
 
@@ -46,7 +69,52 @@ class SqlAlchemyCostBasisProcessingStateRepository:
     ) -> None:
         """Serialize state transitions for one normalized portfolio and security key."""
 
-        lock_key = cost_basis_processing_lock_key(portfolio_id, security_id)
+        await self._acquire_transaction_lock(
+            lock_key=cost_basis_processing_lock_key(portfolio_id, security_id),
+            lock_name="Cost-basis processing lock",
+            wait_observer=observe_cost_basis_processing_lock_wait,
+            log_context={
+                "portfolio_id": normalize_lookup_identifier(portfolio_id),
+                "security_id": normalize_lookup_identifier(security_id),
+            },
+        )
+
+    @async_timed(
+        repository="CostBasisProcessingStateRepository",
+        method="acquire_linked_redemption_group_lock",
+    )
+    async def acquire_linked_redemption_group_lock(
+        self,
+        portfolio_id: str,
+        linked_transaction_group_id: str,
+    ) -> None:
+        """Serialize linked-interest authority for one normalized portfolio and group."""
+
+        await self._acquire_transaction_lock(
+            lock_key=linked_redemption_group_lock_key(
+                portfolio_id,
+                linked_transaction_group_id,
+            ),
+            lock_name="Linked redemption group lock",
+            wait_observer=observe_linked_redemption_group_lock_wait,
+            log_context={
+                "portfolio_id": normalize_lookup_identifier(portfolio_id),
+                "linked_transaction_group_id": normalize_lookup_identifier(
+                    linked_transaction_group_id
+                ),
+            },
+        )
+
+    async def _acquire_transaction_lock(
+        self,
+        *,
+        lock_key: int,
+        lock_name: str,
+        wait_observer: LockWaitObserver,
+        log_context: dict[str, str],
+    ) -> None:
+        """Acquire one advisory transaction lock with uniform telemetry and failure handling."""
+
         started_at = self._clock()
         try:
             await self._session.execute(
@@ -54,26 +122,20 @@ class SqlAlchemyCostBasisProcessingStateRepository:
             )
         except BaseException:
             wait_seconds = max(0.0, self._clock() - started_at)
-            observe_cost_basis_processing_lock_wait(outcome="failed", seconds=wait_seconds)
+            wait_observer(outcome="failed", seconds=wait_seconds)
             logger.warning(
-                "Cost-basis processing lock acquisition failed.",
-                extra={
-                    "portfolio_id": normalize_lookup_identifier(portfolio_id),
-                    "security_id": normalize_lookup_identifier(security_id),
-                    "lock_wait_seconds": wait_seconds,
-                },
+                "%s acquisition failed.",
+                lock_name,
+                extra={**log_context, "lock_wait_seconds": wait_seconds},
                 exc_info=True,
             )
             raise
         wait_seconds = max(0.0, self._clock() - started_at)
-        observe_cost_basis_processing_lock_wait(outcome="acquired", seconds=wait_seconds)
+        wait_observer(outcome="acquired", seconds=wait_seconds)
         logger.debug(
-            "Cost-basis processing lock acquired.",
-            extra={
-                "portfolio_id": normalize_lookup_identifier(portfolio_id),
-                "security_id": normalize_lookup_identifier(security_id),
-                "lock_wait_seconds": wait_seconds,
-            },
+            "%s acquired.",
+            lock_name,
+            extra={**log_context, "lock_wait_seconds": wait_seconds},
         )
 
     async def get_cost_basis_processing_checkpoint(

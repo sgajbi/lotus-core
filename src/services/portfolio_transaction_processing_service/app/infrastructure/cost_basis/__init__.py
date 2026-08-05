@@ -35,6 +35,7 @@ from .processing_adapter import (
 from .processing_state_repository import (
     SqlAlchemyCostBasisProcessingStateRepository,
     cost_basis_processing_lock_key,
+    linked_redemption_group_lock_key,
 )
 from .reference_data_repository import SqlAlchemyCostBasisReferenceDataRepository
 from .transaction_repository import SqlAlchemyCostBasisTransactionRepository
@@ -64,4 +65,5 @@ __all__ = [
     "PrometheusCostBasisCalculationObserver",
     "PrometheusCostBasisPersistenceObserver",
     "cost_basis_processing_lock_key",
+    "linked_redemption_group_lock_key",
 ]

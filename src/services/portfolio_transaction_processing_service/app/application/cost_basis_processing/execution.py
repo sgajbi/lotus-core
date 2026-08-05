@@ -158,6 +158,13 @@ class PreparedCostProcessingUseCase:
             transaction.portfolio_id,
             transaction.security_id,
         )
+        # Lock order is invariant: portfolio/security first, then portfolio/linked-group.
+        # No path may acquire these in reverse order or acquire a second security lock.
+        if requires_linked_redemption_interest_history(transaction):
+            await processing_state.acquire_linked_redemption_group_lock(
+                transaction.portfolio_id,
+                transaction.linked_transaction_group_id or "",
+            )
         await _validate_linked_redemption_group(
             transaction=transaction,
             transaction_state=transaction_state,
