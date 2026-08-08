@@ -1,4 +1,5 @@
 # services/ingestion_service/app/DTOs/transaction_model_dto.py
+import re
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Annotated, Any, Literal, Optional, cast
@@ -39,6 +40,29 @@ RedemptionPriceType = Literal["PAR", "CALL_PRICE", "MARKET_PRICE"]
 REDEMPTION_TRANSACTION_TYPES = production_transaction_types_for_lifecycle_families("redemption")
 
 
+def _normalized_control_code_schema(*codes: str) -> dict[str, Any]:
+    """Describe control codes using the same case/whitespace tolerance as ingestion."""
+
+    alternatives = [
+        {
+            "pattern": (
+                r"^\s*"
+                + "".join(
+                    f"[{character.lower()}{character.upper()}]"
+                    if character.isalpha()
+                    else re.escape(character)
+                    for character in code
+                )
+                + r"\s*$"
+            )
+        }
+        for code in codes
+    ]
+    if len(alternatives) == 1:
+        return alternatives[0]
+    return {"anyOf": alternatives}
+
+
 def _document_transaction_numeric_contract(schema: dict[str, Any]) -> None:
     document_exact_numeric_properties(
         schema,
@@ -50,7 +74,9 @@ def _document_transaction_numeric_contract(schema: dict[str, Any]) -> None:
         {
             "if": {
                 "properties": {
-                    "transaction_type": {"enum": sorted(REDEMPTION_TRANSACTION_TYPES)},
+                    "transaction_type": _normalized_control_code_schema(
+                        *sorted(REDEMPTION_TRANSACTION_TYPES)
+                    ),
                     "price": {"const": 0},
                 },
                 "required": ["transaction_type", "price"],
@@ -64,7 +90,9 @@ def _document_transaction_numeric_contract(schema: dict[str, Any]) -> None:
             {
                 "if": {
                     "properties": {
-                        "transaction_type": {"enum": sorted(REDEMPTION_TRANSACTION_TYPES)}
+                        "transaction_type": _normalized_control_code_schema(
+                            *sorted(REDEMPTION_TRANSACTION_TYPES)
+                        )
                     },
                     "required": ["transaction_type"],
                 },
@@ -74,7 +102,11 @@ def _document_transaction_numeric_contract(schema: dict[str, Any]) -> None:
                 "if": {
                     "anyOf": [
                         {
-                            "properties": {"cash_entry_mode": {"const": "UPSTREAM_PROVIDED"}},
+                            "properties": {
+                                "cash_entry_mode": _normalized_control_code_schema(
+                                    "UPSTREAM_PROVIDED"
+                                )
+                            },
                             "required": ["cash_entry_mode"],
                         },
                         {"required": ["originating_transaction_id"]},
