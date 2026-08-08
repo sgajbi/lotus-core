@@ -2929,10 +2929,11 @@ Most relevant current governance:
      twelve reduces the hottest lane to three series (`1,128` facts), or `40%` less serial work.
      Preserve the `security_id` key, pinned CRC32 partitioner, and per-partition serialization.
      Performance capacity profiles must use stable keys with an asserted CRC32 distribution and a
-     monotonic transaction timestamp/sequence across profile phases. A burst capacity phase must
-     append to steady-state history rather than reset its order and fabricate retroactive rebuild
-     work. Keep observation windows separate from enforced drain SLOs, count only authoritatively
-     accepted replay commands, and retain final domain counts when a drain times out.
+     monotonic transaction timestamp/sequence across profile phases and supported reused-stack
+     runs. Start after the fixture portfolio's latest persisted transaction; a burst capacity phase
+     must append to steady-state history rather than reset its order and fabricate retroactive
+     rebuild work. Keep observation windows separate from enforced drain SLOs, count only
+     authoritatively accepted replay commands, and retain final domain counts when a drain times out.
 196. Cost-basis processing and AVCO rebuild must resolve portfolio policy and optional instrument
      facts through one typed application-port bundle and one repository statement. Preserve the
      distinct missing-portfolio retry and missing-instrument preparation/rebuild behavior. Do not

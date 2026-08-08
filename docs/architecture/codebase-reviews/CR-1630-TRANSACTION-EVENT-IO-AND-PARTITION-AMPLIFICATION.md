@@ -104,9 +104,11 @@ rearmed and completed `525` times for one final portfolio-day row.
     (`1,880` facts) at eight partitions to three (`1,128` facts) at twelve.
 21. The performance load gate uses one stable portfolio and twenty stable security keys whose
     governed CRC32 distribution places at most two keys on each of the twelve transaction
-    partitions. Transaction timestamps increase by one microsecond across steady, burst, and replay
-    source phases, so the capacity profile measures append processing instead of accidentally
-    turning every later phase into retroactive history. Repair replay remains intentional. HTTP
+    partitions. Each run starts after the latest persisted timestamp for that governed portfolio,
+    then transaction timestamps increase by one microsecond across steady, burst, and replay source
+    phases. Clean and supported reused-stack runs therefore measure append processing instead of
+    accidentally turning later phases or runs into retroactive history. Repair replay remains
+    intentional. HTTP
     `409` replay blocks contribute zero expected completions, while `202` responses contribute only
     their validated `accepted_count`. The observation window is separate from, and longer than,
     the unchanged profile SLOs so a failure report can retain final domain-count diagnostics.
@@ -721,7 +723,8 @@ topics, partitions, database schema, calculations, and operator commands. Reposi
 executable cleanup tests, this review record, and #795 own the reusable rule; no OpenAPI, migration,
 runbook, or authored wiki change is required.
 The deterministic performance-profile correction changes only certification identities, ordering,
-accepted-work accounting, and timeout diagnostics. It does not change production Kafka keys,
+one read of existing fixture history, accepted-work accounting, and timeout diagnostics. It does
+not change production Kafka keys,
 topics, partition counts, consumer concurrency, APIs, event schemas, database schemas, calculations,
 or runtime settings. The existing load command is unchanged, and this review/context update is
 sufficient durable guidance; no OpenAPI, migration, operator-runbook, or authored wiki change is
