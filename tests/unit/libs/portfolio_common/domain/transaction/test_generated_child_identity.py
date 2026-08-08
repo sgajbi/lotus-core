@@ -40,6 +40,7 @@ def test_classifies_canonical_generated_settlement_cash_identity() -> None:
 
     assert ownership.family is TransactionIdentityFamily.GENERATED_SETTLEMENT_CASH
     assert ownership.originating_transaction_id == "DIVIDEND-001"
+    assert ownership.originating_transaction_type == "DIVIDEND"
     assert ownership.portfolio_id == "PORT-001"
 
 
@@ -59,6 +60,7 @@ def test_classifies_canonical_redemption_interest_identity() -> None:
 
     assert ownership.family is TransactionIdentityFamily.REDEMPTION_ACCRUED_INTEREST
     assert ownership.originating_transaction_id == "MATURITY-001"
+    assert ownership.originating_transaction_type == "MATURITY_REDEMPTION"
 
 
 @pytest.mark.parametrize(
@@ -100,6 +102,8 @@ def test_suffix_only_cash_masquerade_remains_source_owned(changes: dict[str, obj
         {"component_type": None},
         {"component_id": "wrong"},
         {"originating_transaction_type": "SELL"},
+        {"link_type": None},
+        {"link_type": "UNRELATED"},
     ],
 )
 def test_suffix_only_interest_masquerade_remains_source_owned(
@@ -115,6 +119,7 @@ def test_suffix_only_interest_masquerade_remains_source_owned(
                 "originating_transaction_type": "MATURITY_REDEMPTION",
                 "component_type": "REDEMPTION_ACCRUED_INTEREST",
                 "component_id": f"{transaction_id}:v1",
+                "link_type": "REDEMPTION_TO_ACCRUED_INTEREST",
             }
             | changes
         )

@@ -109,7 +109,15 @@ def _document_transaction_numeric_contract(schema: dict[str, Any]) -> None:
                             },
                             "required": ["cash_entry_mode"],
                         },
-                        {"required": ["originating_transaction_id"]},
+                        {
+                            "properties": {
+                                "originating_transaction_id": {
+                                    "type": "string",
+                                    "pattern": r".*\S.*",
+                                }
+                            },
+                            "required": ["originating_transaction_id"],
+                        },
                     ]
                 },
                 "then": {"required": ["economic_event_id", "linked_transaction_group_id"]},

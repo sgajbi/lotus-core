@@ -20,6 +20,7 @@ _REDEMPTION_TRANSACTION_TYPES = tuple(
     production_transaction_types_for_lifecycle_families("redemption")
 )
 _REDEMPTION_ACCRUED_INTEREST_COMPONENT = "REDEMPTION_ACCRUED_INTEREST"
+_REDEMPTION_ACCRUED_INTEREST_LINK = "REDEMPTION_TO_ACCRUED_INTEREST"
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,12 +50,16 @@ def transaction_identity_update_allowed(
             generated_cash,
             func.trim(transaction_table.originating_transaction_id)
             == ownership.originating_transaction_id,
+            _normalized(transaction_table.originating_transaction_type)
+            == ownership.originating_transaction_type,
         )
     else:
         same_family = and_(
             redemption_interest,
             func.trim(transaction_table.originating_transaction_id)
             == ownership.originating_transaction_id,
+            _normalized(transaction_table.originating_transaction_type)
+            == ownership.originating_transaction_type,
         )
     return and_(same_portfolio, same_family)
 
@@ -91,6 +96,7 @@ def _redemption_interest_predicate(transaction_table: Any) -> ColumnElement[bool
         _normalized(transaction_table.originating_transaction_type).in_(
             _REDEMPTION_TRANSACTION_TYPES
         ),
+        _normalized(transaction_table.link_type) == _REDEMPTION_ACCRUED_INTEREST_LINK,
     )
 
 

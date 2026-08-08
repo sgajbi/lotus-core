@@ -175,6 +175,13 @@ def test_transaction_schema_publishes_conditional_linkage_requirements() -> None
     assert re.fullmatch(upstream_condition["pattern"], " upstream_provided ")
     assert not re.fullmatch(upstream_condition["pattern"], "AUTO_GENERATE")
 
+    origin_condition = linkage_clauses[1]["if"]["anyOf"][1]["properties"][
+        "originating_transaction_id"
+    ]
+    assert origin_condition == {"type": "string", "pattern": r".*\S.*"}
+    assert re.fullmatch(origin_condition["pattern"], " SOURCE-001 ")
+    assert not re.fullmatch(origin_condition["pattern"], "   ")
+
     zero_price_condition = next(
         clause["if"]["properties"]["transaction_type"]
         for clause in schema["allOf"]
