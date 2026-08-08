@@ -14,12 +14,14 @@ from portfolio_common.domain.transaction import (
     TransactionIdentityOwnership,
 )
 from portfolio_common.domain.transaction.type_registry import (
+    production_transaction_types_for_generated_cash_legs,
     production_transaction_types_for_lifecycle_families,
 )
 
 _REDEMPTION_TRANSACTION_TYPES = tuple(
     production_transaction_types_for_lifecycle_families("redemption")
 )
+_GENERATED_CASH_LEG_ORIGIN_TYPES = tuple(production_transaction_types_for_generated_cash_legs())
 _REDEMPTION_ACCRUED_INTEREST_COMPONENT = "REDEMPTION_ACCRUED_INTEREST"
 _REDEMPTION_ACCRUED_INTEREST_LINK = "REDEMPTION_TO_ACCRUED_INTEREST"
 
@@ -121,6 +123,7 @@ def _generated_cash_predicate(transaction_table: Any) -> ColumnElement[bool]:
         transaction_table.transaction_id
         == func.concat(func.trim(transaction_table.originating_transaction_id), "-CASHLEG"),
         _normalized(transaction_table.link_type) == func.concat(originating_type, "_TO_CASH"),
+        originating_type.in_(_GENERATED_CASH_LEG_ORIGIN_TYPES),
         or_(
             transaction_table.component_type.is_(None),
             func.trim(transaction_table.component_type) == "",

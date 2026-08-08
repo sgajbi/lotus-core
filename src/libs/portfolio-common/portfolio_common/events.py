@@ -379,6 +379,34 @@ class TransactionEvent(CoreEventModel):
     epoch: Optional[int] = None
 
     @field_validator(
+        "transaction_id",
+        "portfolio_id",
+        "instrument_id",
+        "security_id",
+        mode="before",
+    )
+    @classmethod
+    def _normalize_required_identifier(cls, value: object) -> object:
+        if not isinstance(value, str):
+            return value
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Identifier must not be blank.")
+        return normalized
+
+    @field_validator(
+        "economic_event_id",
+        "linked_transaction_group_id",
+        "originating_transaction_id",
+        mode="before",
+    )
+    @classmethod
+    def _normalize_optional_linkage_identifier(cls, value: object) -> object:
+        if not isinstance(value, str):
+            return value
+        return value.strip() or None
+
+    @field_validator(
         "trade_currency",
         "currency",
         "pair_base_currency",

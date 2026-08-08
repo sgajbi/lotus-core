@@ -8,6 +8,7 @@ from enum import StrEnum
 from typing import Protocol
 
 from portfolio_common.domain.transaction.type_registry import (
+    production_transaction_types_for_generated_cash_legs,
     production_transaction_types_for_lifecycle_families,
 )
 from portfolio_common.domain.transaction_control_codes import (
@@ -15,6 +16,7 @@ from portfolio_common.domain.transaction_control_codes import (
 )
 
 _REDEMPTION_TRANSACTION_TYPES = production_transaction_types_for_lifecycle_families("redemption")
+_GENERATED_CASH_LEG_ORIGIN_TYPES = production_transaction_types_for_generated_cash_legs()
 _REDEMPTION_ACCRUED_INTEREST_COMPONENT = "REDEMPTION_ACCRUED_INTEREST"
 _REDEMPTION_ACCRUED_INTEREST_LINK = "REDEMPTION_TO_ACCRUED_INTEREST"
 
@@ -122,6 +124,7 @@ def _is_generated_settlement_cash(
         and normalize_transaction_control_code(getattr(candidate, "cash_entry_mode", None))
         == "AUTO_GENERATE"
         and bool(originating_type)
+        and originating_type in _GENERATED_CASH_LEG_ORIGIN_TYPES
         and normalize_transaction_control_code(getattr(candidate, "link_type", None))
         == f"{originating_type}_TO_CASH"
         and not normalize_transaction_control_code(getattr(candidate, "component_type", None))

@@ -177,6 +177,29 @@ async def test_persisted_linked_transaction_retains_group_partition_identity(
     assert outbox_event["partition_key"].value == ("PORT_UT_01|transaction-group|CA-GROUP-1")
 
 
+async def test_persisted_transaction_publishes_canonical_identity(
+    transaction_consumer: TransactionPersistenceConsumer,
+    valid_transaction_event: TransactionEvent,
+) -> None:
+    event = TransactionEvent.model_validate(
+        valid_transaction_event.model_dump()
+        | {
+            "transaction_id": "  UNIT_TEST_01  ",
+            "portfolio_id": "  PORT_UT_01  ",
+            "instrument_id": "  INST_UT_01  ",
+            "security_id": "  SEC_UT_01  ",
+        }
+    )
+
+    outbox_event = transaction_consumer.get_outbox_event(event)
+
+    assert outbox_event is not None
+    assert outbox_event["aggregate_id"] == "PORT_UT_01"
+    assert outbox_event["partition_key"].value == "PORT_UT_01|SEC_UT_01"
+    assert outbox_event["payload"]["transaction_id"] == "UNIT_TEST_01"
+    assert outbox_event["payload"]["portfolio_id"] == "PORT_UT_01"
+
+
 async def test_process_message_uses_header_correlation_on_direct_path(
     transaction_consumer: TransactionPersistenceConsumer,
     mock_kafka_message: MagicMock,

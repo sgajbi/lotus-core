@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 
 from portfolio_common.domain.transaction.type_registry import (
+    production_transaction_types_for_generated_cash_legs,
     production_transaction_types_for_lifecycle_families,
 )
 from portfolio_common.domain.transaction_control_codes import (
@@ -14,10 +15,7 @@ from portfolio_common.domain.transaction_control_codes import (
 
 from ..booked import BookedTransaction
 from .cash_entry import CashEntryMode, resolve_cash_entry_mode
-from .cash_movement import (
-    ORDINARY_SETTLEMENT_TRANSACTION_TYPES,
-    calculate_settlement_cash_movement,
-)
+from .cash_movement import calculate_settlement_cash_movement
 
 ADJUSTMENT_TRANSACTION_TYPE = "ADJUSTMENT"
 
@@ -131,7 +129,7 @@ def _resolve_generated_linkage(
     return economic_event_id, linked_group_id
 
 
-GENERATED_CASH_LEG_TRANSACTION_TYPES = ORDINARY_SETTLEMENT_TRANSACTION_TYPES
+GENERATED_CASH_LEG_TRANSACTION_TYPES = production_transaction_types_for_generated_cash_legs()
 REDEMPTION_SETTLEMENT_TRANSACTION_TYPES = production_transaction_types_for_lifecycle_families(
     "redemption"
 )
