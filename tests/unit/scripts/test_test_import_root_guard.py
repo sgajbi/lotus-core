@@ -22,6 +22,23 @@ def test_guard_detects_from_and_direct_legacy_service_imports(tmp_path: Path) ->
     ]
 
 
+def test_guard_detects_legacy_patch_target(tmp_path: Path) -> None:
+    test_root = tmp_path / "tests"
+    test_root.mkdir()
+    (test_root / "test_legacy_patch.py").write_text(
+        "from unittest.mock import patch\n"
+        "with patch('services.query_service.app.main.repository'):\n"
+        "    pass\n",
+        encoding="utf-8",
+    )
+
+    findings = find_legacy_test_imports(root=tmp_path)
+
+    assert [(finding.line_number, finding.module) for finding in findings] == [
+        (2, "services.query_service.app.main"),
+    ]
+
+
 def test_guard_accepts_canonical_and_relative_imports(tmp_path: Path) -> None:
     test_root = tmp_path / "tests"
     test_root.mkdir()
