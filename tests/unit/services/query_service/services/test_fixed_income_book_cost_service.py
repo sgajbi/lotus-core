@@ -11,13 +11,13 @@ from portfolio_common.database_models import (
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from services.query_service.app.repositories.fixed_income_book_cost_repository import (
+from src.services.query_service.app.repositories.fixed_income_book_cost_repository import (
     FixedIncomeBookCostAsOfReadRecord,
     FixedIncomeBookCostReadRepository,
     _period_read_record,
     _profile_read_record,
 )
-from services.query_service.app.services.fixed_income_book_cost_service import (
+from src.services.query_service.app.services.fixed_income_book_cost_service import (
     FixedIncomeBookCostService,
 )
 

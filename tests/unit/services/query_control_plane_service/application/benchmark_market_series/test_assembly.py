@@ -6,23 +6,23 @@ from decimal import Decimal
 
 from portfolio_common.reference_data_paging import ReferencePageRequest
 
-from services.query_control_plane_service.app.application.benchmark_market_series.assembly import (
+from src.services.query_control_plane_service.app.application.benchmark_market_series.assembly import (
     build_benchmark_market_series_response,
 )
-from services.query_control_plane_service.app.application.benchmark_market_series.policy import (
+from src.services.query_control_plane_service.app.application.benchmark_market_series.policy import (
     resolve_fx_context,
 )
-from services.query_control_plane_service.app.contracts.benchmark_market_series import (
+from src.services.query_control_plane_service.app.contracts.benchmark_market_series import (
     BenchmarkMarketSeriesRequest,
     BenchmarkMarketSeriesResponse,
 )
-from services.query_control_plane_service.app.contracts.common import IntegrationWindow
-from services.query_control_plane_service.app.domain.benchmark_definition import (
+from src.services.query_control_plane_service.app.contracts.common import IntegrationWindow
+from src.services.query_control_plane_service.app.domain.benchmark_definition import (
     BenchmarkComponentEvidence,
     BenchmarkDefinitionEvidence,
 )
-from services.query_control_plane_service.app.domain.index_series import IndexPriceEvidence
-from services.query_control_plane_service.app.domain.market_fx import FxRateEvidence
+from src.services.query_control_plane_service.app.domain.index_series import IndexPriceEvidence
+from src.services.query_control_plane_service.app.domain.market_fx import FxRateEvidence
 
 OBSERVED_AT = datetime(2026, 1, 31, 8, 0, tzinfo=UTC)
 GENERATED_AT = datetime(2026, 1, 31, 9, 0, tzinfo=UTC)

@@ -6,7 +6,7 @@ from decimal import Decimal
 import pytest
 from portfolio_common.domain.calculation_lineage import calculation_lineage_binds_output
 
-from services.portfolio_transaction_processing_service.app.domain.fixed_income_book_cost import (
+from src.services.portfolio_transaction_processing_service.app.domain.fixed_income_book_cost import (
     AMORTIZED_COST_DISPOSAL_ALGORITHM_ID,
     AmortizedCostDisposalError,
     AmortizedCostEligibilityReason,

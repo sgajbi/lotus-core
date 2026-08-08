@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, AsyncSessionTransaction
 
-from services.portfolio_transaction_processing_service.app.infrastructure.fixed_income_book_cost import (  # noqa: E501
+from src.services.portfolio_transaction_processing_service.app.infrastructure.fixed_income_book_cost import (  # noqa: E501
     SqlAlchemyFixedIncomeBookCostAuthorityUnitOfWork,
     SqlAlchemyFixedIncomeBookCostCorrectionReplayRepository,
     SqlAlchemyLotAmortizedCostAuthorityRepository,

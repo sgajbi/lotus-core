@@ -7,23 +7,23 @@ from types import SimpleNamespace
 import pytest
 from portfolio_common.domain.cost_basis_method import CostBasisMethod
 
-from services.portfolio_transaction_processing_service.app.application.cost_basis_processing import (  # noqa: E501
+from src.services.portfolio_transaction_processing_service.app.application.cost_basis_processing import (  # noqa: E501
     CostBasisCalculationResult,
     OpenLotPersistenceScope,
     apply_effective_amortized_cost_to_disposals,
     build_cost_basis_timeline_processor,
 )
-from services.portfolio_transaction_processing_service.app.domain.cost_basis import (
+from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
     AmortizedCostCarryState,
     OpenLotState,
 )
-from services.portfolio_transaction_processing_service.app.domain.fixed_income_book_cost import (
+from src.services.portfolio_transaction_processing_service.app.domain.fixed_income_book_cost import (
     AmortizedCostEligibilityReason,
     lot_amortized_cost_profile_id,
     materialize_active_lot_amortized_cost_profile,
     materialize_parked_lot_amortized_cost_profile,
 )
-from services.portfolio_transaction_processing_service.app.ports import (
+from src.services.portfolio_transaction_processing_service.app.ports import (
     CostBasisPortfolioReference,
 )
 from tests.test_support.fixed_income_book_cost import resolved_fixed_income_book_cost_inputs

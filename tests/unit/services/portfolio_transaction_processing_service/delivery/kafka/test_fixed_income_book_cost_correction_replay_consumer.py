@@ -12,19 +12,19 @@ from portfolio_common.event_mapping import EventContractValidationError
 from portfolio_common.exceptions import RetryableConsumerError
 from portfolio_common.kafka_consumer_execution import KafkaConsumerExecutionProfile
 
-from services.portfolio_transaction_processing_service.app.application import (
+from src.services.portfolio_transaction_processing_service.app.application import (
     BookedTransactionReplayDependencyUnavailable,
     BookedTransactionReplayStatus,
     ReplayBookedTransactionResult,
 )
-from services.portfolio_transaction_processing_service.app.application.fixed_income_book_cost import (  # noqa: E501
+from src.services.portfolio_transaction_processing_service.app.application.fixed_income_book_cost import (  # noqa: E501
     fixed_income_book_cost_disposal_replay_event,
 )
-from services.portfolio_transaction_processing_service.app.delivery.kafka import (
+from src.services.portfolio_transaction_processing_service.app.delivery.kafka import (
     FixedIncomeBookCostCorrectionReplayConsumer,
     FixedIncomeBookCostCorrectionReplaySourceMissing,
 )
-from services.portfolio_transaction_processing_service.app.domain.fixed_income_book_cost import (
+from src.services.portfolio_transaction_processing_service.app.domain.fixed_income_book_cost import (
     AffectedLotDisposalReplayAnchor,
     AmortizedCostEligibilityReason,
     FixedIncomeBookCostCorrectionReplayIntent,

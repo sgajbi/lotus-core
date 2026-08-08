@@ -15,19 +15,19 @@ from portfolio_common.event_contracts import FixedIncomeBookCostAuthorityEvent
 from sqlalchemy import func, inspect, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from services.portfolio_transaction_processing_service.app.application.fixed_income_book_cost import (  # noqa: E501
+from src.services.portfolio_transaction_processing_service.app.application.fixed_income_book_cost import (  # noqa: E501
     HandleFixedIncomeBookCostAuthorityEventUseCase,
 )
-from services.portfolio_transaction_processing_service.app.domain.fixed_income_book_cost import (
+from src.services.portfolio_transaction_processing_service.app.domain.fixed_income_book_cost import (
     AmortizedCostPolicyRegistry,
     LotAmortizedCostBasisFact,
 )
-from services.portfolio_transaction_processing_service.app.infrastructure.fixed_income_book_cost import (  # noqa: E501
+from src.services.portfolio_transaction_processing_service.app.infrastructure.fixed_income_book_cost import (  # noqa: E501
     ConflictingLotAmortizedCostAuthorityError,
     SqlAlchemyFixedIncomeBookCostAuthorityUnitOfWork,
     SqlAlchemyLotAmortizedCostAuthorityRepository,
 )
-from services.portfolio_transaction_processing_service.app.ports import (
+from src.services.portfolio_transaction_processing_service.app.ports import (
     LotAmortizedCostAuthorityAppendOutcome,
 )
 from tests.test_support.fixed_income_book_cost import (

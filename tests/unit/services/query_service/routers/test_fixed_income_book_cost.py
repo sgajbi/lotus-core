@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock
 import pytest
 from fastapi import HTTPException
 
-from services.query_service.app.routers.fixed_income_book_cost import (
+from src.services.query_service.app.routers.fixed_income_book_cost import (
     get_fixed_income_book_cost_as_of,
 )
 

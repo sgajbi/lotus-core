@@ -6,7 +6,7 @@ from decimal import Decimal
 
 import pytest
 
-from services.portfolio_transaction_processing_service.app.domain.fixed_income_book_cost import (
+from src.services.portfolio_transaction_processing_service.app.domain.fixed_income_book_cost import (
     AmortizationPeriodInput,
     AmortizedCostAssignmentStatus,
     AmortizedCostEligibilityReason,

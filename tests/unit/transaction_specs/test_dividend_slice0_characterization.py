@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 from portfolio_common.database_models import Transaction as DBTransaction
 from portfolio_common.events import TransactionEvent
 
-from services.ingestion_service.app.DTOs.transaction_dto import Transaction
+from src.services.ingestion_service.app.DTOs.transaction_dto import Transaction
 from src.services.portfolio_transaction_processing_service.app.domain.cashflow import (
     CashflowClassification,
     CashflowRule,

@@ -5,17 +5,17 @@ from datetime import date
 import pytest
 from portfolio_common.reference_data_paging import ReferencePageRequest
 
-from services.query_control_plane_service.app.application.benchmark_market_series.policy import (
+from src.services.query_control_plane_service.app.application.benchmark_market_series.policy import (
     build_evidence_plan,
     next_page_token_payload,
     resolve_fx_context,
     resolve_request_scope,
     select_index_page,
 )
-from services.query_control_plane_service.app.contracts.benchmark_market_series import (
+from src.services.query_control_plane_service.app.contracts.benchmark_market_series import (
     BenchmarkMarketSeriesRequest,
 )
-from services.query_control_plane_service.app.contracts.common import IntegrationWindow
+from src.services.query_control_plane_service.app.contracts.common import IntegrationWindow
 
 
 def _request(

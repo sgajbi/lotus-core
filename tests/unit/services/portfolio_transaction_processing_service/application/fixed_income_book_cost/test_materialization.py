@@ -9,17 +9,17 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from services.portfolio_transaction_processing_service.app.application.fixed_income_book_cost import (  # noqa: E501
+from src.services.portfolio_transaction_processing_service.app.application.fixed_income_book_cost import (  # noqa: E501
     MaterializeLotAmortizedCostProfileUseCase,
 )
-from services.portfolio_transaction_processing_service.app.application.fixed_income_book_cost import (  # noqa: E501
+from src.services.portfolio_transaction_processing_service.app.application.fixed_income_book_cost import (  # noqa: E501
     materialization as materialization_module,
 )
-from services.portfolio_transaction_processing_service.app.domain.fixed_income_book_cost import (
+from src.services.portfolio_transaction_processing_service.app.domain.fixed_income_book_cost import (
     AmortizedCostEligibilityReason,
     AmortizedCostProfileStatus,
 )
-from services.portfolio_transaction_processing_service.app.ports import (
+from src.services.portfolio_transaction_processing_service.app.ports import (
     LotAmortizedCostAuthorityBundle,
     LotAmortizedCostAuthorityPort,
     LotAmortizedCostProfileAppendOutcome,

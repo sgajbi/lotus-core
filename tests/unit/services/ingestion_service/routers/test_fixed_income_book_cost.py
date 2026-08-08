@@ -8,10 +8,10 @@ from fastapi import HTTPException
 from portfolio_common.logging_utils import correlation_id_var, request_id_var, trace_id_var
 from starlette.requests import Request
 
-from services.ingestion_service.app.DTOs.fixed_income_book_cost_authority_dto import (
+from src.services.ingestion_service.app.DTOs.fixed_income_book_cost_authority_dto import (
     FixedIncomeBookCostAuthorityIngestionRequest,
 )
-from services.ingestion_service.app.routers.fixed_income_book_cost import (
+from src.services.ingestion_service.app.routers.fixed_income_book_cost import (
     ingest_fixed_income_book_cost_authorities,
 )
 

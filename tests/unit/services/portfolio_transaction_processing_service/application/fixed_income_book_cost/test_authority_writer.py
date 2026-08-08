@@ -7,11 +7,11 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from services.portfolio_transaction_processing_service.app.application.fixed_income_book_cost import (  # noqa: E501
+from src.services.portfolio_transaction_processing_service.app.application.fixed_income_book_cost import (  # noqa: E501
     ConflictingLotAmortizedCostAuthorityBatchError,
     PersistLotAmortizedCostAuthorityUseCase,
 )
-from services.portfolio_transaction_processing_service.app.ports import (
+from src.services.portfolio_transaction_processing_service.app.ports import (
     LotAmortizedCostAuthorityAppendOutcome,
     LotAmortizedCostAuthorityPort,
 )
