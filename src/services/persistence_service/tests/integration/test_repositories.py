@@ -10,7 +10,9 @@ from portfolio_common.database_models import Transaction as DBTransaction
 from portfolio_common.events import InstrumentEvent, TransactionEvent
 from sqlalchemy.orm import Session
 
-from src.services.persistence_service.app.repositories.instrument_repository import InstrumentRepository
+from src.services.persistence_service.app.repositories.instrument_repository import (
+    InstrumentRepository,
+)
 from src.services.persistence_service.app.repositories.transaction_db_repo import (
     TransactionDBRepository,
 )

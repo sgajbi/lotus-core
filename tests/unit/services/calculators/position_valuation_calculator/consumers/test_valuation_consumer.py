@@ -37,7 +37,7 @@ from portfolio_common.valuation_job_contracts import ValuationJobTransitionOutco
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.services.calculators.position_valuation_calculator.app.consumers.valuation_consumer import (
+from src.services.calculators.position_valuation_calculator.app.consumers.valuation_consumer import (  # noqa: E501
     ValuationConsumer,
 )
 from src.services.calculators.position_valuation_calculator.app.ports import (

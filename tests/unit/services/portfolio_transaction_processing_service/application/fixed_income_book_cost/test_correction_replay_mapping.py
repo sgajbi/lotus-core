@@ -11,7 +11,7 @@ from src.services.portfolio_transaction_processing_service.app.application.fixed
     fixed_income_book_cost_disposal_replay_event,
     map_fixed_income_book_cost_disposal_replay_event,
 )
-from src.services.portfolio_transaction_processing_service.app.domain.fixed_income_book_cost import (
+from src.services.portfolio_transaction_processing_service.app.domain.fixed_income_book_cost import (  # noqa: E501
     AffectedLotDisposalReplayAnchor,
     AmortizedCostEligibilityReason,
     FixedIncomeBookCostCorrectionReplayIntent,

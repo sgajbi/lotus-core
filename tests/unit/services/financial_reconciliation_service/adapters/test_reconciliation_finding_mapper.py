@@ -1,6 +1,6 @@
 from datetime import date
 
-from src.services.financial_reconciliation_service.app.adapters.reconciliation_finding_mapper import (
+from src.services.financial_reconciliation_service.app.adapters.reconciliation_finding_mapper import (  # noqa: E501
     reconciliation_finding_to_orm,
 )
 from src.services.financial_reconciliation_service.app.domain.reconciliation_policies import (

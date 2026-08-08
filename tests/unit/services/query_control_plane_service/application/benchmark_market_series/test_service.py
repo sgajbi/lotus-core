@@ -7,7 +7,7 @@ from typing import Any, cast
 import pytest
 from portfolio_common.reference_data_paging import ReferencePageRequest
 
-from src.services.query_control_plane_service.app.application.benchmark_market_series.service import (
+from src.services.query_control_plane_service.app.application.benchmark_market_series.service import (  # noqa: E501
     BenchmarkMarketSeriesService,
 )
 from src.services.query_control_plane_service.app.contracts.benchmark_market_series import (

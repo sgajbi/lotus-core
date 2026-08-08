@@ -15,7 +15,7 @@ from src.services.portfolio_transaction_processing_service.app.application.fixed
 from src.services.portfolio_transaction_processing_service.app.application.fixed_income_book_cost import (  # noqa: E501
     materialization as materialization_module,
 )
-from src.services.portfolio_transaction_processing_service.app.domain.fixed_income_book_cost import (
+from src.services.portfolio_transaction_processing_service.app.domain.fixed_income_book_cost import (  # noqa: E501
     AmortizedCostEligibilityReason,
     AmortizedCostProfileStatus,
 )

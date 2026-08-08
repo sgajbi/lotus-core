@@ -6,10 +6,10 @@ from decimal import Decimal
 
 from portfolio_common.reference_data_paging import ReferencePageRequest
 
-from src.services.query_control_plane_service.app.application.benchmark_market_series.assembly import (
+from src.services.query_control_plane_service.app.application.benchmark_market_series.assembly import (  # noqa: E501
     build_benchmark_market_series_response,
 )
-from src.services.query_control_plane_service.app.application.benchmark_market_series.policy import (
+from src.services.query_control_plane_service.app.application.benchmark_market_series.policy import (  # noqa: E501
     resolve_fx_context,
 )
 from src.services.query_control_plane_service.app.contracts.benchmark_market_series import (
