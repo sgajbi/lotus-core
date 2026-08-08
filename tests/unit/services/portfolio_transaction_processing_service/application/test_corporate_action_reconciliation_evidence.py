@@ -97,9 +97,12 @@ def test_balanced_evidence_has_no_findings_and_preserves_run_contract() -> None:
         "source_leg_count": 1,
         "target_leg_count": 1,
         "cash_consideration_count": 0,
+        "fractional_cash_leg_count": 0,
         "source_basis_out_local": "100",
         "target_basis_in_local": "100",
         "cash_basis_local": "0",
+        "cash_consideration_basis_local": "0",
+        "fractional_basis_local": "0",
         "net_basis_delta_local": "0",
         "missing_cash_basis_count": 0,
         "missing_dependency_count": 0,
@@ -121,6 +124,34 @@ def test_balanced_evidence_has_no_findings_and_preserves_run_contract() -> None:
         and item["epoch"] == 7
         for item in evidence.run.summary["input_lineage"]
     )
+
+
+def test_fractional_cash_basis_is_explicit_in_reconciliation_evidence() -> None:
+    evidence = _evidence(
+        _transaction(
+            transaction_id="CA-OUT-01",
+            transaction_type="DEMERGER_OUT",
+            net_cost_local="-100",
+        ),
+        _transaction(
+            transaction_id="CA-IN-01",
+            transaction_type="DEMERGER_IN",
+            net_cost_local="90",
+        ),
+        _transaction(
+            transaction_id="CA-CIL-01",
+            transaction_type="CASH_IN_LIEU",
+            net_cost_local="-10",
+            allocated_cost_basis_local="10",
+        ),
+    )
+
+    assert evidence.run.summary["reconciliation_status"] == "balanced"
+    assert evidence.run.summary["fractional_cash_leg_count"] == 1
+    assert evidence.run.summary["fractional_basis_local"] == "10"
+    assert evidence.run.summary["cash_consideration_basis_local"] == "0"
+    assert evidence.run.summary["cash_basis_local"] == "10"
+    assert evidence.run.summary["examined_count"] == 3
 
 
 @pytest.mark.parametrize(
