@@ -70,6 +70,7 @@ def test_classifies_canonical_redemption_interest_identity() -> None:
         {"transaction_type": "BUY"},
         {"cash_entry_mode": None},
         {"originating_transaction_type": None},
+        {"originating_transaction_type": "ADJUSTMENT", "link_type": "ADJUSTMENT_TO_CASH"},
         {"link_type": None},
         {"component_type": "UNRELATED"},
         {"component_id": "UPSTREAM-COMPONENT-1"},

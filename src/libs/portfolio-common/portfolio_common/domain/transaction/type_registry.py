@@ -587,6 +587,19 @@ def production_transaction_types_for_position_effects(
     )
 
 
+def production_transaction_types_for_generated_cash_legs() -> frozenset[str]:
+    """Return production transaction types backed by a settlement-cash resolver."""
+
+    return frozenset(
+        code
+        for code, definition in TRANSACTION_TYPE_REGISTRY.items()
+        if definition.production_booking_allowed
+        and definition.lifecycle_family in {"trade", "income", "redemption"}
+        and definition.cash_effect in {"inflow", "outflow"}
+        and definition.settlement_behavior == "requires_cash_leg"
+    )
+
+
 def require_registered_transaction_type(code: str) -> TransactionTypeDefinition:
     normalized = str(code or "").strip().upper()
     definition = TRANSACTION_TYPE_REGISTRY.get(normalized)

@@ -29,6 +29,33 @@ def _txn(
     )
 
 
+def test_transaction_event_normalizes_persisted_and_published_identity() -> None:
+    event = TransactionEvent(
+        transaction_id="  TX-IDENTITY-001  ",
+        portfolio_id="  PORT-001  ",
+        instrument_id="  INST-001  ",
+        security_id="  SEC-001  ",
+        transaction_date=datetime(2026, 1, 10, tzinfo=UTC),
+        transaction_type="BUY",
+        quantity=Decimal("1"),
+        price=Decimal("1"),
+        gross_transaction_amount=Decimal("1"),
+        trade_currency="USD",
+        currency="USD",
+        economic_event_id="  EVENT-001  ",
+        linked_transaction_group_id="  GROUP-001  ",
+        originating_transaction_id="  SOURCE-001  ",
+    )
+
+    assert event.transaction_id == "TX-IDENTITY-001"
+    assert event.portfolio_id == "PORT-001"
+    assert event.instrument_id == "INST-001"
+    assert event.security_id == "SEC-001"
+    assert event.economic_event_id == "EVENT-001"
+    assert event.linked_transaction_group_id == "GROUP-001"
+    assert event.originating_transaction_id == "SOURCE-001"
+
+
 def test_transaction_event_standardizes_temporal_fields_to_utc_aware() -> None:
     singapore = timezone(timedelta(hours=8))
     event = _txn(
