@@ -63,6 +63,7 @@ class CorporateActionBasisReconciliation:
     fractional_cash_leg_count: int
     source_basis_out_local: Decimal
     target_basis_in_local: Decimal
+    target_basis_retained_local: Decimal
     cash_basis_local: Decimal
     cash_consideration_basis_local: Decimal
     fractional_basis_local: Decimal
@@ -99,8 +100,12 @@ def reconcile_corporate_action_basis(
     totals = _BasisTotals()
     for transaction in transactions:
         _accumulate(totals, transaction)
+    target_basis_retained_local = totals.target_basis_in_local - totals.fractional_basis_local
     net_basis_delta_local = (
-        totals.target_basis_in_local + totals.cash_basis_local - totals.source_basis_out_local
+        target_basis_retained_local
+        + totals.fractional_basis_local
+        + totals.cash_consideration_basis_local
+        - totals.source_basis_out_local
     )
     return CorporateActionBasisReconciliation(
         status=_status(totals, net_basis_delta_local, basis_tolerance),
@@ -110,6 +115,7 @@ def reconcile_corporate_action_basis(
         fractional_cash_leg_count=totals.fractional_cash_leg_count,
         source_basis_out_local=totals.source_basis_out_local,
         target_basis_in_local=totals.target_basis_in_local,
+        target_basis_retained_local=target_basis_retained_local,
         cash_basis_local=totals.cash_basis_local,
         cash_consideration_basis_local=totals.cash_consideration_basis_local,
         fractional_basis_local=totals.fractional_basis_local,

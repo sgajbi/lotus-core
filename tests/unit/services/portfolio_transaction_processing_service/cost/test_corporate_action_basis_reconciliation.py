@@ -85,16 +85,17 @@ def test_corporate_action_basis_reconciliation_balances_multi_target_fractional_
         ),
         net_cost_local=Decimal("-100"),
     )
+    target_basis_values = (Decimal("30"), Decimal("30"), Decimal("40"))
     targets = tuple(
         replace(
             _booked_transaction(
                 transaction_id=f"TGT_{ordinal:02d}",
                 transaction_type="DEMERGER_IN",
-                gross_amount="30",
+                gross_amount=str(target_basis),
             ),
-            net_cost_local=Decimal("30"),
+            net_cost_local=target_basis,
         )
-        for ordinal in range(1, 4)
+        for ordinal, target_basis in enumerate(target_basis_values, start=1)
     )
     fractional = replace(
         _booked_transaction(
@@ -119,6 +120,7 @@ def test_corporate_action_basis_reconciliation_balances_multi_target_fractional_
     assert result.target_leg_count == 3
     assert result.fractional_cash_leg_count == 1
     assert result.fractional_basis_local == Decimal("10")
+    assert result.target_basis_retained_local == Decimal("90")
     assert result.cash_consideration_basis_local == Decimal(0)
     assert result.cash_basis_local == Decimal("10")
     assert result.excluded_cash_settlement_adjustment_count == 1
@@ -384,7 +386,8 @@ def test_corporate_action_conservation_is_order_independent_for_generated_alloca
     target_basis_values: list[int],
     fractional_basis_value: int,
 ) -> None:
-    source_basis = sum(target_basis_values) + fractional_basis_value
+    source_basis = sum(target_basis_values)
+    governed_fractional_basis = fractional_basis_value % (source_basis + 1)
     source = replace(
         _booked_transaction(
             transaction_id="SRC_PROPERTY",
@@ -408,9 +411,9 @@ def test_corporate_action_conservation_is_order_independent_for_generated_alloca
         _booked_transaction(
             transaction_id="CIL_PROPERTY",
             transaction_type="CASH_IN_LIEU",
-            gross_amount=str(fractional_basis_value),
+            gross_amount=str(governed_fractional_basis),
         ),
-        allocated_cost_basis_local=Decimal(fractional_basis_value),
+        allocated_cost_basis_local=Decimal(governed_fractional_basis),
     )
 
     forward = reconcile_corporate_action_basis((source, *targets, fractional))
@@ -422,5 +425,6 @@ def test_corporate_action_conservation_is_order_independent_for_generated_alloca
     assert forward.status == "balanced"
     assert forward.source_basis_out_local == Decimal(source_basis)
     assert forward.target_basis_in_local == sum(map(Decimal, target_basis_values))
-    assert forward.fractional_basis_local == Decimal(fractional_basis_value)
+    assert forward.target_basis_retained_local == Decimal(source_basis - governed_fractional_basis)
+    assert forward.fractional_basis_local == Decimal(governed_fractional_basis)
     assert forward.net_basis_delta_local == 0
