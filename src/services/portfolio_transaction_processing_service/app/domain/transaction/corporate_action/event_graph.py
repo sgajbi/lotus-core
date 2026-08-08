@@ -45,6 +45,7 @@ class CorporateActionEventChild:
     child_role: str
     dependency_transaction_ids: tuple[str, ...] = ()
     child_sequence_hint: int | None = None
+    instrument_id: str | None = None
     source_instrument_id: str | None = None
     target_instrument_id: str | None = None
 
@@ -81,17 +82,14 @@ class CorporateActionEventChild:
                 raise ValueError("child_sequence_hint must be an integer when provided")
             if self.child_sequence_hint < 0:
                 raise ValueError("child_sequence_hint must be non-negative when provided")
-        if self.target_instrument_id is not None:
+        for field_name in ("instrument_id", "source_instrument_id", "target_instrument_id"):
+            value = getattr(self, field_name)
+            if value is None:
+                continue
             object.__setattr__(
                 self,
-                "target_instrument_id",
-                _required_text(self.target_instrument_id, "target_instrument_id"),
-            )
-        if self.source_instrument_id is not None:
-            object.__setattr__(
-                self,
-                "source_instrument_id",
-                _required_text(self.source_instrument_id, "source_instrument_id"),
+                field_name,
+                _required_text(value, field_name),
             )
 
 
@@ -215,6 +213,7 @@ def _directed_node(child: CorporateActionEventChild) -> DirectedEventNode:
         "child_role": child.child_role,
         "child_sequence_hint": child.child_sequence_hint,
         "dependency_transaction_ids": sorted(child.dependency_transaction_ids),
+        "instrument_id": child.instrument_id,
         "source_instrument_id": child.source_instrument_id,
         "target_instrument_id": child.target_instrument_id,
         "transaction_id": child.transaction_id,
