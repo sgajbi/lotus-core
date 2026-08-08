@@ -428,11 +428,14 @@ def _receipt_content_hash(
     receipt_version: int,
     previous_receipt_content_hash: str | None,
 ) -> str:
-    return receipt_version_content_hash(
-        receipt_id=state.receipt_id,
-        semantic_content_hash=state.semantic_content_hash,
-        receipt_version=receipt_version,
-        previous_receipt_content_hash=previous_receipt_content_hash,
+    return cast(
+        str,
+        receipt_version_content_hash(
+            receipt_id=state.receipt_id,
+            semantic_content_hash=state.semantic_content_hash,
+            receipt_version=receipt_version,
+            previous_receipt_content_hash=previous_receipt_content_hash,
+        ),
     )
 
 
