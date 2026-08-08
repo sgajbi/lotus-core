@@ -40,6 +40,9 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure.co
     SqlAlchemyCostBasisLotRepository,
     SqlAlchemyCostBasisTransactionRepository,
 )
+from src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis import (
+    transaction_repository as transaction_repository_module,
+)
 from src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis.lot_state_lineage import (  # noqa: E501
     LOT_STATE_LINEAGE_OUTPUT_FIELDS,
     lot_state_lineage_output_from_mapping,
@@ -49,6 +52,33 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure.co
 )
 
 pytestmark = pytest.mark.asyncio
+
+
+@pytest.mark.parametrize(
+    "transaction_type",
+    ["MATURITY_REDEMPTION", "CALL_REDEMPTION", "PARTIAL_REDEMPTION"],
+)
+async def test_redemption_metadata_projection_clears_absent_correction_authority(
+    transaction_type: str,
+) -> None:
+    transaction = SimpleNamespace(transaction_type=transaction_type)
+
+    values = transaction_repository_module._transaction_metadata_update_values(transaction)
+
+    assert {
+        field_name: values[field_name]
+        for field_name in transaction_repository_module.REDEMPTION_CORRECTION_OWNED_OPTIONAL_FIELDS
+    } == dict.fromkeys(transaction_repository_module.REDEMPTION_CORRECTION_OWNED_OPTIONAL_FIELDS)
+
+
+async def test_non_redemption_metadata_projection_preserves_sparse_upsert_contract() -> None:
+    transaction = SimpleNamespace(transaction_type="SELL")
+
+    values = transaction_repository_module._transaction_metadata_update_values(transaction)
+
+    assert not (
+        transaction_repository_module.REDEMPTION_CORRECTION_OWNED_OPTIONAL_FIELDS & values.keys()
+    )
 
 
 def _transition_evidence() -> CostBasisStateTransitionEvidence:

@@ -18,6 +18,17 @@ from portfolio_common.domain.transaction.numeric_policy import (
 REDEMPTION_TRANSACTION_TYPES = frozenset(
     {"MATURITY_REDEMPTION", "CALL_REDEMPTION", "PARTIAL_REDEMPTION"}
 )
+REDEMPTION_CORRECTION_OWNED_OPTIONAL_FIELDS = frozenset(
+    {
+        "redemption_price_type",
+        "old_factor",
+        "new_factor",
+        "principal_proceeds_local",
+        "accrued_interest_proceeds_local",
+        "embedded_fee_amount_local",
+        "embedded_tax_amount_local",
+    }
+)
 _FULL_REDEMPTION_TRANSACTION_TYPES = frozenset({"MATURITY_REDEMPTION", "CALL_REDEMPTION"})
 _ALGORITHM_ID = "fixed-income-redemption-economics"
 _ALGORITHM_VERSION = 1

@@ -13,6 +13,7 @@ from portfolio_common.domain.calculation_lineage import (
     calculation_lineage_from_payload,
 )
 from portfolio_common.domain.currency import normalize_currency_code
+from portfolio_common.domain.transaction_control_codes import normalize_transaction_control_code
 from portfolio_common.events import TransactionEvent
 from portfolio_common.identifiers import normalize_lookup_identifier
 from sqlalchemy import func, select, update
@@ -21,6 +22,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...domain.cost_basis import CostBasisTransaction
 from ...domain.transaction import BookedTransaction
+from ...domain.transaction.redemption import (
+    REDEMPTION_CORRECTION_OWNED_OPTIONAL_FIELDS,
+    REDEMPTION_TRANSACTION_TYPES,
+)
 from ..transaction_mapping.booked_transaction import to_booked_transaction
 
 TRANSACTION_METADATA_FIELDS = (
@@ -172,6 +177,27 @@ def _positive_fee_components(fees: object | None) -> dict[str, Decimal]:
     }
 
 
+def _transaction_metadata_update_values(
+    transaction_result: CostBasisTransaction,
+) -> dict[str, object | None]:
+    """Project metadata while clearing absent correction-owned redemption authority."""
+
+    transaction_type = normalize_transaction_control_code(transaction_result.transaction_type)
+    correction_owned_clear_fields = (
+        REDEMPTION_CORRECTION_OWNED_OPTIONAL_FIELDS
+        if transaction_type in REDEMPTION_TRANSACTION_TYPES
+        else frozenset()
+    )
+    return {
+        field_name: field_value
+        for field_name in TRANSACTION_METADATA_FIELDS
+        if (
+            (field_value := getattr(transaction_result, field_name, None)) is not None
+            or field_name in correction_owned_clear_fields
+        )
+    }
+
+
 def _transaction_cost_rows(
     *,
     transaction_result: CostBasisTransaction,
@@ -264,11 +290,7 @@ class SqlAlchemyCostBasisTransactionRepository:
             "net_cost_local": transaction_result.net_cost_local,
             "realized_gain_loss_local": transaction_result.realized_gain_loss_local,
             "calculation_lineage": calculation_lineage.lineage_payload(),
-            **{
-                field_name: field_value
-                for field_name in TRANSACTION_METADATA_FIELDS
-                if (field_value := getattr(transaction_result, field_name, None)) is not None
-            },
+            **_transaction_metadata_update_values(transaction_result),
         }
         statement = (
             update(DBTransaction)

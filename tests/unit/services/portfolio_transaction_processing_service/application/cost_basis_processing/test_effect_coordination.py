@@ -179,6 +179,54 @@ async def test_effect_coordination_supersedes_removed_redemption_interest_with_z
 
 
 @pytest.mark.asyncio
+async def test_corrected_zero_net_redemption_clears_prior_interest_cash_link() -> None:
+    corrected = replace(
+        _transaction(
+            transaction_id="REDEMPTION-ZERO-NET-CORRECTED-01",
+            transaction_type="MATURITY_REDEMPTION",
+            net_cost_local="0",
+        ),
+        quantity=Decimal("1"),
+        price=Decimal("100"),
+        principal_proceeds_local=Decimal(0),
+        accrued_interest_proceeds_local=Decimal("5"),
+        embedded_fee_amount_local=Decimal("5"),
+    )
+    prior_interest = redemption.build_redemption_accrued_interest_component(
+        replace(
+            corrected,
+            external_cash_transaction_id="REDEMPTION-ZERO-NET-CORRECTED-01-CASHLEG",
+        )
+    )
+    assert prior_interest is not None
+    prior_interest = replace(
+        prior_interest,
+        external_cash_transaction_id="REDEMPTION-ZERO-NET-CORRECTED-01-CASHLEG",
+    )
+    transaction_state = AsyncMock(spec=CostBasisTransactionStatePort)
+    transaction_state.get_booked_transaction.side_effect = [None, prior_interest]
+
+    result = await coordinate_cost_processing_effects(
+        processed_transactions=[corrected],
+        instrument_updates=[],
+        source_epoch=6,
+        transaction_state=transaction_state,
+        reconciliation_repository=AsyncMock(spec=CorporateActionReconciliationRepository),
+        effect_stager=AsyncMock(spec=CostProcessingEffectStagingPort),
+        correlation_id="corr-redemption-zero-net-corrected-01",
+        corrected_transaction_id=corrected.transaction_id,
+    )
+
+    rebuilt_interest = result.processed_transactions[1]
+    assert rebuilt_interest.transaction_id == prior_interest.transaction_id
+    assert rebuilt_interest.gross_transaction_amount == Decimal("5")
+    assert rebuilt_interest.external_cash_transaction_id is None
+    assert transaction_state.upsert_booked_transaction.await_args.kwargs == {
+        "fields_to_clear": frozenset({"external_cash_transaction_id", "linked_component_ids"})
+    }
+
+
+@pytest.mark.asyncio
 async def test_correction_neutralizes_interest_child_after_leaving_redemption() -> None:
     corrected = _transaction(
         transaction_id="REDEMPTION-FAMILY-CORRECTED-01",
