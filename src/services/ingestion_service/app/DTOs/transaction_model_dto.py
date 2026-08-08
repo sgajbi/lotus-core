@@ -45,6 +45,7 @@ def _normalized_control_code_schema(*codes: str) -> dict[str, Any]:
 
     alternatives = [
         {
+            "type": "string",
             "pattern": (
                 r"^\s*"
                 + "".join(
@@ -54,7 +55,7 @@ def _normalized_control_code_schema(*codes: str) -> dict[str, Any]:
                     for character in code
                 )
                 + r"\s*$"
-            )
+            ),
         }
         for code in codes
     ]
