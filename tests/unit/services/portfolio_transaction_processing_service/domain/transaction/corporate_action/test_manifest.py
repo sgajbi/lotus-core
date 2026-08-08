@@ -88,6 +88,7 @@ def _manifest(
 ) -> CorporateActionParentManifest:
     return CorporateActionParentManifest(
         corporate_action_event_id="CA-EVENT-001",
+        portfolio_id="PB-SG-GLOBAL-001",
         linked_transaction_group_id="CA-GROUP-001",
         parent_event_reference="UPSTREAM-CA-001",
         corporate_action_type="DEMERGER",
@@ -592,3 +593,11 @@ def test_manifest_hash_binds_actual_child_instrument() -> None:
     )
 
     assert _manifest(children=children).content_hash != _manifest(children=changed).content_hash
+
+
+def test_manifest_hash_binds_portfolio_ownership() -> None:
+    manifest = _manifest()
+
+    assert (
+        manifest.content_hash != replace(manifest, portfolio_id="PB-CH-ADVISORY-002").content_hash
+    )

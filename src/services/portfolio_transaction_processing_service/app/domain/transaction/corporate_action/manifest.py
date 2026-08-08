@@ -63,6 +63,7 @@ class CorporateActionParentManifest:
     """Declare the authoritative expected child set for one parent event version."""
 
     corporate_action_event_id: str
+    portfolio_id: str
     linked_transaction_group_id: str
     parent_event_reference: str
     corporate_action_type: str
@@ -74,6 +75,7 @@ class CorporateActionParentManifest:
     def __post_init__(self) -> None:
         for field_name in (
             "corporate_action_event_id",
+            "portfolio_id",
             "linked_transaction_group_id",
             "parent_event_reference",
             "corporate_action_type",
@@ -116,6 +118,7 @@ class CorporateActionParentManifest:
                     ],
                     "linked_transaction_group_id": self.linked_transaction_group_id,
                     "parent_event_reference": self.parent_event_reference,
+                    "portfolio_id": self.portfolio_id,
                     "source_reference": self.source_reference.lineage_payload(),
                     "version": self.version,
                 }
