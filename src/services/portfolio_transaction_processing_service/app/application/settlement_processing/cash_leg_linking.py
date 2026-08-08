@@ -68,7 +68,7 @@ async def link_settlement_cash_leg(
         )
 
     generated_cash_leg = build_generated_settlement_cash_leg(product_leg)
-    await transaction_persistence.upsert_booked_transaction(generated_cash_leg)
+    await transaction_persistence.upsert_generated_booked_transaction(generated_cash_leg)
     linked_product_leg = replace(
         product_leg,
         external_cash_transaction_id=generated_cash_leg.transaction_id,
@@ -104,5 +104,5 @@ async def _neutralize_obsolete_generated_cash_leg(
     ):
         raise ValueError("Existing generated cash-leg identity is inconsistent with its product.")
     neutralized = replace(existing, gross_transaction_amount=Decimal(0))
-    await transaction_persistence.upsert_booked_transaction(neutralized)
+    await transaction_persistence.upsert_generated_booked_transaction(neutralized)
     return neutralized

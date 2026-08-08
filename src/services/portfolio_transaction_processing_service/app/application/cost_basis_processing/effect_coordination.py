@@ -101,7 +101,7 @@ async def coordinate_cost_processing_effects(
                 if prior_interest is not None
                 else frozenset()
             )
-            await transaction_state.upsert_booked_transaction(
+            await transaction_state.upsert_generated_booked_transaction(
                 accrued_interest,
                 fields_to_clear=fields_to_clear,
             )

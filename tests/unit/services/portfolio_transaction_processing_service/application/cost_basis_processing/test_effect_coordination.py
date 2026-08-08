@@ -82,10 +82,14 @@ async def test_effect_coordination_links_and_stages_generated_cash_leg() -> None
     assert generated_cash.movement_direction == "INFLOW"
     assert generated_cash.originating_transaction_id == "DIV-GENERATED-01"
     assert {item.epoch for item in result.processed_transactions} == {7}
-    assert [
-        call.args[0].transaction_id
-        for call in transaction_state.upsert_booked_transaction.await_args_list
-    ] == ["DIV-GENERATED-01-CASHLEG", "DIV-GENERATED-01"]
+    assert (
+        transaction_state.upsert_generated_booked_transaction.await_args.args[0].transaction_id
+        == "DIV-GENERATED-01-CASHLEG"
+    )
+    assert (
+        transaction_state.upsert_booked_transaction.await_args.args[0].transaction_id
+        == "DIV-GENERATED-01"
+    )
     effect_stager.stage_processed_transactions.assert_awaited_once_with(
         result.processed_transactions,
         correlation_id="corr-generated-01",
@@ -132,12 +136,16 @@ async def test_effect_coordination_emits_separate_redemption_interest_income() -
     assert {item.epoch for item in result.processed_transactions} == {4}
     assert [
         call.args[0].transaction_id
-        for call in transaction_state.upsert_booked_transaction.await_args_list
+        for call in transaction_state.upsert_generated_booked_transaction.await_args_list
     ] == [
         "REDEMPTION-INTEREST-01-CASHLEG",
-        "REDEMPTION-INTEREST-01",
         "REDEMPTION-INTEREST-01-ACCRUED-INTEREST",
     ]
+    assert transaction_state.upsert_booked_transaction.await_count == 1
+    assert (
+        transaction_state.upsert_booked_transaction.await_args.args[0].transaction_id
+        == product.transaction_id
+    )
 
 
 @pytest.mark.asyncio
@@ -221,7 +229,7 @@ async def test_corrected_zero_net_redemption_clears_prior_interest_cash_link() -
     assert rebuilt_interest.transaction_id == prior_interest.transaction_id
     assert rebuilt_interest.gross_transaction_amount == Decimal("5")
     assert rebuilt_interest.external_cash_transaction_id is None
-    assert transaction_state.upsert_booked_transaction.await_args.kwargs == {
+    assert transaction_state.upsert_generated_booked_transaction.await_args.kwargs == {
         "fields_to_clear": frozenset({"external_cash_transaction_id", "linked_component_ids"})
     }
 
@@ -266,7 +274,7 @@ async def test_correction_neutralizes_interest_child_after_leaving_redemption() 
     assert neutralized.external_cash_transaction_id is None
     assert neutralized.epoch == 6
     assert neutralized.calculation_lineage is not None
-    assert transaction_state.upsert_booked_transaction.await_args.kwargs == {
+    assert transaction_state.upsert_generated_booked_transaction.await_args.kwargs == {
         "fields_to_clear": frozenset({"external_cash_transaction_id", "linked_component_ids"})
     }
 

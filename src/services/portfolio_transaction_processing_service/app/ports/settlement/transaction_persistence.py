@@ -14,3 +14,10 @@ class SettlementTransactionPersistencePort(Protocol):
         *,
         fields_to_clear: frozenset[str] = frozenset(),
     ) -> BookedTransaction: ...
+
+    async def upsert_generated_booked_transaction(
+        self,
+        transaction: BookedTransaction,
+        *,
+        fields_to_clear: frozenset[str] = frozenset(),
+    ) -> BookedTransaction: ...
