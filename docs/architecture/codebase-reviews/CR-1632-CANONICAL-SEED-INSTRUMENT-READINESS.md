@@ -84,3 +84,24 @@ Signed implementation commits: `14726920a`, `1008a6150`, `c7b9feb52`, `cdd885b28
 
 GitHub evidence: issue #805 and
 `https://github.com/sgajbi/lotus-core/issues/805#issuecomment-5010205602`.
+
+## 2026-08-09 Same-Pattern Extension: Immutable Lot Evidence
+
+Issue #921 proved that the earlier direct-portfolio-child inventory was insufficient once normal
+transaction processing had persisted immutable lot-disposal evidence. Canonical cleanup attempted
+to delete `position_lot_state` before `lot_disposal_allocations`, so PostgreSQL correctly rejected
+the reseed through `fk_lot_disposal_allocation_lot_scope`.
+
+The expanded foreign-key review found the complete same-pattern graph: disposal and basis-transfer
+allocations restrict lot and receipt deletion; receipt headers restrict transaction deletion;
+amortized periods restrict profile deletion; authority and profile records restrict lot deletion;
+and a lot may optionally point back to its amortized profile. The cleanup now uses one shared,
+portfolio-scoped dependency plan in canonical and Docker-smoke paths. It clears the complete
+nullable lot/profile binding, deletes immutable child evidence and headers in dependency order,
+then permits the existing lot/root cleanup to proceed. Production constraints remain restrictive.
+
+Focused unit contracts, a real PostgreSQL disposal-allocation regression, and the branch-qualified
+live cleanup passed the former FK failure while preserving unrelated portfolio lot evidence and the
+running Compose stack. Full consecutive canonical seed/downstream validation, protected PR CI,
+merge, and exact-main proof remain required before #921 closes. No API, OpenAPI, schema, migration,
+Kafka, calculation, supported-feature, README, or wiki truth changed.
