@@ -104,8 +104,12 @@ Focused unit contracts, a real PostgreSQL disposal-allocation regression, and tw
 branch-qualified cleanup-and-seed executions passed the former FK failure while preserving
 unrelated portfolio lot evidence and the running Compose stack. Core terminal diagnostics were
 healthy after the first reseed: all readiness families were `READY`, 11/11 positions were valued,
-and valuation/aggregation pending, processing, stale, and failed counts were zero. The full verifier
-was blocked only by the separately owned Gateway advisor-book contract error recorded in Workbench
-#140. Downstream validation, protected PR CI, merge, and exact-main proof remain required before
+and valuation/aggregation pending, processing, stale, and failed counts were zero. After the
+separately owned Gateway #531 fix was applied to its retained service, the non-destructive full
+verifier passed for `PB_SG_GLOBAL_BAL_001`: positions and cash quality were `COMPLETE`, the Core
+analytics, performance report, and Gateway return path were current through `2026-04-10`, governed
+advisor-book membership/source evidence were true, and every valuation and aggregation queue count
+was zero. This is branch-qualified cross-repository evidence; Gateway #531 still requires its own
+merge and exact-main proof. Protected Core PR CI, merge, and exact-main proof remain required before
 #921 closes. No API, OpenAPI, schema, migration, Kafka, calculation, supported-feature, README, or
 wiki truth changed.
