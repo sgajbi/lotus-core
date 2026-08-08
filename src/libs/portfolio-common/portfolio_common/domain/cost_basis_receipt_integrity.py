@@ -63,11 +63,7 @@ def verify_cost_basis_receipt_version_chain(
     previous_content_hash: str | None = None
     for expected_version, receipt in enumerate(receipts, start=1):
         receipt_id = receipt.receipt_id
-        if (
-            not isinstance(receipt_id, str)
-            or not receipt_id
-            or receipt_id.strip() != receipt_id
-        ):
+        if not isinstance(receipt_id, str) or not receipt_id or receipt_id.strip() != receipt_id:
             raise ValueError("receipt id must be canonical nonblank text")
         if expected_receipt_id is None:
             expected_receipt_id = receipt_id
@@ -147,22 +143,24 @@ def basis_transfer_lineage_input_payload(
 ) -> dict[str, object]:
     """Return the closed source-allocation input contract for basis-transfer lineage."""
 
-    return {
-        "allocations": [
-            {
-                "allocation_ordinal": allocation.allocation_ordinal,
-                "retained_quantity": allocation.retained_quantity,
-                "source_cost_base_before": allocation.source_cost_base_before,
-                "source_cost_local_before": allocation.source_cost_local_before,
-                "source_acquisition_date": allocation.source_acquisition_date,
-                "source_lot_id": allocation.source_lot_id,
-                "source_transaction_id": allocation.source_transaction_id,
-                "transferred_cost_base": allocation.transferred_cost_base,
-                "transferred_cost_local": allocation.transferred_cost_local,
-            }
-            for allocation in allocations
-        ]
-    }
+    return canonical_cost_basis_output_payload(
+        {
+            "allocations": [
+                {
+                    "allocation_ordinal": allocation.allocation_ordinal,
+                    "retained_quantity": allocation.retained_quantity,
+                    "source_cost_base_before": allocation.source_cost_base_before,
+                    "source_cost_local_before": allocation.source_cost_local_before,
+                    "source_acquisition_date": allocation.source_acquisition_date,
+                    "source_lot_id": allocation.source_lot_id,
+                    "source_transaction_id": allocation.source_transaction_id,
+                    "transferred_cost_base": allocation.transferred_cost_base,
+                    "transferred_cost_local": allocation.transferred_cost_local,
+                }
+                for allocation in allocations
+            ]
+        }
+    )
 
 
 def basis_transfer_lineage_output_payload(
@@ -173,21 +171,23 @@ def basis_transfer_lineage_output_payload(
 ) -> dict[str, object]:
     """Return the closed allocation/aggregate output contract for basis-transfer lineage."""
 
-    return {
-        "allocations": [
-            {
-                "allocation_ordinal": allocation.allocation_ordinal,
-                "retained_cost_base": allocation.retained_cost_base,
-                "retained_cost_local": allocation.retained_cost_local,
-                "source_lot_id": allocation.source_lot_id,
-                "transferred_cost_base": allocation.transferred_cost_base,
-                "transferred_cost_local": allocation.transferred_cost_local,
-            }
-            for allocation in allocations
-        ],
-        "transferred_cost_base": transferred_cost_base,
-        "transferred_cost_local": transferred_cost_local,
-    }
+    return canonical_cost_basis_output_payload(
+        {
+            "allocations": [
+                {
+                    "allocation_ordinal": allocation.allocation_ordinal,
+                    "retained_cost_base": allocation.retained_cost_base,
+                    "retained_cost_local": allocation.retained_cost_local,
+                    "source_lot_id": allocation.source_lot_id,
+                    "transferred_cost_base": allocation.transferred_cost_base,
+                    "transferred_cost_local": allocation.transferred_cost_local,
+                }
+                for allocation in allocations
+            ],
+            "transferred_cost_base": transferred_cost_base,
+            "transferred_cost_local": transferred_cost_local,
+        }
+    )
 
 
 def canonical_cost_basis_output_payload(

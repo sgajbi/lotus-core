@@ -20,6 +20,13 @@ from portfolio_common.domain.calculation_lineage import (
     build_calculation_lineage,
 )
 from portfolio_common.domain.cost_basis_method import CostBasisMethod
+from portfolio_common.domain.cost_basis_receipt_integrity import (
+    BASIS_TRANSFER_LINEAGE_ALGORITHM_ID,
+    BASIS_TRANSFER_LINEAGE_ALGORITHM_VERSION,
+    basis_transfer_lineage_input_payload,
+    basis_transfer_lineage_output_payload,
+)
+from portfolio_common.domain.transaction.numeric_policy import COST_BASIS_STATE_LEDGER_OUTPUT_V1
 from sqlalchemy import event, func, inspect, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -32,6 +39,12 @@ from src.services.portfolio_transaction_processing_service.app.domain.cost_basis
 from src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis import (
     CorruptLotBasisTransferReceiptError,
     SqlAlchemyCostBasisLotBasisTransferRepository,
+)
+from src.services.query_service.app.repositories.lot_basis_transfer_repository import (
+    CorruptLotBasisTransferReadModelError,
+)
+from src.services.query_service.app.repositories.lot_basis_transfer_repository import (
+    LotBasisTransferRepository as QueryLotBasisTransferRepository,
 )
 from tests.test_support.transaction_processing import (
     booked_transaction_event,
@@ -222,6 +235,19 @@ async def test_repository_verifies_sixty_four_transfer_versions_with_two_reads(
         == 64
     )
 
+    statements.clear()
+    event.listen(sync_engine, "before_cursor_execute", record_statement)
+    try:
+        receipt = await QueryLotBasisTransferRepository(async_db_session).get_latest_receipt(
+            portfolio_id=states[-1].portfolio_id,
+            source_transaction_id=states[-1].source_transaction_id,
+        )
+    finally:
+        event.remove(sync_engine, "before_cursor_execute", record_statement)
+    assert receipt is not None
+    assert receipt[0].receipt_version == 64
+    assert len(statements) == 2
+
     await async_db_session.execute(
         update(LotBasisTransferAllocationRecord)
         .where(LotBasisTransferAllocationRecord.receipt_version == 32)
@@ -232,6 +258,11 @@ async def test_repository_verifies_sixty_four_transfer_versions_with_two_reads(
         await repository.reconcile_basis_transfer_receipts(
             reconciliation_scopes=(_scope(),),
             receipt_states=(states[-1],),
+        )
+    with pytest.raises(CorruptLotBasisTransferReadModelError, match="chain is corrupt"):
+        await QueryLotBasisTransferRepository(async_db_session).get_latest_receipt(
+            portfolio_id=states[-1].portfolio_id,
+            source_transaction_id=states[-1].source_transaction_id,
         )
 
 
@@ -294,9 +325,10 @@ def _lineage(algorithm_id: str) -> CalculationLineage:
     return build_calculation_lineage(
         algorithm_id=algorithm_id,
         algorithm_version=1,
-        intermediate_precision=38,
+        intermediate_precision=COST_BASIS_STATE_LEDGER_OUTPUT_V1.working_precision,
         input_payload={"transaction_id": "DEMERGER-OUT-DB-01"},
         output_payload={"cost": Decimal("25")},
+        numeric_output_policy=COST_BASIS_STATE_LEDGER_OUTPUT_V1.lineage_identity(),
     )
 
 
@@ -317,6 +349,31 @@ def _scope(*, transaction_type: str = "DEMERGER_OUT") -> LotBasisTransferReconci
 
 def _active_state(*, transferred_local: str) -> LotBasisTransferReceiptState:
     transferred = Decimal(transferred_local)
+    allocation = SourceLotBasisTransferAllocation(
+        allocation_ordinal=1,
+        source_lot_id="LOT-BASIS-TRANSFER-DB-01",
+        source_transaction_id="BUY-BASIS-TRANSFER-DB-01",
+        source_acquisition_date=date(2026, 1, 1),
+        retained_quantity=Decimal("10"),
+        source_cost_local_before=Decimal("100"),
+        source_cost_base_before=Decimal("120"),
+        transferred_cost_local=transferred,
+        transferred_cost_base=Decimal("30"),
+        retained_cost_local=Decimal("100") - transferred,
+        retained_cost_base=Decimal("90"),
+    )
+    transfer_lineage = build_calculation_lineage(
+        algorithm_id=BASIS_TRANSFER_LINEAGE_ALGORITHM_ID,
+        algorithm_version=BASIS_TRANSFER_LINEAGE_ALGORITHM_VERSION,
+        intermediate_precision=COST_BASIS_STATE_LEDGER_OUTPUT_V1.working_precision,
+        input_payload=basis_transfer_lineage_input_payload((allocation,)),
+        output_payload=basis_transfer_lineage_output_payload(
+            (allocation,),
+            transferred_cost_base=Decimal("30"),
+            transferred_cost_local=transferred,
+        ),
+        numeric_output_policy=COST_BASIS_STATE_LEDGER_OUTPUT_V1.lineage_identity(),
+    )
     return LotBasisTransferReceiptState(
         source_transaction_id="DEMERGER-OUT-DB-01",
         target_transaction_id="DEMERGER-IN-DB-01",
@@ -334,20 +391,6 @@ def _active_state(*, transferred_local: str) -> LotBasisTransferReceiptState:
         status=LotBasisTransferReceiptStatus.ACTIVE,
         transferred_cost_local=transferred,
         transferred_cost_base=Decimal("30"),
-        allocations=(
-            SourceLotBasisTransferAllocation(
-                allocation_ordinal=1,
-                source_lot_id="LOT-BASIS-TRANSFER-DB-01",
-                source_transaction_id="BUY-BASIS-TRANSFER-DB-01",
-                source_acquisition_date=date(2026, 1, 1),
-                retained_quantity=Decimal("10"),
-                source_cost_local_before=Decimal("100"),
-                source_cost_base_before=Decimal("120"),
-                transferred_cost_local=transferred,
-                transferred_cost_base=Decimal("30"),
-                retained_cost_local=Decimal("100") - transferred,
-                retained_cost_base=Decimal("90"),
-            ),
-        ),
-        basis_transfer_calculation_lineage=_lineage("basis-transfer"),
+        allocations=(allocation,),
+        basis_transfer_calculation_lineage=transfer_lineage,
     )
