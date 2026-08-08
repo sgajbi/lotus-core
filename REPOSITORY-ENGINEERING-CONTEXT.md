@@ -3449,6 +3449,11 @@ Most relevant current governance:
      published event contract will reject. Do not silently attach UTC at a financial calculation
      boundary. A parser that still owns an explicit legacy timestamp compatibility contract
      requires its own downstream-safe migration rather than an incidental local change.
+     Semantic correction is different from an ordinary sparse upsert: every nullable field owned
+     by the corrected transaction family must participate in a named domain clear policy, and an
+     omitted corrected value must be persisted explicitly as SQL `NULL`. Preserve exact zero as
+     distinct evidence. When a generated child survives but its settlement leg does not, load that
+     child only on the correction path and explicitly clear its retired cash/component links.
 
 233. Fixed-income amortized book-cost policy, exact source-lot authority, source facts, resolution,
      schedule calculation, and immutable profile materialization belong to the transaction-

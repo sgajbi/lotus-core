@@ -466,6 +466,15 @@ Data Models wiki documents the staged ledgers while the capability wiki remains
   reference, while explicit zero adjustments and non-zero missing pairs remain rejected. No
   API/OpenAPI shape, schema, migration, Kafka, capability, central-context, skill-routing, or
   additional wiki truth changed.
+- correction field-presence hardening: semantic correction now owns one explicit set covering
+  nullable redemption price type, factor bounds, principal, accrued interest, embedded fee, and
+  embedded tax. Cost persistence writes every member for a redemption rebuild, including SQL
+  `NULL` when the corrected command omits prior authority, while non-redemption sparse updates stay
+  unchanged. A correction with positive interest but zero net settlement loads the prior interest
+  child, retains the income component, and clears its retired cash/component links. Validation:
+  41 warning-strict unit cases and one two-repair PostgreSQL lifecycle passed in 70.17 seconds,
+  covering positive-to-omitted, positive-to-zero, cash retirement/regeneration, and durable rows.
+  No API/OpenAPI, schema/migration, Kafka, generated identity, or ordinary-booking query change.
 - final redemption-contract proof: all three production redemption commands require a source-owned
   settlement date at ingestion, canonical-event, preparation, and cost-domain boundaries, blocking
   every fallback from trade date to cash value date. Before lot access, the cost domain requires a

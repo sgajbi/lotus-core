@@ -504,3 +504,157 @@ async def test_partial_redemption_replay_restores_cash_without_versioning_receip
     assert len({cashflow.linked_transaction_group_id for cashflow in cashflows}) == 1
     assert len(receipts) == 1
     assert allocation_count == 1
+
+
+async def test_redemption_correction_clears_superseded_terms_and_interest_cash_link(
+    clean_db,
+    redemption_cashflow_rules,
+    async_db_session: AsyncSession,
+) -> None:
+    portfolio_id = "PORT-REDEMPTION-CORRECTION-01"
+    security_id = "FO_FI_REDEMPTION_CORRECTION_01"
+    buy_id = "BUY-REDEMPTION-CORRECTION-01"
+    redemption_id = "MATURITY_REDEMPTION-CORRECTION-01"
+    interest_leg_id = f"{redemption_id}-ACCRUED-INTEREST"
+    cash_leg_id = f"{redemption_id}-CASHLEG"
+    acquisition = booked_transaction_event(
+        transaction_id=buy_id,
+        portfolio_id=portfolio_id,
+        security_id=security_id,
+        transaction_date=datetime(2026, 1, 2, 10, 0, tzinfo=timezone.utc),
+        transaction_type="BUY",
+        quantity="100",
+        price="0.97",
+        gross_amount="97",
+    )
+    original = booked_transaction_event(
+        transaction_id=redemption_id,
+        portfolio_id=portfolio_id,
+        security_id=security_id,
+        transaction_date=datetime(2026, 7, 1, 10, 0, tzinfo=timezone.utc),
+        settlement_date=datetime(2026, 7, 3, 9, 0, tzinfo=timezone.utc),
+        transaction_type="MATURITY_REDEMPTION",
+        quantity="100",
+        price="1",
+        gross_amount="100",
+        redemption_price_type="PAR",
+        principal_proceeds_local=Decimal("100"),
+        accrued_interest_proceeds_local=Decimal("5"),
+        embedded_fee_amount_local=Decimal("2"),
+        embedded_tax_amount_local=Decimal("3"),
+        cash_entry_mode="AUTO_GENERATE",
+        settlement_cash_account_id="CASH-USD-REDEMPTION-CORRECTION-01",
+        settlement_cash_instrument_id="CASH-USD",
+    )
+    async_db_session.add_all(
+        [
+            portfolio_record(portfolio_id, cost_basis_method="FIFO"),
+            instrument_record(
+                security_id,
+                name="Correctable Redemption Note",
+                isin="SG0000009130",
+                currency="USD",
+                product_type="BOND",
+                asset_class="FIXED_INCOME",
+            ),
+        ]
+    )
+    context = transaction_processing_test_context(async_db_session)
+    for offset, event in enumerate((acquisition, original), start=9911):
+        result = await persist_and_process_booked_transaction(
+            session=async_db_session,
+            context=context,
+            event=event,
+            event_id=f"transactions.persisted-0-{offset}",
+            correlation_id=f"corr-{event.transaction_id.lower()}",
+        )
+        assert result.status is TransactionProcessingStatus.PROCESSED
+
+    zero_net = original.model_copy(
+        update={
+            "redemption_price_type": None,
+            "principal_proceeds_local": Decimal("100"),
+            "accrued_interest_proceeds_local": Decimal("5"),
+            "embedded_fee_amount_local": Decimal("105"),
+            "embedded_tax_amount_local": None,
+        }
+    )
+    zero_net_result = await process_booked_transaction(
+        context=context,
+        event=zero_net,
+        event_id="transactions.persisted-0-9913",
+        correlation_id="corr-redemption-correction-zero-net",
+        processing_intent=TransactionProcessingIntent.REPAIR,
+    )
+    assert zero_net_result.status is TransactionProcessingStatus.PROCESSED
+
+    async with context.session_factory() as verification_session:
+        zero_net_rows = {
+            row.transaction_id: row
+            for row in (
+                (
+                    await verification_session.execute(
+                        select(DBTransaction).where(
+                            DBTransaction.transaction_id.in_(
+                                [redemption_id, interest_leg_id, cash_leg_id]
+                            )
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+        }
+    zero_net_redemption = zero_net_rows[redemption_id]
+    assert zero_net_redemption.redemption_price_type is None
+    assert zero_net_redemption.principal_proceeds_local == Decimal("100")
+    assert zero_net_redemption.accrued_interest_proceeds_local == Decimal("5")
+    assert zero_net_redemption.embedded_fee_amount_local == Decimal("105")
+    assert zero_net_redemption.embedded_tax_amount_local is None
+    assert zero_net_redemption.external_cash_transaction_id is None
+    assert zero_net_rows[interest_leg_id].gross_transaction_amount == Decimal("5")
+    assert zero_net_rows[interest_leg_id].external_cash_transaction_id is None
+    assert zero_net_rows[cash_leg_id].gross_transaction_amount == Decimal(0)
+
+    omitted = zero_net.model_copy(
+        update={
+            "principal_proceeds_local": None,
+            "accrued_interest_proceeds_local": Decimal(0),
+            "embedded_fee_amount_local": None,
+            "embedded_tax_amount_local": None,
+        }
+    )
+    omitted_result = await process_booked_transaction(
+        context=context,
+        event=omitted,
+        event_id="transactions.persisted-0-9914",
+        correlation_id="corr-redemption-correction-omitted",
+        processing_intent=TransactionProcessingIntent.REPAIR,
+    )
+    assert omitted_result.status is TransactionProcessingStatus.PROCESSED
+
+    async with context.session_factory() as verification_session:
+        corrected_rows = {
+            row.transaction_id: row
+            for row in (
+                (
+                    await verification_session.execute(
+                        select(DBTransaction).where(
+                            DBTransaction.transaction_id.in_(
+                                [redemption_id, interest_leg_id, cash_leg_id]
+                            )
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+        }
+    corrected_redemption = corrected_rows[redemption_id]
+    assert corrected_redemption.principal_proceeds_local is None
+    assert corrected_redemption.accrued_interest_proceeds_local == Decimal(0)
+    assert corrected_redemption.embedded_fee_amount_local is None
+    assert corrected_redemption.embedded_tax_amount_local is None
+    assert corrected_redemption.external_cash_transaction_id == cash_leg_id
+    assert corrected_rows[interest_leg_id].gross_transaction_amount == Decimal(0)
+    assert corrected_rows[cash_leg_id].gross_transaction_amount == Decimal("100")
