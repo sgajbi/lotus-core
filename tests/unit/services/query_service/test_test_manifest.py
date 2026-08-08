@@ -76,6 +76,18 @@ def test_transaction_processing_contract_tracks_complete_combined_integration_pa
     ]
 
 
+def test_fixed_income_book_cost_recovery_suite_is_focused_and_db_direct() -> None:
+    suite = get_suite("fixed-income-book-cost-recovery")
+
+    assert len(suite) == 2
+    assert all("::test_" in node_id for node_id in suite)
+    assert SUITE_ENV_PROFILE["fixed-income-book-cost-recovery"] == "integration"
+    assert SUITE_RUNTIME_MODE["fixed-income-book-cost-recovery"] == "db_direct"
+    assert "test-fixed-income-book-cost-recovery-gate:" in Path("Makefile").read_text(
+        encoding="utf-8"
+    )
+
+
 def test_sell_contract_suite_includes_sell_query_contract_tests() -> None:
     sell_suite = get_suite("transaction-sell-contract")
     assert "tests/integration/services/query_service/test_sell_state_router.py" in sell_suite
@@ -109,6 +121,7 @@ def test_e2e_all_suite_tracks_full_end_to_end_tree() -> None:
 def test_manifest_runtime_modes_keep_db_direct_and_live_worker_explicit() -> None:
     assert SUITE_RUNTIME_MODE["integration-all"] == "db_direct"
     assert SUITE_RUNTIME_MODE["transaction-processing-contract"] == "db_direct"
+    assert SUITE_RUNTIME_MODE["fixed-income-book-cost-recovery"] == "db_direct"
     assert SUITE_RUNTIME_MODE["e2e-all"] == "live_worker"
 
 
@@ -116,7 +129,7 @@ def test_manifest_paths_exist_for_all_suites() -> None:
     for suite_name in SUITES:
         validate_suite_paths(suite_name)
         for path in get_suite(suite_name):
-            assert Path(path).exists()
+            assert Path(path.split("::", maxsplit=1)[0]).exists()
 
 
 def test_manifest_collection_command_uses_suite_definition() -> None:

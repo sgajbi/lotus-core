@@ -158,6 +158,14 @@ SUITES: dict[str, list[str]] = {
     "transaction-processing-contract": [
         "tests/integration/services/portfolio_transaction_processing_service",
     ],
+    "fixed-income-book-cost-recovery": [
+        "tests/integration/services/portfolio_transaction_processing_service/"
+        "test_lot_amortized_cost_authority_repository.py::"
+        "test_authority_correction_survives_restart_with_one_durable_replay_intent",
+        "tests/integration/services/portfolio_transaction_processing_service/"
+        "test_int_redemption_lifecycle.py::"
+        "test_partial_redemption_replay_restores_cash_without_versioning_receipt",
+    ],
 }
 
 SOURCE = "src/services/query_service/app"
@@ -182,6 +190,7 @@ SUITE_ENV_PROFILE: dict[str, str] = {
     "transaction-fx-contract": "integration",
     "transaction-portfolio-flow-bundle-contract": "integration",
     "transaction-processing-contract": "integration",
+    "fixed-income-book-cost-recovery": "integration",
     "e2e-smoke": "e2e",
     "e2e-all": "e2e",
 }
@@ -202,6 +211,7 @@ SUITE_RUNTIME_MODE: dict[str, str] = {
     "transaction-fx-contract": "db_direct",
     "transaction-portfolio-flow-bundle-contract": "db_direct",
     "transaction-processing-contract": "db_direct",
+    "fixed-income-book-cost-recovery": "db_direct",
     "e2e-smoke": "live_worker",
     "e2e-all": "live_worker",
 }
@@ -216,7 +226,9 @@ def get_suite(name: str) -> list[str]:
 
 def validate_suite_paths(name: str) -> None:
     missing = [
-        path for path in get_suite(name) if not path.startswith("-") and not Path(path).exists()
+        path
+        for path in get_suite(name)
+        if not path.startswith("-") and not Path(path.split("::", maxsplit=1)[0]).exists()
     ]
     if missing:
         raise FileNotFoundError(
