@@ -495,6 +495,13 @@ Data Models wiki documents the staged ledgers while the capability wiki remains
   assertions with zero failures. No API/OpenAPI shape, schema, migration, Kafka, capability,
   central-context, skill-routing, or wiki truth changed.
 
+Acceptance audit correction: current disposal readers verify the latest receipt and its immediate
+predecessor, but #478 is not fixed-local until a bounded full-chain recovery gate verifies every
+historical header, allocation, and amortized-lineage hash. That gate must reject middle-version
+tampering and prove a durably staged authority correction survives interruption/restart with one
+idempotent repair whose carry, P&L, checkpoint, and lineage equal uninterrupted control. Use bulk
+history reads and representative contiguous depth so the proof cannot introduce N+1 behavior.
+
 Protected PR and exact-main evidence remain pending for this tranche. Wider runtime recovery/load
 proof, complete corporate-action scenario coverage, redemption, and final issue closure remain
 pending until their corresponding implementation slices exist. No
