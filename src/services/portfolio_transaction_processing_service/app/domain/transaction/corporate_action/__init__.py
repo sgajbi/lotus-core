@@ -16,11 +16,11 @@ from .classification import (
 )
 from .event_graph import (
     CorporateActionEventChild,
-    CorporateActionEventExecutionPlan,
     CorporateActionEventGraph,
     CorporateActionEventGraphFinding,
     CorporateActionEventGraphReason,
-    CorporateActionEventGraphStatus,
+    CorporateActionEventStructuralPlan,
+    CorporateActionEventStructuralStatus,
     resolve_corporate_action_event_graph,
 )
 from .ordering import (
@@ -42,11 +42,11 @@ __all__ = [
     "CORPORATE_ACTION_RECONCILIATION_INPUT_TYPES",
     "FRACTIONAL_CASH_BASIS_TRANSACTION_TYPES",
     "CorporateActionEventChild",
-    "CorporateActionEventExecutionPlan",
     "CorporateActionEventGraph",
     "CorporateActionEventGraphFinding",
     "CorporateActionEventGraphReason",
-    "CorporateActionEventGraphStatus",
+    "CorporateActionEventStructuralPlan",
+    "CorporateActionEventStructuralStatus",
     "CorporateActionValidationError",
     "CorporateActionValidationFinding",
     "CorporateActionValidationReasonCode",

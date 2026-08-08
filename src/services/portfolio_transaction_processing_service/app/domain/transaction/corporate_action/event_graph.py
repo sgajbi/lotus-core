@@ -1,24 +1,30 @@
-"""Resolve immutable corporate-action child dependencies before financial execution."""
+"""Adapt corporate-action child declarations to structural event-graph validation."""
 
 from __future__ import annotations
 
-import heapq
+import hashlib
+import json
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Iterable
 
+from ..event_graph import (
+    DirectedEventGraphReason,
+    DirectedEventGraphStatus,
+    DirectedEventNode,
+    resolve_directed_event_graph,
+)
 from .ordering import corporate_action_dependency_rank
 
 
-class CorporateActionEventGraphStatus(StrEnum):
-    """Classify whether an event graph is safe to execute."""
+class CorporateActionEventStructuralStatus(StrEnum):
+    """Classify graph structure without claiming manifest completeness or readiness."""
 
-    READY = "READY"
-    PARKED = "PARKED"
+    STRUCTURALLY_VALID = "STRUCTURALLY_VALID"
+    INVALID = "INVALID"
 
 
 class CorporateActionEventGraphReason(StrEnum):
-    """Expose stable reasons why a graph cannot be executed."""
+    """Expose corporate-action-owned structural defect reasons."""
 
     EMPTY_EVENT = "CA_EVENT_EMPTY"
     DUPLICATE_CHILD_ID = "CA_EVENT_DUPLICATE_CHILD_ID"
@@ -27,11 +33,12 @@ class CorporateActionEventGraphReason(StrEnum):
     SELF_DEPENDENCY = "CA_EVENT_SELF_DEPENDENCY"
     MISSING_DEPENDENCY = "CA_EVENT_MISSING_DEPENDENCY"
     DEPENDENCY_CYCLE = "CA_EVENT_DEPENDENCY_CYCLE"
+    BLOCKED_BY_CYCLE = "CA_EVENT_BLOCKED_BY_CYCLE"
 
 
 @dataclass(frozen=True, slots=True)
 class CorporateActionEventChild:
-    """Represent one immutable child node in a corporate-action event graph."""
+    """Represent one observed child declaration; it is not a completeness manifest."""
 
     transaction_id: str
     transaction_type: str
@@ -42,7 +49,9 @@ class CorporateActionEventChild:
 
     def __post_init__(self) -> None:
         object.__setattr__(
-            self, "transaction_id", _required_text(self.transaction_id, "transaction_id")
+            self,
+            "transaction_id",
+            _required_text(self.transaction_id, "transaction_id"),
         )
         object.__setattr__(
             self,
@@ -50,7 +59,9 @@ class CorporateActionEventChild:
             _required_text(self.transaction_type, "transaction_type").upper(),
         )
         object.__setattr__(
-            self, "child_role", _required_text(self.child_role, "child_role").upper()
+            self,
+            "child_role",
+            _required_text(self.child_role, "child_role").upper(),
         )
         if isinstance(self.dependency_transaction_ids, (str, bytes)):
             raise ValueError("dependency_transaction_ids must be a collection of transaction ids")
@@ -79,7 +90,7 @@ class CorporateActionEventChild:
 
 @dataclass(frozen=True, slots=True)
 class CorporateActionEventGraph:
-    """Represent one versioned parent event and its complete captured child set."""
+    """Represent a versioned parent identity and currently observed child declarations."""
 
     corporate_action_event_id: str
     linked_transaction_group_id: str
@@ -115,7 +126,7 @@ class CorporateActionEventGraph:
 
 @dataclass(frozen=True, slots=True)
 class CorporateActionEventGraphFinding:
-    """Describe one deterministic graph-readiness defect."""
+    """Describe one deterministic structural defect."""
 
     reason: CorporateActionEventGraphReason
     transaction_ids: tuple[str, ...]
@@ -123,189 +134,96 @@ class CorporateActionEventGraphFinding:
 
 
 @dataclass(frozen=True, slots=True)
-class CorporateActionEventExecutionPlan:
-    """Return the deterministic order or the complete fail-closed finding set."""
+class CorporateActionEventStructuralPlan:
+    """Return structural ordering without implying that the event is complete or executable."""
 
-    status: CorporateActionEventGraphStatus
+    status: CorporateActionEventStructuralStatus
     ordered_children: tuple[CorporateActionEventChild, ...]
     findings: tuple[CorporateActionEventGraphFinding, ...]
-    examined_node_count: int
-    examined_edge_count: int
+    declared_node_count: int
+    declared_edge_count: int
 
     @property
     def ordered_transaction_ids(self) -> tuple[str, ...]:
-        """Return the planned transaction identities without losing node evidence."""
+        """Return canonical child identities."""
 
         return tuple(child.transaction_id for child in self.ordered_children)
 
 
 def resolve_corporate_action_event_graph(
     graph: CorporateActionEventGraph,
-) -> CorporateActionEventExecutionPlan:
-    """Resolve a deterministic dependency-respecting order or park the event."""
+) -> CorporateActionEventStructuralPlan:
+    """Validate observed child structure without claiming parent-manifest readiness."""
 
-    findings: list[CorporateActionEventGraphFinding] = []
-    children_by_id: dict[str, CorporateActionEventChild] = {}
-    for child in graph.children:
-        existing = children_by_id.get(child.transaction_id)
-        if existing is None:
-            children_by_id[child.transaction_id] = child
-            continue
-        reason = (
-            CorporateActionEventGraphReason.DUPLICATE_CHILD_ID
-            if existing == child
-            else CorporateActionEventGraphReason.CONFLICTING_CHILD_DEFINITION
+    nodes = tuple(_directed_node(child) for child in graph.children)
+    children_by_transaction_id = {child.transaction_id: child for child in graph.children}
+    plan = resolve_directed_event_graph(nodes)
+    findings = tuple(
+        CorporateActionEventGraphFinding(
+            reason=_CORPORATE_ACTION_REASON_BY_GRAPH_REASON[finding.reason],
+            transaction_ids=finding.node_ids,
+            dependency_transaction_ids=finding.dependency_node_ids,
         )
-        findings.append(
-            CorporateActionEventGraphFinding(
-                reason=reason,
-                transaction_ids=(child.transaction_id,),
-            )
-        )
-
-    if not graph.children:
-        findings.append(
-            CorporateActionEventGraphFinding(
-                reason=CorporateActionEventGraphReason.EMPTY_EVENT,
-                transaction_ids=(),
-            )
-        )
-
-    if findings:
-        return _parked(findings=findings, node_count=len(children_by_id), edge_count=0)
-
-    dependants: dict[str, list[str]] = {transaction_id: [] for transaction_id in children_by_id}
-    indegree = dict.fromkeys(children_by_id, 0)
-    edge_count = 0
-    for child in children_by_id.values():
-        dependencies = child.dependency_transaction_ids
-        unique_dependencies = set(dependencies)
-        if len(unique_dependencies) != len(dependencies):
-            findings.append(
-                CorporateActionEventGraphFinding(
-                    reason=CorporateActionEventGraphReason.DUPLICATE_DEPENDENCY_REFERENCE,
-                    transaction_ids=(child.transaction_id,),
-                    dependency_transaction_ids=_duplicates(dependencies),
-                )
-            )
-        if child.transaction_id in unique_dependencies:
-            findings.append(
-                CorporateActionEventGraphFinding(
-                    reason=CorporateActionEventGraphReason.SELF_DEPENDENCY,
-                    transaction_ids=(child.transaction_id,),
-                    dependency_transaction_ids=(child.transaction_id,),
-                )
-            )
-        missing = tuple(sorted(unique_dependencies.difference(children_by_id)))
-        if missing:
-            findings.append(
-                CorporateActionEventGraphFinding(
-                    reason=CorporateActionEventGraphReason.MISSING_DEPENDENCY,
-                    transaction_ids=(child.transaction_id,),
-                    dependency_transaction_ids=missing,
-                )
-            )
-        for dependency_id in sorted(unique_dependencies.intersection(children_by_id)):
-            if dependency_id == child.transaction_id:
-                continue
-            dependants[dependency_id].append(child.transaction_id)
-            indegree[child.transaction_id] += 1
-            edge_count += 1
-
-    if findings:
-        return _parked(
-            findings=findings,
-            node_count=len(children_by_id),
-            edge_count=edge_count,
-        )
-
-    ready: list[tuple[tuple[int, int, str, str, str], str]] = []
-    for transaction_id, degree in indegree.items():
-        if degree == 0:
-            child = children_by_id[transaction_id]
-            heapq.heappush(ready, (_execution_order_key(child), transaction_id))
-
-    ordered: list[CorporateActionEventChild] = []
-    examined_edge_count = 0
-    while ready:
-        _, transaction_id = heapq.heappop(ready)
-        child = children_by_id[transaction_id]
-        ordered.append(child)
-        for dependant_id in dependants[transaction_id]:
-            examined_edge_count += 1
-            indegree[dependant_id] -= 1
-            if indegree[dependant_id] == 0:
-                dependant = children_by_id[dependant_id]
-                heapq.heappush(ready, (_execution_order_key(dependant), dependant_id))
-
-    if len(ordered) != len(children_by_id):
-        cycle_ids = tuple(
-            sorted(transaction_id for transaction_id, degree in indegree.items() if degree)
-        )
-        return CorporateActionEventExecutionPlan(
-            status=CorporateActionEventGraphStatus.PARKED,
-            ordered_children=(),
-            findings=(
-                CorporateActionEventGraphFinding(
-                    reason=CorporateActionEventGraphReason.DEPENDENCY_CYCLE,
-                    transaction_ids=cycle_ids,
-                ),
-            ),
-            examined_node_count=len(ordered),
-            examined_edge_count=examined_edge_count,
-        )
-
-    return CorporateActionEventExecutionPlan(
-        status=CorporateActionEventGraphStatus.READY,
-        ordered_children=tuple(ordered),
-        findings=(),
-        examined_node_count=len(ordered),
-        examined_edge_count=examined_edge_count,
+        for finding in plan.findings
     )
-
-
-def _execution_order_key(child: CorporateActionEventChild) -> tuple[int, int, str, str, str]:
-    sequence = child.child_sequence_hint if child.child_sequence_hint is not None else 2_147_483_647
-    return (
-        corporate_action_dependency_rank(child),
-        sequence,
-        child.target_instrument_id or "",
-        child.child_role,
-        child.transaction_id,
+    ordered_children = tuple(
+        children_by_transaction_id[node.node_id] for node in plan.ordered_nodes
     )
-
-
-def _duplicates(values: Iterable[str]) -> tuple[str, ...]:
-    seen: set[str] = set()
-    duplicates: set[str] = set()
-    for value in values:
-        if value in seen:
-            duplicates.add(value)
-        seen.add(value)
-    return tuple(sorted(duplicates))
-
-
-def _parked(
-    *,
-    findings: Iterable[CorporateActionEventGraphFinding],
-    node_count: int,
-    edge_count: int,
-) -> CorporateActionEventExecutionPlan:
-    return CorporateActionEventExecutionPlan(
-        status=CorporateActionEventGraphStatus.PARKED,
-        ordered_children=(),
-        findings=tuple(
-            sorted(
-                findings,
-                key=lambda finding: (
-                    finding.reason,
-                    finding.transaction_ids,
-                    finding.dependency_transaction_ids,
-                ),
-            )
+    return CorporateActionEventStructuralPlan(
+        status=(
+            CorporateActionEventStructuralStatus.STRUCTURALLY_VALID
+            if plan.status == DirectedEventGraphStatus.VALID
+            else CorporateActionEventStructuralStatus.INVALID
         ),
-        examined_node_count=node_count,
-        examined_edge_count=edge_count,
+        ordered_children=ordered_children,
+        findings=findings,
+        declared_node_count=plan.declared_node_count,
+        declared_edge_count=plan.declared_edge_count,
+    )
+
+
+_CORPORATE_ACTION_REASON_BY_GRAPH_REASON = {
+    DirectedEventGraphReason.EMPTY_GRAPH: CorporateActionEventGraphReason.EMPTY_EVENT,
+    DirectedEventGraphReason.DUPLICATE_NODE_ID: (
+        CorporateActionEventGraphReason.DUPLICATE_CHILD_ID
+    ),
+    DirectedEventGraphReason.CONFLICTING_NODE_DEFINITION: (
+        CorporateActionEventGraphReason.CONFLICTING_CHILD_DEFINITION
+    ),
+    DirectedEventGraphReason.DUPLICATE_EDGE: (
+        CorporateActionEventGraphReason.DUPLICATE_DEPENDENCY_REFERENCE
+    ),
+    DirectedEventGraphReason.SELF_DEPENDENCY: CorporateActionEventGraphReason.SELF_DEPENDENCY,
+    DirectedEventGraphReason.MISSING_DEPENDENCY: (
+        CorporateActionEventGraphReason.MISSING_DEPENDENCY
+    ),
+    DirectedEventGraphReason.DEPENDENCY_CYCLE: (CorporateActionEventGraphReason.DEPENDENCY_CYCLE),
+    DirectedEventGraphReason.BLOCKED_BY_CYCLE: (CorporateActionEventGraphReason.BLOCKED_BY_CYCLE),
+}
+
+
+def _directed_node(child: CorporateActionEventChild) -> DirectedEventNode:
+    sequence = child.child_sequence_hint if child.child_sequence_hint is not None else 2_147_483_647
+    payload = {
+        "child_role": child.child_role,
+        "child_sequence_hint": child.child_sequence_hint,
+        "dependency_transaction_ids": list(child.dependency_transaction_ids),
+        "target_instrument_id": child.target_instrument_id,
+        "transaction_id": child.transaction_id,
+        "transaction_type": child.transaction_type,
+    }
+    canonical = json.dumps(payload, ensure_ascii=True, separators=(",", ":"), sort_keys=True)
+    return DirectedEventNode(
+        node_id=child.transaction_id,
+        dependency_node_ids=child.dependency_transaction_ids,
+        definition_fingerprint="sha256:" + hashlib.sha256(canonical.encode("utf-8")).hexdigest(),
+        order_key=(
+            f"{corporate_action_dependency_rank(child):04d}",
+            f"{sequence:010d}",
+            child.target_instrument_id or "-",
+            child.child_role,
+            child.transaction_id,
+        ),
     )
 
 
