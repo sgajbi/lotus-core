@@ -30,6 +30,7 @@ def test_source_identity_rejects_both_generated_child_families() -> None:
 
     assert "trim(transactions.portfolio_id) = 'PORT-1'" in sql
     assert "NOT" in sql
+    assert sql.count("coalesce(") == 2
     assert "'-CASHLEG'" in sql
     assert "'-ACCRUED-INTEREST'" in sql
 

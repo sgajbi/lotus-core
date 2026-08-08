@@ -87,6 +87,15 @@ def _generated_event(
     )
 
 
+def _incomplete_generated_shape_event(family: str) -> TransactionEvent:
+    """Build suffix-shaped metadata that remains source-owned because it is incomplete."""
+
+    generated = _generated_event(family)
+    if family == "cash":
+        return generated.model_copy(update={"link_type": None})
+    return generated.model_copy(update={"component_id": None})
+
+
 async def _persist(
     session_factory: async_sessionmaker[AsyncSession],
     event: TransactionEvent,
@@ -200,4 +209,27 @@ async def test_same_owner_replay_updates_but_cross_portfolio_reclaim_fails(
         )
     ).scalar_one()
     assert row.portfolio_id == "PORT-OWNER-A"
+    assert row.gross_transaction_amount == Decimal("875")
+
+
+@pytest.mark.parametrize("family", ["cash", "interest"])
+async def test_incomplete_generated_shape_replays_as_source_owned(
+    clean_db,
+    async_db_session: AsyncSession,
+    family: str,
+) -> None:
+    await _seed_portfolios(async_db_session)
+    factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
+    source = _incomplete_generated_shape_event(family)
+
+    assert await _persist(factory, source) == "persisted"
+    corrected = source.model_copy(update={"gross_transaction_amount": Decimal("875")})
+    assert await _persist(factory, corrected) == "persisted"
+
+    async_db_session.expire_all()
+    row = (
+        await async_db_session.execute(
+            select(DBTransaction).where(DBTransaction.transaction_id == source.transaction_id)
+        )
+    ).scalar_one()
     assert row.gross_transaction_amount == Decimal("875")
