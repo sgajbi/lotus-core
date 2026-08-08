@@ -1052,6 +1052,10 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
         "Count of jobs that moved to FAILED state within the configured failed-job window."
     )
     reconciliation_run_record = components["ReconciliationRunRecord"]
+    summary_contract = reconciliation_run_record["properties"]["summary"]
+    assert "canonical per-child input lineage" in summary_contract["description"]
+    assert summary_contract["examples"][0]["target_basis_retained_local"] == "240.0000000000"
+    assert summary_contract["examples"][0]["fractional_basis_local"] == "10.0000000000"
     assert reconciliation_run_record["properties"]["correlation_id"]["description"].startswith(
         "Durable correlation identifier captured for the reconciliation run"
     )

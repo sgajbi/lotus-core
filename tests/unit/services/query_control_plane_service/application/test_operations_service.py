@@ -1977,6 +1977,13 @@ async def test_analytics_export_job_flags_running_staleness_and_backlog_age():
 async def test_get_reconciliation_runs(service: OperationsService, mock_ops_repo: AsyncMock):
     started_at = datetime(2026, 3, 13, 10, 15, tzinfo=timezone.utc)
     completed_at = datetime(2026, 3, 13, 10, 18, tzinfo=timezone.utc)
+    corporate_action_summary = {
+        "reconciliation_policy_id": "CORPORATE_ACTION_BASIS_CONSERVATION",
+        "reconciliation_policy_version": "1.0.0",
+        "target_basis_retained_local": "240.0000000000",
+        "fractional_basis_local": "10.0000000000",
+        "input_lineage": [{"transaction_id": "DEMERGER-IN-001"}],
+    }
     mock_ops_repo.get_reconciliation_runs_count.return_value = 1
     mock_ops_repo.get_reconciliation_runs.return_value = [
         type(
@@ -1984,7 +1991,7 @@ async def test_get_reconciliation_runs(service: OperationsService, mock_ops_repo
             (),
             {
                 "run_id": "recon_1234567890abcdef",
-                "reconciliation_type": "transaction_cashflow",
+                "reconciliation_type": "corporate_action_bundle_a",
                 "status": " failed ",
                 "business_date": date(2026, 3, 13),
                 "epoch": 3,
@@ -1992,9 +1999,10 @@ async def test_get_reconciliation_runs(service: OperationsService, mock_ops_repo
                 "started_at": started_at,
                 "completed_at": completed_at,
                 "requested_by": "pipeline_orchestrator_service",
-                "dedupe_key": "recon:transaction_cashflow:P1:2026-03-13:3",
+                "dedupe_key": "recon:corporate_action_bundle_a:P1:2026-03-13:3",
                 "correlation_id": "corr-recon-20260313-001",
                 "failure_reason": "Tolerance exceeded for portfolio totals.",
+                "summary": corporate_action_summary,
             },
         )()
     ]
@@ -2005,8 +2013,8 @@ async def test_get_reconciliation_runs(service: OperationsService, mock_ops_repo
         limit=20,
         run_id="recon_1234567890abcdef",
         requested_by="pipeline_orchestrator_service",
-        dedupe_key="recon:transaction_cashflow:P1:2026-03-13:3",
-        reconciliation_type="transaction_cashflow",
+        dedupe_key="recon:corporate_action_bundle_a:P1:2026-03-13:3",
+        reconciliation_type="corporate_action_bundle_a",
         status="failed",
     )
 
@@ -2017,10 +2025,11 @@ async def test_get_reconciliation_runs(service: OperationsService, mock_ops_repo
     assert response.latest_evidence_timestamp == completed_at
     assert response.reconciliation_status == BLOCKED
     assert response.items[0].run_id == "recon_1234567890abcdef"
-    assert response.items[0].reconciliation_type == "transaction_cashflow"
+    assert response.items[0].reconciliation_type == "corporate_action_bundle_a"
+    assert response.items[0].summary == corporate_action_summary
     assert response.items[0].status == " failed "
     assert response.items[0].requested_by == "pipeline_orchestrator_service"
-    assert response.items[0].dedupe_key == "recon:transaction_cashflow:P1:2026-03-13:3"
+    assert response.items[0].dedupe_key == "recon:corporate_action_bundle_a:P1:2026-03-13:3"
     assert response.items[0].aggregation_revision == 7
     assert response.items[0].correlation_id == "corr-recon-20260313-001"
     assert response.items[0].failure_reason == "Tolerance exceeded for portfolio totals."
@@ -2032,8 +2041,8 @@ async def test_get_reconciliation_runs(service: OperationsService, mock_ops_repo
         run_id="recon_1234567890abcdef",
         correlation_id=None,
         requested_by="pipeline_orchestrator_service",
-        dedupe_key="recon:transaction_cashflow:P1:2026-03-13:3",
-        reconciliation_type="transaction_cashflow",
+        dedupe_key="recon:corporate_action_bundle_a:P1:2026-03-13:3",
+        reconciliation_type="corporate_action_bundle_a",
         status="FAILED",
         as_of=response.generated_at_utc,
     )
@@ -2044,8 +2053,8 @@ async def test_get_reconciliation_runs(service: OperationsService, mock_ops_repo
         run_id="recon_1234567890abcdef",
         correlation_id=None,
         requested_by="pipeline_orchestrator_service",
-        dedupe_key="recon:transaction_cashflow:P1:2026-03-13:3",
-        reconciliation_type="transaction_cashflow",
+        dedupe_key="recon:corporate_action_bundle_a:P1:2026-03-13:3",
+        reconciliation_type="corporate_action_bundle_a",
         status="FAILED",
         as_of=response.generated_at_utc,
     )
