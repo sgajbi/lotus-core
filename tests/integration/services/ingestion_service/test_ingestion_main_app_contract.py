@@ -1,3 +1,4 @@
+import re
 from time import time
 from unittest.mock import MagicMock, patch
 
@@ -904,16 +905,31 @@ async def test_openapi_describes_transaction_core_shared_schema(async_test_clien
     )
     gross_amount_property = transaction["properties"]["gross_transaction_amount"]
     assert gross_amount_property["anyOf"][0] == {"minimum": 0.0, "type": "number"}
-    gross_amount_condition = transaction["allOf"][-1]
-    assert gross_amount_condition["if"] == {
-        "properties": {
-            "transaction_type": {
-                "enum": ["CALL_REDEMPTION", "MATURITY_REDEMPTION", "PARTIAL_REDEMPTION"]
-            },
-            "price": {"const": 0},
-        },
-        "required": ["transaction_type", "price"],
-    }
+    gross_amount_conditions = [
+        clause
+        for clause in transaction["allOf"]
+        if clause.get("if", {}).get("properties", {}).get("price") == {"const": 0}
+    ]
+    assert len(gross_amount_conditions) == 1
+    gross_amount_condition = gross_amount_conditions[0]
+    gross_amount_if = gross_amount_condition["if"]
+    assert gross_amount_if["required"] == ["transaction_type", "price"]
+    assert gross_amount_if["properties"]["price"] == {"const": 0}
+    transaction_type_patterns = [
+        alternative["pattern"]
+        for alternative in gross_amount_if["properties"]["transaction_type"]["anyOf"]
+    ]
+    assert len(transaction_type_patterns) == 3
+    for transaction_type in (
+        "CALL_REDEMPTION",
+        "MATURITY_REDEMPTION",
+        "PARTIAL_REDEMPTION",
+    ):
+        assert any(
+            re.fullmatch(pattern, f" {transaction_type.lower()} ")
+            for pattern in transaction_type_patterns
+        )
+    assert not any(re.fullmatch(pattern, "BUY") for pattern in transaction_type_patterns)
     assert gross_amount_condition["then"]["properties"]["gross_transaction_amount"] == {
         "minimum": 0
     }
