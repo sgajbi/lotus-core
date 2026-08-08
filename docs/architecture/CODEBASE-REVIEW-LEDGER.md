@@ -1,5 +1,16 @@
 # Codebase Review Ledger
 
+CR-1678 generated-child ownership addendum (2026-08-08): issue #912 proved that deterministic
+`-CASHLEG` and `-ACCRUED-INTEREST` identifiers could overwrite unrelated globally unique
+transactions through ordinary PostgreSQL upsert conflict handling. One complete-metadata policy
+now classifies source, generated-settlement-cash, and redemption-interest ownership. Both canonical
+transaction writers apply the same atomic `ON CONFLICT DO UPDATE ... WHERE` portfolio/family/origin
+predicate and return stable `generated_transaction_identity_collision` on rejection. Explicit
+generated-child application ports prevent intent from being hidden inside an ordinary sparse
+upsert. Warning-strict application/unit proof covers pre-staging rejection; eight real-PostgreSQL
+cases cover both child families, both arrival orders, concurrent creators, same-owner replay,
+cross-portfolio rejection, and downstream table neutrality. No API, Kafka, or schema shape changed.
+
 CR-1678 linked-redemption serialization addendum (2026-08-05): issue #911 proved that the
 portfolio/security cost lock could not serialize redemption accrued-interest authority against a
 separately booked `INTEREST` leg on another security. Transaction processing now acquires one

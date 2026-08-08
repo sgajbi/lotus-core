@@ -494,6 +494,18 @@ Data Models wiki documents the staged ledgers while the capability wiki remains
   mutation, snapshot, and session-format cases pass; the exact Docker endpoint smoke passes 66
   assertions with zero failures. No API/OpenAPI shape, schema, migration, Kafka, capability,
   central-context, skill-routing, or wiki truth changed.
+- generated-child ownership proof: stable suffixes are no longer treated as ownership evidence.
+  Complete portfolio, family, source, and family-specific metadata classify generated settlement
+  cash and redemption accrued-interest children. Both raw event persistence and transaction
+  processing enforce that ownership in the PostgreSQL conflict statement, eliminating a
+  check-before-upsert race. Same-owner replay/correction remains valid; a source, cross-portfolio,
+  wrong-origin, or cross-family reclaim fails with
+  `generated_transaction_identity_collision` before effect staging. Validation: 70 warning-strict
+  unit/application cases across the ownership slice and eight real-PostgreSQL cases in 99.65
+  seconds covering both child families, both arrival orders, concurrent first creation,
+  same-owner replay, cross-portfolio rejection, sparse rows, and unchanged cashflow, position, and
+  outbox counts. No API/OpenAPI, Kafka, migration, generated-id format, or ordinary sparse-upsert
+  compatibility change.
 
 Acceptance audit correction: current disposal readers verify the latest receipt and its immediate
 predecessor, but #478 is not fixed-local until a bounded full-chain recovery gate verifies every

@@ -3488,6 +3488,15 @@ Most relevant current governance:
      retained rounding residuals, and calculation lineage. Do not return a profile/hash-only
      projection that cannot independently explain its own allocation content hash.
 
+234. A deterministic generated transaction identifier is globally unique but its suffix is not
+     ownership authority. Classify generated settlement cash and redemption accrued-interest only
+     from complete portfolio, origin, family, component, and link metadata. Preserve the ownership
+     invariant atomically in every canonical PostgreSQL transaction upsert with a conflict-row
+     predicate; do not add a pre-read check that reintroduces a first-creator race. Same-owner
+     replay and correction may update the row. Source/generated, cross-portfolio, wrong-origin, and
+     cross-family collisions must fail with `generated_transaction_identity_collision` before
+     effect staging. Application ports must state generated-child write intent explicitly.
+
 ## Context Maintenance Rule
 
 Update this document when:
