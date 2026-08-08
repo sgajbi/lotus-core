@@ -1034,13 +1034,81 @@ def test_internal_lot_disposal_rejects_missing_or_partial_target_metadata(
 
 
 @pytest.mark.parametrize("transaction_type", ["SPIN_OFF", "DEMERGER_OUT"])
-def test_partial_basis_transfer_does_not_over_require_disposal_destination(
+def test_positive_quantity_partial_basis_transfer_preserves_destination_compatibility(
     transaction_type: str,
 ) -> None:
-    transaction = Transaction(**_destination_payload(transaction_type))
+    transaction = Transaction(**_destination_payload(transaction_type, quantity="10"))
 
     assert transaction.target_transaction_reference is None
     assert transaction.target_instrument_id is None
+
+
+@pytest.mark.parametrize("transaction_type", ["SPIN_OFF", "DEMERGER_OUT"])
+@pytest.mark.parametrize(
+    "destination",
+    [
+        {},
+        {"target_transaction_reference": "TARGET-IN-001"},
+        {"target_instrument_id": "TARGET-SECURITY-001"},
+        {
+            "target_transaction_reference": "   ",
+            "target_instrument_id": "TARGET-SECURITY-001",
+        },
+    ],
+)
+def test_zero_quantity_partial_basis_transfer_requires_complete_target_identity(
+    transaction_type: str,
+    destination: dict[str, object],
+) -> None:
+    with pytest.raises(
+        ValidationError,
+        match="requires target_transaction_reference and target_instrument_id",
+    ):
+        Transaction(**_destination_payload(transaction_type, quantity="0", **destination))
+
+
+@pytest.mark.parametrize("transaction_type", ["SPIN_OFF", "DEMERGER_OUT"])
+def test_zero_quantity_partial_basis_transfer_accepts_complete_target_identity(
+    transaction_type: str,
+) -> None:
+    transaction = Transaction(
+        **_destination_payload(
+            transaction_type,
+            quantity="0",
+            target_transaction_reference=" TARGET-IN-001 ",
+            target_instrument_id=" TARGET-SECURITY-001 ",
+        )
+    )
+
+    assert transaction.target_transaction_reference == "TARGET-IN-001"
+    assert transaction.target_instrument_id == "TARGET-SECURITY-001"
+
+
+def test_transaction_schema_publishes_zero_quantity_basis_transfer_destination_requirement() -> (
+    None
+):
+    schema = Transaction.model_json_schema()
+    clauses = [
+        clause
+        for clause in schema["allOf"]
+        if clause.get("then", {}).get("required")
+        == ["target_transaction_reference", "target_instrument_id"]
+    ]
+
+    assert len(clauses) == 1
+    quantity_condition = clauses[0]["if"]["properties"]["quantity"]
+    assert {item.get("const") for item in quantity_condition["anyOf"]} == {0, None}
+    zero_string_pattern = next(
+        item["pattern"] for item in quantity_condition["anyOf"] if item["type"] == "string"
+    )
+    assert re.fullmatch(zero_string_pattern, " 0.000E+10 ")
+    assert not re.fullmatch(zero_string_pattern, "0.01")
+    transaction_type_condition = clauses[0]["if"]["properties"]["transaction_type"]
+    patterns = [item["pattern"] for item in transaction_type_condition["anyOf"]]
+    assert all(
+        any(re.fullmatch(pattern, transaction_type) for pattern in patterns)
+        for transaction_type in ("SPIN_OFF", "DEMERGER_OUT")
+    )
 
 
 @pytest.mark.parametrize("transaction_type", ["SPIN_IN", "DEMERGER_IN"])

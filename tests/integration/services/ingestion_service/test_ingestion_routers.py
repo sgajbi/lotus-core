@@ -1901,6 +1901,45 @@ async def test_ingest_transactions_rejects_incomplete_internal_disposal_destinat
     mock_kafka_producer.publish_message.assert_not_called()
 
 
+@pytest.mark.parametrize("transaction_type", ["SPIN_OFF", "DEMERGER_OUT"])
+@pytest.mark.parametrize(
+    "destination",
+    [
+        {},
+        {"target_transaction_reference": "TARGET-IN-001"},
+        {"target_instrument_id": "TARGET-SECURITY-001"},
+    ],
+)
+async def test_ingest_transactions_rejects_incomplete_basis_only_transfer_before_job_creation(
+    transaction_type: str,
+    destination: dict[str, object],
+    async_test_client: httpx.AsyncClient,
+    ingestion_test_harness,
+    mock_kafka_producer: MagicMock,
+) -> None:
+    mock_kafka_producer.publish_message.reset_mock()
+    fake_job_service = ingestion_test_harness["fake_job_service"]
+    payload = _transaction_batch_payload(f"{transaction_type}-INVALID-TARGET-001")
+    payload["transactions"][0].update(
+        {
+            "transaction_type": transaction_type,
+            "quantity": "0",
+            **destination,
+        }
+    )
+
+    response = await async_test_client.post("/ingest/transactions", json=payload)
+
+    assert response.status_code == 422
+    assert any(
+        "requires target_transaction_reference and target_instrument_id" in error["msg"]
+        for error in response.json()["detail"]
+    )
+    assert fake_job_service.jobs == {}
+    assert fake_job_service.failures == {}
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
 async def test_ingest_transactions_endpoint_accepts_empty_batch(
     async_test_client: httpx.AsyncClient, mock_kafka_producer: MagicMock
 ):
