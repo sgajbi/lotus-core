@@ -1,0 +1,381 @@
+"""Evaluate source-owned corporate-action manifests before execution is permitted."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from enum import StrEnum
+from typing import cast
+
+from portfolio_common.domain.calculation_lineage import (
+    FinancialSourceReference,
+    canonical_content_hash,
+)
+
+from .classification import QUANTITY_TRANSFER_CORPORATE_ACTION_PAIRS
+from .event_graph import (
+    CorporateActionEventChild,
+    CorporateActionEventGraph,
+    CorporateActionEventGraphReason,
+    CorporateActionEventStructuralStatus,
+    resolve_corporate_action_event_graph,
+)
+
+
+class CorporateActionManifestReadinessStatus(StrEnum):
+    """Classify authoritative parent-manifest readiness."""
+
+    AWAITING_MANIFEST = "AWAITING_MANIFEST"
+    AWAITING_COMPLETION = "AWAITING_COMPLETION"
+    AWAITING_CHILDREN = "AWAITING_CHILDREN"
+    INVALID = "INVALID"
+    READY = "READY"
+
+
+class CorporateActionManifestReason(StrEnum):
+    """Expose stable parent-manifest and observation defects."""
+
+    MANIFEST_REQUIRED = "CA_MANIFEST_REQUIRED"
+    COMPLETION_NOT_DECLARED = "CA_MANIFEST_COMPLETION_NOT_DECLARED"
+    INVALID_GRAPH = "CA_MANIFEST_INVALID_GRAPH"
+    INVALID_ROLE_FOR_TRANSACTION_TYPE = "CA_MANIFEST_INVALID_ROLE_FOR_TRANSACTION_TYPE"
+    SOURCE_INSTRUMENT_REQUIRED = "CA_MANIFEST_SOURCE_INSTRUMENT_REQUIRED"
+    TARGET_INSTRUMENT_REQUIRED = "CA_MANIFEST_TARGET_INSTRUMENT_REQUIRED"
+    TARGET_INSTRUMENT_EQUALS_SOURCE = "CA_MANIFEST_TARGET_INSTRUMENT_EQUALS_SOURCE"
+    TARGET_SOURCE_DEPENDENCY_REQUIRED = "CA_MANIFEST_TARGET_SOURCE_DEPENDENCY_REQUIRED"
+    TARGET_SOURCE_INSTRUMENT_MISMATCH = "CA_MANIFEST_TARGET_SOURCE_INSTRUMENT_MISMATCH"
+    NON_POSITION_DEPENDENCY_REQUIRED = "CA_MANIFEST_NON_POSITION_DEPENDENCY_REQUIRED"
+    MISSING_EXPECTED_CHILD = "CA_MANIFEST_MISSING_EXPECTED_CHILD"
+    UNEXPECTED_CHILD = "CA_MANIFEST_UNEXPECTED_CHILD"
+    OBSERVED_CHILD_MISMATCH = "CA_MANIFEST_OBSERVED_CHILD_MISMATCH"
+
+
+@dataclass(frozen=True, slots=True)
+class CorporateActionParentManifest:
+    """Declare the authoritative expected child set for one parent event version."""
+
+    corporate_action_event_id: str
+    linked_transaction_group_id: str
+    parent_event_reference: str
+    corporate_action_type: str
+    version: int
+    completion_declared: bool
+    expected_children: tuple[CorporateActionEventChild, ...]
+    source_reference: FinancialSourceReference
+
+    def __post_init__(self) -> None:
+        for field_name in (
+            "corporate_action_event_id",
+            "linked_transaction_group_id",
+            "parent_event_reference",
+            "corporate_action_type",
+        ):
+            value = getattr(self, field_name)
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+            object.__setattr__(self, field_name, value.strip())
+        object.__setattr__(self, "corporate_action_type", self.corporate_action_type.upper())
+        if isinstance(self.version, bool) or not isinstance(self.version, int) or self.version < 1:
+            raise ValueError("version must be a positive integer")
+        if not isinstance(self.completion_declared, bool):
+            raise ValueError("completion_declared must be a boolean")
+        if not isinstance(self.expected_children, tuple) or not all(
+            isinstance(child, CorporateActionEventChild) for child in self.expected_children
+        ):
+            raise ValueError(
+                "expected_children must be a tuple of CorporateActionEventChild values"
+            )
+        if not isinstance(self.source_reference, FinancialSourceReference):
+            raise ValueError("source_reference must be a FinancialSourceReference")
+
+    @property
+    def content_hash(self) -> str:
+        """Bind parent identity, expected nodes/edges and source-version evidence."""
+
+        return cast(
+            str,
+            canonical_content_hash(
+                {
+                    "completion_declared": self.completion_declared,
+                    "corporate_action_event_id": self.corporate_action_event_id,
+                    "corporate_action_type": self.corporate_action_type,
+                    "expected_children": [
+                        _child_payload(child)
+                        for child in sorted(
+                            self.expected_children,
+                            key=lambda value: value.transaction_id,
+                        )
+                    ],
+                    "linked_transaction_group_id": self.linked_transaction_group_id,
+                    "parent_event_reference": self.parent_event_reference,
+                    "source_reference": self.source_reference.lineage_payload(),
+                    "version": self.version,
+                }
+            ),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class CorporateActionManifestFinding:
+    """Describe one deterministic readiness defect."""
+
+    reason: CorporateActionManifestReason
+    transaction_ids: tuple[str, ...] = ()
+    graph_reasons: tuple[CorporateActionEventGraphReason, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class CorporateActionManifestReadiness:
+    """Return manifest readiness and the only permitted execution order."""
+
+    status: CorporateActionManifestReadinessStatus
+    ordered_children: tuple[CorporateActionEventChild, ...]
+    findings: tuple[CorporateActionManifestFinding, ...]
+    manifest_content_hash: str | None
+
+
+def evaluate_corporate_action_manifest_readiness(
+    *,
+    manifest: CorporateActionParentManifest | None,
+    observed_children: tuple[CorporateActionEventChild, ...],
+) -> CorporateActionManifestReadiness:
+    """Fail closed until an authoritative, complete and exactly observed manifest is ready."""
+
+    if manifest is None:
+        return _readiness(
+            CorporateActionManifestReadinessStatus.AWAITING_MANIFEST,
+            (CorporateActionManifestFinding(CorporateActionManifestReason.MANIFEST_REQUIRED),),
+        )
+    if not manifest.completion_declared:
+        return _readiness(
+            CorporateActionManifestReadinessStatus.AWAITING_COMPLETION,
+            (
+                CorporateActionManifestFinding(
+                    CorporateActionManifestReason.COMPLETION_NOT_DECLARED
+                ),
+            ),
+            manifest=manifest,
+        )
+
+    graph = CorporateActionEventGraph(
+        corporate_action_event_id=manifest.corporate_action_event_id,
+        linked_transaction_group_id=manifest.linked_transaction_group_id,
+        parent_event_reference=manifest.parent_event_reference,
+        version=manifest.version,
+        children=manifest.expected_children,
+    )
+    structural_plan = resolve_corporate_action_event_graph(graph)
+    findings: list[CorporateActionManifestFinding] = []
+    if structural_plan.status != CorporateActionEventStructuralStatus.STRUCTURALLY_VALID:
+        findings.append(
+            CorporateActionManifestFinding(
+                CorporateActionManifestReason.INVALID_GRAPH,
+                graph_reasons=tuple(finding.reason for finding in structural_plan.findings),
+            )
+        )
+    findings.extend(_semantic_findings(manifest.expected_children))
+    if findings:
+        return _readiness(
+            CorporateActionManifestReadinessStatus.INVALID,
+            findings,
+            manifest=manifest,
+        )
+
+    if observed_children:
+        observed_structural_plan = resolve_corporate_action_event_graph(
+            CorporateActionEventGraph(
+                corporate_action_event_id=manifest.corporate_action_event_id,
+                linked_transaction_group_id=manifest.linked_transaction_group_id,
+                parent_event_reference=manifest.parent_event_reference,
+                version=manifest.version,
+                children=observed_children,
+            )
+        )
+        if (
+            observed_structural_plan.status
+            != CorporateActionEventStructuralStatus.STRUCTURALLY_VALID
+        ):
+            return _readiness(
+                CorporateActionManifestReadinessStatus.INVALID,
+                (
+                    CorporateActionManifestFinding(
+                        CorporateActionManifestReason.INVALID_GRAPH,
+                        graph_reasons=tuple(
+                            finding.reason for finding in observed_structural_plan.findings
+                        ),
+                    ),
+                ),
+                manifest=manifest,
+            )
+
+    expected_by_id = {child.transaction_id: child for child in manifest.expected_children}
+    observed_by_id = {child.transaction_id: child for child in observed_children}
+    missing = tuple(sorted(expected_by_id.keys() - observed_by_id.keys()))
+    unexpected = tuple(sorted(observed_by_id.keys() - expected_by_id.keys()))
+    mismatched = tuple(
+        sorted(
+            transaction_id
+            for transaction_id in expected_by_id.keys() & observed_by_id.keys()
+            if _child_payload(expected_by_id[transaction_id])
+            != _child_payload(observed_by_id[transaction_id])
+        )
+    )
+    if missing:
+        findings.append(
+            CorporateActionManifestFinding(
+                CorporateActionManifestReason.MISSING_EXPECTED_CHILD,
+                transaction_ids=missing,
+            )
+        )
+    if unexpected:
+        findings.append(
+            CorporateActionManifestFinding(
+                CorporateActionManifestReason.UNEXPECTED_CHILD,
+                transaction_ids=unexpected,
+            )
+        )
+    if mismatched:
+        findings.append(
+            CorporateActionManifestFinding(
+                CorporateActionManifestReason.OBSERVED_CHILD_MISMATCH,
+                transaction_ids=mismatched,
+            )
+        )
+    if findings:
+        return _readiness(
+            CorporateActionManifestReadinessStatus.AWAITING_CHILDREN,
+            findings,
+            manifest=manifest,
+        )
+    return CorporateActionManifestReadiness(
+        status=CorporateActionManifestReadinessStatus.READY,
+        ordered_children=structural_plan.ordered_children,
+        findings=(),
+        manifest_content_hash=manifest.content_hash,
+    )
+
+
+_SOURCE_ROLE_BY_TYPE = {
+    "SPIN_OFF": frozenset({"SOURCE_POSITION_REDUCE"}),
+    "DEMERGER_OUT": frozenset({"SOURCE_POSITION_REDUCE"}),
+    **{
+        transaction_type: frozenset({"SOURCE_POSITION_CLOSE", "SOURCE_POSITION_REDUCE"})
+        for transaction_type in QUANTITY_TRANSFER_CORPORATE_ACTION_PAIRS
+    },
+}
+_TARGET_SOURCE_TYPE = {
+    "SPIN_IN": "SPIN_OFF",
+    "DEMERGER_IN": "DEMERGER_OUT",
+    **{target: source for source, target in QUANTITY_TRANSFER_CORPORATE_ACTION_PAIRS.items()},
+}
+_ROLE_BY_NON_POSITION_TYPE = {
+    "CASH_CONSIDERATION": "CASH_CONSIDERATION",
+    "CASH_IN_LIEU": "CASH_IN_LIEU",
+    "FEE": "CHARGE",
+    "TAX": "TAX",
+}
+
+
+def _semantic_findings(
+    children: tuple[CorporateActionEventChild, ...],
+) -> tuple[CorporateActionManifestFinding, ...]:
+    findings: list[CorporateActionManifestFinding] = []
+    children_by_id = {child.transaction_id: child for child in children}
+    for child in sorted(children, key=lambda value: value.transaction_id):
+        allowed_source_roles = _SOURCE_ROLE_BY_TYPE.get(child.transaction_type)
+        expected_source_type = _TARGET_SOURCE_TYPE.get(child.transaction_type)
+        expected_non_position_role = _ROLE_BY_NON_POSITION_TYPE.get(child.transaction_type)
+        if allowed_source_roles is not None:
+            if child.child_role not in allowed_source_roles:
+                findings.append(
+                    _finding(CorporateActionManifestReason.INVALID_ROLE_FOR_TRANSACTION_TYPE, child)
+                )
+            if child.source_instrument_id is None:
+                findings.append(
+                    _finding(CorporateActionManifestReason.SOURCE_INSTRUMENT_REQUIRED, child)
+                )
+            continue
+        if expected_source_type is not None:
+            if child.child_role != "TARGET_POSITION_ADD":
+                findings.append(
+                    _finding(CorporateActionManifestReason.INVALID_ROLE_FOR_TRANSACTION_TYPE, child)
+                )
+            if child.source_instrument_id is None:
+                findings.append(
+                    _finding(CorporateActionManifestReason.SOURCE_INSTRUMENT_REQUIRED, child)
+                )
+            if child.target_instrument_id is None:
+                findings.append(
+                    _finding(CorporateActionManifestReason.TARGET_INSTRUMENT_REQUIRED, child)
+                )
+            elif child.target_instrument_id == child.source_instrument_id:
+                findings.append(
+                    _finding(
+                        CorporateActionManifestReason.TARGET_INSTRUMENT_EQUALS_SOURCE,
+                        child,
+                    )
+                )
+            compatible_sources = tuple(
+                children_by_id[dependency_id]
+                for dependency_id in child.dependency_transaction_ids
+                if dependency_id in children_by_id
+                and children_by_id[dependency_id].transaction_type == expected_source_type
+            )
+            if len(compatible_sources) != 1:
+                findings.append(
+                    _finding(CorporateActionManifestReason.TARGET_SOURCE_DEPENDENCY_REQUIRED, child)
+                )
+            elif child.source_instrument_id != compatible_sources[0].source_instrument_id:
+                findings.append(
+                    _finding(CorporateActionManifestReason.TARGET_SOURCE_INSTRUMENT_MISMATCH, child)
+                )
+            continue
+        if expected_non_position_role is None or child.child_role != expected_non_position_role:
+            findings.append(
+                _finding(CorporateActionManifestReason.INVALID_ROLE_FOR_TRANSACTION_TYPE, child)
+            )
+            continue
+        if not any(
+            dependency_id in children_by_id
+            and (
+                children_by_id[dependency_id].transaction_type in _SOURCE_ROLE_BY_TYPE
+                or children_by_id[dependency_id].transaction_type in _TARGET_SOURCE_TYPE
+            )
+            for dependency_id in child.dependency_transaction_ids
+        ):
+            findings.append(
+                _finding(CorporateActionManifestReason.NON_POSITION_DEPENDENCY_REQUIRED, child)
+            )
+    return tuple(findings)
+
+
+def _child_payload(child: CorporateActionEventChild) -> dict[str, object]:
+    return {
+        "child_role": child.child_role,
+        "child_sequence_hint": child.child_sequence_hint,
+        "dependency_transaction_ids": sorted(child.dependency_transaction_ids),
+        "source_instrument_id": child.source_instrument_id,
+        "target_instrument_id": child.target_instrument_id,
+        "transaction_id": child.transaction_id,
+        "transaction_type": child.transaction_type,
+    }
+
+
+def _finding(
+    reason: CorporateActionManifestReason,
+    child: CorporateActionEventChild,
+) -> CorporateActionManifestFinding:
+    return CorporateActionManifestFinding(reason, transaction_ids=(child.transaction_id,))
+
+
+def _readiness(
+    status: CorporateActionManifestReadinessStatus,
+    findings: tuple[CorporateActionManifestFinding, ...] | list[CorporateActionManifestFinding],
+    *,
+    manifest: CorporateActionParentManifest | None = None,
+) -> CorporateActionManifestReadiness:
+    return CorporateActionManifestReadiness(
+        status=status,
+        ordered_children=(),
+        findings=tuple(findings),
+        manifest_content_hash=manifest.content_hash if manifest is not None else None,
+    )
