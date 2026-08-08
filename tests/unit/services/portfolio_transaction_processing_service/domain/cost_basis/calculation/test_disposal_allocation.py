@@ -1,5 +1,6 @@
 """Verify immutable lot-disposal allocation contracts and conservation."""
 
+from dataclasses import replace
 from datetime import date, datetime
 from decimal import Decimal
 
@@ -23,7 +24,7 @@ from src.services.portfolio_transaction_processing_service.app.domain.cost_basis
     TransactionLotDisposal,
     source_lot_disposal_allocation_payload,
 )
-from src.services.portfolio_transaction_processing_service.app.domain.fixed_income_book_cost import (
+from src.services.portfolio_transaction_processing_service.app.domain.fixed_income_book_cost import (  # noqa: E501
     allocate_recognized_lot_book_cost,
     materialize_active_lot_amortized_cost_profile,
 )
@@ -165,6 +166,20 @@ def test_allocation_carries_complete_amortized_cost_evidence_without_changing_le
 
     payload = source_lot_disposal_allocation_payload(allocation)
     assert payload["amortized_cost_evidence"] == evidence.semantic_payload()
+
+
+def test_amortized_evidence_lineage_survives_ledger_scale_round_trip() -> None:
+    evidence = _amortized_cost_evidence()
+
+    persisted = replace(
+        evidence,
+        original_quantity=Decimal("10.0000000000"),
+        open_quantity_before=Decimal("10.0000000000"),
+        consumed_quantity=Decimal("2.0000000000"),
+    )
+
+    assert persisted.calculation_lineage == evidence.calculation_lineage
+    assert persisted.output_payload() == evidence.output_payload()
 
 
 def test_allocation_rejects_amortized_cost_evidence_that_does_not_match_consumed_cost() -> None:
