@@ -7,33 +7,33 @@ from typing import Any, cast
 import pytest
 from portfolio_common.reference_data_paging import ReferencePageRequest
 
-from services.query_control_plane_service.app.application.benchmark_market_series.service import (
+from src.services.query_control_plane_service.app.application.benchmark_market_series.service import (
     BenchmarkMarketSeriesService,
 )
-from services.query_control_plane_service.app.contracts.benchmark_market_series import (
+from src.services.query_control_plane_service.app.contracts.benchmark_market_series import (
     BenchmarkMarketSeriesRequest,
 )
-from services.query_control_plane_service.app.contracts.common import IntegrationWindow
-from services.query_control_plane_service.app.domain.benchmark_definition import (
+from src.services.query_control_plane_service.app.contracts.common import IntegrationWindow
+from src.services.query_control_plane_service.app.domain.benchmark_definition import (
     BenchmarkComponentEvidence,
     BenchmarkDefinitionEvidence,
 )
-from services.query_control_plane_service.app.domain.benchmark_return_series import (
+from src.services.query_control_plane_service.app.domain.benchmark_return_series import (
     BenchmarkReturnEvidence,
 )
-from services.query_control_plane_service.app.domain.index_series import (
+from src.services.query_control_plane_service.app.domain.index_series import (
     IndexPriceEvidence,
     IndexReturnEvidence,
 )
-from services.query_control_plane_service.app.domain.market_fx import FxRateEvidence
-from services.query_control_plane_service.app.ports.benchmark_definition import (
+from src.services.query_control_plane_service.app.domain.market_fx import FxRateEvidence
+from src.services.query_control_plane_service.app.ports.benchmark_definition import (
     BenchmarkDefinitionReader,
 )
-from services.query_control_plane_service.app.ports.benchmark_return_series import (
+from src.services.query_control_plane_service.app.ports.benchmark_return_series import (
     BenchmarkReturnSeriesReader,
 )
-from services.query_control_plane_service.app.ports.index_series import IndexSeriesReader
-from services.query_control_plane_service.app.ports.market_fx import MarketFxRateReader
+from src.services.query_control_plane_service.app.ports.index_series import IndexSeriesReader
+from src.services.query_control_plane_service.app.ports.market_fx import MarketFxRateReader
 
 EVIDENCE_TIME = datetime(2026, 1, 31, 8, 0, tzinfo=UTC)
 GENERATED_AT = datetime(2026, 1, 31, 9, 0, tzinfo=UTC)

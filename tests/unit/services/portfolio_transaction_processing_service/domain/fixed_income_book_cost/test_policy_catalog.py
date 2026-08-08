@@ -2,7 +2,7 @@
 
 from decimal import Decimal
 
-from services.portfolio_transaction_processing_service.app.domain.fixed_income_book_cost import (
+from src.services.portfolio_transaction_processing_service.app.domain.fixed_income_book_cost import (
     IFRS9_EIR_LOCAL_POLICY_ID,
     STRAIGHT_LINE_LOCAL_POLICY_ID,
     AmortizedCostMethod,

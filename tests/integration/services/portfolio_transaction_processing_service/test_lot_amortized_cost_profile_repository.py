@@ -10,13 +10,13 @@ from portfolio_common.database_models import LotAmortizedCostProfileRecord
 from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from services.portfolio_transaction_processing_service.app.domain.fixed_income_book_cost import (
+from src.services.portfolio_transaction_processing_service.app.domain.fixed_income_book_cost import (
     materialize_active_lot_amortized_cost_profile,
 )
-from services.portfolio_transaction_processing_service.app.infrastructure import (
+from src.services.portfolio_transaction_processing_service.app.infrastructure import (
     fixed_income_book_cost,
 )
-from services.portfolio_transaction_processing_service.app.ports import (
+from src.services.portfolio_transaction_processing_service.app.ports import (
     LotAmortizedCostProfileAppendOutcome,
 )
 from tests.test_support.fixed_income_book_cost import (

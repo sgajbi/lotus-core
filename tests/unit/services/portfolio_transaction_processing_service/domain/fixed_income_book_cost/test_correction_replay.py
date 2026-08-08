@@ -7,7 +7,7 @@ from datetime import UTC, date, datetime, timedelta, timezone
 
 import pytest
 
-from services.portfolio_transaction_processing_service.app.domain.fixed_income_book_cost import (
+from src.services.portfolio_transaction_processing_service.app.domain.fixed_income_book_cost import (
     AffectedLotDisposalReplayAnchor,
     AmortizedCostEligibilityReason,
     FixedIncomeBookCostCorrectionReplayIntent,

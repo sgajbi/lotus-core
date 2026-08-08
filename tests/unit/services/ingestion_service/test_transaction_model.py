@@ -5,7 +5,7 @@ from decimal import Decimal
 import pytest
 from pydantic import ValidationError
 
-from services.ingestion_service.app.DTOs.transaction_dto import Transaction
+from src.services.ingestion_service.app.DTOs.transaction_dto import Transaction
 
 
 def test_transaction_model_success():

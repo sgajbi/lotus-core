@@ -37,16 +37,16 @@ from portfolio_common.valuation_job_contracts import ValuationJobTransitionOutco
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from services.calculators.position_valuation_calculator.app.consumers.valuation_consumer import (
+from src.services.calculators.position_valuation_calculator.app.consumers.valuation_consumer import (
     ValuationConsumer,
 )
-from services.calculators.position_valuation_calculator.app.ports import (
+from src.services.calculators.position_valuation_calculator.app.ports import (
     ResolvedRuntimeValuationPolicy,
 )
-from services.calculators.position_valuation_calculator.app.repositories.valuation_repository import (  # noqa: E501
+from src.services.calculators.position_valuation_calculator.app.repositories.valuation_repository import (  # noqa: E501
     ValuationRepository,
 )
-from services.calculators.position_valuation_calculator.app.valuation_processor import (
+from src.services.calculators.position_valuation_calculator.app.valuation_processor import (
     ValuationJobProcessor,
     ValuationProcessorDependencies,
     ValuationReferenceData,

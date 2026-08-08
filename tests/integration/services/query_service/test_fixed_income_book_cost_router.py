@@ -8,11 +8,11 @@ import httpx
 import pytest
 import pytest_asyncio
 
-from services.query_service.app.dependencies import get_fixed_income_book_cost_service
-from services.query_service.app.dtos.fixed_income_book_cost_dto import (
+from src.services.query_service.app.dependencies import get_fixed_income_book_cost_service
+from src.services.query_service.app.dtos.fixed_income_book_cost_dto import (
     FixedIncomeBookCostAsOfResponse,
 )
-from services.query_service.app.main import app
+from src.services.query_service.app.main import app
 
 pytestmark = pytest.mark.asyncio
 

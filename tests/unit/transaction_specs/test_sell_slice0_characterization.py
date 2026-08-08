@@ -4,7 +4,7 @@ from decimal import Decimal
 from portfolio_common.database_models import Transaction as DBTransaction
 from portfolio_common.events import TransactionEvent
 
-from services.ingestion_service.app.DTOs.transaction_dto import Transaction
+from src.services.ingestion_service.app.DTOs.transaction_dto import Transaction
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
     build_cost_basis_engine_input,
 )

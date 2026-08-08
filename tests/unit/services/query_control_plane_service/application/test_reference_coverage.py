@@ -7,27 +7,27 @@ from typing import cast
 
 import pytest
 
-from services.query_control_plane_service.app.application.reference_coverage import (
+from src.services.query_control_plane_service.app.application.reference_coverage import (
     ReferenceCoverageService,
 )
-from services.query_control_plane_service.app.contracts.common import IntegrationWindow
-from services.query_control_plane_service.app.contracts.reference_coverage import CoverageRequest
-from services.query_control_plane_service.app.domain.benchmark_definition import (
+from src.services.query_control_plane_service.app.contracts.common import IntegrationWindow
+from src.services.query_control_plane_service.app.contracts.reference_coverage import CoverageRequest
+from src.services.query_control_plane_service.app.domain.benchmark_definition import (
     BenchmarkComponentEvidence,
 )
-from services.query_control_plane_service.app.domain.benchmark_return_series import (
+from src.services.query_control_plane_service.app.domain.benchmark_return_series import (
     BenchmarkReturnEvidence,
 )
-from services.query_control_plane_service.app.domain.index_series import IndexPriceEvidence
-from services.query_control_plane_service.app.domain.risk_free_series import RiskFreeRateEvidence
-from services.query_control_plane_service.app.ports.benchmark_definition import (
+from src.services.query_control_plane_service.app.domain.index_series import IndexPriceEvidence
+from src.services.query_control_plane_service.app.domain.risk_free_series import RiskFreeRateEvidence
+from src.services.query_control_plane_service.app.ports.benchmark_definition import (
     BenchmarkDefinitionReader,
 )
-from services.query_control_plane_service.app.ports.benchmark_return_series import (
+from src.services.query_control_plane_service.app.ports.benchmark_return_series import (
     BenchmarkReturnSeriesReader,
 )
-from services.query_control_plane_service.app.ports.index_series import IndexSeriesReader
-from services.query_control_plane_service.app.ports.risk_free_series import RiskFreeSeriesReader
+from src.services.query_control_plane_service.app.ports.index_series import IndexSeriesReader
+from src.services.query_control_plane_service.app.ports.risk_free_series import RiskFreeSeriesReader
 
 OBSERVED_AT = datetime(2026, 1, 2, 8, tzinfo=UTC)
 GENERATED_AT = datetime(2026, 1, 2, 9, tzinfo=UTC)

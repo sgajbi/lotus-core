@@ -5,8 +5,8 @@ from __future__ import annotations
 import inspect
 from unittest.mock import MagicMock, patch
 
-from services.calculators.position_valuation_calculator.app import valuation_processor
-from services.calculators.position_valuation_calculator.app.infrastructure import (
+from src.services.calculators.position_valuation_calculator.app import valuation_processor
+from src.services.calculators.position_valuation_calculator.app.infrastructure import (
     SqlAlchemyValuationProcessorDependencyFactory,
     build_valuation_job_processor,
     composition,

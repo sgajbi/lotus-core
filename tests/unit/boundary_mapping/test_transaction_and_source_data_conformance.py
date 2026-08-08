@@ -13,11 +13,11 @@ from portfolio_common.logging_utils import correlation_id_var
 from portfolio_common.reference_data_paging import ReferencePageMetadata
 from pydantic import BaseModel, ValidationError
 
-from services.ingestion_service.app.DTOs.transaction_dto import Transaction
-from services.ingestion_service.app.services.ingestion_event_payloads import (
+from src.services.ingestion_service.app.DTOs.transaction_dto import Transaction
+from src.services.ingestion_service.app.services.ingestion_event_payloads import (
     transaction_event_payload,
 )
-from services.ingestion_service.app.services.ingestion_service import IngestionService
+from src.services.ingestion_service.app.services.ingestion_service import IngestionService
 from src.services.persistence_service.app.adapters.event_record_mapper import (
     transaction_event_to_record_values,
 )

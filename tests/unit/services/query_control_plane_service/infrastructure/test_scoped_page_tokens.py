@@ -3,7 +3,7 @@
 import pytest
 from portfolio_common.page_tokens import PageTokenCodec
 
-from services.query_control_plane_service.app.infrastructure.scoped_page_tokens import (
+from src.services.query_control_plane_service.app.infrastructure.scoped_page_tokens import (
     RouteScopedPageTokenCodec,
 )
 

@@ -10,7 +10,7 @@ from portfolio_common.event_mapping import EventContractValidationError
 from portfolio_common.exceptions import RetryableConsumerError
 from sqlalchemy.exc import IntegrityError
 
-from services.portfolio_transaction_processing_service.app.delivery.kafka import (
+from src.services.portfolio_transaction_processing_service.app.delivery.kafka import (
     FixedIncomeBookCostAuthorityConsumer,
 )
 from tests.test_support.fixed_income_book_cost import resolved_fixed_income_book_cost_inputs

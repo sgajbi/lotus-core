@@ -3,7 +3,7 @@ from decimal import Decimal
 
 import pytest
 
-from services.financial_reconciliation_service.app.domain.reconciliation_policies import (
+from src.services.financial_reconciliation_service.app.domain.reconciliation_policies import (
     DEFAULT_VALUE_TOLERANCE,
     PositionValuationEvidence,
     PositionValuationReceiptEvidence,

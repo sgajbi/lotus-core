@@ -9,16 +9,16 @@ from unittest.mock import AsyncMock
 import pytest
 from portfolio_common.event_contracts import FixedIncomeBookCostAuthorityEvent
 
-from services.portfolio_transaction_processing_service.app.application.fixed_income_book_cost import (  # noqa: E501
+from src.services.portfolio_transaction_processing_service.app.application.fixed_income_book_cost import (  # noqa: E501
     ApplyFixedIncomeBookCostAuthorityEventUseCase,
     HandleFixedIncomeBookCostAuthorityEventUseCase,
 )
-from services.portfolio_transaction_processing_service.app.domain.fixed_income_book_cost import (
+from src.services.portfolio_transaction_processing_service.app.domain.fixed_income_book_cost import (
     AffectedLotDisposalReplayAnchor,
     AmortizedCostEligibilityReason,
     AmortizedCostPolicyRegistry,
 )
-from services.portfolio_transaction_processing_service.app.ports import (
+from src.services.portfolio_transaction_processing_service.app.ports import (
     FixedIncomeBookCostCorrectionReplayPort,
     LotAmortizedCostAuthorityAppendOutcome,
     LotAmortizedCostAuthorityBundle,
