@@ -20,7 +20,7 @@ from portfolio_common.domain.calculation_lineage import (
     build_calculation_lineage,
 )
 from portfolio_common.domain.cost_basis_method import CostBasisMethod
-from sqlalchemy import inspect, select, update
+from sqlalchemy import event, func, inspect, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
@@ -169,6 +169,69 @@ async def test_repository_detects_tampered_child_after_restart(
             async_db_session
         ).reconcile_basis_transfer_receipts(
             reconciliation_scopes=(_scope(),), receipt_states=(state,)
+        )
+
+
+@pytest.mark.lifecycle
+async def test_repository_verifies_sixty_four_transfer_versions_with_two_reads(
+    clean_db,
+    basis_transfer_receipt_schema,
+    async_db_session: AsyncSession,
+) -> None:
+    await _seed_source_lot(async_db_session)
+    repository = SqlAlchemyCostBasisLotBasisTransferRepository(async_db_session)
+    states = tuple(_active_state(transferred_local=f"25.{version:02}") for version in range(1, 65))
+    for state in states:
+        await repository.reconcile_basis_transfer_receipts(
+            reconciliation_scopes=(_scope(),),
+            receipt_states=(state,),
+        )
+    await async_db_session.commit()
+
+    statements: list[str] = []
+
+    def record_statement(
+        _connection,
+        _cursor,
+        statement: str,
+        _parameters,
+        _context,
+        _executemany,
+    ) -> None:
+        if statement.lstrip().upper().startswith("SELECT") and "lot_basis_transfer_" in statement:
+            statements.append(statement)
+
+    assert async_db_session.bind is not None
+    sync_engine = async_db_session.bind.sync_engine
+    event.listen(sync_engine, "before_cursor_execute", record_statement)
+    try:
+        await repository.reconcile_basis_transfer_receipts(
+            reconciliation_scopes=(_scope(),),
+            receipt_states=(states[-1],),
+        )
+    finally:
+        event.remove(sync_engine, "before_cursor_execute", record_statement)
+
+    assert len(statements) == 2
+    assert "lot_basis_transfer_receipts" in statements[0]
+    assert "lot_basis_transfer_allocations" in statements[1]
+    assert (
+        await async_db_session.scalar(
+            select(func.count()).select_from(LotBasisTransferReceiptRecord)
+        )
+        == 64
+    )
+
+    await async_db_session.execute(
+        update(LotBasisTransferAllocationRecord)
+        .where(LotBasisTransferAllocationRecord.receipt_version == 32)
+        .values(allocation_content_hash="0" * 64)
+    )
+    await async_db_session.commit()
+    with pytest.raises(CorruptLotBasisTransferReceiptError, match="receipt is corrupt"):
+        await repository.reconcile_basis_transfer_receipts(
+            reconciliation_scopes=(_scope(),),
+            receipt_states=(states[-1],),
         )
 
 

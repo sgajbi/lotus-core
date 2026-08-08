@@ -83,7 +83,7 @@ class SqlAlchemyCostBasisLotDisposalRepository:
                 )
             except ValueError as exc:
                 raise CorruptLotDisposalReceiptError(
-                    f"persisted lot-disposal receipt chain is corrupt: {transaction_id}"
+                    f"persisted lot-disposal receipt is corrupt: {transaction_id}"
                 ) from exc
             latest[transaction_id] = chain[-1]
             verified_latest[transaction_id] = verified_states[-1]
