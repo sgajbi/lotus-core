@@ -12,6 +12,7 @@ transaction domain; valuation, timeseries, and downstream analytics remain separ
 | --- | --- | --- |
 | Understand atomic processing ownership and rollback | [Processing Flow](#processing-flow) | One application use case and one SQLAlchemy unit of work own the combined mutation. |
 | Verify settlement and FX fee economics | [Ordinary Settlement Cash](#ordinary-settlement-cash) | Stable reason codes and warning-strict domain, application, and lifecycle tests protect current policy. |
+| Understand corrected redemption field presence | [Redemption Correction Semantics](#redemption-correction-semantics) | Omission, exact zero, and generated-child link retirement have distinct durable meanings. |
 | Extend transaction behavior without crossing layers | [Extension Rule](#extension-rule) | Domain policy, application ports, and named infrastructure adapters remain separate. |
 | Assess compatibility and current limitations | [Compatibility](#compatibility) | Existing event and persistence contracts remain authoritative unless a versioned change says otherwise. |
 | Locate executable proof | [Evidence](#evidence) | Repository-native manifests and architecture guards are the closure evidence; wiki prose alone is not proof. |
@@ -119,6 +120,20 @@ product and generated cash legs stay reconciled. Null/zero withholding and rows 
 current settlement fences retain legacy arithmetic.
 Withholding-rate derivation, other receipt deductions, a supplied-net identity, return-of-capital,
 basis reduction, and advanced timing remain tracked under #448.
+
+## Redemption Correction Semantics
+
+Ordinary transaction upserts remain sparse for compatibility. A semantic redemption correction is
+authoritative for its complete optional economics set: redemption price type, old/new factor,
+principal proceeds, accrued-interest proceeds, embedded fee, and embedded tax. When a corrected
+value is omitted, Core persists SQL `NULL`; when it is exactly zero, Core persists zero. This keeps
+replay, query, cashflow, P&L, and calculation lineage aligned to the corrected command instead of
+retaining superseded source authority.
+
+Generated accrued-interest income can remain positive when corrected settlement is exactly zero.
+On that correction-only path, Core loads the prior deterministic interest child and explicitly
+clears any retired cash-leg and component links. Ordinary bookings incur no additional child read,
+and generated transaction identity remains stable.
 
 FX fees and taxes use a separate-linked-posting policy. A non-zero aggregate or component fee on an
 FX spot, forward, swap, or generated cash-settlement leg fails before booking, cost mutation, or
