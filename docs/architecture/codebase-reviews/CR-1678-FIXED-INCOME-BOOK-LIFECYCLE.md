@@ -515,19 +515,27 @@ Data Models wiki documents the staged ledgers while the capability wiki remains
   PostgreSQL returns `25.0100000000`. No schema, API, Kafka, or economic amount changed.
 - correction-staging recovery proof: one real-PostgreSQL test commits corrected authority,
   rematerialized profile evidence, and one source-lot replay command in a single unit of work. A
-  new session observes the pending command, and exact authority redelivery appends no authority,
-  profile, or outbox duplicate. `make test-fixed-income-book-cost-recovery-gate` composes that
-  interruption boundary with the existing restarted transaction-repair proof in one DB-only,
-  45.83-second gate. PR and main recovery lanes reuse the exact-SHA runtime image bundle and run
-  this gate without another image build.
+  new session observes the pending command, publishes it through the production replay mapper, and
+  applies one downstream transaction repair. Exact authority and repair redelivery append no
+  authority, profile, outbox, or financial duplicate. The repaired carrying cost, realized P&L,
+  receipt lineage, and deterministic processing checkpoint match the uninterrupted production
+  calculator. `make test-fixed-income-book-cost-recovery-gate` enforces this composed contract in
+  one DB-only gate (2 passed in 78.80 seconds). PR and main recovery lanes reuse the exact-SHA
+  runtime image bundle and run this gate without another image build.
+- persistence-scale recovery correction: amortized disposal lineage now canonicalizes its numeric
+  inputs and outputs at the existing cost-basis ledger scale. This prevents PostgreSQL's
+  `NUMERIC(18,10)` representation from invalidating a receipt that was valid before commit. A unit
+  round trip and the composed restart scenario prove the same lineage before and after persistence.
+- package-identity recovery correction: every governed Python test now imports service modules only
+  through `src.services.*`; `make test-import-root-guard` rejects a reintroduced `services.*`
+  import. This removes #919's duplicate Prometheus/runtime singleton registration path rather than
+  treating it as flaky test isolation.
 
-Acceptance audit correction: full-chain verification, middle-version tamper rejection, bounded
-two-query reads, correction staging across restart, and transaction repair/redelivery are now
-individually enforced. #478 remains in progress until one exact-source scenario composes the
-staged command with downstream repair and compares carry, P&L, checkpoint, receipt, and lineage to
-an uninterrupted control. Issue #919 durably tracks the mixed `services.*`/`src.services.*` import
-identity defect exposed while composing that scenario; it must be fixed or explicitly isolated,
-not waived as test flakiness.
+Acceptance audit: full-chain verification, middle-version tamper rejection, bounded two-query
+reads, correction staging across restart, and downstream repair/redelivery are now composed in one
+exact-source scenario. The focused local acceptance for #478 and the implementation acceptance for
+#919 are complete; protected PR and exact-main validation remain required before either issue is
+closed or capability truth is promoted.
 
 Protected PR and exact-main evidence remain pending for this tranche. Wider runtime recovery/load
 proof, complete corporate-action scenario coverage, redemption, and final issue closure remain
