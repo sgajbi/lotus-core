@@ -8,11 +8,22 @@ from portfolio_common.infrastructure.persistence.transaction_identity_guard impo
     transaction_identity_update_allowed,
 )
 from sqlalchemy.dialects import postgresql
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 
 def _compiled_predicate(ownership: TransactionIdentityOwnership) -> str:
+    statement = pg_insert(DBTransaction).values(
+        transaction_id=ownership.transaction_id,
+        portfolio_id=ownership.portfolio_id,
+        cash_entry_mode="AUTO_GENERATE",
+    )
     return str(
-        transaction_identity_update_allowed(DBTransaction, ownership).compile(
+        transaction_identity_update_allowed(
+            DBTransaction,
+            ownership,
+            excluded=statement.excluded,
+            updated_fields={"transaction_id", "portfolio_id", "cash_entry_mode"},
+        ).compile(
             dialect=postgresql.dialect(),
             compile_kwargs={"literal_binds": True},
         )
@@ -30,7 +41,8 @@ def test_source_identity_rejects_both_generated_child_families() -> None:
 
     assert "trim(transactions.portfolio_id) = 'PORT-1'" in sql
     assert "NOT" in sql
-    assert sql.count("coalesce(") == 2
+    assert sql.count("coalesce(") == 4
+    assert "excluded.cash_entry_mode" in sql
     assert "'-CASHLEG'" in sql
     assert "'-ACCRUED-INTEREST'" in sql
 
