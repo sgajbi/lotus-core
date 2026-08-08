@@ -121,6 +121,20 @@ current settlement fences retain legacy arithmetic.
 Withholding-rate derivation, other receipt deductions, a supplied-net identity, return-of-capital,
 basis reduction, and advanced timing remain tracked under #448.
 
+## Generated Transaction Identity Ownership
+
+Generated settlement cash and redemption accrued-interest transactions use stable identifiers,
+but the identifier suffix is not proof of ownership. Core recognizes a generated child only when
+its complete portfolio, originating transaction, transaction family, component, and link metadata
+agree. Source bookings that merely resemble a generated identifier remain source-owned.
+
+Both transaction persistence paths enforce ownership inside the PostgreSQL conflict statement.
+An existing row may be replayed or corrected only by the same portfolio, generated family, and
+origin. A source/generated, cross-portfolio, wrong-origin, or cross-family collision fails closed
+with `generated_transaction_identity_collision` before downstream effect staging. This is an
+intentional correctness tightening; ordinary source replay, event shapes, Kafka topology, database
+schema, and generated identifier formats are unchanged.
+
 ## Redemption Correction Semantics
 
 Ordinary transaction upserts remain sparse for compatibility. A semantic redemption correction is
