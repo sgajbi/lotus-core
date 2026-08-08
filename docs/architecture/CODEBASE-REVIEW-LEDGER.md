@@ -1,5 +1,15 @@
 # Codebase Review Ledger
 
+CR-1678 full-chain and recovery addendum (2026-08-08): disposal and basis-transfer writers and
+readers now verify complete 64-version root-to-head receipt histories with two bounded SQL reads
+and fail closed on corrupted middle allocations. Basis-transfer lineage is canonical across
+database Decimal scale. A real-PostgreSQL authority correction commits exactly one replay command,
+survives a new-session boundary, and remains write-neutral on exact redelivery. The new
+`make test-fixed-income-book-cost-recovery-gate` composes staging and restarted transaction-repair
+proofs in DB-only PR/main CI without another image build. Full staged-command-to-repair comparison
+remains open under #478; mixed import identity blocker #919 is durable GitHub truth. No schema,
+API/OpenAPI, Kafka, capability, central-skill, or wiki truth changed.
+
 CR-1678 generated-child ownership addendum (2026-08-08): issue #912 proved that deterministic
 `-CASHLEG` and `-ACCRUED-INTEREST` identifiers could overwrite unrelated globally unique
 transactions through ordinary PostgreSQL upsert conflict handling. One complete-metadata policy
