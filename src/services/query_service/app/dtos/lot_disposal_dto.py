@@ -19,7 +19,19 @@ class LotDisposalAllocationResponse(BaseModel):
     amortized_cost_profile_id: str | None = None
     amortized_cost_profile_version: int | None = None
     amortized_cost_profile_content_hash: str | None = None
+    amortized_cost_currency: str | None = None
     amortized_cost_recognized_through: date | None = None
+    amortized_cost_original_quantity: Decimal | None = None
+    amortized_cost_open_quantity_before: Decimal | None = None
+    amortized_cost_residual_quantity: Decimal | None = None
+    amortized_cost_scheduled_local: Decimal | None = None
+    amortized_cost_current_local: Decimal | None = None
+    amortized_cost_current_base: Decimal | None = None
+    amortized_cost_residual_local: Decimal | None = None
+    amortized_cost_book_fx_rate_to_base: Decimal | None = None
+    amortized_cost_residual_base: Decimal | None = None
+    amortized_cost_retained_rounding_local: Decimal | None = None
+    amortized_cost_retained_rounding_base: Decimal | None = None
     amortized_cost_calculation_lineage: dict[str, Any] | None = None
 
 

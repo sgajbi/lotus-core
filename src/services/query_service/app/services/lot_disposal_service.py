@@ -73,8 +73,28 @@ class LotDisposalService:
                     amortized_cost_profile_content_hash=(
                         allocation.amortized_cost_profile_content_hash
                     ),
+                    amortized_cost_currency=allocation.amortized_cost_currency,
                     amortized_cost_recognized_through=(
                         allocation.amortized_cost_recognized_through
+                    ),
+                    amortized_cost_original_quantity=(allocation.amortized_cost_original_quantity),
+                    amortized_cost_open_quantity_before=(
+                        allocation.amortized_cost_open_quantity_before
+                    ),
+                    amortized_cost_residual_quantity=(allocation.amortized_cost_residual_quantity),
+                    amortized_cost_scheduled_local=allocation.amortized_cost_scheduled_local,
+                    amortized_cost_current_local=allocation.amortized_cost_current_local,
+                    amortized_cost_current_base=allocation.amortized_cost_current_base,
+                    amortized_cost_residual_local=allocation.amortized_cost_residual_local,
+                    amortized_cost_book_fx_rate_to_base=(
+                        allocation.amortized_cost_book_fx_rate_to_base
+                    ),
+                    amortized_cost_residual_base=allocation.amortized_cost_residual_base,
+                    amortized_cost_retained_rounding_local=(
+                        allocation.amortized_cost_retained_rounding_local
+                    ),
+                    amortized_cost_retained_rounding_base=(
+                        allocation.amortized_cost_retained_rounding_base
                     ),
                     amortized_cost_calculation_lineage=(
                         allocation.amortized_cost_calculation_lineage

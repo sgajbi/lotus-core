@@ -9,6 +9,20 @@ It takes persisted transaction events, applies the portfolio's governed cost-bas
 stages enriched processed transactions after cost, cashflow, and position effects have completed in
 one atomic use case.
 
+## Current scope and reader map
+
+This page describes the implemented unified transaction-cost runtime and its persisted supportability
+evidence. Fixed-income amortized carrying cost is exposed only when governed lot-level authority and
+evidence exist. Reserved `AMORTIZATION` and `ACCRETION` journal transaction codes remain disabled,
+and the accumulating-source AVCO capacity gap remains tracked by GitHub issue #481.
+
+| Reader | Start here | Evidence or next action |
+| --- | --- | --- |
+| Business and product | [What it handles](#what-it-handles) | Understand supported cost, realized P&L, and lot-evidence outcomes without treating staged capabilities as active. |
+| Operations and support | [Data it owns](#data-it-owns) | Use verified lot-disposal receipts, metrics, and recovery paths before diagnosing calculation drift. |
+| Engineering | [Runtime role](#runtime-role) | Preserve domain/application/infrastructure ownership and the caller-owned unit of work. |
+| Audit and accounting control | [Data it owns](#data-it-owns) | Reconstruct source-lot and amortized allocation evidence from the immutable query response and lineage hashes. |
+
 ## What it handles
 
 The current app-local/CI runtime centers on:
@@ -230,6 +244,7 @@ Primary durable outputs include:
 - `position_lot_state`
 - `cost_basis_processing_state`
 - `average_cost_pool_state`
+- immutable `lot_disposal_receipts` and ordered `lot_disposal_allocations`
 - `accrued_income_offset_state`
 - `position_state`
 - `transactions.cost.processed` compatibility events
@@ -240,6 +255,14 @@ These outputs feed:
   succeed
 - replay and supportability flows through the combined runtime
 - realized P&L and disposal traceability
+
+The transaction-neutral lot-disposal supportability route returns verified source-lot allocations.
+When an allocation used governed amortized book cost, its response includes the profile and
+recognition identity, currency, original/open/residual quantities, scheduled/current/residual
+carrying cost, book FX rate, retained rounding residuals, and calculation lineage. Those values are
+read from the immutable receipt evidence already covered by its content hash; the query fails closed
+if persisted evidence cannot be reconstructed. Nullable fields remain absent for legacy or
+non-amortized allocations.
 
 ## Why it matters
 

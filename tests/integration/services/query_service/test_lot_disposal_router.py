@@ -1,6 +1,6 @@
 """Verify the public lot-disposal supportability route and OpenAPI contract."""
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock
 
@@ -9,7 +9,10 @@ import pytest
 import pytest_asyncio
 
 from src.services.query_service.app.dependencies import get_lot_disposal_service
-from src.services.query_service.app.dtos.lot_disposal_dto import LotDisposalReceiptResponse
+from src.services.query_service.app.dtos.lot_disposal_dto import (
+    LotDisposalAllocationResponse,
+    LotDisposalReceiptResponse,
+)
 from src.services.query_service.app.main import app
 
 pytestmark = pytest.mark.asyncio
@@ -36,7 +39,35 @@ async def client_and_service():
             semantic_content_hash="a" * 64,
             receipt_content_hash="b" * 64,
             transaction_calculation_lineage={"algorithm_id": "transaction-cost"},
-            allocations=[],
+            allocations=[
+                LotDisposalAllocationResponse(
+                    allocation_ordinal=1,
+                    source_lot_id="LOT-BUY-001",
+                    source_transaction_id="BUY-001",
+                    source_acquisition_date=date(2026, 1, 1),
+                    consumed_quantity=Decimal("25"),
+                    consumed_cost_local=Decimal("24.5"),
+                    consumed_cost_base=Decimal("18.375"),
+                    allocation_content_hash="c" * 64,
+                    amortized_cost_profile_id="PROFILE-1",
+                    amortized_cost_profile_version=1,
+                    amortized_cost_profile_content_hash="d" * 64,
+                    amortized_cost_currency="USD",
+                    amortized_cost_recognized_through=date(2026, 8, 4),
+                    amortized_cost_original_quantity=Decimal("100"),
+                    amortized_cost_open_quantity_before=Decimal("25"),
+                    amortized_cost_residual_quantity=Decimal("0"),
+                    amortized_cost_scheduled_local=Decimal("25"),
+                    amortized_cost_current_local=Decimal("24.5"),
+                    amortized_cost_current_base=Decimal("18.375"),
+                    amortized_cost_residual_local=Decimal("0"),
+                    amortized_cost_book_fx_rate_to_base=Decimal("0.75"),
+                    amortized_cost_residual_base=Decimal("0"),
+                    amortized_cost_retained_rounding_local=Decimal("0.5"),
+                    amortized_cost_retained_rounding_base=Decimal("0.375"),
+                    amortized_cost_calculation_lineage={"algorithm_id": "amortized-cost"},
+                )
+            ],
         )
     )
     app.dependency_overrides[get_lot_disposal_service] = lambda: service
@@ -53,6 +84,12 @@ async def test_get_latest_lot_disposal_receipt(client_and_service) -> None:
 
     assert response.status_code == 200
     assert response.json()["transaction_type"] == "PARTIAL_REDEMPTION"
+    allocation = response.json()["allocations"][0]
+    assert allocation["amortized_cost_currency"] == "USD"
+    assert allocation["amortized_cost_original_quantity"] == "100"
+    assert allocation["amortized_cost_current_local"] == "24.5"
+    assert allocation["amortized_cost_book_fx_rate_to_base"] == "0.75"
+    assert allocation["amortized_cost_retained_rounding_base"] == "0.375"
     service.get_latest_receipt.assert_awaited_once_with(
         portfolio_id="P1",
         transaction_id="RED-001",
@@ -80,3 +117,20 @@ async def test_openapi_documents_transaction_neutral_receipt(client_and_service)
     assert operation["responses"]["200"]["content"]["application/json"]["schema"]["$ref"].endswith(
         "LotDisposalReceiptResponse"
     )
+    allocation_properties = response.json()["components"]["schemas"][
+        "LotDisposalAllocationResponse"
+    ]["properties"]
+    assert {
+        "amortized_cost_currency",
+        "amortized_cost_original_quantity",
+        "amortized_cost_open_quantity_before",
+        "amortized_cost_residual_quantity",
+        "amortized_cost_scheduled_local",
+        "amortized_cost_current_local",
+        "amortized_cost_current_base",
+        "amortized_cost_residual_local",
+        "amortized_cost_book_fx_rate_to_base",
+        "amortized_cost_residual_base",
+        "amortized_cost_retained_rounding_local",
+        "amortized_cost_retained_rounding_base",
+    } <= allocation_properties.keys()

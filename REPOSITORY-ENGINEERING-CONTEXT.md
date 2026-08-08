@@ -3475,6 +3475,13 @@ Most relevant current governance:
      booked transaction: the checkpoint fence forces one canonical full-history cost rebuild, while
      suffix persistence atomically reconciles later transactions, disposal receipts, open-lot carry,
      checkpoints, realized P&L, and lineage without per-disposal command fan-out.
+     The transaction-neutral lot-disposal query is the accounting-control supportability boundary
+     for persisted amortized allocations. Verify the complete receipt and allocation hash chain
+     before mapping ORM rows, then expose every persisted amortized input and output needed to
+     reconstruct the evidence: currency, profile identity, recognition date, original/open/
+     residual quantity, scheduled/current/residual local and base carrying cost, book FX rate,
+     retained rounding residuals, and calculation lineage. Do not return a profile/hash-only
+     projection that cannot independently explain its own allocation content hash.
 
 ## Context Maintenance Rule
 

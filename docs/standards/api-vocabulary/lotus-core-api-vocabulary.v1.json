@@ -13,7 +13,7 @@
       "openApiVersion": "3.1.0"
     }
   ],
-  "generatedAt": "2026-08-04T11:48:45.544709+00:00",
+  "generatedAt": "2026-08-08T06:24:49.836149+00:00",
   "attributeCatalog": [
     {
       "semanticId": "lotus.accepted_count",
@@ -272,11 +272,107 @@
       ]
     },
     {
+      "semanticId": "lotus.amortized_cost_book_fx_rate_to_base",
+      "canonicalTerm": "amortized_cost_book_fx_rate_to_base",
+      "preferredName": "amortized_cost_book_fx_rate_to_base",
+      "description": "Rate/price value for amortized cost book fx rate to base.",
+      "example": {
+        "id": "OBJ_001"
+      },
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
       "semanticId": "lotus.amortized_cost_calculation_lineage",
       "canonicalTerm": "amortized_cost_calculation_lineage",
       "preferredName": "amortized_cost_calculation_lineage",
       "description": "lot disposal allocation response field: amortized cost calculation lineage.",
       "example": {},
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.amortized_cost_currency",
+      "canonicalTerm": "amortized_cost_currency",
+      "preferredName": "amortized_cost_currency",
+      "description": "ISO currency code for amortized cost currency.",
+      "example": {
+        "id": "OBJ_001"
+      },
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.amortized_cost_current_base",
+      "canonicalTerm": "amortized_cost_current_base",
+      "preferredName": "amortized_cost_current_base",
+      "description": "lot disposal allocation response field: amortized cost current base.",
+      "example": {
+        "id": "OBJ_001"
+      },
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.amortized_cost_current_local",
+      "canonicalTerm": "amortized_cost_current_local",
+      "preferredName": "amortized_cost_current_local",
+      "description": "lot disposal allocation response field: amortized cost current local.",
+      "example": {
+        "id": "OBJ_001"
+      },
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.amortized_cost_open_quantity_before",
+      "canonicalTerm": "amortized_cost_open_quantity_before",
+      "preferredName": "amortized_cost_open_quantity_before",
+      "description": "Quantity value for amortized cost open quantity before.",
+      "example": {
+        "id": "OBJ_001"
+      },
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.amortized_cost_original_quantity",
+      "canonicalTerm": "amortized_cost_original_quantity",
+      "preferredName": "amortized_cost_original_quantity",
+      "description": "Quantity value for amortized cost original quantity.",
+      "example": {
+        "id": "OBJ_001"
+      },
       "type": "object",
       "locations": [
         "body"
@@ -337,6 +433,102 @@
       "preferredName": "amortized_cost_recognized_through",
       "description": "lot disposal allocation response field: amortized cost recognized through.",
       "example": "2026-02-27",
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.amortized_cost_residual_base",
+      "canonicalTerm": "amortized_cost_residual_base",
+      "preferredName": "amortized_cost_residual_base",
+      "description": "lot disposal allocation response field: amortized cost residual base.",
+      "example": {
+        "id": "OBJ_001"
+      },
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.amortized_cost_residual_local",
+      "canonicalTerm": "amortized_cost_residual_local",
+      "preferredName": "amortized_cost_residual_local",
+      "description": "lot disposal allocation response field: amortized cost residual local.",
+      "example": {
+        "id": "OBJ_001"
+      },
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.amortized_cost_residual_quantity",
+      "canonicalTerm": "amortized_cost_residual_quantity",
+      "preferredName": "amortized_cost_residual_quantity",
+      "description": "Quantity value for amortized cost residual quantity.",
+      "example": {
+        "id": "OBJ_001"
+      },
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.amortized_cost_retained_rounding_base",
+      "canonicalTerm": "amortized_cost_retained_rounding_base",
+      "preferredName": "amortized_cost_retained_rounding_base",
+      "description": "lot disposal allocation response field: amortized cost retained rounding base.",
+      "example": {
+        "id": "OBJ_001"
+      },
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.amortized_cost_retained_rounding_local",
+      "canonicalTerm": "amortized_cost_retained_rounding_local",
+      "preferredName": "amortized_cost_retained_rounding_local",
+      "description": "lot disposal allocation response field: amortized cost retained rounding local.",
+      "example": {
+        "id": "OBJ_001"
+      },
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.amortized_cost_scheduled_local",
+      "canonicalTerm": "amortized_cost_scheduled_local",
+      "preferredName": "amortized_cost_scheduled_local",
+      "description": "lot disposal allocation response field: amortized cost scheduled local.",
+      "example": {
+        "id": "OBJ_001"
+      },
       "type": "object",
       "locations": [
         "body"
@@ -15811,11 +16003,23 @@
           "allocation_content_hash",
           "allocation_ordinal",
           "allocations",
+          "amortized_cost_book_fx_rate_to_base",
           "amortized_cost_calculation_lineage",
+          "amortized_cost_currency",
+          "amortized_cost_current_base",
+          "amortized_cost_current_local",
+          "amortized_cost_open_quantity_before",
+          "amortized_cost_original_quantity",
           "amortized_cost_profile_content_hash",
           "amortized_cost_profile_id",
           "amortized_cost_profile_version",
           "amortized_cost_recognized_through",
+          "amortized_cost_residual_base",
+          "amortized_cost_residual_local",
+          "amortized_cost_residual_quantity",
+          "amortized_cost_retained_rounding_base",
+          "amortized_cost_retained_rounding_local",
+          "amortized_cost_scheduled_local",
           "calculation_policy_id",
           "calculation_policy_version",
           "consumed_cost_base",
@@ -16177,12 +16381,108 @@
             "attributeRef": "lotus.amortized_cost_profile_content_hash"
           },
           {
+            "name": "allocations[].amortized_cost_currency",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.amortized_cost_currency",
+            "attributeRef": "lotus.amortized_cost_currency"
+          },
+          {
             "name": "allocations[].amortized_cost_recognized_through",
             "location": "body",
             "required": false,
             "type": "object",
             "semanticId": "lotus.amortized_cost_recognized_through",
             "attributeRef": "lotus.amortized_cost_recognized_through"
+          },
+          {
+            "name": "allocations[].amortized_cost_original_quantity",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.amortized_cost_original_quantity",
+            "attributeRef": "lotus.amortized_cost_original_quantity"
+          },
+          {
+            "name": "allocations[].amortized_cost_open_quantity_before",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.amortized_cost_open_quantity_before",
+            "attributeRef": "lotus.amortized_cost_open_quantity_before"
+          },
+          {
+            "name": "allocations[].amortized_cost_residual_quantity",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.amortized_cost_residual_quantity",
+            "attributeRef": "lotus.amortized_cost_residual_quantity"
+          },
+          {
+            "name": "allocations[].amortized_cost_scheduled_local",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.amortized_cost_scheduled_local",
+            "attributeRef": "lotus.amortized_cost_scheduled_local"
+          },
+          {
+            "name": "allocations[].amortized_cost_current_local",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.amortized_cost_current_local",
+            "attributeRef": "lotus.amortized_cost_current_local"
+          },
+          {
+            "name": "allocations[].amortized_cost_current_base",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.amortized_cost_current_base",
+            "attributeRef": "lotus.amortized_cost_current_base"
+          },
+          {
+            "name": "allocations[].amortized_cost_residual_local",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.amortized_cost_residual_local",
+            "attributeRef": "lotus.amortized_cost_residual_local"
+          },
+          {
+            "name": "allocations[].amortized_cost_book_fx_rate_to_base",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.amortized_cost_book_fx_rate_to_base",
+            "attributeRef": "lotus.amortized_cost_book_fx_rate_to_base"
+          },
+          {
+            "name": "allocations[].amortized_cost_residual_base",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.amortized_cost_residual_base",
+            "attributeRef": "lotus.amortized_cost_residual_base"
+          },
+          {
+            "name": "allocations[].amortized_cost_retained_rounding_local",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.amortized_cost_retained_rounding_local",
+            "attributeRef": "lotus.amortized_cost_retained_rounding_local"
+          },
+          {
+            "name": "allocations[].amortized_cost_retained_rounding_base",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.amortized_cost_retained_rounding_base",
+            "attributeRef": "lotus.amortized_cost_retained_rounding_base"
           },
           {
             "name": "allocations[].amortized_cost_calculation_lineage",
