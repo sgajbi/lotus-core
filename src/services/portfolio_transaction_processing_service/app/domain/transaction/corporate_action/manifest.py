@@ -12,9 +12,11 @@ from portfolio_common.domain.calculation_lineage import (
 )
 
 from .classification import QUANTITY_TRANSFER_CORPORATE_ACTION_PAIRS
+from .cohort_policy import corporate_action_cohort_policy
 from .event_graph import (
     CorporateActionEventChild,
     CorporateActionEventGraph,
+    CorporateActionEventGraphFinding,
     CorporateActionEventGraphReason,
     CorporateActionEventStructuralStatus,
     resolve_corporate_action_event_graph,
@@ -38,8 +40,15 @@ class CorporateActionManifestReason(StrEnum):
     COMPLETION_NOT_DECLARED = "CA_MANIFEST_COMPLETION_NOT_DECLARED"
     INVALID_GRAPH = "CA_MANIFEST_INVALID_GRAPH"
     INVALID_ROLE_FOR_TRANSACTION_TYPE = "CA_MANIFEST_INVALID_ROLE_FOR_TRANSACTION_TYPE"
+    UNSUPPORTED_CORPORATE_ACTION_TYPE = "CA_MANIFEST_UNSUPPORTED_CORPORATE_ACTION_TYPE"
+    CHILD_TYPE_NOT_ALLOWED = "CA_MANIFEST_CHILD_TYPE_NOT_ALLOWED"
+    SOURCE_CHILD_REQUIRED = "CA_MANIFEST_SOURCE_CHILD_REQUIRED"
+    SOURCE_CHILD_CARDINALITY = "CA_MANIFEST_SOURCE_CHILD_CARDINALITY"
+    TARGET_CHILD_REQUIRED = "CA_MANIFEST_TARGET_CHILD_REQUIRED"
     SOURCE_INSTRUMENT_REQUIRED = "CA_MANIFEST_SOURCE_INSTRUMENT_REQUIRED"
+    SOURCE_CHILD_INSTRUMENT_MISMATCH = "CA_MANIFEST_SOURCE_CHILD_INSTRUMENT_MISMATCH"
     TARGET_INSTRUMENT_REQUIRED = "CA_MANIFEST_TARGET_INSTRUMENT_REQUIRED"
+    TARGET_CHILD_INSTRUMENT_MISMATCH = "CA_MANIFEST_TARGET_CHILD_INSTRUMENT_MISMATCH"
     TARGET_INSTRUMENT_EQUALS_SOURCE = "CA_MANIFEST_TARGET_INSTRUMENT_EQUALS_SOURCE"
     TARGET_SOURCE_DEPENDENCY_REQUIRED = "CA_MANIFEST_TARGET_SOURCE_DEPENDENCY_REQUIRED"
     TARGET_SOURCE_INSTRUMENT_MISMATCH = "CA_MANIFEST_TARGET_SOURCE_INSTRUMENT_MISMATCH"
@@ -120,7 +129,7 @@ class CorporateActionManifestFinding:
 
     reason: CorporateActionManifestReason
     transaction_ids: tuple[str, ...] = ()
-    graph_reasons: tuple[CorporateActionEventGraphReason, ...] = ()
+    graph_findings: tuple[CorporateActionEventGraphFinding, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -169,10 +178,10 @@ def evaluate_corporate_action_manifest_readiness(
         findings.append(
             CorporateActionManifestFinding(
                 CorporateActionManifestReason.INVALID_GRAPH,
-                graph_reasons=tuple(finding.reason for finding in structural_plan.findings),
+                graph_findings=structural_plan.findings,
             )
         )
-    findings.extend(_semantic_findings(manifest.expected_children))
+    findings.extend(_semantic_findings(manifest))
     if findings:
         return _readiness(
             CorporateActionManifestReadinessStatus.INVALID,
@@ -180,32 +189,13 @@ def evaluate_corporate_action_manifest_readiness(
             manifest=manifest,
         )
 
-    if observed_children:
-        observed_structural_plan = resolve_corporate_action_event_graph(
-            CorporateActionEventGraph(
-                corporate_action_event_id=manifest.corporate_action_event_id,
-                linked_transaction_group_id=manifest.linked_transaction_group_id,
-                parent_event_reference=manifest.parent_event_reference,
-                version=manifest.version,
-                children=observed_children,
-            )
+    observed_identity_findings = _observed_identity_findings(observed_children)
+    if observed_identity_findings:
+        return _readiness(
+            CorporateActionManifestReadinessStatus.INVALID,
+            observed_identity_findings,
+            manifest=manifest,
         )
-        if (
-            observed_structural_plan.status
-            != CorporateActionEventStructuralStatus.STRUCTURALLY_VALID
-        ):
-            return _readiness(
-                CorporateActionManifestReadinessStatus.INVALID,
-                (
-                    CorporateActionManifestFinding(
-                        CorporateActionManifestReason.INVALID_GRAPH,
-                        graph_reasons=tuple(
-                            finding.reason for finding in observed_structural_plan.findings
-                        ),
-                    ),
-                ),
-                manifest=manifest,
-            )
 
     expected_by_id = {child.transaction_id: child for child in manifest.expected_children}
     observed_by_id = {child.transaction_id: child for child in observed_children}
@@ -219,13 +209,6 @@ def evaluate_corporate_action_manifest_readiness(
             != _child_payload(observed_by_id[transaction_id])
         )
     )
-    if missing:
-        findings.append(
-            CorporateActionManifestFinding(
-                CorporateActionManifestReason.MISSING_EXPECTED_CHILD,
-                transaction_ids=missing,
-            )
-        )
     if unexpected:
         findings.append(
             CorporateActionManifestFinding(
@@ -240,7 +223,19 @@ def evaluate_corporate_action_manifest_readiness(
                 transaction_ids=mismatched,
             )
         )
-    if findings:
+    if unexpected or mismatched:
+        return _readiness(
+            CorporateActionManifestReadinessStatus.INVALID,
+            findings,
+            manifest=manifest,
+        )
+    if missing:
+        findings.append(
+            CorporateActionManifestFinding(
+                CorporateActionManifestReason.MISSING_EXPECTED_CHILD,
+                transaction_ids=missing,
+            )
+        )
         return _readiness(
             CorporateActionManifestReadinessStatus.AWAITING_CHILDREN,
             findings,
@@ -270,28 +265,95 @@ _TARGET_SOURCE_TYPE = {
 _ROLE_BY_NON_POSITION_TYPE = {
     "CASH_CONSIDERATION": "CASH_CONSIDERATION",
     "CASH_IN_LIEU": "CASH_IN_LIEU",
+    "ADJUSTMENT": "CASH_SETTLEMENT",
     "FEE": "CHARGE",
     "TAX": "TAX",
 }
 
 
 def _semantic_findings(
-    children: tuple[CorporateActionEventChild, ...],
+    manifest: CorporateActionParentManifest,
 ) -> tuple[CorporateActionManifestFinding, ...]:
     findings: list[CorporateActionManifestFinding] = []
+    children = manifest.expected_children
     children_by_id = {child.transaction_id: child for child in children}
+    policy = corporate_action_cohort_policy(manifest.corporate_action_type)
+    if policy is None:
+        return (
+            CorporateActionManifestFinding(
+                CorporateActionManifestReason.UNSUPPORTED_CORPORATE_ACTION_TYPE
+            ),
+        )
+
+    disallowed_children = tuple(
+        sorted(
+            child.transaction_id
+            for child in children
+            if child.transaction_type not in policy.allowed_transaction_types
+        )
+    )
+    if disallowed_children:
+        findings.append(
+            CorporateActionManifestFinding(
+                CorporateActionManifestReason.CHILD_TYPE_NOT_ALLOWED,
+                transaction_ids=disallowed_children,
+            )
+        )
+    source_children = tuple(
+        child for child in children if child.transaction_type == policy.source_transaction_type
+    )
+    target_children = tuple(
+        child for child in children if child.transaction_type == policy.target_transaction_type
+    )
+    if not source_children:
+        findings.append(
+            CorporateActionManifestFinding(CorporateActionManifestReason.SOURCE_CHILD_REQUIRED)
+        )
+    elif len(source_children) != 1:
+        findings.append(
+            CorporateActionManifestFinding(
+                CorporateActionManifestReason.SOURCE_CHILD_CARDINALITY,
+                transaction_ids=tuple(sorted(child.transaction_id for child in source_children)),
+            )
+        )
+    if not target_children:
+        findings.append(
+            CorporateActionManifestFinding(CorporateActionManifestReason.TARGET_CHILD_REQUIRED)
+        )
+
+    target_ids = frozenset(child.transaction_id for child in target_children)
+    consideration_children = tuple(
+        child
+        for child in children
+        if child.transaction_type in {"CASH_CONSIDERATION", "CASH_IN_LIEU"}
+    )
+    consideration_ids = frozenset(child.transaction_id for child in consideration_children)
     for child in sorted(children, key=lambda value: value.transaction_id):
         allowed_source_roles = _SOURCE_ROLE_BY_TYPE.get(child.transaction_type)
         expected_source_type = _TARGET_SOURCE_TYPE.get(child.transaction_type)
         expected_non_position_role = _ROLE_BY_NON_POSITION_TYPE.get(child.transaction_type)
         if allowed_source_roles is not None:
-            if child.child_role not in allowed_source_roles:
+            if child.child_role != policy.source_role:
                 findings.append(
                     _finding(CorporateActionManifestReason.INVALID_ROLE_FOR_TRANSACTION_TYPE, child)
                 )
             if child.source_instrument_id is None:
                 findings.append(
                     _finding(CorporateActionManifestReason.SOURCE_INSTRUMENT_REQUIRED, child)
+                )
+            if child.instrument_id is None:
+                findings.append(
+                    _finding(CorporateActionManifestReason.SOURCE_INSTRUMENT_REQUIRED, child)
+                )
+            elif (
+                child.source_instrument_id is not None
+                and child.instrument_id != child.source_instrument_id
+            ):
+                findings.append(
+                    _finding(
+                        CorporateActionManifestReason.SOURCE_CHILD_INSTRUMENT_MISMATCH,
+                        child,
+                    )
                 )
             continue
         if expected_source_type is not None:
@@ -314,6 +376,20 @@ def _semantic_findings(
                         child,
                     )
                 )
+            if child.instrument_id is None:
+                findings.append(
+                    _finding(CorporateActionManifestReason.TARGET_INSTRUMENT_REQUIRED, child)
+                )
+            elif (
+                child.target_instrument_id is not None
+                and child.instrument_id != child.target_instrument_id
+            ):
+                findings.append(
+                    _finding(
+                        CorporateActionManifestReason.TARGET_CHILD_INSTRUMENT_MISMATCH,
+                        child,
+                    )
+                )
             compatible_sources = tuple(
                 children_by_id[dependency_id]
                 for dependency_id in child.dependency_transaction_ids
@@ -324,7 +400,7 @@ def _semantic_findings(
                 findings.append(
                     _finding(CorporateActionManifestReason.TARGET_SOURCE_DEPENDENCY_REQUIRED, child)
                 )
-            elif child.source_instrument_id != compatible_sources[0].source_instrument_id:
+            elif child.source_instrument_id != compatible_sources[0].instrument_id:
                 findings.append(
                     _finding(CorporateActionManifestReason.TARGET_SOURCE_INSTRUMENT_MISMATCH, child)
                 )
@@ -334,14 +410,24 @@ def _semantic_findings(
                 _finding(CorporateActionManifestReason.INVALID_ROLE_FOR_TRANSACTION_TYPE, child)
             )
             continue
-        if not any(
-            dependency_id in children_by_id
-            and (
-                children_by_id[dependency_id].transaction_type in _SOURCE_ROLE_BY_TYPE
-                or children_by_id[dependency_id].transaction_type in _TARGET_SOURCE_TYPE
+        dependencies = frozenset(child.dependency_transaction_ids)
+        if child.transaction_type == "CASH_CONSIDERATION":
+            has_governed_dependencies = target_ids.issubset(dependencies)
+        elif child.transaction_type == "CASH_IN_LIEU":
+            matching_target_ids = frozenset(
+                target.transaction_id
+                for target in target_children
+                if target.instrument_id == child.instrument_id
             )
-            for dependency_id in child.dependency_transaction_ids
-        ):
+            has_governed_dependencies = bool(matching_target_ids.intersection(dependencies))
+        elif child.transaction_type == "ADJUSTMENT":
+            has_governed_dependencies = len(dependencies) == 1 and dependencies.issubset(
+                consideration_ids
+            )
+        else:
+            terminal_ids = target_ids.union(consideration_ids)
+            has_governed_dependencies = bool(terminal_ids) and terminal_ids.issubset(dependencies)
+        if not has_governed_dependencies:
             findings.append(
                 _finding(CorporateActionManifestReason.NON_POSITION_DEPENDENCY_REQUIRED, child)
             )
@@ -353,11 +439,61 @@ def _child_payload(child: CorporateActionEventChild) -> dict[str, object]:
         "child_role": child.child_role,
         "child_sequence_hint": child.child_sequence_hint,
         "dependency_transaction_ids": sorted(child.dependency_transaction_ids),
+        "instrument_id": child.instrument_id,
         "source_instrument_id": child.source_instrument_id,
         "target_instrument_id": child.target_instrument_id,
         "transaction_id": child.transaction_id,
         "transaction_type": child.transaction_type,
     }
+
+
+def _observed_identity_findings(
+    children: tuple[CorporateActionEventChild, ...],
+) -> tuple[CorporateActionManifestFinding, ...]:
+    """Reject duplicate/conflicting observations without requiring every dependency to arrive."""
+
+    first_by_id: dict[str, CorporateActionEventChild] = {}
+    graph_findings: list[CorporateActionEventGraphFinding] = []
+    for child in children:
+        existing = first_by_id.get(child.transaction_id)
+        if existing is None:
+            first_by_id[child.transaction_id] = child
+            continue
+        graph_findings.append(
+            CorporateActionEventGraphFinding(
+                reason=(
+                    CorporateActionEventGraphReason.DUPLICATE_CHILD_ID
+                    if _child_payload(existing) == _child_payload(child)
+                    else CorporateActionEventGraphReason.CONFLICTING_CHILD_DEFINITION
+                ),
+                transaction_ids=(child.transaction_id,),
+            )
+        )
+    if not graph_findings:
+        return ()
+    canonical_findings = tuple(
+        sorted(
+            graph_findings,
+            key=lambda finding: (
+                finding.reason,
+                finding.transaction_ids,
+                finding.dependency_transaction_ids,
+            ),
+        )
+    )
+    return (
+        CorporateActionManifestFinding(
+            CorporateActionManifestReason.INVALID_GRAPH,
+            transaction_ids=tuple(
+                sorted(
+                    transaction_id
+                    for finding in canonical_findings
+                    for transaction_id in finding.transaction_ids
+                )
+            ),
+            graph_findings=canonical_findings,
+        ),
+    )
 
 
 def _finding(
