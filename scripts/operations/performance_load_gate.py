@@ -15,6 +15,7 @@ import json
 import os
 import sys
 import time
+import zlib
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -26,6 +27,8 @@ from sqlalchemy import create_engine
 REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
+
+from portfolio_common.config import KAFKA_TOPIC_PARTITION_COUNTS  # noqa: E402
 
 from scripts.operations.transaction_processing_load_support import (  # noqa: E402
     build_transaction_batch as _build_transaction_batch,
@@ -53,6 +56,25 @@ from tests.test_support.managed_compose_run import (  # noqa: E402
     ManagedComposeRun,
     prepare_managed_compose_run,
 )
+
+GOVERNED_LOAD_PORTFOLIO_ID = "PERF_BALANCED_V1"
+GOVERNED_LOAD_SECURITY_PREFIX = "PERF_CANONICAL_V1_SEC"
+GOVERNED_LOAD_SECURITY_COUNT = 20
+MAX_GOVERNED_KEYS_PER_PARTITION = 2
+TRANSACTION_TOPIC_PARTITIONS = KAFKA_TOPIC_PARTITION_COUNTS["transactions.persisted"]
+DRAIN_OBSERVATION_TIMEOUT_SECONDS = 240
+GOVERNED_MAX_DRAIN_SECONDS: dict[str, dict[str, float]] = {
+    "fast": {
+        "steady_state": 60.0,
+        "burst": 120.0,
+        "replay_storm": 120.0,
+    },
+    "full": {
+        "steady_state": 60.0,
+        "burst": 180.0,
+        "replay_storm": 180.0,
+    },
+}
 
 
 @dataclass(slots=True)
@@ -88,6 +110,28 @@ class LoadProfile(TypedDict):
     batch_size: int
     sleep_seconds: float
     thresholds: dict[str, Any]
+
+
+def _governed_partition_distribution() -> tuple[int, ...]:
+    """Return stable CRC32 placement for the canonical transaction load keys."""
+    distribution = [0] * TRANSACTION_TOPIC_PARTITIONS
+    for index in range(GOVERNED_LOAD_SECURITY_COUNT):
+        security_id = f"{GOVERNED_LOAD_SECURITY_PREFIX}_{index:03d}"
+        partition_key = f"{GOVERNED_LOAD_PORTFOLIO_ID}|{security_id}"
+        partition = zlib.crc32(partition_key.encode("utf-8")) % TRANSACTION_TOPIC_PARTITIONS
+        distribution[partition] += 1
+    return tuple(distribution)
+
+
+def _validate_governed_load_identity() -> None:
+    """Fail closed when topic capacity changes invalidate the load-key fixture."""
+    distribution = _governed_partition_distribution()
+    if max(distribution) > MAX_GOVERNED_KEYS_PER_PARTITION:
+        raise RuntimeError(
+            "Canonical performance load keys exceed the governed per-partition bound: "
+            f"distribution={distribution}, "
+            f"max={MAX_GOVERNED_KEYS_PER_PARTITION}"
+        )
 
 
 def _non_negative_delta(current: float, baseline: float) -> float:
@@ -143,7 +187,15 @@ def _trigger_replay_storm(
             raise RuntimeError(
                 f"Replay request failed with status={response.status_code}: {response.text[:300]}"
             )
-        submitted += len(selected)
+        if response.status_code == 409:
+            continue
+        accepted_count = response.json().get("accepted_count")
+        if not isinstance(accepted_count, int) or not 0 <= accepted_count <= len(selected):
+            raise RuntimeError(
+                "Replay request returned an invalid accepted_count: "
+                f"accepted_count={accepted_count!r}, requested={len(selected)}"
+            )
+        submitted += accepted_count
     return submitted
 
 
@@ -389,7 +441,12 @@ def main(
         default="output/task-runs/diagnostics/performance-load-gate-compose.log",
     )
     parser.add_argument("--ready-timeout-seconds", type=int, default=240)
-    parser.add_argument("--drain-timeout-seconds", type=int, default=180)
+    parser.add_argument(
+        "--drain-timeout-seconds",
+        type=int,
+        default=DRAIN_OBSERVATION_TIMEOUT_SECONDS,
+        help="Observation window; profile-specific drain SLOs remain independently enforced.",
+    )
     parser.add_argument(
         "--profile-tier",
         choices=("fast", "full"),
@@ -480,8 +537,9 @@ def main(
     run_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     business_date = datetime.now(UTC).date().isoformat()
     transaction_timestamp = f"{business_date}T09:00:00Z"
-    portfolio_id = f"PERF_LOAD_{run_id}"
-    security_prefix = f"PERF_{run_id}_SEC"
+    _validate_governed_load_identity()
+    portfolio_id = GOVERNED_LOAD_PORTFOLIO_ID
+    security_prefix = GOVERNED_LOAD_SECURITY_PREFIX
     engine = create_engine(args.host_database_url, pool_pre_ping=True)
     _seed_load_context(
         engine=engine,
@@ -505,7 +563,7 @@ def main(
                     "max_backlog_age_increase_seconds": 1800.0,
                     "max_dlq_pressure_ratio_added": 5.0,
                     "max_replay_pressure_ratio_increase": 5.0,
-                    "max_drain_seconds": None,
+                    "max_drain_seconds": GOVERNED_MAX_DRAIN_SECONDS["fast"]["steady_state"],
                     "require_drain": True,
                 },
             },
@@ -519,7 +577,7 @@ def main(
                     "max_backlog_age_increase_seconds": 2400.0,
                     "max_dlq_pressure_ratio_added": 5.0,
                     "max_replay_pressure_ratio_increase": 5.0,
-                    "max_drain_seconds": None,
+                    "max_drain_seconds": GOVERNED_MAX_DRAIN_SECONDS["fast"]["burst"],
                     "require_drain": True,
                 },
             },
@@ -536,7 +594,7 @@ def main(
                     "max_backlog_age_increase_seconds": 1200.0,
                     "max_dlq_pressure_ratio_added": 5.0,
                     "max_replay_pressure_ratio_increase": 5.0,
-                    "max_drain_seconds": None,
+                    "max_drain_seconds": GOVERNED_MAX_DRAIN_SECONDS["full"]["steady_state"],
                     "require_drain": True,
                 },
             },
@@ -550,12 +608,13 @@ def main(
                     "max_backlog_age_increase_seconds": 1800.0,
                     "max_dlq_pressure_ratio_added": 10.0,
                     "max_replay_pressure_ratio_increase": 5.0,
-                    "max_drain_seconds": None,
+                    "max_drain_seconds": GOVERNED_MAX_DRAIN_SECONDS["full"]["burst"],
                     "require_drain": True,
                 },
             },
         ]
 
+    transaction_sequence_offset = 0
     for profile in profiles:
         baseline_health = _get_health_snapshot(
             event_replay_base_url=args.event_replay_base_url,
@@ -576,7 +635,9 @@ def main(
             seed_prefix=transaction_seed,
             security_prefix=security_prefix,
             transaction_date=transaction_timestamp,
+            sequence_offset=transaction_sequence_offset,
         )
+        transaction_sequence_offset += len(transaction_ids)
         drain_seconds = _wait_for_transaction_processing(
             engine=engine,
             portfolio_id=portfolio_id,
@@ -620,6 +681,7 @@ def main(
         seed=replay_source_seed,
         transaction_date=transaction_timestamp,
         security_prefix=security_prefix,
+        sequence_offset=transaction_sequence_offset,
     )
     replay_ids = [row["transaction_id"] for row in replay_source_transactions]
     response = requests.post(
@@ -679,7 +741,7 @@ def main(
                 ),
                 "max_dlq_pressure_ratio_added": 25.0 if args.profile_tier == "full" else 5.0,
                 "max_replay_pressure_ratio_increase": 5.0,
-                "max_drain_seconds": None,
+                "max_drain_seconds": GOVERNED_MAX_DRAIN_SECONDS[args.profile_tier]["replay_storm"],
                 "require_drain": True,
             },
         )

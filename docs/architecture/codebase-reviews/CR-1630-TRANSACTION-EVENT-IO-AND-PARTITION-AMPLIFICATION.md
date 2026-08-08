@@ -102,6 +102,14 @@ rearmed and completed `525` times for one final portfolio-day row.
     partitions/in-flight tasks. The producer pins librdkafka's stable CRC32 keyed partitioner.
     Security ordering is unchanged; the canonical ten-key maximum lane falls from five series
     (`1,880` facts) at eight partitions to three (`1,128` facts) at twelve.
+21. The performance load gate uses one stable portfolio and twenty stable security keys whose
+    governed CRC32 distribution places at most two keys on each of the twelve transaction
+    partitions. Transaction timestamps increase by one microsecond across steady, burst, and replay
+    source phases, so the capacity profile measures append processing instead of accidentally
+    turning every later phase into retroactive history. Repair replay remains intentional. HTTP
+    `409` replay blocks contribute zero expected completions, while `202` responses contribute only
+    their validated `accepted_count`. The observation window is separate from, and longer than,
+    the unchanged profile SLOs so a failure report can retain final domain-count diagnostics.
 
 ## Measured Result
 
@@ -375,6 +383,23 @@ compatibility. Exact-head E2E at `c79bf0afe` passed all four affected timeseries
 `155.53s`; an immediately preceding same-runtime run at `2fb5ecb09` also passed `4/4` in `113.72s`.
 Both used isolated dynamic-port Compose projects, retained the original test budgets, removed every
 run-owned resource, and preserved the separately owned 15-container canonical Core stack.
+
+Exact-main Main Releasability run `31264609366` timed out the full burst profile after `180s` on
+both the original attempt and exact-SHA failed-job rerun. All services remained healthy and the
+failure showed no database, Kafka, or DLQ growth. Review found the supposedly deterministic
+profile embedded its wall-clock run id in the Kafka partition keys, randomized transaction ids,
+and restarted one shared transaction timestamp/sequence between phases. The result changed the
+twelve-lane key distribution on every run and made the burst phase retroactive relative to steady
+state. Replay `409` responses were also counted as accepted work that could never complete.
+
+The corrected full profile
+`output/task-runs/20260808T174445Z-performance-load-gate.json` passed with exact processing and no
+DLQ growth: steady state drained `200` records in `32.513s` against the `60s` SLO; burst drained
+`640` records in `63.730s` at `9.958 records/s` against the unchanged `180s` SLO; and the replay
+storm drained `480` accepted records in `117.804s` against the unchanged `180s` SLO. Compared with
+the last append-incorrect local burst at `205.921s`, deterministic append ordering reduced measured
+burst drain by `69.05%`. This is focused load-gate recovery evidence; it does not replace #795's
+daily, restart, poison, duplicate/concurrency, correction, and restatement acceptance matrix.
 
 ## Compatibility
 
@@ -695,3 +720,9 @@ cleanup. It preserves production consumer idempotency, semantic-conflict protect
 topics, partitions, database schema, calculations, and operator commands. Repository context,
 executable cleanup tests, this review record, and #795 own the reusable rule; no OpenAPI, migration,
 runbook, or authored wiki change is required.
+The deterministic performance-profile correction changes only certification identities, ordering,
+accepted-work accounting, and timeout diagnostics. It does not change production Kafka keys,
+topics, partition counts, consumer concurrency, APIs, event schemas, database schemas, calculations,
+or runtime settings. The existing load command is unchanged, and this review/context update is
+sufficient durable guidance; no OpenAPI, migration, operator-runbook, or authored wiki change is
+required.
