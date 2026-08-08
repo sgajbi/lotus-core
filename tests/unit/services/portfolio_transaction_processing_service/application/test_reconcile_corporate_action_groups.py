@@ -3,6 +3,7 @@
 from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal
+from time import perf_counter
 
 import pytest
 
@@ -257,3 +258,36 @@ async def test_failed_persistence_is_not_observed_or_deduplicated() -> None:
     assert len(repository.loaded_keys) == 2
     assert len(repository.saved_evidence) == 1
     assert len(observer.observations) == 1
+
+
+async def test_one_thousand_target_group_uses_one_read_and_one_evidence_write() -> None:
+    source = _transaction(
+        transaction_id="CA-OUT-CAPACITY",
+        transaction_type="DEMERGER_OUT",
+        net_cost_local="-1000",
+    )
+    targets = tuple(
+        _transaction(
+            transaction_id=f"CA-IN-CAPACITY-{ordinal:04d}",
+            transaction_type="DEMERGER_IN",
+            net_cost_local="1",
+        )
+        for ordinal in range(1_000)
+    )
+    repository = _Repository((source, *targets))
+
+    started_at = perf_counter()
+    evidence = await CorporateActionReconciliationCoordinator(repository).reconcile(
+        source,
+        correlation_id="corr-capacity-1000",
+    )
+    elapsed_seconds = perf_counter() - started_at
+
+    assert evidence is not None
+    assert evidence.run.summary["reconciliation_status"] == "balanced"
+    assert evidence.run.summary["target_leg_count"] == 1_000
+    assert evidence.run.summary["examined_count"] == 1_001
+    assert len(evidence.run.summary["input_lineage"]) == 1_001
+    assert len(repository.loaded_keys) == 1
+    assert repository.saved_evidence == [evidence]
+    assert elapsed_seconds < 5.0
