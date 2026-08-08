@@ -6,6 +6,9 @@ from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from portfolio_common.infrastructure.persistence.transaction_identity_guard import (
+    GeneratedTransactionIdentityCollisionError,
+)
 
 from src.services.portfolio_transaction_processing_service.app.application.cost_basis_processing import (  # noqa: E501
     coordinate_cost_processing_effects,
@@ -146,6 +149,47 @@ async def test_effect_coordination_emits_separate_redemption_interest_income() -
         transaction_state.upsert_booked_transaction.await_args.args[0].transaction_id
         == product.transaction_id
     )
+
+
+@pytest.mark.asyncio
+async def test_redemption_interest_collision_prevents_effect_staging() -> None:
+    product_leg = replace(
+        _transaction(
+            transaction_id="REDEMPTION-COLLISION-01",
+            transaction_type="MATURITY_REDEMPTION",
+            net_cost_local="100",
+            auto_generate_cash_leg=True,
+        ),
+        quantity=Decimal("1"),
+        price=Decimal("100"),
+        principal_proceeds_local=Decimal("100"),
+        accrued_interest_proceeds_local=Decimal("5"),
+    )
+    transaction_state = AsyncMock(spec=CostBasisTransactionStatePort)
+
+    async def reject_interest(transaction: BookedTransaction, **_: object) -> None:
+        if transaction.transaction_id.endswith("-ACCRUED-INTEREST"):
+            raise GeneratedTransactionIdentityCollisionError(transaction.transaction_id)
+
+    transaction_state.upsert_generated_booked_transaction.side_effect = reject_interest
+    effect_stager = AsyncMock(spec=CostProcessingEffectStagingPort)
+
+    with pytest.raises(
+        GeneratedTransactionIdentityCollisionError,
+        match="generated_transaction_identity_collision",
+    ):
+        await coordinate_cost_processing_effects(
+            processed_transactions=[product_leg],
+            instrument_updates=[],
+            source_epoch=4,
+            transaction_state=transaction_state,
+            reconciliation_repository=AsyncMock(spec=CorporateActionReconciliationRepository),
+            effect_stager=effect_stager,
+            correlation_id="corr-redemption-collision-01",
+        )
+
+    effect_stager.stage_processed_transactions.assert_not_awaited()
+    effect_stager.stage_instrument_updates.assert_not_awaited()
 
 
 @pytest.mark.asyncio
