@@ -1,5 +1,6 @@
 """Verify bounded, fail-closed latest-version lot-disposal receipt reads."""
 
+from copy import deepcopy
 from dataclasses import fields
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -48,8 +49,9 @@ from src.services.query_service.app.repositories.lot_disposal_repository import 
 
 
 @pytest.mark.asyncio
-async def test_latest_receipt_uses_one_scoped_verified_latest_version_query() -> None:
+async def test_latest_receipt_uses_two_scoped_full_chain_queries() -> None:
     receipt = MagicMock(receipt_id="RECEIPT-1", allocation_count=2)
+    receipt.receipt_version = 1
     receipt.destination_type = "INTERNAL_LOT"
     receipt.target_transaction_id = "EXCHANGE-IN-001"
     receipt.target_lot_id = "LOT-EXCHANGE-IN-001"
@@ -57,15 +59,25 @@ async def test_latest_receipt_uses_one_scoped_verified_latest_version_query() ->
     receipt.external_destination_reference = None
     first = MagicMock(source_lot_id="LOT-1")
     second = MagicMock(source_lot_id="LOT-2")
-    result = MagicMock()
-    result.all.return_value = [(receipt, first, None), (receipt, second, None)]
+    first.receipt_version = 1
+    second.receipt_version = 1
+    receipt_result = MagicMock()
+    receipt_result.all.return_value = [receipt]
+    allocation_result = MagicMock()
+    allocation_result.all.return_value = [first, second]
     session = AsyncMock(spec=AsyncSession)
-    session.execute = AsyncMock(return_value=result)
+    session.scalars = AsyncMock(side_effect=[receipt_result, allocation_result])
 
-    with patch(
-        "src.services.query_service.app.repositories.lot_disposal_repository."
-        "_verify_receipt_integrity"
-    ) as verify:
+    with (
+        patch(
+            "src.services.query_service.app.repositories.lot_disposal_repository."
+            "verify_cost_basis_receipt_version_chain"
+        ) as verify_chain,
+        patch(
+            "src.services.query_service.app.repositories.lot_disposal_repository."
+            "_verify_receipt_integrity"
+        ) as verify,
+    ):
         resolved = await LotDisposalRepository(session).get_latest_receipt(
             portfolio_id="P1",
             transaction_id="RED-001",
@@ -81,33 +93,79 @@ async def test_latest_receipt_uses_one_scoped_verified_latest_version_query() ->
     assert mapped_receipt.target_lot_id == "LOT-EXCHANGE-IN-001"
     assert all(isinstance(row, LotDisposalAllocationReadRecord) for row in mapped_allocations)
     assert [row.source_lot_id for row in mapped_allocations] == ["LOT-1", "LOT-2"]
-    session.execute.assert_awaited_once()
-    statement = session.execute.call_args.args[0]
-    compiled = str(statement.compile(compile_kwargs={"literal_binds": True}))
-    assert "LEFT OUTER JOIN lot_disposal_allocations" in compiled
-    assert "LEFT OUTER JOIN lot_disposal_receipts AS" in compiled
-    assert "max(lot_disposal_receipts.receipt_version)" in compiled
-    assert "lot_disposal_receipts.portfolio_id = 'P1'" in compiled
-    assert "lot_disposal_receipts.disposal_transaction_id = 'RED-001'" in compiled
-    assert "ORDER BY lot_disposal_allocations.allocation_ordinal ASC" in compiled
+    assert session.scalars.await_count == 2
+    receipt_statement = session.scalars.await_args_list[0].args[0]
+    allocation_statement = session.scalars.await_args_list[1].args[0]
+    compiled_receipts = str(receipt_statement.compile(compile_kwargs={"literal_binds": True}))
+    compiled_allocations = str(allocation_statement.compile(compile_kwargs={"literal_binds": True}))
+    assert "lot_disposal_receipts.portfolio_id = 'P1'" in compiled_receipts
+    assert "lot_disposal_receipts.disposal_transaction_id = 'RED-001'" in compiled_receipts
+    assert "ORDER BY lot_disposal_receipts.receipt_version" in compiled_receipts
+    assert "lot_disposal_allocations.receipt_version <= 1" in compiled_allocations
+    assert (
+        "ORDER BY lot_disposal_allocations.receipt_version, "
+        "lot_disposal_allocations.allocation_ordinal" in compiled_allocations
+    )
+    verify_chain.assert_called_once_with((receipt,))
     verify.assert_called_once_with(receipt, [first, second], predecessor_hash=None)
+
+
+@pytest.mark.asyncio
+async def test_latest_receipt_rejects_tampered_middle_version_at_depth_sixty_four() -> None:
+    canonical_receipt, canonical_allocation = _valid_evidence()
+    receipts: list[LotDisposalReceiptRecord] = []
+    allocations: list[LotDisposalAllocationRecord] = []
+    previous_hash: str | None = None
+    for version in range(1, 65):
+        receipt = deepcopy(canonical_receipt)
+        allocation = deepcopy(canonical_allocation)
+        receipt.receipt_version = version
+        receipt.previous_receipt_content_hash = previous_hash
+        receipt.receipt_content_hash = receipt_version_content_hash(
+            receipt_id=receipt.receipt_id,
+            semantic_content_hash=receipt.semantic_content_hash,
+            receipt_version=version,
+            previous_receipt_content_hash=previous_hash,
+        )
+        allocation.receipt_version = version
+        receipts.append(receipt)
+        allocations.append(allocation)
+        previous_hash = receipt.receipt_content_hash
+    allocations[31].allocation_content_hash = "0" * 64
+
+    receipt_result = MagicMock()
+    receipt_result.all.return_value = receipts
+    allocation_result = MagicMock()
+    allocation_result.all.return_value = allocations
+    session = AsyncMock(spec=AsyncSession)
+    session.scalars = AsyncMock(side_effect=[receipt_result, allocation_result])
+
+    with pytest.raises(CorruptLotDisposalReadModelError, match="chain is corrupt"):
+        await LotDisposalRepository(session).get_latest_receipt(
+            portfolio_id="P1",
+            transaction_id="EXCHANGE-OUT-001",
+        )
+
+    assert session.scalars.await_count == 2
 
 
 @pytest.mark.asyncio
 async def test_portfolio_existence_and_absent_receipt_are_bounded() -> None:
     scalar_result = MagicMock()
     scalar_result.scalar_one_or_none.side_effect = ["P1", None]
-    empty_result = MagicMock()
-    empty_result.all.return_value = []
+    empty_scalar_result = MagicMock()
+    empty_scalar_result.all.return_value = []
     session = AsyncMock(spec=AsyncSession)
-    session.execute = AsyncMock(side_effect=[scalar_result, scalar_result, empty_result])
+    session.execute = AsyncMock(side_effect=[scalar_result, scalar_result])
+    session.scalars = AsyncMock(return_value=empty_scalar_result)
     repository = LotDisposalRepository(session)
 
     assert await repository.portfolio_exists("P1") is True
     assert await repository.portfolio_exists("MISSING") is False
     assert await repository.get_latest_receipt(portfolio_id="P1", transaction_id="UNKNOWN") is None
 
-    assert session.execute.await_count == 3
+    assert session.execute.await_count == 2
+    session.scalars.assert_awaited_once()
 
 
 def test_amortized_evidence_contract_has_lossless_query_projection() -> None:

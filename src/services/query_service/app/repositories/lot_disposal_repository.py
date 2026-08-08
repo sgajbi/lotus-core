@@ -1,5 +1,6 @@
 """Read and verify immutable lot-disposal receipts without family assumptions."""
 
+from collections import defaultdict
 from collections.abc import Mapping
 from datetime import date
 from decimal import Decimal
@@ -24,11 +25,11 @@ from portfolio_common.domain.cost_basis_receipt_integrity import (
     lot_disposal_lineage_input_payload,
     lot_disposal_lineage_output_payload,
     receipt_version_content_hash,
+    verify_cost_basis_receipt_version_chain,
 )
 from portfolio_common.domain.transaction.numeric_policy import COST_BASIS_STATE_LEDGER_OUTPUT_V1
-from sqlalchemy import and_, func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import aliased
 
 from .lot_disposal_records import (
     LotDisposalAllocationReadRecord,
@@ -52,58 +53,54 @@ class LotDisposalRepository:
         portfolio_id: str,
         transaction_id: str,
     ) -> tuple[LotDisposalReceiptReadRecord, list[LotDisposalAllocationReadRecord]] | None:
-        latest_version = (
-            select(func.max(LotDisposalReceiptRecord.receipt_version))
+        receipt_statement = (
+            select(LotDisposalReceiptRecord)
             .where(
                 LotDisposalReceiptRecord.portfolio_id == portfolio_id,
                 LotDisposalReceiptRecord.disposal_transaction_id == transaction_id,
             )
-            .scalar_subquery()
+            .order_by(LotDisposalReceiptRecord.receipt_version)
         )
-        predecessor = aliased(LotDisposalReceiptRecord)
-        statement = (
-            select(
-                LotDisposalReceiptRecord,
-                LotDisposalAllocationRecord,
-                predecessor.receipt_content_hash,
-            )
-            .outerjoin(
-                LotDisposalAllocationRecord,
-                and_(
-                    LotDisposalAllocationRecord.receipt_id == LotDisposalReceiptRecord.receipt_id,
-                    LotDisposalAllocationRecord.receipt_version
-                    == LotDisposalReceiptRecord.receipt_version,
-                    LotDisposalAllocationRecord.portfolio_id
-                    == LotDisposalReceiptRecord.portfolio_id,
-                    LotDisposalAllocationRecord.security_id == LotDisposalReceiptRecord.security_id,
-                ),
-            )
-            .outerjoin(
-                predecessor,
-                and_(
-                    predecessor.receipt_id == LotDisposalReceiptRecord.receipt_id,
-                    predecessor.receipt_version == LotDisposalReceiptRecord.receipt_version - 1,
-                ),
-            )
-            .where(
-                LotDisposalReceiptRecord.portfolio_id == portfolio_id,
-                LotDisposalReceiptRecord.disposal_transaction_id == transaction_id,
-                LotDisposalReceiptRecord.receipt_version == latest_version,
-            )
-            .order_by(LotDisposalAllocationRecord.allocation_ordinal.asc())
-        )
-        rows = (await self.db.execute(statement)).all()
-        if not rows:
+        receipts = tuple((await self.db.scalars(receipt_statement)).all())
+        if not receipts:
             return None
-        receipt_record = rows[0][0]
-        allocation_records = [allocation for _, allocation, _ in rows if allocation is not None]
-        _verify_receipt_integrity(
-            receipt_record,
-            allocation_records,
-            predecessor_hash=rows[0][2],
+        receipt_id = str(receipts[0].receipt_id)
+        head_version = int(receipts[-1].receipt_version)
+        allocation_statement = (
+            select(LotDisposalAllocationRecord)
+            .where(
+                LotDisposalAllocationRecord.receipt_id == receipt_id,
+                LotDisposalAllocationRecord.receipt_version <= head_version,
+            )
+            .order_by(
+                LotDisposalAllocationRecord.receipt_version,
+                LotDisposalAllocationRecord.allocation_ordinal,
+            )
         )
-        return _receipt_record(receipt_record), [
-            _allocation_record(allocation) for allocation in allocation_records
+        allocation_rows = tuple((await self.db.scalars(allocation_statement)).all())
+        allocations_by_version: defaultdict[int, list[LotDisposalAllocationRecord]] = defaultdict(
+            list
+        )
+        for allocation in allocation_rows:
+            allocations_by_version[int(allocation.receipt_version)].append(allocation)
+        try:
+            verify_cost_basis_receipt_version_chain(receipts)
+            for index, receipt in enumerate(receipts):
+                _verify_receipt_integrity(
+                    receipt,
+                    allocations_by_version[int(receipt.receipt_version)],
+                    predecessor_hash=(
+                        str(receipts[index - 1].receipt_content_hash) if index else None
+                    ),
+                )
+        except ValueError as exc:
+            raise CorruptLotDisposalReadModelError(
+                f"Persisted lot-disposal receipt chain is corrupt: {receipt_id}"
+            ) from exc
+        head = receipts[-1]
+        head_allocations = allocations_by_version[head_version]
+        return _receipt_record(head), [
+            _allocation_record(allocation) for allocation in head_allocations
         ]
 
 
