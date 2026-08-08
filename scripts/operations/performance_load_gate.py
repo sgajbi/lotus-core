@@ -17,12 +17,13 @@ import sys
 import time
 import zlib
 from dataclasses import asdict, dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, TypedDict
 
 import requests  # type: ignore[import-untyped]
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
+from sqlalchemy.engine import Engine
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
@@ -132,6 +133,37 @@ def _validate_governed_load_identity() -> None:
             f"distribution={distribution}, "
             f"max={MAX_GOVERNED_KEYS_PER_PARTITION}"
         )
+
+
+def _next_transaction_timestamp(
+    *,
+    engine: Engine,
+    default_timestamp: datetime,
+) -> datetime:
+    """Return an append-only timestamp even when a supported stack is reused."""
+    with engine.connect() as connection:
+        latest_timestamp = connection.execute(
+            text(
+                """
+                SELECT MAX(transaction_date)
+                FROM transactions
+                WHERE portfolio_id = :portfolio_id
+                """
+            ),
+            {"portfolio_id": GOVERNED_LOAD_PORTFOLIO_ID},
+        ).scalar_one_or_none()
+    if latest_timestamp is None:
+        return default_timestamp
+    if not isinstance(latest_timestamp, datetime):
+        raise RuntimeError(
+            "Latest governed load transaction timestamp has an unexpected type: "
+            f"{type(latest_timestamp).__name__}"
+        )
+    if latest_timestamp.tzinfo is None:
+        latest_timestamp = latest_timestamp.replace(tzinfo=UTC)
+    else:
+        latest_timestamp = latest_timestamp.astimezone(UTC)
+    return max(default_timestamp, latest_timestamp + timedelta(microseconds=1))
 
 
 def _non_negative_delta(current: float, baseline: float) -> float:
@@ -534,13 +566,18 @@ def main(
         timeout_seconds=args.ready_timeout_seconds,
     )
 
-    run_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-    business_date = datetime.now(UTC).date().isoformat()
-    transaction_timestamp = f"{business_date}T09:00:00Z"
+    run_started_at = datetime.now(UTC)
+    run_id = run_started_at.strftime("%Y%m%dT%H%M%SZ")
     _validate_governed_load_identity()
     portfolio_id = GOVERNED_LOAD_PORTFOLIO_ID
     security_prefix = GOVERNED_LOAD_SECURITY_PREFIX
     engine = create_engine(args.host_database_url, pool_pre_ping=True)
+    transaction_timestamp_value = _next_transaction_timestamp(
+        engine=engine,
+        default_timestamp=run_started_at.replace(hour=9, minute=0, second=0, microsecond=0),
+    )
+    business_date = transaction_timestamp_value.date().isoformat()
+    transaction_timestamp = transaction_timestamp_value.isoformat().replace("+00:00", "Z")
     _seed_load_context(
         engine=engine,
         ingestion_base_url=args.ingestion_base_url,

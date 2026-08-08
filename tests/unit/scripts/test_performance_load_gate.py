@@ -1,4 +1,5 @@
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -17,6 +18,7 @@ from scripts.operations.performance_load_gate import (
     _build_transaction_batch,
     _evaluate_profile,
     _governed_partition_distribution,
+    _next_transaction_timestamp,
     _validate_governed_load_identity,
     _write_report,
 )
@@ -394,6 +396,54 @@ def test_governed_load_identity_fails_closed_after_partition_capacity_drift(
 
     with pytest.raises(RuntimeError, match="exceed the governed per-partition bound"):
         _validate_governed_load_identity()
+
+
+def test_next_transaction_timestamp_appends_after_reused_stack_history() -> None:
+    latest_timestamp = datetime(2026, 8, 8, 9, 0, 0, 839, tzinfo=UTC)
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = latest_timestamp
+    connection = MagicMock()
+    connection.execute.return_value = result
+    engine = MagicMock()
+    engine.connect.return_value.__enter__.return_value = connection
+
+    next_timestamp = _next_transaction_timestamp(
+        engine=engine,
+        default_timestamp=datetime(2026, 8, 8, 9, 0, tzinfo=UTC),
+    )
+
+    assert next_timestamp == datetime(2026, 8, 8, 9, 0, 0, 840, tzinfo=UTC)
+    assert connection.execute.call_args.args[1] == {"portfolio_id": GOVERNED_LOAD_PORTFOLIO_ID}
+
+
+def test_next_transaction_timestamp_uses_default_for_a_clean_stack() -> None:
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = None
+    connection = MagicMock()
+    connection.execute.return_value = result
+    engine = MagicMock()
+    engine.connect.return_value.__enter__.return_value = connection
+    default_timestamp = datetime(2026, 8, 8, 9, 0, tzinfo=UTC)
+
+    assert (
+        _next_transaction_timestamp(engine=engine, default_timestamp=default_timestamp)
+        == default_timestamp
+    )
+
+
+def test_next_transaction_timestamp_rejects_an_invalid_database_value() -> None:
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = "2026-08-08T09:00:00Z"
+    connection = MagicMock()
+    connection.execute.return_value = result
+    engine = MagicMock()
+    engine.connect.return_value.__enter__.return_value = connection
+
+    with pytest.raises(RuntimeError, match="unexpected type: str"):
+        _next_transaction_timestamp(
+            engine=engine,
+            default_timestamp=datetime(2026, 8, 8, 9, 0, tzinfo=UTC),
+        )
 
 
 def test_governed_drain_slos_are_stricter_than_the_observation_window() -> None:
