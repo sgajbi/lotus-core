@@ -205,7 +205,7 @@ async def test_valuation_processor_executes_success_path_without_kafka_consumer(
     mock_valuation_repo.upsert_daily_snapshot.return_value = persisted_snapshot
 
     with patch(
-        "services.calculators.position_valuation_calculator.app."
+        "src.services.calculators.position_valuation_calculator.app."
         "valuation_processor.VALUATION_QUOTE_AUTHORITY_PATH_TOTAL"
     ) as authority_path_metric:
         await mock_dependencies["processor"].process_valid_event(
@@ -367,7 +367,7 @@ async def test_scoped_portfolio_uses_exact_authority_without_legacy_price_read(
     mock_dependencies["source_evidence_builder"].return_value = evidence
 
     with patch(
-        "services.calculators.position_valuation_calculator.app."
+        "src.services.calculators.position_valuation_calculator.app."
         "valuation_processor.VALUATION_QUOTE_AUTHORITY_PATH_TOTAL"
     ) as authority_path_metric:
         await mock_dependencies["processor"].process_valid_event(
@@ -951,7 +951,7 @@ async def test_process_message_handles_unexpected_error(
     # ACT
     # Patch the logic layer to raise an unexpected error
     with patch(
-        "services.calculators.position_valuation_calculator.app.valuation_processor.ValuationLogic.calculate_valuation_components",
+        "src.services.calculators.position_valuation_calculator.app.valuation_processor.ValuationLogic.calculate_valuation_components",
         side_effect=ValueError("Unexpected logic error"),
     ) as mock_logic:
         with pytest.raises(ValueError, match="Unexpected logic error"):
@@ -1077,7 +1077,7 @@ async def test_valuation_consumer_skips_success_side_effects_without_terminal_ow
     mock_valuation_repo.update_job_status.return_value = transition_outcome
 
     with patch(
-        "services.calculators.position_valuation_calculator.app.valuation_processor.logger.warning"
+        "src.services.calculators.position_valuation_calculator.app.valuation_processor.logger.warning"
     ) as warning:
         await consumer.process_message(mock_kafka_message)
 

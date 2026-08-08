@@ -15,6 +15,9 @@ from portfolio_common.domain.calculation_lineage import (
     build_calculation_lineage,
 )
 from portfolio_common.domain.cost_basis_method import CostBasisMethod
+from portfolio_common.domain.cost_basis_receipt_integrity import (
+    canonical_cost_basis_output_payload,
+)
 
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
     AmortizedCostAllocationEvidence,
@@ -126,7 +129,7 @@ def _active_state_with_amortized_cost() -> LotDisposalReceiptState:
             algorithm_version=1,
             intermediate_precision=38,
             input_payload={"profile_id": "PROFILE-REPOSITORY-01"},
-            output_payload=output_payload,
+            output_payload=canonical_cost_basis_output_payload(output_payload),
         ),
     )
     allocation = replace(

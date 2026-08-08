@@ -20,18 +20,18 @@ class LegacyTestImport:
     def render(self, *, root: Path) -> str:
         return (
             f"{self.path.relative_to(root).as_posix()}:{self.line_number}: "
-            f"legacy test import '{self.module}'; use 'src.services.*'"
+            f"legacy test module reference '{self.module}'; use 'src.services.*'"
         )
 
 
 def find_legacy_test_imports(*, root: Path = REPO_ROOT) -> tuple[LegacyTestImport, ...]:
-    """Return top-level ``services`` imports that can execute one package twice."""
+    """Return imports and patch targets that can execute one service package twice."""
 
     findings: list[LegacyTestImport] = []
     for path in _test_python_files(root):
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         for node in ast.walk(tree):
-            modules = _imported_modules(node)
+            modules = (*_imported_modules(node), *_patched_modules(node))
             findings.extend(
                 LegacyTestImport(path=path, line_number=node.lineno, module=module)
                 for module in modules
@@ -52,6 +52,21 @@ def _imported_modules(node: ast.AST) -> tuple[str, ...]:
     if isinstance(node, ast.Import):
         return tuple(alias.name for alias in node.names)
     return ()
+
+
+def _patched_modules(node: ast.AST) -> tuple[str, ...]:
+    if not isinstance(node, ast.Call) or not node.args or not _is_patch_call(node.func):
+        return ()
+    target = node.args[0]
+    if not isinstance(target, ast.Constant) or not isinstance(target.value, str):
+        return ()
+    return (target.value.rpartition(".")[0],)
+
+
+def _is_patch_call(function: ast.AST) -> bool:
+    return (isinstance(function, ast.Name) and function.id == "patch") or (
+        isinstance(function, ast.Attribute) and function.attr == "patch"
+    )
 
 
 def main() -> int:
