@@ -64,6 +64,7 @@ class PrometheusCorporateActionReconciliationObserver:
                 "fractional_cash_leg_count": observation.fractional_cash_leg_count,
                 "source_basis_out_local": str(observation.source_basis_out_local),
                 "target_basis_in_local": str(observation.target_basis_in_local),
+                "target_basis_retained_local": str(observation.target_basis_retained_local),
                 "cash_basis_local": str(observation.cash_basis_local),
                 "cash_consideration_basis_local": str(observation.cash_consideration_basis_local),
                 "fractional_basis_local": str(observation.fractional_basis_local),

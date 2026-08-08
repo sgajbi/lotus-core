@@ -81,6 +81,7 @@ class CorporateActionReconciliationObservation:
     fractional_cash_leg_count: int
     source_basis_out_local: Decimal
     target_basis_in_local: Decimal
+    target_basis_retained_local: Decimal
     cash_basis_local: Decimal
     cash_consideration_basis_local: Decimal
     fractional_basis_local: Decimal

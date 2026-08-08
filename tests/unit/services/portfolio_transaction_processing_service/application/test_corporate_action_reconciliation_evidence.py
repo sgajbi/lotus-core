@@ -100,6 +100,7 @@ def test_balanced_evidence_has_no_findings_and_preserves_run_contract() -> None:
         "fractional_cash_leg_count": 0,
         "source_basis_out_local": "100",
         "target_basis_in_local": "100",
+        "target_basis_retained_local": "100",
         "cash_basis_local": "0",
         "cash_consideration_basis_local": "0",
         "fractional_basis_local": "0",
@@ -139,7 +140,7 @@ def test_fractional_cash_basis_is_explicit_in_reconciliation_evidence() -> None:
         _transaction(
             transaction_id="CA-IN-01",
             transaction_type="DEMERGER_IN",
-            net_cost_local="90",
+            net_cost_local="100",
         ),
         _transaction(
             transaction_id="CA-CIL-01",
@@ -152,6 +153,7 @@ def test_fractional_cash_basis_is_explicit_in_reconciliation_evidence() -> None:
     assert evidence.run.summary["reconciliation_status"] == "balanced"
     assert evidence.run.summary["fractional_cash_leg_count"] == 1
     assert evidence.run.summary["fractional_basis_local"] == "10"
+    assert evidence.run.summary["target_basis_retained_local"] == "90"
     assert evidence.run.summary["cash_consideration_basis_local"] == "0"
     assert evidence.run.summary["cash_basis_local"] == "10"
     assert evidence.run.summary["examined_count"] == 3

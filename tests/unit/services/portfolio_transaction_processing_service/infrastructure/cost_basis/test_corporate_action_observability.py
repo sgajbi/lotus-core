@@ -48,6 +48,9 @@ def _observation(
         fractional_cash_leg_count=0,
         source_basis_out_local=Decimal("100"),
         target_basis_in_local=Decimal("60") if status == "basis_mismatch" else Decimal("100"),
+        target_basis_retained_local=(
+            Decimal("60") if status == "basis_mismatch" else Decimal("100")
+        ),
         cash_basis_local=Decimal("0"),
         cash_consideration_basis_local=Decimal("0"),
         fractional_basis_local=Decimal("0"),
@@ -97,6 +100,7 @@ def test_observer_preserves_metric_and_balanced_state_log_contract() -> None:
             "fractional_cash_leg_count": 0,
             "source_basis_out_local": "100",
             "target_basis_in_local": "100",
+            "target_basis_retained_local": "100",
             "cash_basis_local": "0",
             "cash_consideration_basis_local": "0",
             "fractional_basis_local": "0",
