@@ -322,17 +322,45 @@ async def test_exact_retry_is_write_neutral() -> None:
     record, allocations = _persisted_version(state)
     session = AsyncMock()
     repository = lot_disposal_repository.SqlAlchemyCostBasisLotDisposalRepository(session)
-    repository._load_latest_receipts = AsyncMock(  # type: ignore[method-assign]
-        return_value={state.disposal_transaction_id: record}
+    repository._load_receipt_chains = AsyncMock(  # type: ignore[method-assign]
+        return_value={state.disposal_transaction_id: (record,)}
     )
     repository._load_allocations = AsyncMock(  # type: ignore[method-assign]
         return_value={(state.receipt_id, 1): allocations}
     )
-    repository._load_previous_receipts = AsyncMock(  # type: ignore[method-assign]
-        return_value={}
-    )
 
     await repository.reconcile_disposal_receipts(receipt_states=(state,))
+
+    session.execute.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_reconciliation_verifies_every_version_before_accepting_retry() -> None:
+    state = _active_state()
+    chain: list[LotDisposalReceiptRecord] = []
+    allocations_by_version: dict[tuple[str, int], tuple[LotDisposalAllocationRecord, ...]] = {}
+    previous: LotDisposalReceiptRecord | None = None
+    for version in range(1, 65):
+        record, allocations = _persisted_version(state, version=version, previous=previous)
+        chain.append(record)
+        allocations_by_version[(state.receipt_id, version)] = allocations
+        previous = record
+    allocations_by_version[(state.receipt_id, 32)][0].allocation_content_hash = "0" * 64
+
+    session = AsyncMock()
+    repository = lot_disposal_repository.SqlAlchemyCostBasisLotDisposalRepository(session)
+    repository._load_receipt_chains = AsyncMock(  # type: ignore[method-assign]
+        return_value={state.disposal_transaction_id: tuple(chain)}
+    )
+    repository._load_allocations = AsyncMock(  # type: ignore[method-assign]
+        return_value=allocations_by_version
+    )
+
+    with pytest.raises(
+        lot_disposal_repository.CorruptLotDisposalReceiptError,
+        match="receipt chain is corrupt",
+    ):
+        await repository.reconcile_disposal_receipts(receipt_states=(state,))
 
     session.execute.assert_not_awaited()
 
@@ -344,14 +372,11 @@ async def test_changed_receipt_appends_header_and_children() -> None:
     corrected = _active_state(cost_local="11")
     session = AsyncMock()
     repository = lot_disposal_repository.SqlAlchemyCostBasisLotDisposalRepository(session)
-    repository._load_latest_receipts = AsyncMock(  # type: ignore[method-assign]
-        return_value={first_state.disposal_transaction_id: first}
+    repository._load_receipt_chains = AsyncMock(  # type: ignore[method-assign]
+        return_value={first_state.disposal_transaction_id: (first,)}
     )
     repository._load_allocations = AsyncMock(  # type: ignore[method-assign]
         return_value={(first_state.receipt_id, 1): allocations}
-    )
-    repository._load_previous_receipts = AsyncMock(  # type: ignore[method-assign]
-        return_value={}
     )
 
     await repository.reconcile_disposal_receipts(receipt_states=(corrected,))
@@ -366,14 +391,11 @@ async def test_active_to_voided_appends_header_without_children() -> None:
     voided = _void_state()
     session = AsyncMock()
     repository = lot_disposal_repository.SqlAlchemyCostBasisLotDisposalRepository(session)
-    repository._load_latest_receipts = AsyncMock(  # type: ignore[method-assign]
-        return_value={active.disposal_transaction_id: first}
+    repository._load_receipt_chains = AsyncMock(  # type: ignore[method-assign]
+        return_value={active.disposal_transaction_id: (first,)}
     )
     repository._load_allocations = AsyncMock(  # type: ignore[method-assign]
         return_value={(active.receipt_id, 1): allocations}
-    )
-    repository._load_previous_receipts = AsyncMock(  # type: ignore[method-assign]
-        return_value={}
     )
 
     await repository.reconcile_disposal_receipts(receipt_states=(voided,))
@@ -386,13 +408,10 @@ async def test_initial_void_state_does_not_create_empty_history() -> None:
     voided = _void_state()
     session = AsyncMock()
     repository = lot_disposal_repository.SqlAlchemyCostBasisLotDisposalRepository(session)
-    repository._load_latest_receipts = AsyncMock(  # type: ignore[method-assign]
+    repository._load_receipt_chains = AsyncMock(  # type: ignore[method-assign]
         return_value={}
     )
     repository._load_allocations = AsyncMock(  # type: ignore[method-assign]
-        return_value={}
-    )
-    repository._load_previous_receipts = AsyncMock(  # type: ignore[method-assign]
         return_value={}
     )
 
