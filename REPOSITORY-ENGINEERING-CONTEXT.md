@@ -3219,6 +3219,14 @@ Most relevant current governance:
      existing volatile service/topic fence cross-product. Preserve semantic-conflict protection in
      production; do not generalize this local reset into runtime fence deletion or a daemon-wide
      Kafka/PostgreSQL cleanup.
+     The same cleanup must follow the complete restrictive lot-evidence dependency graph before
+     deleting lot, transaction, instrument, or portfolio roots. Clear the nullable
+     `position_lot_state` amortized-profile binding as one all-or-none field set, then delete
+     portfolio-scoped disposal and basis-transfer allocations, amortized periods, receipt headers,
+     amortized authority, and amortized profiles before `position_lot_state`. Keep canonical and
+     Docker-smoke cleanup on the shared plan so schema evolution cannot leave one path stale. Never
+     disable these production integrity constraints or replace portfolio predicates with shared
+     truncation for local reseeding.
 218. E2E module cleanup must observe both sides of the quiescence contract. Active-row timestamp
      queries remain predicate-scoped so completed history cannot create false cleanup timeouts. If
      an all-zero blocking snapshot has no active timestamp, it must still remain continuously zero
