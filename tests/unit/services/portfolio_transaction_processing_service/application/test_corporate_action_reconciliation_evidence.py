@@ -57,6 +57,7 @@ def _evidence(
     processed_transaction = transactions[-1]
     return build_corporate_action_reconciliation_evidence(
         processed_transaction=processed_transaction,
+        input_transactions=transactions,
         linked_transaction_group_id="LTG-CA-DEM-01",
         parent_event_reference="CA-PARENT-DEM-01",
         reconciliation=reconcile_corporate_action_basis(transactions),
@@ -105,8 +106,21 @@ def test_balanced_evidence_has_no_findings_and_preserves_run_contract() -> None:
         "linkage_finding_count": 0,
         "linked_transaction_group_id": "LTG-CA-DEM-01",
         "parent_event_reference": "CA-PARENT-DEM-01",
+        "reconciliation_policy_id": "CORPORATE_ACTION_BASIS_CONSERVATION",
+        "reconciliation_policy_version": "1.0.0",
+        "input_lineage": evidence.run.summary["input_lineage"],
     }
     assert evidence.findings == ()
+    assert [item["transaction_id"] for item in evidence.run.summary["input_lineage"]] == [
+        "CA-IN-01",
+        "CA-OUT-01",
+    ]
+    assert all(
+        item["payload_fingerprint"].startswith("sha256:")
+        and item["semantic_key"].startswith("transaction-processing:v1:")
+        and item["epoch"] == 7
+        for item in evidence.run.summary["input_lineage"]
+    )
 
 
 @pytest.mark.parametrize(
@@ -238,3 +252,64 @@ def test_evidence_identity_is_stable_across_reprocessing_time() -> None:
     assert repeated.run.dedupe_key == first.run.dedupe_key
     assert repeated.findings[0].finding_id == first.findings[0].finding_id
     assert repeated.run.completed_at != first.run.completed_at
+
+
+def test_evidence_identity_is_child_order_independent() -> None:
+    source = _transaction(
+        transaction_id="CA-OUT-01",
+        transaction_type="DEMERGER_OUT",
+        net_cost_local="-100",
+    )
+    first_target = _transaction(
+        transaction_id="CA-IN-01",
+        transaction_type="DEMERGER_IN",
+        net_cost_local="40",
+    )
+    second_target = replace(
+        _transaction(
+            transaction_id="CA-IN-02",
+            transaction_type="DEMERGER_IN",
+            net_cost_local="60",
+        ),
+        epoch=8,
+    )
+
+    first = _evidence(source, first_target, second_target)
+    reordered = _evidence(second_target, source, first_target)
+
+    assert reordered.run.run_id == first.run.run_id
+    assert reordered.run.dedupe_key == first.run.dedupe_key
+    assert reordered.run.summary["input_lineage"] == first.run.summary["input_lineage"]
+    assert reordered.run.business_date == first.run.business_date
+    assert reordered.run.epoch == first.run.epoch
+
+
+@pytest.mark.parametrize(
+    "changed_target",
+    [
+        {"transaction_id": "CA-IN-REBOOKED"},
+        {"gross_transaction_amount": Decimal("61")},
+        {"epoch": 8},
+        {"calculation_policy_id": "CA-BASIS-POLICY"},
+        {"calculation_policy_version": "2.0.0"},
+    ],
+)
+def test_evidence_identity_binds_child_identity_economics_revision_and_policy(
+    changed_target: dict[str, object],
+) -> None:
+    source = _transaction(
+        transaction_id="CA-OUT-01",
+        transaction_type="DEMERGER_OUT",
+        net_cost_local="-100",
+    )
+    target = _transaction(
+        transaction_id="CA-IN-01",
+        transaction_type="DEMERGER_IN",
+        net_cost_local="100",
+    )
+    baseline = _evidence(source, target)
+
+    changed = _evidence(source, replace(target, **changed_target))
+
+    assert changed.run.run_id != baseline.run.run_id
+    assert changed.run.summary["input_lineage"] != baseline.run.summary["input_lineage"]

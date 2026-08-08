@@ -9,7 +9,7 @@ from decimal import Decimal
 from hashlib import sha256
 from typing import Any
 
-from .booked import BookedTransaction
+from .booked import BOOKED_TRANSACTION_DERIVED_FIELDS, BookedTransaction
 
 TRANSACTION_SEMANTIC_IDENTITY_VERSION = "v1"
 TRANSACTION_CORRECTION_IDENTITY_VERSION = "v1"
@@ -31,7 +31,9 @@ _PROCESSOR_OWNED_OUTPUT_FIELDS = frozenset(
         "transaction_fx_rate",
     }
 )
-_NON_MATERIAL_FIELDS = _PROCESSOR_OWNED_OUTPUT_FIELDS | {"created_at"}
+_NON_MATERIAL_FIELDS = (
+    _PROCESSOR_OWNED_OUTPUT_FIELDS | BOOKED_TRANSACTION_DERIVED_FIELDS | {"created_at"}
+)
 _DEFAULT_POLICY_IDS_BY_FAMILY = {
     "BUY": frozenset({"BUY_DEFAULT_POLICY"}),
     "DIVIDEND": frozenset({"DIVIDEND_DEFAULT_POLICY"}),

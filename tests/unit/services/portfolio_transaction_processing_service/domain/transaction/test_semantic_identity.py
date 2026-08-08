@@ -4,6 +4,8 @@ from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
+from portfolio_common.domain.calculation_lineage import CalculationLineage
+
 from src.services.portfolio_transaction_processing_service.app.domain import (
     BookedTransaction,
     build_transaction_correction_identity,
@@ -105,6 +107,26 @@ def test_semantic_identity_ignores_processor_owned_outputs_added_before_replay()
     assert build_transaction_semantic_identity(
         enriched_after_processing
     ) == build_transaction_semantic_identity(transaction)
+
+
+def test_semantic_identity_ignores_processor_owned_calculation_lineage() -> None:
+    transaction = _transaction()
+    digest = "0" * 64
+    enriched = replace(
+        transaction,
+        calculation_lineage=CalculationLineage(
+            algorithm_id="cost-basis",
+            algorithm_version=1,
+            intermediate_precision=64,
+            input_content_hash=digest,
+            calculation_content_hash=digest,
+            output_content_hash=digest,
+        ),
+    )
+
+    assert build_transaction_semantic_identity(enriched) == build_transaction_semantic_identity(
+        transaction
+    )
 
 
 def test_semantic_identity_keeps_custom_linkage_and_policy_material() -> None:

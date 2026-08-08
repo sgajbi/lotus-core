@@ -23,6 +23,7 @@ from ..domain.transaction.corporate_action import (
     is_bundle_a_corporate_action,
     is_reconcilable_corporate_action,
 )
+from ..domain.transaction.semantic_identity import build_transaction_semantic_identity
 from ..ports.corporate_action_reconciliation import (
     CorporateActionReconciliationEvidence,
     CorporateActionReconciliationFindingEvidence,
@@ -40,6 +41,8 @@ CORPORATE_ACTION_RECONCILIATION_TYPE = CORPORATE_ACTION_BUNDLE_A_RECONCILIATION_
 CORPORATE_ACTION_QUANTITY_TRANSFER_RECONCILIATION_TYPE = "corporate_action_quantity_transfer"
 CORPORATE_ACTION_RECONCILIATION_REQUEST_OWNER = "cost-calculator"
 CORPORATE_ACTION_FINDING_OWNER = "CORPORATE_ACTION_OPERATIONS"
+CORPORATE_ACTION_RECONCILIATION_POLICY_ID = "CORPORATE_ACTION_BASIS_CONSERVATION"
+CORPORATE_ACTION_RECONCILIATION_POLICY_VERSION = "1.0.0"
 
 
 class CorporateActionReconciliationFindingType(StrEnum):
@@ -133,6 +136,7 @@ class CorporateActionReconciliationCoordinator:
         linkage_findings = reconcile_corporate_action_leg_linkage(group_transactions)
         evidence = build_corporate_action_reconciliation_evidence(
             processed_transaction=processed_transaction,
+            input_transactions=group_transactions,
             linked_transaction_group_id=key.linked_transaction_group_id,
             parent_event_reference=key.parent_event_reference,
             reconciliation=reconciliation,
@@ -213,6 +217,7 @@ def _observation(
 def build_corporate_action_reconciliation_evidence(
     *,
     processed_transaction: BookedTransaction,
+    input_transactions: Sequence[BookedTransaction],
     linked_transaction_group_id: str,
     parent_event_reference: str,
     reconciliation: CorporateActionBasisReconciliation,
@@ -224,10 +229,25 @@ def build_corporate_action_reconciliation_evidence(
 ) -> CorporateActionReconciliationEvidence:
     """Build stable run and finding evidence without persistence or telemetry concerns."""
 
-    missing_dependencies = tuple(missing_dependency_reference_ids)
+    missing_dependencies = tuple(sorted(set(missing_dependency_reference_ids)))
+    input_lineage = _canonical_input_lineage(input_transactions)
+    evidence_transaction = _canonical_evidence_transaction(input_transactions)
+    canonical_linkage_findings = tuple(
+        sorted(
+            linkage_findings,
+            key=lambda finding: (
+                finding.source_transaction_id,
+                finding.target_transaction_id,
+                finding.finding_type,
+                finding.field,
+                finding.expected_value,
+                finding.observed_value or "",
+            ),
+        )
+    )
     evidence_signature = _stable_digest(
         {
-            "portfolio_id": processed_transaction.portfolio_id,
+            "portfolio_id": evidence_transaction.portfolio_id,
             "linked_transaction_group_id": linked_transaction_group_id,
             "parent_event_reference": parent_event_reference,
             "status": reconciliation.status,
@@ -237,26 +257,32 @@ def build_corporate_action_reconciliation_evidence(
             "missing_cash_basis_count": reconciliation.missing_cash_basis_count,
             "net_basis_delta_local": str(reconciliation.net_basis_delta_local),
             "basis_tolerance": str(reconciliation.basis_tolerance),
+            "reconciliation_policy_id": CORPORATE_ACTION_RECONCILIATION_POLICY_ID,
+            "reconciliation_policy_version": CORPORATE_ACTION_RECONCILIATION_POLICY_VERSION,
+            "input_lineage": input_lineage,
             "missing_dependency_reference_ids": list(missing_dependencies),
-            "linkage_findings": [asdict(finding) for finding in linkage_findings],
+            "linkage_findings": [asdict(finding) for finding in canonical_linkage_findings],
         }
     )
     run_id = f"recon-{reconciliation_type}-{evidence_signature}"
     run = CorporateActionReconciliationRunEvidence(
         run_id=run_id,
         reconciliation_type=reconciliation_type,
-        portfolio_id=processed_transaction.portfolio_id,
-        business_date=processed_transaction.transaction_date.date(),
-        epoch=processed_transaction.epoch,
+        portfolio_id=evidence_transaction.portfolio_id,
+        business_date=evidence_transaction.transaction_date.date(),
+        epoch=evidence_transaction.epoch,
         status="COMPLETED",
         requested_by=CORPORATE_ACTION_RECONCILIATION_REQUEST_OWNER,
         dedupe_key=f"auto:{reconciliation_type}:{evidence_signature}",
         correlation_id=correlation_id,
         tolerance=reconciliation.basis_tolerance,
         summary={
-            **_summary(reconciliation, missing_dependencies, linkage_findings),
+            **_summary(reconciliation, missing_dependencies, canonical_linkage_findings),
             "linked_transaction_group_id": linked_transaction_group_id,
             "parent_event_reference": parent_event_reference,
+            "reconciliation_policy_id": CORPORATE_ACTION_RECONCILIATION_POLICY_ID,
+            "reconciliation_policy_version": CORPORATE_ACTION_RECONCILIATION_POLICY_VERSION,
+            "input_lineage": input_lineage,
         },
         failure_reason=None,
         completed_at=completed_at,
@@ -266,12 +292,12 @@ def build_corporate_action_reconciliation_evidence(
         findings=_findings(
             run_id=run_id,
             evidence_signature=evidence_signature,
-            processed_transaction=processed_transaction,
+            processed_transaction=evidence_transaction,
             linked_transaction_group_id=linked_transaction_group_id,
             parent_event_reference=parent_event_reference,
             reconciliation=reconciliation,
             missing_dependencies=missing_dependencies,
-            linkage_findings=tuple(linkage_findings),
+            linkage_findings=canonical_linkage_findings,
             reconciliation_type=reconciliation_type,
         ),
     )
@@ -280,6 +306,84 @@ def build_corporate_action_reconciliation_evidence(
 def _stable_digest(payload: dict[str, object]) -> str:
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()[:24]
+
+
+def _canonical_input_lineage(
+    transactions: Sequence[BookedTransaction],
+) -> list[dict[str, object]]:
+    lineage: list[dict[str, object]] = []
+    for transaction in transactions:
+        semantic_identity = build_transaction_semantic_identity(transaction)
+        lineage.append(
+            {
+                "transaction_id": transaction.transaction_id.strip(),
+                "semantic_key": semantic_identity.semantic_key,
+                "payload_fingerprint": semantic_identity.payload_fingerprint,
+                "transaction_type": transaction.transaction_type.strip().upper(),
+                "instrument_id": transaction.instrument_id.strip(),
+                "security_id": transaction.security_id.strip(),
+                "source_transaction_reference": _normalized_text(
+                    transaction.source_transaction_reference
+                ),
+                "target_transaction_reference": _normalized_text(
+                    transaction.target_transaction_reference
+                ),
+                "source_instrument_id": _normalized_text(transaction.source_instrument_id),
+                "target_instrument_id": _normalized_text(transaction.target_instrument_id),
+                "quantity": _canonical_decimal(transaction.quantity),
+                "price": _canonical_decimal(transaction.price),
+                "gross_transaction_amount": _canonical_decimal(
+                    transaction.gross_transaction_amount
+                ),
+                "net_cost_local": _canonical_decimal(transaction.net_cost_local),
+                "allocated_cost_basis_local": _canonical_decimal(
+                    transaction.allocated_cost_basis_local
+                ),
+                "allocated_cost_basis_base": _canonical_decimal(
+                    transaction.allocated_cost_basis_base
+                ),
+                "calculation_policy_id": _normalized_text(transaction.calculation_policy_id),
+                "calculation_policy_version": _normalized_text(
+                    transaction.calculation_policy_version
+                ),
+                "epoch": transaction.epoch,
+            }
+        )
+    return sorted(
+        lineage,
+        key=lambda item: (
+            str(item["transaction_id"]),
+            str(item["semantic_key"]),
+            str(item["payload_fingerprint"]),
+        ),
+    )
+
+
+def _canonical_evidence_transaction(
+    transactions: Sequence[BookedTransaction],
+) -> BookedTransaction:
+    if not transactions:
+        raise ValueError("Corporate-action reconciliation requires input transactions")
+    return min(
+        transactions,
+        key=lambda transaction: (
+            transaction.transaction_id.strip(),
+            build_transaction_semantic_identity(transaction).payload_fingerprint,
+        ),
+    )
+
+
+def _canonical_decimal(value: Decimal | None) -> str | None:
+    if value is None:
+        return None
+    if value == 0:
+        return "0"
+    return format(value.normalize(), "f")
+
+
+def _normalized_text(value: str | None) -> str | None:
+    normalized = (value or "").strip()
+    return normalized or None
 
 
 def _summary(
