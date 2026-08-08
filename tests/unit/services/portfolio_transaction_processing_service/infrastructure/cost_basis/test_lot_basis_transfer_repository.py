@@ -218,7 +218,7 @@ async def test_reconciliation_verifies_every_transfer_version_before_retry() -> 
 
     with pytest.raises(
         lot_basis_transfer_repository.CorruptLotBasisTransferReceiptError,
-        match="receipt chain is corrupt",
+        match="receipt is corrupt",
     ):
         await repository.reconcile_basis_transfer_receipts(
             reconciliation_scopes=(_scope(),),

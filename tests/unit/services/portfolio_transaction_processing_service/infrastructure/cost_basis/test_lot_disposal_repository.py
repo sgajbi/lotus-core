@@ -358,7 +358,7 @@ async def test_reconciliation_verifies_every_version_before_accepting_retry() ->
 
     with pytest.raises(
         lot_disposal_repository.CorruptLotDisposalReceiptError,
-        match="receipt chain is corrupt",
+        match="receipt is corrupt",
     ):
         await repository.reconcile_disposal_receipts(receipt_states=(state,))
 

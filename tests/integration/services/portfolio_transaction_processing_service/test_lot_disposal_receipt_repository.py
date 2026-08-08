@@ -20,7 +20,7 @@ from portfolio_common.domain.calculation_lineage import (
     build_calculation_lineage,
 )
 from portfolio_common.domain.cost_basis_method import CostBasisMethod
-from sqlalchemy import func, inspect, select, update
+from sqlalchemy import event, func, inspect, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
@@ -155,6 +155,58 @@ async def test_repository_detects_tampered_child_after_restart(
         await SqlAlchemyCostBasisLotDisposalRepository(
             async_db_session
         ).reconcile_disposal_receipts(receipt_states=(state,))
+
+
+@pytest.mark.lifecycle
+async def test_repository_verifies_sixty_four_versions_with_two_bounded_reads(
+    clean_db,
+    disposal_receipt_schema,
+    async_db_session: AsyncSession,
+) -> None:
+    await _seed_source_lot(async_db_session)
+    repository = SqlAlchemyCostBasisLotDisposalRepository(async_db_session)
+    states = tuple(_active_state(cost_local=f"10.{version:02}") for version in range(1, 65))
+    for state in states:
+        await repository.reconcile_disposal_receipts(receipt_states=(state,))
+    await async_db_session.commit()
+
+    statements: list[str] = []
+
+    def record_statement(
+        _connection,
+        _cursor,
+        statement: str,
+        _parameters,
+        _context,
+        _executemany,
+    ) -> None:
+        if statement.lstrip().upper().startswith("SELECT") and "lot_disposal_" in statement:
+            statements.append(statement)
+
+    assert async_db_session.bind is not None
+    sync_engine = async_db_session.bind.sync_engine
+    event.listen(sync_engine, "before_cursor_execute", record_statement)
+    try:
+        await repository.reconcile_disposal_receipts(receipt_states=(states[-1],))
+    finally:
+        event.remove(sync_engine, "before_cursor_execute", record_statement)
+
+    assert len(statements) == 2
+    assert "lot_disposal_receipts" in statements[0]
+    assert "lot_disposal_allocations" in statements[1]
+    assert (
+        await async_db_session.scalar(select(func.count()).select_from(LotDisposalReceiptRecord))
+        == 64
+    )
+
+    await async_db_session.execute(
+        update(LotDisposalAllocationRecord)
+        .where(LotDisposalAllocationRecord.receipt_version == 32)
+        .values(allocation_content_hash="0" * 64)
+    )
+    await async_db_session.commit()
+    with pytest.raises(CorruptLotDisposalReceiptError, match="receipt is corrupt"):
+        await repository.reconcile_disposal_receipts(receipt_states=(states[-1],))
 
 
 async def test_initial_void_state_remains_database_neutral(

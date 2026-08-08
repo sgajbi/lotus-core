@@ -82,7 +82,7 @@ class SqlAlchemyCostBasisLotBasisTransferRepository:
                 )
             except ValueError as exc:
                 raise CorruptLotBasisTransferReceiptError(
-                    f"persisted lot basis-transfer receipt chain is corrupt: {transaction_id}"
+                    f"persisted lot basis-transfer receipt is corrupt: {transaction_id}"
                 ) from exc
             latest[transaction_id] = chain[-1]
             verified_latest[transaction_id] = verified_states[-1]
