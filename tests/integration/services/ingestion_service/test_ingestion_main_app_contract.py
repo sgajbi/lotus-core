@@ -8,6 +8,7 @@ import pytest_asyncio
 from portfolio_common.domain.transaction.numeric_policy import (
     TRANSACTION_COMMAND_DECIMAL_FIELDS,
 )
+from portfolio_common.domain.transaction.type_registry import TRANSACTION_TYPE_CODES
 from portfolio_common.enterprise_readiness import (
     _enterprise_auth_context_signature,
     _normalize_headers,
@@ -920,16 +921,21 @@ async def test_openapi_describes_transaction_core_shared_schema(async_test_clien
         for alternative in gross_amount_if["properties"]["transaction_type"]["anyOf"]
     ]
     assert len(transaction_type_patterns) == 3
-    for transaction_type in (
+    redemption_transaction_types = {
         "CALL_REDEMPTION",
         "MATURITY_REDEMPTION",
         "PARTIAL_REDEMPTION",
-    ):
+    }
+    for transaction_type in redemption_transaction_types:
         assert any(
             re.fullmatch(pattern, f" {transaction_type.lower()} ")
             for pattern in transaction_type_patterns
         )
-    assert not any(re.fullmatch(pattern, "BUY") for pattern in transaction_type_patterns)
+    for transaction_type in TRANSACTION_TYPE_CODES - redemption_transaction_types:
+        assert not any(
+            re.fullmatch(pattern, f" {transaction_type.lower()} ")
+            for pattern in transaction_type_patterns
+        )
     assert gross_amount_condition["then"]["properties"]["gross_transaction_amount"] == {
         "minimum": 0
     }
