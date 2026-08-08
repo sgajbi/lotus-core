@@ -15,6 +15,7 @@ from portfolio_common.domain.calculation_lineage import (
 from portfolio_common.domain.currency import normalize_currency_code
 from portfolio_common.domain.transaction import (
     TransactionIdentityOwnership,
+    canonical_transaction_identity_record_values,
     require_generated_transaction_identity,
     transaction_identity_ownership,
 )
@@ -189,22 +190,20 @@ def _positive_fee_components(fees: object | None) -> dict[str, Decimal]:
 def _transaction_metadata_update_values(
     transaction_result: CostBasisTransaction,
 ) -> dict[str, object | None]:
-    """Project metadata while clearing absent correction-owned redemption authority."""
+    """Project metadata and enforce redemption-only field ownership on correction."""
 
     transaction_type = normalize_transaction_control_code(transaction_result.transaction_type)
-    correction_owned_clear_fields = (
-        REDEMPTION_CORRECTION_OWNED_OPTIONAL_FIELDS
-        if transaction_type in REDEMPTION_TRANSACTION_TYPES
-        else frozenset()
-    )
-    return {
+    metadata_values = {
         field_name: field_value
         for field_name in TRANSACTION_METADATA_FIELDS
         if (
             (field_value := getattr(transaction_result, field_name, None)) is not None
-            or field_name in correction_owned_clear_fields
+            or field_name in REDEMPTION_CORRECTION_OWNED_OPTIONAL_FIELDS
         )
     }
+    if transaction_type not in REDEMPTION_TRANSACTION_TYPES:
+        metadata_values.update(dict.fromkeys(REDEMPTION_CORRECTION_OWNED_OPTIONAL_FIELDS))
+    return metadata_values
 
 
 def _transaction_cost_rows(
@@ -373,9 +372,12 @@ class SqlAlchemyCostBasisTransactionRepository:
         ownership: TransactionIdentityOwnership,
         fields_to_clear: frozenset[str],
     ) -> BookedTransaction:
-        transaction_values = _booked_transaction_payload(
-            transaction,
-            fields_to_clear=fields_to_clear,
+        transaction_values = canonical_transaction_identity_record_values(
+            _booked_transaction_payload(
+                transaction,
+                fields_to_clear=fields_to_clear,
+            ),
+            ownership,
         )
         stmt = pg_insert(DBTransaction).values(**transaction_values)
         update_fields = [

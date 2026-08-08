@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Protocol
@@ -51,6 +52,21 @@ class TransactionIdentityOwnership:
     originating_transaction_type: str | None = None
 
 
+def canonical_transaction_identity_record_values(
+    values: Mapping[str, object],
+    ownership: TransactionIdentityOwnership,
+) -> dict[str, object]:
+    """Project canonical ownership keys onto a transaction persistence payload."""
+
+    canonical_values = dict(values)
+    canonical_values["transaction_id"] = ownership.transaction_id
+    canonical_values["portfolio_id"] = ownership.portfolio_id
+    if ownership.family is not TransactionIdentityFamily.SOURCE:
+        canonical_values["originating_transaction_id"] = ownership.originating_transaction_id
+        canonical_values["originating_transaction_type"] = ownership.originating_transaction_type
+    return canonical_values
+
+
 def transaction_identity_ownership(
     candidate: TransactionIdentityCandidate,
 ) -> TransactionIdentityOwnership:
@@ -61,7 +77,7 @@ def transaction_identity_ownership(
     originating_transaction_id = _optional_identifier(
         getattr(candidate, "originating_transaction_id", None)
     )
-    originating_transaction_type = normalize_transaction_control_code(
+    originating_transaction_type: str | None = normalize_transaction_control_code(
         getattr(candidate, "originating_transaction_type", None)
     )
     if _is_generated_settlement_cash(candidate, originating_transaction_id):

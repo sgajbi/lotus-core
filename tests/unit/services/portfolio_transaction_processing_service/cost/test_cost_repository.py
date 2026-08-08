@@ -71,14 +71,24 @@ async def test_redemption_metadata_projection_clears_absent_correction_authority
     } == dict.fromkeys(transaction_repository_module.REDEMPTION_CORRECTION_OWNED_OPTIONAL_FIELDS)
 
 
-async def test_non_redemption_metadata_projection_preserves_sparse_upsert_contract() -> None:
-    transaction = SimpleNamespace(transaction_type="SELL")
+async def test_non_redemption_metadata_projection_clears_stale_redemption_authority() -> None:
+    transaction = SimpleNamespace(
+        transaction_type="SELL",
+        redemption_price_type="PAR",
+        old_factor=Decimal("1"),
+        new_factor=Decimal("0.5"),
+        principal_proceeds_local=Decimal("100"),
+        accrued_interest_proceeds_local=Decimal("5"),
+        embedded_fee_amount_local=Decimal("2"),
+        embedded_tax_amount_local=Decimal("1"),
+    )
 
     values = transaction_repository_module._transaction_metadata_update_values(transaction)
 
-    assert not (
-        transaction_repository_module.REDEMPTION_CORRECTION_OWNED_OPTIONAL_FIELDS & values.keys()
-    )
+    assert {
+        field_name: values[field_name]
+        for field_name in transaction_repository_module.REDEMPTION_CORRECTION_OWNED_OPTIONAL_FIELDS
+    } == dict.fromkeys(transaction_repository_module.REDEMPTION_CORRECTION_OWNED_OPTIONAL_FIELDS)
 
 
 def _transition_evidence() -> CostBasisStateTransitionEvidence:
@@ -1492,13 +1502,19 @@ async def test_apply_transaction_costs_and_replace_breakdown_uses_update_returni
     assert updated_transaction is not db_transaction
     assert updated_transaction.net_cost == Decimal("1002")
     assert db_session.execute.await_count == 2
-    update_statement = str(db_session.execute.await_args_list[0].args[0])
+    persisted_update = db_session.execute.await_args_list[0].args[0]
+    update_statement = str(persisted_update)
     delete_statement = str(db_session.execute.await_args_list[1].args[0])
     assert update_statement.startswith("UPDATE transactions SET")
     assert "economic_event_id=" in update_statement
     assert "calculation_policy_version=" in update_statement
     assert "calculation_lineage=" in update_statement
     assert "RETURNING transactions.id" in update_statement
+    update_parameters = persisted_update.compile().params
+    assert {
+        field_name: update_parameters[field_name]
+        for field_name in transaction_repository_module.REDEMPTION_CORRECTION_OWNED_OPTIONAL_FIELDS
+    } == dict.fromkeys(transaction_repository_module.REDEMPTION_CORRECTION_OWNED_OPTIONAL_FIELDS)
     assert delete_statement.startswith("DELETE FROM transaction_costs")
     db_session.add_all.assert_called_once_with([])
 
@@ -1538,7 +1554,7 @@ async def test_upsert_booked_transaction_persists_only_canonical_table_fields() 
     )
 
     transaction = BookedTransaction(
-        transaction_id="FX-OPEN-001",
+        transaction_id=" FX-OPEN-001 ",
         portfolio_id="PORT_COST_01",
         instrument_id="FXC-2026-0001",
         security_id="FXC-2026-0001",
@@ -1563,7 +1579,7 @@ async def test_upsert_booked_transaction_persists_only_canonical_table_fields() 
     )
 
     persisted_transaction = DBTransaction(
-        transaction_id=transaction.transaction_id,
+        transaction_id="FX-OPEN-001",
         portfolio_id=transaction.portfolio_id,
         instrument_id=transaction.instrument_id,
         security_id=transaction.security_id,
@@ -1593,7 +1609,7 @@ async def test_upsert_booked_transaction_persists_only_canonical_table_fields() 
         fields_to_clear=frozenset({"external_cash_transaction_id", "linked_component_ids"}),
     )
 
-    assert result.transaction_id == transaction.transaction_id
+    assert result.transaction_id == "FX-OPEN-001"
     assert result.calculation_lineage == calculation_lineage
     db_session.execute.assert_awaited_once()
     statement = db_session.execute.await_args.args[0]
