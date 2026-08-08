@@ -1,0 +1,203 @@
+"""Prove generated transaction ownership against real PostgreSQL conflicts."""
+
+from __future__ import annotations
+
+import asyncio
+from datetime import UTC, date, datetime
+from decimal import Decimal
+
+import pytest
+from portfolio_common.database_models import Cashflow, OutboxEvent, Portfolio, PositionState
+from portfolio_common.database_models import Transaction as DBTransaction
+from portfolio_common.events import TransactionEvent
+from portfolio_common.infrastructure.persistence.transaction_identity_guard import (
+    GeneratedTransactionIdentityCollisionError,
+)
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+from src.services.persistence_service.app.repositories.transaction_db_repo import (
+    TransactionDBRepository,
+)
+
+pytestmark = [
+    pytest.mark.asyncio,
+    pytest.mark.integration_db,
+    pytest.mark.db_direct,
+    pytest.mark.regression,
+]
+
+
+def _source_event(transaction_id: str, *, portfolio_id: str = "PORT-OWNER-A") -> TransactionEvent:
+    return TransactionEvent(
+        transaction_id=transaction_id,
+        portfolio_id=portfolio_id,
+        instrument_id="SEC-OWNER-1",
+        security_id="SEC-OWNER-1",
+        transaction_date=datetime(2026, 8, 8, 9, 0, tzinfo=UTC),
+        transaction_type="BUY",
+        quantity=Decimal("10"),
+        price=Decimal("100"),
+        gross_transaction_amount=Decimal("1000"),
+        trade_currency="USD",
+        currency="USD",
+    )
+
+
+def _generated_event(
+    family: str,
+    *,
+    portfolio_id: str = "PORT-OWNER-A",
+    amount: Decimal = Decimal("1000"),
+) -> TransactionEvent:
+    if family == "cash":
+        return TransactionEvent(
+            transaction_id="ROOT-OWNER-1-CASHLEG",
+            portfolio_id=portfolio_id,
+            instrument_id="CASH-USD",
+            security_id="CASH-USD",
+            transaction_date=datetime(2026, 8, 10, 9, 0, tzinfo=UTC),
+            transaction_type="ADJUSTMENT",
+            quantity=Decimal(0),
+            price=Decimal(0),
+            gross_transaction_amount=amount,
+            trade_currency="USD",
+            currency="USD",
+            cash_entry_mode="AUTO_GENERATE",
+            originating_transaction_id="ROOT-OWNER-1",
+            originating_transaction_type="BUY",
+            link_type="BUY_TO_CASH",
+        )
+    return TransactionEvent(
+        transaction_id="ROOT-OWNER-1-ACCRUED-INTEREST",
+        portfolio_id=portfolio_id,
+        instrument_id="SEC-OWNER-1",
+        security_id="SEC-OWNER-1",
+        transaction_date=datetime(2026, 8, 10, 9, 0, tzinfo=UTC),
+        transaction_type="INTEREST",
+        quantity=Decimal(0),
+        price=Decimal(0),
+        gross_transaction_amount=amount,
+        trade_currency="USD",
+        currency="USD",
+        component_type="REDEMPTION_ACCRUED_INTEREST",
+        component_id="ROOT-OWNER-1-ACCRUED-INTEREST:v1",
+        originating_transaction_id="ROOT-OWNER-1",
+        originating_transaction_type="MATURITY_REDEMPTION",
+    )
+
+
+async def _persist(
+    session_factory: async_sessionmaker[AsyncSession],
+    event: TransactionEvent,
+) -> str:
+    async with session_factory() as session:
+        try:
+            await TransactionDBRepository(session).create_or_update_transaction(event)
+            await session.commit()
+            return "persisted"
+        except GeneratedTransactionIdentityCollisionError:
+            await session.rollback()
+            return "generated_transaction_identity_collision"
+
+
+async def _seed_portfolios(session: AsyncSession) -> None:
+    session.add_all(
+        [
+            Portfolio(
+                portfolio_id=portfolio_id,
+                base_currency="USD",
+                open_date=date(2026, 1, 1),
+                risk_exposure="MEDIUM",
+                investment_time_horizon="LONG_TERM",
+                portfolio_type="ADVISORY",
+                booking_center_code="SG",
+                client_id=f"CLIENT-{portfolio_id}",
+                status="ACTIVE",
+            )
+            for portfolio_id in ("PORT-OWNER-A", "PORT-OWNER-B")
+        ]
+    )
+    await session.commit()
+
+
+@pytest.mark.parametrize("family", ["cash", "interest"])
+@pytest.mark.parametrize("first_owner", ["source", "generated"])
+async def test_first_owner_wins_without_hybrid_or_downstream_evidence(
+    clean_db,
+    async_db_session: AsyncSession,
+    family: str,
+    first_owner: str,
+) -> None:
+    await _seed_portfolios(async_db_session)
+    factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
+    generated = _generated_event(family)
+    source = _source_event(generated.transaction_id)
+    first, second = (source, generated) if first_owner == "source" else (generated, source)
+
+    assert await _persist(factory, first) == "persisted"
+    assert await _persist(factory, second) == "generated_transaction_identity_collision"
+
+    async_db_session.expire_all()
+    row = (
+        await async_db_session.execute(
+            select(DBTransaction).where(DBTransaction.transaction_id == generated.transaction_id)
+        )
+    ).scalar_one()
+    assert row.transaction_type == first.transaction_type
+    assert row.portfolio_id == first.portfolio_id
+    assert row.originating_transaction_id == first.originating_transaction_id
+    for model in (Cashflow, PositionState, OutboxEvent):
+        assert (await async_db_session.scalar(select(func.count()).select_from(model))) == 0
+
+
+@pytest.mark.parametrize("family", ["cash", "interest"])
+async def test_concurrent_source_and_generated_creators_produce_one_owner(
+    clean_db,
+    async_db_session: AsyncSession,
+    family: str,
+) -> None:
+    await _seed_portfolios(async_db_session)
+    factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
+    generated = _generated_event(family)
+    source = _source_event(generated.transaction_id)
+
+    outcomes = await asyncio.gather(
+        _persist(factory, source),
+        _persist(factory, generated),
+    )
+
+    assert sorted(outcomes) == ["generated_transaction_identity_collision", "persisted"]
+    assert (
+        await async_db_session.scalar(
+            select(func.count()).where(DBTransaction.transaction_id == generated.transaction_id)
+        )
+    ) == 1
+
+
+@pytest.mark.parametrize("family", ["cash", "interest"])
+async def test_same_owner_replay_updates_but_cross_portfolio_reclaim_fails(
+    clean_db,
+    async_db_session: AsyncSession,
+    family: str,
+) -> None:
+    await _seed_portfolios(async_db_session)
+    factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
+    generated = _generated_event(family)
+
+    assert await _persist(factory, generated) == "persisted"
+    corrected = generated.model_copy(update={"gross_transaction_amount": Decimal("875")})
+    foreign_portfolio = generated.model_copy(update={"portfolio_id": "PORT-OWNER-B"})
+    assert await _persist(factory, corrected) == "persisted"
+    assert await _persist(factory, foreign_portfolio) == (
+        "generated_transaction_identity_collision"
+    )
+
+    async_db_session.expire_all()
+    row = (
+        await async_db_session.execute(
+            select(DBTransaction).where(DBTransaction.transaction_id == generated.transaction_id)
+        )
+    ).scalar_one()
+    assert row.portfolio_id == "PORT-OWNER-A"
+    assert row.gross_transaction_amount == Decimal("875")
