@@ -14,6 +14,15 @@ from .classification import (
     is_reconcilable_corporate_action,
     normalize_corporate_action_transaction_type,
 )
+from .event_graph import (
+    CorporateActionEventChild,
+    CorporateActionEventExecutionPlan,
+    CorporateActionEventGraph,
+    CorporateActionEventGraphFinding,
+    CorporateActionEventGraphReason,
+    CorporateActionEventGraphStatus,
+    resolve_corporate_action_event_graph,
+)
 from .ordering import (
     corporate_action_dependency_rank,
     corporate_action_target_order_key,
@@ -32,6 +41,12 @@ __all__ = [
     "CASH_CONSIDERATION_TRANSACTION_TYPE",
     "CORPORATE_ACTION_RECONCILIATION_INPUT_TYPES",
     "FRACTIONAL_CASH_BASIS_TRANSACTION_TYPES",
+    "CorporateActionEventChild",
+    "CorporateActionEventExecutionPlan",
+    "CorporateActionEventGraph",
+    "CorporateActionEventGraphFinding",
+    "CorporateActionEventGraphReason",
+    "CorporateActionEventGraphStatus",
     "CorporateActionValidationError",
     "CorporateActionValidationFinding",
     "CorporateActionValidationReasonCode",
@@ -47,5 +62,6 @@ __all__ = [
     "is_bundle_a_corporate_action",
     "is_reconcilable_corporate_action",
     "normalize_corporate_action_transaction_type",
+    "resolve_corporate_action_event_graph",
     "validate_bundle_a_corporate_action",
 ]
