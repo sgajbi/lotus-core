@@ -455,6 +455,8 @@ jobs:
           echo "LOTUS_RUNTIME_IMAGE_SET_VERIFIED=true" >> "${GITHUB_ENV}"
       - name: Install
         run: make install-ci
+      - name: Run fixed-income book-cost recovery gate
+        run: make test-fixed-income-book-cost-recovery-gate
       - name: Run deterministic derived-state recovery gate
         run: make test-derived-state-recovery-gate
       - name: Upload derived-state recovery artifacts

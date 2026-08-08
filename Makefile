@@ -3,6 +3,7 @@
 .PHONY: ingestion-gateway-rate-limit-policy-guard generated-artifact-tracking-guard
 .PHONY: test-critical-lifecycle-db
 .PHONY: calculated-output-policy-guard
+.PHONY: test-fixed-income-book-cost-recovery-gate
 
 LATENCY_SEED_COMPLETION_TIMEOUT_SECONDS ?= 900
 OPENAPI_ARTIFACT_DIR ?= output/openapi
@@ -464,6 +465,9 @@ profile-cost-processing-modes:
 
 test-failure-recovery-gate:
 	$(REPOSITORY_PYTHON) scripts/operations/failure_recovery_gate.py $(RUNTIME_BUILD_ARGUMENT) --enforce
+
+test-fixed-income-book-cost-recovery-gate:
+	$(REPOSITORY_PYTHON) scripts/quality/test_manifest.py --suite fixed-income-book-cost-recovery --quiet
 
 test-derived-state-recovery-gate:
 	$(REPOSITORY_PYTHON) -m scripts.operations.recovery.derived_state_gate $(RUNTIME_BUILD_ARGUMENT) --enforce

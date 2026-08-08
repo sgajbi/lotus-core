@@ -461,6 +461,8 @@ jobs:
         run: make install-ci
       - name: Run deterministic failure recovery gate
         run: make test-failure-recovery-gate
+      - name: Run fixed-income book-cost recovery gate
+        run: make test-fixed-income-book-cost-recovery-gate
       - name: Run deterministic derived-state recovery gate
         run: make test-derived-state-recovery-gate
       - name: Upload failure recovery artifacts
