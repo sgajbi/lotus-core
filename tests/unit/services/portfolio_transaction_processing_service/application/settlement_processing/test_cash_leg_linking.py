@@ -3,7 +3,7 @@
 from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal
-from unittest.mock import AsyncMock, call
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -68,10 +68,10 @@ async def test_generated_cash_leg_is_persisted_before_linked_product_leg() -> No
         == result.generated_cash_leg.linked_transaction_group_id
     )
     assert product_leg.external_cash_transaction_id is None
-    assert persistence.upsert_booked_transaction.await_args_list == [
-        call(result.generated_cash_leg),
-        call(result.product_leg),
-    ]
+    persistence.upsert_generated_booked_transaction.assert_awaited_once_with(
+        result.generated_cash_leg
+    )
+    persistence.upsert_booked_transaction.assert_awaited_once_with(result.product_leg)
     lookup.get_booked_transaction.assert_not_awaited()
 
 
@@ -178,10 +178,10 @@ async def test_correction_neutralizes_obsolete_generated_cash_leg() -> None:
     assert result.generated_cash_leg is not None
     assert result.generated_cash_leg.transaction_id == prior_cash_leg.transaction_id
     assert result.generated_cash_leg.gross_transaction_amount == Decimal(0)
-    assert persistence.upsert_booked_transaction.await_args_list == [
-        call(result.generated_cash_leg),
-        call(
-            result.product_leg,
-            fields_to_clear=frozenset({"external_cash_transaction_id"}),
-        ),
-    ]
+    persistence.upsert_generated_booked_transaction.assert_awaited_once_with(
+        result.generated_cash_leg
+    )
+    persistence.upsert_booked_transaction.assert_awaited_once_with(
+        result.product_leg,
+        fields_to_clear=frozenset({"external_cash_transaction_id"}),
+    )

@@ -4,6 +4,9 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from portfolio_common.events import TransactionEvent
+from portfolio_common.infrastructure.persistence.transaction_identity_guard import (
+    GeneratedTransactionIdentityCollisionError,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.persistence_service.app.adapters.event_record_mapper import (
@@ -17,6 +20,9 @@ from src.services.persistence_service.app.repositories.transaction_db_repo impor
 @pytest.mark.asyncio
 async def test_create_or_update_transaction_uses_canonical_currency_codes() -> None:
     db = AsyncMock(spec=AsyncSession)
+    execute_result = MagicMock()
+    execute_result.scalar_one_or_none.return_value = "TX_CANONICAL_CCY_001"
+    db.execute.return_value = execute_result
     repo = TransactionDBRepository(db)
     event = TransactionEvent(
         transaction_id="TX_CANONICAL_CCY_001",
@@ -52,6 +58,9 @@ async def test_create_or_update_transaction_uses_canonical_currency_codes() -> N
 @pytest.mark.asyncio
 async def test_create_or_update_transaction_persists_aggregated_trade_fee() -> None:
     db = AsyncMock(spec=AsyncSession)
+    execute_result = MagicMock()
+    execute_result.scalar_one_or_none.return_value = "TX_FEE_COMPONENTS_001"
+    db.execute.return_value = execute_result
     repo = TransactionDBRepository(db)
     event = TransactionEvent(
         transaction_id="TX_FEE_COMPONENTS_001",
@@ -78,6 +87,41 @@ async def test_create_or_update_transaction_persists_aggregated_trade_fee() -> N
     assert persisted.trade_fee == Decimal("5.00")
     assert not hasattr(persisted, "brokerage")
     db.execute.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_create_or_update_transaction_rejects_existing_foreign_identity() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    execute_result = MagicMock()
+    execute_result.scalar_one_or_none.return_value = None
+    db.execute.return_value = execute_result
+    repo = TransactionDBRepository(db)
+    event = TransactionEvent(
+        transaction_id="SOURCE-1-CASHLEG",
+        portfolio_id="PORT-1",
+        instrument_id="CASH-USD",
+        security_id="CASH-USD",
+        transaction_date="2026-05-28T10:00:00Z",
+        transaction_type="ADJUSTMENT",
+        quantity=Decimal("0"),
+        price=Decimal("1"),
+        gross_transaction_amount=Decimal("1000"),
+        trade_currency="USD",
+        currency="USD",
+        originating_transaction_id="SOURCE-1",
+        originating_transaction_type="BUY",
+        cash_entry_mode="AUTO_GENERATE",
+        link_type="BUY_TO_CASH",
+    )
+
+    with pytest.raises(
+        GeneratedTransactionIdentityCollisionError,
+        match="generated_transaction_identity_collision",
+    ):
+        await repo.create_or_update_transaction(event)
+
+    statement = db.execute.await_args.args[0]
+    assert "WHERE" in str(statement.compile())
 
 
 def test_transaction_event_to_record_values_excludes_traceparent_envelope() -> None:

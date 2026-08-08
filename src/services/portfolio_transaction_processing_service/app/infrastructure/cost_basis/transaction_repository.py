@@ -13,9 +13,18 @@ from portfolio_common.domain.calculation_lineage import (
     calculation_lineage_from_payload,
 )
 from portfolio_common.domain.currency import normalize_currency_code
+from portfolio_common.domain.transaction import (
+    TransactionIdentityOwnership,
+    require_generated_transaction_identity,
+    transaction_identity_ownership,
+)
 from portfolio_common.domain.transaction_control_codes import normalize_transaction_control_code
 from portfolio_common.events import TransactionEvent
 from portfolio_common.identifiers import normalize_lookup_identifier
+from portfolio_common.infrastructure.persistence.transaction_identity_guard import (
+    GeneratedTransactionIdentityCollisionError,
+    transaction_identity_update_allowed,
+)
 from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -337,6 +346,33 @@ class SqlAlchemyCostBasisTransactionRepository:
     ) -> BookedTransaction:
         """Upsert and return the final canonical booked transaction row."""
 
+        return await self._upsert_booked_transaction(
+            transaction,
+            ownership=transaction_identity_ownership(transaction),
+            fields_to_clear=fields_to_clear,
+        )
+
+    async def upsert_generated_booked_transaction(
+        self,
+        transaction: BookedTransaction,
+        *,
+        fields_to_clear: frozenset[str] = frozenset(),
+    ) -> BookedTransaction:
+        """Atomically upsert one canonical generated child within its existing ownership."""
+
+        return await self._upsert_booked_transaction(
+            transaction,
+            ownership=require_generated_transaction_identity(transaction),
+            fields_to_clear=fields_to_clear,
+        )
+
+    async def _upsert_booked_transaction(
+        self,
+        transaction: BookedTransaction,
+        *,
+        ownership: TransactionIdentityOwnership,
+        fields_to_clear: frozenset[str],
+    ) -> BookedTransaction:
         transaction_values = _booked_transaction_payload(
             transaction,
             fields_to_clear=fields_to_clear,
@@ -354,10 +390,16 @@ class SqlAlchemyCostBasisTransactionRepository:
                     stmt.on_conflict_do_update(
                         index_elements=["transaction_id"],
                         set_=update_dict,
+                        where=transaction_identity_update_allowed(
+                            DBTransaction,
+                            ownership,
+                        ),
                     ).returning(DBTransaction)
                 )
             )
             .scalars()
-            .one()
+            .one_or_none()
         )
+        if persisted is None:
+            raise GeneratedTransactionIdentityCollisionError(transaction.transaction_id)
         return _to_persisted_booked_transaction(persisted)

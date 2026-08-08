@@ -5,7 +5,12 @@ from datetime import date
 
 from portfolio_common.database_models import CashAccountMaster, Instrument, Portfolio
 from portfolio_common.database_models import Transaction as DBTransaction
+from portfolio_common.domain.transaction import transaction_identity_ownership
 from portfolio_common.events import TransactionEvent
+from portfolio_common.infrastructure.persistence.transaction_identity_guard import (
+    GeneratedTransactionIdentityCollisionError,
+    transaction_identity_update_allowed,
+)
 from sqlalchemy import exists, func, literal, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -100,11 +105,16 @@ class TransactionDBRepository:
             update_dict = {field: getattr(stmt.excluded, field) for field in update_fields}
 
             # The final UPSERT statement with the conflict resolution.
+            ownership = transaction_identity_ownership(event)
             final_stmt = stmt.on_conflict_do_update(
-                index_elements=["transaction_id"], set_=update_dict
-            )
+                index_elements=["transaction_id"],
+                set_=update_dict,
+                where=transaction_identity_update_allowed(DBTransaction, ownership),
+            ).returning(DBTransaction.transaction_id)
 
-            await self.db.execute(final_stmt)
+            persisted_id = (await self.db.execute(final_stmt)).scalar_one_or_none()
+            if persisted_id is None:
+                raise GeneratedTransactionIdentityCollisionError(event.transaction_id)
             logger.debug(
                 "Transaction upsert staged.",
                 extra={"transaction_id": event.transaction_id},

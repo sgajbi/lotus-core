@@ -1585,7 +1585,7 @@ async def test_upsert_booked_transaction_persists_only_canonical_table_fields() 
         calculation_lineage=calculation_lineage.lineage_payload(),
     )
     execute_result = MagicMock()
-    execute_result.scalars.return_value.one.return_value = persisted_transaction
+    execute_result.scalars.return_value.one_or_none.return_value = persisted_transaction
     db_session.execute.return_value = execute_result
 
     result = await repository.upsert_booked_transaction(
