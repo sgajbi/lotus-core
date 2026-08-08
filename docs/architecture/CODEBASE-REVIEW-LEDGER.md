@@ -133,6 +133,17 @@ canonical portfolio, and live-validator tests enforce the boundary. Genuine batc
 null; no response content hash is relabeled as an upstream ingestion batch. No route, DTO property,
 database, migration, Kafka, auth, or runtime-topology shape changed. Evidence is consolidated in
 CR-1189 rather than creating another standalone review document.
+CR-1678 corporate-action conservation addendum (2026-08-09): issue #450 now has one domain-owned,
+versioned linked-group policy for basis-only spin-off and demerger evidence. Zero-quantity source
+commands fail before job creation without complete target references. Reconciliation binds
+canonical per-child semantic/economic lineage and conserves retained target, fractional,
+cash-consideration, and governed-adjustment basis against source basis out. Recognized generated
+settlements are excluded; ambiguous adjustments fail closed. Mixed PostgreSQL replay proves lot,
+cash, P&L, synthetic-flow, finding, and duplicate neutrality. A 1,000-target cohort retains one
+group read and one evidence write, while the existing reconciliation-run endpoint and additive
+OpenAPI example expose operator evidence without another API. Positive-quantity behavior, schema,
+Kafka topology, and deployment topology remain unchanged. Exact protected-PR and mainline evidence
+remain pending.
 
 CR-1678 full-chain and recovery addendum (2026-08-08): disposal and basis-transfer writers and
 readers now verify complete 64-version root-to-head receipt histories with two bounded SQL reads

@@ -3,9 +3,10 @@
 ## Scope
 
 This review governs the bounded fixed-income batch for GitHub issues #451, #478, #481, and #477,
-with a partial contribution to #788. It covers explicit quote authority, amortized-cost evolution,
-lot-disposal lineage, and maturity/call/partial-redemption economics in their required dependency
-order.
+the corporate-action basis-conservation closure under #450, and a partial contribution to #788. It
+covers explicit quote authority, amortized-cost evolution, lot-disposal lineage, linked
+corporate-action basis conservation, and maturity/call/partial-redemption economics in their
+required dependency order.
 
 ## Findings
 
@@ -256,6 +257,28 @@ Pending-disposal commit, discard, and record filtering also normalize transactio
 engine boundary, matching the immutable evidence key and preventing whitespace variants from
 leaking staged evidence or suppressing an accepted record.
 
+Corporate-action basis-only `SPIN_OFF` and `DEMERGER_OUT` commands now require their target
+transaction and target instrument before ingestion creates a job or publishes an event. The
+domain-owned reconciliation policy evaluates a complete linked group once and binds deterministic
+per-child semantic identity, payload fingerprint, epoch, aggregation revision, and calculation
+policy. Its conserved equation is:
+
+`source basis out = retained target basis + fractional basis + cash-consideration basis + governed adjustment basis`
+
+where retained target basis is incoming target basis less basis consumed by an explicit
+`CASH_IN_LIEU` leg. Generated cash-settlement adjustments are identified and excluded from basis;
+an unrecognized linked adjustment fails closed with a stable reason and repair action instead of
+being interpreted as tax or allocation authority. The immutable run summary exposes source,
+incoming and retained target, fractional, cash-consideration, adjustment, delta, and canonical
+input-lineage evidence through the existing reconciliation-run query.
+
+The mixed PostgreSQL lifecycle proves 1,000 original basis as 700 retained source, 240 retained
+target, 10 fractional, and 50 cash-consideration basis; the target lot remains at quantity 24 and
+basis 240, fractional realized P&L is 2, product flows balance, generated settlements are excluded,
+duplicate delivery is neutral, and the final finding set is empty. A 1,000-target cohort uses one
+group read and one evidence write and completed locally in 0.18 seconds against a five-second
+guard. Property proof covers allocation and child-order invariance.
+
 ## Same-Pattern Review
 
 The review covers both remaining `resolve_valuation_unit_price` call sites, authoritative price and
@@ -279,11 +302,20 @@ accrued-income variants without evidence, and every redemption type remain fail 
 change is additive; no public API/OpenAPI, Kafka runtime, or capability claim changed. The authored
 Data Models wiki documents the staged ledgers while the capability wiki remains
 `target_not_implemented`.
+Corporate-action validation is intentionally stricter only for zero-quantity basis-transfer
+commands; positive-quantity compatibility is unchanged. The existing optional reconciliation-run
+`summary` response shape is unchanged and now has an additive OpenAPI example. The Financial
+Reconciliation wiki documents how operators inspect the new evidence; no new endpoint, schema,
+migration, Kafka topic, partition, or deployment topology was introduced.
 
 ## Validation
 
 - signed commits `fb558698e`, `2ceec9e34`, `7f76491fe`, `fc79da648`, `47f059684`, and
   `3deb33d9b`;
+- corporate-action basis-conservation commits `564bbacd3`, `188e10465`, `6f4ebbefe`,
+  `a9ac3f3cc`, `6984f5a46`, `98277d139`, `6350bbc0a`, and `6004d3ba2`; focused proof includes 187
+  corporate-action cases, 100 property examples, the 1,000-target capacity cohort, one mixed
+  PostgreSQL replay scenario, four service cases, one router case, and one OpenAPI contract case;
 - 35 warning-strict authoritative valuation tests;
 - 49 warning-strict shared valuation/calculator tests;
 - 77 warning-strict reconciliation domain/service/repository tests;

@@ -46,8 +46,8 @@ The current control families cover:
 - `timeseries_integrity`
   portfolio timeseries remain consistent with the underlying position-timeseries inputs
 - `corporate_action_bundle_a`
-  transfer-style corporate-action child legs reconcile source-out and target-in basis and expose
-  missing dependency references
+  linked transfer-style child legs reconcile source basis against retained target, fractional,
+  cash-consideration, and governed-adjustment basis and expose missing dependency references
 
 ## Data it owns
 
@@ -116,7 +116,14 @@ Check this service when:
   child-leg dependency references
 
 For Bundle A issues, list reconciliation runs with `reconciliation_type=corporate_action_bundle_a`
-and then inspect that run's findings. Stable finding types are
+and inspect both the immutable run `summary` and the run's current findings. The summary identifies
+the policy/version, source basis, incoming and retained target basis, fractional basis,
+cash-consideration basis, governed adjustment posture, net delta, excluded generated settlements,
+unsupported adjustments, and canonical per-child input lineage. Retained target basis is incoming
+target basis less basis consumed by an explicit cash-in-lieu leg; do not add fractional basis to
+incoming target basis a second time.
+
+Stable finding types are
 `ca_bundle_a_basis_mismatch`, `ca_bundle_a_insufficient_legs`, and
 `ca_bundle_a_missing_dependency`; each row includes the portfolio, triggering transaction,
 business date, correlation id through the run, linked transaction group, parent event reference,
