@@ -20,8 +20,10 @@ from ..domain.cost_basis import (
 )
 from ..domain.transaction import BookedTransaction
 from ..domain.transaction.corporate_action import (
-    is_bundle_a_corporate_action,
+    SOURCE_QUANTITY_TRANSFER_TRANSACTION_TYPES,
+    TARGET_QUANTITY_TRANSFER_TRANSACTION_TYPES,
     is_reconcilable_corporate_action,
+    normalize_corporate_action_transaction_type,
 )
 from ..domain.transaction.semantic_identity import build_transaction_semantic_identity
 from ..ports.corporate_action_reconciliation import (
@@ -179,10 +181,12 @@ def _reconciliation_key(
 
 
 def _reconciliation_type(transaction: BookedTransaction) -> str:
+    transaction_type = normalize_corporate_action_transaction_type(transaction.transaction_type)
     return (
-        CORPORATE_ACTION_BUNDLE_A_RECONCILIATION_TYPE
-        if is_bundle_a_corporate_action(transaction.transaction_type)
-        else CORPORATE_ACTION_QUANTITY_TRANSFER_RECONCILIATION_TYPE
+        CORPORATE_ACTION_QUANTITY_TRANSFER_RECONCILIATION_TYPE
+        if transaction_type
+        in SOURCE_QUANTITY_TRANSFER_TRANSACTION_TYPES | TARGET_QUANTITY_TRANSFER_TRANSACTION_TYPES
+        else CORPORATE_ACTION_BUNDLE_A_RECONCILIATION_TYPE
     )
 
 
@@ -202,9 +206,12 @@ def _observation(
         source_leg_count=reconciliation.source_leg_count,
         target_leg_count=reconciliation.target_leg_count,
         cash_consideration_count=reconciliation.cash_consideration_count,
+        fractional_cash_leg_count=reconciliation.fractional_cash_leg_count,
         source_basis_out_local=reconciliation.source_basis_out_local,
         target_basis_in_local=reconciliation.target_basis_in_local,
         cash_basis_local=reconciliation.cash_basis_local,
+        cash_consideration_basis_local=reconciliation.cash_consideration_basis_local,
+        fractional_basis_local=reconciliation.fractional_basis_local,
         missing_cash_basis_count=reconciliation.missing_cash_basis_count,
         net_basis_delta_local=reconciliation.net_basis_delta_local,
         basis_tolerance=reconciliation.basis_tolerance,
@@ -401,6 +408,7 @@ def _summary(
             reconciliation.source_leg_count
             + reconciliation.target_leg_count
             + reconciliation.cash_consideration_count
+            + reconciliation.fractional_cash_leg_count
         ),
         "finding_count": finding_count,
         "error_count": finding_count,
@@ -410,9 +418,12 @@ def _summary(
         "source_leg_count": reconciliation.source_leg_count,
         "target_leg_count": reconciliation.target_leg_count,
         "cash_consideration_count": reconciliation.cash_consideration_count,
+        "fractional_cash_leg_count": reconciliation.fractional_cash_leg_count,
         "source_basis_out_local": str(reconciliation.source_basis_out_local),
         "target_basis_in_local": str(reconciliation.target_basis_in_local),
         "cash_basis_local": str(reconciliation.cash_basis_local),
+        "cash_consideration_basis_local": str(reconciliation.cash_consideration_basis_local),
+        "fractional_basis_local": str(reconciliation.fractional_basis_local),
         "net_basis_delta_local": str(reconciliation.net_basis_delta_local),
         "missing_cash_basis_count": reconciliation.missing_cash_basis_count,
         "missing_dependency_count": len(missing_dependencies),
@@ -568,7 +579,10 @@ def _finding(
         "source_leg_count": reconciliation.source_leg_count,
         "target_leg_count": reconciliation.target_leg_count,
         "cash_consideration_count": reconciliation.cash_consideration_count,
+        "fractional_cash_leg_count": reconciliation.fractional_cash_leg_count,
         "cash_basis_local": str(reconciliation.cash_basis_local),
+        "cash_consideration_basis_local": str(reconciliation.cash_consideration_basis_local),
+        "fractional_basis_local": str(reconciliation.fractional_basis_local),
         "missing_cash_basis_count": reconciliation.missing_cash_basis_count,
         "basis_tolerance": str(reconciliation.basis_tolerance),
         **(extra_detail or {}),

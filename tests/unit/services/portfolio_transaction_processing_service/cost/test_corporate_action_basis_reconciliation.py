@@ -71,6 +71,54 @@ def test_corporate_action_basis_reconciliation_balances_source_target_and_cash()
     assert result.source_basis_out_local == Decimal("300")
     assert result.target_basis_in_local == Decimal("250")
     assert result.cash_basis_local == Decimal("50")
+    assert result.cash_consideration_basis_local == Decimal("50")
+    assert result.fractional_basis_local == Decimal(0)
+    assert result.net_basis_delta_local == Decimal(0)
+
+
+def test_corporate_action_basis_reconciliation_balances_multi_target_fractional_basis() -> None:
+    source = replace(
+        _booked_transaction(
+            transaction_id="SRC_01", transaction_type="DEMERGER_OUT", gross_amount="100"
+        ),
+        net_cost_local=Decimal("-100"),
+    )
+    targets = tuple(
+        replace(
+            _booked_transaction(
+                transaction_id=f"TGT_{ordinal:02d}",
+                transaction_type="DEMERGER_IN",
+                gross_amount="30",
+            ),
+            net_cost_local=Decimal("30"),
+        )
+        for ordinal in range(1, 4)
+    )
+    fractional = replace(
+        _booked_transaction(
+            transaction_id="CIL_01", transaction_type="CASH_IN_LIEU", gross_amount="12"
+        ),
+        quantity=Decimal("0.1"),
+        allocated_cost_basis_local=Decimal("10"),
+    )
+    generated_cash = replace(
+        _booked_transaction(
+            transaction_id="ADJ_CIL_01", transaction_type="ADJUSTMENT", gross_amount="12"
+        ),
+        movement_direction="INFLOW",
+        originating_transaction_type="CASH_IN_LIEU",
+        adjustment_reason="CASH_IN_LIEU_SETTLEMENT",
+        net_cost_local=Decimal("12"),
+    )
+
+    result = reconcile_corporate_action_basis((source, *targets, fractional, generated_cash))
+
+    assert result.status == "balanced"
+    assert result.target_leg_count == 3
+    assert result.fractional_cash_leg_count == 1
+    assert result.fractional_basis_local == Decimal("10")
+    assert result.cash_consideration_basis_local == Decimal(0)
+    assert result.cash_basis_local == Decimal("10")
     assert result.net_basis_delta_local == Decimal(0)
 
 

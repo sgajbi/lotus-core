@@ -9,6 +9,7 @@ from ..transaction import BookedTransaction
 from ..transaction.corporate_action import is_reconcilable_corporate_action
 from ..transaction.corporate_action.classification import (
     CASH_CONSIDERATION_TRANSACTION_TYPE,
+    FRACTIONAL_CASH_BASIS_TRANSACTION_TYPES,
     QUANTITY_TRANSFER_CORPORATE_ACTION_PAIRS,
     SOURCE_BASIS_TRANSFER_TRANSACTION_TYPES,
     SOURCE_QUANTITY_TRANSFER_TRANSACTION_TYPES,
@@ -58,9 +59,12 @@ class CorporateActionBasisReconciliation:
     source_leg_count: int
     target_leg_count: int
     cash_consideration_count: int
+    fractional_cash_leg_count: int
     source_basis_out_local: Decimal
     target_basis_in_local: Decimal
     cash_basis_local: Decimal
+    cash_consideration_basis_local: Decimal
+    fractional_basis_local: Decimal
     missing_cash_basis_count: int
     net_basis_delta_local: Decimal
     basis_tolerance: Decimal
@@ -71,9 +75,12 @@ class _BasisTotals:
     source_leg_count: int = 0
     target_leg_count: int = 0
     cash_consideration_count: int = 0
+    fractional_cash_leg_count: int = 0
     source_basis_out_local: Decimal = Decimal(0)
     target_basis_in_local: Decimal = Decimal(0)
     cash_basis_local: Decimal = Decimal(0)
+    cash_consideration_basis_local: Decimal = Decimal(0)
+    fractional_basis_local: Decimal = Decimal(0)
     missing_cash_basis_count: int = 0
 
 
@@ -95,9 +102,12 @@ def reconcile_corporate_action_basis(
         source_leg_count=totals.source_leg_count,
         target_leg_count=totals.target_leg_count,
         cash_consideration_count=totals.cash_consideration_count,
+        fractional_cash_leg_count=totals.fractional_cash_leg_count,
         source_basis_out_local=totals.source_basis_out_local,
         target_basis_in_local=totals.target_basis_in_local,
         cash_basis_local=totals.cash_basis_local,
+        cash_consideration_basis_local=totals.cash_consideration_basis_local,
+        fractional_basis_local=totals.fractional_basis_local,
         missing_cash_basis_count=totals.missing_cash_basis_count,
         net_basis_delta_local=net_basis_delta_local,
         basis_tolerance=basis_tolerance,
@@ -326,6 +336,17 @@ def _accumulate(totals: _BasisTotals, transaction: BookedTransaction) -> None:
         ):
             totals.missing_cash_basis_count += 1
         else:
+            totals.cash_consideration_basis_local += transaction.allocated_cost_basis_local
+            totals.cash_basis_local += transaction.allocated_cost_basis_local
+    elif transaction_type in FRACTIONAL_CASH_BASIS_TRANSACTION_TYPES:
+        totals.fractional_cash_leg_count += 1
+        if (
+            transaction.allocated_cost_basis_local is None
+            or transaction.allocated_cost_basis_local < 0
+        ):
+            totals.missing_cash_basis_count += 1
+        else:
+            totals.fractional_basis_local += transaction.allocated_cost_basis_local
             totals.cash_basis_local += transaction.allocated_cost_basis_local
 
 
