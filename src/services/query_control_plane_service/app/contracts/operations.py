@@ -2390,8 +2390,31 @@ class ReconciliationRunRecord(BaseModel):
         None,
         description=(
             "Immutable completion-time examined, finding, error, warning, and pass/fail summary. "
+            "Corporate-action basis runs include the reconciliation policy/version, source, "
+            "incoming and retained target, fractional and cash-consideration basis, adjustment "
+            "posture, and canonical per-child input lineage. "
             "Current open-break posture is reported by the lifecycle fields on this record."
         ),
+        examples=[
+            {
+                "reconciliation_policy_id": "CORPORATE_ACTION_BASIS_CONSERVATION",
+                "reconciliation_policy_version": "1.0.0",
+                "source_basis_out_local": "300.0000000000",
+                "target_basis_in_local": "250.0000000000",
+                "target_basis_retained_local": "240.0000000000",
+                "fractional_basis_local": "10.0000000000",
+                "cash_consideration_basis_local": "50.0000000000",
+                "governed_adjustment_basis_local": "0",
+                "net_basis_delta_local": "0E-10",
+                "input_lineage": [
+                    {
+                        "transaction_id": "DEMERGER-IN-001",
+                        "semantic_key": ("transaction-processing:v1:PORT-001:DEMERGER-IN-001:7"),
+                        "payload_fingerprint": "sha256:<canonical-child-payload-hash>",
+                    }
+                ],
+            }
+        ],
     )
     open_break_count: int = Field(
         ...,

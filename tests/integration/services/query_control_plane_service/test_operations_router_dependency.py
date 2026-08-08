@@ -1211,16 +1211,23 @@ async def test_reconciliation_runs_success(async_test_client):
         "items": [
             {
                 "run_id": "recon_1234567890abcdef",
-                "reconciliation_type": "transaction_cashflow",
+                "reconciliation_type": "corporate_action_bundle_a",
                 "status": "FAILED",
                 "business_date": "2026-03-13",
                 "epoch": 3,
                 "started_at": "2026-03-13T10:15:00Z",
                 "completed_at": "2026-03-13T10:15:09Z",
                 "requested_by": "pipeline_orchestrator_service",
-                "dedupe_key": "recon:transaction_cashflow:PF-001:2026-03-13:3",
+                "dedupe_key": "recon:corporate_action_bundle_a:PF-001:2026-03-13:3",
                 "correlation_id": "corr-recon-20260313-001",
                 "failure_reason": "Tolerance exceeded for portfolio totals.",
+                "summary": {
+                    "reconciliation_policy_id": "CORPORATE_ACTION_BASIS_CONSERVATION",
+                    "reconciliation_policy_version": "1.0.0",
+                    "target_basis_retained_local": "240.0000000000",
+                    "fractional_basis_local": "10.0000000000",
+                    "input_lineage": [{"transaction_id": "DEMERGER-IN-001"}],
+                },
                 "open_break_count": 1,
                 "blocking_break_count": 1,
                 "open_break_count_by_severity": {"ERROR": 1},
@@ -1239,8 +1246,8 @@ async def test_reconciliation_runs_success(async_test_client):
         "/support/portfolios/P1/reconciliation-runs"
         "?run_id=recon_1234567890abcdef&correlation_id=corr-recon-20260313-001"
         "&requested_by=pipeline_orchestrator_service"
-        "&dedupe_key=recon:transaction_cashflow:PF-001:2026-03-13:3"
-        "&reconciliation_type=transaction_cashflow&status_filter=FAILED"
+        "&dedupe_key=recon:corporate_action_bundle_a:PF-001:2026-03-13:3"
+        "&reconciliation_type=corporate_action_bundle_a&status_filter=FAILED"
     )
 
     assert response.status_code == 200
@@ -1250,10 +1257,20 @@ async def test_reconciliation_runs_success(async_test_client):
     assert response.json()["generated_at_utc"] == "2026-03-14T10:50:00Z"
     assert response.json()["items"][0]["run_id"] == "recon_1234567890abcdef"
     assert response.json()["items"][0]["status"] == "FAILED"
+    assert response.json()["items"][0]["summary"]["reconciliation_policy_id"] == (
+        "CORPORATE_ACTION_BASIS_CONSERVATION"
+    )
+    assert response.json()["items"][0]["summary"]["target_basis_retained_local"] == (
+        "240.0000000000"
+    )
+    assert response.json()["items"][0]["summary"]["fractional_basis_local"] == "10.0000000000"
+    assert response.json()["items"][0]["summary"]["input_lineage"] == [
+        {"transaction_id": "DEMERGER-IN-001"}
+    ]
     assert response.json()["items"][0]["requested_by"] == "pipeline_orchestrator_service"
     assert (
         response.json()["items"][0]["dedupe_key"]
-        == "recon:transaction_cashflow:PF-001:2026-03-13:3"
+        == "recon:corporate_action_bundle_a:PF-001:2026-03-13:3"
     )
     assert response.json()["items"][0]["correlation_id"] == "corr-recon-20260313-001"
     assert response.json()["items"][0]["is_terminal_failure"] is True
@@ -1272,9 +1289,9 @@ async def test_reconciliation_runs_success(async_test_client):
         limit=100,
         run_id="recon_1234567890abcdef",
         requested_by="pipeline_orchestrator_service",
-        dedupe_key="recon:transaction_cashflow:PF-001:2026-03-13:3",
+        dedupe_key="recon:corporate_action_bundle_a:PF-001:2026-03-13:3",
         correlation_id="corr-recon-20260313-001",
-        reconciliation_type="transaction_cashflow",
+        reconciliation_type="corporate_action_bundle_a",
         status="FAILED",
     )
 
