@@ -28,7 +28,7 @@ from portfolio_common.domain.cost_basis_receipt_integrity import (
     lot_disposal_lineage_output_payload,
 )
 from portfolio_common.domain.transaction.numeric_policy import COST_BASIS_STATE_LEDGER_OUTPUT_V1
-from sqlalchemy import event, func, inspect, select, update
+from sqlalchemy import event, func, inspect, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
@@ -52,6 +52,7 @@ from tests.test_support.transaction_processing import (
     instrument_record,
     portfolio_record,
 )
+from tools.front_office_portfolio_seed import build_portfolio_seed_cleanup_sql
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration_db, pytest.mark.db_direct]
 
@@ -144,6 +145,36 @@ async def test_repository_preserves_active_correction_void_and_reactivation_hist
     assert receipts[1].previous_receipt_content_hash == receipts[0].receipt_content_hash
     assert receipts[2].previous_receipt_content_hash == receipts[1].receipt_content_hash
     assert receipts[3].previous_receipt_content_hash == receipts[2].receipt_content_hash
+
+
+async def test_portfolio_reseed_cleanup_removes_disposal_evidence_and_preserves_other_lots(
+    clean_db,
+    disposal_receipt_schema,
+    async_db_session: AsyncSession,
+) -> None:
+    await _seed_source_lot(async_db_session)
+    await _seed_unrelated_source_lot(async_db_session)
+    await SqlAlchemyCostBasisLotDisposalRepository(async_db_session).reconcile_disposal_receipts(
+        receipt_states=(_active_state(cost_local="10"),)
+    )
+    await async_db_session.commit()
+
+    cleanup_sql = build_portfolio_seed_cleanup_sql(portfolio_id="PORT-RECEIPT-DB-01")
+    for statement in cleanup_sql.split(";"):
+        if statement.strip():
+            await async_db_session.execute(text(statement))
+    await async_db_session.commit()
+
+    allocation_count = await async_db_session.scalar(
+        select(func.count()).select_from(LotDisposalAllocationRecord)
+    )
+    receipt_count = await async_db_session.scalar(
+        select(func.count()).select_from(LotDisposalReceiptRecord)
+    )
+    remaining_lot_ids = set((await async_db_session.scalars(select(PositionLotState.lot_id))).all())
+    assert allocation_count == 0
+    assert receipt_count == 0
+    assert remaining_lot_ids == {"LOT-RECEIPT-DB-OTHER"}
 
 
 async def test_repository_detects_tampered_child_after_restart(
@@ -307,6 +338,50 @@ async def _seed_source_lot(session: AsyncSession) -> None:
             open_quantity=Decimal("9"),
             lot_cost_local=Decimal("90"),
             lot_cost_base=Decimal("90"),
+            accrued_interest_paid_local=Decimal(0),
+        )
+    )
+    await session.commit()
+
+
+async def _seed_unrelated_source_lot(session: AsyncSession) -> None:
+    portfolio_id = "PORT-RECEIPT-DB-OTHER"
+    security_id = "SEC-RECEIPT-DB-OTHER"
+    buy = booked_transaction_event(
+        transaction_id="BUY-RECEIPT-DB-OTHER",
+        portfolio_id=portfolio_id,
+        security_id=security_id,
+        transaction_date=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        transaction_type="BUY",
+        quantity="5",
+        price="20",
+        gross_amount="100",
+    )
+    session.add_all(
+        [
+            portfolio_record(portfolio_id, cost_basis_method="FIFO"),
+            instrument_record(
+                security_id,
+                name="Unrelated Disposal Receipt Proof Instrument",
+                isin="SG0000000602",
+                currency="SGD",
+            ),
+            canonical_transaction_record(buy),
+        ]
+    )
+    await session.flush()
+    session.add(
+        PositionLotState(
+            lot_id="LOT-RECEIPT-DB-OTHER",
+            source_transaction_id=buy.transaction_id,
+            portfolio_id=portfolio_id,
+            instrument_id=security_id,
+            security_id=security_id,
+            acquisition_date=date(2026, 1, 1),
+            original_quantity=Decimal("5"),
+            open_quantity=Decimal("5"),
+            lot_cost_local=Decimal("100"),
+            lot_cost_base=Decimal("100"),
             accrued_interest_paid_local=Decimal(0),
         )
     )

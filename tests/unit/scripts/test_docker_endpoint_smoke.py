@@ -41,6 +41,18 @@ def test_docker_endpoint_smoke_cleanup_sql_purges_legacy_smoke_rows():
     assert "delete from portfolios where portfolio_id like 'PORT_SMOKE_%';" in sql
     assert "delete from market_prices where security_id like 'SEC_SMOKE_%';" in sql
     assert "delete from transaction_costs where transaction_id like 'TX%_SMOKE_%';" in sql
+    for table in (
+        "lot_disposal_allocations",
+        "lot_basis_transfer_allocations",
+        "lot_amortized_cost_periods",
+        "lot_disposal_receipts",
+        "lot_basis_transfer_receipts",
+        "lot_amortized_cost_authority",
+        "lot_amortized_cost_profiles",
+    ):
+        assert f"delete from {table}" in sql
+        assert sql.index(f"delete from {table}") < sql.index("delete from position_lot_state")
+    assert "where portfolio_id like 'PORT_SMOKE_%'" in sql
     for child_table in (
         "average_cost_pool_state",
         "cost_basis_processing_state",

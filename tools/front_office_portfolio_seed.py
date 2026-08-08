@@ -27,6 +27,7 @@ from tools.front_office_seed_contract import (  # noqa: E402
     FrontOfficeSeedContract,
     load_front_office_seed_contract,
 )
+from tools.lot_evidence_cleanup import build_lot_evidence_cleanup_statements  # noqa: E402
 
 LOGGER = logging.getLogger("front_office_portfolio_seed")
 FRONT_OFFICE_SEED_CONTRACT = load_front_office_seed_contract()
@@ -220,6 +221,10 @@ def build_portfolio_seed_cleanup_sql(*, portfolio_id: str) -> str:
             f"delete from position_timeseries where portfolio_id = '{portfolio_id}';",
             f"delete from position_history where portfolio_id = '{portfolio_id}';",
             f"delete from position_state where portfolio_id = '{portfolio_id}';",
+            *build_lot_evidence_cleanup_statements(
+                portfolio_selector=portfolio_id,
+                match="exact",
+            ),
             f"delete from position_lot_state where portfolio_id = '{portfolio_id}';",
             f"delete from average_cost_pool_state where portfolio_id = '{portfolio_id}';",
             f"delete from cost_basis_processing_state where portfolio_id = '{portfolio_id}';",
