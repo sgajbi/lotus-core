@@ -8,6 +8,7 @@ from .accrued_interest import (
     redemption_accrued_interest_transaction_id,
 )
 from .economics import (
+    REDEMPTION_CORRECTION_OWNED_OPTIONAL_FIELDS,
     REDEMPTION_TRANSACTION_TYPES,
     RedemptionCalculationError,
     RedemptionCalculationReasonCode,
@@ -32,6 +33,7 @@ from .linked_event_validation import (
 
 __all__ = [
     "REDEMPTION_ACCRUED_INTEREST_COMPONENT",
+    "REDEMPTION_CORRECTION_OWNED_OPTIONAL_FIELDS",
     "REDEMPTION_ELIGIBLE_ASSET_CLASSES",
     "REDEMPTION_ELIGIBLE_PRODUCT_TYPES_BY_TRANSACTION",
     "REDEMPTION_TRANSACTION_TYPES",

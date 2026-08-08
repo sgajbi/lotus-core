@@ -66,7 +66,12 @@ async def coordinate_cost_processing_effects(
             or linking.product_leg.transaction_id == corrected_transaction_id
         )
         prior_interest = None
-        if accrued_interest is None and reconcile_prior_interest:
+        correction_requires_prior_interest = (
+            linking.product_leg.transaction_id == corrected_transaction_id
+        )
+        if reconcile_prior_interest and (
+            accrued_interest is None or correction_requires_prior_interest
+        ):
             prior_interest = await transaction_state.get_booked_transaction(
                 redemption_accrued_interest_transaction_id(linking.product_leg.transaction_id),
                 portfolio_id=linking.product_leg.portfolio_id,
