@@ -30,6 +30,7 @@ from tests.test_support.managed_compose_run import (  # noqa: E402
     ManagedComposeRun,
     prepare_managed_compose_run,
 )
+from tools.lot_evidence_cleanup import build_lot_evidence_cleanup_statements  # noqa: E402
 
 
 @dataclass(slots=True)
@@ -114,6 +115,10 @@ def build_smoke_cleanup_sql() -> str:
             "delete from position_timeseries where portfolio_id like 'PORT_SMOKE_%';",
             "delete from position_history where portfolio_id like 'PORT_SMOKE_%';",
             "delete from position_state where portfolio_id like 'PORT_SMOKE_%';",
+            *build_lot_evidence_cleanup_statements(
+                portfolio_selector="PORT_SMOKE_",
+                match="prefix",
+            ),
             "delete from position_lot_state where portfolio_id like 'PORT_SMOKE_%';",
             "delete from average_cost_pool_state where portfolio_id like 'PORT_SMOKE_%';",
             "delete from cost_basis_processing_state where portfolio_id like 'PORT_SMOKE_%';",

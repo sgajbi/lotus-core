@@ -813,6 +813,25 @@ def test_portfolio_seed_cleanup_sql_removes_portfolio_owned_state_before_reseed(
 
     assert "delete from transactions where portfolio_id = 'PB_SG_GLOBAL_BAL_001';" in sql
     assert "delete from position_timeseries where portfolio_id = 'PB_SG_GLOBAL_BAL_001';" in sql
+    dependent_lot_tables = (
+        "lot_disposal_allocations",
+        "lot_basis_transfer_allocations",
+        "lot_amortized_cost_periods",
+        "lot_disposal_receipts",
+        "lot_basis_transfer_receipts",
+        "lot_amortized_cost_authority",
+        "lot_amortized_cost_profiles",
+    )
+    for table in dependent_lot_tables:
+        assert f"delete from {table}" in sql
+    lot_delete_index = sql.index("delete from position_lot_state")
+    assert all(
+        sql.index(f"delete from {table}") < lot_delete_index for table in dependent_lot_tables
+    )
+    profile_unbind_index = sql.index("update position_lot_state set")
+    profile_delete_index = sql.index("delete from lot_amortized_cost_profiles")
+    assert profile_unbind_index < profile_delete_index < lot_delete_index
+    assert sql.count("where portfolio_id = 'PB_SG_GLOBAL_BAL_001'") >= 8
     assert "delete from average_cost_pool_state where portfolio_id = 'PB_SG_GLOBAL_BAL_001';" in sql
     assert (
         "delete from cost_basis_processing_state where portfolio_id = 'PB_SG_GLOBAL_BAL_001';"
