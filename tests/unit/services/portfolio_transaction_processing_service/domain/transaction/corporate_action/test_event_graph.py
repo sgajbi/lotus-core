@@ -114,6 +114,32 @@ def test_structural_validation_does_not_claim_lone_target_is_business_ready() ->
     assert plan.status.value != "READY"
 
 
+def test_dependency_order_does_not_change_child_definition_identity() -> None:
+    plan = resolve_corporate_action_event_graph(
+        _graph(
+            _child("SOURCE-A", "SPIN_OFF", role="SOURCE_POSITION_REDUCE"),
+            _child("SOURCE-B", "SPIN_OFF", role="SOURCE_POSITION_REDUCE"),
+            _child(
+                "TARGET",
+                "SPIN_IN",
+                role="TARGET_POSITION_ADD",
+                dependencies=("SOURCE-A", "SOURCE-B"),
+            ),
+            _child(
+                "TARGET",
+                "SPIN_IN",
+                role="TARGET_POSITION_ADD",
+                dependencies=("SOURCE-B", "SOURCE-A"),
+            ),
+        )
+    )
+
+    assert plan.status == CorporateActionEventStructuralStatus.INVALID
+    assert [finding.reason for finding in plan.findings] == [
+        CorporateActionEventGraphReason.DUPLICATE_CHILD_ID
+    ]
+
+
 @pytest.mark.parametrize(
     ("children", "reason"),
     [

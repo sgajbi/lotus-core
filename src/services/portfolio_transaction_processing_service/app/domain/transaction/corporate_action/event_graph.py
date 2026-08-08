@@ -45,6 +45,7 @@ class CorporateActionEventChild:
     child_role: str
     dependency_transaction_ids: tuple[str, ...] = ()
     child_sequence_hint: int | None = None
+    source_instrument_id: str | None = None
     target_instrument_id: str | None = None
 
     def __post_init__(self) -> None:
@@ -85,6 +86,12 @@ class CorporateActionEventChild:
                 self,
                 "target_instrument_id",
                 _required_text(self.target_instrument_id, "target_instrument_id"),
+            )
+        if self.source_instrument_id is not None:
+            object.__setattr__(
+                self,
+                "source_instrument_id",
+                _required_text(self.source_instrument_id, "source_instrument_id"),
             )
 
 
@@ -207,7 +214,8 @@ def _directed_node(child: CorporateActionEventChild) -> DirectedEventNode:
     payload = {
         "child_role": child.child_role,
         "child_sequence_hint": child.child_sequence_hint,
-        "dependency_transaction_ids": list(child.dependency_transaction_ids),
+        "dependency_transaction_ids": sorted(child.dependency_transaction_ids),
+        "source_instrument_id": child.source_instrument_id,
         "target_instrument_id": child.target_instrument_id,
         "transaction_id": child.transaction_id,
         "transaction_type": child.transaction_type,

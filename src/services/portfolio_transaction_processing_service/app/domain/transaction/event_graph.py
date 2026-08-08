@@ -107,7 +107,7 @@ def resolve_directed_event_graph(nodes: Iterable[DirectedEventNode]) -> Directed
             DirectedEventGraphFinding(
                 reason=(
                     DirectedEventGraphReason.DUPLICATE_NODE_ID
-                    if existing == node
+                    if existing.definition_fingerprint == node.definition_fingerprint
                     else DirectedEventGraphReason.CONFLICTING_NODE_DEFINITION
                 ),
                 node_ids=(node.node_id,),
