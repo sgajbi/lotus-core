@@ -2681,8 +2681,15 @@ Most relevant current governance:
      and run only after persistence succeeds. Do not restore the retired
      `portfolio_common.ca_bundle_a_validation`, `ca_bundle_a_reconciliation`, or reason-code facades.
      This is design modularity inside the unified transaction-processing deployable, not a new
-     runtime service. Issues #450, #480, and #481 retain partial-allocation, parent-event graph, and
-     lot-lineage closure.
+     runtime service. For basis-only `SPIN_OFF` and `DEMERGER_OUT`, fail before job creation unless
+     target transaction and instrument references are complete. Reconcile the linked group through
+     `CORPORATE_ACTION_BASIS_CONSERVATION@1.0.0`: retained target basis equals incoming target basis
+     less explicit fractional basis, and retained target plus fractional, cash-consideration, and
+     governed adjustment basis must equal source basis out. Bind canonical per-child input lineage,
+     exclude only recognized generated cash-settlement adjustments, and fail closed on every other
+     adjustment. Expose this evidence through the existing reconciliation-run summary rather than a
+     duplicate endpoint. Issues #480 and #481 retain the broader parent-event graph and lot-lineage
+     closure.
 176. Transaction and product lifecycle publication is governed by
      `contracts/transaction-processing/transaction-capability-catalog.v1.json`, refreshed with
      `python scripts/transaction_processing/generate_capability_catalog.py`, and blocked by
