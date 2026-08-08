@@ -52,6 +52,7 @@ async def test_mixed_demerger_conserves_basis_and_balances_product_flows(
     linked_group_id = "GROUP-MIXED-DEMERGER-01"
     parent_reference = "PARENT-MIXED-DEMERGER-01"
     cash_settlement_id = "CASH-SETTLEMENT-MIXED-DEMERGER-01"
+    fractional_cash_settlement_id = "CASH-SETTLEMENT-MIXED-DEMERGER-CIL-01"
     transaction_time = datetime(2026, 7, 5, 10, 0, tzinfo=timezone.utc)
 
     acquisition = booked_transaction_event(
@@ -119,6 +120,53 @@ async def test_mixed_demerger_conserves_basis_and_balances_product_flows(
         synthetic_flow_price_source="UPSTREAM",
         synthetic_flow_source="UPSTREAM_PROVIDED",
     )
+    fractional_cash_settlement = booked_transaction_event(
+        transaction_id=fractional_cash_settlement_id,
+        portfolio_id=portfolio_id,
+        security_id=cash_security_id,
+        transaction_date=transaction_time,
+        transaction_type="ADJUSTMENT",
+        quantity="0",
+        price="0",
+        gross_amount="12",
+        economic_event_id=economic_event_id,
+        linked_transaction_group_id=linked_group_id,
+        parent_event_reference=parent_reference,
+        movement_direction="INFLOW",
+        originating_transaction_id="CASH-IN-LIEU-MIXED-01",
+        originating_transaction_type="CASH_IN_LIEU",
+        adjustment_reason="CASH_IN_LIEU_SETTLEMENT",
+        link_type="CASH_IN_LIEU_TO_CASH",
+    )
+    cash_in_lieu = booked_transaction_event(
+        transaction_id="CASH-IN-LIEU-MIXED-01",
+        portfolio_id=portfolio_id,
+        security_id=target_security_id,
+        transaction_date=transaction_time,
+        transaction_type="CASH_IN_LIEU",
+        quantity="1",
+        price="12",
+        gross_amount="12",
+        economic_event_id=economic_event_id,
+        linked_transaction_group_id=linked_group_id,
+        parent_event_reference=parent_reference,
+        linked_cash_transaction_id=fractional_cash_settlement_id,
+        external_cash_transaction_id=fractional_cash_settlement_id,
+        cash_entry_mode="UPSTREAM_PROVIDED",
+        allocated_cost_basis_local=Decimal("10"),
+        allocated_cost_basis_base=Decimal("10"),
+        has_synthetic_flow=True,
+        synthetic_flow_effective_date=date(2026, 7, 5),
+        synthetic_flow_amount_local=Decimal("-12"),
+        synthetic_flow_currency="USD",
+        synthetic_flow_amount_base=Decimal("-12"),
+        synthetic_flow_price_used=Decimal("12"),
+        synthetic_flow_quantity_used=Decimal("1"),
+        synthetic_flow_valuation_method="MVT_PRICE_X_QTY",
+        synthetic_flow_classification="POSITION_CASH_IN_LIEU_OUT",
+        synthetic_flow_price_source="UPSTREAM",
+        synthetic_flow_source="UPSTREAM_PROVIDED",
+    )
     cash_settlement = booked_transaction_event(
         transaction_id=cash_settlement_id,
         portfolio_id=portfolio_id,
@@ -180,7 +228,15 @@ async def test_mixed_demerger_conserves_basis_and_balances_product_flows(
     context = transaction_processing_test_context(async_db_session)
 
     results = []
-    events = (acquisition, source_out, target_in, cash_settlement, cash_consideration)
+    events = (
+        acquisition,
+        source_out,
+        target_in,
+        fractional_cash_settlement,
+        cash_in_lieu,
+        cash_settlement,
+        cash_consideration,
+    )
     for offset, event in enumerate(events, start=9701):
         results.append(
             await persist_and_process_booked_transaction(
@@ -194,7 +250,7 @@ async def test_mixed_demerger_conserves_basis_and_balances_product_flows(
     duplicate = await process_booked_transaction(
         context=context,
         event=cash_consideration,
-        event_id="transactions.persisted-0-9705",
+        event_id="transactions.persisted-0-9707",
         correlation_id="corr-cash-consideration-mixed-01",
     )
 
@@ -210,6 +266,7 @@ async def test_mixed_demerger_conserves_basis_and_balances_product_flows(
                             [
                                 source_out.transaction_id,
                                 target_in.transaction_id,
+                                cash_in_lieu.transaction_id,
                                 cash_consideration.transaction_id,
                             ]
                         )
@@ -235,7 +292,11 @@ async def test_mixed_demerger_conserves_basis_and_balances_product_flows(
                 await verification_session.execute(
                     select(PositionHistory)
                     .where(PositionHistory.portfolio_id == portfolio_id)
-                    .order_by(PositionHistory.security_id, PositionHistory.position_date)
+                    .order_by(
+                        PositionHistory.security_id,
+                        PositionHistory.position_date,
+                        PositionHistory.id,
+                    )
                 )
             )
             .scalars()
@@ -283,6 +344,7 @@ async def test_mixed_demerger_conserves_basis_and_balances_product_flows(
     source_transaction = transaction_by_id[source_out.transaction_id]
     target_transaction = transaction_by_id[target_in.transaction_id]
     cash_transaction = transaction_by_id[cash_consideration.transaction_id]
+    fractional_transaction = transaction_by_id[cash_in_lieu.transaction_id]
     assert source_transaction.net_cost == Decimal("-300")
     assert target_transaction.net_cost == Decimal("250")
     assert cash_transaction.allocated_cost_basis_local == Decimal("50")
@@ -297,14 +359,20 @@ async def test_mixed_demerger_conserves_basis_and_balances_product_flows(
     assert cash_transaction.realized_capital_pnl_base == Decimal("200")
     assert cash_transaction.realized_fx_pnl_base == Decimal("0")
     assert cash_transaction.realized_total_pnl_base == Decimal("200")
+    assert fractional_transaction.allocated_cost_basis_local == Decimal("10")
+    assert fractional_transaction.net_cost_local == Decimal("-10")
+    assert fractional_transaction.realized_total_pnl_local == Decimal("2")
 
     lot_by_source = {lot.source_transaction_id: lot for lot in lots}
     assert lot_by_source[acquisition.transaction_id].open_quantity == Decimal("100")
     assert lot_by_source[acquisition.transaction_id].lot_cost_base == Decimal("700")
-    assert lot_by_source[target_in.transaction_id].open_quantity == Decimal("25")
-    assert lot_by_source[target_in.transaction_id].lot_cost_base == Decimal("250")
-    assert sum(lot.lot_cost_base for lot in lots) + cash_transaction.allocated_cost_basis_base == (
-        Decimal("1000")
+    assert lot_by_source[target_in.transaction_id].open_quantity == Decimal("24")
+    assert lot_by_source[target_in.transaction_id].lot_cost_base == Decimal("240")
+    assert (
+        sum(lot.lot_cost_base for lot in lots)
+        + cash_transaction.allocated_cost_basis_base
+        + fractional_transaction.allocated_cost_basis_base
+        == Decimal("1000")
     )
 
     latest_position_by_security = {
@@ -315,25 +383,38 @@ async def test_mixed_demerger_conserves_basis_and_balances_product_flows(
     }
     assert latest_position_by_security[source_security_id].quantity == Decimal("100")
     assert latest_position_by_security[source_security_id].cost_basis == Decimal("700")
-    assert latest_position_by_security[target_security_id].quantity == Decimal("25")
-    assert latest_position_by_security[target_security_id].cost_basis == Decimal("250")
-    assert latest_position_by_security[cash_security_id].quantity == Decimal("250")
-    assert latest_position_by_security[cash_security_id].cost_basis == Decimal("250")
+    assert latest_position_by_security[target_security_id].quantity == Decimal("24")
+    assert latest_position_by_security[target_security_id].cost_basis == Decimal("240")
+    assert latest_position_by_security[cash_security_id].quantity == Decimal("262")
+    assert latest_position_by_security[cash_security_id].cost_basis == Decimal("262")
 
     flow_by_transaction = {flow.transaction_id: flow for flow in flows}
     assert flow_by_transaction[source_out.transaction_id].amount == Decimal("-1450")
     assert flow_by_transaction[target_in.transaction_id].amount == Decimal("1200")
     assert flow_by_transaction[cash_consideration.transaction_id].amount == Decimal("250")
+    assert flow_by_transaction[cash_in_lieu.transaction_id].amount == Decimal("-12")
     assert (
         flow_by_transaction[cash_consideration.transaction_id].classification
         == "CORPORATE_ACTION_PROCEEDS"
     )
-    product_flows = [flow for flow in flows if flow.is_position_flow]
-    assert sum(flow.amount for flow in product_flows) == Decimal("0")
+    demerger_product_flows = [
+        flow
+        for flow in flows
+        if flow.transaction_id
+        in {source_out.transaction_id, target_in.transaction_id, cash_consideration.transaction_id}
+    ]
+    assert sum(flow.amount for flow in demerger_product_flows) == Decimal("0")
     settlement_flow = flow_by_transaction[cash_settlement_id]
     assert settlement_flow.amount == Decimal("250")
     assert settlement_flow.is_position_flow is False
     assert settlement_flow.is_portfolio_flow is False
+    fractional_settlement_flow = flow_by_transaction[fractional_cash_settlement_id]
+    assert fractional_settlement_flow.amount == Decimal("12")
+    assert fractional_settlement_flow.is_position_flow is False
+    assert fractional_settlement_flow.is_portfolio_flow is False
+    assert flow_by_transaction[
+        cash_in_lieu.transaction_id
+    ].amount + fractional_settlement_flow.amount == Decimal("0")
 
     balanced_runs = [
         run
@@ -344,7 +425,13 @@ async def test_mixed_demerger_conserves_basis_and_balances_product_flows(
     balanced_summary = balanced_runs[-1].summary
     assert balanced_summary["source_basis_out_local"] == "300.0000000000"
     assert balanced_summary["target_basis_in_local"] == "250.0000000000"
-    assert balanced_summary["cash_basis_local"] == "50.0000000000"
+    assert balanced_summary["target_basis_retained_local"] == "240.0000000000"
+    assert balanced_summary["cash_consideration_basis_local"] == "50.0000000000"
+    assert balanced_summary["fractional_basis_local"] == "10.0000000000"
+    assert balanced_summary["cash_basis_local"] == "60.0000000000"
+    assert balanced_summary["excluded_cash_settlement_adjustment_count"] == 2
+    assert balanced_summary["unsupported_adjustment_count"] == 0
+    assert len(balanced_summary["input_lineage"]) == 6
     assert balanced_summary["net_basis_delta_local"] == "0E-10"
     assert balanced_summary["passed"] is True
     assert not any(
