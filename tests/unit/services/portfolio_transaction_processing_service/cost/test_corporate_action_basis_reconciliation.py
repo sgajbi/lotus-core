@@ -119,7 +119,37 @@ def test_corporate_action_basis_reconciliation_balances_multi_target_fractional_
     assert result.fractional_basis_local == Decimal("10")
     assert result.cash_consideration_basis_local == Decimal(0)
     assert result.cash_basis_local == Decimal("10")
+    assert result.excluded_cash_settlement_adjustment_count == 1
+    assert result.unsupported_adjustment_count == 0
     assert result.net_basis_delta_local == Decimal(0)
+
+
+def test_corporate_action_basis_reconciliation_fails_closed_for_ambiguous_adjustment() -> None:
+    source = replace(
+        _booked_transaction(
+            transaction_id="SRC_01", transaction_type="SPIN_OFF", gross_amount="100"
+        ),
+        net_cost_local=Decimal("-100"),
+    )
+    target = replace(
+        _booked_transaction(
+            transaction_id="TGT_01", transaction_type="SPIN_IN", gross_amount="100"
+        ),
+        net_cost_local=Decimal("100"),
+    )
+    ambiguous_adjustment = replace(
+        _booked_transaction(
+            transaction_id="ADJ_01", transaction_type="ADJUSTMENT", gross_amount="5"
+        ),
+        movement_direction="INFLOW",
+        adjustment_reason="MANUAL_BASIS_OVERRIDE",
+    )
+
+    result = reconcile_corporate_action_basis((source, target, ambiguous_adjustment))
+
+    assert result.status == "unsupported_adjustment"
+    assert result.unsupported_adjustment_count == 1
+    assert result.excluded_cash_settlement_adjustment_count == 0
 
 
 def test_corporate_action_basis_reconciliation_distinguishes_incomplete_evidence() -> None:

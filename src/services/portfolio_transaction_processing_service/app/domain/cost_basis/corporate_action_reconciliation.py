@@ -28,6 +28,7 @@ class CorporateActionBasisReconciliationStatus(StrEnum):
     BASIS_MISMATCH = "basis_mismatch"
     INSUFFICIENT_CASH_BASIS = "insufficient_cash_basis"
     INSUFFICIENT_LEGS = "insufficient_legs"
+    UNSUPPORTED_ADJUSTMENT = "unsupported_adjustment"
 
 
 class CorporateActionLegLinkageFindingType(StrEnum):
@@ -66,6 +67,8 @@ class CorporateActionBasisReconciliation:
     cash_consideration_basis_local: Decimal
     fractional_basis_local: Decimal
     missing_cash_basis_count: int
+    excluded_cash_settlement_adjustment_count: int
+    unsupported_adjustment_count: int
     net_basis_delta_local: Decimal
     basis_tolerance: Decimal
 
@@ -82,6 +85,8 @@ class _BasisTotals:
     cash_consideration_basis_local: Decimal = Decimal(0)
     fractional_basis_local: Decimal = Decimal(0)
     missing_cash_basis_count: int = 0
+    excluded_cash_settlement_adjustment_count: int = 0
+    unsupported_adjustment_count: int = 0
 
 
 def reconcile_corporate_action_basis(
@@ -109,6 +114,10 @@ def reconcile_corporate_action_basis(
         cash_consideration_basis_local=totals.cash_consideration_basis_local,
         fractional_basis_local=totals.fractional_basis_local,
         missing_cash_basis_count=totals.missing_cash_basis_count,
+        excluded_cash_settlement_adjustment_count=(
+            totals.excluded_cash_settlement_adjustment_count
+        ),
+        unsupported_adjustment_count=totals.unsupported_adjustment_count,
         net_basis_delta_local=net_basis_delta_local,
         basis_tolerance=basis_tolerance,
     )
@@ -348,6 +357,22 @@ def _accumulate(totals: _BasisTotals, transaction: BookedTransaction) -> None:
         else:
             totals.fractional_basis_local += transaction.allocated_cost_basis_local
             totals.cash_basis_local += transaction.allocated_cost_basis_local
+    elif transaction_type == "ADJUSTMENT":
+        if _is_generated_cash_settlement_adjustment(transaction):
+            totals.excluded_cash_settlement_adjustment_count += 1
+        else:
+            totals.unsupported_adjustment_count += 1
+
+
+def _is_generated_cash_settlement_adjustment(transaction: BookedTransaction) -> bool:
+    originating_type = normalize_corporate_action_transaction_type(
+        transaction.originating_transaction_type
+    )
+    adjustment_reason = str(transaction.adjustment_reason or "").strip().upper()
+    return originating_type in {"CASH_IN_LIEU", "CASH_CONSIDERATION"} and adjustment_reason in {
+        "CASH_IN_LIEU_SETTLEMENT",
+        "CASH_CONSIDERATION_SETTLEMENT",
+    }
 
 
 def _status(
@@ -359,6 +384,8 @@ def _status(
         return CorporateActionBasisReconciliationStatus.INSUFFICIENT_LEGS
     if totals.missing_cash_basis_count > 0:
         return CorporateActionBasisReconciliationStatus.INSUFFICIENT_CASH_BASIS
+    if totals.unsupported_adjustment_count > 0:
+        return CorporateActionBasisReconciliationStatus.UNSUPPORTED_ADJUSTMENT
     if abs(net_delta) <= tolerance:
         return CorporateActionBasisReconciliationStatus.BALANCED
     return CorporateActionBasisReconciliationStatus.BASIS_MISMATCH

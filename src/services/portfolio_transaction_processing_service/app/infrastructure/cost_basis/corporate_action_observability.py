@@ -68,6 +68,10 @@ class PrometheusCorporateActionReconciliationObserver:
                 "cash_consideration_basis_local": str(observation.cash_consideration_basis_local),
                 "fractional_basis_local": str(observation.fractional_basis_local),
                 "missing_cash_basis_count": observation.missing_cash_basis_count,
+                "excluded_cash_settlement_adjustment_count": (
+                    observation.excluded_cash_settlement_adjustment_count
+                ),
+                "unsupported_adjustment_count": observation.unsupported_adjustment_count,
                 "net_basis_delta_local": str(observation.net_basis_delta_local),
                 "basis_tolerance": str(observation.basis_tolerance),
                 "missing_dependency_reference_ids": list(

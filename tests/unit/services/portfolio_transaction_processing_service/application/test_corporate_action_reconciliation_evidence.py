@@ -105,6 +105,9 @@ def test_balanced_evidence_has_no_findings_and_preserves_run_contract() -> None:
         "fractional_basis_local": "0",
         "net_basis_delta_local": "0",
         "missing_cash_basis_count": 0,
+        "excluded_cash_settlement_adjustment_count": 0,
+        "unsupported_adjustment_count": 0,
+        "governed_adjustment_basis_local": "0",
         "missing_dependency_count": 0,
         "linkage_finding_count": 0,
         "linked_transaction_group_id": "LTG-CA-DEM-01",
@@ -152,6 +155,32 @@ def test_fractional_cash_basis_is_explicit_in_reconciliation_evidence() -> None:
     assert evidence.run.summary["cash_consideration_basis_local"] == "0"
     assert evidence.run.summary["cash_basis_local"] == "10"
     assert evidence.run.summary["examined_count"] == 3
+
+
+def test_ambiguous_adjustment_emits_stable_unsupported_reason() -> None:
+    source = _transaction(
+        transaction_id="CA-OUT-01", transaction_type="SPIN_OFF", net_cost_local="-100"
+    )
+    target = _transaction(
+        transaction_id="CA-IN-01", transaction_type="SPIN_IN", net_cost_local="100"
+    )
+    adjustment = replace(
+        _transaction(transaction_id="CA-ADJ-01", transaction_type="ADJUSTMENT", net_cost_local="5"),
+        adjustment_reason="MANUAL_BASIS_OVERRIDE",
+        movement_direction="INFLOW",
+    )
+
+    evidence = _evidence(source, target, adjustment)
+
+    assert evidence.run.summary["reconciliation_status"] == "unsupported_adjustment"
+    assert evidence.run.summary["unsupported_adjustment_count"] == 1
+    assert evidence.run.summary["governed_adjustment_basis_local"] == "0"
+    assert evidence.findings[0].detail["reason_code"] == (
+        "CA_BUNDLE_A_UNSUPPORTED_BASIS_ADJUSTMENT"
+    )
+    assert evidence.findings[0].repair_recommendation == (
+        "REBOOK_WITH_SUPPORTED_CORPORATE_ACTION_BASIS_LEGS"
+    )
 
 
 @pytest.mark.parametrize(
