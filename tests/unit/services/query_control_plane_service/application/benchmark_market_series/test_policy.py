@@ -5,7 +5,7 @@ from datetime import date
 import pytest
 from portfolio_common.reference_data_paging import ReferencePageRequest
 
-from src.services.query_control_plane_service.app.application.benchmark_market_series.policy import (
+from src.services.query_control_plane_service.app.application.benchmark_market_series.policy import (  # noqa: E501
     build_evidence_plan,
     next_page_token_payload,
     resolve_fx_context,

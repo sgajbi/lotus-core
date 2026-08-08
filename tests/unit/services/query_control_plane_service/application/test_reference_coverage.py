@@ -11,7 +11,9 @@ from src.services.query_control_plane_service.app.application.reference_coverage
     ReferenceCoverageService,
 )
 from src.services.query_control_plane_service.app.contracts.common import IntegrationWindow
-from src.services.query_control_plane_service.app.contracts.reference_coverage import CoverageRequest
+from src.services.query_control_plane_service.app.contracts.reference_coverage import (
+    CoverageRequest,
+)
 from src.services.query_control_plane_service.app.domain.benchmark_definition import (
     BenchmarkComponentEvidence,
 )
@@ -19,7 +21,9 @@ from src.services.query_control_plane_service.app.domain.benchmark_return_series
     BenchmarkReturnEvidence,
 )
 from src.services.query_control_plane_service.app.domain.index_series import IndexPriceEvidence
-from src.services.query_control_plane_service.app.domain.risk_free_series import RiskFreeRateEvidence
+from src.services.query_control_plane_service.app.domain.risk_free_series import (
+    RiskFreeRateEvidence,
+)
 from src.services.query_control_plane_service.app.ports.benchmark_definition import (
     BenchmarkDefinitionReader,
 )

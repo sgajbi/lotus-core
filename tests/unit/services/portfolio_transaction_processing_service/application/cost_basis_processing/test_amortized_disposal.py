@@ -17,7 +17,7 @@ from src.services.portfolio_transaction_processing_service.app.domain.cost_basis
     AmortizedCostCarryState,
     OpenLotState,
 )
-from src.services.portfolio_transaction_processing_service.app.domain.fixed_income_book_cost import (
+from src.services.portfolio_transaction_processing_service.app.domain.fixed_income_book_cost import (  # noqa: E501
     AmortizedCostEligibilityReason,
     lot_amortized_cost_profile_id,
     materialize_active_lot_amortized_cost_profile,

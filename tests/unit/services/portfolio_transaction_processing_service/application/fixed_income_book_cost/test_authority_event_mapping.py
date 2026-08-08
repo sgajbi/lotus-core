@@ -19,7 +19,7 @@ from src.services.portfolio_transaction_processing_service.app.application.fixed
     UnsupportedFixedIncomeBookCostAuthorityMappingError,
     map_fixed_income_book_cost_authority_event,
 )
-from src.services.portfolio_transaction_processing_service.app.domain.fixed_income_book_cost import (
+from src.services.portfolio_transaction_processing_service.app.domain.fixed_income_book_cost import (  # noqa: E501
     AmortizedCostAssignmentStatus,
     AmortizedCostSourceFactStatus,
     DiscountOriginClassification,

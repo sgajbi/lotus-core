@@ -13,7 +13,7 @@ from src.services.portfolio_transaction_processing_service.app.application.fixed
     ApplyFixedIncomeBookCostAuthorityEventUseCase,
     HandleFixedIncomeBookCostAuthorityEventUseCase,
 )
-from src.services.portfolio_transaction_processing_service.app.domain.fixed_income_book_cost import (
+from src.services.portfolio_transaction_processing_service.app.domain.fixed_income_book_cost import (  # noqa: E501
     AffectedLotDisposalReplayAnchor,
     AmortizedCostEligibilityReason,
     AmortizedCostPolicyRegistry,

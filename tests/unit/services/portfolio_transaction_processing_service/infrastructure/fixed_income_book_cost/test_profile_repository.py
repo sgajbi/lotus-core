@@ -12,7 +12,7 @@ from portfolio_common.database_models import (
 )
 from sqlalchemy.dialects import postgresql
 
-from src.services.portfolio_transaction_processing_service.app.domain.fixed_income_book_cost import (
+from src.services.portfolio_transaction_processing_service.app.domain.fixed_income_book_cost import (  # noqa: E501
     lot_amortized_cost_profile_id,
     materialize_active_lot_amortized_cost_profile,
 )

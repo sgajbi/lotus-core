@@ -10,7 +10,7 @@ import pytest
 from portfolio_common.outbox_repository import OutboxRepository
 from sqlalchemy.dialects import postgresql
 
-from src.services.portfolio_transaction_processing_service.app.domain.fixed_income_book_cost import (
+from src.services.portfolio_transaction_processing_service.app.domain.fixed_income_book_cost import (  # noqa: E501
     AffectedLotDisposalReplayAnchor,
     FixedIncomeBookCostCorrectionReplayIntent,
     FixedIncomeBookCostProfileDecisionEvidence,
