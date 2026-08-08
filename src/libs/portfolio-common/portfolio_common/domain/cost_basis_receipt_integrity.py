@@ -5,7 +5,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Protocol, cast
 
-from .calculation_lineage import canonical_content_hash
+from .calculation_lineage import canonical_content_hash, require_sha256_digest
 from .transaction.numeric_policy import COST_BASIS_STATE_LEDGER_OUTPUT_V1
 
 BASIS_TRANSFER_LINEAGE_ALGORITHM_ID = "cost-basis-lot-basis-transfer-allocation"
@@ -40,6 +40,60 @@ class LotDisposalLineageAllocation(Protocol):
     source_acquisition_date: date
     source_lot_id: str
     source_transaction_id: str
+
+
+class CostBasisReceiptVersion(Protocol):
+    """Structural immutable-ledger header used by every cost-basis receipt family."""
+
+    previous_receipt_content_hash: str | None
+    receipt_content_hash: str
+    receipt_id: str
+    receipt_version: int
+
+
+def verify_cost_basis_receipt_version_chain(
+    receipts: Sequence[CostBasisReceiptVersion],
+) -> None:
+    """Fail closed unless ``receipts`` is one complete ordered root-to-head chain."""
+
+    if not receipts:
+        raise ValueError("receipt version chain must not be empty")
+
+    expected_receipt_id: str | None = None
+    previous_content_hash: str | None = None
+    for expected_version, receipt in enumerate(receipts, start=1):
+        receipt_id = receipt.receipt_id
+        if (
+            not isinstance(receipt_id, str)
+            or not receipt_id
+            or receipt_id.strip() != receipt_id
+        ):
+            raise ValueError("receipt id must be canonical nonblank text")
+        if expected_receipt_id is None:
+            expected_receipt_id = receipt_id
+        elif receipt_id != expected_receipt_id:
+            raise ValueError("receipt version chain contains multiple receipt identities")
+
+        version = receipt.receipt_version
+        if type(version) is not int or version != expected_version:
+            raise ValueError("receipt versions must be contiguous and ordered from one")
+
+        content_hash = require_sha256_digest(
+            receipt.receipt_content_hash,
+            "receipt_content_hash",
+        )
+        predecessor_hash = receipt.previous_receipt_content_hash
+        if expected_version == 1:
+            if predecessor_hash is not None:
+                raise ValueError("first receipt version cannot have a predecessor")
+        else:
+            require_sha256_digest(
+                predecessor_hash,
+                "previous_receipt_content_hash",
+            )
+            if predecessor_hash != previous_content_hash:
+                raise ValueError("receipt version chain hash does not match predecessor")
+        previous_content_hash = content_hash
 
 
 def lot_disposal_allocation_payload(
