@@ -124,6 +124,39 @@ async def test_create_or_update_transaction_rejects_existing_foreign_identity() 
     assert "WHERE" in str(statement.compile())
 
 
+@pytest.mark.asyncio
+async def test_create_or_update_transaction_persists_canonical_generated_identity() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    execute_result = MagicMock()
+    execute_result.scalar_one_or_none.return_value = "SOURCE-1-CASHLEG"
+    db.execute.return_value = execute_result
+    repo = TransactionDBRepository(db)
+    event = TransactionEvent(
+        transaction_id="  SOURCE-1-CASHLEG  ",
+        portfolio_id="  PORT-1  ",
+        instrument_id="CASH-USD",
+        security_id="CASH-USD",
+        transaction_date="2026-05-28T10:00:00Z",
+        transaction_type="ADJUSTMENT",
+        quantity=Decimal("0"),
+        price=Decimal("1"),
+        gross_transaction_amount=Decimal("1000"),
+        trade_currency="USD",
+        currency="USD",
+        originating_transaction_id="  SOURCE-1  ",
+        originating_transaction_type=" buy ",
+        cash_entry_mode="AUTO_GENERATE",
+        link_type="BUY_TO_CASH",
+    )
+
+    persisted = await repo.create_or_update_transaction(event)
+
+    assert persisted.transaction_id == "SOURCE-1-CASHLEG"
+    assert persisted.portfolio_id == "PORT-1"
+    assert persisted.originating_transaction_id == "SOURCE-1"
+    assert persisted.originating_transaction_type == "BUY"
+
+
 def test_transaction_event_to_record_values_excludes_traceparent_envelope() -> None:
     event = TransactionEvent(
         transaction_id="TX_TRACEPARENT_001",

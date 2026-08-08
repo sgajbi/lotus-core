@@ -214,6 +214,45 @@ async def test_same_owner_replay_updates_but_cross_portfolio_reclaim_fails(
 
 
 @pytest.mark.parametrize("family", ["cash", "interest"])
+async def test_padded_generated_identity_replays_against_canonical_row(
+    clean_db,
+    async_db_session: AsyncSession,
+    family: str,
+) -> None:
+    await _seed_portfolios(async_db_session)
+    factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
+    generated = _generated_event(family)
+
+    assert await _persist(factory, generated) == "persisted"
+    padded = generated.model_copy(
+        update={
+            "transaction_id": f"  {generated.transaction_id}  ",
+            "portfolio_id": f"  {generated.portfolio_id}  ",
+            "originating_transaction_id": (f"  {generated.originating_transaction_id}  "),
+            "gross_transaction_amount": Decimal("875"),
+        }
+    )
+    assert await _persist(factory, padded) == "persisted"
+
+    async_db_session.expire_all()
+    rows = (
+        (
+            await async_db_session.execute(
+                select(DBTransaction).where(
+                    DBTransaction.transaction_id == generated.transaction_id
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(rows) == 1
+    assert rows[0].portfolio_id == generated.portfolio_id
+    assert rows[0].originating_transaction_id == generated.originating_transaction_id
+    assert rows[0].gross_transaction_amount == Decimal("875")
+
+
+@pytest.mark.parametrize("family", ["cash", "interest"])
 async def test_generated_owner_rejects_origin_type_reclassification(
     clean_db,
     async_db_session: AsyncSession,

@@ -5,7 +5,10 @@ from datetime import date
 
 from portfolio_common.database_models import CashAccountMaster, Instrument, Portfolio
 from portfolio_common.database_models import Transaction as DBTransaction
-from portfolio_common.domain.transaction import transaction_identity_ownership
+from portfolio_common.domain.transaction import (
+    canonical_transaction_identity_record_values,
+    transaction_identity_ownership,
+)
 from portfolio_common.events import TransactionEvent
 from portfolio_common.infrastructure.persistence.transaction_identity_guard import (
     GeneratedTransactionIdentityCollisionError,
@@ -94,7 +97,11 @@ class TransactionDBRepository:
         UPSERT (INSERT ... ON CONFLICT DO UPDATE) for high performance and concurrency safety.
         """
         try:
-            event_dict = transaction_event_to_record_values(event)
+            ownership = transaction_identity_ownership(event)
+            event_dict = canonical_transaction_identity_record_values(
+                transaction_event_to_record_values(event),
+                ownership,
+            )
 
             # The statement to execute.
             stmt = pg_insert(DBTransaction).values(**event_dict)
@@ -105,7 +112,6 @@ class TransactionDBRepository:
             update_dict = {field: getattr(stmt.excluded, field) for field in update_fields}
 
             # The final UPSERT statement with the conflict resolution.
-            ownership = transaction_identity_ownership(event)
             final_stmt = stmt.on_conflict_do_update(
                 index_elements=["transaction_id"],
                 set_=update_dict,
@@ -114,10 +120,10 @@ class TransactionDBRepository:
 
             persisted_id = (await self.db.execute(final_stmt)).scalar_one_or_none()
             if persisted_id is None:
-                raise GeneratedTransactionIdentityCollisionError(event.transaction_id)
+                raise GeneratedTransactionIdentityCollisionError(ownership.transaction_id)
             logger.debug(
                 "Transaction upsert staged.",
-                extra={"transaction_id": event.transaction_id},
+                extra={"transaction_id": ownership.transaction_id},
             )
 
             # Note: Since UPSERT doesn't easily return the model, we can assume success.
