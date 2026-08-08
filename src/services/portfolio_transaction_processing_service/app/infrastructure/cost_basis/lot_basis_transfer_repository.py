@@ -13,8 +13,9 @@ from portfolio_common.database_models import (
 from portfolio_common.domain.cost_basis_method import CostBasisMethod
 from portfolio_common.domain.cost_basis_receipt_integrity import (
     cost_basis_allocation_content_hash,
+    verify_cost_basis_receipt_version_chain,
 )
-from sqlalchemy import and_, func, select, tuple_
+from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -60,22 +61,31 @@ class SqlAlchemyCostBasisLotBasisTransferRepository:
         )
         candidates_by_transaction = {state.source_transaction_id: state for state in receipt_states}
         transaction_ids = tuple(scopes_by_transaction)
-        latest = await self._load_latest_receipts(transaction_ids)
-        latest_allocations = await self._load_allocations(tuple(latest.values()))
-        previous = await self._load_previous_receipts(tuple(latest.values()))
-        verified_latest = {
-            transaction_id: _verified_state(
-                record,
-                allocations=latest_allocations.get(
-                    (str(record.receipt_id), int(record.receipt_version)),
-                    (),
-                ),
-                previous_record=previous.get(
-                    (str(record.receipt_id), int(record.receipt_version) - 1)
-                ),
-            )
-            for transaction_id, record in latest.items()
-        }
+        chains = await self._load_receipt_chains(transaction_ids)
+        persisted_records = tuple(record for chain in chains.values() for record in chain)
+        persisted_allocations = await self._load_allocations(persisted_records)
+        latest: dict[str, LotBasisTransferReceiptRecord] = {}
+        verified_latest: dict[str, LotBasisTransferReceiptState] = {}
+        for transaction_id, chain in chains.items():
+            try:
+                verify_cost_basis_receipt_version_chain(chain)
+                verified_states = tuple(
+                    _verified_state(
+                        record,
+                        allocations=persisted_allocations.get(
+                            (str(record.receipt_id), int(record.receipt_version)),
+                            (),
+                        ),
+                        previous_record=chain[index - 1] if index else None,
+                    )
+                    for index, record in enumerate(chain)
+                )
+            except ValueError as exc:
+                raise CorruptLotBasisTransferReceiptError(
+                    f"persisted lot basis-transfer receipt chain is corrupt: {transaction_id}"
+                ) from exc
+            latest[transaction_id] = chain[-1]
+            verified_latest[transaction_id] = verified_states[-1]
 
         header_values: list[dict[str, object]] = []
         allocation_values: list[dict[str, object]] = []
@@ -147,66 +157,35 @@ class SqlAlchemyCostBasisLotBasisTransferRepository:
                 "lot basis-transfer receipt version collided during append"
             ) from exc
 
-    async def _load_latest_receipts(
+    async def _load_receipt_chains(
         self,
         transaction_ids: tuple[str, ...],
-    ) -> dict[str, LotBasisTransferReceiptRecord]:
-        record = LotBasisTransferReceiptRecord
-        latest_versions = (
-            select(
-                record.source_transaction_id.label("source_transaction_id"),
-                func.max(record.receipt_version).label("receipt_version"),
-            )
-            .where(record.source_transaction_id.in_(transaction_ids))
-            .group_by(record.source_transaction_id)
-            .subquery()
-        )
-        rows = (
-            await self._session.scalars(
-                select(record).join(
-                    latest_versions,
-                    and_(
-                        record.source_transaction_id == latest_versions.c.source_transaction_id,
-                        record.receipt_version == latest_versions.c.receipt_version,
-                    ),
-                )
-            )
-        ).all()
-        return {str(row.source_transaction_id): row for row in rows}
-
-    async def _load_previous_receipts(
-        self,
-        latest: tuple[LotBasisTransferReceiptRecord, ...],
-    ) -> dict[tuple[str, int], LotBasisTransferReceiptRecord]:
-        identities = [
-            (str(record.receipt_id), int(record.receipt_version) - 1)
-            for record in latest
-            if int(record.receipt_version) > 1
-        ]
-        if not identities:
-            return {}
+    ) -> dict[str, tuple[LotBasisTransferReceiptRecord, ...]]:
         record = LotBasisTransferReceiptRecord
         rows = (
             await self._session.scalars(
-                select(record).where(
-                    tuple_(record.receipt_id, record.receipt_version).in_(identities)
-                )
+                select(record)
+                .where(record.source_transaction_id.in_(transaction_ids))
+                .order_by(record.source_transaction_id, record.receipt_version)
             )
         ).all()
-        return {(str(row.receipt_id), int(row.receipt_version)): row for row in rows}
+        grouped: defaultdict[str, list[LotBasisTransferReceiptRecord]] = defaultdict(list)
+        for row in rows:
+            grouped[str(row.source_transaction_id)].append(row)
+        return {transaction_id: tuple(items) for transaction_id, items in grouped.items()}
 
     async def _load_allocations(
         self,
-        latest: tuple[LotBasisTransferReceiptRecord, ...],
+        receipts: tuple[LotBasisTransferReceiptRecord, ...],
     ) -> dict[tuple[str, int], tuple[LotBasisTransferAllocationRecord, ...]]:
-        identities = [(str(record.receipt_id), int(record.receipt_version)) for record in latest]
-        if not identities:
+        receipt_ids = {str(record.receipt_id) for record in receipts}
+        if not receipt_ids:
             return {}
         allocation = LotBasisTransferAllocationRecord
         rows = (
             await self._session.scalars(
                 select(allocation)
-                .where(tuple_(allocation.receipt_id, allocation.receipt_version).in_(identities))
+                .where(allocation.receipt_id.in_(receipt_ids))
                 .order_by(
                     allocation.receipt_id,
                     allocation.receipt_version,

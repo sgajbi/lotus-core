@@ -129,14 +129,11 @@ def _repository_with_latest(
     repository = lot_basis_transfer_repository.SqlAlchemyCostBasisLotBasisTransferRepository(
         session
     )
-    repository._load_latest_receipts = AsyncMock(  # type: ignore[method-assign]
-        return_value={state.source_transaction_id: record}
+    repository._load_receipt_chains = AsyncMock(  # type: ignore[method-assign]
+        return_value={state.source_transaction_id: (record,)}
     )
     repository._load_allocations = AsyncMock(  # type: ignore[method-assign]
         return_value={(state.receipt_id, 1): allocations}
-    )
-    repository._load_previous_receipts = AsyncMock(  # type: ignore[method-assign]
-        return_value={}
     )
     return repository, session
 
@@ -196,6 +193,42 @@ async def test_exact_retry_is_write_neutral() -> None:
 
 
 @pytest.mark.asyncio
+async def test_reconciliation_verifies_every_transfer_version_before_retry() -> None:
+    state = _active_state()
+    chain: list[LotBasisTransferReceiptRecord] = []
+    allocations_by_version: dict[tuple[str, int], tuple[LotBasisTransferAllocationRecord, ...]] = {}
+    previous: LotBasisTransferReceiptRecord | None = None
+    for version in range(1, 65):
+        record, allocations = _persisted_version(state, version=version, previous=previous)
+        chain.append(record)
+        allocations_by_version[(state.receipt_id, version)] = allocations
+        previous = record
+    allocations_by_version[(state.receipt_id, 32)][0].allocation_content_hash = "0" * 64
+
+    session = AsyncMock()
+    repository = lot_basis_transfer_repository.SqlAlchemyCostBasisLotBasisTransferRepository(
+        session
+    )
+    repository._load_receipt_chains = AsyncMock(  # type: ignore[method-assign]
+        return_value={state.source_transaction_id: tuple(chain)}
+    )
+    repository._load_allocations = AsyncMock(  # type: ignore[method-assign]
+        return_value=allocations_by_version
+    )
+
+    with pytest.raises(
+        lot_basis_transfer_repository.CorruptLotBasisTransferReceiptError,
+        match="receipt chain is corrupt",
+    ):
+        await repository.reconcile_basis_transfer_receipts(
+            reconciliation_scopes=(_scope(),),
+            receipt_states=(state,),
+        )
+
+    session.execute.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_changed_receipt_appends_header_and_children() -> None:
     repository, session = _repository_with_latest(_active_state())
 
@@ -231,9 +264,8 @@ async def test_initial_absent_transfer_does_not_create_empty_history() -> None:
     repository = lot_basis_transfer_repository.SqlAlchemyCostBasisLotBasisTransferRepository(
         session
     )
-    repository._load_latest_receipts = AsyncMock(return_value={})  # type: ignore[method-assign]
+    repository._load_receipt_chains = AsyncMock(return_value={})  # type: ignore[method-assign]
     repository._load_allocations = AsyncMock(return_value={})  # type: ignore[method-assign]
-    repository._load_previous_receipts = AsyncMock(return_value={})  # type: ignore[method-assign]
 
     await repository.reconcile_basis_transfer_receipts(
         reconciliation_scopes=(_scope(),),
