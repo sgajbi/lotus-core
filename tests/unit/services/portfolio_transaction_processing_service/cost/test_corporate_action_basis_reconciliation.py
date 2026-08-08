@@ -5,6 +5,8 @@ from datetime import datetime
 from decimal import Decimal
 
 import pytest
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
     reconcile_corporate_action_basis,
@@ -369,3 +371,56 @@ def test_corporate_action_dependency_references_preserve_order() -> None:
     )
 
     assert missing_corporate_action_dependencies(transaction, {"SRC_01"}) == ("TGT_00",)
+
+
+@settings(max_examples=100, deadline=None)
+@given(
+    target_basis_values=st.lists(
+        st.integers(min_value=1, max_value=1_000), min_size=1, max_size=20
+    ),
+    fractional_basis_value=st.integers(min_value=0, max_value=1_000),
+)
+def test_corporate_action_conservation_is_order_independent_for_generated_allocations(
+    target_basis_values: list[int],
+    fractional_basis_value: int,
+) -> None:
+    source_basis = sum(target_basis_values) + fractional_basis_value
+    source = replace(
+        _booked_transaction(
+            transaction_id="SRC_PROPERTY",
+            transaction_type="SPIN_OFF",
+            gross_amount=str(source_basis),
+        ),
+        net_cost_local=Decimal(-source_basis),
+    )
+    targets = tuple(
+        replace(
+            _booked_transaction(
+                transaction_id=f"TGT_PROPERTY_{ordinal:02d}",
+                transaction_type="SPIN_IN",
+                gross_amount=str(basis),
+            ),
+            net_cost_local=Decimal(basis),
+        )
+        for ordinal, basis in enumerate(target_basis_values)
+    )
+    fractional = replace(
+        _booked_transaction(
+            transaction_id="CIL_PROPERTY",
+            transaction_type="CASH_IN_LIEU",
+            gross_amount=str(fractional_basis_value),
+        ),
+        allocated_cost_basis_local=Decimal(fractional_basis_value),
+    )
+
+    forward = reconcile_corporate_action_basis((source, *targets, fractional))
+    reversed_result = reconcile_corporate_action_basis(
+        tuple(reversed((source, *targets, fractional)))
+    )
+
+    assert forward == reversed_result
+    assert forward.status == "balanced"
+    assert forward.source_basis_out_local == Decimal(source_basis)
+    assert forward.target_basis_in_local == sum(map(Decimal, target_basis_values))
+    assert forward.fractional_basis_local == Decimal(fractional_basis_value)
+    assert forward.net_basis_delta_local == 0
