@@ -4,6 +4,7 @@
 .PHONY: test-critical-lifecycle-db
 .PHONY: calculated-output-policy-guard
 .PHONY: test-fixed-income-book-cost-recovery-gate
+.PHONY: test-import-root-guard
 
 LATENCY_SEED_COMPLETION_TIMEOUT_SECONDS ?= 900
 OPENAPI_ARTIFACT_DIR ?= output/openapi
@@ -309,6 +310,7 @@ typecheck:
 
 architecture-guard:
 	$(REPOSITORY_PYTHON) scripts/quality/architecture_boundary_guard.py --strict
+	$(MAKE) test-import-root-guard
 	$(MAKE) domain-layer-guard
 	$(MAKE) testability-architecture-guard
 	$(MAKE) runtime-boundary-decision-guard
@@ -339,6 +341,9 @@ architecture-guard:
 	$(MAKE) ingestion-store-port-guard
 	$(MAKE) event-publisher-port-guard
 	$(MAKE) repository-port-guard
+
+test-import-root-guard:
+	$(REPOSITORY_PYTHON) scripts/quality/test_import_root_guard.py
 
 openapi-gate:
 	$(REPOSITORY_PYTHON) scripts/quality/openapi_quality_gate.py
