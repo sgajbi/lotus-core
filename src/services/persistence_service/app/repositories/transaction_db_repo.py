@@ -115,7 +115,12 @@ class TransactionDBRepository:
             final_stmt = stmt.on_conflict_do_update(
                 index_elements=["transaction_id"],
                 set_=update_dict,
-                where=transaction_identity_update_allowed(DBTransaction, ownership),
+                where=transaction_identity_update_allowed(
+                    DBTransaction,
+                    ownership,
+                    excluded=stmt.excluded,
+                    updated_fields=event_dict,
+                ),
             ).returning(DBTransaction.transaction_id)
 
             persisted_id = (await self.db.execute(final_stmt)).scalar_one_or_none()

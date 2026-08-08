@@ -300,3 +300,49 @@ async def test_incomplete_generated_shape_replays_as_source_owned(
         )
     ).scalar_one()
     assert row.gross_transaction_amount == Decimal("875")
+
+
+@pytest.mark.parametrize("family", ["cash", "interest"])
+async def test_sparse_source_update_cannot_merge_into_generated_ownership(
+    clean_db,
+    async_db_session: AsyncSession,
+    family: str,
+) -> None:
+    await _seed_portfolios(async_db_session)
+    factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
+    generated = _generated_event(family)
+    if family == "cash":
+        incomplete = generated.model_copy(update={"cash_entry_mode": None})
+        sparse_update = generated.model_copy(
+            update={
+                "originating_transaction_id": None,
+                "originating_transaction_type": None,
+                "link_type": None,
+            }
+        )
+    else:
+        incomplete = generated.model_copy(update={"link_type": None})
+        sparse_update = generated.model_copy(
+            update={
+                "originating_transaction_id": None,
+                "originating_transaction_type": None,
+                "component_type": None,
+                "component_id": None,
+            }
+        )
+
+    assert await _persist(factory, incomplete) == "persisted"
+    assert await _persist(factory, sparse_update) == "generated_transaction_identity_collision"
+
+    async_db_session.expire_all()
+    row = (
+        await async_db_session.execute(
+            select(DBTransaction).where(DBTransaction.transaction_id == generated.transaction_id)
+        )
+    ).scalar_one()
+    if family == "cash":
+        assert row.cash_entry_mode is None
+        assert row.originating_transaction_id == generated.originating_transaction_id
+    else:
+        assert row.link_type is None
+        assert row.component_id == generated.component_id

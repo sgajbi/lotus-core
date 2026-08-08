@@ -395,6 +395,8 @@ class SqlAlchemyCostBasisTransactionRepository:
                         where=transaction_identity_update_allowed(
                             DBTransaction,
                             ownership,
+                            excluded=stmt.excluded,
+                            updated_fields=transaction_values,
                         ),
                     ).returning(DBTransaction)
                 )
