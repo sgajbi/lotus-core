@@ -42,19 +42,30 @@ def test_shared_cost_basis_payload_canonicalizes_set_members() -> None:
 
 
 @pytest.mark.asyncio
-async def test_latest_receipt_uses_one_scoped_latest_version_query() -> None:
+async def test_latest_receipt_uses_two_scoped_full_chain_queries() -> None:
     receipt = MagicMock(receipt_id="RECEIPT-1", allocation_count=2)
+    receipt.receipt_version = 1
     first = MagicMock(source_lot_id="LOT-1")
     second = MagicMock(source_lot_id="LOT-2")
-    result = MagicMock()
-    result.all.return_value = [(receipt, first, None), (receipt, second, None)]
+    first.receipt_version = 1
+    second.receipt_version = 1
+    receipt_result = MagicMock()
+    receipt_result.all.return_value = [receipt]
+    allocation_result = MagicMock()
+    allocation_result.all.return_value = [first, second]
     session = AsyncMock(spec=AsyncSession)
-    session.execute = AsyncMock(return_value=result)
+    session.scalars = AsyncMock(side_effect=[receipt_result, allocation_result])
 
-    with patch(
-        "src.services.query_service.app.repositories.lot_basis_transfer_repository."
-        "_verify_receipt_integrity"
-    ) as verify:
+    with (
+        patch(
+            "src.services.query_service.app.repositories.lot_basis_transfer_repository."
+            "verify_cost_basis_receipt_version_chain"
+        ) as verify_chain,
+        patch(
+            "src.services.query_service.app.repositories.lot_basis_transfer_repository."
+            "_verify_receipt_integrity"
+        ) as verify,
+    ):
         resolved = await LotBasisTransferRepository(session).get_latest_receipt(
             portfolio_id="P1",
             source_transaction_id="DEMERGER-OUT-001",
@@ -66,25 +77,102 @@ async def test_latest_receipt_uses_one_scoped_latest_version_query() -> None:
     assert mapped_receipt.receipt_id == "RECEIPT-1"
     assert all(isinstance(row, LotBasisTransferAllocationReadRecord) for row in mapped_allocations)
     assert [row.source_lot_id for row in mapped_allocations] == ["LOT-1", "LOT-2"]
-    session.execute.assert_awaited_once()
-    statement = session.execute.call_args.args[0]
-    compiled = str(statement.compile(compile_kwargs={"literal_binds": True}))
-    assert "LEFT OUTER JOIN lot_basis_transfer_allocations" in compiled
-    assert "max(lot_basis_transfer_receipts.receipt_version)" in compiled
-    assert "lot_basis_transfer_receipts.portfolio_id = 'P1'" in compiled
-    assert "lot_basis_transfer_receipts.source_transaction_id = 'DEMERGER-OUT-001'" in compiled
-    assert "ORDER BY lot_basis_transfer_allocations.allocation_ordinal ASC" in compiled
+    assert session.scalars.await_count == 2
+    receipt_statement = session.scalars.await_args_list[0].args[0]
+    allocation_statement = session.scalars.await_args_list[1].args[0]
+    compiled_receipts = str(receipt_statement.compile(compile_kwargs={"literal_binds": True}))
+    compiled_allocations = str(allocation_statement.compile(compile_kwargs={"literal_binds": True}))
+    assert "lot_basis_transfer_receipts.portfolio_id = 'P1'" in compiled_receipts
+    assert (
+        "lot_basis_transfer_receipts.source_transaction_id = 'DEMERGER-OUT-001'"
+        in compiled_receipts
+    )
+    assert "ORDER BY lot_basis_transfer_receipts.receipt_version" in compiled_receipts
+    assert "lot_basis_transfer_allocations.receipt_version <= 1" in compiled_allocations
+    assert (
+        "ORDER BY lot_basis_transfer_allocations.receipt_version, "
+        "lot_basis_transfer_allocations.allocation_ordinal" in compiled_allocations
+    )
+    verify_chain.assert_called_once_with((receipt,))
     verify.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_latest_receipt_rejects_tampered_middle_transfer_at_depth_sixty_four() -> None:
+    canonical_receipt, canonical_allocation = _valid_evidence()
+    headers: list[MagicMock] = []
+    mapped_receipts: list[LotBasisTransferReceiptReadRecord] = []
+    allocation_rows: list[MagicMock] = []
+    mapped_allocations: list[LotBasisTransferAllocationReadRecord] = []
+    previous_hash: str | None = None
+    for version in range(1, 65):
+        content_hash = receipt_version_content_hash(
+            receipt_id=canonical_receipt.receipt_id,
+            semantic_content_hash=canonical_receipt.semantic_content_hash,
+            receipt_version=version,
+            previous_receipt_content_hash=previous_hash,
+        )
+        header = MagicMock()
+        header.receipt_id = canonical_receipt.receipt_id
+        header.receipt_version = version
+        header.previous_receipt_content_hash = previous_hash
+        header.receipt_content_hash = content_hash
+        headers.append(header)
+        mapped_receipts.append(
+            replace(
+                canonical_receipt,
+                receipt_version=version,
+                previous_receipt_content_hash=previous_hash,
+                receipt_content_hash=content_hash,
+            )
+        )
+        allocation_row = MagicMock()
+        allocation_row.receipt_version = version
+        allocation_rows.append(allocation_row)
+        mapped_allocations.append(canonical_allocation)
+        previous_hash = content_hash
+    mapped_allocations[31] = replace(
+        canonical_allocation,
+        allocation_content_hash="0" * 64,
+    )
+
+    receipt_result = MagicMock()
+    receipt_result.all.return_value = headers
+    allocation_result = MagicMock()
+    allocation_result.all.return_value = allocation_rows
+    session = AsyncMock(spec=AsyncSession)
+    session.scalars = AsyncMock(side_effect=[receipt_result, allocation_result])
+
+    with (
+        patch(
+            "src.services.query_service.app.repositories.lot_basis_transfer_repository."
+            "_receipt_record",
+            side_effect=mapped_receipts,
+        ),
+        patch(
+            "src.services.query_service.app.repositories.lot_basis_transfer_repository."
+            "_allocation_record",
+            side_effect=mapped_allocations,
+        ),
+        pytest.raises(CorruptLotBasisTransferReadModelError, match="chain is corrupt"),
+    ):
+        await LotBasisTransferRepository(session).get_latest_receipt(
+            portfolio_id="P1",
+            source_transaction_id="DEMERGER-OUT-001",
+        )
+
+    assert session.scalars.await_count == 2
 
 
 @pytest.mark.asyncio
 async def test_portfolio_existence_and_absent_receipt_are_bounded() -> None:
     scalar_result = MagicMock()
     scalar_result.scalar_one_or_none.side_effect = ["P1", None]
-    empty_result = MagicMock()
-    empty_result.all.return_value = []
+    empty_scalar_result = MagicMock()
+    empty_scalar_result.all.return_value = []
     session = AsyncMock(spec=AsyncSession)
-    session.execute = AsyncMock(side_effect=[scalar_result, scalar_result, empty_result])
+    session.execute = AsyncMock(side_effect=[scalar_result, scalar_result])
+    session.scalars = AsyncMock(return_value=empty_scalar_result)
     repository = LotBasisTransferRepository(session)
 
     assert await repository.portfolio_exists("P1") is True
@@ -96,6 +184,8 @@ async def test_portfolio_existence_and_absent_receipt_are_bounded() -> None:
         )
         is None
     )
+    assert session.execute.await_count == 2
+    session.scalars.assert_awaited_once()
 
 
 def test_latest_receipt_fails_closed_on_missing_allocation_rows() -> None:

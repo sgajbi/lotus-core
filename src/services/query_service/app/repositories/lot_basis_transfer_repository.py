@@ -1,4 +1,6 @@
-"""Read the latest immutable basis-transfer receipt in one scoped query."""
+"""Read the latest immutable basis-transfer receipt after full-chain verification."""
+
+from collections import defaultdict
 
 from portfolio_common.database_models import (
     LotBasisTransferAllocationRecord,
@@ -19,11 +21,11 @@ from portfolio_common.domain.cost_basis_receipt_integrity import (
     cost_basis_allocation_content_hash,
     cost_basis_receipt_semantic_hash,
     receipt_version_content_hash,
+    verify_cost_basis_receipt_version_chain,
 )
 from portfolio_common.domain.transaction.numeric_policy import COST_BASIS_STATE_LEDGER_OUTPUT_V1
-from sqlalchemy import and_, func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import aliased
 
 from .lot_basis_transfer_records import (
     LotBasisTransferAllocationReadRecord,
@@ -53,58 +55,63 @@ class LotBasisTransferRepository:
         ]
         | None
     ):
-        latest_version = (
-            select(func.max(LotBasisTransferReceiptRecord.receipt_version))
+        receipt_statement = (
+            select(LotBasisTransferReceiptRecord)
             .where(
                 LotBasisTransferReceiptRecord.portfolio_id == portfolio_id,
                 LotBasisTransferReceiptRecord.source_transaction_id == source_transaction_id,
             )
-            .scalar_subquery()
+            .order_by(LotBasisTransferReceiptRecord.receipt_version)
         )
-        predecessor = aliased(LotBasisTransferReceiptRecord)
-        statement = (
-            select(
-                LotBasisTransferReceiptRecord,
-                LotBasisTransferAllocationRecord,
-                predecessor.receipt_content_hash,
-            )
-            .outerjoin(
-                LotBasisTransferAllocationRecord,
-                and_(
-                    LotBasisTransferAllocationRecord.receipt_id
-                    == LotBasisTransferReceiptRecord.receipt_id,
-                    LotBasisTransferAllocationRecord.receipt_version
-                    == LotBasisTransferReceiptRecord.receipt_version,
-                    LotBasisTransferAllocationRecord.portfolio_id
-                    == LotBasisTransferReceiptRecord.portfolio_id,
-                    LotBasisTransferAllocationRecord.source_security_id
-                    == LotBasisTransferReceiptRecord.source_security_id,
-                ),
-            )
-            .outerjoin(
-                predecessor,
-                and_(
-                    predecessor.receipt_id == LotBasisTransferReceiptRecord.receipt_id,
-                    predecessor.receipt_version
-                    == LotBasisTransferReceiptRecord.receipt_version - 1,
-                ),
-            )
-            .where(
-                LotBasisTransferReceiptRecord.portfolio_id == portfolio_id,
-                LotBasisTransferReceiptRecord.source_transaction_id == source_transaction_id,
-                LotBasisTransferReceiptRecord.receipt_version == latest_version,
-            )
-            .order_by(LotBasisTransferAllocationRecord.allocation_ordinal.asc())
-        )
-        rows = (await self.db.execute(statement)).all()
-        if not rows:
+        receipt_rows = tuple((await self.db.scalars(receipt_statement)).all())
+        if not receipt_rows:
             return None
-        receipt = _receipt_record(rows[0][0])
-        allocations = [
-            _allocation_record(allocation) for _, allocation, _ in rows if allocation is not None
-        ]
-        _verify_receipt_integrity(receipt, allocations, predecessor_hash=rows[0][2])
-        return receipt, allocations
+        receipt_id = str(receipt_rows[0].receipt_id)
+        head_version = int(receipt_rows[-1].receipt_version)
+        allocation_statement = (
+            select(LotBasisTransferAllocationRecord)
+            .where(
+                LotBasisTransferAllocationRecord.receipt_id == receipt_id,
+                LotBasisTransferAllocationRecord.receipt_version <= head_version,
+            )
+            .order_by(
+                LotBasisTransferAllocationRecord.receipt_version,
+                LotBasisTransferAllocationRecord.allocation_ordinal,
+            )
+        )
+        allocation_rows = tuple((await self.db.scalars(allocation_statement)).all())
+        allocations_by_version: defaultdict[int, list[LotBasisTransferAllocationRecord]] = (
+            defaultdict(list)
+        )
+        for allocation in allocation_rows:
+            allocations_by_version[int(allocation.receipt_version)].append(allocation)
+        try:
+            verify_cost_basis_receipt_version_chain(receipt_rows)
+            verified: list[
+                tuple[
+                    LotBasisTransferReceiptReadRecord,
+                    list[LotBasisTransferAllocationReadRecord],
+                ]
+            ] = []
+            for index, receipt_row in enumerate(receipt_rows):
+                receipt = _receipt_record(receipt_row)
+                allocations = [
+                    _allocation_record(allocation)
+                    for allocation in allocations_by_version[int(receipt_row.receipt_version)]
+                ]
+                _verify_receipt_integrity(
+                    receipt,
+                    allocations,
+                    predecessor_hash=(
+                        str(receipt_rows[index - 1].receipt_content_hash) if index else None
+                    ),
+                )
+                verified.append((receipt, allocations))
+        except ValueError as exc:
+            raise CorruptLotBasisTransferReadModelError(
+                f"Persisted lot basis-transfer receipt chain is corrupt: {receipt_id}"
+            ) from exc
+        return verified[-1]
 
 
 def _receipt_record(record: LotBasisTransferReceiptRecord) -> LotBasisTransferReceiptReadRecord:
