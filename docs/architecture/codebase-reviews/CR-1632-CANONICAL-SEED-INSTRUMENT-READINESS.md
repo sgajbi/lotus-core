@@ -100,8 +100,12 @@ portfolio-scoped dependency plan in canonical and Docker-smoke paths. It clears 
 nullable lot/profile binding, deletes immutable child evidence and headers in dependency order,
 then permits the existing lot/root cleanup to proceed. Production constraints remain restrictive.
 
-Focused unit contracts, a real PostgreSQL disposal-allocation regression, and the branch-qualified
-live cleanup passed the former FK failure while preserving unrelated portfolio lot evidence and the
-running Compose stack. Full consecutive canonical seed/downstream validation, protected PR CI,
-merge, and exact-main proof remain required before #921 closes. No API, OpenAPI, schema, migration,
-Kafka, calculation, supported-feature, README, or wiki truth changed.
+Focused unit contracts, a real PostgreSQL disposal-allocation regression, and two consecutive
+branch-qualified cleanup-and-seed executions passed the former FK failure while preserving
+unrelated portfolio lot evidence and the running Compose stack. Core terminal diagnostics were
+healthy after the first reseed: all readiness families were `READY`, 11/11 positions were valued,
+and valuation/aggregation pending, processing, stale, and failed counts were zero. The full verifier
+was blocked only by the separately owned Gateway advisor-book contract error recorded in Workbench
+#140. Downstream validation, protected PR CI, merge, and exact-main proof remain required before
+#921 closes. No API, OpenAPI, schema, migration, Kafka, calculation, supported-feature, README, or
+wiki truth changed.
