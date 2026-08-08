@@ -40,8 +40,8 @@ def transaction_identity_update_allowed(
     """Return the conflict-row predicate that preserves canonical id ownership."""
 
     same_portfolio = func.trim(transaction_table.portfolio_id) == ownership.portfolio_id
-    generated_cash = _generated_cash_predicate(transaction_table)
-    redemption_interest = _redemption_interest_predicate(transaction_table)
+    generated_cash = func.coalesce(_generated_cash_predicate(transaction_table), False)
+    redemption_interest = func.coalesce(_redemption_interest_predicate(transaction_table), False)
     if ownership.family is TransactionIdentityFamily.SOURCE:
         same_family = not_(or_(generated_cash, redemption_interest))
     elif ownership.family is TransactionIdentityFamily.GENERATED_SETTLEMENT_CASH:
