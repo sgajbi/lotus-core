@@ -13,7 +13,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...domain import BookedTransaction
-from ...domain.transaction.corporate_action import RECONCILABLE_CORPORATE_ACTION_TYPES
+from ...domain.transaction.corporate_action import CORPORATE_ACTION_RECONCILIATION_INPUT_TYPES
 from ...ports import (
     CorporateActionReconciliationEvidence,
     CorporateActionReconciliationKey,
@@ -39,7 +39,7 @@ class SqlAlchemyCorporateActionReconciliationRepository:
             .where(DBTransaction.parent_event_reference == key.parent_event_reference)
             .where(
                 DBTransaction.transaction_type.in_(
-                    tuple(sorted(RECONCILABLE_CORPORATE_ACTION_TYPES))
+                    tuple(sorted(CORPORATE_ACTION_RECONCILIATION_INPUT_TYPES))
                 )
             )
         )

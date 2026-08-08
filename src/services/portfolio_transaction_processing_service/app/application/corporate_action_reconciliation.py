@@ -55,6 +55,7 @@ class CorporateActionReconciliationFindingType(StrEnum):
     INSUFFICIENT_LEGS = "ca_bundle_a_insufficient_legs"
     MISSING_DEPENDENCY = "ca_bundle_a_missing_dependency"
     LEG_LINKAGE_MISMATCH = "ca_linked_leg_mismatch"
+    UNSUPPORTED_ADJUSTMENT = "ca_bundle_a_unsupported_adjustment"
 
 
 class CorporateActionReconciliationReasonCode(StrEnum):
@@ -65,6 +66,7 @@ class CorporateActionReconciliationReasonCode(StrEnum):
     INSUFFICIENT_LEGS = "CA_BUNDLE_A_INSUFFICIENT_LEGS"
     MISSING_DEPENDENCY = "CA_BUNDLE_A_MISSING_DEPENDENCY"
     LEG_LINKAGE_MISMATCH = "CA_LINKED_LEG_MISMATCH"
+    UNSUPPORTED_ADJUSTMENT = "CA_BUNDLE_A_UNSUPPORTED_BASIS_ADJUSTMENT"
 
 
 _REPAIR_RECOMMENDATIONS = {
@@ -82,6 +84,9 @@ _REPAIR_RECOMMENDATIONS = {
     ),
     CorporateActionReconciliationFindingType.LEG_LINKAGE_MISMATCH: (
         "REPAIR_CORPORATE_ACTION_LEG_LINKAGE"
+    ),
+    CorporateActionReconciliationFindingType.UNSUPPORTED_ADJUSTMENT: (
+        "REBOOK_WITH_SUPPORTED_CORPORATE_ACTION_BASIS_LEGS"
     ),
 }
 
@@ -213,6 +218,10 @@ def _observation(
         cash_consideration_basis_local=reconciliation.cash_consideration_basis_local,
         fractional_basis_local=reconciliation.fractional_basis_local,
         missing_cash_basis_count=reconciliation.missing_cash_basis_count,
+        excluded_cash_settlement_adjustment_count=(
+            reconciliation.excluded_cash_settlement_adjustment_count
+        ),
+        unsupported_adjustment_count=reconciliation.unsupported_adjustment_count,
         net_basis_delta_local=reconciliation.net_basis_delta_local,
         basis_tolerance=reconciliation.basis_tolerance,
         missing_dependency_reference_ids=missing_dependencies,
@@ -426,6 +435,11 @@ def _summary(
         "fractional_basis_local": str(reconciliation.fractional_basis_local),
         "net_basis_delta_local": str(reconciliation.net_basis_delta_local),
         "missing_cash_basis_count": reconciliation.missing_cash_basis_count,
+        "excluded_cash_settlement_adjustment_count": (
+            reconciliation.excluded_cash_settlement_adjustment_count
+        ),
+        "unsupported_adjustment_count": reconciliation.unsupported_adjustment_count,
+        "governed_adjustment_basis_local": "0",
         "missing_dependency_count": len(missing_dependencies),
         "linkage_finding_count": len(linkage_findings),
     }
@@ -507,6 +521,24 @@ def _findings(
                 reconciliation_type=reconciliation_type,
             )
         )
+    elif status is CorporateActionBasisReconciliationStatus.UNSUPPORTED_ADJUSTMENT:
+        findings.append(
+            _finding(
+                run_id=run_id,
+                evidence_signature=evidence_signature,
+                finding_type=CorporateActionReconciliationFindingType.UNSUPPORTED_ADJUSTMENT,
+                reason_code=CorporateActionReconciliationReasonCode.UNSUPPORTED_ADJUSTMENT,
+                processed_transaction=processed_transaction,
+                linked_transaction_group_id=linked_transaction_group_id,
+                parent_event_reference=parent_event_reference,
+                reconciliation=reconciliation,
+                expected_value={"unsupported_adjustment_count": 0},
+                observed_value={
+                    "unsupported_adjustment_count": reconciliation.unsupported_adjustment_count
+                },
+                reconciliation_type=reconciliation_type,
+            )
+        )
     if missing_dependencies:
         findings.append(
             _finding(
@@ -584,6 +616,10 @@ def _finding(
         "cash_consideration_basis_local": str(reconciliation.cash_consideration_basis_local),
         "fractional_basis_local": str(reconciliation.fractional_basis_local),
         "missing_cash_basis_count": reconciliation.missing_cash_basis_count,
+        "excluded_cash_settlement_adjustment_count": (
+            reconciliation.excluded_cash_settlement_adjustment_count
+        ),
+        "unsupported_adjustment_count": reconciliation.unsupported_adjustment_count,
         "basis_tolerance": str(reconciliation.basis_tolerance),
         **(extra_detail or {}),
     }

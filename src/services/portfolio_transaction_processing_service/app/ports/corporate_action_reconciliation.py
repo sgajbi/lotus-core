@@ -85,6 +85,8 @@ class CorporateActionReconciliationObservation:
     cash_consideration_basis_local: Decimal
     fractional_basis_local: Decimal
     missing_cash_basis_count: int
+    excluded_cash_settlement_adjustment_count: int
+    unsupported_adjustment_count: int
     net_basis_delta_local: Decimal
     basis_tolerance: Decimal
     missing_dependency_reference_ids: tuple[str, ...]
