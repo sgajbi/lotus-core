@@ -63,6 +63,17 @@ def _normalized_control_code_schema(*codes: str) -> dict[str, Any]:
     return {"anyOf": alternatives}
 
 
+def _required_linkage_schema() -> dict[str, Any]:
+    nonblank_identifier = {"type": "string", "pattern": r".*\S.*"}
+    return {
+        "required": ["economic_event_id", "linked_transaction_group_id"],
+        "properties": {
+            "economic_event_id": nonblank_identifier,
+            "linked_transaction_group_id": nonblank_identifier,
+        },
+    }
+
+
 def _document_transaction_numeric_contract(schema: dict[str, Any]) -> None:
     document_exact_numeric_properties(
         schema,
@@ -96,7 +107,7 @@ def _document_transaction_numeric_contract(schema: dict[str, Any]) -> None:
                     },
                     "required": ["transaction_type"],
                 },
-                "then": {"required": ["economic_event_id", "linked_transaction_group_id"]},
+                "then": _required_linkage_schema(),
             },
             {
                 "if": {
@@ -120,7 +131,7 @@ def _document_transaction_numeric_contract(schema: dict[str, Any]) -> None:
                         },
                     ]
                 },
-                "then": {"required": ["economic_event_id", "linked_transaction_group_id"]},
+                "then": _required_linkage_schema(),
             },
         ]
     )
@@ -179,7 +190,12 @@ class Transaction(BaseModel):
             )
         return identifier
 
-    @field_validator("economic_event_id", "linked_transaction_group_id", mode="before")
+    @field_validator(
+        "economic_event_id",
+        "linked_transaction_group_id",
+        "originating_transaction_id",
+        mode="before",
+    )
     @classmethod
     def _normalize_optional_linkage_identifier(cls, value: object) -> object:
         if not isinstance(value, str):

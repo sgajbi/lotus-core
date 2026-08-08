@@ -165,6 +165,11 @@ def test_transaction_schema_publishes_conditional_linkage_requirements() -> None
     ]
 
     assert len(linkage_clauses) == 2
+    for clause in linkage_clauses:
+        assert clause["then"]["properties"] == {
+            "economic_event_id": {"type": "string", "pattern": r".*\S.*"},
+            "linked_transaction_group_id": {"type": "string", "pattern": r".*\S.*"},
+        }
 
     redemption_condition = linkage_clauses[0]["if"]["properties"]["transaction_type"]
     redemption_patterns = [item["pattern"] for item in redemption_condition["anyOf"]]
@@ -749,6 +754,7 @@ def test_transaction_model_normalizes_control_codes_without_defaulting() -> None
         "trade_currency": "USD",
         "currency": "USD",
         "cash_entry_mode": " upstream_provided ",
+        "originating_transaction_id": "   ",
         "economic_event_id": " EVT-CONTROL-CODE-001 ",
         "linked_transaction_group_id": " GROUP-CONTROL-CODE-001 ",
         "movement_direction": " inflow ",
@@ -789,6 +795,7 @@ def test_transaction_model_normalizes_control_codes_without_defaulting() -> None
 
     assert model.transaction_type == "DIVIDEND"
     assert model.cash_entry_mode == "UPSTREAM_PROVIDED"
+    assert model.originating_transaction_id is None
     assert model.movement_direction == "INFLOW"
     assert model.originating_transaction_type == "BUY"
     assert model.adjustment_reason == "BUY_SETTLEMENT"

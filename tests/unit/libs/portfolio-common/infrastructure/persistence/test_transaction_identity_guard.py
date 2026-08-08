@@ -50,6 +50,7 @@ def test_generated_cash_identity_requires_same_family_and_origin() -> None:
     assert "upper(trim(transactions.cash_entry_mode)) = 'AUTO_GENERATE'" in sql
     assert "trim(transactions.originating_transaction_id) = 'SOURCE-1'" in sql
     assert "upper(trim(transactions.originating_transaction_type)) = 'BUY'" in sql
+    assert "transactions.component_id IS NULL" in sql
 
 
 def test_redemption_interest_identity_requires_same_family_and_origin() -> None:
