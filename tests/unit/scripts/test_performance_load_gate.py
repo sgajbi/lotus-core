@@ -7,8 +7,17 @@ import pytest
 
 from scripts.operations import performance_load_gate, transaction_processing_load_support
 from scripts.operations.performance_load_gate import (
+    DRAIN_OBSERVATION_TIMEOUT_SECONDS,
+    GOVERNED_LOAD_PORTFOLIO_ID,
+    GOVERNED_LOAD_SECURITY_COUNT,
+    GOVERNED_LOAD_SECURITY_PREFIX,
+    GOVERNED_MAX_DRAIN_SECONDS,
+    MAX_GOVERNED_KEYS_PER_PARTITION,
+    TRANSACTION_TOPIC_PARTITIONS,
     _build_transaction_batch,
     _evaluate_profile,
+    _governed_partition_distribution,
+    _validate_governed_load_identity,
     _write_report,
 )
 
@@ -90,6 +99,38 @@ def test_transaction_processing_operation_count_reads_bounded_duplicate_metric(
 
     assert count == 60
     assert requested == [("http://localhost:8090/metrics", 10)]
+
+
+def test_transaction_processing_timeout_reports_final_domain_counts(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(
+        transaction_processing_load_support,
+        "transaction_processing_counts",
+        lambda **_kwargs: SimpleNamespace(
+            transaction_count=640,
+            cost_count=640,
+            cashflow_count=640,
+            position_count=639,
+            processing_claim_count=839,
+        ),
+    )
+
+    drain_seconds = transaction_processing_load_support.wait_for_transaction_processing(
+        engine=MagicMock(),
+        portfolio_id="PERF_BALANCED_V1",
+        transaction_id_prefix="TX_PERF-burst",
+        expected=640,
+        expected_processing_claim_minimum=840,
+        timeout_seconds=0,
+    )
+
+    assert drain_seconds is None
+    output = capsys.readouterr().out
+    assert "transaction_count=640" in output
+    assert "position_count=639" in output
+    assert "processing_claim_count=839" in output
 
 
 def test_transaction_processing_operation_evidence_retains_bounded_stage_timing(
@@ -212,6 +253,56 @@ def test_repair_replay_completion_uses_processed_transaction_outcome(monkeypatch
     assert waited == [("http://localhost:8090", "transaction", "processed", 45, 180)]
 
 
+def test_replay_storm_counts_only_accepted_commands(monkeypatch: pytest.MonkeyPatch) -> None:
+    responses = iter(
+        [
+            SimpleNamespace(
+                status_code=202,
+                text="",
+                json=lambda: {"accepted_count": 2},
+            ),
+            SimpleNamespace(
+                status_code=409,
+                text='{"detail":{"code":"INGESTION_REPLAY_BLOCKED"}}',
+            ),
+        ]
+    )
+    monkeypatch.setattr(
+        performance_load_gate.requests, "post", lambda *_args, **_kwargs: next(responses)
+    )
+
+    accepted = performance_load_gate._trigger_replay_storm(
+        ingestion_base_url="http://ingestion",
+        transaction_ids=["TX-1", "TX-2"],
+        bursts=2,
+        burst_size=2,
+    )
+
+    assert accepted == 2
+
+
+def test_replay_storm_rejects_untruthful_accepted_count(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        performance_load_gate.requests,
+        "post",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            status_code=202,
+            text="",
+            json=lambda: {"accepted_count": 3},
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match="invalid accepted_count"):
+        performance_load_gate._trigger_replay_storm(
+            ingestion_base_url="http://ingestion",
+            transaction_ids=["TX-1", "TX-2"],
+            bursts=1,
+            burst_size=2,
+        )
+
+
 def test_transaction_batch_uses_the_seeded_portfolio_and_instrument_namespace() -> None:
     rows = _build_transaction_batch(
         portfolio_id="PERF_LOAD_RUN1",
@@ -230,7 +321,100 @@ def test_transaction_batch_uses_the_seeded_portfolio_and_instrument_namespace() 
         "PERF_RUN1_SEC_000",
         "PERF_RUN1_SEC_001",
     ]
-    assert {row["transaction_date"] for row in rows} == {"2026-07-10T09:00:00Z"}
+    assert [row["transaction_date"] for row in rows] == [
+        "2026-07-10T09:00:00Z",
+        "2026-07-10T09:00:00.000001Z",
+    ]
+
+
+def test_transaction_batches_preserve_monotonic_tie_break_order(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    posted_transaction_ids: list[str] = []
+    posted_transaction_timestamps: list[str] = []
+
+    def post(_url: str, *, json: dict[str, object], timeout: int) -> SimpleNamespace:
+        assert timeout == 30
+        transactions = json["transactions"]
+        assert isinstance(transactions, list)
+        posted_transaction_ids.extend(row["transaction_id"] for row in transactions)
+        posted_transaction_timestamps.extend(row["transaction_date"] for row in transactions)
+        return SimpleNamespace(status_code=202, text="")
+
+    monkeypatch.setattr(transaction_processing_load_support.requests, "post", post)
+
+    transaction_ids, batches_submitted = transaction_processing_load_support.ingest_transactions(
+        ingestion_base_url="http://ingestion",
+        portfolio_id="PERF_BALANCED_V1",
+        batches=2,
+        batch_size=2,
+        sleep_seconds_between_batches=0.0,
+        seed_prefix="PERF-RUN-burst",
+        security_prefix="PERF_CANONICAL_V1_SEC",
+        transaction_date="2026-08-08T09:00:00Z",
+        sequence_offset=10,
+    )
+
+    assert batches_submitted == 2
+    assert (
+        transaction_ids
+        == posted_transaction_ids
+        == [
+            "TX_PERF-RUN-burst-000-0000",
+            "TX_PERF-RUN-burst-000-0001",
+            "TX_PERF-RUN-burst-001-0000",
+            "TX_PERF-RUN-burst-001-0001",
+        ]
+    )
+    assert transaction_ids == sorted(transaction_ids)
+    assert posted_transaction_timestamps == [
+        "2026-08-08T09:00:00.000010Z",
+        "2026-08-08T09:00:00.000011Z",
+        "2026-08-08T09:00:00.000012Z",
+        "2026-08-08T09:00:00.000013Z",
+    ]
+
+
+def test_governed_load_identity_is_stable_and_partition_balanced() -> None:
+    distribution = _governed_partition_distribution()
+
+    assert GOVERNED_LOAD_PORTFOLIO_ID == "PERF_BALANCED_V1"
+    assert GOVERNED_LOAD_SECURITY_PREFIX == "PERF_CANONICAL_V1_SEC"
+    assert TRANSACTION_TOPIC_PARTITIONS == 12
+    assert len(distribution) == TRANSACTION_TOPIC_PARTITIONS
+    assert sum(distribution) == GOVERNED_LOAD_SECURITY_COUNT == 20
+    assert max(distribution) == MAX_GOVERNED_KEYS_PER_PARTITION == 2
+    assert distribution == (1, 2, 2, 2, 2, 1, 1, 1, 2, 2, 2, 2)
+
+
+def test_governed_load_identity_fails_closed_after_partition_capacity_drift(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(performance_load_gate, "TRANSACTION_TOPIC_PARTITIONS", 4)
+
+    with pytest.raises(RuntimeError, match="exceed the governed per-partition bound"):
+        _validate_governed_load_identity()
+
+
+def test_governed_drain_slos_are_stricter_than_the_observation_window() -> None:
+    assert DRAIN_OBSERVATION_TIMEOUT_SECONDS == 240
+    assert GOVERNED_MAX_DRAIN_SECONDS == {
+        "fast": {
+            "steady_state": 60.0,
+            "burst": 120.0,
+            "replay_storm": 120.0,
+        },
+        "full": {
+            "steady_state": 60.0,
+            "burst": 180.0,
+            "replay_storm": 180.0,
+        },
+    }
+    assert all(
+        max_drain < DRAIN_OBSERVATION_TIMEOUT_SECONDS
+        for tier in GOVERNED_MAX_DRAIN_SECONDS.values()
+        for max_drain in tier.values()
+    )
 
 
 def test_evaluate_profile_requires_transaction_processing_drain_when_governed() -> None:
