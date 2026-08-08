@@ -52,7 +52,19 @@ async def test_latest_receipt_maps_ordered_allocations_and_lineage() -> None:
         amortized_cost_profile_id="PROFILE-1",
         amortized_cost_profile_version=1,
         amortized_cost_profile_content_hash="e" * 64,
+        amortized_cost_currency="USD",
         amortized_cost_recognized_through=date(2026, 8, 4),
+        amortized_cost_original_quantity=Decimal("100"),
+        amortized_cost_open_quantity_before=Decimal("25"),
+        amortized_cost_residual_quantity=Decimal("0"),
+        amortized_cost_scheduled_local=Decimal("25"),
+        amortized_cost_current_local=Decimal("24.5"),
+        amortized_cost_current_base=Decimal("18.375"),
+        amortized_cost_residual_local=Decimal("0"),
+        amortized_cost_book_fx_rate_to_base=Decimal("0.75"),
+        amortized_cost_residual_base=Decimal("0"),
+        amortized_cost_retained_rounding_local=Decimal("0.5"),
+        amortized_cost_retained_rounding_base=Decimal("0.375"),
         amortized_cost_calculation_lineage={"algorithm_id": "amortized-cost"},
     )
     repository = MagicMock()
@@ -72,6 +84,33 @@ async def test_latest_receipt_maps_ordered_allocations_and_lineage() -> None:
     assert result.receipt_version == 2
     assert result.allocations[0].source_lot_id == "LOT-BUY-001"
     assert result.allocations[0].amortized_cost_profile_id == "PROFILE-1"
+    assert result.allocations[0].model_dump(exclude_none=True) == {
+        "allocation_ordinal": 1,
+        "source_lot_id": "LOT-BUY-001",
+        "source_transaction_id": "BUY-001",
+        "source_acquisition_date": date(2026, 1, 1),
+        "consumed_quantity": Decimal("25"),
+        "consumed_cost_local": Decimal("24.5"),
+        "consumed_cost_base": Decimal("18.375"),
+        "allocation_content_hash": "d" * 64,
+        "amortized_cost_profile_id": "PROFILE-1",
+        "amortized_cost_profile_version": 1,
+        "amortized_cost_profile_content_hash": "e" * 64,
+        "amortized_cost_currency": "USD",
+        "amortized_cost_recognized_through": date(2026, 8, 4),
+        "amortized_cost_original_quantity": Decimal("100"),
+        "amortized_cost_open_quantity_before": Decimal("25"),
+        "amortized_cost_residual_quantity": Decimal("0"),
+        "amortized_cost_scheduled_local": Decimal("25"),
+        "amortized_cost_current_local": Decimal("24.5"),
+        "amortized_cost_current_base": Decimal("18.375"),
+        "amortized_cost_residual_local": Decimal("0"),
+        "amortized_cost_book_fx_rate_to_base": Decimal("0.75"),
+        "amortized_cost_residual_base": Decimal("0"),
+        "amortized_cost_retained_rounding_local": Decimal("0.5"),
+        "amortized_cost_retained_rounding_base": Decimal("0.375"),
+        "amortized_cost_calculation_lineage": {"algorithm_id": "amortized-cost"},
+    }
     assert result.disposal_calculation_lineage == {"algorithm_id": "lot-disposal"}
     assert result.destination_type == "INTERNAL_LOT"
     assert result.target_transaction_id == "EXCHANGE-IN-001"

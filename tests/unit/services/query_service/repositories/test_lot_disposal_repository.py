@@ -1,5 +1,6 @@
 """Verify bounded, fail-closed latest-version lot-disposal receipt reads."""
 
+from dataclasses import fields
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -25,14 +26,17 @@ from portfolio_common.domain.cost_basis_receipt_integrity import (
 from portfolio_common.domain.transaction.numeric_policy import COST_BASIS_STATE_LEDGER_OUTPUT_V1
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.services.query_service.app.dtos.lot_disposal_dto import LotDisposalAllocationResponse
 from src.services.query_service.app.repositories.lot_disposal_records import (
     LotDisposalAllocationReadRecord,
     LotDisposalReceiptReadRecord,
 )
 from src.services.query_service.app.repositories.lot_disposal_repository import (
+    _AMORTIZED_EVIDENCE_FIELDS,
     CorruptLotDisposalReadModelError,
     LotDisposalRepository,
     _allocation_payload,
+    _allocation_record,
     _amortized_cost_evidence_payload,
     _receipt_semantic_payload,
     _verify_allocation,
@@ -104,6 +108,15 @@ async def test_portfolio_existence_and_absent_receipt_are_bounded() -> None:
     assert await repository.get_latest_receipt(portfolio_id="P1", transaction_id="UNKNOWN") is None
 
     assert session.execute.await_count == 3
+
+
+def test_amortized_evidence_contract_has_lossless_query_projection() -> None:
+    persisted_evidence_fields = set(_AMORTIZED_EVIDENCE_FIELDS)
+    read_record_fields = {field.name for field in fields(LotDisposalAllocationReadRecord)}
+    response_fields = set(LotDisposalAllocationResponse.model_fields)
+
+    assert persisted_evidence_fields <= read_record_fields
+    assert persisted_evidence_fields <= response_fields
 
 
 def test_integrity_accepts_complete_canonical_evidence() -> None:
@@ -424,6 +437,19 @@ def test_complete_amortized_cost_evidence_is_verified_and_bound_to_lineage() -> 
     assert payload["profile_id"] == "PROFILE-1"
     assert payload["consumed_quantity"] == Decimal("25")
     assert allocation_payload["amortized_cost_evidence"] == payload
+    read_record = _allocation_record(allocation)
+    assert read_record.amortized_cost_currency == "USD"
+    assert read_record.amortized_cost_original_quantity == Decimal("100")
+    assert read_record.amortized_cost_open_quantity_before == Decimal("25")
+    assert read_record.amortized_cost_residual_quantity == Decimal("0")
+    assert read_record.amortized_cost_scheduled_local == Decimal("25")
+    assert read_record.amortized_cost_current_local == Decimal("25")
+    assert read_record.amortized_cost_current_base == Decimal("18.75")
+    assert read_record.amortized_cost_residual_local == Decimal("0")
+    assert read_record.amortized_cost_book_fx_rate_to_base == Decimal("0.75")
+    assert read_record.amortized_cost_residual_base == Decimal("0")
+    assert read_record.amortized_cost_retained_rounding_local == Decimal("0")
+    assert read_record.amortized_cost_retained_rounding_base == Decimal("0")
 
 
 @pytest.mark.parametrize(

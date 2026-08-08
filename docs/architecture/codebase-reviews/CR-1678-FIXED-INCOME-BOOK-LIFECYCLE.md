@@ -120,6 +120,12 @@ The query read plane now exposes the latest immutable lot-disposal receipt throu
 transaction-neutral endpoint. One bounded SQL query selects the latest receipt version and ordered
 allocations, including hash-chain, source-lot, calculation-lineage, and amortized-cost authority
 evidence. Persistence-neutral immutable read records prevent ORM models escaping the repository.
+The amortized allocation projection is lossless: it returns the persisted currency, profile and
+recognition identity, original/open/residual quantities, scheduled/current/residual carrying costs,
+book FX rate, retained rounding residuals, and calculation lineage already bound by the allocation
+hash. The repository reconstructs and verifies that closed evidence before mapping, so an
+accounting-control consumer can reproduce the receipt without direct database access and tampered
+evidence fails before response assembly.
 Existing SELL-specific projections remain compatible; redemption, transfer, and
 corporate-action support do not require new family-specific receipt APIs.
 Basis-only `SPIN_OFF` and `DEMERGER_OUT` processing no longer discards the per-source-lot
@@ -264,6 +270,9 @@ Existing unit-price results, snapshot fields, tax/original lot basis, and produc
 transaction types remain stable. The lot-disposal query adds nullable destination fields; legacy
 receipts preserve their exact semantic hash because absent destination evidence is omitted from the
 hashed payload. The transaction contract and ledger add nullable external destination authority;
+the lot-disposal allocation response also adds nullable amortized-cost reconstruction fields. These
+fields disclose existing persisted evidence and do not change receipt hashes, write behavior, or
+legacy non-amortized response values.
 `TRANSFER_OUT` without exactly one internal or external destination now fails before persistence by
 intent. `FACTOR_ADJUSTED_CURRENT_PRINCIPAL`, supplied current principal,
 accrued-income variants without evidence, and every redemption type remain fail closed. The schema
