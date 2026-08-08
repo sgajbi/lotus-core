@@ -78,6 +78,10 @@ def _generated_cash_predicate(transaction_table: Any) -> ColumnElement[bool]:
             transaction_table.component_type.is_(None),
             func.trim(transaction_table.component_type) == "",
         ),
+        or_(
+            transaction_table.component_id.is_(None),
+            func.trim(transaction_table.component_id) == "",
+        ),
     )
 
 

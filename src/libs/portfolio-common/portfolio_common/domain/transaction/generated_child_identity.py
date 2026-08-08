@@ -109,6 +109,7 @@ def _is_generated_settlement_cash(
         and normalize_transaction_control_code(getattr(candidate, "link_type", None))
         == f"{originating_type}_TO_CASH"
         and not normalize_transaction_control_code(getattr(candidate, "component_type", None))
+        and not _optional_identifier(getattr(candidate, "component_id", None))
     )
 
 

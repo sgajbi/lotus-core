@@ -93,7 +93,7 @@ def _incomplete_generated_shape_event(family: str) -> TransactionEvent:
 
     generated = _generated_event(family)
     if family == "cash":
-        return generated.model_copy(update={"link_type": None})
+        return generated.model_copy(update={"component_id": "UPSTREAM-COMPONENT-1"})
     return generated.model_copy(update={"link_type": None})
 
 

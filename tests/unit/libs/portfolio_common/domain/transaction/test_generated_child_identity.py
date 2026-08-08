@@ -72,6 +72,7 @@ def test_classifies_canonical_redemption_interest_identity() -> None:
         {"originating_transaction_type": None},
         {"link_type": None},
         {"component_type": "UNRELATED"},
+        {"component_id": "UPSTREAM-COMPONENT-1"},
     ],
 )
 def test_suffix_only_cash_masquerade_remains_source_owned(changes: dict[str, object]) -> None:
