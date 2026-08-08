@@ -16,6 +16,7 @@ from portfolio_common.domain.transaction.numeric_policy import (
 from portfolio_common.domain.transaction.type_registry import (
     get_transaction_type_definition,
     production_transaction_types_for_lifecycle_families,
+    production_transaction_types_for_lot_behaviors,
 )
 from portfolio_common.domain.transaction_control_codes import (
     normalize_optional_transaction_control_code,
@@ -38,6 +39,9 @@ NonNegativeDecimal = Annotated[Decimal, Field(ge=Decimal(0))]
 PositiveDecimal = Annotated[Decimal, Field(gt=Decimal(0))]
 RedemptionPriceType = Literal["PAR", "CALL_PRICE", "MARKET_PRICE"]
 REDEMPTION_TRANSACTION_TYPES = production_transaction_types_for_lifecycle_families("redemption")
+PARTIAL_BASIS_TRANSFER_TRANSACTION_TYPES = production_transaction_types_for_lot_behaviors(
+    "partial_basis_transfer"
+)
 
 
 def _normalized_control_code_schema(*codes: str) -> dict[str, Any]:
@@ -72,6 +76,29 @@ def _required_linkage_schema() -> dict[str, Any]:
             "economic_event_id": nonblank_identifier,
             "linked_transaction_group_id": nonblank_identifier,
         },
+    }
+
+
+def _required_internal_destination_schema() -> dict[str, Any]:
+    nonblank_identifier = {"type": "string", "pattern": r".*\S.*"}
+    return {
+        "required": ["target_transaction_reference", "target_instrument_id"],
+        "properties": {
+            "target_transaction_reference": nonblank_identifier,
+            "target_instrument_id": nonblank_identifier,
+        },
+    }
+
+
+def _zero_decimal_schema() -> dict[str, Any]:
+    return {
+        "anyOf": [
+            {"type": "number", "const": 0},
+            {
+                "type": "string",
+                "pattern": r"^\s*[+-]?0+(?:\.0+)?(?:[eE][+-]?\d+)?\s*$",
+            },
+        ]
     }
 
 
@@ -133,6 +160,18 @@ def _document_transaction_numeric_contract(schema: dict[str, Any]) -> None:
                     ]
                 },
                 "then": _required_linkage_schema(),
+            },
+            {
+                "if": {
+                    "properties": {
+                        "transaction_type": _normalized_control_code_schema(
+                            *sorted(PARTIAL_BASIS_TRANSFER_TRANSACTION_TYPES)
+                        ),
+                        "quantity": _zero_decimal_schema(),
+                    },
+                    "required": ["transaction_type", "quantity"],
+                },
+                "then": _required_internal_destination_schema(),
             },
         ]
     )
@@ -988,7 +1027,10 @@ class Transaction(BaseModel):
             requires_internal_destination = bool(
                 definition
                 and definition.position_effect == "decrease"
-                and definition.lot_behavior == "transfer_basis_out"
+                and (
+                    definition.lot_behavior == "transfer_basis_out"
+                    or (definition.lot_behavior == "partial_basis_transfer" and self.quantity == 0)
+                )
             )
             if requires_internal_destination and not has_complete_internal:
                 raise ValueError(

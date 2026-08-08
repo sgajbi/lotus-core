@@ -15,6 +15,7 @@ from portfolio_common.domain.transaction.type_registry import (
     is_production_booking_transaction_type,
     is_registered_transaction_type,
     production_transaction_types_for_lifecycle_families,
+    production_transaction_types_for_lot_behaviors,
     production_transaction_types_for_position_effects,
     require_registered_transaction_type,
 )
@@ -170,6 +171,18 @@ def test_position_effect_selector_normalizes_and_combines_effects() -> None:
         production_transaction_types_for_position_effects(" INCREASE ", "cash_increase")
         == POSITION_INCREASE_TRANSACTION_TYPES | CASH_POSITION_INCREASE_TRANSACTION_TYPES
     )
+
+
+def test_lot_behavior_selector_normalizes_and_combines_behaviors() -> None:
+    assert production_transaction_types_for_lot_behaviors(
+        " PARTIAL_BASIS_TRANSFER ", "transfer_basis_out"
+    ) == {
+        "DEMERGER_OUT",
+        "EXCHANGE_OUT",
+        "MERGER_OUT",
+        "REPLACEMENT_OUT",
+        "SPIN_OFF",
+    }
 
 
 def test_portfolio_flow_no_auto_generate_types_are_registry_derived() -> None:

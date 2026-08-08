@@ -587,6 +587,23 @@ def production_transaction_types_for_position_effects(
     )
 
 
+def production_transaction_types_for_lot_behaviors(
+    *lot_behaviors: str,
+) -> frozenset[str]:
+    """Return production-bookable transaction codes with the requested lot behavior."""
+
+    normalized_behaviors = frozenset(
+        str(lot_behavior or "").strip().lower()
+        for lot_behavior in lot_behaviors
+        if str(lot_behavior or "").strip()
+    )
+    return frozenset(
+        code
+        for code, definition in TRANSACTION_TYPE_REGISTRY.items()
+        if definition.production_booking_allowed and definition.lot_behavior in normalized_behaviors
+    )
+
+
 def production_transaction_types_for_generated_cash_legs() -> frozenset[str]:
     """Return production transaction types backed by a settlement-cash resolver."""
 
