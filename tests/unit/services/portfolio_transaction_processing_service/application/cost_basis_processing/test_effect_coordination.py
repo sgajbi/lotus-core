@@ -346,7 +346,7 @@ async def test_effect_coordination_reconciles_corporate_action_group_once() -> N
         parent_event_reference="CA-PARENT-DEM-01",
     )
     reconciliation_repository = AsyncMock(spec=CorporateActionReconciliationRepository)
-    reconciliation_repository.load_group.return_value = ()
+    reconciliation_repository.load_group.return_value = (source, target)
     observer = MagicMock()
 
     result = await coordinate_cost_processing_effects(
