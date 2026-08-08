@@ -3487,6 +3487,14 @@ Most relevant current governance:
      residual quantity, scheduled/current/residual local and base carrying cost, book FX rate,
      retained rounding residuals, and calculation lineage. Do not return a profile/hash-only
      projection that cannot independently explain its own allocation content hash.
+     Receipt integrity is a complete root-to-captured-head contract, not a head/predecessor check.
+     Disposal and basis-transfer adapters must bulk-read ordered headers and ordered allocations,
+     verify every family-owned semantic and lineage payload, and reject gaps, duplicates, changed
+     identity, or middle-version corruption. Canonicalize basis-transfer lineage decimals at the
+     governed cost-basis ledger scale before hashing so database representation does not change
+     calculation identity. Run `make test-fixed-income-book-cost-recovery-gate` for the focused
+     PostgreSQL authority-staging and transaction-repair recovery boundaries. This gate is not a
+     substitute for a fully composed exact-source staged-command-to-repair comparison.
 
 234. A deterministic generated transaction identifier is globally unique but its suffix is not
      ownership authority. Classify generated settlement cash and redemption accrued-interest only

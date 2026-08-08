@@ -506,13 +506,28 @@ Data Models wiki documents the staged ledgers while the capability wiki remains
   same-owner replay, cross-portfolio rejection, sparse rows, and unchanged cashflow, position, and
   outbox counts. No API/OpenAPI, Kafka, migration, generated-id format, or ordinary sparse-upsert
   compatibility change.
+- full receipt-history proof: disposal and basis-transfer writers and readers now verify every
+  version from root through the captured head, including every allocation and family-owned
+  semantic/lineage contract. Each adapter performs one ordered header read and one ordered child
+  read for a 64-version chain. PostgreSQL tests reject a corrupted version-32 allocation in both
+  write and read paths. Basis-transfer lineage inputs and outputs now canonicalize at the existing
+  cost-basis ledger scale, preventing `25.01` from acquiring a different lineage identity after
+  PostgreSQL returns `25.0100000000`. No schema, API, Kafka, or economic amount changed.
+- correction-staging recovery proof: one real-PostgreSQL test commits corrected authority,
+  rematerialized profile evidence, and one source-lot replay command in a single unit of work. A
+  new session observes the pending command, and exact authority redelivery appends no authority,
+  profile, or outbox duplicate. `make test-fixed-income-book-cost-recovery-gate` composes that
+  interruption boundary with the existing restarted transaction-repair proof in one DB-only,
+  45.83-second gate. PR and main recovery lanes reuse the exact-SHA runtime image bundle and run
+  this gate without another image build.
 
-Acceptance audit correction: current disposal readers verify the latest receipt and its immediate
-predecessor, but #478 is not fixed-local until a bounded full-chain recovery gate verifies every
-historical header, allocation, and amortized-lineage hash. That gate must reject middle-version
-tampering and prove a durably staged authority correction survives interruption/restart with one
-idempotent repair whose carry, P&L, checkpoint, and lineage equal uninterrupted control. Use bulk
-history reads and representative contiguous depth so the proof cannot introduce N+1 behavior.
+Acceptance audit correction: full-chain verification, middle-version tamper rejection, bounded
+two-query reads, correction staging across restart, and transaction repair/redelivery are now
+individually enforced. #478 remains in progress until one exact-source scenario composes the
+staged command with downstream repair and compares carry, P&L, checkpoint, receipt, and lineage to
+an uninterrupted control. Issue #919 durably tracks the mixed `services.*`/`src.services.*` import
+identity defect exposed while composing that scenario; it must be fixed or explicitly isolated,
+not waived as test flakiness.
 
 Protected PR and exact-main evidence remain pending for this tranche. Wider runtime recovery/load
 proof, complete corporate-action scenario coverage, redemption, and final issue closure remain
