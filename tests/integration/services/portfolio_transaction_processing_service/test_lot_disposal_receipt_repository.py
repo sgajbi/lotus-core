@@ -20,6 +20,14 @@ from portfolio_common.domain.calculation_lineage import (
     build_calculation_lineage,
 )
 from portfolio_common.domain.cost_basis_method import CostBasisMethod
+from portfolio_common.domain.cost_basis_receipt_integrity import (
+    LOT_DISPOSAL_LINEAGE_ALGORITHM_ID,
+    LOT_DISPOSAL_LINEAGE_ALGORITHM_VERSION,
+    lot_disposal_allocation_payload,
+    lot_disposal_lineage_input_payload,
+    lot_disposal_lineage_output_payload,
+)
+from portfolio_common.domain.transaction.numeric_policy import COST_BASIS_STATE_LEDGER_OUTPUT_V1
 from sqlalchemy import event, func, inspect, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -31,6 +39,12 @@ from src.services.portfolio_transaction_processing_service.app.domain.cost_basis
 from src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis import (
     CorruptLotDisposalReceiptError,
     SqlAlchemyCostBasisLotDisposalRepository,
+)
+from src.services.query_service.app.repositories.lot_disposal_repository import (
+    CorruptLotDisposalReadModelError,
+)
+from src.services.query_service.app.repositories.lot_disposal_repository import (
+    LotDisposalRepository as QueryLotDisposalRepository,
 )
 from tests.test_support.transaction_processing import (
     booked_transaction_event,
@@ -199,6 +213,19 @@ async def test_repository_verifies_sixty_four_versions_with_two_bounded_reads(
         == 64
     )
 
+    statements.clear()
+    event.listen(sync_engine, "before_cursor_execute", record_statement)
+    try:
+        receipt = await QueryLotDisposalRepository(async_db_session).get_latest_receipt(
+            portfolio_id=states[-1].portfolio_id,
+            transaction_id=states[-1].disposal_transaction_id,
+        )
+    finally:
+        event.remove(sync_engine, "before_cursor_execute", record_statement)
+    assert receipt is not None
+    assert receipt[0].receipt_version == 64
+    assert len(statements) == 2
+
     await async_db_session.execute(
         update(LotDisposalAllocationRecord)
         .where(LotDisposalAllocationRecord.receipt_version == 32)
@@ -207,6 +234,11 @@ async def test_repository_verifies_sixty_four_versions_with_two_bounded_reads(
     await async_db_session.commit()
     with pytest.raises(CorruptLotDisposalReceiptError, match="receipt is corrupt"):
         await repository.reconcile_disposal_receipts(receipt_states=(states[-1],))
+    with pytest.raises(CorruptLotDisposalReadModelError, match="chain is corrupt"):
+        await QueryLotDisposalRepository(async_db_session).get_latest_receipt(
+            portfolio_id=states[-1].portfolio_id,
+            transaction_id=states[-1].disposal_transaction_id,
+        )
 
 
 async def test_initial_void_state_remains_database_neutral(
@@ -285,13 +317,38 @@ def _lineage(algorithm_id: str) -> CalculationLineage:
     return build_calculation_lineage(
         algorithm_id=algorithm_id,
         algorithm_version=1,
-        intermediate_precision=38,
+        intermediate_precision=COST_BASIS_STATE_LEDGER_OUTPUT_V1.working_precision,
         input_payload={"transaction_id": "SELL-RECEIPT-DB-01"},
         output_payload={"cost": Decimal("10")},
+        numeric_output_policy=COST_BASIS_STATE_LEDGER_OUTPUT_V1.lineage_identity(),
     )
 
 
 def _active_state(*, cost_local: str) -> LotDisposalReceiptState:
+    consumed_cost_local = Decimal(cost_local)
+    allocation = SourceLotDisposalAllocation(
+        source_lot_id="LOT-RECEIPT-DB-01",
+        source_transaction_id="BUY-RECEIPT-DB-01",
+        source_acquisition_date=date(2026, 1, 1),
+        allocation_ordinal=1,
+        consumed_quantity=Decimal("1"),
+        consumed_cost_local=consumed_cost_local,
+        consumed_cost_base=Decimal("10"),
+    )
+    disposal_lineage = build_calculation_lineage(
+        algorithm_id=LOT_DISPOSAL_LINEAGE_ALGORITHM_ID,
+        algorithm_version=LOT_DISPOSAL_LINEAGE_ALGORITHM_VERSION,
+        intermediate_precision=COST_BASIS_STATE_LEDGER_OUTPUT_V1.working_precision,
+        input_payload=lot_disposal_lineage_input_payload(
+            [lot_disposal_allocation_payload(allocation)]
+        ),
+        output_payload=lot_disposal_lineage_output_payload(
+            consumed_cost_base=Decimal("10"),
+            consumed_cost_local=consumed_cost_local,
+            consumed_quantity=Decimal("1"),
+        ),
+        numeric_output_policy=COST_BASIS_STATE_LEDGER_OUTPUT_V1.lineage_identity(),
+    )
     return LotDisposalReceiptState(
         disposal_transaction_id="SELL-RECEIPT-DB-01",
         portfolio_id="PORT-RECEIPT-DB-01",
@@ -305,20 +362,10 @@ def _active_state(*, cost_local: str) -> LotDisposalReceiptState:
         transaction_calculation_lineage=_lineage("transaction-cost"),
         status=LotDisposalReceiptStatus.ACTIVE,
         consumed_quantity=Decimal("1"),
-        consumed_cost_local=Decimal(cost_local),
+        consumed_cost_local=consumed_cost_local,
         consumed_cost_base=Decimal("10"),
-        allocations=(
-            SourceLotDisposalAllocation(
-                source_lot_id="LOT-RECEIPT-DB-01",
-                source_transaction_id="BUY-RECEIPT-DB-01",
-                source_acquisition_date=date(2026, 1, 1),
-                allocation_ordinal=1,
-                consumed_quantity=Decimal("1"),
-                consumed_cost_local=Decimal(cost_local),
-                consumed_cost_base=Decimal("10"),
-            ),
-        ),
-        disposal_calculation_lineage=_lineage("lot-disposal"),
+        allocations=(allocation,),
+        disposal_calculation_lineage=disposal_lineage,
     )
 
 
