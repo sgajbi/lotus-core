@@ -29,6 +29,7 @@ from src.services.portfolio_transaction_processing_service.app.application impor
 from src.services.portfolio_transaction_processing_service.app.runtime.dependency_composition import (  # noqa: E501
     build_replay_booked_transaction_use_case,
 )
+from src.services.query_service.app.dtos.transaction_dto import TransactionRecord
 from tests.test_support.transaction_processing import (
     booked_transaction_event,
     instrument_record,
@@ -624,16 +625,25 @@ async def test_redemption_correction_clears_superseded_terms_and_interest_cash_l
             "embedded_tax_amount_local": None,
         }
     )
+    restarted_context = transaction_processing_test_context(async_db_session)
     omitted_result = await process_booked_transaction(
-        context=context,
+        context=restarted_context,
         event=omitted,
         event_id="transactions.persisted-0-9914",
         correlation_id="corr-redemption-correction-omitted",
         processing_intent=TransactionProcessingIntent.REPAIR,
     )
     assert omitted_result.status is TransactionProcessingStatus.PROCESSED
+    duplicate = await process_booked_transaction(
+        context=restarted_context,
+        event=omitted,
+        event_id="transactions.persisted-0-9915",
+        correlation_id="corr-redemption-correction-omitted-repeat",
+        processing_intent=TransactionProcessingIntent.REPAIR,
+    )
+    assert duplicate.status is TransactionProcessingStatus.PROCESSED
 
-    async with context.session_factory() as verification_session:
+    async with restarted_context.session_factory() as verification_session:
         corrected_rows = {
             row.transaction_id: row
             for row in (
@@ -650,11 +660,72 @@ async def test_redemption_correction_clears_superseded_terms_and_interest_cash_l
                 .all()
             )
         }
+        acquisition_row = await verification_session.scalar(
+            select(DBTransaction).where(DBTransaction.transaction_id == buy_id)
+        )
+        corrected_cashflows = (
+            (
+                await verification_session.execute(
+                    select(Cashflow).where(
+                        Cashflow.transaction_id.in_([redemption_id, interest_leg_id, cash_leg_id])
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        receipt_count = await verification_session.scalar(
+            select(func.count())
+            .select_from(LotDisposalReceiptRecord)
+            .where(LotDisposalReceiptRecord.disposal_transaction_id == redemption_id)
+        )
+        allocation_count = await verification_session.scalar(
+            select(func.count())
+            .select_from(LotDisposalAllocationRecord)
+            .join(
+                LotDisposalReceiptRecord,
+                (LotDisposalReceiptRecord.receipt_id == LotDisposalAllocationRecord.receipt_id)
+                & (
+                    LotDisposalReceiptRecord.receipt_version
+                    == LotDisposalAllocationRecord.receipt_version
+                ),
+            )
+            .where(LotDisposalReceiptRecord.disposal_transaction_id == redemption_id)
+        )
     corrected_redemption = corrected_rows[redemption_id]
     assert corrected_redemption.principal_proceeds_local is None
     assert corrected_redemption.accrued_interest_proceeds_local == Decimal(0)
     assert corrected_redemption.embedded_fee_amount_local is None
     assert corrected_redemption.embedded_tax_amount_local is None
     assert corrected_redemption.external_cash_transaction_id == cash_leg_id
+    assert corrected_redemption.allocated_cost_basis_local == Decimal("97")
+    assert corrected_redemption.realized_capital_pnl_local == Decimal("3")
+    assert corrected_redemption.realized_total_pnl_local == Decimal("3")
+    assert corrected_redemption.calculation_lineage is not None
     assert corrected_rows[interest_leg_id].gross_transaction_amount == Decimal(0)
     assert corrected_rows[cash_leg_id].gross_transaction_amount == Decimal("100")
+    assert acquisition_row is not None
+    assert acquisition_row.quantity == Decimal("100")
+    assert acquisition_row.gross_transaction_amount == Decimal("97")
+    assert acquisition_row.principal_proceeds_local is None
+    cashflows_by_transaction = {
+        cashflow.transaction_id: cashflow for cashflow in corrected_cashflows
+    }
+    assert cashflows_by_transaction[redemption_id].amount == Decimal("100")
+    assert cashflows_by_transaction[interest_leg_id].amount == Decimal(0)
+    assert cashflows_by_transaction[cash_leg_id].amount == Decimal("100")
+    assert receipt_count == 3
+    assert allocation_count == 3
+
+    query_record = TransactionRecord.model_validate(
+        {
+            column.name: getattr(corrected_redemption, column.name)
+            for column in DBTransaction.__table__.columns
+        }
+        | {"costs": [], "cashflow": None}
+    )
+    assert query_record.redemption_price_type is None
+    assert query_record.principal_proceeds_local is None
+    assert query_record.accrued_interest_proceeds_local == Decimal(0)
+    assert query_record.embedded_fee_amount_local is None
+    assert query_record.embedded_tax_amount_local is None
