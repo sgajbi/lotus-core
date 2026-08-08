@@ -1,3 +1,4 @@
+import re
 from datetime import UTC, date, datetime, timedelta, timezone
 from decimal import Decimal
 
@@ -155,13 +156,33 @@ def test_transaction_model_requires_linkage_for_upstream_cash_authority(
 
 
 def test_transaction_schema_publishes_conditional_linkage_requirements() -> None:
-    linkage_requirements = [
-        clause["then"]["required"]
-        for clause in Transaction.model_json_schema()["allOf"]
-        if "then" in clause and "required" in clause["then"]
+    schema = Transaction.model_json_schema()
+    linkage_clauses = [
+        clause
+        for clause in schema["allOf"]
+        if clause.get("then", {}).get("required")
+        == ["economic_event_id", "linked_transaction_group_id"]
     ]
 
-    assert linkage_requirements.count(["economic_event_id", "linked_transaction_group_id"]) == 2
+    assert len(linkage_clauses) == 2
+
+    redemption_condition = linkage_clauses[0]["if"]["properties"]["transaction_type"]
+    redemption_patterns = [item["pattern"] for item in redemption_condition["anyOf"]]
+    assert any(re.fullmatch(pattern, " maturity_redemption ") for pattern in redemption_patterns)
+    assert not any(re.fullmatch(pattern, "BUY") for pattern in redemption_patterns)
+
+    upstream_condition = linkage_clauses[1]["if"]["anyOf"][0]["properties"]["cash_entry_mode"]
+    assert re.fullmatch(upstream_condition["pattern"], " upstream_provided ")
+    assert not re.fullmatch(upstream_condition["pattern"], "AUTO_GENERATE")
+
+    zero_price_condition = next(
+        clause["if"]["properties"]["transaction_type"]
+        for clause in schema["allOf"]
+        if clause.get("if", {}).get("properties", {}).get("price") == {"const": 0}
+    )
+    assert any(
+        re.fullmatch(item["pattern"], " call_redemption ") for item in zero_price_condition["anyOf"]
+    )
 
 
 @pytest.mark.parametrize(
