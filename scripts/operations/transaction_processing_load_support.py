@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from typing import Any
-from uuid import uuid4
 
 import requests  # type: ignore[import-untyped]
 from prometheus_client.parser import text_string_to_metric_families
@@ -85,17 +85,22 @@ def build_transaction_batch(
     seed: str,
     transaction_date: str,
     security_prefix: str = "SEC",
+    sequence_offset: int = 0,
 ) -> list[dict[str, Any]]:
+    base_transaction_timestamp = datetime.fromisoformat(transaction_date.replace("Z", "+00:00"))
     rows: list[dict[str, Any]] = []
     for index in range(batch_size):
         transaction_suffix = f"{seed}-{index:04d}"
+        ordered_timestamp = base_transaction_timestamp + timedelta(
+            microseconds=sequence_offset + index
+        )
         rows.append(
             {
                 "transaction_id": f"TX_{transaction_suffix}",
                 "portfolio_id": portfolio_id,
                 "instrument_id": f"{security_prefix}_{index % 20:03d}",
                 "security_id": f"{security_prefix}_{index % 20:03d}",
-                "transaction_date": transaction_date,
+                "transaction_date": ordered_timestamp.isoformat().replace("+00:00", "Z"),
                 "transaction_type": "BUY",
                 "quantity": "10",
                 "price": "100.00",
@@ -117,17 +122,19 @@ def ingest_transactions(
     seed_prefix: str,
     security_prefix: str,
     transaction_date: str,
+    sequence_offset: int = 0,
 ) -> tuple[list[str], int]:
     transaction_ids: list[str] = []
     total_batches = 0
     for batch_number in range(batches):
-        seed = f"{seed_prefix}-{uuid4().hex[:8]}-{batch_number:03d}"
+        seed = f"{seed_prefix}-{batch_number:03d}"
         transactions = build_transaction_batch(
             portfolio_id=portfolio_id,
             batch_size=batch_size,
             seed=seed,
             transaction_date=transaction_date,
             security_prefix=security_prefix,
+            sequence_offset=sequence_offset + (batch_number * batch_size),
         )
         response = requests.post(
             f"{ingestion_base_url}/ingest/transactions",
@@ -257,12 +264,12 @@ def wait_for_transaction_processing(
 ) -> float | None:
     started = time.time()
     deadline = started + timeout_seconds
+    counts = transaction_processing_counts(
+        engine=engine,
+        portfolio_id=portfolio_id,
+        transaction_id_prefix=transaction_id_prefix,
+    )
     while time.time() < deadline:
-        counts = transaction_processing_counts(
-            engine=engine,
-            portfolio_id=portfolio_id,
-            transaction_id_prefix=transaction_id_prefix,
-        )
         domain_counts_match = all(
             count == expected
             for count in (
@@ -278,6 +285,19 @@ def wait_for_transaction_processing(
         ):
             return round(time.time() - started, 3)
         time.sleep(1)
+        counts = transaction_processing_counts(
+            engine=engine,
+            portfolio_id=portfolio_id,
+            transaction_id_prefix=transaction_id_prefix,
+        )
+    print(
+        "Transaction processing drain timed out: "
+        f"portfolio_id={portfolio_id}, prefix={transaction_id_prefix}, expected={expected}, "
+        f"expected_processing_claim_minimum={expected_processing_claim_minimum}, "
+        f"transaction_count={counts.transaction_count}, cost_count={counts.cost_count}, "
+        f"cashflow_count={counts.cashflow_count}, position_count={counts.position_count}, "
+        f"processing_claim_count={counts.processing_claim_count}"
+    )
     return None
 
 
