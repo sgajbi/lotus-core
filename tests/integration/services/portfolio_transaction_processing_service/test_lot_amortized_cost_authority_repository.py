@@ -10,12 +10,21 @@ from pathlib import Path
 import pytest
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
-from portfolio_common.database_models import LotAmortizedCostAuthorityRecord
-from sqlalchemy import inspect, select, text, update
-from sqlalchemy.ext.asyncio import AsyncSession
+from portfolio_common.database_models import LotAmortizedCostAuthorityRecord, OutboxEvent
+from portfolio_common.event_contracts import FixedIncomeBookCostAuthorityEvent
+from sqlalchemy import func, inspect, select, text, update
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from services.portfolio_transaction_processing_service.app.application.fixed_income_book_cost import (  # noqa: E501
+    HandleFixedIncomeBookCostAuthorityEventUseCase,
+)
+from services.portfolio_transaction_processing_service.app.domain.fixed_income_book_cost import (
+    AmortizedCostPolicyRegistry,
+    LotAmortizedCostBasisFact,
+)
 from services.portfolio_transaction_processing_service.app.infrastructure.fixed_income_book_cost import (  # noqa: E501
     ConflictingLotAmortizedCostAuthorityError,
+    SqlAlchemyFixedIncomeBookCostAuthorityUnitOfWork,
     SqlAlchemyLotAmortizedCostAuthorityRepository,
 )
 from services.portfolio_transaction_processing_service.app.ports import (
@@ -111,6 +120,83 @@ async def test_repository_round_trips_every_authority_family_and_exact_retry(
     assert await async_db_session.scalar(
         text("SELECT COUNT(*) FROM lot_amortized_cost_authority")
     ) == len(authorities)
+
+
+@pytest.mark.lifecycle
+async def test_authority_correction_survives_restart_with_one_durable_replay_intent(
+    clean_db,
+    authority_schema,
+    async_db_session: AsyncSession,
+) -> None:
+    await _seed_source_lot(async_db_session)
+    await _seed_affected_disposal(async_db_session)
+    resolved = resolved_fixed_income_book_cost_inputs()
+    authority = SqlAlchemyLotAmortizedCostAuthorityRepository(async_db_session)
+    for source in (
+        resolved.assignment,
+        resolved.basis_fact,
+        resolved.schedule_fact,
+        resolved.yield_fact,
+    ):
+        assert source is not None
+        assert await authority.append(source) is LotAmortizedCostAuthorityAppendOutcome.APPENDED
+    await async_db_session.commit()
+
+    corrected_basis = replace(
+        resolved.basis_fact,
+        initial_clean_cost_local=Decimal("96"),
+        source=replace(
+            resolved.basis_fact.source,
+            source_revision="revision-2",
+            fact_version=2,
+        ),
+    )
+    assert async_db_session.bind is not None
+    session_factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
+
+    first = await HandleFixedIncomeBookCostAuthorityEventUseCase(
+        unit_of_work_factory=lambda: SqlAlchemyFixedIncomeBookCostAuthorityUnitOfWork(
+            session_factory
+        ),
+        policies=AmortizedCostPolicyRegistry((resolved.policy,)),
+        correction_replay_enabled=True,
+    ).execute(
+        _basis_event(corrected_basis),
+        correlation_id="corr-amortized-cost-correction-01",
+    )
+
+    assert first.correction_replay_intent is not None
+    assert first.correction_replay_intent.anchor.transaction_id == "AMORT_SELL_001"
+    command_id = first.correction_replay_intent.command_id
+    async with session_factory() as restarted_session:
+        staged = tuple(
+            (
+                await restarted_session.scalars(
+                    select(OutboxEvent).where(
+                        OutboxEvent.aggregate_type == "FixedIncomeBookCostCorrectionReplay"
+                    )
+                )
+            ).all()
+        )
+    assert len(staged) == 1
+    assert staged[0].aggregate_id == command_id
+    assert staged[0].status == "PENDING"
+    assert staged[0].payload["source_authority_event_content_hash"] == (
+        _basis_event(corrected_basis).content_hash()
+    )
+
+    duplicate = await HandleFixedIncomeBookCostAuthorityEventUseCase(
+        unit_of_work_factory=lambda: SqlAlchemyFixedIncomeBookCostAuthorityUnitOfWork(
+            session_factory
+        ),
+        policies=AmortizedCostPolicyRegistry((resolved.policy,)),
+        correction_replay_enabled=True,
+    ).execute(_basis_event(corrected_basis))
+
+    assert duplicate.persistence.unchanged_count == 1
+    assert duplicate.correction_replay_intent is None
+    async with session_factory() as verification_session:
+        assert await verification_session.scalar(select(func.count()).select_from(OutboxEvent)) == 1
 
 
 async def test_repository_appends_corrections_and_rejects_version_collision(
@@ -391,6 +477,95 @@ async def test_repository_rejects_normalized_payload_tampering(
         match="does not use its canonical representation",
     ):
         await repository.load(fixed_income_book_cost_scope())
+
+
+def _basis_event(basis: LotAmortizedCostBasisFact) -> FixedIncomeBookCostAuthorityEvent:
+    return FixedIncomeBookCostAuthorityEvent.model_validate(
+        {
+            "event_type": "fixed_income.book_cost.authority.received",
+            "schema_version": "1.0.0",
+            "authority": {
+                "authority_type": "CLEAN_COST_BASIS",
+                "header": {
+                    "scope": {
+                        "tenant_id": basis.scope.tenant_id,
+                        "legal_book_id": basis.scope.legal_book_id,
+                        "portfolio_id": basis.scope.portfolio_id,
+                        "security_id": basis.scope.security_id,
+                        "lot_id": basis.scope.lot_id,
+                    },
+                    "source": {
+                        "source_system": basis.source.source_system,
+                        "source_record_id": basis.source.source_record_id,
+                        "source_revision": basis.source.source_revision,
+                        "source_version": basis.source.fact_version,
+                        "observed_at": basis.source.observed_at.isoformat(),
+                    },
+                    "status": basis.fact_status.value,
+                    "valid_from": basis.valid_from.isoformat(),
+                    "valid_to": basis.valid_to.isoformat() if basis.valid_to else None,
+                },
+                "currency": basis.currency,
+                "initial_clean_cost_local": str(basis.initial_clean_cost_local),
+                "fees_in_basis_local": str(basis.fees_in_basis_local),
+                "redemption_value_local": str(basis.redemption_value_local),
+                "discount_origin": basis.discount_origin.value,
+            },
+        }
+    )
+
+
+async def _seed_affected_disposal(session: AsyncSession) -> None:
+    await session.execute(
+        text(
+            """
+            INSERT INTO transactions (
+                transaction_id, portfolio_id, instrument_id, security_id,
+                transaction_type, quantity, price, gross_transaction_amount,
+                trade_currency, currency, transaction_date
+            ) VALUES (
+                'AMORT_SELL_001', 'AMORT_PORTFOLIO', 'AMORT_BOND_001',
+                'AMORT_BOND_001', 'SELL', 10, 1, 10, 'SGD', 'SGD',
+                TIMESTAMPTZ '2026-07-01 08:00:00+00'
+            )
+            """
+        )
+    )
+    await session.execute(
+        text(
+            """
+            INSERT INTO lot_disposal_receipts (
+                receipt_id, receipt_version, disposal_transaction_id, portfolio_id,
+                instrument_id, security_id, disposal_timestamp, transaction_type,
+                cost_basis_method, status, consumed_quantity, consumed_cost_local,
+                consumed_cost_base, allocation_count, transaction_calculation_lineage,
+                disposal_calculation_lineage, semantic_content_hash, receipt_content_hash
+            ) VALUES (
+                'lot-disposal:amort-sell-001', 1, 'AMORT_SELL_001',
+                'AMORT_PORTFOLIO', 'AMORT_BOND_001', 'AMORT_BOND_001',
+                TIMESTAMPTZ '2026-07-01 08:00:00+00', 'SELL', 'FIFO', 'ACTIVE',
+                10, 9.8, 9.8, 1, '{}'::jsonb, '{}'::jsonb,
+                repeat('a', 64), repeat('b', 64)
+            )
+            """
+        )
+    )
+    await session.execute(
+        text(
+            """
+            INSERT INTO lot_disposal_allocations (
+                receipt_id, receipt_version, portfolio_id, security_id,
+                allocation_ordinal, source_lot_id, source_transaction_id,
+                source_acquisition_date, consumed_quantity, consumed_cost_local,
+                consumed_cost_base, allocation_content_hash
+            ) VALUES (
+                'lot-disposal:amort-sell-001', 1, 'AMORT_PORTFOLIO',
+                'AMORT_BOND_001', 1, 'AMORT_LOT_001', 'AMORT_BUY_001',
+                DATE '2026-01-01', 10, 9.8, 9.8, repeat('c', 64)
+            )
+            """
+        )
+    )
 
 
 async def _seed_source_lot(session: AsyncSession) -> None:
