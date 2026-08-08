@@ -3493,8 +3493,11 @@ Most relevant current governance:
      identity, or middle-version corruption. Canonicalize basis-transfer lineage decimals at the
      governed cost-basis ledger scale before hashing so database representation does not change
      calculation identity. Run `make test-fixed-income-book-cost-recovery-gate` for the focused
-     PostgreSQL authority-staging and transaction-repair recovery boundaries. This gate is not a
-     substitute for a fully composed exact-source staged-command-to-repair comparison.
+     PostgreSQL exact-source recovery contract. It must commit one corrected authority and replay
+     command, cross a session boundary before repair, apply one idempotent repair, preserve the
+     processing checkpoint, and match uninterrupted carrying cost, realized P&L, receipt, and
+     calculation-lineage results. Test modules must use the canonical `src.services.*` package
+     identity so runtime instrumentation and other module singletons cannot register twice.
 
 234. A deterministic generated transaction identifier is globally unique but its suffix is not
      ownership authority. Classify generated settlement cash and redemption accrued-interest only
