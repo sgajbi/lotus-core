@@ -15,6 +15,7 @@ from portfolio_common.domain.transaction_control_codes import (
 
 _REDEMPTION_TRANSACTION_TYPES = production_transaction_types_for_lifecycle_families("redemption")
 _REDEMPTION_ACCRUED_INTEREST_COMPONENT = "REDEMPTION_ACCRUED_INTEREST"
+_REDEMPTION_ACCRUED_INTEREST_LINK = "REDEMPTION_TO_ACCRUED_INTEREST"
 
 
 class TransactionIdentityCandidate(Protocol):
@@ -47,6 +48,7 @@ class TransactionIdentityOwnership:
     transaction_id: str
     portfolio_id: str
     originating_transaction_id: str | None = None
+    originating_transaction_type: str | None = None
 
 
 def transaction_identity_ownership(
@@ -59,6 +61,9 @@ def transaction_identity_ownership(
     originating_transaction_id = _optional_identifier(
         getattr(candidate, "originating_transaction_id", None)
     )
+    originating_transaction_type = normalize_transaction_control_code(
+        getattr(candidate, "originating_transaction_type", None)
+    )
     if _is_generated_settlement_cash(candidate, originating_transaction_id):
         family = TransactionIdentityFamily.GENERATED_SETTLEMENT_CASH
     elif _is_redemption_accrued_interest(candidate, originating_transaction_id):
@@ -66,11 +71,13 @@ def transaction_identity_ownership(
     else:
         family = TransactionIdentityFamily.SOURCE
         originating_transaction_id = None
+        originating_transaction_type = None
     return TransactionIdentityOwnership(
         family=family,
         transaction_id=transaction_id,
         portfolio_id=portfolio_id,
         originating_transaction_id=originating_transaction_id,
+        originating_transaction_type=originating_transaction_type,
     )
 
 
@@ -122,6 +129,8 @@ def _is_redemption_accrued_interest(
             getattr(candidate, "originating_transaction_type", None)
         )
         in _REDEMPTION_TRANSACTION_TYPES
+        and normalize_transaction_control_code(getattr(candidate, "link_type", None))
+        == _REDEMPTION_ACCRUED_INTEREST_LINK
     )
 
 

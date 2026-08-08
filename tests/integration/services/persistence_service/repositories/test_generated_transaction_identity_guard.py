@@ -84,6 +84,7 @@ def _generated_event(
         component_id="ROOT-OWNER-1-ACCRUED-INTEREST:v1",
         originating_transaction_id="ROOT-OWNER-1",
         originating_transaction_type="MATURITY_REDEMPTION",
+        link_type="REDEMPTION_TO_ACCRUED_INTEREST",
     )
 
 
@@ -93,7 +94,7 @@ def _incomplete_generated_shape_event(family: str) -> TransactionEvent:
     generated = _generated_event(family)
     if family == "cash":
         return generated.model_copy(update={"link_type": None})
-    return generated.model_copy(update={"component_id": None})
+    return generated.model_copy(update={"link_type": None})
 
 
 async def _persist(
@@ -210,6 +211,33 @@ async def test_same_owner_replay_updates_but_cross_portfolio_reclaim_fails(
     ).scalar_one()
     assert row.portfolio_id == "PORT-OWNER-A"
     assert row.gross_transaction_amount == Decimal("875")
+
+
+@pytest.mark.parametrize("family", ["cash", "interest"])
+async def test_generated_owner_rejects_origin_type_reclassification(
+    clean_db,
+    async_db_session: AsyncSession,
+    family: str,
+) -> None:
+    await _seed_portfolios(async_db_session)
+    factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
+    generated = _generated_event(family)
+    replacement_type = "DIVIDEND" if family == "cash" else "CALL_REDEMPTION"
+    update = {"originating_transaction_type": replacement_type}
+    if family == "cash":
+        update["link_type"] = "DIVIDEND_TO_CASH"
+    reclassified = generated.model_copy(update=update)
+
+    assert await _persist(factory, generated) == "persisted"
+    assert await _persist(factory, reclassified) == "generated_transaction_identity_collision"
+
+    async_db_session.expire_all()
+    row = (
+        await async_db_session.execute(
+            select(DBTransaction).where(DBTransaction.transaction_id == generated.transaction_id)
+        )
+    ).scalar_one()
+    assert row.originating_transaction_type == generated.originating_transaction_type
 
 
 @pytest.mark.parametrize("family", ["cash", "interest"])
