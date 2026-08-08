@@ -11,7 +11,7 @@ from src.services.portfolio_transaction_processing_service.app.domain.transactio
 CorporateActionEventChild = corporate_action.CorporateActionEventChild
 CorporateActionEventGraph = corporate_action.CorporateActionEventGraph
 CorporateActionEventGraphReason = corporate_action.CorporateActionEventGraphReason
-CorporateActionEventGraphStatus = corporate_action.CorporateActionEventGraphStatus
+CorporateActionEventStructuralStatus = corporate_action.CorporateActionEventStructuralStatus
 resolve_corporate_action_event_graph = corporate_action.resolve_corporate_action_event_graph
 
 
@@ -71,11 +71,11 @@ def test_event_graph_orders_multi_target_and_mixed_consideration_by_dependencies
 
     plan = resolve_corporate_action_event_graph(_graph(cash, target_b, source, target_a))
 
-    assert plan.status == CorporateActionEventGraphStatus.READY
+    assert plan.status == CorporateActionEventStructuralStatus.STRUCTURALLY_VALID
     assert plan.ordered_transaction_ids == ("SOURCE", "TARGET-A", "TARGET-B", "CASH")
     assert plan.findings == ()
-    assert plan.examined_node_count == 4
-    assert plan.examined_edge_count == 4
+    assert plan.declared_node_count == 4
+    assert plan.declared_edge_count == 4
 
 
 def test_event_graph_output_is_independent_of_child_arrival_order() -> None:
@@ -103,6 +103,15 @@ def test_event_graph_output_is_independent_of_child_arrival_order() -> None:
     }
 
     assert orders == {("SOURCE", "TARGET-A", "TARGET-B")}
+
+
+def test_structural_validation_does_not_claim_lone_target_is_business_ready() -> None:
+    plan = resolve_corporate_action_event_graph(
+        _graph(_child("TARGET", "SPIN_IN", role="TARGET_POSITION_ADD"))
+    )
+
+    assert plan.status == CorporateActionEventStructuralStatus.STRUCTURALLY_VALID
+    assert plan.status.value != "READY"
 
 
 @pytest.mark.parametrize(
@@ -165,7 +174,7 @@ def test_event_graph_parks_invalid_child_sets(
 ) -> None:
     plan = resolve_corporate_action_event_graph(_graph(*children))
 
-    assert plan.status == CorporateActionEventGraphStatus.PARKED
+    assert plan.status == CorporateActionEventStructuralStatus.INVALID
     assert plan.ordered_children == ()
     assert reason in {finding.reason for finding in plan.findings}
 
@@ -188,14 +197,14 @@ def test_event_graph_parks_cycles_without_returning_a_partial_plan() -> None:
         )
     )
 
-    assert plan.status == CorporateActionEventGraphStatus.PARKED
+    assert plan.status == CorporateActionEventStructuralStatus.INVALID
     assert plan.ordered_children == ()
     assert len(plan.findings) == 1
     assert plan.findings[0].reason == CorporateActionEventGraphReason.DEPENDENCY_CYCLE
     assert plan.findings[0].transaction_ids == ("TARGET-A", "TARGET-B")
 
 
-def test_event_graph_resolves_one_thousand_children_with_linear_traversal_counts() -> None:
+def test_event_graph_resolves_one_thousand_children_with_bounded_cardinality() -> None:
     source = _child("SOURCE", "SPIN_OFF", role="SOURCE_POSITION_REDUCE")
     targets = tuple(
         _child(
@@ -211,9 +220,9 @@ def test_event_graph_resolves_one_thousand_children_with_linear_traversal_counts
 
     plan = resolve_corporate_action_event_graph(_graph(*reversed((source, *targets))))
 
-    assert plan.status == CorporateActionEventGraphStatus.READY
-    assert plan.examined_node_count == 1_000
-    assert plan.examined_edge_count == 999
+    assert plan.status == CorporateActionEventStructuralStatus.STRUCTURALLY_VALID
+    assert plan.declared_node_count == 1_000
+    assert plan.declared_edge_count == 999
     assert plan.ordered_transaction_ids[0] == "SOURCE"
     assert plan.ordered_transaction_ids[-1] == "TARGET-0998"
 
