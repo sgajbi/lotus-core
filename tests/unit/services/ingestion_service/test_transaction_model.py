@@ -177,6 +177,7 @@ def test_transaction_schema_publishes_conditional_linkage_requirements() -> None
     assert not any(re.fullmatch(pattern, "BUY") for pattern in redemption_patterns)
 
     upstream_condition = linkage_clauses[1]["if"]["anyOf"][0]["properties"]["cash_entry_mode"]
+    assert upstream_condition["type"] == "string"
     assert re.fullmatch(upstream_condition["pattern"], " upstream_provided ")
     assert not re.fullmatch(upstream_condition["pattern"], "AUTO_GENERATE")
 
