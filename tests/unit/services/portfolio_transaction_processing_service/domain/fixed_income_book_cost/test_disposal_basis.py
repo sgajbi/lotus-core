@@ -5,8 +5,11 @@ from decimal import Decimal
 
 import pytest
 from portfolio_common.domain.calculation_lineage import calculation_lineage_binds_output
+from portfolio_common.domain.cost_basis_receipt_integrity import (
+    canonical_cost_basis_output_payload,
+)
 
-from src.services.portfolio_transaction_processing_service.app.domain.fixed_income_book_cost import (
+from src.services.portfolio_transaction_processing_service.app.domain.fixed_income_book_cost import (  # noqa: E501
     AMORTIZED_COST_DISPOSAL_ALGORITHM_ID,
     AmortizedCostDisposalError,
     AmortizedCostEligibilityReason,
@@ -202,21 +205,23 @@ def test_lineage_binds_profile_identity_inputs_and_outputs() -> None:
     assert result.calculation_lineage.algorithm_id == AMORTIZED_COST_DISPOSAL_ALGORITHM_ID
     assert calculation_lineage_binds_output(
         result.calculation_lineage,
-        output_payload={
-            "consumed_cost_base": result.consumed_cost_base,
-            "consumed_cost_local": result.consumed_cost_local,
-            "consumed_quantity": result.consumed_quantity,
-            "current_cost_base": result.current_cost_base,
-            "current_cost_local": result.current_cost_local,
-            "open_quantity_before": result.open_quantity_before,
-            "recognized_through_date": result.recognized_through_date,
-            "residual_cost_base": result.residual_cost_base,
-            "residual_cost_local": result.residual_cost_local,
-            "residual_quantity": result.residual_quantity,
-            "retained_rounding_residual_base": result.retained_rounding_residual_base,
-            "retained_rounding_residual_local": result.retained_rounding_residual_local,
-            "scheduled_cost_local": result.scheduled_cost_local,
-        },
+        output_payload=canonical_cost_basis_output_payload(
+            {
+                "consumed_cost_base": result.consumed_cost_base,
+                "consumed_cost_local": result.consumed_cost_local,
+                "consumed_quantity": result.consumed_quantity,
+                "current_cost_base": result.current_cost_base,
+                "current_cost_local": result.current_cost_local,
+                "open_quantity_before": result.open_quantity_before,
+                "recognized_through_date": result.recognized_through_date,
+                "residual_cost_base": result.residual_cost_base,
+                "residual_cost_local": result.residual_cost_local,
+                "residual_quantity": result.residual_quantity,
+                "retained_rounding_residual_base": result.retained_rounding_residual_base,
+                "retained_rounding_residual_local": result.retained_rounding_residual_local,
+                "scheduled_cost_local": result.scheduled_cost_local,
+            }
+        ),
     )
 
 

@@ -11,6 +11,9 @@ from portfolio_common.domain.calculation_lineage import (
     CalculationLineage,
     build_calculation_lineage,
 )
+from portfolio_common.domain.cost_basis_receipt_integrity import (
+    canonical_cost_basis_output_payload,
+)
 from portfolio_common.domain.transaction.numeric_policy import (
     COST_BASIS_STATE_LEDGER_OUTPUT_V1,
 )
@@ -185,49 +188,53 @@ def allocate_recognized_lot_book_cost(
         field_name="amortized_retained_rounding_residual_base",
     )
     profile_content_hash = profile.content_hash()
-    output_payload = {
-        "consumed_cost_base": consumed_cost_base,
-        "consumed_cost_local": consumed_cost_local,
-        "consumed_quantity": consumed_quantity,
-        "current_cost_base": current_cost_base,
-        "current_cost_local": current_cost_local,
-        "open_quantity_before": open_quantity_before,
-        "recognized_through_date": recognized_through_date,
-        "residual_cost_base": residual_cost_base,
-        "residual_cost_local": residual_cost_local,
-        "residual_quantity": residual_quantity,
-        "retained_rounding_residual_base": retained_rounding_residual_base,
-        "retained_rounding_residual_local": retained_rounding_residual_local,
-        "scheduled_cost_local": scheduled_cost_local,
-    }
+    output_payload = canonical_cost_basis_output_payload(
+        {
+            "consumed_cost_base": consumed_cost_base,
+            "consumed_cost_local": consumed_cost_local,
+            "consumed_quantity": consumed_quantity,
+            "current_cost_base": current_cost_base,
+            "current_cost_local": current_cost_local,
+            "open_quantity_before": open_quantity_before,
+            "recognized_through_date": recognized_through_date,
+            "residual_cost_base": residual_cost_base,
+            "residual_cost_local": residual_cost_local,
+            "residual_quantity": residual_quantity,
+            "retained_rounding_residual_base": retained_rounding_residual_base,
+            "retained_rounding_residual_local": retained_rounding_residual_local,
+            "scheduled_cost_local": scheduled_cost_local,
+        }
+    )
     lineage = build_calculation_lineage(
         algorithm_id=AMORTIZED_COST_DISPOSAL_ALGORITHM_ID,
         algorithm_version=AMORTIZED_COST_DISPOSAL_ALGORITHM_VERSION,
         intermediate_precision=numeric_policy.working_precision,
-        input_payload={
-            "consumed_quantity": consumed_quantity,
-            "disposal_date": disposal_date,
-            "book_cost_fx_rate_to_base": book_cost_fx_rate_to_base,
-            "carried_book_cost": (
-                {
-                    "residual_cost_base": carried_book_cost.residual_cost_base,
-                    "residual_cost_local": carried_book_cost.residual_cost_local,
-                    "scheduled_cost_local": carried_book_cost.scheduled_cost_local,
-                }
-                if carried_book_cost is not None
-                else None
-            ),
-            "original_quantity": original_quantity,
-            "open_quantity_before": open_quantity_before,
-            "profile_content_hash": profile_content_hash,
-            "profile_id": profile.profile_id,
-            "profile_version": profile.profile_version,
-            "schedule_calculation_output_hash": (
-                profile.calculation_lineage.output_content_hash
-                if profile.calculation_lineage is not None
-                else None
-            ),
-        },
+        input_payload=canonical_cost_basis_output_payload(
+            {
+                "consumed_quantity": consumed_quantity,
+                "disposal_date": disposal_date,
+                "book_cost_fx_rate_to_base": book_cost_fx_rate_to_base,
+                "carried_book_cost": (
+                    {
+                        "residual_cost_base": carried_book_cost.residual_cost_base,
+                        "residual_cost_local": carried_book_cost.residual_cost_local,
+                        "scheduled_cost_local": carried_book_cost.scheduled_cost_local,
+                    }
+                    if carried_book_cost is not None
+                    else None
+                ),
+                "original_quantity": original_quantity,
+                "open_quantity_before": open_quantity_before,
+                "profile_content_hash": profile_content_hash,
+                "profile_id": profile.profile_id,
+                "profile_version": profile.profile_version,
+                "schedule_calculation_output_hash": (
+                    profile.calculation_lineage.output_content_hash
+                    if profile.calculation_lineage is not None
+                    else None
+                ),
+            }
+        ),
         output_payload=output_payload,
         numeric_output_policy=numeric_policy.lineage_identity(),
     )

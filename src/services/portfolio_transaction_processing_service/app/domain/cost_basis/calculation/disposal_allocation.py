@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
+from typing import cast
 
 from portfolio_common.domain.calculation_lineage import (
     CalculationLineage,
@@ -15,6 +16,7 @@ from portfolio_common.domain.calculation_lineage import (
 from portfolio_common.domain.cost_basis_receipt_integrity import (
     LOT_DISPOSAL_LINEAGE_ALGORITHM_ID,
     LOT_DISPOSAL_LINEAGE_ALGORITHM_VERSION,
+    canonical_cost_basis_output_payload,
     lot_disposal_allocation_payload,
     lot_disposal_lineage_input_payload,
     lot_disposal_lineage_output_payload,
@@ -120,21 +122,26 @@ class AmortizedCostAllocationEvidence:
     def output_payload(self) -> dict[str, object]:
         """Return the calculation output bound by the amortized-cost lineage."""
 
-        return {
-            "consumed_cost_base": self.consumed_cost_base,
-            "consumed_cost_local": self.consumed_cost_local,
-            "consumed_quantity": self.consumed_quantity,
-            "current_cost_base": self.current_cost_base,
-            "current_cost_local": self.current_cost_local,
-            "open_quantity_before": self.open_quantity_before,
-            "recognized_through_date": self.recognized_through_date,
-            "residual_cost_base": self.residual_cost_base,
-            "residual_cost_local": self.residual_cost_local,
-            "residual_quantity": self.residual_quantity,
-            "retained_rounding_residual_base": self.retained_rounding_residual_base,
-            "retained_rounding_residual_local": self.retained_rounding_residual_local,
-            "scheduled_cost_local": self.scheduled_cost_local,
-        }
+        return cast(
+            dict[str, object],
+            canonical_cost_basis_output_payload(
+                {
+                    "consumed_cost_base": self.consumed_cost_base,
+                    "consumed_cost_local": self.consumed_cost_local,
+                    "consumed_quantity": self.consumed_quantity,
+                    "current_cost_base": self.current_cost_base,
+                    "current_cost_local": self.current_cost_local,
+                    "open_quantity_before": self.open_quantity_before,
+                    "recognized_through_date": self.recognized_through_date,
+                    "residual_cost_base": self.residual_cost_base,
+                    "residual_cost_local": self.residual_cost_local,
+                    "residual_quantity": self.residual_quantity,
+                    "retained_rounding_residual_base": self.retained_rounding_residual_base,
+                    "retained_rounding_residual_local": self.retained_rounding_residual_local,
+                    "scheduled_cost_local": self.scheduled_cost_local,
+                }
+            ),
+        )
 
     def semantic_payload(self) -> dict[str, object]:
         """Return complete profile, allocation, and calculation evidence for persistence."""
