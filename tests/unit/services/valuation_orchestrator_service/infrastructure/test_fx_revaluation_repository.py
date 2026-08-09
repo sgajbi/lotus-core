@@ -46,7 +46,7 @@ async def test_find_open_position_keys_uses_set_based_direct_pair_query() -> Non
     assert "row_number() OVER" in sql
 
 
-async def test_revaluation_query_requires_snapshot_older_than_direct_pair_source() -> None:
+async def test_revaluation_query_requires_latest_derived_authority_older_than_source() -> None:
     session = AsyncMock(spec=AsyncSession)
     result = MagicMock()
     result.all.return_value = []
@@ -62,7 +62,8 @@ async def test_revaluation_query_requires_snapshot_older_than_direct_pair_source
     sql = str(statement)
     assert "fx_rates" in sql
     assert "daily_position_snapshots" in sql
-    assert "daily_position_snapshots.updated_at < fx_rates.updated_at" in sql
+    assert "coalesce(daily_position_snapshots.updated_at, anon_1.updated_at)" in sql
+    assert "< fx_rates.updated_at" in sql
 
 
 async def test_stage_durable_replay_uses_pair_scoped_pending_upsert() -> None:

@@ -16,7 +16,7 @@ from portfolio_common.database_models import (
 )
 from portfolio_common.durable_correlation import durable_correlation_diagnostics
 from portfolio_common.reprocessing_job_repository import ReprocessingJobRepository
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...domain.fx_revaluation import (
@@ -97,7 +97,7 @@ class SqlAlchemyFxRevaluationRepository:
         pair: DirectCurrencyPair,
         effective_date: date,
     ) -> list[PositionValuationKey]:
-        """Return direct-pair keys whose snapshot is absent or older than the source rate."""
+        """Return keys whose latest derived authority predates the source rate."""
 
         latest_history = _latest_open_position_scope(
             pair=pair,
@@ -119,10 +119,11 @@ class SqlAlchemyFxRevaluationRepository:
                 & (DailyPositionSnapshot.epoch == latest_history.c.epoch),
             )
             .where(
-                or_(
-                    DailyPositionSnapshot.id.is_(None),
-                    DailyPositionSnapshot.updated_at < FxRate.updated_at,
+                func.coalesce(
+                    DailyPositionSnapshot.updated_at,
+                    latest_history.c.updated_at,
                 )
+                < FxRate.updated_at
             )
         )
         rows = (await self._db.execute(statement)).all()
@@ -208,6 +209,7 @@ def _latest_open_position_scope(*, pair: DirectCurrencyPair, effective_date: dat
             PositionHistory.security_id.label("security_id"),
             PositionHistory.epoch.label("epoch"),
             PositionHistory.quantity.label("quantity"),
+            PositionHistory.updated_at.label("updated_at"),
             func.row_number()
             .over(
                 partition_by=(

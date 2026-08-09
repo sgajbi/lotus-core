@@ -753,6 +753,28 @@ does not publish this key policy; the operator-owned migration runbook is the du
   Thirty-four focused repository tests, live PostgreSQL fee replacement/rollback proof, and the
   exact initial-BUY statement-count test passed. Calculations, lineage, fee identity, lock order,
   replay behavior, schema, events, and public contracts are unchanged.
+- Exact clean fan-in task
+  `eng-task-20260810-005849-lotus-core-certification-make-profile-derived-state-fan-in` at signed
+  head `0d4990036` completed and reconciled all 1,000 transactions, snapshots, position-series rows,
+  and the portfolio-series row with zero open jobs, DLQ events, log errors, or financial findings.
+  Artifact `20260809T170050Z-bank-day-load.json` has SHA-256
+  `80EA208206FBD3F8A00F904A0548EA90725855FD02E63A5670B51D8FEB8DE3A1`. It remains a valid
+  correctness failure: 21 valuation jobs were processed twice, maximum valuation attempt count was
+  four, 1,001 snapshot events were emitted for 1,000 snapshots, and three aggregation completion
+  cohorts were published. Drain was `161.436s`, including an `84.110312s` position-to-portfolio
+  tail. The new combined position replay-window query measured `0.019874997s`; the two superseded
+  post-lock reads were absent, proving the preceding round-trip reduction without claiming an
+  end-to-end pass.
+- The failure exposed the same stale-source-event race in price and direct-pair FX correction
+  selection. Both queries treated an absent snapshot as unconditional correction authority. A
+  source fact committed before a newly materialized position was therefore scheduled again if its
+  Kafka event arrived after position readiness, even though readiness necessarily valued from that
+  already-committed fact. Both selectors now compare source `updated_at` with the latest available
+  derived authority: the snapshot when present, otherwise the current position-history row. A
+  source older than the position is left to ordinary readiness; a genuinely later correction still
+  schedules revaluation. Six live PostgreSQL cases cover long/short positions, source-before-
+  position convergence, source-after-position correction, snapshot freshness, and a subsequent
+  correction; 36 valuation scheduling/requeue unit tests also pass.
 
 Implementation commits include `23fc6faf3`, `d51adb739`, `ad1ad179d`, `57f8c60e2`,
 `4f05be9a5`, `c230d660a`, `f42f6eaa3`, `d56e14dbf`, `2d49fc8f1`, `70ae16f0f`,
@@ -799,6 +821,11 @@ shape inside the existing unit of work. It preserves fail-closed missing-row beh
 fee components, calculation lineage, APIs, OpenAPI, events, database schema, locks, runtime settings,
 and operator commands. No migration, runbook, repository context, calculation-methodology, or
 authored wiki change is required.
+The price/FX correction freshness fix changes only internal source-correction selection. It
+preserves the readiness and persisted-source event schemas, source values, valuation calculations,
+lineage, requeue fencing, APIs, OpenAPI, database schema, partitioning, runtime settings, and
+operator commands. This review record and executable tests are the durable truth; no migration,
+runbook, repository context, calculation-methodology, or authored wiki change is required.
 The rejected source-version interval and its operator setting were reverted forward. The canonical
 immediate source-version validation contract is restored; retaining the experiment evidence requires
 no OpenAPI, migration, event-contract, calculation-methodology, operator-runbook, or wiki-source

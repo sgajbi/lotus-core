@@ -594,12 +594,15 @@ async def test_find_portfolios_holding_security_on_date(
 
 
 @pytest.mark.parametrize("position_quantity", [Decimal("12"), Decimal("-1000")])
-async def test_price_revaluation_selects_nonzero_current_epoch_until_snapshot_is_source_fresh(
+@pytest.mark.parametrize("source_is_newer", [True, False])
+async def test_price_revaluation_compares_source_with_latest_derived_authority(
     clean_db,
     async_db_session: AsyncSession,
     position_quantity: Decimal,
+    source_is_newer: bool,
 ):
     source_updated_at = datetime(2025, 8, 2, 8, 0, tzinfo=timezone.utc)
+    position_updated_at = source_updated_at + timedelta(seconds=-1 if source_is_newer else 1)
     async_db_session.add(
         Portfolio(
             portfolio_id="P-CURRENT-1",
@@ -678,6 +681,8 @@ async def test_price_revaluation_selects_nonzero_current_epoch_until_snapshot_is
                 epoch=1,
                 quantity=position_quantity,
                 cost_basis=Decimal("12"),
+                created_at=position_updated_at,
+                updated_at=position_updated_at,
             ),
         ]
     )
@@ -689,7 +694,7 @@ async def test_price_revaluation_selects_nonzero_current_epoch_until_snapshot_is
         date(2025, 8, 2),
     )
 
-    assert keys == [("P-CURRENT-1", "S-CURRENT-1", 1)]
+    assert keys == ([("P-CURRENT-1", "S-CURRENT-1", 1)] if source_is_newer else [])
 
     async_db_session.add(
         DailyPositionSnapshot(
@@ -699,7 +704,7 @@ async def test_price_revaluation_selects_nonzero_current_epoch_until_snapshot_is
             epoch=1,
             quantity=position_quantity,
             cost_basis=Decimal("12"),
-            updated_at=source_updated_at + timedelta(seconds=1),
+            updated_at=max(source_updated_at, position_updated_at) + timedelta(seconds=1),
         )
     )
     await async_db_session.commit()
