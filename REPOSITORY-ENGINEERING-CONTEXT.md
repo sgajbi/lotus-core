@@ -2703,13 +2703,22 @@ Most relevant current governance:
      source/version/content conflict, and CAS both `state_version` and `current_manifest_version`.
      Keep the complete mutation behind a savepoint so a typed CAS loser cannot strand graph rows if
      the caller catches the conflict and commits other UoW work. Reconstruct and hash-verify
-     immutable source truth, declared edge count, and deterministic execution ordinals after
-     restart. Canonical payloads carry an independent serializer version; canonicalize
+     immutable source truth, the complete contiguous predecessor chain, declared edge count,
+     deterministic execution ordinals, and each observed payload's relational transaction identity
+     after restart. Canonical payloads carry an independent serializer version; canonicalize
      timezone-aware source timestamps to UTC in stored JSON so equivalent instants do not become
-     false integrity conflicts. Manifest append resolves latest child epochs in one bounded bulk
-     read so child-before-manifest and corrected-manifest recovery cannot remain falsely awaiting.
-     The repository never commits; ingress and later observation/readiness activation use
-     caller-owned atomic UoWs.
+     false integrity conflicts. Version 1 evaluates observations from sequence zero so a rogue child
+     received before source authority cannot be forgiven; later manifest corrections retain prior
+     expected children while admitting all observations after the correction boundary. Child
+     observation append uses the same ordered dual locks and a conflict-neutral savepoint, rejects
+     cross-portfolio transaction identity, preserves exact-delivery evidence, treats matching
+     semantic redelivery as neutral, requires monotonically increasing correction epochs for changed
+     content, and CAS-updates root state plus observation sequence before deterministic readiness
+     evidence persists. Manifest append and readiness reconstruction must keep bounded statement
+     counts at 1,000 children. The repository never commits; manifest ingress and child
+     observation/readiness activation use caller-owned atomic UoWs. Financial mutation remains
+     parked until the current event reaches persisted READY and must release in persisted dependency
+     order; repository-level readiness proof alone does not prove runtime integration.
 176. Transaction and product lifecycle publication is governed by
      `contracts/transaction-processing/transaction-capability-catalog.v1.json`, refreshed with
      `python scripts/transaction_processing/generate_capability_catalog.py`, and blocked by
