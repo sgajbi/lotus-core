@@ -97,9 +97,10 @@ def test_managed_gate_failure_receipts_remain_explicitly_non_certifying() -> Non
     assert "44cacab60" in cr_1630_row
 
 
-def test_outbox_capacity_docs_preserve_bounded_percentile_and_exact_total_contracts() -> None:
+def test_outbox_capacity_docs_preserve_profile_attribution_and_exact_total_contracts() -> None:
     paths = (
         REPO_ROOT / "docs/features/portfolio-derived-state/operations-runbook.md",
+        REPO_ROOT / "docs/operations/bank-day-load-scenario.md",
         REPO_ROOT / "wiki/Timeseries-and-Aggregation.md",
         REPO_ROOT / "REPOSITORY-ENGINEERING-CONTEXT.md",
         REPO_ROOT
@@ -111,7 +112,11 @@ def test_outbox_capacity_docs_preserve_bounded_percentile_and_exact_total_contra
         assert "10,000" in content
         assert "publication-age p50/p95/p99" in content
         assert "processed-event throughput" in content
+        assert "outbox-capacity-profile.v1.json" in content
+        assert "outbox-capacity-profile-guard" in content
+        assert "producer" in content
 
-    review = paths[3].read_text(encoding="utf-8")
+    review = paths[4].read_text(encoding="utf-8")
     assert "63.624ms" in review
+    assert "187.430ms" in review
     assert "outbox_events_pkey" in review

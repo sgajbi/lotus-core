@@ -94,6 +94,11 @@ Certifying reports must also contain monotonic recent publication-age p50/p95/p9
 observed processed-event throughput window. The age distribution samples only the newest 10,000
 outbox rows through the primary-key index so monitoring does not add an unbounded sort to the
 capacity workload; exact pending/retry/failed totals and topic cohorts remain full-table evidence.
+The report also retains bounded producer aggregate-type/topic cohorts and fails closed when their
+counts diverge from topic or final status totals. Use the single
+`docs/standards/outbox-capacity-profile.v1.json` contract and
+`make outbox-capacity-profile-guard` for development, CI, and production dispatcher settings. Its
+`1s/1000` profile remains `candidate_pending_exact_source` until the current-source daily run passes.
 
 If managed Compose startup, migration, recovery, or poison orchestration fails before its normal
 report exists, the gate writes an atomic
