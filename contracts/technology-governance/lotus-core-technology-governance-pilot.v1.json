@@ -115,7 +115,7 @@
       "rationale": "Exact-main runtime image-set evidence binds all local runtime images to the inspected Git SHA.",
       "evidence_refs": [
         {"kind": "local_file", "path": "scripts/release/runtime_image_set.py", "anchors": ["source_commit_sha"]},
-        {"kind": "github_run", "url": "https://github.com/sgajbi/lotus-core/actions/runs/31296298515", "artifact": "main-runtime-image-set", "artifact_digest": "sha256:c02bf54b57822119d80f07d98565510920e3f480862c10e6c21e2e532ed864f6", "source_commit": "aed8862f3daab33f0635b00b98e1f094a057fab3", "workflow_id": 259248882, "workflow_path": ".github/workflows/main-releasability.yml", "event": "push", "head_branch": "main"}
+        {"kind": "github_run", "url": "https://github.com/sgajbi/lotus-core/actions/runs/31296298515", "artifact": "main-releasability-docker-build-evidence", "artifact_digest": "sha256:518fa37d379ac98c06e2e2a517dc5f5009cf784c9a01025daf55694fbce7aff7", "source_commit": "aed8862f3daab33f0635b00b98e1f094a057fab3", "workflow_id": 259248882, "workflow_path": ".github/workflows/main-releasability.yml", "event": "push", "head_branch": "main"}
       ]
     },
     {
@@ -151,7 +151,7 @@
       "rationale": "All deployable Dockerfiles carry guarded OCI source/build labels and exact-main runtime image-set verification passed.",
       "evidence_refs": [
         {"kind": "local_file", "path": "scripts/quality/image_provenance_guard.py", "anchors": ["REQUIRED_OCI_LABELS", "_dockerfile_findings"]},
-        {"kind": "github_run", "url": "https://github.com/sgajbi/lotus-core/actions/runs/31296298515", "artifact": "main-runtime-image-set", "artifact_digest": "sha256:c02bf54b57822119d80f07d98565510920e3f480862c10e6c21e2e532ed864f6", "source_commit": "aed8862f3daab33f0635b00b98e1f094a057fab3", "workflow_id": 259248882, "workflow_path": ".github/workflows/main-releasability.yml", "event": "push", "head_branch": "main"}
+        {"kind": "github_run", "url": "https://github.com/sgajbi/lotus-core/actions/runs/31296298515", "artifact": "main-releasability-docker-build-evidence", "artifact_digest": "sha256:518fa37d379ac98c06e2e2a517dc5f5009cf784c9a01025daf55694fbce7aff7", "source_commit": "aed8862f3daab33f0635b00b98e1f094a057fab3", "workflow_id": 259248882, "workflow_path": ".github/workflows/main-releasability.yml", "event": "push", "head_branch": "main"}
       ]
     },
     {
