@@ -128,6 +128,11 @@ jobs:
             target: test-transaction-processing-contract
     steps:
       - uses: actions/checkout@v6
+        if: matrix.suite != 'unit'
+      - uses: actions/checkout@v6
+        if: matrix.suite == 'unit'
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
