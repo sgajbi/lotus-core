@@ -23,6 +23,7 @@ SCHEMA_VERSION = "lotus-core.technology-governance-pilot.v1"
 PILOT_ID = "lotus-core-technology-governance-pilot"
 CLASSIFICATIONS = {"present", "gap", "non_certifying"}
 CORE_ISSUE_PATTERN = re.compile(r"^https://github\.com/sgajbi/lotus-core/issues/\d+$")
+CORE_RUN_PATTERN = re.compile(r"^https://github\.com/sgajbi/lotus-core/actions/runs/\d+$")
 FULL_SHA_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 EXPECTED_POLICY_REF = {
@@ -93,8 +94,10 @@ def _validate_local_evidence(
         errors.append(f"{location}: evidence file does not exist: {evidence_path}")
         return
     anchors = evidence.get("anchors", [])
-    if not isinstance(anchors, list) or not all(
-        isinstance(anchor, str) and anchor for anchor in anchors
+    if (
+        not isinstance(anchors, list)
+        or not anchors
+        or not all(isinstance(anchor, str) and anchor for anchor in anchors)
     ):
         errors.append(f"{location}: anchors must be non-empty strings")
         return
@@ -104,7 +107,14 @@ def _validate_local_evidence(
             errors.append(f"{location}: {evidence_path} is missing anchor {anchor!r}")
 
 
-def _validate_evidence_refs(refs: Any, *, root: Path, location: str, errors: list[str]) -> None:
+def _validate_evidence_refs(
+    refs: Any,
+    *,
+    root: Path,
+    location: str,
+    inspected_commit: str,
+    errors: list[str],
+) -> None:
     if not isinstance(refs, list):
         errors.append(f"{location}: evidence_refs must be an array")
         return
@@ -117,28 +127,44 @@ def _validate_evidence_refs(refs: Any, *, root: Path, location: str, errors: lis
         if kind == "local_file":
             _validate_local_evidence(evidence, root=root, location=ref_location, errors=errors)
         elif kind == "github_run":
-            _validate_github_run_evidence(evidence, location=ref_location, errors=errors)
+            _validate_github_run_evidence(
+                evidence,
+                location=ref_location,
+                inspected_commit=inspected_commit,
+                errors=errors,
+            )
         else:
             errors.append(f"{ref_location}: unsupported evidence kind {kind!r}")
 
 
 def _validate_github_run_evidence(
-    evidence: dict[str, Any], *, location: str, errors: list[str]
+    evidence: dict[str, Any],
+    *,
+    location: str,
+    inspected_commit: str,
+    errors: list[str],
 ) -> None:
     url = evidence.get("url")
     source_commit = evidence.get("source_commit")
     artifact = evidence.get("artifact")
-    if not isinstance(url, str) or not url.startswith(
-        "https://github.com/sgajbi/lotus-core/actions/runs/"
-    ):
+    if not isinstance(url, str) or not CORE_RUN_PATTERN.fullmatch(url):
         errors.append(f"{location}: invalid Core GitHub run URL")
     if not isinstance(source_commit, str) or not FULL_SHA_PATTERN.fullmatch(source_commit):
         errors.append(f"{location}: source_commit must be a full Git SHA")
+    elif source_commit != inspected_commit:
+        errors.append(f"{location}: source_commit must match inspected_core_commit")
     if not isinstance(artifact, str) or not artifact:
         errors.append(f"{location}: GitHub run evidence requires artifact")
 
 
-def _validate_mapping(mapping: Any, *, root: Path, location: str, errors: list[str]) -> None:
+def _validate_mapping(
+    mapping: Any,
+    *,
+    root: Path,
+    location: str,
+    inspected_commit: str,
+    errors: list[str],
+) -> None:
     if not isinstance(mapping, dict):
         errors.append(f"{location}: mapping must be an object")
         return
@@ -149,7 +175,13 @@ def _validate_mapping(mapping: Any, *, root: Path, location: str, errors: list[s
     if not isinstance(rationale, str) or not rationale.strip():
         errors.append(f"{location}: rationale is required")
     refs = mapping.get("evidence_refs")
-    _validate_evidence_refs(refs, root=root, location=location, errors=errors)
+    _validate_evidence_refs(
+        refs,
+        root=root,
+        location=location,
+        inspected_commit=inspected_commit,
+        errors=errors,
+    )
     if classification == "present" and not refs:
         errors.append(f"{location}: present evidence requires at least one reference")
     if classification in {"gap", "non_certifying"}:
@@ -159,7 +191,12 @@ def _validate_mapping(mapping: Any, *, root: Path, location: str, errors: list[s
 
 
 def _validate_collection(
-    manifest: dict[str, Any], *, name: str, root: Path, errors: list[str]
+    manifest: dict[str, Any],
+    *,
+    name: str,
+    root: Path,
+    inspected_commit: str,
+    errors: list[str],
 ) -> None:
     mappings = manifest.get(name)
     if not isinstance(mappings, list):
@@ -168,7 +205,13 @@ def _validate_collection(
     identifiers: list[str] = []
     for index, mapping in enumerate(mappings):
         location = f"{name}[{index}]"
-        _validate_mapping(mapping, root=root, location=location, errors=errors)
+        _validate_mapping(
+            mapping,
+            root=root,
+            location=location,
+            inspected_commit=inspected_commit,
+            errors=errors,
+        )
         if isinstance(mapping, dict) and isinstance(mapping.get("requirement_id"), str):
             identifiers.append(mapping["requirement_id"])
     duplicates = sorted({item for item in identifiers if identifiers.count(item) > 1})
@@ -215,27 +258,33 @@ def _validate_platform_policy(
     for key in ("contract_id", "contract_version", "lifecycle_status"):
         if policy.get(key) != policy_ref.get(key):
             errors.append(f"policy_ref.{key} does not match the pinned Platform policy")
-    policy_collections = {
-        "dependency_artifacts": set(policy["dependency_evidence_policy"]["required_artifacts"]),
-        "container_identity_fields": set(
-            policy["container_image_evidence_policy"]["required_identity_fields"]
-        ),
-        "container_artifacts": set(policy["container_image_evidence_policy"]["required_artifacts"]),
-        "vulnerability_controls": {
-            entry["class"] for entry in policy["vulnerability_severity_policy"]
-        },
-    }
+    try:
+        policy_collections = {
+            "dependency_artifacts": set(policy["dependency_evidence_policy"]["required_artifacts"]),
+            "container_identity_fields": set(
+                policy["container_image_evidence_policy"]["required_identity_fields"]
+            ),
+            "container_artifacts": set(
+                policy["container_image_evidence_policy"]["required_artifacts"]
+            ),
+            "vulnerability_controls": {
+                entry["class"] for entry in policy["vulnerability_severity_policy"]
+            },
+        }
+        rollout = policy["rollout"]
+    except (KeyError, TypeError) as exc:
+        errors.append(f"pinned Platform policy has invalid required evidence shape: {exc}")
+        return
     for name, required in policy_collections.items():
         if required != REQUIRED_COLLECTIONS[name]:
             errors.append(f"{name}: local consumer projection drifted from pinned Platform policy")
-    rollout = policy.get("rollout", {})
     if rollout.get("lane_posture") != "report_only":
         errors.append("pinned Platform pilot lane is not report_only")
     if "lotus-core" not in rollout.get("pilot_repositories", []):
         errors.append("pinned Platform policy does not include lotus-core as a pilot")
 
 
-def _validate_manifest_identity(manifest: dict[str, Any], errors: list[str]) -> None:
+def _validate_manifest_identity(manifest: dict[str, Any], *, root: Path, errors: list[str]) -> str:
     if manifest.get("schema_version") != SCHEMA_VERSION:
         errors.append(f"schema_version must be {SCHEMA_VERSION}")
     if manifest.get("pilot_id") != PILOT_ID:
@@ -249,6 +298,16 @@ def _validate_manifest_identity(manifest: dict[str, Any], errors: list[str]) -> 
     inspected_commit = manifest.get("inspected_core_commit")
     if not isinstance(inspected_commit, str) or not FULL_SHA_PATTERN.fullmatch(inspected_commit):
         errors.append("inspected_core_commit must be a full Git SHA")
+        return ""
+    result = subprocess.run(
+        ["git", "cat-file", "-e", f"{inspected_commit}^{{commit}}"],
+        cwd=root,
+        check=False,
+        capture_output=True,
+    )
+    if result.returncode:
+        errors.append("inspected_core_commit must resolve to a Core commit")
+    return inspected_commit
 
 
 def _validate_policy_ref(manifest: dict[str, Any], errors: list[str]) -> dict[str, Any] | None:
@@ -299,12 +358,15 @@ def _validate_technology_assessment(manifest: dict[str, Any], errors: list[str])
         errors.append("technology_state_assessment requires canonical Core issues")
 
 
-def _validate_exception_control(manifest: dict[str, Any], *, root: Path, errors: list[str]) -> None:
+def _validate_exception_control(
+    manifest: dict[str, Any], *, root: Path, inspected_commit: str, errors: list[str]
+) -> None:
     exception_control = manifest.get("exception_control")
     _validate_mapping(
         exception_control,
         root=root,
         location="exception_control",
+        inspected_commit=inspected_commit,
         errors=errors,
     )
     if (
@@ -318,13 +380,24 @@ def validate_manifest(
     manifest: dict[str, Any], *, root: Path = REPO_ROOT, platform_root: Path | None = None
 ) -> list[str]:
     errors: list[str] = []
-    _validate_manifest_identity(manifest, errors)
+    inspected_commit = _validate_manifest_identity(manifest, root=root, errors=errors)
     policy_ref = _validate_policy_ref(manifest, errors)
     _validate_claim_boundary(manifest, errors)
     _validate_technology_assessment(manifest, errors)
     for collection_name in REQUIRED_COLLECTIONS:
-        _validate_collection(manifest, name=collection_name, root=root, errors=errors)
-    _validate_exception_control(manifest, root=root, errors=errors)
+        _validate_collection(
+            manifest,
+            name=collection_name,
+            root=root,
+            inspected_commit=inspected_commit,
+            errors=errors,
+        )
+    _validate_exception_control(
+        manifest,
+        root=root,
+        inspected_commit=inspected_commit,
+        errors=errors,
+    )
     if platform_root is not None and isinstance(policy_ref, dict):
         _validate_platform_policy(manifest, platform_root=platform_root, errors=errors)
     return errors
