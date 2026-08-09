@@ -16,6 +16,8 @@ import requests  # type: ignore[import-untyped]
 from portfolio_common.config import KAFKA_VALUATION_SNAPSHOT_PERSISTED_TOPIC
 from sqlalchemy import Engine, create_engine, text
 
+from scripts.operations.managed_gate_evidence import write_managed_gate_failure_receipt
+
 if TYPE_CHECKING:
     from tests.test_support.managed_compose_run import ManagedComposeRun
 
@@ -425,14 +427,14 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main() -> int:
+def _run_gate(
+    *,
+    args: argparse.Namespace,
+    repo_root: Path,
+    started_at: datetime,
+) -> int:
     """Execute one controlled interruption and emit deterministic recovery evidence."""
 
-    args = build_parser().parse_args()
-    if not 1 <= args.position_count <= 20:
-        raise ValueError("position_count must be between 1 and 20")
-    repo_root = Path(args.repo_root).resolve()
-    started_at = datetime.now(UTC)
     run_id = started_at.strftime("%Y%m%dT%H%M%SZ")
     business_date = started_at.date().isoformat()
     portfolio_id = f"DERIVED_RECOVERY_{run_id}"
@@ -619,6 +621,42 @@ def main() -> int:
         print(f"Wrote derived-state recovery JSON report: {json_path}")
         print(f"Wrote derived-state recovery Markdown report: {markdown_path}")
         return 1 if args.enforce and failures else 0
+
+
+def main() -> int:
+    """Validate arguments and preserve failures that occur before normal recovery evidence."""
+
+    args = build_parser().parse_args()
+    if not 1 <= args.position_count <= 20:
+        raise ValueError("position_count must be between 1 and 20")
+    repo_root = Path(args.repo_root).resolve()
+    started_at = datetime.now(UTC)
+    try:
+        return _run_gate(args=args, repo_root=repo_root, started_at=started_at)
+    except Exception as error:
+        receipt = write_managed_gate_failure_receipt(
+            output_dir=repo_root / args.output_dir,
+            gate_name="derived-state-recovery-gate",
+            phase="managed-gate-execution",
+            error=error,
+            started_at=started_at,
+            failed_at=datetime.now(UTC),
+            compose_project_name=(args.compose_project_name or os.getenv("COMPOSE_PROJECT_NAME")),
+            compose_log_path=(
+                repo_root
+                / args.output_dir
+                / "diagnostics"
+                / "derived-state-recovery-gate-compose.log"
+            ),
+            context={
+                "position_count": args.position_count,
+                "interruption_service": args.interruption_service,
+                "source_topic": args.source_topic,
+                "consumer_group": args.consumer_group,
+            },
+        )
+        print(f"Derived-state recovery orchestration failure receipt: {receipt}")
+        raise
 
 
 if __name__ == "__main__":

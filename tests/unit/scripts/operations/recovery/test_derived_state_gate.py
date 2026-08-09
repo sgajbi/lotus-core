@@ -1,6 +1,7 @@
 """Unit proof for the unified portfolio derived-state recovery gate."""
 
 import json
+import sys
 from argparse import Namespace
 from pathlib import Path
 from types import SimpleNamespace
@@ -55,6 +56,57 @@ def test_recovery_evaluation_accepts_exact_drain_and_rejects_partial_state() -> 
     assert any("open_aggregation_job_count 1" in failure for failure in failures)
     assert any("reconciliation returned 2" in failure for failure in failures)
     assert any("added 1 DLQ" in failure for failure in failures)
+
+
+def test_main_writes_redacted_receipt_when_managed_recovery_start_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    class FailingManagedRun:
+        compose_file = tmp_path / "docker-compose.yml"
+        runtime = SimpleNamespace(
+            endpoints=SimpleNamespace(compose_project_name="lotus-recovery-failure"),
+            export_to=lambda _environment: monkeypatch.setenv(
+                "COMPOSE_PROJECT_NAME", "lotus-recovery-failure"
+            ),
+        )
+
+        def __enter__(self) -> None:
+            raise RuntimeError("postgresql://operator:secret@postgres/core unavailable")
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+    monkeypatch.setattr(
+        derived_state_gate,
+        "prepare_managed_run",
+        lambda **_kwargs: FailingManagedRun(),
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "derived_state_gate",
+            "--repo-root",
+            str(tmp_path),
+            "--output-dir",
+            "output/task-runs",
+        ],
+    )
+    with pytest.raises(RuntimeError, match="secret"):
+        derived_state_gate.main()
+
+    receipts = list(
+        (tmp_path / "output/task-runs").glob(
+            "*-derived-state-recovery-gate-orchestration-failure.json"
+        )
+    )
+    assert len(receipts) == 1
+    payload = json.loads(receipts[0].read_text(encoding="utf-8"))
+    assert payload["evidence_classification"] == "non_certifying_failure"
+    assert payload["compose_project_name"] == "lotus-recovery-failure"
+    assert payload["context"]["position_count"] == 10
+    assert "secret" not in payload["error_message"]
 
 
 def test_wait_for_full_recovery_requires_outputs_queues_and_lag(
