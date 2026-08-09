@@ -49,6 +49,21 @@ def test_missing_file_and_anchor_fail() -> None:
     assert any("missing anchor" in error for error in errors)
 
 
+def test_empty_evidence_anchors_fail() -> None:
+    manifest = copy.deepcopy(_manifest())
+    mappings = manifest["dependency_artifacts"]
+    assert isinstance(mappings, list)
+    mapping = mappings[0]
+    assert isinstance(mapping, dict)
+    refs = mapping["evidence_refs"]
+    assert isinstance(refs, list)
+    refs[0]["anchors"] = []
+
+    errors = guard.validate_manifest(manifest)
+
+    assert any("anchors must be non-empty strings" in error for error in errors)
+
+
 def test_actionable_posture_requires_canonical_issue() -> None:
     manifest = copy.deepcopy(_manifest())
     mappings = manifest["container_artifacts"]
@@ -95,6 +110,33 @@ def test_local_validation_pins_policy_identity_and_exception_control() -> None:
 
     assert any("policy_ref.commit must identify" in error for error in errors)
     assert any("must be exception_policy" in error for error in errors)
+
+
+def test_github_run_evidence_is_numeric_and_bound_to_inspected_commit() -> None:
+    manifest = copy.deepcopy(_manifest())
+    mappings = manifest["dependency_artifacts"]
+    assert isinstance(mappings, list)
+    mapping = mappings[3]
+    assert isinstance(mapping, dict)
+    refs = mapping["evidence_refs"]
+    assert isinstance(refs, list)
+    run_ref = refs[1]
+    run_ref["url"] = "https://github.com/sgajbi/lotus-core/actions/runs/not-a-run"
+    run_ref["source_commit"] = "0" * 40
+
+    errors = guard.validate_manifest(manifest)
+
+    assert any("invalid Core GitHub run URL" in error for error in errors)
+    assert any("must match inspected_core_commit" in error for error in errors)
+
+
+def test_inspected_commit_must_resolve_in_core() -> None:
+    manifest = copy.deepcopy(_manifest())
+    manifest["inspected_core_commit"] = "f" * 40
+
+    errors = guard.validate_manifest(manifest)
+
+    assert any("must resolve to a Core commit" in error for error in errors)
 
 
 def _write_platform_policy_repo(tmp_path: Path, policy: dict[str, object]) -> Path:
@@ -211,3 +253,22 @@ def test_cross_repository_verification_detects_policy_set_drift(
     errors = guard.validate_manifest(manifest, platform_root=platform_root)
 
     assert any("consumer projection drifted" in error for error in errors)
+
+
+def test_cross_repository_verification_fails_closed_on_malformed_policy_shape(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    malformed_policy = {
+        "contract_id": "lotus-platform-technology-governance-policy",
+        "contract_version": "1.0.0",
+        "lifecycle_status": "report_only",
+    }
+    monkeypatch.setattr(
+        guard,
+        "_policy_bytes",
+        lambda *_args, **_kwargs: json.dumps(malformed_policy).encode("utf-8"),
+    )
+
+    errors = guard.validate_manifest(_manifest(), platform_root=tmp_path)
+
+    assert any("invalid required evidence shape" in error for error in errors)
