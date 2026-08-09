@@ -75,7 +75,9 @@ their separate attribution. FX correction is not covered by the market-price pro
 owns a versioned persisted FX event and bounded direct-pair replay. Certifying run
 `20260715T233241Z` passed the five-business-date FX profile with exact corrected rows and values,
 restart recovery, closed queues, clean reconciliation, and complete resource evidence; #791 is
-locally fixed pending PR, CI, exact-main validation, and QA closure.
+verified closed on main through PR #797 at exact SHA `c44d863bb849eddb7c751dab4a02d1be18a3d75f`
+and Main Releasability run `29475491036`. Treat that run as the retained FX baseline; #714 still
+requires a current-source FX restatement rerun with the rest of its certification matrix.
 
 Run `make profile-derived-state-daily`, `make profile-derived-state-fan-in`,
 `make profile-derived-state-price-burst`, `make profile-derived-state-price-restatement`, and
