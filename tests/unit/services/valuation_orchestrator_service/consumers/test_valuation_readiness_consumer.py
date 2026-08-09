@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.services.valuation_orchestrator_service.app.consumers.valuation_readiness_consumer import (
     SERVICE_NAME,
     ValuationReadinessConsumer,
+    _readiness_outbox_id,
     _readiness_source_mutation_id,
 )
 
@@ -110,16 +111,15 @@ async def test_readiness_event_upserts_valuation_job_and_marks_idempotency(
 
     await consumer.process_message(mock_kafka_message)
 
-    mock_job_repo.upsert_job.assert_awaited_once()
-    job_kwargs = mock_job_repo.upsert_job.await_args.kwargs
+    mock_job_repo.upsert_position_readiness_job.assert_awaited_once()
+    job_kwargs = mock_job_repo.upsert_position_readiness_job.await_args.kwargs
     assert job_kwargs["portfolio_id"] == mock_event.portfolio_id
     assert job_kwargs["security_id"] == mock_event.security_id
     assert job_kwargs["valuation_date"] == mock_event.valuation_date
     assert job_kwargs["epoch"] == mock_event.epoch
     assert isinstance(job_kwargs["correlation_id"], str)
-    assert job_kwargs["source_correction_id"] == _readiness_source_mutation_id(mock_kafka_message)
-    assert job_kwargs["rearm_completed"] is True
-    assert job_kwargs["requeue_if_processing"] is True
+    assert job_kwargs["source_mutation_id"] == _readiness_source_mutation_id(mock_kafka_message)
+    assert job_kwargs["readiness_outbox_id"] == 417
 
     mock_idempotency_repo.claim_event_processing.assert_awaited_once()
     mark_args = mock_idempotency_repo.claim_event_processing.await_args.args
@@ -140,6 +140,7 @@ async def test_readiness_event_is_noop_when_already_processed(
     await consumer.process_message(mock_kafka_message)
 
     mock_job_repo.upsert_job.assert_not_called()
+    mock_job_repo.upsert_position_readiness_job.assert_not_called()
     mock_idempotency_repo.mark_event_processed.assert_not_called()
 
 
@@ -175,7 +176,10 @@ async def test_readiness_event_uses_header_correlation_for_direct_processing(
 
     await consumer.process_message(mock_kafka_message)
 
-    assert mock_job_repo.upsert_job.await_args.kwargs["correlation_id"] == "test-corr-id"
+    assert (
+        mock_job_repo.upsert_position_readiness_job.await_args.kwargs["correlation_id"]
+        == "test-corr-id"
+    )
     assert mock_idempotency_repo.claim_event_processing.await_args.args[3] == "test-corr-id"
 
 
@@ -190,9 +194,10 @@ async def test_headerless_readiness_event_preserves_non_rearming_compatibility(
     await consumer.process_message(mock_kafka_message)
 
     job_kwargs = mock_dependencies["job_repo"].upsert_job.await_args.kwargs
-    assert job_kwargs["source_correction_id"] is None
-    assert job_kwargs["rearm_completed"] is False
-    assert job_kwargs["requeue_if_processing"] is False
+    assert job_kwargs.get("source_correction_id") is None
+    assert job_kwargs.get("rearm_completed", False) is False
+    assert job_kwargs.get("requeue_if_processing", False) is False
+    mock_dependencies["job_repo"].upsert_position_readiness_job.assert_not_called()
 
 
 async def test_readiness_source_mutation_identity_is_redelivery_stable_and_event_specific():
@@ -208,3 +213,13 @@ async def test_readiness_source_mutation_identity_is_redelivery_stable_and_event
 
     assert _readiness_source_mutation_id(first) == _readiness_source_mutation_id(duplicate)
     assert _readiness_source_mutation_id(first) != _readiness_source_mutation_id(later_mutation)
+    assert _readiness_outbox_id(first) == 417
+
+
+@pytest.mark.parametrize("raw_value", [b"0", b"-1", b"not-an-id", b""])
+async def test_readiness_rejects_nonpositive_or_malformed_outbox_sequence(raw_value: bytes):
+    message = MagicMock()
+    message.headers.return_value = [("outbox_id", raw_value)]
+
+    assert _readiness_outbox_id(message) is None
+    assert _readiness_source_mutation_id(message) is None

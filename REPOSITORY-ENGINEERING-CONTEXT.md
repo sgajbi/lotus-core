@@ -2206,6 +2206,13 @@ Most relevant current governance:
      `ports/transaction_readiness.py` repository and event-staging contracts. Governed event DTOs,
      topics, payload mapping, and transactional outbox writes belong to
      `infrastructure/transaction_readiness`; do not restore readiness policy to a SQL/outbox adapter.
+     Valuation readiness delivery uses the positive transactional-outbox ID as durable sequence
+     authority. A valuation claim snapshots the maximum committed ID for its exact portfolio,
+     security, valuation-date, and epoch scope; a delayed delivery may rearm or request requeue only
+     when its ID is newer than that watermark. Preserve exact payload identity alongside aggregate
+     identity, monotonic watermarks across outbox retention, and non-rearming compatibility for
+     headerless or malformed legacy deliveries. Do not replace this with timestamps: outbox
+     creation time can precede commit and PostgreSQL `now()` is transaction-start time.
      `TransactionProcessingUnitOfWork.readiness` composes that application use case directly from
      the package-owned stage repository and event stager. Do not restore the ambiguous `pipeline`
      unit-of-work property or a flat compatibility adapter.

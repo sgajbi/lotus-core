@@ -41,6 +41,13 @@ then recheck supersession after a concurrent zero-row write. This fence is disti
 `aggregation_revision`: source revision protects calculation input identity, while aggregation
 revision is the positive claim sequence published to reconciliation.
 
+Upstream valuation claims also retain the maximum committed transactional-outbox ID for the exact
+portfolio/security/date/epoch readiness scope. A delayed readiness delivery can rearm completed
+work or request requeue of processing work only when its positive outbox ID is newer than that
+claim watermark. This prevents an already-covered position mutation from creating duplicate
+snapshots while preserving genuinely later source authority; event timestamps are not ordering
+authority. Headerless legacy deliveries remain consumable but cannot rearm work.
+
 `target_epoch` remains the maximum staged epoch for the portfolio day, but every materially changed
 per-security stage advances `source_revision`, including a delayed lower-epoch row. If such a stage
 supersedes an active claim and that worker later expires, recovery requeues `REPROCESS_REQUESTED`

@@ -27,7 +27,7 @@ SERVICE_NAME = "valuation-readiness-consumer"
 def _readiness_source_mutation_id(msg: Message) -> str | None:
     """Return stable identity for the durable outbox mutation behind readiness."""
 
-    outbox_id = kafka_outbox_id(msg)
+    outbox_id = _readiness_outbox_id(msg)
     if outbox_id is None:
         return None
     return cast(
@@ -35,10 +35,23 @@ def _readiness_source_mutation_id(msg: Message) -> str | None:
         stable_content_hash(
             {
                 "event_type": "PortfolioDayReadyForValuation",
-                "outbox_id": outbox_id,
+                "outbox_id": str(outbox_id),
             }
         ),
     )
+
+
+def _readiness_outbox_id(msg: Message) -> int | None:
+    """Return the positive durable sequence carried by a readiness record."""
+
+    raw_outbox_id = kafka_outbox_id(msg)
+    if raw_outbox_id is None:
+        return None
+    try:
+        outbox_id = int(raw_outbox_id)
+    except ValueError:
+        return None
+    return outbox_id if outbox_id > 0 else None
 
 
 class ValuationReadinessConsumer(BaseConsumer):
@@ -69,17 +82,29 @@ class ValuationReadinessConsumer(BaseConsumer):
                         ):
                             return
 
+                        readiness_outbox_id = _readiness_outbox_id(msg)
                         source_mutation_id = _readiness_source_mutation_id(msg)
-                        await ValuationJobRepository(db).upsert_job(
-                            portfolio_id=event.portfolio_id,
-                            security_id=event.security_id,
-                            valuation_date=event.valuation_date,
-                            epoch=event.epoch,
-                            correlation_id=correlation_id,
-                            source_correction_id=source_mutation_id,
-                            rearm_completed=source_mutation_id is not None,
-                            requeue_if_processing=source_mutation_id is not None,
-                        )
+                        job_repository = ValuationJobRepository(db)
+                        if readiness_outbox_id is None:
+                            await job_repository.upsert_job(
+                                portfolio_id=event.portfolio_id,
+                                security_id=event.security_id,
+                                valuation_date=event.valuation_date,
+                                epoch=event.epoch,
+                                correlation_id=correlation_id,
+                            )
+                        else:
+                            if source_mutation_id is None:  # pragma: no cover - shared parser fence
+                                raise RuntimeError("Readiness mutation identity was not resolved")
+                            await job_repository.upsert_position_readiness_job(
+                                portfolio_id=event.portfolio_id,
+                                security_id=event.security_id,
+                                valuation_date=event.valuation_date,
+                                epoch=event.epoch,
+                                correlation_id=correlation_id,
+                                source_mutation_id=source_mutation_id,
+                                readiness_outbox_id=readiness_outbox_id,
+                            )
         except (json.JSONDecodeError, ValidationError, EventContractValidationError):
             logger.error("Invalid valuation readiness payload.", exc_info=True)
             raise
