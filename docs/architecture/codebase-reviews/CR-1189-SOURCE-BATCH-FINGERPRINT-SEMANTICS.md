@@ -64,3 +64,23 @@ command or wiki-authored runbook changed.
 - Wire true source-batch fingerprints from persisted ingestion evidence where available.
 - Keep the CR-1220 source-data product contract guard enforced so request/snapshot fingerprints are
   not reassigned to source-batch lineage fields.
+
+## 2026-08-09 DPM Universe Content-Identity Follow-Up
+
+Issue #882 exposed the complementary gap: after the batch-lineage correction above,
+`DpmPortfolioUniverseCandidate:v1` still returned the shared unavailable content digest even for a
+complete READY result. Core now hashes the normalized tenant, business date, booking center, model
+portfolio filters, inactive-authority policy, page size/canonical page position, and every ordered source mandate
+binding field, including its source record and evidence timestamps. The identity uses the decoded
+canonical cursor rather than the signed token envelope, so expiry, key id, and signature rotation
+cannot alter an otherwise identical replay. Identical READY evidence
+replays to the same `content_hash`/`source_digest`; source or selection drift changes it.
+
+`source_batch_fingerprint` remains null. The product is an on-demand effective-binding query and
+does not have a proven persisted ingestion batch to publish. Empty results and truncated pages keep
+the unavailable digest and cannot be consumed as READY authority. The canonical live DPM validator
+now requires a non-placeholder SHA-256 content identity with a matching source digest for the
+complete three-candidate `PB_SG_GLOBAL_BAL_001` scenario. READY metadata is internally coherent:
+quality is `COMPLETE`, source evidence is current, and freshness is `CURRENT`.
+Rows without any observed, updated, or created evidence time fail closed as `DEGRADED` with an
+unavailable digest rather than publishing contradictory READY authority.

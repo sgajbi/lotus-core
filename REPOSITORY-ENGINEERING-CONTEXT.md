@@ -142,7 +142,12 @@ Current repository posture:
     without moving rebalance decisioning into core. `DpmPortfolioUniverseCandidate:v1` advances
     RFC37-WTBD-004 source-owner depth by exposing paged Core-owned DPM universe candidates from
     effective discretionary mandate bindings without claiming relationship-householding, client
-    suitability, PM ranking, execution, or external workflow ownership. RFC40-WTBD-008 source-owner coverage adds
+    suitability, PM ranking, execution, or external workflow ownership. Complete READY responses
+    publish deterministic `content_hash`/`source_digest` authority over the normalized request
+    scope and exact ordered mandate-binding evidence. `source_batch_fingerprint` stays null because
+    the on-demand query has no proven persisted ingestion batch; empty or truncated results do not
+    publish READY content authority, and rows without source evidence time fail closed as degraded.
+    RFC40-WTBD-008 source-owner coverage adds
     `ClientRestrictionProfile:v1` and `SustainabilityPreferenceProfile:v1` as effective-dated,
     lineage-backed query-control-plane products and canonical front-office seed inputs; downstream
     `lotus-manage` consumption remains a separate slice. RFC42-WTBD-006 source-owner coverage adds
