@@ -107,7 +107,8 @@ verifies:
 - DPM client restriction and sustainability preference source records resolve through
   query-control-plane integration routes
 - DPM portfolio-universe candidates return the governed three-candidate source scenario and prove
-  full continuation-token paging through terminal page exhaustion
+  full continuation-token paging through terminal page exhaustion; the complete READY response
+  must carry a non-placeholder `sha256:` `content_hash` with an identical `source_digest`
 - gateway performance summary resolves with benchmark-linked content
 - core analytics reference `performance_end_date` is at or after the seed end date and represents
   a complete calculable performance horizon across portfolio and position analytics source
@@ -143,7 +144,9 @@ the RFC-0075 Slice 4 derived-state readiness fix with these outcomes:
     `PB_SG_GLOBAL_INC_002`, and `PB_SG_GLOBAL_GROWTH_003` as Core-owned candidate rows; this proves
     source-owned candidate discovery only. The live DPM source validator also walks one-row
     candidate pages until the terminal page, requires every governed candidate to appear exactly
-    once, and rejects duplicate, empty, or non-terminating continuation pages. This does not prove
+    once, rejects duplicate, empty, or non-terminating continuation pages, and rejects a complete
+    READY response without Core-owned canonical content identity. `source_batch_fingerprint`
+    remains null unless persisted upstream batch evidence exists. This does not prove
     relationship householding, suitability, PM ranking, execution readiness, client workflow, or
     full analytics support for the source-only rows.
 - `lotus-core portfolio_derived_state_service`

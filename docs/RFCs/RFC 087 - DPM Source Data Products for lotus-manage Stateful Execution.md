@@ -1276,7 +1276,11 @@ from repo-local wiki source is complete.
 The later `DpmPortfolioUniverseCandidate:v1` extension reaches producer-side gold-standard posture
 once local and CI gates pass, because the contract is cataloged, security-profiled, documented,
 OpenAPI-bound, domain-product declared, paged, source-lineage preserving, and explicitly bounded by
-non-claims. It does not by itself close RFC37-WTBD-004 end to end; downstream `lotus-manage`
+non-claims. Complete READY responses also publish deterministic `content_hash`/`source_digest`
+authority over normalized selection scope and exact ordered mandate-binding evidence. Empty and
+truncated responses retain unavailable identity, and `source_batch_fingerprint` remains null in the
+absence of persisted ingestion-batch lineage. It does not by itself close RFC37-WTBD-004 end to end;
+downstream `lotus-manage`
 consumption and live canonical wave proof remain separate closure evidence.
 
 ### Documentation And Skill Review
