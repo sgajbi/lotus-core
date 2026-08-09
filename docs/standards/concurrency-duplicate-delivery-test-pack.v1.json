@@ -90,17 +90,23 @@
       "lane": "unit-and-integration-all",
       "evidence": [
         "tests/integration/services/portfolio_transaction_processing_service/test_int_atomic_unit_of_work.py",
+        "tests/integration/services/portfolio_transaction_processing_service/test_int_cost_basis_concurrency.py",
+        "tests/integration/services/portfolio_transaction_processing_service/test_int_position_recalculation_concurrency.py",
         "tests/integration/services/portfolio_transaction_processing_service/test_int_cost_repository_lot_offset.py",
-        "tests/unit/services/portfolio_transaction_processing_service/application/test_process_transaction.py",
-        "tests/integration/services/portfolio_transaction_processing_service/test_int_atomic_unit_of_work.py"
+        "tests/unit/services/portfolio_transaction_processing_service/application/test_process_transaction.py"
       ],
       "deterministic_primitives": [
         "explicit transaction ids",
+        "asyncio.Event worker release barrier",
+        "PostgreSQL transaction advisory locks",
+        "independent portfolio/security worker barriers",
         "canonical lot/offset state assertions",
         "epoch field assertions"
       ],
       "state_assertions": [
         "cost/outbox rows are created once for accepted events",
+        "concurrent same-event workers return one processed and one duplicate outcome",
+        "same portfolio/security work serializes while independent keys proceed",
         "duplicate claims skip processing",
         "lot and accrued-income offset state remain consistent"
       ],

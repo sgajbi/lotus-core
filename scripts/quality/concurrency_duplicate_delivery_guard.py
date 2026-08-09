@@ -7,7 +7,7 @@ import json
 import re
 import subprocess
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PACK_PATH = Path("docs/standards/concurrency-duplicate-delivery-test-pack.v1.json")
@@ -26,7 +26,10 @@ ALLOWED_STATUSES = {"implemented", "representative_implemented"}
 
 
 def _load_json(path: Path) -> dict[str, Any]:
-    return json.loads(path.read_text(encoding="utf-8"))
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError(f"Concurrency duplicate-delivery pack must be an object: {path}")
+    return cast(dict[str, Any], payload)
 
 
 def _normalize(path: str) -> str:
@@ -106,6 +109,18 @@ def validate_concurrency_duplicate_delivery_pack(
             values = scenario.get(key)
             if not isinstance(values, list) or not values:
                 findings.append({"scenario": scenario_id, "missing": key})
+                continue
+            normalized_values = [str(value) for value in values]
+            duplicate_values = sorted(
+                {value for value in normalized_values if normalized_values.count(value) > 1}
+            )
+            if duplicate_values:
+                findings.append(
+                    {
+                        "scenario": scenario_id,
+                        "duplicate_values": {key: duplicate_values},
+                    }
+                )
         missing_refs = [
             str(ref)
             for ref in scenario.get("evidence", [])

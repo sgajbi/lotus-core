@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from dataclasses import replace
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -34,6 +35,7 @@ from src.services.portfolio_transaction_processing_service.app.ports import (
     CostProcessingResult,
     PositionProcessingResult,
 )
+from tests.test_support.async_task_coordination import cancel_pending_tasks
 
 pytestmark = [
     pytest.mark.asyncio,
@@ -170,6 +172,42 @@ async def test_combined_use_case_commits_every_module_and_idempotency_atomically
 
     assert result.status is TransactionProcessingStatus.PROCESSED
     assert duplicate_result.status is TransactionProcessingStatus.DUPLICATE
+    assert await _persisted_counts(session_factory, command) == (3, 1)
+
+
+async def test_concurrent_same_transaction_delivery_commits_financial_effects_once(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    session_factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
+    command = _command("CONCURRENT-DUPLICATE")
+    workers_ready = asyncio.Event()
+    release_workers = asyncio.Event()
+    ready_count = 0
+
+    async def process_from_independent_worker() -> TransactionProcessingStatus:
+        nonlocal ready_count
+        use_case = ProcessTransactionUseCase(
+            _unit_of_work_factory(session_factory, fail_at=None),
+            observer=PROMETHEUS_TRANSACTION_PROCESSING_OBSERVER,
+        )
+        ready_count += 1
+        if ready_count == 2:
+            workers_ready.set()
+        await release_workers.wait()
+        return (await use_case.execute(command)).status
+
+    first = asyncio.create_task(process_from_independent_worker())
+    second = asyncio.create_task(process_from_independent_worker())
+    try:
+        await asyncio.wait_for(workers_ready.wait(), timeout=2)
+        release_workers.set()
+        statuses = await asyncio.wait_for(asyncio.gather(first, second), timeout=10)
+    finally:
+        release_workers.set()
+        await cancel_pending_tasks(first, second)
+
+    assert sorted(status.value for status in statuses) == ["duplicate", "processed"]
     assert await _persisted_counts(session_factory, command) == (3, 1)
 
 
