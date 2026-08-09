@@ -33,6 +33,14 @@ class PositionMaterializationProgress:
     latest_completed_snapshot_date: date | None
 
 
+@dataclass(frozen=True, slots=True)
+class PositionReplayWindow:
+    """Carry the position anchor and ordered transactions for one replay window."""
+
+    anchor: PositionHistoryRecord | None
+    transactions: tuple[BookedTransaction, ...]
+
+
 class PositionHistoryRepository(Protocol):
     """Load and persist canonical transaction-backed position history."""
 
@@ -57,18 +65,14 @@ class PositionHistoryRepository(Protocol):
         self, *, portfolio_id: str, security_id: str
     ) -> tuple[BookedTransaction, ...]: ...
 
-    async def last_record_before(
+    async def load_replay_window(
         self,
         *,
         portfolio_id: str,
         security_id: str,
         position_date: date,
         epoch: int,
-    ) -> PositionHistoryRecord | None: ...
-
-    async def list_transactions_from(
-        self, *, portfolio_id: str, security_id: str, transaction_date: date
-    ) -> tuple[BookedTransaction, ...]: ...
+    ) -> PositionReplayWindow: ...
 
     async def delete_records_from(
         self,

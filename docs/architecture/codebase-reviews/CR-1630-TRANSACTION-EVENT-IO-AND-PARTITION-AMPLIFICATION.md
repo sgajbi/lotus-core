@@ -725,6 +725,24 @@ does not publish this key policy; the operator-owned migration runbook is the du
   next slice must reduce proven transaction-scoped round trips while preserving ordering, locks,
   atomicity, calculations, event contracts, the 12-partition ceiling, and the rejected-experiment
   exclusions.
+- Position persistence accounted for `0.178394358s` mean stage time in that exact-source artifact;
+  the sum of its measured repository calls was `0.177557555s`, or 99.53% of the stage. The ordinary
+  current-stream path read the prior position anchor and affected booked transactions in two
+  sequential post-lock queries. One domain-owned `PositionReplayWindow` now loads both from the
+  same post-lock database snapshot with deterministic transaction-date/transaction-id ordering.
+  The initial-stream statement shape therefore removes one fixed-latency query (measured prior
+  anchor call `0.025202879s`, projecting about 14.1% from the position stage) without moving the
+  lock, changing the delete boundary, weakening the epoch-fenced rearm, or altering calculations,
+  lineage, events, schema, or public contracts. Focused unit proof passed 26 tests; live PostgreSQL
+  replay-window proof passed two tests with exactly one SELECT; same-key serialization and rollback
+  atomicity proof passed four tests.
+- A cost-stream experiment that acquired the advisory lock and read its replay checkpoint inside
+  one SQL statement was rejected and fully reverted before commit. Under PostgreSQL READ COMMITTED,
+  a statement snapshot can precede an advisory-lock wait, so a caller unblocked by a committing
+  predecessor could read a stale checkpoint from the waiting statement's older snapshot. Future
+  cost round-trip work must keep lock acquisition and freshness-dependent reads in separate
+  statements or prove an equivalent fresh-snapshot boundary; a lower statement count is never a
+  substitute for deterministic replay authority.
 
 Implementation commits include `23fc6faf3`, `d51adb739`, `ad1ad179d`, `57f8c60e2`,
 `4f05be9a5`, `c230d660a`, `f42f6eaa3`, `d56e14dbf`, `2d49fc8f1`, `70ae16f0f`,
@@ -761,6 +779,11 @@ forward. Recording its no-repeat evidence requires no OpenAPI, migration, event-
 calculation-methodology, operator-runbook, or wiki-source change.
 The exact daily failure adds evidence only. It requires no OpenAPI, migration, event-contract,
 calculation-methodology, operator-runbook, or additional wiki-source change.
+The post-lock position replay-window consolidation changes one internal repository port and query
+shape only. It preserves lock order, delete and replay boundaries, deterministic transaction order,
+epoch fencing, calculations, lineage, APIs, OpenAPI, events, database schema, runtime settings, and
+operator commands. This review record is the durable evidence; no migration, runbook, repository
+context, calculation-methodology, or authored wiki change is required.
 The rejected source-version interval and its operator setting were reverted forward. The canonical
 immediate source-version validation contract is restored; retaining the experiment evidence requires
 no OpenAPI, migration, event-contract, calculation-methodology, operator-runbook, or wiki-source

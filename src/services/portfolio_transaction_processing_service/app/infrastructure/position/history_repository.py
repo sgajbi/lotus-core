@@ -16,12 +16,13 @@ from portfolio_common.domain.calculation_lineage import calculation_lineage_from
 from portfolio_common.identifiers import normalize_lookup_identifier
 from portfolio_common.monitoring import observe_position_history_replay_lock_wait
 from portfolio_common.utils import async_timed
-from sqlalchemy import delete, func, select, text
+from sqlalchemy import delete, func, select, text, true
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from ...domain.position.history import PositionHistoryRecord
 from ...domain.transaction.booked import BookedTransaction
-from ...ports.position_history import PositionMaterializationProgress
+from ...ports.position_history import PositionMaterializationProgress, PositionReplayWindow
 
 logger = logging.getLogger(__name__)
 
@@ -162,47 +163,48 @@ class SqlAlchemyPositionHistoryRepository:
         result = await self._session.execute(statement)
         return tuple(_to_booked_transaction(row) for row in result.scalars().all())
 
-    @async_timed(repository="PositionRepository", method="get_last_position_before")
-    async def last_record_before(
+    @async_timed(repository="PositionRepository", method="load_position_replay_window")
+    async def load_replay_window(
         self,
         *,
         portfolio_id: str,
         security_id: str,
         position_date: date,
         epoch: int,
-    ) -> PositionHistoryRecord | None:
-        """Return the latest position record before the replay window."""
-        statement = (
+    ) -> PositionReplayWindow:
+        """Load the prior anchor and ordered replay transactions in one query."""
+        normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
+        normalized_security_id = normalize_lookup_identifier(security_id)
+        anchor_cte = (
             select(PositionHistory)
             .where(
-                func.trim(PositionHistory.portfolio_id)
-                == normalize_lookup_identifier(portfolio_id),
-                func.trim(PositionHistory.security_id) == normalize_lookup_identifier(security_id),
+                func.trim(PositionHistory.portfolio_id) == normalized_portfolio_id,
+                func.trim(PositionHistory.security_id) == normalized_security_id,
                 PositionHistory.position_date < position_date,
                 PositionHistory.epoch == epoch,
             )
             .order_by(PositionHistory.position_date.desc(), PositionHistory.id.desc())
+            .limit(1)
+            .cte("position_replay_anchor")
         )
-        result = await self._session.execute(statement)
-        row = result.scalars().first()
-        return _to_position_history_record(row) if row is not None else None
-
-    @async_timed(repository="PositionRepository", method="get_transactions_on_or_after")
-    async def list_transactions_from(
-        self, *, portfolio_id: str, security_id: str, transaction_date: date
-    ) -> tuple[BookedTransaction, ...]:
-        """Return booked transactions in the affected replay window."""
+        anchor = aliased(PositionHistory, anchor_cte)
         statement = (
-            select(Transaction)
+            select(Transaction, anchor)
+            .select_from(Transaction)
+            .outerjoin(anchor, true())
             .where(
-                func.trim(Transaction.portfolio_id) == normalize_lookup_identifier(portfolio_id),
-                func.trim(Transaction.security_id) == normalize_lookup_identifier(security_id),
-                Transaction.transaction_date >= datetime.combine(transaction_date, time.min),
+                func.trim(Transaction.portfolio_id) == normalized_portfolio_id,
+                func.trim(Transaction.security_id) == normalized_security_id,
+                Transaction.transaction_date >= datetime.combine(position_date, time.min),
             )
             .order_by(Transaction.transaction_date.asc(), Transaction.transaction_id.asc())
         )
-        result = await self._session.execute(statement)
-        return tuple(_to_booked_transaction(row) for row in result.scalars().all())
+        rows = (await self._session.execute(statement)).all()
+        anchor_row = rows[0][1] if rows else None
+        return PositionReplayWindow(
+            anchor=(_to_position_history_record(anchor_row) if anchor_row is not None else None),
+            transactions=tuple(_to_booked_transaction(row[0]) for row in rows),
+        )
 
     @async_timed(repository="PositionRepository", method="delete_positions_from")
     async def delete_records_from(
