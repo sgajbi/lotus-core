@@ -13,6 +13,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import TYPE_CHECKING, Mapping, Protocol, cast
 
+from scripts.operations.managed_gate_evidence import write_managed_gate_failure_receipt
 from scripts.quality.ci_service_sets import DERIVED_STATE_WORKLOAD_GATE_SERVICES
 
 if TYPE_CHECKING:
@@ -340,6 +341,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> int:
     """Start the managed runtime, execute one workload, and preserve diagnostics."""
 
+    started_at = datetime.now(UTC)
     args = build_parser().parse_args()
     if args.resource_poll_interval_seconds <= 0:
         raise ValueError("resource_poll_interval_seconds must be positive")
@@ -349,46 +351,76 @@ def main() -> int:
         diagnostic_smoke=args.diagnostic_smoke,
     )
     validate_execution_posture(profile=profile, build=args.build)
-    managed_run = prepare_managed_run(args=args, repo_root=repo_root)
-    managed_run.runtime.export_to(os.environ)
-    endpoints = cast(WorkloadConnectionEndpoints, managed_run.runtime.endpoints)
+    output_dir = repo_root / args.output_dir
+    compose_log_path = (
+        output_dir / "diagnostics" / f"derived-state-{args.profile}-workload-compose.log"
+    )
+    compose_project_name: str | None = args.compose_project_name
+    failure_phase = "prepare-managed-run"
 
-    from tests.test_support.docker_stack import wait_for_migration_runner
+    try:
+        managed_run = prepare_managed_run(args=args, repo_root=repo_root)
+        managed_run.runtime.export_to(os.environ)
+        endpoints = cast(WorkloadConnectionEndpoints, managed_run.runtime.endpoints)
+        compose_project_name = endpoints.compose_project_name
 
-    with ExitStack() as lifecycle:
-        if not args.skip_compose:
-            lifecycle.enter_context(managed_run)
-            wait_for_migration_runner(
-                managed_run.compose_file,
-                timeout_seconds=300,
-                runtime=managed_run.runtime,
+        from tests.test_support.docker_stack import wait_for_migration_runner
+
+        with ExitStack() as lifecycle:
+            if not args.skip_compose:
+                failure_phase = "start-managed-runtime"
+                lifecycle.enter_context(managed_run)
+                failure_phase = "wait-for-migration"
+                wait_for_migration_runner(
+                    managed_run.compose_file,
+                    timeout_seconds=300,
+                    runtime=managed_run.runtime,
+                )
+            else:
+                managed_run.runtime.port_reservation.release()
+            command = build_bank_day_command(
+                python_executable=sys.executable,
+                repo_root=repo_root,
+                compose_file=Path(managed_run.compose_file),
+                endpoints=endpoints,
+                profile=profile,
+                output_dir=args.output_dir,
+                resource_poll_interval_seconds=args.resource_poll_interval_seconds,
+                trade_date=resolve_workload_trade_date(
+                    explicit_trade_date=args.trade_date,
+                    now=datetime.now(UTC),
+                ),
             )
-        else:
-            managed_run.runtime.port_reservation.release()
-        command = build_bank_day_command(
-            python_executable=sys.executable,
-            repo_root=repo_root,
-            compose_file=Path(managed_run.compose_file),
-            endpoints=endpoints,
-            profile=profile,
-            output_dir=args.output_dir,
-            resource_poll_interval_seconds=args.resource_poll_interval_seconds,
-            trade_date=resolve_workload_trade_date(
-                explicit_trade_date=args.trade_date,
-                now=datetime.now(UTC),
-            ),
+            environment = build_workload_environment(
+                endpoints=endpoints,
+                base_environment=os.environ,
+            )
+            failure_phase = "execute-bank-day-workload"
+            completed = subprocess.run(
+                command,
+                cwd=repo_root,
+                env=environment,
+                check=False,
+            )
+            return completed.returncode
+    except Exception as error:
+        receipt = write_managed_gate_failure_receipt(
+            output_dir=output_dir,
+            gate_name=profile.name,
+            phase=failure_phase,
+            error=error,
+            started_at=started_at,
+            failed_at=datetime.now(UTC),
+            compose_project_name=compose_project_name,
+            compose_log_path=compose_log_path,
+            context={
+                "profile": profile.name,
+                "certifying_profile": profile.certifying,
+                "transaction_count": profile.transaction_count,
+            },
         )
-        environment = build_workload_environment(
-            endpoints=endpoints,
-            base_environment=os.environ,
-        )
-        completed = subprocess.run(
-            command,
-            cwd=repo_root,
-            env=environment,
-            check=False,
-        )
-        return completed.returncode
+        print(f"Derived-state workload orchestration failure receipt: {receipt}")
+        raise
 
 
 if __name__ == "__main__":
