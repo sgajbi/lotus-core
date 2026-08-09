@@ -233,7 +233,7 @@ def test_inspected_commit_must_be_on_origin_main(monkeypatch: pytest.MonkeyPatch
 
     errors = guard.validate_manifest(_manifest())
 
-    assert any("must be an ancestor of origin/main" in error for error in errors)
+    assert any("must be an ancestor of the governed main ref" in error for error in errors)
 
 
 def test_git_commit_main_ancestry_rejects_branch_only_commit(tmp_path: Path) -> None:
@@ -290,6 +290,47 @@ def test_git_commit_main_ancestry_rejects_branch_only_commit(tmp_path: Path) -> 
     assert not guard._git_commit_is_on_main(repository, branch_commit)
 
 
+def test_git_commit_main_ancestry_uses_local_main_when_origin_is_unavailable(
+    tmp_path: Path,
+) -> None:
+    repository = tmp_path / "repository"
+    repository.mkdir()
+    subprocess.run(["git", "init"], cwd=repository, check=True, capture_output=True)
+    evidence_path = repository / "evidence.txt"
+    evidence_path.write_text("main evidence\n", encoding="utf-8")
+    subprocess.run(["git", "add", "evidence.txt"], cwd=repository, check=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=Lotus Test",
+            "-c",
+            "user.email=lotus-test@example.invalid",
+            "commit",
+            "-m",
+            "main evidence",
+        ],
+        cwd=repository,
+        check=True,
+        capture_output=True,
+    )
+    main_commit = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=repository,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    subprocess.run(
+        ["git", "update-ref", "refs/heads/main", main_commit],
+        cwd=repository,
+        check=True,
+    )
+
+    assert guard._resolve_main_ref(repository) == "refs/heads/main"
+    assert guard._git_commit_is_on_main(repository, main_commit)
+
+
 def test_online_receipt_verification_rejects_missing_artifact(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -331,7 +372,10 @@ def test_online_receipt_verification_binds_main_run_and_artifact_digest(
 ) -> None:
     manifest = _manifest()
     artifacts = _receipt_artifacts(manifest)
-    artifacts[0]["digest"] = "sha256:" + "0" * 64
+    target_artifact = artifacts[0]["name"]
+    for artifact in artifacts:
+        if artifact["name"] == target_artifact:
+            artifact["digest"] = "sha256:" + "0" * 64
 
     def github_payload(endpoint: str) -> dict[str, object]:
         if endpoint.endswith("artifacts?per_page=100"):
@@ -390,6 +434,26 @@ def test_protected_ci_enforces_online_receipt_verification(workflow_path: str) -
     assert "actions: read" in workflow
     assert "GH_TOKEN: ${{ github.token }}" in workflow
     assert "make technology-governance-pilot-receipt-guard" in workflow
+
+
+def test_pilot_does_not_cite_ephemeral_image_bundle_as_durable_evidence() -> None:
+    manifest = _manifest()
+
+    artifacts = {evidence["artifact"] for _, evidence in guard._github_run_refs(manifest)}
+
+    assert artifacts.isdisjoint(guard.EPHEMERAL_RECEIPT_ARTIFACTS)
+
+
+def test_ephemeral_image_bundle_is_rejected_as_governance_evidence() -> None:
+    manifest = copy.deepcopy(_manifest())
+    _, run_ref = next(guard._github_run_refs(manifest))
+    run_ref["artifact"] = "main-runtime-image-set"
+
+    errors = guard.validate_manifest(manifest)
+
+    assert any(
+        "ephemeral artifact cannot be a durable governance receipt" in error for error in errors
+    )
 
 
 def _write_platform_policy_repo(tmp_path: Path, policy: dict[str, object]) -> Path:

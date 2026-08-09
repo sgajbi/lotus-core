@@ -33,6 +33,7 @@ RECEIPT_WORKFLOW_ID = 259248882
 RECEIPT_WORKFLOW_PATH = ".github/workflows/main-releasability.yml"
 RECEIPT_EVENT = "push"
 RECEIPT_BRANCH = "main"
+EPHEMERAL_RECEIPT_ARTIFACTS = {"main-runtime-image-set"}
 EXPECTED_POLICY_REF = {
     "repository": "sgajbi/lotus-platform",
     "commit": "c3af9ace58f54fb070db32d2b428ff79c852d818",
@@ -191,6 +192,8 @@ def _validate_github_run_evidence(
         errors.append(f"{location}: source_commit must match inspected_core_commit")
     if not isinstance(artifact, str) or not artifact:
         errors.append(f"{location}: GitHub run evidence requires artifact")
+    elif artifact in EPHEMERAL_RECEIPT_ARTIFACTS:
+        errors.append(f"{location}: ephemeral artifact cannot be a durable governance receipt")
     if not isinstance(artifact_digest, str) or not ARTIFACT_DIGEST_PATTERN.fullmatch(
         artifact_digest
     ):
@@ -352,7 +355,7 @@ def _validate_manifest_identity(manifest: dict[str, Any], *, root: Path, errors:
     if not _git_commit_resolves(root, inspected_commit):
         errors.append("inspected_core_commit must resolve to a Core commit")
     elif not _git_commit_is_on_main(root, inspected_commit):
-        errors.append("inspected_core_commit must be an ancestor of origin/main")
+        errors.append("inspected_core_commit must be an ancestor of the governed main ref")
     return inspected_commit
 
 
@@ -367,13 +370,29 @@ def _git_commit_resolves(root: Path, commit: str) -> bool:
 
 
 def _git_commit_is_on_main(root: Path, commit: str) -> bool:
+    main_ref = _resolve_main_ref(root)
+    if main_ref is None:
+        return False
     result = subprocess.run(
-        ["git", "merge-base", "--is-ancestor", commit, "refs/remotes/origin/main"],
+        ["git", "merge-base", "--is-ancestor", commit, main_ref],
         cwd=root,
         check=False,
         capture_output=True,
     )
     return result.returncode == 0
+
+
+def _resolve_main_ref(root: Path) -> str | None:
+    for candidate in ("refs/remotes/origin/main", "refs/heads/main"):
+        result = subprocess.run(
+            ["git", "show-ref", "--verify", "--quiet", candidate],
+            cwd=root,
+            check=False,
+            capture_output=True,
+        )
+        if result.returncode == 0:
+            return candidate
+    return None
 
 
 def _validate_policy_ref(manifest: dict[str, Any], errors: list[str]) -> dict[str, Any] | None:
