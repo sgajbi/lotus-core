@@ -139,6 +139,45 @@ def upgrade() -> None:
         "corporate_action_events",
         ["portfolio_id", "readiness_status", sa.text("updated_at DESC")],
     )
+    op.execute(
+        sa.text(
+            """
+            CREATE FUNCTION enforce_ca_event_identity_immutable()
+            RETURNS trigger
+            LANGUAGE plpgsql
+            AS $$
+            BEGIN
+                IF ROW(
+                    NEW.tenant_id,
+                    NEW.legal_book_id,
+                    NEW.portfolio_id,
+                    NEW.corporate_action_event_id,
+                    NEW.linked_transaction_group_id,
+                    NEW.parent_event_reference,
+                    NEW.created_at
+                ) IS DISTINCT FROM ROW(
+                    OLD.tenant_id,
+                    OLD.legal_book_id,
+                    OLD.portfolio_id,
+                    OLD.corporate_action_event_id,
+                    OLD.linked_transaction_group_id,
+                    OLD.parent_event_reference,
+                    OLD.created_at
+                ) THEN
+                    RAISE EXCEPTION 'corporate-action event identity is immutable'
+                        USING ERRCODE = '23514';
+                END IF;
+                RETURN NEW;
+            END;
+            $$;
+
+            CREATE TRIGGER trg_ca_event_identity_immutable
+            BEFORE UPDATE ON corporate_action_events
+            FOR EACH ROW
+            EXECUTE FUNCTION enforce_ca_event_identity_immutable();
+            """
+        )
+    )
 
     op.create_table(
         "corporate_action_manifest_versions",
@@ -836,4 +875,5 @@ def downgrade() -> None:
     op.drop_table("corporate_action_manifest_versions")
     op.execute(sa.text("DROP FUNCTION enforce_ca_manifest_predecessor()"))
     op.drop_table("corporate_action_events")
+    op.execute(sa.text("DROP FUNCTION enforce_ca_event_identity_immutable()"))
     op.execute(sa.text("DROP FUNCTION reject_ca_ledger_mutation()"))
