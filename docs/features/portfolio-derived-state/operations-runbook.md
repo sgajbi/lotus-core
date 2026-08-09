@@ -90,3 +90,10 @@ ingestion and requires complete recovery after restart.
 used as daily-volume, fan-in, lease-duration, or production-capacity evidence. Treat only a report
 with `evidence_classification=certifying`, exact expected row counts, complete resource samples,
 clean reconciliation, and no failures as profile evidence.
+
+If managed Compose startup, migration, recovery, or poison orchestration fails before its normal
+report exists, the gate writes an atomic
+`lotus.managed-gate-orchestration-failure.v1` JSON receipt. The receipt identifies the failed
+phase and owned Compose/log context, redacts credentials, re-raises the original error, and is
+always labelled `non_certifying_failure`. Retain it for diagnosis; never use it as workload,
+capacity, recovery, or poison-containment acceptance.
