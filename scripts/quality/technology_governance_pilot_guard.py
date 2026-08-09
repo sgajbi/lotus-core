@@ -303,15 +303,30 @@ def _validate_manifest_identity(manifest: dict[str, Any], *, root: Path, errors:
     if not isinstance(inspected_commit, str) or not FULL_SHA_PATTERN.fullmatch(inspected_commit):
         errors.append("inspected_core_commit must be a full Git SHA")
         return ""
+    if not _git_commit_resolves(root, inspected_commit) and not _is_shallow_repository(root):
+        errors.append("inspected_core_commit must resolve to a Core commit")
+    return inspected_commit
+
+
+def _git_commit_resolves(root: Path, commit: str) -> bool:
     result = subprocess.run(
-        ["git", "cat-file", "-e", f"{inspected_commit}^{{commit}}"],
+        ["git", "cat-file", "-e", f"{commit}^{{commit}}"],
         cwd=root,
         check=False,
         capture_output=True,
     )
-    if result.returncode:
-        errors.append("inspected_core_commit must resolve to a Core commit")
-    return inspected_commit
+    return result.returncode == 0
+
+
+def _is_shallow_repository(root: Path) -> bool:
+    result = subprocess.run(
+        ["git", "rev-parse", "--is-shallow-repository"],
+        cwd=root,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    return result.returncode == 0 and result.stdout.strip() == "true"
 
 
 def _validate_policy_ref(manifest: dict[str, Any], errors: list[str]) -> dict[str, Any] | None:
