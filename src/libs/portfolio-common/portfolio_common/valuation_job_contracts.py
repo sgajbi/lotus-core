@@ -24,3 +24,4 @@ class ValuationJobUpsert:
     epoch: int
     correlation_id: Optional[str] = None
     source_correction_id: Optional[str] = None
+    readiness_outbox_id: Optional[int] = None

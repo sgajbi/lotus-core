@@ -788,6 +788,25 @@ does not publish this key policy; the operator-owned migration runbook is the du
   receipt now retains at most 25 synthetic repeated-job samples with source-correction and
   correlation lineage so the next exact run can identify the winning trigger without retaining an
   unbounded high-cardinality dump or relying on timing inference.
+- Exact clean fan-in task
+  `eng-task-20260810-014321-lotus-core-certification-make-profile-derived-state-fan-in` at signed
+  head `f4ab7ecfc` reconciled all 1,000 transactions, snapshots, position-series rows, and the
+  portfolio-series row in `90.653s`, but correctly failed certification: 30 valuation jobs were
+  repeated, maximum attempt count reached four, and 1,007 snapshot events were published. Artifact
+  `20260809T175045Z-bank-day-load.json` has SHA-256
+  `D54AA9E97A3EFC6AEED5DB8B1E36D9088B071713113983AF0AA933EC490C8943`. Every sampled repeat
+  carried scheduler-backfill correlation without source-correction lineage, while the latest
+  position-history rows predated the affected jobs. The remaining race was delayed delivery of a
+  readiness outbox event whose committed position mutation had already been covered by a valuation
+  claim.
+- Valuation claims now snapshot the maximum committed readiness outbox ID for the exact
+  portfolio/security/date/epoch scope. The readiness consumer rearms or requeues only for a
+  positive delivered outbox ID newer than that durable watermark; headerless or malformed legacy
+  deliveries remain non-rearming compatibility inputs. Exact JSON payload identity supplements the
+  aggregate ID, preventing delimiter collisions, and the watermark is monotonic when outbox history
+  is later pruned. Ten live PostgreSQL cases cover delayed replay, later mutation, uncommitted
+  exclusion, other-date isolation, completed-job idempotency, retention, non-ISO `DateStyle`,
+  aggregate-ID collision, rollback sequence gaps, and same-position concurrent publication.
 
 Implementation commits include `23fc6faf3`, `d51adb739`, `ad1ad179d`, `57f8c60e2`,
 `4f05be9a5`, `c230d660a`, `f42f6eaa3`, `d56e14dbf`, `2d49fc8f1`, `70ae16f0f`,
@@ -895,3 +914,9 @@ The cost-persistence timing extension changes only bounded internal metrics and 
 completeness. Its labels are fixed repository/method names without business identifiers, and it
 changes no API, OpenAPI, event, database statement/schema, calculation, lock, partition, runtime
 setting, operator command, or authored wiki truth.
+The readiness-sequence fence adds one non-null, default-zero internal valuation-job database column
+through migration `c150b2c3d517`. It changes no public API, OpenAPI field, Kafka topic, event payload,
+partition key, calculation, or downstream consumer contract. Existing readiness records without a
+valid outbox header remain consumable but cannot fabricate rearm authority. Repository context,
+this review, the existing runtime contract, and authored Timeseries and Aggregation wiki are updated
+in place; no new standalone document is required.

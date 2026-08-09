@@ -59,6 +59,13 @@ async def test_find_and_claim_eligible_jobs_emits_claim_metric(
         "portfolio_valuation_jobs.valuation_date ASC, "
         "portfolio_valuation_jobs.epoch DESC"
     ) in compiled_query
+    compact_query = compiled_query.replace(" ", "").replace("\n", "")
+    assert "claimed_readiness_outbox_id=greatest(" in compact_query
+    assert "coalesce((SELECTmax(outbox_events.id)" in compact_query
+    assert "outbox_events.aggregate_type = 'ValuationReadiness'" in compiled_query
+    assert "outbox_events.event_type = 'PortfolioDayReadyForValuation'" in compiled_query
+    assert "to_char(portfolio_valuation_jobs.valuation_date, 'YYYY-MM-DD')" in compiled_query
+    assert "outbox_events.payload['portfolio_id']" in compiled_query
 
 
 async def test_find_and_reset_stale_jobs_emits_reset_metric(

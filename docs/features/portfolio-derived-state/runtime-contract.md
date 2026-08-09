@@ -49,3 +49,10 @@ queue is the durable internal command boundary; there is no private aggregation 
 
 The preserved consumer group is `timeseries_generator_group_positions`. Keeping this identifier is
 an intentional offset-compatibility decision, not a surviving legacy service.
+
+The upstream valuation queue uses committed transactional-outbox IDs as exact-scope readiness
+sequence authority. A claim records the latest committed ID for its portfolio, security, valuation
+date, and epoch. Delivery of the same or an older readiness event cannot rearm that covered job;
+only a newer positive ID can do so. Headerless compatibility records remain consumable without
+rearm authority. This is an internal database sequencing contract and does not change the Kafka
+payload or public API.

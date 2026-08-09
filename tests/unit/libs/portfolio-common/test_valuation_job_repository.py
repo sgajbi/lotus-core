@@ -287,6 +287,55 @@ async def test_source_requeue_compares_correction_identity_not_transport_correla
     assert "correlation_id IS NOT DISTINCT FROM excluded.correlation_id" not in conflict_predicate
 
 
+async def test_position_readiness_fence_compares_exact_outbox_sequence() -> None:
+    statement = _valuation_job_upsert_stmt(
+        [
+            ValuationJobUpsert(
+                portfolio_id="P1",
+                security_id="S1",
+                valuation_date=date(2025, 8, 10),
+                epoch=2,
+                correlation_id="readiness-correlation",
+                source_correction_id="sha256:" + ("b" * 64),
+                readiness_outbox_id=417,
+            )
+        ],
+        rearm_completed=True,
+        requeue_if_processing=True,
+        fence_by_readiness_sequence=True,
+    )
+
+    compiled = str(statement.compile(compile_kwargs={"literal_binds": True}))
+    conflict_predicate = compiled.rsplit(" WHERE ", maxsplit=1)[-1]
+    assert "excluded.claimed_readiness_outbox_id" in conflict_predicate
+    assert "portfolio_valuation_jobs.claimed_readiness_outbox_id" in conflict_predicate
+    assert "portfolio_valuation_jobs.status = 'PENDING'" in conflict_predicate
+
+
+async def test_position_readiness_uses_revision_fenced_upsert(
+    repository: ValuationJobRepository,
+) -> None:
+    repository._upsert_jobs = AsyncMock(return_value=1)  # type: ignore[method-assign]
+
+    count = await repository.upsert_position_readiness_job(
+        portfolio_id="P1",
+        security_id="S1",
+        valuation_date=date(2025, 8, 10),
+        epoch=2,
+        correlation_id="readiness-correlation",
+        source_mutation_id="sha256:" + ("c" * 64),
+        readiness_outbox_id=418,
+    )
+
+    assert count == 1
+    repository._upsert_jobs.assert_awaited_once()  # type: ignore[attr-defined]
+    assert repository._upsert_jobs.await_args.kwargs == {  # type: ignore[attr-defined]
+        "rearm_completed": True,
+        "requeue_if_processing": True,
+        "fence_by_readiness_sequence": True,
+    }
+
+
 async def test_upsert_jobs_deduplicates_duplicate_requests(repository: ValuationJobRepository):
     jobs = [
         ValuationJobUpsert(
@@ -375,7 +424,12 @@ async def test_high_fanout_upserts_use_bind_safe_ordered_statement_chunks(
         1,
     ]
     assert all(
-        call.kwargs == {"rearm_completed": True, "requeue_if_processing": True}
+        call.kwargs
+        == {
+            "rearm_completed": True,
+            "requeue_if_processing": True,
+            "fence_by_readiness_sequence": False,
+        }
         for call in mock_upsert_statement.call_args_list
     )
     assert mock_db_session.execute.await_count == 2

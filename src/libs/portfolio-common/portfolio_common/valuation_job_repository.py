@@ -81,6 +81,46 @@ class ValuationJobRepository:
             jobs,
             rearm_completed=rearm_completed,
             requeue_if_processing=requeue_if_processing,
+            fence_by_readiness_sequence=False,
+        )
+
+    async def upsert_position_readiness_job(
+        self,
+        *,
+        portfolio_id: str,
+        security_id: str,
+        valuation_date: date,
+        epoch: int,
+        correlation_id: Optional[str],
+        source_mutation_id: str,
+        readiness_outbox_id: int,
+    ) -> int:
+        """Schedule readiness only when persisted position authority is newer.
+
+        The valuation worker snapshots the exact-scope readiness outbox ID when it claims
+        a job. A readiness event may arrive after that claim even though its position mutation
+        was already visible. Comparing durable sequence authority prevents that delivery race from
+        fabricating a second valuation while preserving requeue for a genuinely later mutation.
+        """
+
+        if readiness_outbox_id <= 0:
+            raise ValueError("readiness_outbox_id must be a positive integer")
+
+        return await self._upsert_jobs(
+            [
+                ValuationJobUpsert(
+                    portfolio_id=portfolio_id,
+                    security_id=security_id,
+                    valuation_date=valuation_date,
+                    epoch=epoch,
+                    correlation_id=correlation_id,
+                    source_correction_id=source_mutation_id,
+                    readiness_outbox_id=readiness_outbox_id,
+                )
+            ],
+            rearm_completed=True,
+            requeue_if_processing=True,
+            fence_by_readiness_sequence=True,
         )
 
     async def _upsert_jobs(
@@ -89,6 +129,7 @@ class ValuationJobRepository:
         *,
         rearm_completed: bool,
         requeue_if_processing: bool,
+        fence_by_readiness_sequence: bool = False,
     ) -> int:
         normalized_jobs = self._normalize_jobs(jobs)
         if not normalized_jobs:
@@ -111,6 +152,7 @@ class ValuationJobRepository:
                 eligible_jobs,
                 rearm_completed=rearm_completed,
                 requeue_if_processing=requeue_if_processing,
+                fence_by_readiness_sequence=fence_by_readiness_sequence,
             )
             superseded_count = await self._skip_superseded_pending_jobs(
                 normalized_jobs=normalized_jobs,
@@ -148,6 +190,7 @@ class ValuationJobRepository:
         *,
         rearm_completed: bool,
         requeue_if_processing: bool,
+        fence_by_readiness_sequence: bool = False,
     ) -> int:
         staged_count = 0
         for job_chunk in _iter_statement_chunks(eligible_jobs):
@@ -156,6 +199,7 @@ class ValuationJobRepository:
                     job_chunk,
                     rearm_completed=rearm_completed,
                     requeue_if_processing=requeue_if_processing,
+                    fence_by_readiness_sequence=fence_by_readiness_sequence,
                 ).returning(
                     PortfolioValuationJob.portfolio_id,
                     PortfolioValuationJob.security_id,
@@ -176,6 +220,7 @@ class ValuationJobRepository:
                 epoch=job.epoch,
                 correlation_id=normalize_lineage_value(job.correlation_id),
                 source_correction_id=normalize_lineage_value(job.source_correction_id),
+                readiness_outbox_id=job.readiness_outbox_id,
             )
             normalized_by_scope[
                 (
@@ -313,6 +358,7 @@ def _valuation_job_upsert_stmt(
     *,
     rearm_completed: bool = False,
     requeue_if_processing: bool = False,
+    fence_by_readiness_sequence: bool = False,
 ):
     stmt = pg_insert(PortfolioValuationJob).values(_valuation_job_insert_values(eligible_jobs))
     return stmt.on_conflict_do_update(
@@ -325,6 +371,7 @@ def _valuation_job_upsert_stmt(
             stmt,
             rearm_completed=rearm_completed,
             requeue_if_processing=requeue_if_processing,
+            fence_by_readiness_sequence=fence_by_readiness_sequence,
         ),
     )
 
@@ -351,6 +398,7 @@ def _valuation_job_insert_values(
                 "status": "PENDING",
                 "requeue_requested": False,
                 "source_correction_id": job.source_correction_id,
+                "claimed_readiness_outbox_id": job.readiness_outbox_id or 0,
                 "correlation_id": diagnostics.correlation_id,
                 "correlation_missing_reason": diagnostics.correlation_missing_reason,
                 "alternate_lookup_key": diagnostics.alternate_lookup_key,
@@ -395,6 +443,7 @@ def _valuation_job_conflict_update_predicate(
     *,
     rearm_completed: bool,
     requeue_if_processing: bool,
+    fence_by_readiness_sequence: bool,
 ):
     identity_matches = PortfolioValuationJob.correlation_id.is_not_distinct_from(
         stmt.excluded.correlation_id
@@ -416,6 +465,11 @@ def _valuation_job_conflict_update_predicate(
         predicate = not_(PortfolioValuationJob.status == "PROCESSING") & not_(same_pending_lineage)
     if not rearm_completed:
         predicate &= PortfolioValuationJob.status != "COMPLETE"
+    if fence_by_readiness_sequence:
+        incoming_outbox_id = stmt.excluded.claimed_readiness_outbox_id
+        predicate &= (PortfolioValuationJob.status == "PENDING") | (
+            incoming_outbox_id > PortfolioValuationJob.claimed_readiness_outbox_id
+        )
     return predicate
 
 

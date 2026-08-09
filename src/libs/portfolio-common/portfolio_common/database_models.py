@@ -3,6 +3,7 @@ from enum import StrEnum
 
 from sqlalchemy import (
     JSON,
+    BigInteger,
     Boolean,
     CheckConstraint,
     Column,
@@ -3957,6 +3958,7 @@ class PortfolioValuationJob(Base):
     alternate_lookup_key = Column(String, nullable=True)
     failure_reason = Column(Text, nullable=True)
     attempt_count = Column(Integer, nullable=False, default=0, server_default="0")
+    claimed_readiness_outbox_id = Column(BigInteger, nullable=False, default=0, server_default="0")
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False

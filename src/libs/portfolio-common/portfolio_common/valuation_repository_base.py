@@ -15,6 +15,7 @@ from .database_models import (
     FxRate,
     Instrument,
     MarketPrice,
+    OutboxEvent,
     Portfolio,
     PortfolioValuationJob,
     PositionHistory,
@@ -32,6 +33,35 @@ from .valuation_snapshot_contiguity import (
 logger = logging.getLogger(__name__)
 
 _VALUATION_JOB_CLAIM_LOCK_ID = 7_611_901
+
+
+def _latest_readiness_outbox_id_for_job():
+    """Return the latest committed readiness sequence for the exact valuation scope."""
+
+    aggregate_id = func.concat(
+        PortfolioValuationJob.portfolio_id,
+        ":",
+        PortfolioValuationJob.security_id,
+        ":",
+        func.to_char(PortfolioValuationJob.valuation_date, "YYYY-MM-DD"),
+        ":",
+        PortfolioValuationJob.epoch,
+    )
+    return func.coalesce(
+        select(func.max(OutboxEvent.id))
+        .where(
+            OutboxEvent.aggregate_type == "ValuationReadiness",
+            OutboxEvent.event_type == "PortfolioDayReadyForValuation",
+            OutboxEvent.aggregate_id == aggregate_id,
+            OutboxEvent.payload["portfolio_id"].as_string() == PortfolioValuationJob.portfolio_id,
+            OutboxEvent.payload["security_id"].as_string() == PortfolioValuationJob.security_id,
+            OutboxEvent.payload["valuation_date"].as_string()
+            == func.to_char(PortfolioValuationJob.valuation_date, "YYYY-MM-DD"),
+            OutboxEvent.payload["epoch"].as_integer() == PortfolioValuationJob.epoch,
+        )
+        .scalar_subquery(),
+        0,
+    )
 
 
 class ValuationRepositoryBase:
@@ -519,6 +549,10 @@ class ValuationRepositoryBase:
             .values(
                 status="PROCESSING",
                 requeue_requested=False,
+                claimed_readiness_outbox_id=func.greatest(
+                    PortfolioValuationJob.claimed_readiness_outbox_id,
+                    _latest_readiness_outbox_id_for_job(),
+                ),
                 updated_at=func.now(),
                 attempt_count=PortfolioValuationJob.attempt_count + 1,
             )
