@@ -19,15 +19,7 @@ class TransactionReadinessRepository(Protocol):
         transaction_id: str,
     ) -> None: ...
 
-    async def latest_epoch(
-        self,
-        *,
-        stage_name: str,
-        portfolio_id: str,
-        transaction_id: str,
-    ) -> int | None: ...
-
-    async def upsert_processed_stage(
+    async def claim_processed_stage(
         self,
         *,
         stage_name: str,
@@ -36,9 +28,7 @@ class TransactionReadinessRepository(Protocol):
         security_id: str | None,
         business_date: date,
         epoch: int,
-    ) -> TransactionStageRecord: ...
-
-    async def claim_completion(self, stage: TransactionStageRecord) -> bool: ...
+    ) -> TransactionStageRecord | None: ...
 
 
 class TransactionReadinessEventStagingPort(Protocol):

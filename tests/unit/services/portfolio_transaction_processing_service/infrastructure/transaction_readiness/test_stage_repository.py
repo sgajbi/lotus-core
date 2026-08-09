@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import date
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -17,19 +16,6 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure.tr
 )
 
 
-def _persisted_stage(*, portfolio_id: str = "PB-001") -> SimpleNamespace:
-    return SimpleNamespace(
-        id=12,
-        transaction_id="TX-READY-001",
-        portfolio_id=portfolio_id,
-        security_id="SEC-001",
-        business_date=date(2026, 4, 10),
-        epoch=4,
-        status="PENDING",
-        cost_event_seen=True,
-    )
-
-
 def _stage_record() -> TransactionStageRecord:
     return TransactionStageRecord(
         stage_id=12,
@@ -38,7 +24,7 @@ def _stage_record() -> TransactionStageRecord:
         security_id="SEC-001",
         business_date=date(2026, 4, 10),
         epoch=4,
-        status="PENDING",
+        status="COMPLETED",
         cost_event_seen=True,
     )
 
@@ -62,37 +48,24 @@ async def test_acquire_stage_lock_uses_complete_transaction_stage_identity() -> 
 
 
 @pytest.mark.asyncio
-async def test_latest_epoch_returns_current_transaction_stage_epoch() -> None:
+async def test_claim_processed_stage_maps_new_completion_and_uses_one_statement() -> None:
     session = AsyncMock(spec=AsyncSession)
     result = MagicMock()
-    result.scalar_one_or_none.return_value = 7
+    result.mappings.return_value.one_or_none.return_value = {
+        "id": 12,
+        "transaction_id": "TX-READY-001",
+        "portfolio_id": "PB-001",
+        "security_id": "SEC-001",
+        "business_date": date(2026, 4, 10),
+        "epoch": 4,
+        "status": "COMPLETED",
+        "cost_event_seen": True,
+        "newly_claimed": True,
+    }
     session.execute.return_value = result
     repository = SqlAlchemyTransactionStageRepository(session)
 
-    epoch = await repository.latest_epoch(
-        stage_name="transaction_processing",
-        portfolio_id="PB-001",
-        transaction_id="TX-READY-001",
-    )
-
-    assert epoch == 7
-    statement = session.execute.await_args.args[0]
-    compiled_query = str(statement.compile(compile_kwargs={"literal_binds": True}))
-    assert "max(pipeline_stage_state.epoch)" in compiled_query
-    assert "pipeline_stage_state.stage_name = 'transaction_processing'" in compiled_query
-    assert "pipeline_stage_state.portfolio_id = 'PB-001'" in compiled_query
-    assert "pipeline_stage_state.transaction_id = 'TX-READY-001'" in compiled_query
-
-
-@pytest.mark.asyncio
-async def test_upsert_processed_stage_maps_persisted_state_to_domain_record() -> None:
-    session = AsyncMock(spec=AsyncSession)
-    result = MagicMock()
-    result.scalar_one.return_value = _persisted_stage()
-    session.execute.return_value = result
-    repository = SqlAlchemyTransactionStageRepository(session)
-
-    stage = await repository.upsert_processed_stage(
+    stage = await repository.claim_processed_stage(
         stage_name="transaction_processing",
         transaction_id="TX-READY-001",
         portfolio_id="PB-001",
@@ -102,19 +75,63 @@ async def test_upsert_processed_stage_maps_persisted_state_to_domain_record() ->
     )
 
     assert stage == _stage_record()
-    statement = session.execute.await_args.args[0]
-    assert statement.get_execution_options()["populate_existing"] is True
-    compiled_query = str(statement.compile())
-    assert "ON CONFLICT (stage_name, transaction_id, epoch) DO UPDATE" in compiled_query
-    assert "RETURNING" in compiled_query
+    session.execute.assert_awaited_once()
+    statement, parameters = session.execute.await_args.args
+    sql = str(statement)
+    assert "WHERE NOT EXISTS" in sql
+    assert "epoch > CAST(:epoch AS integer)" in sql
+    assert "ON CONFLICT (stage_name, transaction_id, epoch) DO UPDATE" in sql
+    assert "status = 'COMPLETED'" in sql
+    assert "RETURNING" in sql
+    assert parameters == {
+        "stage_name": "transaction_processing",
+        "transaction_id": "TX-READY-001",
+        "portfolio_id": "PB-001",
+        "security_id": "SEC-001",
+        "business_date": date(2026, 4, 10),
+        "epoch": 4,
+    }
 
 
 @pytest.mark.asyncio
-async def test_upsert_processed_stage_rejects_cross_portfolio_key_collision() -> None:
+async def test_claim_processed_stage_returns_none_for_same_owner_duplicate() -> None:
     session = AsyncMock(spec=AsyncSession)
-    result = MagicMock()
-    result.scalar_one.return_value = _persisted_stage(portfolio_id="PB-OTHER")
-    session.execute.return_value = result
+    claim_result = MagicMock()
+    claim_result.mappings.return_value.one_or_none.return_value = {
+        "id": 12,
+        "transaction_id": "TX-READY-001",
+        "portfolio_id": "PB-001",
+        "security_id": "SEC-001",
+        "business_date": date(2026, 4, 10),
+        "epoch": 4,
+        "status": "COMPLETED",
+        "cost_event_seen": True,
+        "newly_claimed": False,
+    }
+    session.execute.return_value = claim_result
+    repository = SqlAlchemyTransactionStageRepository(session)
+
+    stage = await repository.claim_processed_stage(
+        stage_name="transaction_processing",
+        transaction_id="TX-READY-001",
+        portfolio_id="PB-001",
+        security_id="SEC-001",
+        business_date=date(2026, 4, 10),
+        epoch=4,
+    )
+
+    assert stage is None
+    session.execute.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_claim_processed_stage_rejects_cross_portfolio_key_collision() -> None:
+    session = AsyncMock(spec=AsyncSession)
+    claim_result = MagicMock()
+    claim_result.mappings.return_value.one_or_none.return_value = None
+    owner_result = MagicMock()
+    owner_result.scalar_one_or_none.return_value = "PB-OTHER"
+    session.execute.side_effect = [claim_result, owner_result]
     repository = SqlAlchemyTransactionStageRepository(session)
 
     with pytest.raises(
@@ -125,7 +142,7 @@ async def test_upsert_processed_stage_rejects_cross_portfolio_key_collision() ->
             "existing=PB-OTHER incoming=PB-001"
         ),
     ):
-        await repository.upsert_processed_stage(
+        await repository.claim_processed_stage(
             stage_name="transaction_processing",
             transaction_id="TX-READY-001",
             portfolio_id="PB-001",
@@ -133,26 +150,3 @@ async def test_upsert_processed_stage_rejects_cross_portfolio_key_collision() ->
             business_date=date(2026, 4, 10),
             epoch=4,
         )
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(("rowcount", "expected"), [(1, True), (0, False)])
-async def test_claim_completion_reports_atomic_transition_result(
-    rowcount: int,
-    expected: bool,
-) -> None:
-    session = AsyncMock(spec=AsyncSession)
-    result = MagicMock()
-    result.rowcount = rowcount
-    session.execute.return_value = result
-    repository = SqlAlchemyTransactionStageRepository(session)
-
-    claimed = await repository.claim_completion(_stage_record())
-
-    assert claimed is expected
-    statement = session.execute.await_args.args[0]
-    compiled_query = str(statement.compile(compile_kwargs={"literal_binds": True}))
-    assert "pipeline_stage_state.id = 12" in compiled_query
-    assert "pipeline_stage_state.status = 'PENDING'" in compiled_query
-    assert "pipeline_stage_state.cost_event_seen IS true" in compiled_query
-    assert "status='COMPLETED'" in compiled_query.replace(" ", "")

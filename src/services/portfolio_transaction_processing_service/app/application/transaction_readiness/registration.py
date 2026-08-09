@@ -52,15 +52,7 @@ class RegisterTransactionReadinessUseCase:
             portfolio_id=transaction.portfolio_id,
             transaction_id=transaction.transaction_id,
         )
-        latest_epoch = await self._repository.latest_epoch(
-            stage_name=TRANSACTION_PROCESSING_STAGE,
-            portfolio_id=transaction.portfolio_id,
-            transaction_id=transaction.transaction_id,
-        )
-        if latest_epoch is not None and event_epoch < latest_epoch:
-            return
-
-        stage = await self._repository.upsert_processed_stage(
+        stage = await self._repository.claim_processed_stage(
             stage_name=TRANSACTION_PROCESSING_STAGE,
             transaction_id=transaction.transaction_id,
             portfolio_id=transaction.portfolio_id,
@@ -68,9 +60,7 @@ class RegisterTransactionReadinessUseCase:
             business_date=transaction.transaction_date.date(),
             epoch=event_epoch,
         )
-        if stage.status == "COMPLETED" or not stage.cost_event_seen:
-            return
-        if not await self._repository.claim_completion(stage):
+        if stage is None:
             return
 
         await self._events.stage_transaction_readiness(

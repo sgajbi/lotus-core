@@ -6,9 +6,7 @@ from datetime import date
 from typing import cast
 
 from portfolio_common.database_models import PipelineStageState
-from sqlalchemy import and_, func, select, text, update
-from sqlalchemy.dialects.postgresql import insert as pg_insert
-from sqlalchemy.engine import CursorResult
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...domain import TransactionStageRecord
@@ -34,23 +32,7 @@ class SqlAlchemyTransactionStageRepository:
             {"lock_identity": lock_identity},
         )
 
-    async def latest_epoch(
-        self,
-        *,
-        stage_name: str,
-        portfolio_id: str,
-        transaction_id: str,
-    ) -> int | None:
-        """Return the latest persisted epoch for one transaction stage."""
-        statement = select(func.max(PipelineStageState.epoch)).where(
-            PipelineStageState.stage_name == stage_name,
-            PipelineStageState.portfolio_id == portfolio_id,
-            PipelineStageState.transaction_id == transaction_id,
-        )
-        result = await self._db_session.execute(statement)
-        return cast(int | None, result.scalar_one_or_none())
-
-    async def upsert_processed_stage(
+    async def claim_processed_stage(
         self,
         *,
         stage_name: str,
@@ -59,72 +41,135 @@ class SqlAlchemyTransactionStageRepository:
         security_id: str | None,
         business_date: date,
         epoch: int,
-    ) -> TransactionStageRecord:
-        """Record processing completion without allowing a stage key to change owner."""
-        statement = (
-            pg_insert(PipelineStageState)
-            .values(
-                stage_name=stage_name,
-                transaction_id=transaction_id,
-                portfolio_id=portfolio_id,
-                security_id=security_id,
-                business_date=business_date,
-                epoch=epoch,
-                status="PENDING",
-                cost_event_seen=True,
-                cashflow_event_seen=True,
-                last_source_event_type="processed_transaction",
-            )
-            .on_conflict_do_update(
-                index_elements=["stage_name", "transaction_id", "epoch"],
-                set_={
-                    "portfolio_id": PipelineStageState.portfolio_id,
-                    "security_id": security_id,
-                    "business_date": business_date,
-                    "cost_event_seen": True,
-                    "cashflow_event_seen": True,
-                    "last_source_event_type": "processed_transaction",
-                },
-            )
-            .returning(PipelineStageState)
+    ) -> TransactionStageRecord | None:
+        """Persist and claim a current completion in one post-lock statement.
+
+        The advisory lock remains a separate statement so READ COMMITTED takes a fresh
+        snapshot after a concurrent owner commits. The common path therefore uses two
+        database round trips instead of lock, epoch read, upsert, and completion update.
+        """
+        parameters = {
+            "stage_name": stage_name,
+            "transaction_id": transaction_id,
+            "portfolio_id": portfolio_id,
+            "security_id": security_id,
+            "business_date": business_date,
+            "epoch": epoch,
+        }
+        result = await self._db_session.execute(
+            text(
+                """
+                WITH existing AS MATERIALIZED (
+                    SELECT status
+                    FROM pipeline_stage_state
+                    WHERE stage_name = CAST(:stage_name AS varchar)
+                      AND transaction_id = CAST(:transaction_id AS varchar)
+                      AND epoch = CAST(:epoch AS integer)
+                ),
+                claimed AS (
+                    INSERT INTO pipeline_stage_state (
+                        stage_name,
+                        transaction_id,
+                        portfolio_id,
+                        security_id,
+                        business_date,
+                        epoch,
+                        status,
+                        cost_event_seen,
+                        cashflow_event_seen,
+                        ready_emitted_at,
+                        last_source_event_type
+                    )
+                    SELECT
+                        CAST(:stage_name AS varchar),
+                        CAST(:transaction_id AS varchar),
+                        CAST(:portfolio_id AS varchar),
+                        CAST(:security_id AS varchar),
+                        CAST(:business_date AS date),
+                        CAST(:epoch AS integer),
+                        'COMPLETED',
+                        true,
+                        true,
+                        now(),
+                        'processed_transaction'
+                    WHERE NOT EXISTS (
+                        SELECT 1
+                        FROM pipeline_stage_state
+                        WHERE stage_name = CAST(:stage_name AS varchar)
+                          AND portfolio_id = CAST(:portfolio_id AS varchar)
+                          AND transaction_id = CAST(:transaction_id AS varchar)
+                          AND epoch > CAST(:epoch AS integer)
+                    )
+                    ON CONFLICT (stage_name, transaction_id, epoch) DO UPDATE
+                    SET
+                        security_id = EXCLUDED.security_id,
+                        business_date = EXCLUDED.business_date,
+                        status = 'COMPLETED',
+                        cost_event_seen = true,
+                        cashflow_event_seen = true,
+                        ready_emitted_at = CASE
+                            WHEN pipeline_stage_state.status <> 'COMPLETED' THEN now()
+                            ELSE pipeline_stage_state.ready_emitted_at
+                        END,
+                        last_source_event_type = 'processed_transaction',
+                        updated_at = CASE
+                            WHEN pipeline_stage_state.status <> 'COMPLETED'
+                              OR pipeline_stage_state.cost_event_seen IS NOT true
+                              OR pipeline_stage_state.cashflow_event_seen IS NOT true
+                              OR pipeline_stage_state.security_id
+                                  IS DISTINCT FROM EXCLUDED.security_id
+                              OR pipeline_stage_state.business_date
+                                  IS DISTINCT FROM EXCLUDED.business_date
+                            THEN now()
+                            ELSE pipeline_stage_state.updated_at
+                        END
+                    WHERE pipeline_stage_state.portfolio_id = EXCLUDED.portfolio_id
+                    RETURNING
+                        id,
+                        transaction_id,
+                        portfolio_id,
+                        security_id,
+                        business_date,
+                        epoch,
+                        status,
+                        cost_event_seen
+                )
+                SELECT
+                    claimed.*,
+                    coalesce(existing.status <> 'COMPLETED', true) AS newly_claimed
+                FROM claimed
+                LEFT JOIN existing ON true
+                """
+            ),
+            parameters,
         )
-        result = await self._db_session.execute(statement.execution_options(populate_existing=True))
-        stage = result.scalar_one()
-        if stage.portfolio_id != portfolio_id:
+        claimed = result.mappings().one_or_none()
+        if claimed is not None:
+            if not claimed["newly_claimed"]:
+                return None
+            return TransactionStageRecord(
+                stage_id=claimed["id"],
+                transaction_id=claimed["transaction_id"],
+                portfolio_id=claimed["portfolio_id"],
+                security_id=claimed["security_id"],
+                business_date=claimed["business_date"],
+                epoch=claimed["epoch"],
+                status=claimed["status"],
+                cost_event_seen=claimed["cost_event_seen"],
+            )
+
+        owner_result = await self._db_session.execute(
+            select(PipelineStageState.portfolio_id).where(
+                PipelineStageState.stage_name == stage_name,
+                PipelineStageState.transaction_id == transaction_id,
+                PipelineStageState.epoch == epoch,
+            )
+        )
+        owner = cast(str | None, owner_result.scalar_one_or_none())
+        if owner is not None and owner != portfolio_id:
             raise ValueError(
                 "Pipeline stage key collision detected for different portfolios: "
                 f"{stage_name}/{transaction_id}/{epoch} "
-                f"existing={stage.portfolio_id} incoming={portfolio_id}"
+                f"existing={owner} incoming={portfolio_id}"
             )
-        return _to_transaction_stage_record(stage)
-
-    async def claim_completion(self, stage: TransactionStageRecord) -> bool:
-        """Atomically claim emission for a pending, processed transaction stage."""
-        statement = (
-            update(PipelineStageState)
-            .where(
-                and_(
-                    PipelineStageState.id == stage.stage_id,
-                    PipelineStageState.status == "PENDING",
-                    PipelineStageState.cost_event_seen.is_(True),
-                )
-            )
-            .values(status="COMPLETED", ready_emitted_at=func.now())
-        )
-        result = cast(CursorResult[tuple[object, ...]], await self._db_session.execute(statement))
-        claimed = cast(int, result.rowcount) == 1
-        return claimed
-
-
-def _to_transaction_stage_record(stage: PipelineStageState) -> TransactionStageRecord:
-    """Map persistence state to the transaction capability's domain record."""
-    return TransactionStageRecord(
-        stage_id=stage.id,
-        transaction_id=stage.transaction_id,
-        portfolio_id=stage.portfolio_id,
-        security_id=stage.security_id,
-        business_date=stage.business_date,
-        epoch=stage.epoch,
-        status=stage.status,
-        cost_event_seen=stage.cost_event_seen,
-    )
+        return None

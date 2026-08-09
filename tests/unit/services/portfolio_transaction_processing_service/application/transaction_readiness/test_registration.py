@@ -50,9 +50,7 @@ def _stage(*, status: str = "PENDING", cost_event_seen: bool = True) -> Transact
 @pytest.mark.asyncio
 async def test_registers_current_epoch_and_stages_claimed_completion() -> None:
     repository = AsyncMock()
-    repository.latest_epoch.return_value = 3
-    repository.upsert_processed_stage.return_value = _stage()
-    repository.claim_completion.return_value = True
+    repository.claim_processed_stage.return_value = _stage(status="COMPLETED")
     events = AsyncMock()
     use_case = RegisterTransactionReadinessUseCase(repository=repository, events=events)
 
@@ -67,7 +65,7 @@ async def test_registers_current_epoch_and_stages_claimed_completion() -> None:
         portfolio_id="PB-001",
         transaction_id="TX-READY-001",
     )
-    repository.upsert_processed_stage.assert_awaited_once_with(
+    repository.claim_processed_stage.assert_awaited_once_with(
         stage_name="TRANSACTION_PROCESSING",
         transaction_id="TX-READY-001",
         portfolio_id="PB-001",
@@ -76,7 +74,7 @@ async def test_registers_current_epoch_and_stages_claimed_completion() -> None:
         epoch=4,
     )
     events.stage_transaction_readiness.assert_awaited_once_with(
-        _stage(),
+        _stage(status="COMPLETED"),
         correlation_id="corr-001",
         traceparent="trace-001",
     )
@@ -85,7 +83,7 @@ async def test_registers_current_epoch_and_stages_claimed_completion() -> None:
 @pytest.mark.asyncio
 async def test_ignores_superseded_epoch_after_acquiring_exact_stage_lock() -> None:
     repository = AsyncMock()
-    repository.latest_epoch.return_value = 5
+    repository.claim_processed_stage.return_value = None
     events = AsyncMock()
     use_case = RegisterTransactionReadinessUseCase(repository=repository, events=events)
 
@@ -94,28 +92,21 @@ async def test_ignores_superseded_epoch_after_acquiring_exact_stage_lock() -> No
     )
 
     repository.acquire_stage_lock.assert_awaited_once()
-    repository.upsert_processed_stage.assert_not_awaited()
-    repository.claim_completion.assert_not_awaited()
+    repository.claim_processed_stage.assert_awaited_once_with(
+        stage_name="TRANSACTION_PROCESSING",
+        transaction_id="TX-READY-001",
+        portfolio_id="PB-001",
+        security_id="SEC-001",
+        business_date=date(2026, 4, 10),
+        epoch=4,
+    )
     events.stage_transaction_readiness.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("stage", "claim_expected"),
-    [
-        pytest.param(_stage(status="COMPLETED"), False, id="already-completed"),
-        pytest.param(_stage(cost_event_seen=False), False, id="cost-not-seen"),
-        pytest.param(_stage(), True, id="claim-lost"),
-    ],
-)
-async def test_stages_only_newly_claimed_complete_stage(
-    stage: TransactionStageRecord,
-    claim_expected: bool,
-) -> None:
+async def test_does_not_stage_an_unclaimed_completion() -> None:
     repository = AsyncMock()
-    repository.latest_epoch.return_value = 4
-    repository.upsert_processed_stage.return_value = stage
-    repository.claim_completion.return_value = False
+    repository.claim_processed_stage.return_value = None
     events = AsyncMock()
     use_case = RegisterTransactionReadinessUseCase(repository=repository, events=events)
 
@@ -123,8 +114,4 @@ async def test_stages_only_newly_claimed_complete_stage(
         (_transaction(),), correlation_id=None, traceparent=None
     )
 
-    if claim_expected:
-        repository.claim_completion.assert_awaited_once_with(stage)
-    else:
-        repository.claim_completion.assert_not_awaited()
     events.stage_transaction_readiness.assert_not_awaited()
