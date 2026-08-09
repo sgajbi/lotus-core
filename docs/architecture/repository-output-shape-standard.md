@@ -35,10 +35,11 @@ These are the preferred shape for new high-value source-data paths.
 
 Derived-state processing uses the same rule:
 
-- `timeseries_generator_service.app.domain.timeseries_records` owns immutable valued-snapshot,
-  cashflow, and position-timeseries calculation records;
-- `portfolio_aggregation_service.app.domain.aggregation_records` owns immutable portfolio scope,
-  position-day, portfolio-day, and claimed-job records.
+- `portfolio_derived_state_service.app.domain.position_timeseries.models` owns immutable
+  valued-snapshot, cashflow, and position-timeseries calculation records;
+- `portfolio_derived_state_service.app.domain.portfolio_timeseries.models` and
+  `portfolio_derived_state_service.app.domain.aggregation_jobs.models` own immutable portfolio
+  scope, position-day, portfolio-day, and claimed-job records.
 
 Delete repository methods with no production caller rather than preserving ORM-returning methods
 and tests that imply unsupported contracts.
