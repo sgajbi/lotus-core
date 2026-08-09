@@ -111,9 +111,6 @@ def _validate_local_evidence(
     except ValueError:
         errors.append(f"{location}: evidence path escapes repository root: {evidence_path}")
         return
-    if not candidate.is_file():
-        errors.append(f"{location}: evidence file does not exist: {evidence_path}")
-        return
     anchors = evidence.get("anchors", [])
     if (
         not isinstance(anchors, list)

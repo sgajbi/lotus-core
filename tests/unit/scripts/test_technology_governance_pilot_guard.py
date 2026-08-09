@@ -111,9 +111,19 @@ def test_local_evidence_is_read_from_inspected_commit_not_worktree(tmp_path: Pat
         inspected_commit=inspected_commit,
         errors=drift_errors,
     )
+    evidence_path.unlink()
+    deleted_worktree_errors: list[str] = []
+    guard._validate_local_evidence(
+        {"path": "evidence.txt", "anchors": ["inspected authority"]},
+        root=repository,
+        location="evidence",
+        inspected_commit=inspected_commit,
+        errors=deleted_worktree_errors,
+    )
 
     assert inspected_errors == []
     assert any("missing anchor" in error for error in drift_errors)
+    assert deleted_worktree_errors == []
 
 
 def test_actionable_posture_requires_canonical_issue() -> None:
