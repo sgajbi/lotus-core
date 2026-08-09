@@ -84,6 +84,7 @@ async def _seed_position(
     security_id: str,
     transaction_id: str,
     quantity: Decimal,
+    updated_at: datetime | None = None,
 ) -> None:
     session.add(
         PositionState(
@@ -94,18 +95,20 @@ async def _seed_position(
             status="CURRENT",
         )
     )
-    session.add(
-        PositionHistory(
-            portfolio_id=portfolio_id,
-            security_id=security_id,
-            transaction_id=transaction_id,
-            position_date=date(2026, 4, 1),
-            epoch=0,
-            quantity=quantity,
-            cost_basis=Decimal("1000") if quantity > 0 else Decimal("0"),
-            cost_basis_local=Decimal("1000") if quantity > 0 else Decimal("0"),
-        )
+    position_history = PositionHistory(
+        portfolio_id=portfolio_id,
+        security_id=security_id,
+        transaction_id=transaction_id,
+        position_date=date(2026, 4, 1),
+        epoch=0,
+        quantity=quantity,
+        cost_basis=Decimal("1000") if quantity > 0 else Decimal("0"),
+        cost_basis_local=Decimal("1000") if quantity > 0 else Decimal("0"),
     )
+    if updated_at is not None:
+        position_history.created_at = updated_at
+        position_history.updated_at = updated_at
+    session.add(position_history)
 
 
 async def test_direct_pair_query_excludes_inverse_unrelated_and_closed_positions(
@@ -204,11 +207,14 @@ async def test_direct_pair_query_returns_nonzero_matching_position_epoch(
     ]
 
 
-async def test_immediate_fx_revaluation_uses_source_snapshot_freshness(
+@pytest.mark.parametrize("source_is_newer", [True, False])
+async def test_immediate_fx_revaluation_uses_latest_derived_authority_freshness(
     clean_db,
     async_db_session: AsyncSession,
+    source_is_newer: bool,
 ) -> None:
     source_updated_at = datetime(2026, 4, 10, 8, tzinfo=timezone.utc)
+    position_updated_at = source_updated_at + timedelta(seconds=-1 if source_is_newer else 1)
     rate = FxRate(
         from_currency="USD",
         to_currency="SGD",
@@ -232,6 +238,7 @@ async def test_immediate_fx_revaluation_uses_source_snapshot_freshness(
         security_id="USD-BOND",
         transaction_id="TX-MATCH",
         quantity=Decimal("10"),
+        updated_at=position_updated_at,
     )
     await async_db_session.commit()
     repository = fx_revaluation_repository.SqlAlchemyFxRevaluationRepository(async_db_session)
@@ -241,9 +248,9 @@ async def test_immediate_fx_revaluation_uses_source_snapshot_freshness(
         effective_date=date(2026, 4, 10),
     )
 
-    assert [(key.portfolio_id, key.security_id, key.epoch) for key in keys] == [
-        ("P-SGD", "USD-BOND", 0)
-    ]
+    assert [(key.portfolio_id, key.security_id, key.epoch) for key in keys] == (
+        [("P-SGD", "USD-BOND", 0)] if source_is_newer else []
+    )
 
     async_db_session.add(
         DailyPositionSnapshot(
@@ -253,7 +260,7 @@ async def test_immediate_fx_revaluation_uses_source_snapshot_freshness(
             epoch=0,
             quantity=Decimal("10"),
             cost_basis=Decimal("1000"),
-            updated_at=source_updated_at + timedelta(seconds=1),
+            updated_at=max(source_updated_at, position_updated_at) + timedelta(seconds=1),
         )
     )
     await async_db_session.commit()
@@ -266,7 +273,7 @@ async def test_immediate_fx_revaluation_uses_source_snapshot_freshness(
         == []
     )
 
-    rate.updated_at = source_updated_at + timedelta(seconds=2)
+    rate.updated_at = max(source_updated_at, position_updated_at) + timedelta(seconds=2)
     rate.rate = Decimal("1.36")
     await async_db_session.commit()
 

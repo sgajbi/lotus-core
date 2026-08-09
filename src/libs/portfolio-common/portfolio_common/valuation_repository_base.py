@@ -78,6 +78,7 @@ class ValuationRepositoryBase:
                 PositionHistory.security_id.label("security_id"),
                 PositionHistory.epoch.label("epoch"),
                 PositionHistory.quantity.label("quantity"),
+                PositionHistory.updated_at.label("updated_at"),
                 func.row_number()
                 .over(
                     partition_by=(PositionHistory.portfolio_id, PositionHistory.epoch),
@@ -119,10 +120,11 @@ class ValuationRepositoryBase:
             .where(
                 latest_history_subquery.c.rn == 1,
                 latest_history_subquery.c.quantity != 0,
-                or_(
-                    DailyPositionSnapshot.id.is_(None),
-                    DailyPositionSnapshot.updated_at < MarketPrice.updated_at,
-                ),
+                func.coalesce(
+                    DailyPositionSnapshot.updated_at,
+                    latest_history_subquery.c.updated_at,
+                )
+                < MarketPrice.updated_at,
             )
         )
 
