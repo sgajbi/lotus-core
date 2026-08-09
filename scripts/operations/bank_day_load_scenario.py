@@ -372,12 +372,16 @@ def _governed_transaction_timestamp(trade_date: str) -> str:
     """Represent a workload business date as the canonical start-of-day UTC instant."""
 
     trade_day = date.fromisoformat(trade_date)
-    return datetime(
-        trade_day.year,
-        trade_day.month,
-        trade_day.day,
-        tzinfo=UTC,
-    ).isoformat().replace("+00:00", "Z")
+    return (
+        datetime(
+            trade_day.year,
+            trade_day.month,
+            trade_day.day,
+            tzinfo=UTC,
+        )
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
 
 
 def _build_instrument_specs(*, run_id: str, instrument_count: int) -> list[InstrumentSpec]:
@@ -1659,6 +1663,24 @@ def _evaluate_report(report: ScenarioReport) -> list[str]:
                 "final outbox failed events "
                 f"{outbox_evidence.final_outbox_failed_events} != expected 0"
             )
+        if report.config.get("evidence_classification") == "certifying":
+            publication_age_p50 = outbox_evidence.peak_outbox_recent_publication_age_p50_seconds
+            publication_age_p95 = outbox_evidence.peak_outbox_recent_publication_age_p95_seconds
+            publication_age_p99 = outbox_evidence.peak_outbox_recent_publication_age_p99_seconds
+            if (
+                publication_age_p50 is None
+                or publication_age_p95 is None
+                or publication_age_p99 is None
+            ):
+                failures.append("outbox publication-age percentiles are incomplete")
+            elif not publication_age_p50 <= publication_age_p95 <= publication_age_p99:
+                failures.append("outbox publication-age percentiles are not monotonic")
+            if (
+                outbox_evidence.observed_outbox_processed_events is None
+                or outbox_evidence.observed_outbox_seconds is None
+                or outbox_evidence.observed_outbox_processed_events_per_second is None
+            ):
+                failures.append("outbox processed-throughput evidence is incomplete")
         if not source_correction_requested:
             created_events_by_topic = dict(outbox_evidence.final_outbox_created_events_by_topic)
             valuation_snapshot_event_count = int(

@@ -176,6 +176,16 @@ def test_read_outbox_resource_usage_preserves_backlog_and_topic_cohorts() -> Non
                         }
                     ]
                 )
+            if self._call_count == 2:
+                return Result(
+                    [
+                        {
+                            "recent_publication_age_p50_seconds": 2.25,
+                            "recent_publication_age_p95_seconds": 8.5,
+                            "recent_publication_age_p99_seconds": 12.75,
+                        }
+                    ]
+                )
             return Result(
                 [
                     {
@@ -203,6 +213,9 @@ def test_read_outbox_resource_usage_preserves_backlog_and_topic_cohorts() -> Non
     assert usage.retry_eligible_pending_events == 115
     assert usage.retry_waiting_pending_events == 5
     assert usage.oldest_pending_age_seconds == 42.125679
+    assert usage.recent_publication_age_p50_seconds == 2.25
+    assert usage.recent_publication_age_p95_seconds == 8.5
+    assert usage.recent_publication_age_p99_seconds == 12.75
     assert usage.pending_events_by_topic == (("transactions.persisted", 100),)
     assert usage.created_events_by_topic == (
         ("transactions.persisted", 700),
@@ -236,6 +249,9 @@ def test_summarize_resource_samples_reports_peak_capacity_pressure() -> None:
                 retry_eligible_pending_events=90,
                 retry_waiting_pending_events=10,
                 oldest_pending_age_seconds=15.0,
+                recent_publication_age_p50_seconds=1.0,
+                recent_publication_age_p95_seconds=4.0,
+                recent_publication_age_p99_seconds=7.0,
                 pending_events_by_topic=(("transactions.persisted", 100),),
                 created_events_by_topic=(("transactions.persisted", 400),),
             ),
@@ -264,6 +280,9 @@ def test_summarize_resource_samples_reports_peak_capacity_pressure() -> None:
                 retry_eligible_pending_events=240,
                 retry_waiting_pending_events=10,
                 oldest_pending_age_seconds=45.0,
+                recent_publication_age_p50_seconds=2.0,
+                recent_publication_age_p95_seconds=6.0,
+                recent_publication_age_p99_seconds=9.0,
                 pending_events_by_topic=(
                     ("transactions.persisted", 200),
                     ("valuation.snapshot.persisted", 50),
@@ -292,6 +311,9 @@ def test_summarize_resource_samples_reports_peak_capacity_pressure() -> None:
     assert evidence.peak_runtime_memory_utilization_percent == 31.25
     assert evidence.peak_outbox_pending_events == 250
     assert evidence.peak_outbox_oldest_pending_age_seconds == 45.0
+    assert evidence.peak_outbox_recent_publication_age_p50_seconds == 2.0
+    assert evidence.peak_outbox_recent_publication_age_p95_seconds == 6.0
+    assert evidence.peak_outbox_recent_publication_age_p99_seconds == 9.0
     assert evidence.peak_outbox_retry_eligible_pending_events == 240
     assert evidence.peak_outbox_retry_waiting_pending_events == 10
     assert evidence.peak_outbox_failed_events == 1
@@ -306,6 +328,9 @@ def test_summarize_resource_samples_reports_peak_capacity_pressure() -> None:
         ("transactions.persisted", 700),
         ("valuation.snapshot.persisted", 300),
     )
+    assert evidence.observed_outbox_processed_events == 450
+    assert evidence.observed_outbox_seconds == 5.0
+    assert evidence.observed_outbox_processed_events_per_second == 90.0
 
 
 def test_summarize_resource_samples_is_explicit_when_no_sample_completed() -> None:
@@ -316,5 +341,9 @@ def test_summarize_resource_samples_is_explicit_when_no_sample_completed() -> No
     assert evidence.peak_database_total_connections is None
     assert evidence.peak_runtime_memory_usage_bytes is None
     assert evidence.peak_outbox_pending_events is None
+    assert evidence.peak_outbox_recent_publication_age_p99_seconds is None
     assert evidence.final_outbox_pending_events is None
     assert evidence.final_outbox_pending_events_by_topic == ()
+    assert evidence.observed_outbox_processed_events is None
+    assert evidence.observed_outbox_seconds is None
+    assert evidence.observed_outbox_processed_events_per_second is None

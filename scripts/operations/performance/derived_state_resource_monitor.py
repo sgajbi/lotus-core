@@ -66,6 +66,27 @@ _OUTBOX_RESOURCE_QUERY = text(
     """
 )
 
+_OUTBOX_RECENT_PUBLICATION_AGE_QUERY = text(
+    """
+    SELECT
+      coalesce(percentile_cont(0.50) WITHIN GROUP (ORDER BY publication_age_seconds), 0)
+        AS recent_publication_age_p50_seconds,
+      coalesce(percentile_cont(0.95) WITHIN GROUP (ORDER BY publication_age_seconds), 0)
+        AS recent_publication_age_p95_seconds,
+      coalesce(percentile_cont(0.99) WITHIN GROUP (ORDER BY publication_age_seconds), 0)
+        AS recent_publication_age_p99_seconds
+    FROM (
+      SELECT greatest(
+        extract(epoch FROM coalesce(processed_at, clock_timestamp()) - created_at),
+        0
+      ) AS publication_age_seconds
+      FROM outbox_events
+      ORDER BY id DESC
+      LIMIT 10000
+    ) recent_outbox_events
+    """
+)
+
 _OUTBOX_TOPIC_QUERY = text(
     """
     SELECT
@@ -126,6 +147,9 @@ class OutboxResourceUsage:
     retry_eligible_pending_events: int
     retry_waiting_pending_events: int
     oldest_pending_age_seconds: float
+    recent_publication_age_p50_seconds: float
+    recent_publication_age_p95_seconds: float
+    recent_publication_age_p99_seconds: float
     pending_events_by_topic: tuple[tuple[str, int], ...]
     created_events_by_topic: tuple[tuple[str, int], ...]
 
@@ -158,6 +182,9 @@ class DerivedStateResourceEvidence:
     peak_runtime_memory_utilization_percent: float | None
     peak_outbox_pending_events: int | None
     peak_outbox_oldest_pending_age_seconds: float | None
+    peak_outbox_recent_publication_age_p50_seconds: float | None
+    peak_outbox_recent_publication_age_p95_seconds: float | None
+    peak_outbox_recent_publication_age_p99_seconds: float | None
     peak_outbox_retry_eligible_pending_events: int | None
     peak_outbox_retry_waiting_pending_events: int | None
     peak_outbox_failed_events: int | None
@@ -166,6 +193,9 @@ class DerivedStateResourceEvidence:
     final_outbox_failed_events: int | None
     final_outbox_pending_events_by_topic: tuple[tuple[str, int], ...]
     final_outbox_created_events_by_topic: tuple[tuple[str, int], ...]
+    observed_outbox_processed_events: int | None
+    observed_outbox_seconds: float | None
+    observed_outbox_processed_events_per_second: float | None
 
 
 def parse_memory_bytes(value: str) -> int:
@@ -257,6 +287,7 @@ def read_outbox_resource_usage(*, engine: Engine) -> OutboxResourceUsage:
 
     with engine.connect() as connection:
         totals = connection.execute(_OUTBOX_RESOURCE_QUERY).mappings().one()
+        publication_age = connection.execute(_OUTBOX_RECENT_PUBLICATION_AGE_QUERY).mappings().one()
         topic_rows = connection.execute(_OUTBOX_TOPIC_QUERY).mappings().all()
     return OutboxResourceUsage(
         pending_events=int(totals["pending_events"]),
@@ -265,6 +296,15 @@ def read_outbox_resource_usage(*, engine: Engine) -> OutboxResourceUsage:
         retry_eligible_pending_events=int(totals["retry_eligible_pending_events"]),
         retry_waiting_pending_events=int(totals["retry_waiting_pending_events"]),
         oldest_pending_age_seconds=round(float(totals["oldest_pending_age_seconds"]), 6),
+        recent_publication_age_p50_seconds=round(
+            float(publication_age["recent_publication_age_p50_seconds"]), 6
+        ),
+        recent_publication_age_p95_seconds=round(
+            float(publication_age["recent_publication_age_p95_seconds"]), 6
+        ),
+        recent_publication_age_p99_seconds=round(
+            float(publication_age["recent_publication_age_p99_seconds"]), 6
+        ),
         pending_events_by_topic=tuple(
             (str(row["topic"]), int(row["pending_events"]))
             for row in topic_rows
@@ -338,6 +378,29 @@ def _maximum(
     return max((reader(sample) for sample in samples), default=None)
 
 
+def _outbox_throughput(
+    samples: tuple[DerivedStateResourceSample, ...],
+) -> tuple[int | None, float | None, float | None]:
+    """Calculate observed processed-event throughput across a real sampling window."""
+
+    if len(samples) < 2:
+        return None, None, None
+    started_at = datetime.fromisoformat(samples[0].captured_at.replace("Z", "+00:00"))
+    ended_at = datetime.fromisoformat(samples[-1].captured_at.replace("Z", "+00:00"))
+    elapsed_seconds = max((ended_at - started_at).total_seconds(), 0.0)
+    processed_events = max(
+        samples[-1].outbox.processed_events - samples[0].outbox.processed_events,
+        0,
+    )
+    if elapsed_seconds == 0:
+        return processed_events, 0.0, None
+    return (
+        processed_events,
+        round(elapsed_seconds, 6),
+        round(processed_events / elapsed_seconds, 6),
+    )
+
+
 def summarize_resource_samples(
     *,
     samples: Iterable[DerivedStateResourceSample],
@@ -348,6 +411,7 @@ def summarize_resource_samples(
     sample_values = tuple(samples)
     error_values = tuple(sampling_errors)
     final_outbox = sample_values[-1].outbox if sample_values else None
+    processed_events, observed_seconds, processed_per_second = _outbox_throughput(sample_values)
     return DerivedStateResourceEvidence(
         sample_count=len(sample_values),
         sampling_error_count=len(error_values),
@@ -385,6 +449,15 @@ def summarize_resource_samples(
         peak_outbox_oldest_pending_age_seconds=_maximum(
             sample_values, lambda sample: sample.outbox.oldest_pending_age_seconds
         ),
+        peak_outbox_recent_publication_age_p50_seconds=_maximum(
+            sample_values, lambda sample: sample.outbox.recent_publication_age_p50_seconds
+        ),
+        peak_outbox_recent_publication_age_p95_seconds=_maximum(
+            sample_values, lambda sample: sample.outbox.recent_publication_age_p95_seconds
+        ),
+        peak_outbox_recent_publication_age_p99_seconds=_maximum(
+            sample_values, lambda sample: sample.outbox.recent_publication_age_p99_seconds
+        ),
         peak_outbox_retry_eligible_pending_events=_maximum(
             sample_values,
             lambda sample: sample.outbox.retry_eligible_pending_events,
@@ -405,6 +478,9 @@ def summarize_resource_samples(
         final_outbox_created_events_by_topic=(
             final_outbox.created_events_by_topic if final_outbox else ()
         ),
+        observed_outbox_processed_events=processed_events,
+        observed_outbox_seconds=observed_seconds,
+        observed_outbox_processed_events_per_second=processed_per_second,
     )
 
 

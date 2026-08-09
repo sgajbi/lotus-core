@@ -1,4 +1,5 @@
 from argparse import Namespace
+from dataclasses import replace
 from decimal import Decimal
 from subprocess import CalledProcessError, CompletedProcess
 
@@ -687,6 +688,9 @@ def test_finalize_report_marks_aborted_runs_as_failed_and_preserves_partial_evid
             peak_runtime_memory_utilization_percent=25.0,
             peak_outbox_pending_events=120,
             peak_outbox_oldest_pending_age_seconds=30.0,
+            peak_outbox_recent_publication_age_p50_seconds=0.5,
+            peak_outbox_recent_publication_age_p95_seconds=1.0,
+            peak_outbox_recent_publication_age_p99_seconds=1.5,
             peak_outbox_retry_eligible_pending_events=120,
             peak_outbox_retry_waiting_pending_events=0,
             peak_outbox_failed_events=0,
@@ -695,6 +699,9 @@ def test_finalize_report_marks_aborted_runs_as_failed_and_preserves_partial_evid
             final_outbox_failed_events=0,
             final_outbox_pending_events_by_topic=(),
             final_outbox_created_events_by_topic=(("transactions.persisted", 500),),
+            observed_outbox_processed_events=500,
+            observed_outbox_seconds=10.0,
+            observed_outbox_processed_events_per_second=50.0,
         ),
     )
 
@@ -817,7 +824,8 @@ def test_evaluate_report_rejects_baseline_valuation_reprocessing() -> None:
             "portfolio_count": 0,
             "transactions_per_portfolio": 0,
             "transaction_count": 0,
-            "derived_state_resource_evidence_required": False,
+            "derived_state_resource_evidence_required": True,
+            "evidence_classification": "certifying",
             "market_price_correction_multiplier": None,
             "fx_rate_correction_multiplier": None,
             "restart_valuation_orchestrator_during_fx_correction": False,
@@ -900,6 +908,9 @@ def test_evaluate_report_rejects_baseline_valuation_reprocessing() -> None:
             peak_runtime_memory_utilization_percent=1.0,
             peak_outbox_pending_events=0,
             peak_outbox_oldest_pending_age_seconds=0.0,
+            peak_outbox_recent_publication_age_p50_seconds=None,
+            peak_outbox_recent_publication_age_p95_seconds=None,
+            peak_outbox_recent_publication_age_p99_seconds=None,
             peak_outbox_retry_eligible_pending_events=0,
             peak_outbox_retry_waiting_pending_events=0,
             peak_outbox_failed_events=0,
@@ -908,6 +919,9 @@ def test_evaluate_report_rejects_baseline_valuation_reprocessing() -> None:
             final_outbox_failed_events=0,
             final_outbox_pending_events_by_topic=(),
             final_outbox_created_events_by_topic=(("valuation.snapshot.persisted", 1),),
+            observed_outbox_processed_events=None,
+            observed_outbox_seconds=None,
+            observed_outbox_processed_events_per_second=None,
         ),
     )
 
@@ -916,3 +930,21 @@ def test_evaluate_report_rejects_baseline_valuation_reprocessing() -> None:
     assert "valuation_job_attempt_count_max 4 != expected 2" in failures
     assert "valuation_jobs_with_repeated_processing 1 != expected 0" in failures
     assert "valuation_snapshot_event_count 1 != expected 0" in failures
+    assert "outbox publication-age percentiles are incomplete" in failures
+    assert "outbox processed-throughput evidence is incomplete" in failures
+
+    assert report.derived_state_resource_evidence is not None
+    non_monotonic_evidence = replace(
+        report.derived_state_resource_evidence,
+        peak_outbox_recent_publication_age_p50_seconds=3.0,
+        peak_outbox_recent_publication_age_p95_seconds=2.0,
+        peak_outbox_recent_publication_age_p99_seconds=1.0,
+        observed_outbox_processed_events=1,
+        observed_outbox_seconds=1.0,
+        observed_outbox_processed_events_per_second=1.0,
+    )
+    non_monotonic_failures = _evaluate_report(
+        replace(report, derived_state_resource_evidence=non_monotonic_evidence)
+    )
+    assert "outbox publication-age percentiles are not monotonic" in non_monotonic_failures
+    assert "outbox processed-throughput evidence is incomplete" not in non_monotonic_failures
