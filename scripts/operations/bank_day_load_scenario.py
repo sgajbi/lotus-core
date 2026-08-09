@@ -17,7 +17,7 @@ import subprocess
 import threading
 import time
 from contextlib import nullcontext
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -191,6 +191,7 @@ class DatabaseTieOut:
     valuation_job_attempt_count_min: int | None = None
     valuation_job_attempt_count_max: int | None = None
     valuation_jobs_with_repeated_processing: int = 0
+    repeated_valuation_job_samples: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -1168,6 +1169,30 @@ def _build_database_tie_out(
                 WHERE portfolio_id LIKE :portfolio_pattern
             ) AS valuation_jobs_with_repeated_processing,
             (
+                SELECT coalesce(
+                    jsonb_agg(sample ORDER BY security_id),
+                    '[]'::jsonb
+                )
+                FROM (
+                    SELECT
+                        security_id,
+                        jsonb_build_object(
+                            'security_id', security_id,
+                            'attempt_count', attempt_count,
+                            'source_correction_id', source_correction_id,
+                            'correlation_id', correlation_id,
+                            'created_at_utc', created_at,
+                            'updated_at_utc', updated_at
+                        ) AS sample
+                    FROM portfolio_valuation_jobs
+                    WHERE portfolio_id LIKE :portfolio_pattern
+                      AND status = 'COMPLETE'
+                      AND attempt_count > 2
+                    ORDER BY security_id
+                    LIMIT 25
+                ) repeated_jobs
+            ) AS repeated_valuation_job_samples,
+            (
                 SELECT count(*) FILTER (WHERE status = 'PENDING')
                 FROM portfolio_aggregation_jobs
                 WHERE portfolio_id LIKE :portfolio_pattern
@@ -1451,6 +1476,9 @@ def _build_database_tie_out(
         ),
         valuation_jobs_with_repeated_processing=int(
             aggregate_row["valuation_jobs_with_repeated_processing"] or 0
+        ),
+        repeated_valuation_job_samples=list(
+            aggregate_row.get("repeated_valuation_job_samples") or []
         ),
     )
 

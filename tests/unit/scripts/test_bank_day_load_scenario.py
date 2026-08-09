@@ -963,8 +963,16 @@ def test_database_tie_out_measures_both_materialization_stages_with_upsert_times
             "processing_valuation_jobs": 0,
             "completed_valuation_jobs": 1,
             "valuation_job_attempt_count_min": 2,
-            "valuation_job_attempt_count_max": 2,
-            "valuation_jobs_with_repeated_processing": 0,
+            "valuation_job_attempt_count_max": 4,
+            "valuation_jobs_with_repeated_processing": 1,
+            "repeated_valuation_job_samples": [
+                {
+                    "security_id": "LOAD_RUN1_SEC_0001",
+                    "attempt_count": 4,
+                    "source_correction_id": "sha256:diagnostic",
+                    "correlation_id": "corr-diagnostic",
+                }
+            ],
             "pending_aggregation_jobs": 0,
             "processing_aggregation_jobs": 0,
             "latest_snapshot_materialized_at_utc": None,
@@ -1004,6 +1012,8 @@ def test_database_tie_out_measures_both_materialization_stages_with_upsert_times
     assert "max(updated_at) AS positions_materialized_at" in query
     assert "pfts.updated_at - pmc.positions_materialized_at" in query
     assert "attempt_count > 2" in query
+    assert "jsonb_agg(sample ORDER BY security_id)" in query
+    assert "LIMIT 25" in query
     assert query.count("percentile_cont(0.99)") == 2
     assert captured["params"] == {
         "portfolio_pattern": "LOAD_RUN1_PF_%",
@@ -1016,8 +1026,16 @@ def test_database_tie_out_measures_both_materialization_stages_with_upsert_times
     assert tie_out.position_to_portfolio_timeseries_latency_p99_seconds == 0.49
     assert tie_out.completed_valuation_jobs == 1
     assert tie_out.valuation_job_attempt_count_min == 2
-    assert tie_out.valuation_job_attempt_count_max == 2
-    assert tie_out.valuation_jobs_with_repeated_processing == 0
+    assert tie_out.valuation_job_attempt_count_max == 4
+    assert tie_out.valuation_jobs_with_repeated_processing == 1
+    assert tie_out.repeated_valuation_job_samples == [
+        {
+            "security_id": "LOAD_RUN1_SEC_0001",
+            "attempt_count": 4,
+            "source_correction_id": "sha256:diagnostic",
+            "correlation_id": "corr-diagnostic",
+        }
+    ]
 
 
 def test_evaluate_report_rejects_baseline_valuation_reprocessing() -> None:

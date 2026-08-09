@@ -105,6 +105,9 @@ Likewise, a normal valuation job should have one claim and one completion transi
 attempt count. Jobs with repeated normal-lifecycle transitions indicate duplicate scheduling or
 rearm amplification. Different correlation ids are lineage evidence only and must not reopen
 completed work; only a freshness-proven source correction can request explicit rearm.
+When repeats occur, the receipt retains at most 25 synthetic job samples with correction and
+correlation lineage. Use them to identify the trigger family; the bound is diagnostic and must not
+be widened into an unbounded business-identifier export.
 
 `price-restatement` applies the same price correction across five business dates.
 `fx-restatement` materializes the same 100 x 100 shape across five business dates, corrects the

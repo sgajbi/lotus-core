@@ -70,7 +70,7 @@ class ValuationRepositoryBase:
     async def find_position_keys_requiring_price_revaluation(
         self, security_id: str, a_date: date
     ) -> List[Tuple[str, str, int]]:
-        """Return open current epochs whose same-day snapshot predates the persisted price."""
+        """Return current epochs whose latest derived authority predates the price."""
 
         latest_history_subquery = (
             select(
