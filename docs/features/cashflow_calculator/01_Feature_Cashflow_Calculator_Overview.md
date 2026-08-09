@@ -8,7 +8,10 @@ The **Cashflow Calculator** service is a core component of the system responsibl
 - **Enrichment**: For each transaction, it applies a set of business rules to determine the cashflow's financial characteristics.
 - **Calculation**: It calculates the net cashflow amount, adjusting for fees and applying the correct sign (inflow/outflow).
 - **Persistence**: Saves the resulting `Cashflow` record to the main database.
-- **Publication**: Publishes a `CashflowCalculated` event to the `cashflows.calculated` topic via the outbox pattern for downstream consumers like the `timeseries_generator_service`.
+- **Publication**: Publishes a retained `CashflowCalculated` compatibility fact to the
+  `cashflows.calculated` topic through the outbox. No active Core stage waits on that topic;
+  `portfolio_derived_state_service` reads the durable cashflow rows when valuation snapshots
+  trigger position-timeseries materialization.
 
 ## 2. Key Features
 
