@@ -139,6 +139,27 @@ def test_inspected_commit_must_resolve_in_core() -> None:
     assert any("must resolve to a Core commit" in error for error in errors)
 
 
+def test_online_receipt_verification_rejects_missing_artifact(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manifest = _manifest()
+
+    def github_payload(endpoint: str) -> dict[str, object]:
+        if endpoint.endswith("artifacts?per_page=100"):
+            return {"artifacts": []}
+        return {
+            "head_sha": manifest["inspected_core_commit"],
+            "status": "completed",
+            "conclusion": "success",
+        }
+
+    monkeypatch.setattr(guard, "_github_api_payload", github_payload)
+
+    errors = guard.validate_manifest(manifest, verify_github=True)
+
+    assert any("GitHub artifact does not exist" in error for error in errors)
+
+
 def _write_platform_policy_repo(tmp_path: Path, policy: dict[str, object]) -> Path:
     platform_root = tmp_path / "lotus-platform"
     policy_path = (
@@ -272,3 +293,19 @@ def test_cross_repository_verification_fails_closed_on_malformed_policy_shape(
     errors = guard.validate_manifest(_manifest(), platform_root=tmp_path)
 
     assert any("invalid required evidence shape" in error for error in errors)
+
+
+def test_cross_repository_verification_rejects_non_object_rollout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    malformed_policy = _minimal_policy()
+    malformed_policy["rollout"] = []
+    monkeypatch.setattr(
+        guard,
+        "_policy_bytes",
+        lambda *_args, **_kwargs: json.dumps(malformed_policy).encode("utf-8"),
+    )
+
+    errors = guard.validate_manifest(_manifest(), platform_root=tmp_path)
+
+    assert any("rollout must be an object" in error for error in errors)

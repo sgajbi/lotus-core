@@ -8,8 +8,9 @@ import json
 import re
 import subprocess
 from datetime import date
+from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MANIFEST_PATH = (
@@ -21,6 +22,7 @@ MANIFEST_PATH = (
 
 SCHEMA_VERSION = "lotus-core.technology-governance-pilot.v1"
 PILOT_ID = "lotus-core-technology-governance-pilot"
+GITHUB_REPOSITORY = "sgajbi/lotus-core"
 CLASSIFICATIONS = {"present", "gap", "non_certifying"}
 CORE_ISSUE_PATTERN = re.compile(r"^https://github\.com/sgajbi/lotus-core/issues/\d+$")
 CORE_RUN_PATTERN = re.compile(r"^https://github\.com/sgajbi/lotus-core/actions/runs/\d+$")
@@ -272,6 +274,8 @@ def _validate_platform_policy(
             },
         }
         rollout = policy["rollout"]
+        if not isinstance(rollout, dict):
+            raise TypeError("rollout must be an object")
     except (KeyError, TypeError) as exc:
         errors.append(f"pinned Platform policy has invalid required evidence shape: {exc}")
         return
@@ -376,8 +380,88 @@ def _validate_exception_control(
         errors.append("exception_control.requirement_id must be exception_policy")
 
 
+@lru_cache(maxsize=None)
+def _github_api_payload(endpoint: str) -> dict[str, Any]:
+    try:
+        result = subprocess.run(
+            ["gh", "api", endpoint],
+            cwd=REPO_ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except OSError as exc:
+        raise ValueError(f"cannot execute GitHub CLI: {exc}") from exc
+    if result.returncode:
+        detail = result.stderr.strip() or "GitHub API request failed"
+        raise ValueError(detail)
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"GitHub API returned invalid JSON: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise ValueError("GitHub API response must be an object")
+    return payload
+
+
+def _github_run_refs(manifest: dict[str, Any]) -> Iterator[tuple[str, dict[str, Any]]]:
+    mappings: list[Any] = []
+    for collection_name in REQUIRED_COLLECTIONS:
+        collection = manifest.get(collection_name)
+        if isinstance(collection, list):
+            mappings.extend(collection)
+    mappings.append(manifest.get("exception_control"))
+    for mapping_index, mapping in enumerate(mappings):
+        if not isinstance(mapping, dict):
+            continue
+        refs = mapping.get("evidence_refs")
+        if not isinstance(refs, list):
+            continue
+        for ref_index, evidence in enumerate(refs):
+            if isinstance(evidence, dict) and evidence.get("kind") == "github_run":
+                yield f"github_receipts[{mapping_index}].evidence_refs[{ref_index}]", evidence
+
+
+def _validate_github_receipt(evidence: dict[str, Any], *, location: str, errors: list[str]) -> None:
+    url = evidence.get("url")
+    if not isinstance(url, str) or not CORE_RUN_PATTERN.fullmatch(url):
+        return
+    run_id = url.rsplit("/", maxsplit=1)[-1]
+    try:
+        run = _github_api_payload(f"repos/{GITHUB_REPOSITORY}/actions/runs/{run_id}")
+        artifacts_payload = _github_api_payload(
+            f"repos/{GITHUB_REPOSITORY}/actions/runs/{run_id}/artifacts?per_page=100"
+        )
+    except ValueError as exc:
+        errors.append(f"{location}: GitHub receipt lookup failed: {exc}")
+        return
+    if run.get("head_sha") != evidence.get("source_commit"):
+        errors.append(f"{location}: GitHub run head SHA does not match source_commit")
+    if run.get("status") != "completed" or run.get("conclusion") != "success":
+        errors.append(f"{location}: GitHub run is not completed successfully")
+    artifacts = artifacts_payload.get("artifacts")
+    if not isinstance(artifacts, list):
+        errors.append(f"{location}: GitHub artifact response is malformed")
+        return
+    artifact_name = evidence.get("artifact")
+    matches = [artifact for artifact in artifacts if artifact.get("name") == artifact_name]
+    if not matches:
+        errors.append(f"{location}: GitHub artifact does not exist: {artifact_name}")
+    elif all(bool(artifact.get("expired")) for artifact in matches):
+        errors.append(f"{location}: GitHub artifact is expired: {artifact_name}")
+
+
+def _validate_github_receipts(manifest: dict[str, Any], errors: list[str]) -> None:
+    for location, evidence in _github_run_refs(manifest):
+        _validate_github_receipt(evidence, location=location, errors=errors)
+
+
 def validate_manifest(
-    manifest: dict[str, Any], *, root: Path = REPO_ROOT, platform_root: Path | None = None
+    manifest: dict[str, Any],
+    *,
+    root: Path = REPO_ROOT,
+    platform_root: Path | None = None,
+    verify_github: bool = False,
 ) -> list[str]:
     errors: list[str] = []
     inspected_commit = _validate_manifest_identity(manifest, root=root, errors=errors)
@@ -400,6 +484,8 @@ def validate_manifest(
     )
     if platform_root is not None and isinstance(policy_ref, dict):
         _validate_platform_policy(manifest, platform_root=platform_root, errors=errors)
+    if verify_github:
+        _validate_github_receipts(manifest, errors)
     return errors
 
 
@@ -412,6 +498,14 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", type=Path, default=MANIFEST_PATH)
     parser.add_argument("--platform-root", type=Path)
+    parser.add_argument(
+        "--verify-github",
+        action="store_true",
+        help=(
+            "Verify cited run conclusions, source SHAs, artifact existence, "
+            "and expiry via GitHub."
+        ),
+    )
     args = parser.parse_args(argv)
     try:
         manifest = load_manifest(args.manifest)
@@ -422,6 +516,7 @@ def main(argv: list[str] | None = None) -> int:
         manifest,
         root=REPO_ROOT,
         platform_root=args.platform_root.resolve() if args.platform_root else None,
+        verify_github=args.verify_github,
     )
     if errors:
         for error in errors:
