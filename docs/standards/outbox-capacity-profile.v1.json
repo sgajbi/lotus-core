@@ -1,0 +1,51 @@
+{
+  "schema_version": "lotus-core.outbox-capacity-profile.v1",
+  "owning_repository": "lotus-core",
+  "issue": "sgajbi/lotus-core#794",
+  "guard_command": "make outbox-capacity-profile-guard",
+  "profiles": {
+    "bank_day_safe_v1": {
+      "description": "Governed candidate baseline for amplified daily, correction, and replay certification; environment bindings may not weaken delivery, claim, retry, or shutdown fencing.",
+      "certification_status": "candidate_pending_exact_source",
+      "kafka_delivery_timeout_ms": 120000,
+      "environment": {
+        "OUTBOX_DISPATCHER_POLL_INTERVAL_SECONDS": 1,
+        "OUTBOX_DISPATCHER_BATCH_SIZE": 1000,
+        "OUTBOX_DISPATCHER_CLAIM_LEASE_SECONDS": 130,
+        "OUTBOX_DISPATCHER_TERMINATION_GRACE_SECONDS": 150,
+        "OUTBOX_DISPATCHER_MAX_RETRIES": 3,
+        "OUTBOX_DISPATCHER_RETRY_MAX_ELAPSED_SECONDS": 0,
+        "OUTBOX_DISPATCHER_RETRY_INITIAL_DELAY_SECONDS": 5,
+        "OUTBOX_DISPATCHER_RETRY_MAX_DELAY_SECONDS": 300,
+        "OUTBOX_DISPATCHER_RETRY_JITTER_SECONDS": 0
+      }
+    }
+  },
+  "environment_bindings": {
+    "development": {
+      "profile": "bank_day_safe_v1",
+      "kind": "compose_defaults",
+      "paths": ["docker-compose.yml"]
+    },
+    "ci": {
+      "profile": "bank_day_safe_v1",
+      "kind": "compose_defaults",
+      "paths": ["docker-compose.yml"]
+    },
+    "production_safe_baseline": {
+      "profile": "bank_day_safe_v1",
+      "kind": "kubernetes_literals",
+      "paths": [
+        "deployment/kubernetes/base/portfolio-derived-state.yaml",
+        "deployment/kubernetes/base/portfolio-transaction-processing.yaml"
+      ]
+    }
+  },
+  "safety_invariants": {
+    "delivery_fence_rounding_seconds": 1,
+    "claim_lease_safety_seconds": 5,
+    "shutdown_drain_safety_seconds": 5,
+    "runtime_termination_grace_safety_seconds": 10,
+    "retry_max_elapsed_zero_means_disabled": true
+  }
+}
