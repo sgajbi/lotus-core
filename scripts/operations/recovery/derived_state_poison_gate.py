@@ -20,6 +20,8 @@ from portfolio_common.config import (
 from portfolio_common.kafka_utils import KafkaProducer
 from sqlalchemy import create_engine
 
+from scripts.operations.managed_gate_evidence import write_managed_gate_failure_receipt
+
 if TYPE_CHECKING:
     from tests.test_support.managed_compose_run import ManagedComposeRun
 
@@ -346,12 +348,14 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main() -> int:
+def _run_gate(
+    *,
+    args: argparse.Namespace,
+    repo_root: Path,
+    started_at: datetime,
+) -> int:
     """Execute one poison event followed by one valid derived-state event."""
 
-    args = build_parser().parse_args()
-    repo_root = Path(args.repo_root).resolve()
-    started_at = datetime.now(UTC)
     run_id = started_at.strftime("%Y%m%dT%H%M%SZ")
     business_date = started_at.date().isoformat()
     portfolio_id = f"DERIVED_POISON_{run_id}"
@@ -548,6 +552,39 @@ def main() -> int:
         print(f"Wrote derived-state poison JSON report: {json_path}")
         print(f"Wrote derived-state poison Markdown report: {markdown_path}")
         return 1 if args.enforce and failures else 0
+
+
+def main() -> int:
+    """Preserve failures that occur before normal poison-gate evidence is available."""
+
+    args = build_parser().parse_args()
+    repo_root = Path(args.repo_root).resolve()
+    started_at = datetime.now(UTC)
+    try:
+        return _run_gate(args=args, repo_root=repo_root, started_at=started_at)
+    except Exception as error:
+        receipt = write_managed_gate_failure_receipt(
+            output_dir=repo_root / args.output_dir,
+            gate_name="derived-state-poison-gate",
+            phase="managed-gate-execution",
+            error=error,
+            started_at=started_at,
+            failed_at=datetime.now(UTC),
+            compose_project_name=(args.compose_project_name or os.getenv("COMPOSE_PROJECT_NAME")),
+            compose_log_path=(
+                repo_root
+                / args.output_dir
+                / "diagnostics"
+                / "derived-state-poison-gate-compose.log"
+            ),
+            context={
+                "source_topic": args.source_topic,
+                "consumer_group": args.consumer_group,
+                "dlq_topic": args.dlq_topic,
+            },
+        )
+        print(f"Derived-state poison orchestration failure receipt: {receipt}")
+        raise
 
 
 if __name__ == "__main__":
