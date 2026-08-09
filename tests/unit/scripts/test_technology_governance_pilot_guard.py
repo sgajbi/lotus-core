@@ -130,9 +130,10 @@ def test_github_run_evidence_is_numeric_and_bound_to_inspected_commit() -> None:
     assert any("must match inspected_core_commit" in error for error in errors)
 
 
-def test_inspected_commit_must_resolve_in_core() -> None:
+def test_inspected_commit_must_resolve_in_core(monkeypatch: pytest.MonkeyPatch) -> None:
     manifest = copy.deepcopy(_manifest())
     manifest["inspected_core_commit"] = "f" * 40
+    monkeypatch.setattr(guard, "_is_shallow_repository", lambda *_args: False)
 
     errors = guard.validate_manifest(manifest)
 
