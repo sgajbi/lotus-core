@@ -1,10 +1,70 @@
 """Prove deterministic evaluation of the derived-state poison recovery gate."""
 
+import json
+import sys
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+
+from scripts.operations.recovery import derived_state_poison_gate
 from scripts.operations.recovery.derived_state_gate import DerivedStateCounts
 from scripts.operations.recovery.derived_state_poison_gate import (
     matching_support_events,
     validate_poison_recovery,
 )
+
+
+def test_main_writes_redacted_receipt_when_managed_poison_start_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    class FailingManagedRun:
+        compose_file = tmp_path / "docker-compose.yml"
+        runtime = SimpleNamespace(
+            endpoints=SimpleNamespace(compose_project_name="lotus-poison-failure"),
+            export_to=lambda _environment: monkeypatch.setenv(
+                "COMPOSE_PROJECT_NAME", "lotus-poison-failure"
+            ),
+        )
+
+        def __enter__(self) -> None:
+            raise RuntimeError("postgresql://operator:secret@postgres/core unavailable")
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+    monkeypatch.setattr(
+        derived_state_poison_gate,
+        "prepare_managed_run",
+        lambda **_kwargs: FailingManagedRun(),
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "derived_state_poison_gate",
+            "--repo-root",
+            str(tmp_path),
+            "--output-dir",
+            "output/task-runs",
+        ],
+    )
+
+    with pytest.raises(RuntimeError, match="secret"):
+        derived_state_poison_gate.main()
+
+    receipts = list(
+        (tmp_path / "output/task-runs").glob(
+            "*-derived-state-poison-gate-orchestration-failure.json"
+        )
+    )
+    assert len(receipts) == 1
+    payload = json.loads(receipts[0].read_text(encoding="utf-8"))
+    assert payload["evidence_classification"] == "non_certifying_failure"
+    assert payload["compose_project_name"] == "lotus-poison-failure"
+    assert payload["context"]["dlq_topic"] == "dlq.persistence_service"
+    assert "secret" not in payload["error_message"]
 
 
 def test_matching_support_events_requires_exact_source_identity() -> None:
