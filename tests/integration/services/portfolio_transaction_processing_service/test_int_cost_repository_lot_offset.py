@@ -624,3 +624,30 @@ async def test_cost_repository_applies_costs_and_replaces_breakdown_idempotently
         ("exchange_fee", Decimal("1.25"), "USD"),
         ("other_fees", Decimal("0.01"), "USD"),
     ]
+
+    txn.fees = Fees(
+        brokerage=Decimal("999"),
+        stamp_duty=Decimal("0"),
+        exchange_fee=Decimal("0"),
+        gst=Decimal("0"),
+        other_fees=Decimal("0"),
+    )
+    assert await repo.apply_transaction_costs_and_replace_breakdown(txn) is not None
+    await async_db_session.rollback()
+
+    persisted_after_rollback = (
+        (
+            await async_db_session.execute(
+                select(TransactionCost)
+                .where(TransactionCost.transaction_id == "TXN_SLICE4_03")
+                .order_by(TransactionCost.fee_type)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert [(row.fee_type, row.amount, row.currency) for row in persisted_after_rollback] == [
+        ("brokerage", Decimal("12.34"), "USD"),
+        ("exchange_fee", Decimal("1.25"), "USD"),
+        ("other_fees", Decimal("0.01"), "USD"),
+    ]

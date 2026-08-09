@@ -27,9 +27,10 @@ from portfolio_common.infrastructure.persistence.transaction_identity_guard impo
     transaction_identity_update_allowed,
 )
 from portfolio_common.utils import async_timed
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, true, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from ...domain.cost_basis import CostBasisTransaction
 from ...domain.transaction import BookedTransaction
@@ -307,21 +308,29 @@ class SqlAlchemyCostBasisTransactionRepository:
             "calculation_lineage": calculation_lineage.lineage_payload(),
             **_transaction_metadata_update_values(transaction_result),
         }
-        statement = (
+        update_statement = (
             update(DBTransaction)
             .where(DBTransaction.transaction_id == transaction_result.transaction_id)
             .values(**update_values)
             .returning(DBTransaction)
         )
+        updated_transaction = update_statement.cte("updated_transaction")
+        updated_transaction_row = aliased(DBTransaction, updated_transaction)
+        deleted_costs = (
+            delete(TransactionCost)
+            .where(TransactionCost.transaction_id == updated_transaction.c.transaction_id)
+            .returning(TransactionCost.id)
+            .cte("deleted_transaction_costs")
+        )
+        statement = (
+            select(updated_transaction_row)
+            .select_from(updated_transaction_row)
+            .outerjoin(deleted_costs, true())
+            .limit(1)
+        )
         db_transaction = (await self.db.execute(statement)).scalars().first()
         if db_transaction is None:
             return None
-
-        await self.db.execute(
-            TransactionCost.__table__.delete().where(
-                TransactionCost.transaction_id == transaction_result.transaction_id
-            )
-        )
         self.db.add_all(
             _transaction_cost_rows(
                 transaction_result=transaction_result,

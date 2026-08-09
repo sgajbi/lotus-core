@@ -1426,7 +1426,7 @@ async def test_update_selected_open_lot_states_skips_empty_selection() -> None:
     db_session.execute.assert_not_awaited()
 
 
-async def test_apply_transaction_costs_and_replace_breakdown_uses_update_returning() -> None:
+async def test_apply_transaction_costs_and_replace_breakdown_uses_one_atomic_statement() -> None:
     db_session = AsyncMock()
     db_session.add_all = MagicMock()
     repository = SqlAlchemyCostBasisTransactionRepository(db_session)
@@ -1501,21 +1501,24 @@ async def test_apply_transaction_costs_and_replace_breakdown_uses_update_returni
     assert isinstance(updated_transaction, BookedTransaction)
     assert updated_transaction is not db_transaction
     assert updated_transaction.net_cost == Decimal("1002")
-    assert db_session.execute.await_count == 2
-    persisted_update = db_session.execute.await_args_list[0].args[0]
-    update_statement = str(persisted_update)
-    delete_statement = str(db_session.execute.await_args_list[1].args[0])
-    assert update_statement.startswith("UPDATE transactions SET")
-    assert "economic_event_id=" in update_statement
-    assert "calculation_policy_version=" in update_statement
-    assert "calculation_lineage=" in update_statement
-    assert "RETURNING transactions.id" in update_statement
-    update_parameters = persisted_update.compile().params
-    assert {
-        field_name: update_parameters[field_name]
-        for field_name in transaction_repository_module.REDEMPTION_CORRECTION_OWNED_OPTIONAL_FIELDS
-    } == dict.fromkeys(transaction_repository_module.REDEMPTION_CORRECTION_OWNED_OPTIONAL_FIELDS)
-    assert delete_statement.startswith("DELETE FROM transaction_costs")
+    db_session.execute.assert_awaited_once()
+    persisted_statement = db_session.execute.await_args.args[0]
+    statement_sql = str(persisted_statement)
+    assert statement_sql.startswith("WITH updated_transaction AS")
+    assert "UPDATE transactions SET" in statement_sql
+    assert "economic_event_id=" in statement_sql
+    assert "calculation_policy_version=" in statement_sql
+    assert "calculation_lineage=" in statement_sql
+    assert "DELETE FROM transaction_costs" in statement_sql
+    assert "transaction_costs.transaction_id = updated_transaction.transaction_id" in statement_sql
+    assert "LEFT OUTER JOIN deleted_transaction_costs ON true" in statement_sql
+    assert "RETURNING transactions.id" in statement_sql
+    update_parameters = persisted_statement.compile().params
+    for field_name in transaction_repository_module.REDEMPTION_CORRECTION_OWNED_OPTIONAL_FIELDS:
+        assert f"{field_name}=" in statement_sql
+    assert sum(value is None for value in update_parameters.values()) >= len(
+        transaction_repository_module.REDEMPTION_CORRECTION_OWNED_OPTIONAL_FIELDS
+    )
     db_session.add_all.assert_called_once_with([])
 
 
