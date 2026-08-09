@@ -2689,7 +2689,13 @@ Most relevant current governance:
      exclude only recognized generated cash-settlement adjustments, and fail closed on every other
      adjustment. Expose this evidence through the existing reconciliation-run summary rather than a
      duplicate endpoint. Issues #480 and #481 retain the broader parent-event graph and lot-lineage
-     closure.
+     closure. The #480 persistence foundation uses a mutable, book-scoped event pointer plus
+     immutable manifest-version, node, edge, child-observation, and readiness-evaluation ledgers.
+     A READY row must match the event's current manifest/state/observation pointers, the manifest
+     content hash, every declared node's latest observed content hash, deterministic node order,
+     and the declared forward-only edge graph. Retain correction-safe multiple READY evaluations
+     across state versions; do not restore a lifetime one-READY-per-manifest constraint or permit
+     historical ledger mutation.
 176. Transaction and product lifecycle publication is governed by
      `contracts/transaction-processing/transaction-capability-catalog.v1.json`, refreshed with
      `python scripts/transaction_processing/generate_capability_catalog.py`, and blocked by
