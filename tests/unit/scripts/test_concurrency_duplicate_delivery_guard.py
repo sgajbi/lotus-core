@@ -68,3 +68,31 @@ def test_concurrency_duplicate_delivery_guard_reports_missing_evidence_ref(
     findings = validate_concurrency_duplicate_delivery_pack(pack, repo_root=tmp_path)
 
     assert any("missing_evidence_refs" in finding for finding in findings)
+
+
+def test_concurrency_duplicate_delivery_guard_rejects_duplicate_evidence(
+    tmp_path: Path,
+) -> None:
+    evidence = "existing_test.py"
+    pack = {
+        "schema_version": "lotus-core.concurrency-duplicate-delivery-test-pack.v1",
+        "owning_repository": "lotus-core",
+        "issue": "sgajbi/lotus-core#608",
+        "guard_command": "make concurrency-duplicate-delivery-guard",
+        "scenarios": [
+            {
+                "id": scenario_id,
+                "status": "implemented",
+                "evidence": [evidence, evidence] if index == 0 else [evidence],
+                "deterministic_primitives": ["barrier"],
+                "state_assertions": ["one row"],
+            }
+            for index, scenario_id in enumerate(sorted(REQUIRED_SCENARIOS))
+        ],
+    }
+    (tmp_path / "Makefile").write_text("concurrency-duplicate-delivery-guard:\n", encoding="utf-8")
+    (tmp_path / evidence).write_text("def test_x(): pass\n", encoding="utf-8")
+
+    findings = validate_concurrency_duplicate_delivery_pack(pack, repo_root=tmp_path)
+
+    assert any(finding.get("duplicate_values") == {"evidence": [evidence]} for finding in findings)
