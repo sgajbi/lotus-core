@@ -972,9 +972,13 @@ def _seed_source_facts_before_business_horizon(
         sql="""
         SELECT count(*) AS count
         FROM business_dates
-        WHERE date = ANY(CAST(:business_dates AS date[]))
+        WHERE date IN (
+            SELECT jsonb_array_elements_text(
+                CAST(:business_dates_json AS jsonb)
+            )::date
+        )
         """,
-        params={"business_dates": business_dates},
+        params={"business_dates_json": json.dumps(business_dates)},
         expected_count=len(business_dates),
         label="business-date horizon",
         timeout_seconds=timeout_seconds,

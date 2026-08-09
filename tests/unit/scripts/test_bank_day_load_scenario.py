@@ -169,10 +169,59 @@ def test_initial_source_facts_drain_before_business_horizon_activation(monkeypat
             (
                 "business-date horizon",
                 1,
-                {"business_dates": ["2026-08-07"]},
+                {"business_dates_json": '["2026-08-07"]'},
             ),
         ),
     ]
+
+
+def test_business_date_horizon_binds_multiple_dates_as_json(monkeypatch) -> None:
+    observed_wait: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        bank_day_load_scenario,
+        "_ingest_static_payload",
+        lambda **kwargs: bank_day_load_scenario.IngestPhaseResult(
+            endpoint=kwargs["endpoint"],
+            record_count=len(kwargs["rows"]),
+            batch_count=1,
+            duration_seconds=0.0,
+        ),
+    )
+    monkeypatch.setattr(
+        bank_day_load_scenario,
+        "_wait_for_seed_materialization",
+        lambda **kwargs: (
+            observed_wait.update(kwargs) if kwargs["label"] == "business-date horizon" else None
+        ),
+    )
+    monkeypatch.setattr(
+        bank_day_load_scenario,
+        "_db_row",
+        lambda *_args, **_kwargs: {"source_seed_started_at": "2026-08-09T00:00:00Z"},
+    )
+
+    bank_day_load_scenario._seed_source_facts_before_business_horizon(
+        engine=object(),
+        session=object(),
+        ingestion_base_url="http://ingestion",
+        run_id="20260809T000000Z",
+        portfolios=bank_day_load_scenario._build_portfolios(
+            run_id="20260809T000000Z",
+            portfolio_count=1,
+            trade_date="2026-08-07",
+        ),
+        specs=bank_day_load_scenario._build_instrument_specs(
+            run_id="20260809T000000Z",
+            instrument_count=1,
+        ),
+        business_dates=["2026-08-07", "2026-08-10"],
+        timeout_seconds=30,
+    )
+
+    assert observed_wait["params"] == {"business_dates_json": '["2026-08-07", "2026-08-10"]'}
+    assert "jsonb_array_elements_text" in str(observed_wait["sql"])
+    assert observed_wait["expected_count"] == 2
 
 
 def test_operation_evidence_collection_preserves_bounded_stage_totals(monkeypatch) -> None:

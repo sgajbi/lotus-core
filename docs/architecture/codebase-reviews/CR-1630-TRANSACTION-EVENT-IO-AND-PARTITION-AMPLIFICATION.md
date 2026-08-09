@@ -699,6 +699,16 @@ does not publish this key policy; the operator-owned migration runbook is the du
   pressure. The bounded query excludes completed-only history before grouping, retains every
   observable state, and documents that zero-pressure historical job types are absent rather than
   forcing the database to revisit their terminal rows.
+- Corrected-source daily task
+  `eng-task-20260809-215800-lotus-core-certification-make-profile-derived-state-daily` failed before
+  ingestion at clean signed `de0145b3c`: SQLAlchemy adapted the one-element Python date collection
+  as a tuple, which PostgreSQL rejected as a `date[]` literal. Receipt
+  `20260809T140708Z-bank-day-load.json` is therefore non-certifying harness evidence (SHA-256
+  `D79159645F5C0B02543AE966A0C521CA668B7D7F3B55E647EBAC669CB5F34AE5`), not a capacity verdict.
+  The horizon fence now transports its bounded date set as JSON and expands it inside PostgreSQL,
+  avoiding driver-specific array adaptation for both one and multiple dates. Focused unit tests and
+  a live PostgreSQL two-date binding probe passed; no production query, schema, or runtime contract
+  changed.
 
 Implementation commits include `23fc6faf3`, `d51adb739`, `ad1ad179d`, `57f8c60e2`,
 `4f05be9a5`, `c230d660a`, `f42f6eaa3`, `d56e14dbf`, `2d49fc8f1`, `70ae16f0f`,
