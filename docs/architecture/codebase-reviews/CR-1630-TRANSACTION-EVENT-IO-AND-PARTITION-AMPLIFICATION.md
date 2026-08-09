@@ -709,6 +709,22 @@ does not publish this key policy; the operator-owned migration runbook is the du
   avoiding driver-specific array adaptation for both one and multiple dates. Focused unit tests and
   a live PostgreSQL two-date binding probe passed; no production query, schema, or runtime contract
   changed.
+- The first corrected-harness exact-source daily at signed `3f770ce09` is a valid internal capacity
+  failure, not an orchestration diagnostic. Task
+  `eng-task-20260809-221942-lotus-core-certification-make-profile-derived-state-daily` accepted all
+  100,000 transactions through the public API in `126.70s`, then exhausted the unchanged two-hour
+  end-to-end drain with 82,802 snapshots, 82,785 position-series rows, 904 portfolio-series rows,
+  30 open valuation jobs, nine open aggregation jobs, maximum valuation attempt four, and 3,941
+  repeatedly processed jobs. Artifact `20260809T142151Z-bank-day-load.json` has SHA-256
+  `F63514EDFB8E89E67EF463B59EA57E839EE8064ED13DD224E7ED22276D77805B`.
+  Outbox publication remained bounded (164 peak pending, zero failed, `78.900264/s` observed
+  processed throughput), so the failure does not justify more dispatcher capacity. The new operation
+  evidence instead attributes mean `0.889971171s` transaction time to `0.336456535s` cost and
+  `0.178394358s` position stages while FIFO calculation itself remained `0.001073069s` at depth one.
+  Required cost persistence calls each observed roughly 24.6–59.0ms fixed database latency. The
+  next slice must reduce proven transaction-scoped round trips while preserving ordering, locks,
+  atomicity, calculations, event contracts, the 12-partition ceiling, and the rejected-experiment
+  exclusions.
 
 Implementation commits include `23fc6faf3`, `d51adb739`, `ad1ad179d`, `57f8c60e2`,
 `4f05be9a5`, `c230d660a`, `f42f6eaa3`, `d56e14dbf`, `2d49fc8f1`, `70ae16f0f`,
