@@ -2211,7 +2211,9 @@ Most relevant current governance:
      security, valuation-date, and epoch scope; a delayed delivery may rearm or request requeue only
      when its ID is newer than that watermark. Preserve exact payload identity alongside aggregate
      identity, monotonic watermarks across outbox retention, and non-rearming compatibility for
-     headerless or malformed legacy deliveries. Do not replace this with timestamps: outbox
+     truly headerless legacy deliveries. A present malformed or nonpositive sequence fails closed
+     before idempotency; transport input may request work but must never initialize or advance the
+     claimed watermark. Do not replace this with timestamps: outbox
      creation time can precede commit and PostgreSQL `now()` is transaction-start time.
      `TransactionProcessingUnitOfWork.readiness` composes that application use case directly from
      the package-owned stage repository and event stager. Do not restore the ambiguous `pipeline`

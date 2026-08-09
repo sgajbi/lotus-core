@@ -3,7 +3,7 @@ import logging
 from datetime import date
 from typing import Iterable, Iterator, Optional, TypeVar
 
-from sqlalchemy import and_, case, func, not_, select, tuple_, update
+from sqlalchemy import and_, case, func, literal, not_, select, tuple_, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -360,6 +360,11 @@ def _valuation_job_upsert_stmt(
     requeue_if_processing: bool = False,
     fence_by_readiness_sequence: bool = False,
 ):
+    readiness_outbox_id: int | None = None
+    if fence_by_readiness_sequence:
+        if len(eligible_jobs) != 1 or eligible_jobs[0].readiness_outbox_id is None:
+            raise ValueError("Readiness-sequence fencing requires exactly one sequenced job")
+        readiness_outbox_id = eligible_jobs[0].readiness_outbox_id
     stmt = pg_insert(PortfolioValuationJob).values(_valuation_job_insert_values(eligible_jobs))
     return stmt.on_conflict_do_update(
         index_elements=["portfolio_id", "security_id", "valuation_date", "epoch"],
@@ -372,6 +377,7 @@ def _valuation_job_upsert_stmt(
             rearm_completed=rearm_completed,
             requeue_if_processing=requeue_if_processing,
             fence_by_readiness_sequence=fence_by_readiness_sequence,
+            readiness_outbox_id=readiness_outbox_id,
         ),
     )
 
@@ -398,7 +404,8 @@ def _valuation_job_insert_values(
                 "status": "PENDING",
                 "requeue_requested": False,
                 "source_correction_id": job.source_correction_id,
-                "claimed_readiness_outbox_id": job.readiness_outbox_id or 0,
+                # Only a claim's exact-scope database query may advance covered authority.
+                "claimed_readiness_outbox_id": 0,
                 "correlation_id": diagnostics.correlation_id,
                 "correlation_missing_reason": diagnostics.correlation_missing_reason,
                 "alternate_lookup_key": diagnostics.alternate_lookup_key,
@@ -444,6 +451,7 @@ def _valuation_job_conflict_update_predicate(
     rearm_completed: bool,
     requeue_if_processing: bool,
     fence_by_readiness_sequence: bool,
+    readiness_outbox_id: int | None,
 ):
     identity_matches = PortfolioValuationJob.correlation_id.is_not_distinct_from(
         stmt.excluded.correlation_id
@@ -466,9 +474,10 @@ def _valuation_job_conflict_update_predicate(
     if not rearm_completed:
         predicate &= PortfolioValuationJob.status != "COMPLETE"
     if fence_by_readiness_sequence:
-        incoming_outbox_id = stmt.excluded.claimed_readiness_outbox_id
-        predicate &= (PortfolioValuationJob.status == "PENDING") | (
-            incoming_outbox_id > PortfolioValuationJob.claimed_readiness_outbox_id
+        if readiness_outbox_id is None:
+            raise ValueError("readiness_outbox_id is required for sequence fencing")
+        predicate &= literal(readiness_outbox_id) > (
+            PortfolioValuationJob.claimed_readiness_outbox_id
         )
     return predicate
 

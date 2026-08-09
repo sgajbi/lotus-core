@@ -15,6 +15,7 @@ from src.services.calculators.position_valuation_calculator.app.repositories.val
     ValuationRepository,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure.position.history_repository import (  # noqa: E501
+    SqlAlchemyPositionHistoryRepository,
     _position_history_replay_lock_key,
 )
 
@@ -234,6 +235,39 @@ async def test_claimed_sequence_never_regresses_when_outbox_history_is_absent(
     assert claimed[0].claimed_readiness_outbox_id == 900
 
 
+async def test_unverified_high_transport_sequence_cannot_poison_claimed_authority(
+    async_db_session: AsyncSession,
+    clean_db,
+) -> None:
+    covered = await _stage_readiness(async_db_session)
+    covered_id = covered.id
+    await async_db_session.commit()
+    await _seed_pending_job(async_db_session)
+    await ValuationRepository(async_db_session).find_and_claim_eligible_jobs(1)
+    job = await _read_job(async_db_session)
+    job.status = "COMPLETE"
+    await async_db_session.commit()
+
+    unverified_high_id = covered_id + 1_000_000
+    await _apply_readiness(async_db_session, outbox_id=unverified_high_id)
+    claimed = await ValuationRepository(async_db_session).find_and_claim_eligible_jobs(1)
+    assert claimed[0].claimed_readiness_outbox_id == covered_id
+    claimed_job = await _read_job(async_db_session)
+    claimed_job.status = "COMPLETE"
+    await async_db_session.commit()
+
+    legitimate = await _stage_readiness(async_db_session)
+    legitimate_id = legitimate.id
+    await async_db_session.commit()
+    assert covered_id < legitimate_id < unverified_high_id
+    await _apply_readiness(async_db_session, outbox_id=legitimate_id)
+
+    async_db_session.expire_all()
+    job = await _read_job(async_db_session)
+    assert job.status == "PENDING"
+    assert job.claimed_readiness_outbox_id == covered_id
+
+
 async def test_claim_scope_is_stable_under_non_iso_postgres_datestyle(
     async_db_session: AsyncSession,
     clean_db,
@@ -318,16 +352,28 @@ async def test_same_position_lock_serializes_readiness_sequence_allocation(
     lock_key = _position_history_replay_lock_key(PORTFOLIO_ID, SECURITY_ID, 0)
 
     async with session_factory() as first_session:
-        await first_session.execute(
-            text("SELECT pg_advisory_xact_lock(:lock_key)").bindparams(lock_key=lock_key)
+        await SqlAlchemyPositionHistoryRepository(first_session).acquire_replay_lock(
+            portfolio_id=PORTFOLIO_ID,
+            security_id=SECURITY_ID,
+            epoch=0,
         )
         first = await _stage_readiness(first_session)
         first_id = first.id
+        contention_proven = asyncio.Event()
 
         async def stage_after_same_position_lock() -> int:
             async with session_factory() as second_session:
-                await second_session.execute(
-                    text("SELECT pg_advisory_xact_lock(:lock_key)").bindparams(lock_key=lock_key)
+                acquired_early = await second_session.scalar(
+                    text("SELECT pg_try_advisory_xact_lock(:lock_key)").bindparams(
+                        lock_key=lock_key
+                    )
+                )
+                assert acquired_early is False
+                contention_proven.set()
+                await SqlAlchemyPositionHistoryRepository(second_session).acquire_replay_lock(
+                    portfolio_id=PORTFOLIO_ID,
+                    security_id=SECURITY_ID,
+                    epoch=0,
                 )
                 second = await _stage_readiness(second_session)
                 second_id = second.id
@@ -335,7 +381,7 @@ async def test_same_position_lock_serializes_readiness_sequence_allocation(
                 return second_id
 
         second_task = asyncio.create_task(stage_after_same_position_lock())
-        await asyncio.sleep(0.1)
+        await asyncio.wait_for(contention_proven.wait(), timeout=5)
         assert second_task.done() is False
         await first_session.commit()
         second_id = await asyncio.wait_for(second_task, timeout=5)

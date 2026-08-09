@@ -118,7 +118,7 @@ async def test_readiness_event_upserts_valuation_job_and_marks_idempotency(
     assert job_kwargs["valuation_date"] == mock_event.valuation_date
     assert job_kwargs["epoch"] == mock_event.epoch
     assert isinstance(job_kwargs["correlation_id"], str)
-    assert job_kwargs["source_mutation_id"] == _readiness_source_mutation_id(mock_kafka_message)
+    assert job_kwargs["source_mutation_id"] == _readiness_source_mutation_id(417)
     assert job_kwargs["readiness_outbox_id"] == 417
 
     mock_idempotency_repo.claim_event_processing.assert_awaited_once()
@@ -211,9 +211,13 @@ async def test_readiness_source_mutation_identity_is_redelivery_stable_and_event
     later_mutation = MagicMock()
     later_mutation.headers.return_value = [("outbox_id", b"418")]
 
-    assert _readiness_source_mutation_id(first) == _readiness_source_mutation_id(duplicate)
-    assert _readiness_source_mutation_id(first) != _readiness_source_mutation_id(later_mutation)
-    assert _readiness_outbox_id(first) == 417
+    first_id = _readiness_outbox_id(first)
+    duplicate_id = _readiness_outbox_id(duplicate)
+    later_id = _readiness_outbox_id(later_mutation)
+    assert first_id == duplicate_id == 417
+    assert later_id == 418
+    assert _readiness_source_mutation_id(first_id) == _readiness_source_mutation_id(duplicate_id)
+    assert _readiness_source_mutation_id(first_id) != _readiness_source_mutation_id(later_id)
 
 
 @pytest.mark.parametrize("raw_value", [b"0", b"-1", b"not-an-id", b""])
@@ -221,5 +225,45 @@ async def test_readiness_rejects_nonpositive_or_malformed_outbox_sequence(raw_va
     message = MagicMock()
     message.headers.return_value = [("outbox_id", raw_value)]
 
-    assert _readiness_outbox_id(message) is None
-    assert _readiness_source_mutation_id(message) is None
+    with pytest.raises(EventContractValidationError, match="positive integer"):
+        _readiness_outbox_id(message)
+
+
+@pytest.mark.parametrize(
+    ("raw_value", "message"),
+    [(b"\xff", "UTF-8"), (417, "must be text")],
+)
+async def test_readiness_rejects_non_text_transport_sequences(
+    raw_value: object,
+    message: str,
+) -> None:
+    kafka_message = MagicMock()
+    kafka_message.headers.return_value = [("outbox_id", raw_value)]
+
+    with pytest.raises(EventContractValidationError, match=message):
+        _readiness_outbox_id(kafka_message)
+
+
+async def test_readiness_fails_closed_when_transport_headers_are_unreadable() -> None:
+    message = MagicMock()
+    message.headers.side_effect = RuntimeError("transport unavailable")
+
+    with pytest.raises(EventContractValidationError, match="could not be inspected"):
+        _readiness_outbox_id(message)
+
+
+@pytest.mark.parametrize("raw_value", [b"0", b"-1", b"not-an-id", b""])
+async def test_present_invalid_sequence_fails_before_idempotency_claim(
+    raw_value: bytes,
+    consumer: ValuationReadinessConsumer,
+    mock_kafka_message: MagicMock,
+    mock_dependencies: dict,
+) -> None:
+    mock_kafka_message.headers.return_value = [("outbox_id", raw_value)]
+
+    with pytest.raises(EventContractValidationError, match="positive integer"):
+        await consumer.process_message(mock_kafka_message)
+
+    mock_dependencies["idempotency_repo"].claim_event_processing.assert_not_awaited()
+    mock_dependencies["job_repo"].upsert_job.assert_not_awaited()
+    mock_dependencies["job_repo"].upsert_position_readiness_job.assert_not_awaited()

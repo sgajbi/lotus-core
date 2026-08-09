@@ -4,7 +4,9 @@ CR-1682 delayed-readiness sequencing addendum (2026-08-10): exact fan-in evidenc
 `f4ab7ecfc` reconciled all 1,000 financial results but exposed 30 scheduler-backfill valuation
 repeats and 1,007 snapshot publications. Core now snapshots the maximum committed exact-scope
 readiness outbox ID when claiming a valuation job and accepts rearm/requeue authority only from a
-newer positive delivered sequence. Ten live PostgreSQL cases prove commit visibility, replay,
+newer positive delivered sequence. Review then removed transport-header initialization of claimed
+authority and made malformed-present sequences fail closed before idempotency. Eleven live
+PostgreSQL cases prove commit visibility, replay,
 retention, scope isolation, delimiter-collision safety, rollback gaps, and concurrent publication.
 Migration `c150b2c3d517` adds the default-zero monotonic watermark. No API/OpenAPI or Kafka payload
 shape changes; CR-1630 contains the detailed evidence and certification remains pending an

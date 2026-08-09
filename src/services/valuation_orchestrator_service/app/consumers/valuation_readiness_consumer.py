@@ -7,7 +7,6 @@ from portfolio_common.db import get_async_db_session
 from portfolio_common.event_mapping import (
     EventContractValidationError,
     decode_kafka_event_payload,
-    kafka_outbox_id,
     validate_kafka_event_payload,
 )
 from portfolio_common.events import PortfolioDayReadyForValuationEvent
@@ -24,12 +23,9 @@ logger = logging.getLogger(__name__)
 SERVICE_NAME = "valuation-readiness-consumer"
 
 
-def _readiness_source_mutation_id(msg: Message) -> str | None:
+def _readiness_source_mutation_id(outbox_id: int) -> str:
     """Return stable identity for the durable outbox mutation behind readiness."""
 
-    outbox_id = _readiness_outbox_id(msg)
-    if outbox_id is None:
-        return None
     return cast(
         str,
         stable_content_hash(
@@ -42,16 +38,40 @@ def _readiness_source_mutation_id(msg: Message) -> str | None:
 
 
 def _readiness_outbox_id(msg: Message) -> int | None:
-    """Return the positive durable sequence carried by a readiness record."""
+    """Return an absent legacy sequence or validate a present sequence fail-closed."""
 
-    raw_outbox_id = kafka_outbox_id(msg)
-    if raw_outbox_id is None:
-        return None
     try:
-        outbox_id = int(raw_outbox_id)
-    except ValueError:
-        return None
-    return outbox_id if outbox_id > 0 else None
+        headers = msg.headers() or []
+    except Exception as exc:
+        raise EventContractValidationError(
+            "Valuation readiness headers could not be inspected"
+        ) from exc
+    for name, raw_value in reversed(headers):
+        if name != "outbox_id":
+            continue
+        if isinstance(raw_value, (bytes, bytearray)):
+            try:
+                value = raw_value.decode("utf-8")
+            except UnicodeDecodeError as exc:
+                raise EventContractValidationError(
+                    "Valuation readiness outbox_id must be UTF-8"
+                ) from exc
+        elif isinstance(raw_value, str):
+            value = raw_value
+        else:
+            raise EventContractValidationError("Valuation readiness outbox_id must be text")
+        try:
+            outbox_id = int(value.strip())
+        except ValueError as exc:
+            raise EventContractValidationError(
+                "Valuation readiness outbox_id must be a positive integer"
+            ) from exc
+        if outbox_id <= 0:
+            raise EventContractValidationError(
+                "Valuation readiness outbox_id must be a positive integer"
+            )
+        return outbox_id
+    return None
 
 
 class ValuationReadinessConsumer(BaseConsumer):
@@ -70,6 +90,12 @@ class ValuationReadinessConsumer(BaseConsumer):
                 PortfolioDayReadyForValuationEvent,
                 expected_event_type="PortfolioDayReadyForValuation",
             )
+            readiness_outbox_id = _readiness_outbox_id(msg)
+            source_mutation_id = (
+                _readiness_source_mutation_id(readiness_outbox_id)
+                if readiness_outbox_id is not None
+                else None
+            )
             with self._message_correlation_context(msg) as correlation_id:
                 async for db in get_async_db_session():
                     async with db.begin():
@@ -82,8 +108,6 @@ class ValuationReadinessConsumer(BaseConsumer):
                         ):
                             return
 
-                        readiness_outbox_id = _readiness_outbox_id(msg)
-                        source_mutation_id = _readiness_source_mutation_id(msg)
                         job_repository = ValuationJobRepository(db)
                         if readiness_outbox_id is None:
                             await job_repository.upsert_job(
@@ -94,7 +118,7 @@ class ValuationReadinessConsumer(BaseConsumer):
                                 correlation_id=correlation_id,
                             )
                         else:
-                            if source_mutation_id is None:  # pragma: no cover - shared parser fence
+                            if source_mutation_id is None:  # pragma: no cover - local parser fence
                                 raise RuntimeError("Readiness mutation identity was not resolved")
                             await job_repository.upsert_position_readiness_job(
                                 portfolio_id=event.portfolio_id,
