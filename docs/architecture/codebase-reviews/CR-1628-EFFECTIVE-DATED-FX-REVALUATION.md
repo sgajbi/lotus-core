@@ -102,8 +102,11 @@ five governed business dates: 12,500/12,500 affected snapshots, valuation jobs, 
 500/500 portfolio rows; one persisted observation; one completed pair replay; exact corrected
 market value and unrealized price/FX/total P&L; a measured `6.167s` orchestrator outage with healthy
 restore; 292 complete resource samples; zero failures; and closed valuation, aggregation, and
-outbox queues. This is local closure evidence for #791 pending PR, CI, exact-main validation, QA,
-and issue closure.
+outbox queues. PR #797 merged this evidence to exact main
+`c44d863bb849eddb7c751dab4a02d1be18a3d75f`; Main Releasability run `29475491036`
+passed, authored wiki publication reached strict parity, and #791 is verified closed. #714 still
+owns current-source daily, correction/restatement, recovery, release, and rollback certification;
+that matrix does not reopen the proven FX source contract.
 
 ## Documentation Decision
 

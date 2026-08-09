@@ -57,10 +57,25 @@ def test_fx_correction_docs_preserve_verified_main_closure_and_current_rerun_req
     paths = (
         REPO_ROOT / "docs/features/portfolio-derived-state/operations-runbook.md",
         REPO_ROOT / "wiki/Timeseries-and-Aggregation.md",
+        REPO_ROOT
+        / "docs/architecture/codebase-reviews/CR-1628-EFFECTIVE-DATED-FX-REVALUATION.md",
     )
     for path in paths:
         content = path.read_text(encoding="utf-8")
         assert "c44d863bb849eddb7c751dab4a02d1be18a3d75f" in content
         assert "29475491036" in content
-        assert "current-source FX restatement rerun" in content
         assert "#791 is locally fixed pending" not in content
+
+    current_surfaces = "\n".join(path.read_text(encoding="utf-8") for path in paths[:2])
+    assert "current-source FX restatement rerun" in current_surfaces
+
+    review = paths[2].read_text(encoding="utf-8")
+    assert "#791 is verified closed" in review
+
+    ledger = (REPO_ROOT / "docs/architecture/CODEBASE-REVIEW-LEDGER.md").read_text(
+        encoding="utf-8"
+    )
+    cr_1628_row = next(line for line in ledger.splitlines() if line.startswith("| CR-1628 |"))
+    assert "Verified merged main" in cr_1628_row
+    assert "29475491036" in cr_1628_row
+    assert "PR/main/QA pending" not in cr_1628_row
