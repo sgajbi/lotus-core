@@ -545,7 +545,7 @@ class ValuationRepositoryBase:
             func.min(PortfolioValuationJob.created_at)
             .filter(actionable_pending)
             .label("oldest_pending_created_at"),
-        )
+        ).where(PortfolioValuationJob.status.in_(("PENDING", "FAILED")))
         row = (await self.db.execute(stmt)).one()
         return {
             "pending_count": int(row.pending_count or 0),

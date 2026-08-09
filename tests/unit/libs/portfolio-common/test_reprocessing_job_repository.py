@@ -295,7 +295,9 @@ async def test_get_queue_stats_filters_by_job_type(
         "oldest_pending_created_at": None,
     }
     stmt = mock_db_session.execute.await_args.args[0]
-    assert "reprocessing_jobs.job_type" in str(stmt)
+    compiled_query = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "reprocessing_jobs.status IN ('PENDING', 'FAILED')" in compiled_query
+    assert "reprocessing_jobs.job_type = 'RESET_WATERMARKS'" in compiled_query
 
 
 async def test_find_and_reset_stale_jobs_marks_over_limit_rows_failed(

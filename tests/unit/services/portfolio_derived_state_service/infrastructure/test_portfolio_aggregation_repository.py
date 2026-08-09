@@ -275,6 +275,11 @@ async def test_get_job_queue_stats_returns_pending_failed_and_oldest_pending(
         "failed_count": 1,
         "oldest_pending_created_at": date(2025, 1, 1),
     }
+    stmt = mock_db_session.execute.await_args.args[0]
+    compiled_query = str(
+        stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True})
+    )
+    assert "portfolio_aggregation_jobs.status IN ('PENDING', 'FAILED')" in compiled_query
 
 
 async def test_get_all_position_timeseries_for_date_uses_latest_position_epoch_within_target_epoch(

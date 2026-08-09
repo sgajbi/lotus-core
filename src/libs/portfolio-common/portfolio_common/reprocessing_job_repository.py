@@ -615,7 +615,7 @@ class ReprocessingJobRepository:
             func.min(ReprocessingJob.created_at)
             .filter(ReprocessingJob.status == "PENDING")
             .label("oldest_pending_created_at"),
-        )
+        ).where(ReprocessingJob.status.in_(("PENDING", "FAILED")))
         if job_type is not None:
             stmt = stmt.where(ReprocessingJob.job_type == job_type)
         row = (await self.db.execute(stmt)).one()
