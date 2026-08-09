@@ -189,14 +189,22 @@ def test_read_outbox_resource_usage_preserves_backlog_and_topic_cohorts() -> Non
             return Result(
                 [
                     {
+                        "aggregate_type": "RawTransaction",
                         "topic": "transactions.persisted",
                         "created_events": 700,
                         "pending_events": 100,
                     },
                     {
+                        "aggregate_type": "DailyPositionSnapshot",
                         "topic": "valuation.snapshot.persisted",
                         "created_events": 300,
                         "pending_events": 0,
+                    },
+                    {
+                        "aggregate_type": "TransactionReplay",
+                        "topic": "transactions.persisted",
+                        "created_events": 50,
+                        "pending_events": 5,
                     },
                 ]
             )
@@ -216,10 +224,19 @@ def test_read_outbox_resource_usage_preserves_backlog_and_topic_cohorts() -> Non
     assert usage.recent_publication_age_p50_seconds == 2.25
     assert usage.recent_publication_age_p95_seconds == 8.5
     assert usage.recent_publication_age_p99_seconds == 12.75
-    assert usage.pending_events_by_topic == (("transactions.persisted", 100),)
+    assert usage.pending_events_by_topic == (("transactions.persisted", 105),)
     assert usage.created_events_by_topic == (
-        ("transactions.persisted", 700),
+        ("transactions.persisted", 750),
         ("valuation.snapshot.persisted", 300),
+    )
+    assert usage.pending_events_by_producer_cohort == (
+        ("RawTransaction", "transactions.persisted", 100),
+        ("TransactionReplay", "transactions.persisted", 5),
+    )
+    assert usage.created_events_by_producer_cohort == (
+        ("DailyPositionSnapshot", "valuation.snapshot.persisted", 300),
+        ("RawTransaction", "transactions.persisted", 700),
+        ("TransactionReplay", "transactions.persisted", 50),
     )
 
 
@@ -254,6 +271,12 @@ def test_summarize_resource_samples_reports_peak_capacity_pressure() -> None:
                 recent_publication_age_p99_seconds=7.0,
                 pending_events_by_topic=(("transactions.persisted", 100),),
                 created_events_by_topic=(("transactions.persisted", 400),),
+                pending_events_by_producer_cohort=(
+                    ("RawTransaction", "transactions.persisted", 100),
+                ),
+                created_events_by_producer_cohort=(
+                    ("RawTransaction", "transactions.persisted", 400),
+                ),
             ),
         ),
         DerivedStateResourceSample(
@@ -290,6 +313,14 @@ def test_summarize_resource_samples_reports_peak_capacity_pressure() -> None:
                 created_events_by_topic=(
                     ("transactions.persisted", 700),
                     ("valuation.snapshot.persisted", 300),
+                ),
+                pending_events_by_producer_cohort=(
+                    ("RawTransaction", "transactions.persisted", 200),
+                    ("DailyPositionSnapshot", "valuation.snapshot.persisted", 50),
+                ),
+                created_events_by_producer_cohort=(
+                    ("RawTransaction", "transactions.persisted", 700),
+                    ("DailyPositionSnapshot", "valuation.snapshot.persisted", 300),
                 ),
             ),
         ),
@@ -328,6 +359,14 @@ def test_summarize_resource_samples_reports_peak_capacity_pressure() -> None:
         ("transactions.persisted", 700),
         ("valuation.snapshot.persisted", 300),
     )
+    assert evidence.final_outbox_pending_events_by_producer_cohort == (
+        ("RawTransaction", "transactions.persisted", 200),
+        ("DailyPositionSnapshot", "valuation.snapshot.persisted", 50),
+    )
+    assert evidence.final_outbox_created_events_by_producer_cohort == (
+        ("RawTransaction", "transactions.persisted", 700),
+        ("DailyPositionSnapshot", "valuation.snapshot.persisted", 300),
+    )
     assert evidence.observed_outbox_processed_events == 450
     assert evidence.observed_outbox_seconds == 5.0
     assert evidence.observed_outbox_processed_events_per_second == 90.0
@@ -344,6 +383,7 @@ def test_summarize_resource_samples_is_explicit_when_no_sample_completed() -> No
     assert evidence.peak_outbox_recent_publication_age_p99_seconds is None
     assert evidence.final_outbox_pending_events is None
     assert evidence.final_outbox_pending_events_by_topic == ()
+    assert evidence.final_outbox_pending_events_by_producer_cohort == ()
     assert evidence.observed_outbox_processed_events is None
     assert evidence.observed_outbox_seconds is None
     assert evidence.observed_outbox_processed_events_per_second is None

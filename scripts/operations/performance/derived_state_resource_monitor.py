@@ -90,12 +90,13 @@ _OUTBOX_RECENT_PUBLICATION_AGE_QUERY = text(
 _OUTBOX_TOPIC_QUERY = text(
     """
     SELECT
+      aggregate_type,
       topic,
       count(*) AS created_events,
       count(*) FILTER (WHERE status = 'PENDING') AS pending_events
     FROM outbox_events
-    GROUP BY topic
-    ORDER BY topic
+    GROUP BY aggregate_type, topic
+    ORDER BY aggregate_type, topic
     """
 )
 
@@ -152,6 +153,8 @@ class OutboxResourceUsage:
     recent_publication_age_p99_seconds: float
     pending_events_by_topic: tuple[tuple[str, int], ...]
     created_events_by_topic: tuple[tuple[str, int], ...]
+    pending_events_by_producer_cohort: tuple[tuple[str, str, int], ...]
+    created_events_by_producer_cohort: tuple[tuple[str, str, int], ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -193,6 +196,8 @@ class DerivedStateResourceEvidence:
     final_outbox_failed_events: int | None
     final_outbox_pending_events_by_topic: tuple[tuple[str, int], ...]
     final_outbox_created_events_by_topic: tuple[tuple[str, int], ...]
+    final_outbox_pending_events_by_producer_cohort: tuple[tuple[str, str, int], ...]
+    final_outbox_created_events_by_producer_cohort: tuple[tuple[str, str, int], ...]
     observed_outbox_processed_events: int | None
     observed_outbox_seconds: float | None
     observed_outbox_processed_events_per_second: float | None
@@ -282,6 +287,23 @@ def read_database_resource_usage(*, engine: Engine) -> DatabaseResourceUsage:
     )
 
 
+def _outbox_topic_totals(
+    rows: Iterable[Mapping[str, Any]],
+    *,
+    count_field: str,
+    omit_zero: bool = False,
+) -> tuple[tuple[str, int], ...]:
+    """Aggregate bounded producer cohorts into stable topic-level totals."""
+
+    totals: dict[str, int] = {}
+    for row in rows:
+        topic = str(row["topic"])
+        totals[topic] = totals.get(topic, 0) + int(row[count_field])
+    return tuple(
+        (topic, count) for topic, count in sorted(totals.items()) if not omit_zero or count > 0
+    )
+
+
 def read_outbox_resource_usage(*, engine: Engine) -> OutboxResourceUsage:
     """Read durable publication backlog, retry posture, age, and topic cohorts."""
 
@@ -305,13 +327,35 @@ def read_outbox_resource_usage(*, engine: Engine) -> OutboxResourceUsage:
         recent_publication_age_p99_seconds=round(
             float(publication_age["recent_publication_age_p99_seconds"]), 6
         ),
-        pending_events_by_topic=tuple(
-            (str(row["topic"]), int(row["pending_events"]))
-            for row in topic_rows
-            if int(row["pending_events"]) > 0
+        pending_events_by_topic=_outbox_topic_totals(
+            topic_rows,
+            count_field="pending_events",
+            omit_zero=True,
         ),
-        created_events_by_topic=tuple(
-            (str(row["topic"]), int(row["created_events"])) for row in topic_rows
+        created_events_by_topic=_outbox_topic_totals(
+            topic_rows,
+            count_field="created_events",
+        ),
+        pending_events_by_producer_cohort=tuple(
+            sorted(
+                (
+                    str(row["aggregate_type"]),
+                    str(row["topic"]),
+                    int(row["pending_events"]),
+                )
+                for row in topic_rows
+                if int(row["pending_events"]) > 0
+            )
+        ),
+        created_events_by_producer_cohort=tuple(
+            sorted(
+                (
+                    str(row["aggregate_type"]),
+                    str(row["topic"]),
+                    int(row["created_events"]),
+                )
+                for row in topic_rows
+            )
         ),
     )
 
@@ -477,6 +521,12 @@ def summarize_resource_samples(
         ),
         final_outbox_created_events_by_topic=(
             final_outbox.created_events_by_topic if final_outbox else ()
+        ),
+        final_outbox_pending_events_by_producer_cohort=(
+            final_outbox.pending_events_by_producer_cohort if final_outbox else ()
+        ),
+        final_outbox_created_events_by_producer_cohort=(
+            final_outbox.created_events_by_producer_cohort if final_outbox else ()
         ),
         observed_outbox_processed_events=processed_events,
         observed_outbox_seconds=observed_seconds,
