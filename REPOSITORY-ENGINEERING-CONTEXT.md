@@ -2948,7 +2948,11 @@ Most relevant current governance:
      non-sensitive `source_tree_state` of `clean`, `dirty`, or `unavailable` when repository metadata
      can be resolved. Never retain changed file names, Git command output, credentials, or raw
      process configuration in the artifact. Source provenance improves reproducibility but does not
-     promote local evidence to trusted CI, deployment, or production certification.
+     promote local evidence to trusted CI, deployment, or production certification. Managed
+     derived-state workload, recovery, and poison gates must also atomically retain a credential-
+     redacted `lotus.managed-gate-orchestration-failure.v1` receipt when orchestration fails before
+     its normal report. That receipt must remain `non_certifying_failure` and must not be accepted as
+     capacity, recovery, or poison-containment proof.
 198. Position-state acquisition must use the conflict-aware insert result as the authoritative
      newly-created state and perform a fallback read only when another transaction already owns the
      natural key. Preserve one state row per portfolio/security/account boundary, caller-owned

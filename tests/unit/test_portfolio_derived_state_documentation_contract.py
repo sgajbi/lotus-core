@@ -1,6 +1,5 @@
 from pathlib import Path
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 RETIRED_DERIVED_STATE_SERVICES = {
     "timeseries_generator_service",
@@ -14,8 +13,7 @@ def _section(document: str, start: str, end: str) -> str:
 
 def test_current_derived_state_ownership_docs_exclude_retired_deployables() -> None:
     current_documents = [
-        REPO_ROOT
-        / "docs/features/cashflow_calculator/01_Feature_Cashflow_Calculator_Overview.md",
+        REPO_ROOT / "docs/features/cashflow_calculator/01_Feature_Cashflow_Calculator_Overview.md",
         REPO_ROOT / "docs/architecture/repository-output-shape-standard.md",
     ]
     for path in current_documents:
@@ -57,8 +55,7 @@ def test_fx_correction_docs_preserve_verified_main_closure_and_current_rerun_req
     paths = (
         REPO_ROOT / "docs/features/portfolio-derived-state/operations-runbook.md",
         REPO_ROOT / "wiki/Timeseries-and-Aggregation.md",
-        REPO_ROOT
-        / "docs/architecture/codebase-reviews/CR-1628-EFFECTIVE-DATED-FX-REVALUATION.md",
+        REPO_ROOT / "docs/architecture/codebase-reviews/CR-1628-EFFECTIVE-DATED-FX-REVALUATION.md",
     )
     for path in paths:
         content = path.read_text(encoding="utf-8")
@@ -72,10 +69,29 @@ def test_fx_correction_docs_preserve_verified_main_closure_and_current_rerun_req
     review = paths[2].read_text(encoding="utf-8")
     assert "#791 is verified closed" in review
 
-    ledger = (REPO_ROOT / "docs/architecture/CODEBASE-REVIEW-LEDGER.md").read_text(
-        encoding="utf-8"
-    )
+    ledger = (REPO_ROOT / "docs/architecture/CODEBASE-REVIEW-LEDGER.md").read_text(encoding="utf-8")
     cr_1628_row = next(line for line in ledger.splitlines() if line.startswith("| CR-1628 |"))
     assert "Verified merged main" in cr_1628_row
     assert "29475491036" in cr_1628_row
     assert "PR/main/QA pending" not in cr_1628_row
+
+
+def test_managed_gate_failure_receipts_remain_explicitly_non_certifying() -> None:
+    paths = (
+        REPO_ROOT / "docs/features/portfolio-derived-state/operations-runbook.md",
+        REPO_ROOT / "wiki/Timeseries-and-Aggregation.md",
+        REPO_ROOT / "REPOSITORY-ENGINEERING-CONTEXT.md",
+        REPO_ROOT
+        / "docs/architecture/codebase-reviews"
+        / "CR-1630-TRANSACTION-EVENT-IO-AND-PARTITION-AMPLIFICATION.md",
+    )
+    for path in paths:
+        content = path.read_text(encoding="utf-8")
+        assert "lotus.managed-gate-orchestration-failure.v1" in content
+        assert "non_certifying_failure" in content
+
+    ledger = (REPO_ROOT / "docs/architecture/CODEBASE-REVIEW-LEDGER.md").read_text(encoding="utf-8")
+    cr_1630_row = next(line for line in ledger.splitlines() if line.startswith("| CR-1630 |"))
+    assert "credential-redacting" in cr_1630_row
+    assert "a8e1b0611" in cr_1630_row
+    assert "44cacab60" in cr_1630_row

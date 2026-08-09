@@ -115,6 +115,10 @@ valuation orchestration is stopped, restores the service, and certifies the reco
 `make test-derived-state-workload-smoke` is machine-labelled
 `diagnostic`; a successful smoke proves orchestration only, not capacity. Certifying profile
 execution requires building the exact branch source and fails fast if existing images are selected.
+If managed startup, migration, recovery, or poison orchestration fails before the normal report,
+the gate writes an atomic `lotus.managed-gate-orchestration-failure.v1` JSON receipt with the
+failed phase and owned Compose/log context. Credentials are redacted, the original error is
+re-raised, and the receipt is always `non_certifying_failure`; it is diagnostic evidence only.
 
 The market-price correction profiles do not certify FX corrections. Core publishes each accepted
 FX observation as source-owned persisted evidence and valuation orchestration coalesces bounded

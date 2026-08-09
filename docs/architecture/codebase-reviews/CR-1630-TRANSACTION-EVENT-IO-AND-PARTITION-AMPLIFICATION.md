@@ -659,6 +659,12 @@ does not publish this key policy; the operator-owned migration runbook is the du
   portfolio rows, exact quantity and market-value reconciliation, attempts `2/2`, zero repeats,
   closed valuation/aggregation queues, and no failures. This proves the generator correction only;
   it does not substitute for the 100,000-transaction certifying profile.
+- The first exact-source failure also exposed an evidence-lifecycle gap: managed Compose startup or
+  migration could exit before the bank-day child created its normal report. Workload, interruption-
+  recovery, and poison gates now share one atomic, credential-redacting
+  `lotus.managed-gate-orchestration-failure.v1` receipt. It records phase and owned Compose/log
+  context, re-raises the original error, and is always `non_certifying_failure`; it cannot satisfy
+  load, recovery, or poison acceptance.
 
 Implementation commits include `23fc6faf3`, `d51adb739`, `ad1ad179d`, `57f8c60e2`,
 `4f05be9a5`, `c230d660a`, `f42f6eaa3`, `d56e14dbf`, `2d49fc8f1`, `70ae16f0f`,
