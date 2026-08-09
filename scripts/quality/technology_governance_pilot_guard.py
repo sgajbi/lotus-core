@@ -117,19 +117,25 @@ def _validate_evidence_refs(refs: Any, *, root: Path, location: str, errors: lis
         if kind == "local_file":
             _validate_local_evidence(evidence, root=root, location=ref_location, errors=errors)
         elif kind == "github_run":
-            url = evidence.get("url")
-            source_commit = evidence.get("source_commit")
-            artifact = evidence.get("artifact")
-            if not isinstance(url, str) or not url.startswith(
-                "https://github.com/sgajbi/lotus-core/actions/runs/"
-            ):
-                errors.append(f"{ref_location}: invalid Core GitHub run URL")
-            if not isinstance(source_commit, str) or not FULL_SHA_PATTERN.fullmatch(source_commit):
-                errors.append(f"{ref_location}: source_commit must be a full Git SHA")
-            if not isinstance(artifact, str) or not artifact:
-                errors.append(f"{ref_location}: GitHub run evidence requires artifact")
+            _validate_github_run_evidence(evidence, location=ref_location, errors=errors)
         else:
             errors.append(f"{ref_location}: unsupported evidence kind {kind!r}")
+
+
+def _validate_github_run_evidence(
+    evidence: dict[str, Any], *, location: str, errors: list[str]
+) -> None:
+    url = evidence.get("url")
+    source_commit = evidence.get("source_commit")
+    artifact = evidence.get("artifact")
+    if not isinstance(url, str) or not url.startswith(
+        "https://github.com/sgajbi/lotus-core/actions/runs/"
+    ):
+        errors.append(f"{location}: invalid Core GitHub run URL")
+    if not isinstance(source_commit, str) or not FULL_SHA_PATTERN.fullmatch(source_commit):
+        errors.append(f"{location}: source_commit must be a full Git SHA")
+    if not isinstance(artifact, str) or not artifact:
+        errors.append(f"{location}: GitHub run evidence requires artifact")
 
 
 def _validate_mapping(mapping: Any, *, root: Path, location: str, errors: list[str]) -> None:
@@ -229,10 +235,7 @@ def _validate_platform_policy(
         errors.append("pinned Platform policy does not include lotus-core as a pilot")
 
 
-def validate_manifest(
-    manifest: dict[str, Any], *, root: Path = REPO_ROOT, platform_root: Path | None = None
-) -> list[str]:
-    errors: list[str] = []
+def _validate_manifest_identity(manifest: dict[str, Any], errors: list[str]) -> None:
     if manifest.get("schema_version") != SCHEMA_VERSION:
         errors.append(f"schema_version must be {SCHEMA_VERSION}")
     if manifest.get("pilot_id") != PILOT_ID:
@@ -247,61 +250,81 @@ def validate_manifest(
     if not isinstance(inspected_commit, str) or not FULL_SHA_PATTERN.fullmatch(inspected_commit):
         errors.append("inspected_core_commit must be a full Git SHA")
 
+
+def _validate_policy_ref(manifest: dict[str, Any], errors: list[str]) -> dict[str, Any] | None:
     policy_ref = manifest.get("policy_ref")
     if not isinstance(policy_ref, dict):
         errors.append("policy_ref must be an object")
-    else:
-        for field, expected in EXPECTED_POLICY_REF.items():
-            if policy_ref.get(field) != expected:
-                errors.append(f"policy_ref.{field} must identify the pinned Platform policy")
-        if not FULL_SHA_PATTERN.fullmatch(str(policy_ref.get("commit", ""))):
-            errors.append("policy_ref.commit must be a full Git SHA")
-        if not SHA256_PATTERN.fullmatch(str(policy_ref.get("document_sha256", ""))):
-            errors.append("policy_ref.document_sha256 must be a SHA-256 digest")
-        if policy_ref.get("lifecycle_status") != "report_only":
-            errors.append("policy_ref.lifecycle_status must remain report_only")
+        return None
+    for field, expected in EXPECTED_POLICY_REF.items():
+        if policy_ref.get(field) != expected:
+            errors.append(f"policy_ref.{field} must identify the pinned Platform policy")
+    if not FULL_SHA_PATTERN.fullmatch(str(policy_ref.get("commit", ""))):
+        errors.append("policy_ref.commit must be a full Git SHA")
+    if not SHA256_PATTERN.fullmatch(str(policy_ref.get("document_sha256", ""))):
+        errors.append("policy_ref.document_sha256 must be a SHA-256 digest")
+    if policy_ref.get("lifecycle_status") != "report_only":
+        errors.append("policy_ref.lifecycle_status must remain report_only")
+    return policy_ref
 
+
+def _validate_claim_boundary(manifest: dict[str, Any], errors: list[str]) -> None:
     claims = manifest.get("claim_boundary")
     if not isinstance(claims, dict) or claims.get("lane_posture") != "report_only":
         errors.append("claim_boundary must declare report_only lane posture")
-    else:
-        for claim in (
-            "release_certifying",
-            "production_ready_claim",
-            "bank_buyable_claim",
-            "supported_feature_claim",
-        ):
-            if claims.get(claim) is not False:
-                errors.append(f"claim_boundary.{claim} must be false")
+        return
+    for claim in (
+        "release_certifying",
+        "production_ready_claim",
+        "bank_buyable_claim",
+        "supported_feature_claim",
+    ):
+        if claims.get(claim) is not False:
+            errors.append(f"claim_boundary.{claim} must be false")
 
+
+def _validate_technology_assessment(manifest: dict[str, Any], errors: list[str]) -> None:
     assessment = manifest.get("technology_state_assessment")
     if not isinstance(assessment, dict) or assessment.get("classification") != "non_certifying":
         errors.append("technology_state_assessment must remain non_certifying")
-    else:
-        issues = assessment.get("canonical_issues")
-        if (
-            not isinstance(issues, list)
-            or not issues
-            or not all(
-                isinstance(issue, str) and CORE_ISSUE_PATTERN.fullmatch(issue) for issue in issues
-            )
-        ):
-            errors.append("technology_state_assessment requires canonical Core issues")
+        return
+    issues = assessment.get("canonical_issues")
+    if (
+        not isinstance(issues, list)
+        or not issues
+        or not all(
+            isinstance(issue, str) and CORE_ISSUE_PATTERN.fullmatch(issue) for issue in issues
+        )
+    ):
+        errors.append("technology_state_assessment requires canonical Core issues")
 
-    for collection_name in REQUIRED_COLLECTIONS:
-        _validate_collection(manifest, name=collection_name, root=root, errors=errors)
+
+def _validate_exception_control(manifest: dict[str, Any], *, root: Path, errors: list[str]) -> None:
+    exception_control = manifest.get("exception_control")
     _validate_mapping(
-        manifest.get("exception_control"),
+        exception_control,
         root=root,
         location="exception_control",
         errors=errors,
     )
-    exception_control = manifest.get("exception_control")
     if (
         not isinstance(exception_control, dict)
         or exception_control.get("requirement_id") != "exception_policy"
     ):
         errors.append("exception_control.requirement_id must be exception_policy")
+
+
+def validate_manifest(
+    manifest: dict[str, Any], *, root: Path = REPO_ROOT, platform_root: Path | None = None
+) -> list[str]:
+    errors: list[str] = []
+    _validate_manifest_identity(manifest, errors)
+    policy_ref = _validate_policy_ref(manifest, errors)
+    _validate_claim_boundary(manifest, errors)
+    _validate_technology_assessment(manifest, errors)
+    for collection_name in REQUIRED_COLLECTIONS:
+        _validate_collection(manifest, name=collection_name, root=root, errors=errors)
+    _validate_exception_control(manifest, root=root, errors=errors)
     if platform_root is not None and isinstance(policy_ref, dict):
         _validate_platform_policy(manifest, platform_root=platform_root, errors=errors)
     return errors
