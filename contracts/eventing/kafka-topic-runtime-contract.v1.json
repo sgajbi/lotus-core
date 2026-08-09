@@ -1,9 +1,38 @@
 {
   "schema_version": "lotus-core.kafka-topic-runtime-contract.v1",
-  "contract_version": "1.2.0",
+  "contract_version": "1.3.0",
   "ordering_contract": "Kafka ordering is guaranteed only within a partition. Dates and epochs must not be key components for backdated corrections or restatements.",
   "keyed_partitioner": "consistent_random_crc32",
   "tenant_identity_status": "not_source_owned_in_current_event_family",
+  "partition_migrations": {
+    "eight_to_twelve_v1": {
+      "status": "implemented_pending_final_runtime_revalidation",
+      "source_partition_count": 8,
+      "target_partition_count": 12,
+      "topics": [
+        "transactions.raw.received",
+        "transactions.persisted",
+        "market_prices.raw.received",
+        "market_prices.persisted"
+      ],
+      "runbook": "docs/operations/kafka-partition-migration-runbook.md",
+      "precondition": "pause producers and drain every affected consumer group to zero lag before partition expansion",
+      "historical_record_contract": "historical records remain in their original partitions; identical keys may map to different target partitions after expansion",
+      "rollback_contract": "Kafka cannot reduce partitions in place; rollback uses a drained replacement topic with the prior partition count and a coordinated producer/consumer cutover",
+      "representative_crc32_keys": [
+        "CASH_EUR_BOOK_OPERATING",
+        "CASH_USD_BOOK_OPERATING",
+        "FO_BOND_UST_2030",
+        "FO_EQ_AAPL_US",
+        "FO_EQ_MSFT_US",
+        "FO_EQ_SAP_DE",
+        "FO_ETF_MSCI_WORLD",
+        "FO_FUND_BLK_ALLOC",
+        "FO_FUND_PIMCO_INC",
+        "FO_PRIV_PRIVATE_CREDIT_A"
+      ]
+    }
+  },
   "topics": [
     {
       "topic": "portfolios.raw.received",
