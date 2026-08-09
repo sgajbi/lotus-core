@@ -81,8 +81,8 @@
       "authoritative_domain": "portfolio_state",
       "lifecycle_status": "active",
       "request_scope": {
-        "scope_level": "ingestion_job",
-        "supports_bulk": false
+        "scope_level": "portfolio",
+        "supports_bulk": true
       },
       "temporal_scope": {
         "primary_time_field": "as_of_date",
@@ -1387,6 +1387,7 @@
       },
       "identifier_refs": [
         "portfolio_id",
+        "run_id",
         "snapshot_id",
         "tenant_id"
       ],
@@ -1469,8 +1470,8 @@
       "authoritative_domain": "portfolio_state",
       "lifecycle_status": "active",
       "request_scope": {
-        "scope_level": "portfolio",
-        "supports_bulk": true
+        "scope_level": "ingestion_job",
+        "supports_bulk": false
       },
       "temporal_scope": {
         "primary_time_field": "ingested_at",
@@ -1522,6 +1523,7 @@
         "successor_product": null
       },
       "identifier_refs": [
+        "job_id",
         "correlation_id",
         "tenant_id"
       ],
@@ -2103,6 +2105,7 @@
         "successor_product": null
       },
       "identifier_refs": [
+        "portfolio_manager_id",
         "portfolio_id",
         "tenant_id"
       ],
