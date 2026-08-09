@@ -220,20 +220,15 @@ class PositionHistoryProcessor:
             position_date=transaction_date,
             epoch=message_epoch,
         )
-        anchor = await self._repository.last_record_before(
+        replay_window = await self._repository.load_replay_window(
             portfolio_id=transaction.portfolio_id,
             security_id=transaction.security_id,
             position_date=transaction_date,
             epoch=message_epoch,
         )
-        transactions = await self._repository.list_transactions_from(
-            portfolio_id=transaction.portfolio_id,
-            security_id=transaction.security_id,
-            transaction_date=transaction_date,
-        )
         return await self._stage_history(
-            anchor=anchor,
-            transactions=transactions,
+            anchor=replay_window.anchor,
+            transactions=replay_window.transactions,
             state=replace(current_state, epoch=message_epoch),
             transaction_date=transaction_date,
         )

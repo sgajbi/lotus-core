@@ -61,6 +61,7 @@ from .position_history import (
     PositionRecalculationReason,
     PositionRecalculationStateStore,
     PositionReplayMode,
+    PositionReplayWindow,
 )
 from .processing_observability import (
     TransactionProcessingObservation,
@@ -143,6 +144,7 @@ __all__ = [
     "PositionHistoryObserver",
     "PositionHistoryRepository",
     "PositionMaterializationProgress",
+    "PositionReplayWindow",
     "PositionProcessingPort",
     "PositionProcessingResult",
     "PositionRecalculationReason",

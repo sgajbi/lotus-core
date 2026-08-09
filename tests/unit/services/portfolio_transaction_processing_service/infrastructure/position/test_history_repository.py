@@ -22,6 +22,7 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure.po
 )
 from src.services.portfolio_transaction_processing_service.app.ports import (
     PositionMaterializationProgress,
+    PositionReplayWindow,
 )
 
 
@@ -75,9 +76,9 @@ async def test_list_all_transactions_maps_orm_rows_to_booked_transactions() -> N
 
 
 @pytest.mark.asyncio
-async def test_last_record_before_maps_nullable_local_basis_to_zero() -> None:
+async def test_load_replay_window_maps_anchor_and_transactions_in_one_query() -> None:
     session = AsyncMock(spec=AsyncSession)
-    row = PositionHistory(
+    anchor_row = PositionHistory(
         portfolio_id="PB-001",
         security_id="SEC-001",
         transaction_id="TX-001",
@@ -87,19 +88,32 @@ async def test_last_record_before_maps_nullable_local_basis_to_zero() -> None:
         cost_basis_local=None,
         epoch=2,
     )
+    transaction_row = Transaction(
+        transaction_id="TX-002",
+        portfolio_id="PB-001",
+        instrument_id="SEC-001",
+        security_id="SEC-001",
+        transaction_type="BUY",
+        quantity=Decimal("5"),
+        price=Decimal("20"),
+        gross_transaction_amount=Decimal("100"),
+        trade_currency="SGD",
+        currency="SGD",
+        transaction_date=datetime(2026, 4, 10, tzinfo=timezone.utc),
+    )
     result = MagicMock()
-    result.scalars.return_value.first.return_value = row
+    result.all.return_value = [(transaction_row, anchor_row)]
     session.execute.return_value = result
     repository = SqlAlchemyPositionHistoryRepository(session)
 
-    record = await repository.last_record_before(
+    window = await repository.load_replay_window(
         portfolio_id="PB-001",
         security_id="SEC-001",
         position_date=date(2026, 4, 10),
         epoch=2,
     )
 
-    assert record == PositionHistoryRecord(
+    assert window.anchor == PositionHistoryRecord(
         portfolio_id="PB-001",
         security_id="SEC-001",
         transaction_id="TX-001",
@@ -109,10 +123,12 @@ async def test_last_record_before_maps_nullable_local_basis_to_zero() -> None:
         cost_basis_local=Decimal("0"),
         epoch=2,
     )
+    assert tuple(item.transaction_id for item in window.transactions) == ("TX-002",)
+    session.execute.assert_awaited_once()
 
 
 @pytest.mark.asyncio
-async def test_last_record_before_rehydrates_calculation_lineage() -> None:
+async def test_load_replay_window_rehydrates_anchor_calculation_lineage() -> None:
     session = AsyncMock(spec=AsyncSession)
     lineage = _calculation_lineage()
     row = PositionHistory(
@@ -127,18 +143,31 @@ async def test_last_record_before_rehydrates_calculation_lineage() -> None:
         calculation_lineage=lineage.lineage_payload(),
     )
     result = MagicMock()
-    result.scalars.return_value.first.return_value = row
+    transaction_row = Transaction(
+        transaction_id="TX-002",
+        portfolio_id="PB-001",
+        instrument_id="SEC-001",
+        security_id="SEC-001",
+        transaction_type="BUY",
+        quantity=Decimal("5"),
+        price=Decimal("20"),
+        gross_transaction_amount=Decimal("100"),
+        trade_currency="SGD",
+        currency="SGD",
+        transaction_date=datetime(2026, 4, 10, tzinfo=timezone.utc),
+    )
+    result.all.return_value = [(transaction_row, row)]
     session.execute.return_value = result
 
-    record = await SqlAlchemyPositionHistoryRepository(session).last_record_before(
+    window = await SqlAlchemyPositionHistoryRepository(session).load_replay_window(
         portfolio_id="PB-001",
         security_id="SEC-001",
         position_date=date(2026, 4, 10),
         epoch=2,
     )
 
-    assert record is not None
-    assert record.calculation_lineage == lineage
+    assert window.anchor is not None
+    assert window.anchor.calculation_lineage == lineage
 
 
 @pytest.mark.asyncio
@@ -282,26 +311,30 @@ async def test_contains_transaction_normalizes_lineage_and_position_key() -> Non
 
 
 @pytest.mark.asyncio
-async def test_list_transactions_from_normalizes_key_and_orders_deterministically() -> None:
+async def test_load_replay_window_normalizes_key_and_orders_deterministically() -> None:
     session = AsyncMock(spec=AsyncSession)
     result = MagicMock()
-    result.scalars.return_value.all.return_value = []
+    result.all.return_value = []
     session.execute.return_value = result
     repository = SqlAlchemyPositionHistoryRepository(session)
 
-    transactions = await repository.list_transactions_from(
+    window = await repository.load_replay_window(
         portfolio_id=" PORT_COST_01 ",
         security_id=" SEC01 ",
-        transaction_date=date(2026, 5, 28),
+        position_date=date(2026, 5, 28),
+        epoch=42,
     )
 
-    assert transactions == ()
+    assert window == PositionReplayWindow(anchor=None, transactions=())
     compiled_query = str(
         session.execute.call_args.args[0].compile(compile_kwargs={"literal_binds": True})
     )
     assert "trim(transactions.portfolio_id) = 'PORT_COST_01'" in compiled_query
     assert "trim(transactions.security_id) = 'SEC01'" in compiled_query
     assert "transactions.transaction_date >= '2026-05-28 00:00:00'" in compiled_query
+    assert "position_replay_anchor" in compiled_query
+    assert "position_history.position_date < '2026-05-28'" in compiled_query
+    assert "position_history.epoch = 42" in compiled_query
     assert (
         "ORDER BY transactions.transaction_date ASC, transactions.transaction_id ASC"
         in compiled_query

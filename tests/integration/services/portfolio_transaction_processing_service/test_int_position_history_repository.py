@@ -12,6 +12,7 @@ from portfolio_common.database_models import (
     PositionHistory,
     Transaction,
 )
+from sqlalchemy import event as sqlalchemy_event
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
@@ -175,4 +176,45 @@ async def test_materialization_progress_is_epoch_scoped(
     ) == PositionMaterializationProgress(
         latest_history_date=None,
         latest_completed_snapshot_date=None,
+    )
+
+
+async def test_replay_window_loads_exact_anchor_and_ordered_transactions_once(
+    clean_db,
+    position_history_repository_data: None,
+    async_db_session: AsyncSession,
+) -> None:
+    del clean_db, position_history_repository_data
+    repository = SqlAlchemyPositionHistoryRepository(async_db_session)
+    statements: list[str] = []
+
+    def capture_statement(
+        _conn,
+        _cursor,
+        statement,
+        _parameters,
+        _context,
+        _executemany,
+    ) -> None:
+        statements.append(" ".join(statement.split()))
+
+    sync_engine = async_db_session.bind.sync_engine
+    sqlalchemy_event.listen(sync_engine, "before_cursor_execute", capture_statement)
+    try:
+        window = await repository.load_replay_window(
+            portfolio_id=f" {PORTFOLIO_ID} ",
+            security_id=f" {SECURITY_ID} ",
+            position_date=date(2025, 8, 6),
+            epoch=0,
+        )
+    finally:
+        sqlalchemy_event.remove(sync_engine, "before_cursor_execute", capture_statement)
+
+    assert len(statements) == 1
+    assert window.anchor is not None
+    assert window.anchor.transaction_id == "TX_POSITION_HISTORY_E0_A"
+    assert window.anchor.epoch == 0
+    assert tuple(item.transaction_id for item in window.transactions) == (
+        "TX_POSITION_HISTORY_E0_B",
+        "TX_POSITION_HISTORY_E1_A",
     )
