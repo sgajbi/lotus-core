@@ -307,9 +307,11 @@ async def test_position_readiness_fence_compares_exact_outbox_sequence() -> None
 
     compiled = str(statement.compile(compile_kwargs={"literal_binds": True}))
     conflict_predicate = compiled.rsplit(" WHERE ", maxsplit=1)[-1]
-    assert "excluded.claimed_readiness_outbox_id" in conflict_predicate
+    assert "417 > portfolio_valuation_jobs.claimed_readiness_outbox_id" in conflict_predicate
     assert "portfolio_valuation_jobs.claimed_readiness_outbox_id" in conflict_predicate
-    assert "portfolio_valuation_jobs.status = 'PENDING'" in conflict_predicate
+    assert "excluded.claimed_readiness_outbox_id" not in conflict_predicate
+    assert "claimed_readiness_outbox_id" in compiled
+    assert "417" not in compiled.split("ON CONFLICT", maxsplit=1)[0]
 
 
 async def test_position_readiness_uses_revision_fenced_upsert(

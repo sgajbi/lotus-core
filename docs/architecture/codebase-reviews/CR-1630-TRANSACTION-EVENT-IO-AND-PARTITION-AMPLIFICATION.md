@@ -801,12 +801,26 @@ does not publish this key policy; the operator-owned migration runbook is the du
   claim.
 - Valuation claims now snapshot the maximum committed readiness outbox ID for the exact
   portfolio/security/date/epoch scope. The readiness consumer rearms or requeues only for a
-  positive delivered outbox ID newer than that durable watermark; headerless or malformed legacy
-  deliveries remain non-rearming compatibility inputs. Exact JSON payload identity supplements the
+  positive delivered outbox ID newer than that durable watermark. Truly headerless legacy
+  deliveries remain non-rearming compatibility inputs; a present malformed or nonpositive header
+  fails closed before idempotency is claimed. Transport input never initializes the claimed
+  watermark. Exact JSON payload identity supplements the
   aggregate ID, preventing delimiter collisions, and the watermark is monotonic when outbox history
-  is later pruned. Ten live PostgreSQL cases cover delayed replay, later mutation, uncommitted
+  is later pruned. Eleven live PostgreSQL cases cover delayed replay, later mutation, uncommitted
   exclusion, other-date isolation, completed-job idempotency, retention, non-ISO `DateStyle`,
-  aggregate-ID collision, rollback sequence gaps, and same-position concurrent publication.
+  aggregate-ID collision, rollback sequence gaps, unverified high transport input, and
+  deterministically contended same-position publication through the production lock adapter.
+- Exact clean fan-in task
+  `eng-task-20260810-022442-lotus-core-certification-make-profile-derived-state-fan-in` at signed
+  head `1db5ee8d2` completed with exact 1,000-row reconciliation, attempts `2/2`, zero repeated
+  valuation jobs, exactly 1,000 snapshot events, pending/failed outbox `0/0`, and `95.773s` drain.
+  Artifact `20260809T183144Z-bank-day-load.json` has SHA-256
+  `B3A40B16E16434F27E8BC2EDD7D3CE78BF7079FAD6531F797390B643181C3F83`. It remains diagnostic,
+  not certifying: exact-head review found that malformed-present headers downgraded to legacy
+  behavior and that transport input could initialize the monotonic watermark. The artifact also
+  records two aggregation-completion revisions for the one portfolio day; distinct revisions are
+  valid continuous-processing evidence, but this superseded run does not carry enough lineage to
+  classify their trigger. Corrected-head fan-in remains mandatory.
 
 Implementation commits include `23fc6faf3`, `d51adb739`, `ad1ad179d`, `57f8c60e2`,
 `4f05be9a5`, `c230d660a`, `f42f6eaa3`, `d56e14dbf`, `2d49fc8f1`, `70ae16f0f`,
@@ -916,7 +930,12 @@ changes no API, OpenAPI, event, database statement/schema, calculation, lock, pa
 setting, operator command, or authored wiki truth.
 The readiness-sequence fence adds one non-null, default-zero internal valuation-job database column
 through migration `c150b2c3d517`. It changes no public API, OpenAPI field, Kafka topic, event payload,
-partition key, calculation, or downstream consumer contract. Existing readiness records without a
-valid outbox header remain consumable but cannot fabricate rearm authority. Repository context,
+partition key, calculation, or downstream consumer contract. Truly headerless readiness records
+remain consumable but cannot fabricate rearm authority; malformed-present headers fail closed.
+Only exact-scope database evidence observed by a claim advances the monotonic watermark. Repository context,
 this review, the existing runtime contract, and authored Timeseries and Aggregation wiki are updated
 in place; no new standalone document is required.
+Exact-head review changed no API, schema, Kafka payload, or operator command. It tightened only the
+consumer boundary and claimed-authority source, replaced a timing-dependent lock test with an
+explicit failed try-lock followed by the production lock adapter, and requires one corrected-head
+profile rerun. No additional wiki or OpenAPI change is required.
