@@ -58,7 +58,10 @@ class IngestionReprocessingQueueHealthResponse(BaseModel):
         examples=[1],
     )
     queues: list[IngestionReprocessingQueueItemResponse] = Field(
-        description="Per-job-type queue health rows sorted by highest pending pressure.",
+        description=(
+            "Per-job-type queue health rows with pending, processing, or failed work, sorted by "
+            "highest pending pressure. Completed-only history is excluded."
+        ),
         examples=[
             [
                 {

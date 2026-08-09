@@ -799,7 +799,8 @@ async def test_openapi_describes_ingestion_job_shared_schema_depth(async_test_cl
         "(position, cost, valuation, cashflow, timeseries)."
     )
     assert queue_health["properties"]["queues"]["description"] == (
-        "Per-job-type queue health rows sorted by highest pending pressure."
+        "Per-job-type queue health rows with pending, processing, or failed work, sorted by "
+        "highest pending pressure. Completed-only history is excluded."
     )
     assert queue_item["properties"]["oldest_pending_age_seconds"]["description"] == (
         "Age in seconds for the oldest pending job for this type."
