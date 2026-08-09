@@ -30,6 +30,7 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure.co
 from src.services.portfolio_transaction_processing_service.app.infrastructure.transaction_mapping import (  # noqa: E501
     booked_transaction,
 )
+from tests.test_support.postgres_query_plan import plan_index_names
 from tests.test_support.transaction_processing import (
     booked_transaction_event,
     canonical_transaction_record,
@@ -133,7 +134,7 @@ async def test_avco_replay_statement_count_is_bounded_and_lot_read_is_indexed(
             "security_id": "FO_EQ_AVCO_CAPACITY_SMALL",
         },
     )
-    assert "ix_position_lot_norm_port_sec" in _index_names(plan)
+    assert "ix_position_lot_norm_port_sec" in plan_index_names(plan)
 
 
 async def test_average_cost_pool_lock_is_scoped_to_portfolio_security_key(
@@ -316,12 +317,3 @@ def _cost_state_statements(statements: list[str]) -> list[str]:
         for statement in statements
         if "average_cost_pool_state" in statement or "position_lot_state" in statement
     ]
-
-
-def _index_names(value) -> set[str]:
-    if isinstance(value, dict):
-        names = {value["Index Name"]} if "Index Name" in value else set()
-        return names | set().union(*(_index_names(item) for item in value.values()), set())
-    if isinstance(value, list):
-        return set().union(*(_index_names(item) for item in value), set())
-    return set()

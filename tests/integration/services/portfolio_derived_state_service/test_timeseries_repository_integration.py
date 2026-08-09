@@ -44,6 +44,7 @@ from tests.test_support.async_task_coordination import (
     wait_for_postgres_advisory_lock_wait,
     wait_for_task_signal,
 )
+from tests.test_support.postgres_query_plan import plan_index_names, plan_node_types
 
 TimeseriesGenerationRepository = timeseries_generation_repository.TimeseriesGenerationRepository
 
@@ -700,30 +701,12 @@ async def test_materialization_restages_carry_forward_days_before_convergence(
             "target_epoch": 2,
         },
     )
-    assert _index_names(plan) & {
+    assert plan_index_names(plan) & {
         "_portfolio_date_uc",
         "ix_portfolio_aggregation_jobs_aggregation_date",
     }
-    assert "Seq Scan" not in _node_types(plan)
+    assert "Seq Scan" not in plan_node_types(plan)
     await async_db_session.rollback()
-
-
-def _index_names(value) -> set[str]:
-    if isinstance(value, dict):
-        names = {value["Index Name"]} if "Index Name" in value else set()
-        return names | set().union(*(_index_names(item) for item in value.values()), set())
-    if isinstance(value, list):
-        return set().union(*(_index_names(item) for item in value), set())
-    return set()
-
-
-def _node_types(value) -> set[str]:
-    if isinstance(value, dict):
-        names = {value["Node Type"]} if "Node Type" in value else set()
-        return names | set().union(*(_node_types(item) for item in value.values()), set())
-    if isinstance(value, list):
-        return set().union(*(_node_types(item) for item in value), set())
-    return set()
 
 
 @pytest.fixture(scope="function")

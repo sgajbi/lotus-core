@@ -18,6 +18,7 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure.po
     SqlAlchemyPositionHistoryRepository,
     _position_history_replay_lock_key,
 )
+from tests.test_support.postgres_query_plan import plan_index_names, plan_node_types
 
 pytestmark = pytest.mark.asyncio
 
@@ -282,6 +283,79 @@ async def test_claim_scope_is_stable_under_non_iso_postgres_datestyle(
     await async_db_session.commit()
 
     assert claimed[0].claimed_readiness_outbox_id == readiness_id
+
+
+async def test_exact_scope_readiness_lookup_uses_aggregate_index_at_fan_in_scale(
+    async_db_session: AsyncSession,
+    clean_db,
+) -> None:
+    # Insert the target before the fan-in noise so a lucky backward primary-key scan
+    # cannot satisfy the lookup cheaply; the scope index must do the selective work.
+    await _stage_readiness(async_db_session)
+    await async_db_session.execute(
+        text(
+            """
+            INSERT INTO outbox_events (
+                aggregate_type,
+                aggregate_id,
+                partition_key,
+                event_type,
+                payload,
+                topic,
+                status,
+                retry_count,
+                created_at
+            )
+            SELECT
+                'ValuationReadiness',
+                'P-READINESS-NOISE-' || series::text
+                    || chr(58) || 'S-READINESS-NOISE'
+                    || chr(58) || '2026-08-09' || chr(58) || '0',
+                'P-READINESS-NOISE-' || series::text || '|S-READINESS-NOISE',
+                'PortfolioDayReadyForValuation',
+                json_build_object(
+                    'portfolio_id', 'P-READINESS-NOISE-' || series::text,
+                    'security_id', 'S-READINESS-NOISE',
+                    'valuation_date', '2026-08-09',
+                    'epoch', 0
+                ),
+                'portfolio_security_day.valuation.ready',
+                'PENDING',
+                0,
+                now()
+            FROM generate_series(1, 10000) AS series
+            """
+        )
+    )
+    await async_db_session.commit()
+    await async_db_session.execute(text("ANALYZE outbox_events"))
+
+    plan = await async_db_session.scalar(
+        text(
+            """
+            EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)
+            SELECT coalesce(max(id), 0)
+            FROM outbox_events
+            WHERE aggregate_type = 'ValuationReadiness'
+              AND event_type = 'PortfolioDayReadyForValuation'
+              AND aggregate_id = :aggregate_id
+              AND payload ->> 'portfolio_id' = :portfolio_id
+              AND payload ->> 'security_id' = :security_id
+              AND payload ->> 'valuation_date' = :valuation_date
+              AND CAST(payload ->> 'epoch' AS INTEGER) = :epoch
+            """
+        ),
+        {
+            "aggregate_id": _aggregate_id(),
+            "portfolio_id": PORTFOLIO_ID,
+            "security_id": SECURITY_ID,
+            "valuation_date": VALUATION_DATE.isoformat(),
+            "epoch": 0,
+        },
+    )
+
+    assert "ix_outbox_events_aggregate_id" in plan_index_names(plan)
+    assert "Seq Scan" not in plan_node_types(plan)
 
 
 async def test_payload_identity_rejects_colon_delimited_aggregate_collision(
