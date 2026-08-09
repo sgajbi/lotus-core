@@ -3580,6 +3580,14 @@ Most relevant current governance:
      waiting lock statement under PostgreSQL READ COMMITTED, because that statement's snapshot can
      predate the predecessor commit.
 
+238. A managed certifying workload owns its database and resource observation surface. Monitor it
+     through governed async task state, exact project container liveness, and terminal artifacts;
+     do not execute ad hoc full-table progress counts, launch another Compose build/test, or run a
+     competing Docker-heavy gate. Disclose any bounded read-only observer in retained evidence. A
+     pass under added observer load is conservative acceptance evidence but cannot become the clean
+     timing comparison baseline. A failed or timed-out observed run is diagnostic and requires an
+     unobserved rerun before it can support a capacity verdict.
+
 ## Context Maintenance Rule
 
 Update this document when:
