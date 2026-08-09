@@ -699,6 +699,10 @@ def test_finalize_report_marks_aborted_runs_as_failed_and_preserves_partial_evid
             final_outbox_failed_events=0,
             final_outbox_pending_events_by_topic=(),
             final_outbox_created_events_by_topic=(("transactions.persisted", 500),),
+            final_outbox_pending_events_by_producer_cohort=(),
+            final_outbox_created_events_by_producer_cohort=(
+                ("RawTransaction", "transactions.persisted", 500),
+            ),
             observed_outbox_processed_events=500,
             observed_outbox_seconds=10.0,
             observed_outbox_processed_events_per_second=50.0,
@@ -919,6 +923,10 @@ def test_evaluate_report_rejects_baseline_valuation_reprocessing() -> None:
             final_outbox_failed_events=0,
             final_outbox_pending_events_by_topic=(),
             final_outbox_created_events_by_topic=(("valuation.snapshot.persisted", 1),),
+            final_outbox_pending_events_by_producer_cohort=(),
+            final_outbox_created_events_by_producer_cohort=(
+                ("DailyPositionSnapshot", "valuation.snapshot.persisted", 1),
+            ),
             observed_outbox_processed_events=None,
             observed_outbox_seconds=None,
             observed_outbox_processed_events_per_second=None,
@@ -932,6 +940,17 @@ def test_evaluate_report_rejects_baseline_valuation_reprocessing() -> None:
     assert "valuation_snapshot_event_count 1 != expected 0" in failures
     assert "outbox publication-age percentiles are incomplete" in failures
     assert "outbox processed-throughput evidence is incomplete" in failures
+
+    missing_cohort_failures = _evaluate_report(
+        replace(
+            report,
+            derived_state_resource_evidence=replace(
+                report.derived_state_resource_evidence,
+                final_outbox_created_events_by_producer_cohort=(),
+            ),
+        )
+    )
+    assert "outbox producer-cohort attribution is incomplete" in missing_cohort_failures
 
     assert report.derived_state_resource_evidence is not None
     non_monotonic_evidence = replace(

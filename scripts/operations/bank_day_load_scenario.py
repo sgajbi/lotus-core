@@ -1681,6 +1681,33 @@ def _evaluate_report(report: ScenarioReport) -> list[str]:
                 or outbox_evidence.observed_outbox_processed_events_per_second is None
             ):
                 failures.append("outbox processed-throughput evidence is incomplete")
+            created_topic_total = sum(
+                count for _, count in outbox_evidence.final_outbox_created_events_by_topic
+            )
+            created_cohort_total = sum(
+                count
+                for _, _, count in (outbox_evidence.final_outbox_created_events_by_producer_cohort)
+            )
+            final_status_total = sum(
+                count or 0
+                for count in (
+                    outbox_evidence.final_outbox_pending_events,
+                    outbox_evidence.final_outbox_processed_events,
+                    outbox_evidence.final_outbox_failed_events,
+                )
+            )
+            if not outbox_evidence.final_outbox_created_events_by_producer_cohort:
+                failures.append("outbox producer-cohort attribution is incomplete")
+            elif created_cohort_total != created_topic_total:
+                failures.append(
+                    "outbox producer-cohort attribution total "
+                    f"{created_cohort_total} != topic total {created_topic_total}"
+                )
+            elif created_cohort_total != final_status_total:
+                failures.append(
+                    "outbox producer-cohort attribution total "
+                    f"{created_cohort_total} != status total {final_status_total}"
+                )
         if not source_correction_requested:
             created_events_by_topic = dict(outbox_evidence.final_outbox_created_events_by_topic)
             valuation_snapshot_event_count = int(
