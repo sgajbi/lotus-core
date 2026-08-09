@@ -1,5 +1,20 @@
 # Codebase Review Ledger
 
+CR-1681 report-only technology-governance pilot (2026-08-09): issue #917 maps every
+dependency artifact, container identity field, container artifact, vulnerability severity, and
+exception-control class required by the exact Platform policy at
+`c3af9ace58f54fb070db32d2b428ff79c852d818`. The compact Core manifest distinguishes a producer
+control from a generated receipt and is guarded against missing classifications, stale local
+anchors, duplicate mappings, unowned gaps, policy-set drift, and production or bank-buyable
+overclaiming. Exact-main `aed8862f3daab33f0635b00b98e1f094a057fab3` supplies current dependency
+audit, runtime-lock SBOM, runtime-image-set, and Docker-smoke evidence, but no `Image Release` run
+exists; immutable release digest, image SBOM, Trivy receipt, signature, and attestation therefore
+remain absent and owned by #720. Deduplicated follow-up issues own dependency license/supportability
+inventory (#926), base-image support/EOL evidence (#927), and KEV/all-severity/exception lifecycle
+governance (#928). This is governance evidence only: no API, OpenAPI, database, migration, event,
+auth, dependency, runtime behavior, supported-feature, or release claim changed. No wiki source
+change is required because no operator workflow or public contract changed.
+
 CR-1680 domain-product request-scope correction (2026-08-09): issue #885 found that
 `HoldingsAsOf:v1` advertised ingestion-job/non-bulk scope and `IngestionEvidenceBundle:v1`
 advertised portfolio/bulk scope, contradicting their route and response grains. The same-pattern

@@ -3527,6 +3527,18 @@ Most relevant current governance:
      cross-family collisions must fail with `generated_transaction_identity_collision` before
      effect staging. Application ports must state generated-child write intent explicitly.
 
+235. Technology-governance rollout consumes the canonical Platform policy by exact commit rather
+     than copying it into Core. `make technology-governance-pilot-guard` validates the compact
+     report-only evidence map in
+     `contracts/technology-governance/lotus-core-technology-governance-pilot.v1.json`, verifies
+     local evidence anchors, requires a canonical Core issue for every gap or non-certifying
+     posture, and can compare the complete requirement sets with the pinned policy through
+     `--platform-root`. Treat a workflow, generator, pinned Dockerfile, local image ID, runtime-lock
+     SBOM, or local smoke test as control/runtime evidence only; it does not replace an immutable
+     image-release digest, scan receipt, image SBOM, signature, or provenance attestation. A
+     report-only pilot must keep release-certifying, production-ready, bank-buyable, and
+     supported-feature claims false.
+
 ## Context Maintenance Rule
 
 Update this document when:
