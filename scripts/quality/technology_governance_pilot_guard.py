@@ -502,8 +502,7 @@ def main(argv: list[str] | None = None) -> int:
         "--verify-github",
         action="store_true",
         help=(
-            "Verify cited run conclusions, source SHAs, artifact existence, "
-            "and expiry via GitHub."
+            "Verify cited run conclusions, source SHAs, artifact existence, and expiry via GitHub."
         ),
     )
     args = parser.parse_args(argv)
