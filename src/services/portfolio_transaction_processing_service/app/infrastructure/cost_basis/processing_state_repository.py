@@ -138,6 +138,10 @@ class SqlAlchemyCostBasisProcessingStateRepository:
             extra={**log_context, "lock_wait_seconds": wait_seconds},
         )
 
+    @async_timed(
+        repository="CostBasisProcessingStateRepository",
+        method="get_cost_basis_processing_checkpoint",
+    )
     async def get_cost_basis_processing_checkpoint(
         self, *, portfolio_id: str, security_id: str
     ) -> CostBasisProcessingCheckpoint | None:
@@ -164,6 +168,10 @@ class SqlAlchemyCostBasisProcessingStateRepository:
             calculation_state_version=row.engine_state_version,
         )
 
+    @async_timed(
+        repository="CostBasisProcessingStateRepository",
+        method="upsert_cost_basis_processing_checkpoint",
+    )
     async def upsert_cost_basis_processing_checkpoint(
         self, checkpoint: CostBasisProcessingCheckpoint
     ) -> None:

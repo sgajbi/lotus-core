@@ -11,6 +11,7 @@ from portfolio_common.domain.calculation_lineage import (
 )
 from portfolio_common.events import TransactionEvent
 from portfolio_common.identifiers import normalize_lookup_identifier
+from portfolio_common.utils import async_timed
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -33,6 +34,7 @@ class SqlAlchemyCostBasisLotRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
+    @async_timed(repository="CostBasisLotRepository", method="get_open_lot_checkpoint_records")
     async def get_open_lot_checkpoint_records(
         self,
         *,
@@ -48,6 +50,10 @@ class SqlAlchemyCostBasisLotRepository:
         rows = (await self._session.execute(statement)).all()
         return [self._to_checkpoint_record(lot, transaction) for lot, transaction in rows]
 
+    @async_timed(
+        repository="CostBasisLotRepository",
+        method="get_fifo_disposal_lot_checkpoint_records",
+    )
     async def get_fifo_disposal_lot_checkpoint_records(
         self,
         *,
@@ -77,6 +83,7 @@ class SqlAlchemyCostBasisLotRepository:
             await result.close()
         return records
 
+    @async_timed(repository="CostBasisLotRepository", method="upsert_buy_lot_state")
     async def upsert_buy_lot_state(self, transaction: CostBasisTransaction) -> None:
         """Idempotently persist the lot opened by a purchase transaction."""
 
@@ -88,6 +95,7 @@ class SqlAlchemyCostBasisLotRepository:
             )
         )
 
+    @async_timed(repository="CostBasisLotRepository", method="update_open_lot_states")
     async def update_open_lot_states(
         self,
         *,
@@ -128,6 +136,7 @@ class SqlAlchemyCostBasisLotRepository:
                 transition_evidence=transition_evidence,
             )
 
+    @async_timed(repository="CostBasisLotRepository", method="update_selected_open_lot_states")
     async def update_selected_open_lot_states(
         self,
         *,

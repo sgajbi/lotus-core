@@ -26,6 +26,7 @@ from portfolio_common.infrastructure.persistence.transaction_identity_guard impo
     GeneratedTransactionIdentityCollisionError,
     transaction_identity_update_allowed,
 )
+from portfolio_common.utils import async_timed
 from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -229,6 +230,7 @@ class SqlAlchemyCostBasisTransactionRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
 
+    @async_timed(repository="CostBasisTransactionRepository", method="get_transaction_history")
     async def get_transaction_history(
         self, portfolio_id: str, security_id: str, exclude_id: str | None = None
     ) -> list[BookedTransaction]:
@@ -255,6 +257,7 @@ class SqlAlchemyCostBasisTransactionRepository:
         result = await self.db.execute(stmt)
         return [_to_persisted_booked_transaction(row) for row in result.scalars().all()]
 
+    @async_timed(repository="CostBasisTransactionRepository", method="get_linked_transaction_group")
     async def get_linked_transaction_group(
         self,
         portfolio_id: str,
@@ -279,6 +282,10 @@ class SqlAlchemyCostBasisTransactionRepository:
         result = await self.db.execute(stmt)
         return [_to_persisted_booked_transaction(row) for row in result.scalars().all()]
 
+    @async_timed(
+        repository="CostBasisTransactionRepository",
+        method="apply_transaction_costs_and_replace_breakdown",
+    )
     async def apply_transaction_costs_and_replace_breakdown(
         self, transaction_result: CostBasisTransaction
     ) -> BookedTransaction | None:
@@ -323,6 +330,7 @@ class SqlAlchemyCostBasisTransactionRepository:
         )
         return _to_persisted_booked_transaction(db_transaction)
 
+    @async_timed(repository="CostBasisTransactionRepository", method="get_booked_transaction")
     async def get_booked_transaction(
         self, transaction_id: str, *, portfolio_id: str | None = None
     ) -> BookedTransaction | None:
@@ -337,6 +345,7 @@ class SqlAlchemyCostBasisTransactionRepository:
             return None
         return _to_persisted_booked_transaction(transaction)
 
+    @async_timed(repository="CostBasisTransactionRepository", method="upsert_booked_transaction")
     async def upsert_booked_transaction(
         self,
         transaction: BookedTransaction,
@@ -351,6 +360,10 @@ class SqlAlchemyCostBasisTransactionRepository:
             fields_to_clear=fields_to_clear,
         )
 
+    @async_timed(
+        repository="CostBasisTransactionRepository",
+        method="upsert_generated_booked_transaction",
+    )
     async def upsert_generated_booked_transaction(
         self,
         transaction: BookedTransaction,

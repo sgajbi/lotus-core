@@ -4,6 +4,7 @@ from datetime import date
 
 from portfolio_common.database_models import FxRate
 from portfolio_common.domain.currency import normalize_currency_code
+from portfolio_common.utils import async_timed
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
@@ -17,6 +18,7 @@ class SqlAlchemyCostBasisFxRateRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
+    @async_timed(repository="CostBasisFxRateRepository", method="get_fx_rate_window")
     async def get_fx_rate_window(
         self,
         from_currency: str,

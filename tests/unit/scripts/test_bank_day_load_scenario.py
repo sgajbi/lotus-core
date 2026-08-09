@@ -324,6 +324,27 @@ def test_database_operation_evidence_collection_fails_closed_on_empty_scrape(
     assert failures == ["database operation metrics returned no bounded repository/method samples"]
 
 
+def test_required_cost_database_operation_evidence_fails_closed_on_missing_sample() -> None:
+    required = [
+        {"repository": "CostBasisTransactionRepository", "method": "get_transaction_history"},
+        {"repository": "CostBasisLotRepository", "method": "upsert_buy_lot_state"},
+    ]
+    observed = [
+        DatabaseOperationEvidence(
+            repository="CostBasisTransactionRepository",
+            method="get_transaction_history",
+            observation_count=10,
+            total_duration_seconds=1.0,
+            average_duration_seconds=0.1,
+        )
+    ]
+
+    assert bank_day_load_scenario._missing_required_database_operations(
+        required=required,
+        observed=observed,
+    ) == [("CostBasisLotRepository", "upsert_buy_lot_state")]
+
+
 def test_build_instrument_specs_cycles_currencies_and_prices() -> None:
     specs = _build_instrument_specs(run_id="RUN1", instrument_count=5)
 
