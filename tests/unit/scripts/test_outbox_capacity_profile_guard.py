@@ -47,6 +47,15 @@ def test_outbox_capacity_profile_rejects_missing_failure_mode_evidence() -> None
     assert {"missing_acceptance_evidence": ["broker_timeout"]} in findings
 
 
+def test_outbox_capacity_profile_rejects_acceptance_command_drift() -> None:
+    contract = deepcopy(_load_json(REPO_ROOT / CONTRACT_PATH))
+    contract["acceptance_command"] = "make test-integration-all"
+
+    findings = validate_outbox_capacity_contract(contract, repo_root=REPO_ROOT)
+
+    assert {"invalid_acceptance_command": "make test-integration-all"} in findings
+
+
 def test_outbox_capacity_profile_rejects_missing_test_node() -> None:
     contract = deepcopy(_load_json(REPO_ROOT / CONTRACT_PATH))
     missing_ref = "tests/unit/scripts/test_outbox_capacity_profile_guard.py::test_missing"

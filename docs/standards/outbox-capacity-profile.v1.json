@@ -3,6 +3,7 @@
   "owning_repository": "lotus-core",
   "issue": "sgajbi/lotus-core#794",
   "guard_command": "make outbox-capacity-profile-guard",
+  "acceptance_command": "make test-outbox-capacity-acceptance",
   "profiles": {
     "bank_day_safe_v1": {
       "description": "Governed candidate baseline for amplified daily, correction, and replay certification; environment bindings may not weaken delivery, claim, retry, or shutdown fencing.",

@@ -116,6 +116,9 @@ def test_outbox_capacity_docs_preserve_profile_attribution_and_exact_total_contr
         assert "outbox-capacity-profile-guard" in content
         assert "producer" in content
 
+    for path in paths[:2]:
+        assert "test-outbox-capacity-acceptance" in path.read_text(encoding="utf-8")
+
     review = paths[4].read_text(encoding="utf-8")
     assert "63.624ms" in review
     assert "187.430ms" in review

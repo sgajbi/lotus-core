@@ -99,6 +99,8 @@ counts diverge from topic or final status totals. Use the single
 `docs/standards/outbox-capacity-profile.v1.json` contract and
 `make outbox-capacity-profile-guard` for development, CI, and production dispatcher settings. Its
 `1s/1000` profile remains `candidate_pending_exact_source` until the current-source daily run passes.
+Use `make test-outbox-capacity-acceptance` for the contract-declared database rollback, duplicate,
+claim, acknowledgement, timeout, terminal-failure, and managed restart evidence.
 
 If managed Compose startup, migration, recovery, or poison orchestration fails before its normal
 report exists, the gate writes an atomic

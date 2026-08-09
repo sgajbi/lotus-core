@@ -71,6 +71,8 @@ delivery fence and supervised shutdown safety bounds and rejects Compose/Kuberne
 profile remains `candidate_pending_exact_source` until its current-source 100,000-transaction run
 passes; do not describe the configuration as certified or tune it independently in one environment
 before that receipt exists.
+Run `make test-outbox-capacity-acceptance` to execute the contract's deduplicated direct PostgreSQL
+failure-mode nodes and its managed dispatcher-restart gate without reconstructing commands by hand.
 Certifying evidence also requires monotonic recent publication-age p50/p95/p99, an observed
 processed-event throughput window, exact pending/retry/failed/topic totals, and count-reconciled
 producer cohorts; the newest 10,000 rows bound only the publication-age percentile sample.
