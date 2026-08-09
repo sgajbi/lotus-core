@@ -132,6 +132,11 @@ and production dispatcher values are bound through the single
 `docs/standards/outbox-capacity-profile.v1.json` contract and
 `make outbox-capacity-profile-guard`; its `1s/1000` profile remains a candidate until exact-source
 daily certification passes.
+The managed profile is the only database/resource sampler during certification. Observe an async
+run through governed task status, owned-container liveness, and its terminal artifact; do not add
+full-table SQL progress queries or another Docker-heavy workload. Disclose any bounded read-only
+observer. A pass is conservative evidence but not a clean timing baseline, while a failure requires
+an unobserved rerun before it supports a capacity verdict.
 If managed startup, migration, recovery, or poison orchestration fails before the normal report,
 the gate writes an atomic `lotus.managed-gate-orchestration-failure.v1` JSON receipt with the
 failed phase and owned Compose/log context. Credentials are redacted, the original error is

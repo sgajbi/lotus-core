@@ -77,6 +77,15 @@ Certifying evidence also requires monotonic recent publication-age p50/p95/p99, 
 processed-event throughput window, exact pending/retry/failed/topic totals, and count-reconciled
 producer cohorts; the newest 10,000 rows bound only the publication-age percentile sample.
 
+The managed profile is the sole database and resource sampler during a certifying run. Monitor a
+background execution through its governed task status, owned-container liveness, and terminal
+artifact; do not add ad hoc `docker exec` row counts, full-table database queries, a second Compose
+build/test, or another Docker-heavy workload. Those observations consume the same database, CPU,
+I/O, and connection capacity being measured. If a bounded read-only diagnostic query was executed,
+record it with the run. A passing run may be retained as conservative acceptance evidence because
+the observer only added load, but its timing is not the clean comparison baseline. A failed or
+timed-out run cannot support a capacity verdict until repeated without the external observer.
+
 Service readiness and seed materialization use separate deadlines. Readiness remains a short
 startup check, while certifying profiles allow up to 600 seconds for source records to become
 durable before transaction submission. Seed timeout failures remain hard failures and do not

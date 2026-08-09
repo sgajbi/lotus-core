@@ -104,6 +104,12 @@ into an unbounded identifier dump. Use the single
 Use `make test-outbox-capacity-acceptance` for the contract-declared database rollback, duplicate,
 claim, acknowledgement, timeout, terminal-failure, and managed restart evidence.
 
+Do not poll certifying progress with external full-table SQL or run another Docker-heavy gate. The
+managed profile already owns bounded database and resource sampling; use its async task state,
+owned-container liveness, and terminal JSON/Markdown artifacts. Disclose any bounded read-only
+observer. A pass under that extra load is conservative but not a clean timing baseline; a failure
+requires an unobserved rerun before it can be classified as a capacity verdict.
+
 If managed Compose startup, migration, recovery, or poison orchestration fails before its normal
 report exists, the gate writes an atomic
 `lotus.managed-gate-orchestration-failure.v1` JSON receipt. The receipt identifies the failed
