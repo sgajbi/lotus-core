@@ -4,6 +4,7 @@ from dataclasses import asdict, dataclass
 from datetime import date, datetime
 from typing import Any, Literal, cast
 
+from portfolio_common.logging_utils import normalize_lineage_value
 from portfolio_common.reference_data_paging import ReferencePageMetadata
 from portfolio_common.request_fingerprints import request_fingerprint
 from portfolio_common.runtime_providers import Clock
@@ -37,6 +38,7 @@ from ..ports.dpm_portfolio_population import (
 class DpmPortfolioUniverseScope:
     """Normalized universe filters bound to a continuation sequence."""
 
+    tenant_id: str | None
     booking_center_code: str | None
     model_portfolio_ids: tuple[str, ...]
     fingerprint: str
@@ -116,6 +118,7 @@ class DpmPortfolioPopulationService:
 
 
 def _universe_scope(request: DpmPortfolioUniverseCandidateRequest) -> DpmPortfolioUniverseScope:
+    tenant_id = normalize_lineage_value(request.tenant_id)
     booking_center_code = (
         request.booking_center_code.strip() if request.booking_center_code else None
     )
@@ -130,10 +133,10 @@ def _universe_scope(request: DpmPortfolioUniverseCandidateRequest) -> DpmPortfol
             "booking_center_code": booking_center_code,
             "model_portfolio_ids": model_ids,
             "include_inactive_mandates": request.include_inactive_mandates,
-            "tenant_id": request.tenant_id,
+            "tenant_id": tenant_id,
         }
     )
-    return DpmPortfolioUniverseScope(booking_center_code, model_ids, fingerprint)
+    return DpmPortfolioUniverseScope(tenant_id, booking_center_code, model_ids, fingerprint)
 
 
 def _after_sort_key(*, cursor: dict[str, Any], scope_fingerprint: str) -> tuple[str, str] | None:
@@ -308,7 +311,7 @@ def _universe_response(
         **_metadata(
             as_of_date=request.as_of_date,
             generated_at=generated_at,
-            tenant_id=request.tenant_id,
+            tenant_id=scope.tenant_id,
             quality=quality,
             evidence=rows,
             snapshot_id=f"dpm_portfolio_universe:{scope.fingerprint}",
@@ -332,7 +335,7 @@ def _ready_universe_content_hash(
             {
                 "product_name": "DpmPortfolioUniverseCandidate",
                 "product_version": "v1",
-                "tenant_id": request.tenant_id,
+                "tenant_id": scope.tenant_id,
                 "as_of_date": request.as_of_date,
                 "booking_center_code": scope.booking_center_code,
                 "model_portfolio_ids": scope.model_portfolio_ids,

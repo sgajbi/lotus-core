@@ -279,6 +279,28 @@ async def test_ready_universe_publishes_stable_core_owned_content_identity() -> 
 
 
 @pytest.mark.asyncio
+async def test_ready_universe_normalizes_tenant_in_scope_and_content_identity() -> None:
+    reader = _Reader()
+    normalized = await _service(reader).resolve_universe_candidates(
+        request=DpmPortfolioUniverseCandidateRequest(
+            as_of_date=date(2026, 5, 3), tenant_id="default"
+        )
+    )
+    whitespace_equivalent = await _service(reader).resolve_universe_candidates(
+        request=DpmPortfolioUniverseCandidateRequest(
+            as_of_date=date(2026, 5, 3), tenant_id=" default "
+        )
+    )
+
+    assert normalized.tenant_id == whitespace_equivalent.tenant_id == "default"
+    assert (
+        normalized.page.request_scope_fingerprint
+        == whitespace_equivalent.page.request_scope_fingerprint
+    )
+    assert normalized.content_hash == whitespace_equivalent.content_hash
+
+
+@pytest.mark.asyncio
 async def test_ready_universe_content_identity_changes_with_source_evidence() -> None:
     request = DpmPortfolioUniverseCandidateRequest(as_of_date=date(2026, 5, 3))
     baseline_reader = _Reader()
