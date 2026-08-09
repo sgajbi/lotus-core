@@ -796,6 +796,181 @@ def _wait_for_seed_materialization(
     )
 
 
+def _seed_source_facts_before_business_horizon(
+    *,
+    engine: Any,
+    session: requests.Session,
+    ingestion_base_url: str,
+    run_id: str,
+    portfolios: list[dict[str, Any]],
+    specs: list[InstrumentSpec],
+    business_dates: list[str],
+    timeout_seconds: int,
+) -> list[IngestPhaseResult]:
+    """Seed source facts before activating the derived-state business horizon.
+
+    Price and FX consumers interpret observations for an active business date as
+    correction evidence. Waiting for their idempotency fences before publishing
+    the business-date window prevents initial seed facts from being misclassified
+    as corrections and keeps valuation attempts deterministic.
+    """
+
+    opening_trade_date = business_dates[0]
+    portfolio_pattern = {"portfolio_pattern": f"LOAD_{run_id}_PF_%"}
+    security_pattern = {"security_pattern": f"LOAD_{run_id}_SEC_%"}
+    phases: list[IngestPhaseResult] = []
+
+    phases.append(
+        _ingest_static_payload(
+            session=session,
+            base_url=ingestion_base_url,
+            endpoint="/ingest/portfolios",
+            root_key="portfolios",
+            rows=portfolios,
+        )
+    )
+    _wait_for_seed_materialization(
+        engine=engine,
+        sql="""
+        SELECT count(*) AS count
+        FROM portfolios
+        WHERE portfolio_id LIKE :portfolio_pattern
+        """,
+        params=portfolio_pattern,
+        expected_count=len(portfolios),
+        label="portfolio seed",
+        timeout_seconds=timeout_seconds,
+    )
+
+    phases.append(
+        _ingest_static_payload(
+            session=session,
+            base_url=ingestion_base_url,
+            endpoint="/ingest/instruments",
+            root_key="instruments",
+            rows=_build_instruments_payload(specs),
+        )
+    )
+    _wait_for_seed_materialization(
+        engine=engine,
+        sql="""
+        SELECT count(*) AS count
+        FROM instruments
+        WHERE security_id LIKE :security_pattern
+        """,
+        params=security_pattern,
+        expected_count=len(specs),
+        label="instrument seed",
+        timeout_seconds=timeout_seconds,
+    )
+
+    source_seed_started_at = _db_row(
+        engine,
+        "SELECT clock_timestamp() AS source_seed_started_at",
+        {},
+    )["source_seed_started_at"]
+    fx_rate_count = len(SUPPORTED_CURRENCIES) * (len(SUPPORTED_CURRENCIES) - 1)
+    phases.append(
+        _ingest_static_payload(
+            session=session,
+            base_url=ingestion_base_url,
+            endpoint="/ingest/fx-rates",
+            root_key="fx_rates",
+            rows=_build_fx_rates_payload(
+                currencies=SUPPORTED_CURRENCIES,
+                rate_date=opening_trade_date,
+            ),
+        )
+    )
+    _wait_for_seed_materialization(
+        engine=engine,
+        sql="""
+        SELECT count(*) AS count
+        FROM fx_rates
+        WHERE rate_date = :trade_date
+          AND from_currency IN ('USD', 'EUR', 'SGD', 'GBP')
+          AND to_currency IN ('USD', 'EUR', 'SGD', 'GBP')
+        """,
+        params={"trade_date": opening_trade_date},
+        expected_count=fx_rate_count,
+        label="fx seed",
+        timeout_seconds=timeout_seconds,
+    )
+
+    phases.append(
+        _ingest_static_payload(
+            session=session,
+            base_url=ingestion_base_url,
+            endpoint="/ingest/market-prices",
+            root_key="market_prices",
+            rows=_build_market_prices_payload(
+                specs=specs,
+                price_date=opening_trade_date,
+            ),
+        )
+    )
+    _wait_for_seed_materialization(
+        engine=engine,
+        sql="""
+        SELECT count(*) AS count
+        FROM market_prices
+        WHERE security_id LIKE :security_pattern
+          AND price_date = :trade_date
+        """,
+        params={
+            "security_pattern": security_pattern["security_pattern"],
+            "trade_date": opening_trade_date,
+        },
+        expected_count=len(specs),
+        label="market price seed",
+        timeout_seconds=timeout_seconds,
+    )
+
+    for service_name, expected_count, label in (
+        ("fx-rate-revaluation-trigger", fx_rate_count, "FX source-event fence"),
+        ("price-event-reprocessing-trigger", len(specs), "market-price source-event fence"),
+    ):
+        _wait_for_seed_materialization(
+            engine=engine,
+            sql="""
+            SELECT count(*) AS count
+            FROM processed_events
+            WHERE service_name = :service_name
+              AND processed_at >= :source_seed_started_at
+            """,
+            params={
+                "service_name": service_name,
+                "source_seed_started_at": source_seed_started_at,
+            },
+            expected_count=expected_count,
+            label=label,
+            timeout_seconds=timeout_seconds,
+        )
+
+    phases.append(
+        _ingest_static_payload(
+            session=session,
+            base_url=ingestion_base_url,
+            endpoint="/ingest/business-dates",
+            root_key="business_dates",
+            rows=[{"business_date": business_date} for business_date in business_dates],
+        )
+    )
+    _wait_for_seed_materialization(
+        engine=engine,
+        sql="""
+        SELECT count(*) AS count
+        FROM business_dates
+        WHERE date = ANY(CAST(:business_dates AS date[]))
+        """,
+        params={"business_dates": business_dates},
+        expected_count=len(business_dates),
+        label="business-date horizon",
+        timeout_seconds=timeout_seconds,
+    )
+    return phases
+
+
 def _resolve_trade_date(*, engine: Any, explicit_trade_date: str | None) -> str:
     if explicit_trade_date:
         return explicit_trade_date
@@ -2411,8 +2586,6 @@ def main() -> int:
     fx_correction_restart_evidence: ComposeFaultRecoveryEvidence | None = None
     session = requests.Session()
     ingest_phases: list[IngestPhaseResult] = []
-    portfolio_pattern = {"portfolio_pattern": f"LOAD_{run_id}_PF_%"}
-    security_pattern = {"security_pattern": f"LOAD_{run_id}_SEC_%"}
     health_monitor = HealthMonitor(
         event_replay_base_url=args.event_replay_base_url,
         ops_token=args.ops_token,
@@ -2445,110 +2618,17 @@ def main() -> int:
     health_monitor.start()
     resource_monitor.start()
     try:
-        ingest_phases.append(
-            _ingest_static_payload(
+        ingest_phases.extend(
+            _seed_source_facts_before_business_horizon(
+                engine=engine,
                 session=session,
-                base_url=args.ingestion_base_url,
-                endpoint="/ingest/business-dates",
-                root_key="business_dates",
-                rows=[{"business_date": business_date} for business_date in business_dates],
+                ingestion_base_url=args.ingestion_base_url,
+                run_id=run_id,
+                portfolios=portfolios,
+                specs=specs,
+                business_dates=business_dates,
+                timeout_seconds=args.seed_materialization_timeout_seconds,
             )
-        )
-        ingest_phases.append(
-            _ingest_static_payload(
-                session=session,
-                base_url=args.ingestion_base_url,
-                endpoint="/ingest/portfolios",
-                root_key="portfolios",
-                rows=portfolios,
-            )
-        )
-        _wait_for_seed_materialization(
-            engine=engine,
-            sql="""
-            SELECT count(*) AS count
-            FROM portfolios
-            WHERE portfolio_id LIKE :portfolio_pattern
-            """,
-            params=portfolio_pattern,
-            expected_count=args.portfolio_count,
-            label="portfolio seed",
-            timeout_seconds=args.seed_materialization_timeout_seconds,
-        )
-        ingest_phases.append(
-            _ingest_static_payload(
-                session=session,
-                base_url=args.ingestion_base_url,
-                endpoint="/ingest/instruments",
-                root_key="instruments",
-                rows=_build_instruments_payload(specs),
-            )
-        )
-        _wait_for_seed_materialization(
-            engine=engine,
-            sql="""
-            SELECT count(*) AS count
-            FROM instruments
-            WHERE security_id LIKE :security_pattern
-            """,
-            params=security_pattern,
-            expected_count=args.transactions_per_portfolio,
-            label="instrument seed",
-            timeout_seconds=args.seed_materialization_timeout_seconds,
-        )
-        ingest_phases.append(
-            _ingest_static_payload(
-                session=session,
-                base_url=args.ingestion_base_url,
-                endpoint="/ingest/fx-rates",
-                root_key="fx_rates",
-                rows=_build_fx_rates_payload(
-                    currencies=SUPPORTED_CURRENCIES,
-                    rate_date=opening_trade_date,
-                ),
-            )
-        )
-        _wait_for_seed_materialization(
-            engine=engine,
-            sql="""
-            SELECT count(*) AS count
-            FROM fx_rates
-            WHERE rate_date = :trade_date
-              AND from_currency IN ('USD', 'EUR', 'SGD', 'GBP')
-              AND to_currency IN ('USD', 'EUR', 'SGD', 'GBP')
-            """,
-            params={"trade_date": opening_trade_date},
-            expected_count=len(SUPPORTED_CURRENCIES) * (len(SUPPORTED_CURRENCIES) - 1),
-            label="fx seed",
-            timeout_seconds=args.seed_materialization_timeout_seconds,
-        )
-        ingest_phases.append(
-            _ingest_static_payload(
-                session=session,
-                base_url=args.ingestion_base_url,
-                endpoint="/ingest/market-prices",
-                root_key="market_prices",
-                rows=_build_market_prices_payload(
-                    specs=specs,
-                    price_date=opening_trade_date,
-                ),
-            )
-        )
-        _wait_for_seed_materialization(
-            engine=engine,
-            sql="""
-            SELECT count(*) AS count
-            FROM market_prices
-            WHERE security_id LIKE :security_pattern
-              AND price_date = :trade_date
-            """,
-            params={
-                "security_pattern": security_pattern["security_pattern"],
-                "trade_date": opening_trade_date,
-            },
-            expected_count=args.transactions_per_portfolio,
-            label="market price seed",
-            timeout_seconds=args.seed_materialization_timeout_seconds,
         )
         ingest_phases.append(
             _ingest_transaction_batches(

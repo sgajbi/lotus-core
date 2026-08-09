@@ -80,6 +80,13 @@ startup check, while certifying profiles allow up to 600 seconds for source reco
 durable before transaction submission. Seed timeout failures remain hard failures and do not
 weaken the downstream drain or reconciliation deadlines.
 
+The certifying fixture is source-first. It persists portfolios, instruments, FX rates, and market
+prices; waits for both source rows and the FX/price consumer idempotency fences; then publishes and
+waits for the business-date horizon before submitting transactions. This ordering keeps initial
+reference facts distinct from corrections. Activating the business horizon before the source
+consumers drain can leave correction/reprocessing state that later rearms otherwise normal
+transaction readiness and invalidates attempt-count evidence.
+
 Current-business-date FX and market-price seed facts do not create replay merely because positions
 have not been submitted yet. Later transaction processing emits authoritative valuation readiness
 and reads those committed source facts. A delayed source notification also skips positions whose
@@ -112,18 +119,17 @@ The script:
 
 1. waits for ingestion, query, control-plane, event-replay, and reconciliation
    services to become ready,
-2. seeds business date, portfolios, instruments, FX rates, and market prices
-   through public ingestion APIs,
-3. waits for supporting data to become durable in PostgreSQL before it submits
-   transactions,
-4. ingests deterministic BUY transactions in batches,
-5. monitors event-replay health during processing,
-6. waits for position snapshots, security-level position timeseries, and
+2. seeds portfolios, instruments, FX rates, and market prices through public ingestion APIs,
+3. waits for source rows and the FX/price consumer fences to become durable,
+4. publishes the business-date horizon last and waits for it to become durable,
+5. ingests deterministic BUY transactions in batches,
+6. monitors event-replay health during processing,
+7. waits for position snapshots, security-level position timeseries, and
    portfolio-level timeseries to converge,
-7. samples downstream APIs,
-8. runs reconciliation checks for sampled portfolios,
-9. inspects stable Compose service logs for real error lines using the configured project/file,
-10. writes a machine-readable and human-readable evidence pack.
+8. samples downstream APIs,
+9. runs reconciliation checks for sampled portfolios,
+10. inspects stable Compose service logs for real error lines using the configured project/file,
+11. writes a machine-readable and human-readable evidence pack.
 
 When `--market-price-correction-multiplier` is supplied, the scenario runs the complete baseline
 cycle first, records a database-clock correction boundary, ingests corrected prices, and waits for

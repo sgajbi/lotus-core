@@ -41,6 +41,140 @@ def test_log_evidence_uses_the_combined_transaction_processing_runtime() -> None
     assert not any("calculator_service" in name for name in LOG_SERVICE_NAMES)
 
 
+def test_initial_source_facts_drain_before_business_horizon_activation(monkeypatch) -> None:
+    observed_steps: list[tuple[str, object]] = []
+
+    def ingest_static_payload(**kwargs):
+        endpoint = kwargs["endpoint"]
+        observed_steps.append(("ingest", endpoint))
+        return bank_day_load_scenario.IngestPhaseResult(
+            endpoint=endpoint,
+            record_count=len(kwargs["rows"]),
+            batch_count=1,
+            duration_seconds=0.0,
+        )
+
+    def wait_for_seed_materialization(**kwargs):
+        observed_steps.append(
+            (
+                "wait",
+                (
+                    kwargs["label"],
+                    kwargs["expected_count"],
+                    kwargs["params"],
+                ),
+            )
+        )
+
+    monkeypatch.setattr(
+        bank_day_load_scenario,
+        "_ingest_static_payload",
+        ingest_static_payload,
+    )
+    monkeypatch.setattr(
+        bank_day_load_scenario,
+        "_wait_for_seed_materialization",
+        wait_for_seed_materialization,
+    )
+    monkeypatch.setattr(
+        bank_day_load_scenario,
+        "_db_row",
+        lambda *_args, **_kwargs: {"source_seed_started_at": "2026-08-09T00:00:00Z"},
+    )
+
+    run_id = "20260809T000000Z"
+    phases = bank_day_load_scenario._seed_source_facts_before_business_horizon(
+        engine=object(),
+        session=object(),
+        ingestion_base_url="http://ingestion",
+        run_id=run_id,
+        portfolios=bank_day_load_scenario._build_portfolios(
+            run_id=run_id,
+            portfolio_count=2,
+            trade_date="2026-08-07",
+        ),
+        specs=bank_day_load_scenario._build_instrument_specs(
+            run_id=run_id,
+            instrument_count=3,
+        ),
+        business_dates=["2026-08-07"],
+        timeout_seconds=30,
+    )
+
+    assert [phase.endpoint for phase in phases] == [
+        "/ingest/portfolios",
+        "/ingest/instruments",
+        "/ingest/fx-rates",
+        "/ingest/market-prices",
+        "/ingest/business-dates",
+    ]
+    assert observed_steps == [
+        ("ingest", "/ingest/portfolios"),
+        (
+            "wait",
+            (
+                "portfolio seed",
+                2,
+                {"portfolio_pattern": "LOAD_20260809T000000Z_PF_%"},
+            ),
+        ),
+        ("ingest", "/ingest/instruments"),
+        (
+            "wait",
+            (
+                "instrument seed",
+                3,
+                {"security_pattern": "LOAD_20260809T000000Z_SEC_%"},
+            ),
+        ),
+        ("ingest", "/ingest/fx-rates"),
+        ("wait", ("fx seed", 12, {"trade_date": "2026-08-07"})),
+        ("ingest", "/ingest/market-prices"),
+        (
+            "wait",
+            (
+                "market price seed",
+                3,
+                {
+                    "security_pattern": "LOAD_20260809T000000Z_SEC_%",
+                    "trade_date": "2026-08-07",
+                },
+            ),
+        ),
+        (
+            "wait",
+            (
+                "FX source-event fence",
+                12,
+                {
+                    "service_name": "fx-rate-revaluation-trigger",
+                    "source_seed_started_at": "2026-08-09T00:00:00Z",
+                },
+            ),
+        ),
+        (
+            "wait",
+            (
+                "market-price source-event fence",
+                3,
+                {
+                    "service_name": "price-event-reprocessing-trigger",
+                    "source_seed_started_at": "2026-08-09T00:00:00Z",
+                },
+            ),
+        ),
+        ("ingest", "/ingest/business-dates"),
+        (
+            "wait",
+            (
+                "business-date horizon",
+                1,
+                {"business_dates": ["2026-08-07"]},
+            ),
+        ),
+    ]
+
+
 def test_operation_evidence_collection_preserves_bounded_stage_totals(monkeypatch) -> None:
     expected = [
         TransactionProcessingOperationEvidence(
