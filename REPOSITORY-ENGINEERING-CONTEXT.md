@@ -2952,7 +2952,10 @@ Most relevant current governance:
      derived-state workload, recovery, and poison gates must also atomically retain a credential-
      redacted `lotus.managed-gate-orchestration-failure.v1` receipt when orchestration fails before
      its normal report. That receipt must remain `non_certifying_failure` and must not be accepted as
-     capacity, recovery, or poison-containment proof.
+     capacity, recovery, or poison-containment proof. Certifying outbox-capacity evidence must
+     include monotonic recent publication-age p50/p95/p99 and an observed processed-event throughput
+     window. Bound the age percentile query to the newest 10,000 primary-key rows; do not restore a
+     repeated full-outbox percentile sort. Pending/retry/failed totals and topic cohorts stay exact.
 198. Position-state acquisition must use the conflict-aware insert result as the authoritative
      newly-created state and perform a fallback read only when another transaction already owns the
      natural key. Preserve one state row per portfolio/security/account boundary, caller-owned

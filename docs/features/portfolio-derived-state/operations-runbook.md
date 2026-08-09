@@ -90,6 +90,10 @@ ingestion and requires complete recovery after restart.
 used as daily-volume, fan-in, lease-duration, or production-capacity evidence. Treat only a report
 with `evidence_classification=certifying`, exact expected row counts, complete resource samples,
 clean reconciliation, and no failures as profile evidence.
+Certifying reports must also contain monotonic recent publication-age p50/p95/p99 and a non-null
+observed processed-event throughput window. The age distribution samples only the newest 10,000
+outbox rows through the primary-key index so monitoring does not add an unbounded sort to the
+capacity workload; exact pending/retry/failed totals and topic cohorts remain full-table evidence.
 
 If managed Compose startup, migration, recovery, or poison orchestration fails before its normal
 report exists, the gate writes an atomic

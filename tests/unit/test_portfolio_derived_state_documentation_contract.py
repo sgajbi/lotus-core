@@ -95,3 +95,23 @@ def test_managed_gate_failure_receipts_remain_explicitly_non_certifying() -> Non
     assert "credential-redacting" in cr_1630_row
     assert "a8e1b0611" in cr_1630_row
     assert "44cacab60" in cr_1630_row
+
+
+def test_outbox_capacity_docs_preserve_bounded_percentile_and_exact_total_contracts() -> None:
+    paths = (
+        REPO_ROOT / "docs/features/portfolio-derived-state/operations-runbook.md",
+        REPO_ROOT / "wiki/Timeseries-and-Aggregation.md",
+        REPO_ROOT / "REPOSITORY-ENGINEERING-CONTEXT.md",
+        REPO_ROOT
+        / "docs/architecture/codebase-reviews"
+        / "CR-1630-TRANSACTION-EVENT-IO-AND-PARTITION-AMPLIFICATION.md",
+    )
+    for path in paths:
+        content = path.read_text(encoding="utf-8")
+        assert "10,000" in content
+        assert "publication-age p50/p95/p99" in content
+        assert "processed-event throughput" in content
+
+    review = paths[3].read_text(encoding="utf-8")
+    assert "63.624ms" in review
+    assert "outbox_events_pkey" in review

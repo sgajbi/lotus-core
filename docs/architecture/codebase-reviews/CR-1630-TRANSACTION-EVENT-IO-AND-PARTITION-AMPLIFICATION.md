@@ -665,6 +665,12 @@ does not publish this key policy; the operator-owned migration runbook is the du
   `lotus.managed-gate-orchestration-failure.v1` receipt. It records phase and owned Compose/log
   context, re-raises the original error, and is always `non_certifying_failure`; it cannot satisfy
   load, recovery, or poison acceptance.
+- #794's report contract now carries monotonic recent publication-age p50/p95/p99 plus an observed
+  processed-event throughput window. The percentile query is deliberately bounded to the newest
+  10,000 primary-key rows rather than sorting the full amplified outbox on every sample. Live SQL
+  returned `0.208127s / 0.77536835s / 1.08417709s`; `EXPLAIN (ANALYZE, BUFFERS)` used a backward
+  `outbox_events_pkey` scan, limited exactly 10,000 rows, and completed in `63.624ms` without a new
+  index or migration. Exact pending/retry/failed totals and topic cohorts remain full-table evidence.
 
 Implementation commits include `23fc6faf3`, `d51adb739`, `ad1ad179d`, `57f8c60e2`,
 `4f05be9a5`, `c230d660a`, `f42f6eaa3`, `d56e14dbf`, `2d49fc8f1`, `70ae16f0f`,
