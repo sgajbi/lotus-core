@@ -12,6 +12,11 @@
   "campaign_issues": [
     {
       "repo": "sgajbi/lotus-core",
+      "number": 714,
+      "final_close_required": true
+    },
+    {
+      "repo": "sgajbi/lotus-core",
       "number": 795,
       "final_close_required": true
     },
@@ -49,12 +54,12 @@
       "branch": "feat/domain-ordered-kafka-partitioning",
       "base_sha": "b9c55792361557bda56ba498492e962225557dd4",
       "head_sha": "dcb1aba71d47ab5d72732921a802135276a21143",
-      "post_merge_main_sha": "pending",
+      "post_merge_main_sha": "ed2dacf34b0b99fdf945b13dbe54225f694a0822",
       "required_predecessor_main_sha": "b9c55792361557bda56ba498492e962225557dd4",
       "capability_boundary": "Transactional hot-path throughput, twelve-way capacity, valuation-job lock ordering, and exact workload certification",
       "commit_count": 57,
-      "tranche_decision": "Merge the proven throughput, ordering, valuation-concurrency, diagnostics, and CI fix-forward work in PR #804; keep aggregate campaign closure open and append a subsequent tranche only after its first real signed commit from exact validated main.",
-      "issue_closure_decision": "close_after_final_validated_main",
+      "tranche_decision": "PR #804 merged by the governed rebase/non-squash method. Retain the proven throughput, ordering, valuation-concurrency, diagnostics, and CI fix-forward history on main while aggregate #714/#794/#795 certification continues in tranche 3.",
+      "issue_closure_decision": "keep_aggregate_campaign_open",
       "local_evidence": [
         "Focused #799 unit, domain, lint, format, and type checks pass at signed campaign commits through 349ee126c66415c9bf683baa43b51656e6c8905d",
         "Exact daily 20260717T092348Z made all 100,000 source transactions durable but only 83,644 valuation snapshots before the fixed drain deadline; this is a valid transaction-processing capacity failure",
@@ -104,7 +109,32 @@
         "Remote Feature Lane 29599992446 passed at signed fail-fast diagnostic head 6640ec911a31d722410b678de54f415433f469f2",
         "Remote Feature Lane 29600977253 passed at signed exact fan-in evidence head d34da93054c56897c317dbdeb7a1c7a595a432c7",
         "Remote Feature Lane 29602493876 passed at signed database-attribution head 37ffa2fadd37662c34d6f2ae66e7455d1bbd8cb7",
-        "PR Merge Gate run 29628815481 passed all jobs except app-level validation, where 65 runtime surface checks passed and only the pre-durability replay command returned 404; signed 997d999087fea6165c82e32bd1555ff4894b1161 fixes that exact failure without weakening the contract"
+        "PR Merge Gate run 29628815481 passed all jobs except app-level validation, where 65 runtime surface checks passed and only the pre-durability replay command returned 404; signed 997d999087fea6165c82e32bd1555ff4894b1161 fixes that exact failure without weakening the contract",
+        "PR #804 merged by the governed rebase/non-squash method at exact main ed2dacf34b0b99fdf945b13dbe54225f694a0822 on 2026-07-18"
+      ]
+    },
+    {
+      "tranche_id": "tranche-3-derived-state-certification-closure",
+      "branch": "feat/derived-state-certification-closure",
+      "base_sha": "6bc937bb173051e0bd4ee9a07ffebd54face0163",
+      "head_sha": "484d7c0964437edce5029af465838b6011cf2130",
+      "post_merge_main_sha": "pending",
+      "required_predecessor_main_sha": "6bc937bb173051e0bd4ee9a07ffebd54face0163",
+      "capability_boundary": "Combined derived-state runtime certification, bounded outbox capacity, deterministic workload evidence, stale-source and delayed-readiness suppression, and transaction hot-path round-trip reduction",
+      "commit_count": 34,
+      "tranche_decision": "Retain the combined deployable with separately attributable position and portfolio modules, the twelve-partition transaction ceiling, and the atomic two-call readiness claim. Keep PR #931 draft until daily, recovery, poison, duplicate/outbox, correction, restatement, rollback, and downstream proofs pass.",
+      "issue_closure_decision": "close_only_after_merge_exact_main_and_wiki_publication",
+      "local_evidence": [
+        "Exact clean daily 20260809T190656Z at signed bad4645977ac481aa43270c3a27c177641c97590 made all 100000 source transactions durable and reached 83668 snapshots with attempts 2/2, zero repeated processing, failed outbox 0, and advancing terminal timestamps; this is a valid remaining capacity failure, not a harness failure",
+        "Signed 3d6e3aed7c483c2dd7db51b33661b8044e0e1005 adds a live 10000-distractor PostgreSQL query-plan proof that requires ix_outbox_events_aggregate_id and rejects sequential scans",
+        "Signed 6406033221b36d9c21fbcaee3bfa53ba975cc984 reduces the ordinary transaction-readiness path from four serial database calls to two while preserving a separate post-wait READ COMMITTED snapshot boundary, epoch monotonicity, collision rejection, replay neutrality, and unit-of-work atomicity",
+        "Exact clean fan-in task eng-task-20260810-055424-lotus-core-certification-make-profile-derived-state-fan-in at 6406033221b36d9c21fbcaee3bfa53ba975cc984 reconciled all 1000 transactions, snapshots, position rows, and one portfolio row with attempts 2/2, zero repeats, closed jobs/outbox, and 80.982-second drain versus 115.998 seconds before, a 30.19 percent reduction",
+        "The retained fan-in artifact output/task-runs/20260809T215625Z-bank-day-load.json has SHA-256 621D0C1BA13F2B69224F431679610FE03991BE042C2C5C96F2522273C106C51C; exact project-scoped teardown removed every owned container, network, and volume without touching the shared stack",
+        "Focused readiness claim and query-plan proof passed 25 live PostgreSQL integration tests, 2 plan-helper unit tests, 11 atomic-claim unit/live cases, the 122-test transaction-processing contract, scoped MyPy/Ruff/format/diff checks, and docs/wiki/architecture guards"
+      ],
+      "remote_evidence": [
+        "PR #931 exact implementation head 6406033221b36d9c21fbcaee3bfa53ba975cc984 passed Remote Feature Lane 31338004146, PR Merge Gate 31338007004, and Quality Baseline 31338007006",
+        "PR #931 remains draft; documentation head 484d7c0964437edce5029af465838b6011cf2130 has no failed checks and must complete its fresh protected lanes before readiness"
       ]
     }
   ],
