@@ -647,6 +647,18 @@ does not publish this key policy; the operator-owned migration runbook is the du
   valuation and aggregation pending/processing/stale/failed count reached zero. The pre-existing
   eight DLQ records did not increase. This is live acceptance for the reseed-fence slice, not the
   remaining daily/recovery/poison/duplicate/correction/restatement acceptance of #795.
+- Exact-main daily certification task
+  `eng-task-20260809-192100-lotus-core-certification-make-profile-derived-state-daily` built the
+  exact source and completed isolated migration/startup, but produced no bank-day artifact and
+  exited before workload evidence. A bounded live diagnostic exposed the source-contract drift:
+  the bank-day generator still emitted date-only `transaction_date` values after ingestion began
+  enforcing governed timezone-aware transaction instants. The correction preserves the business
+  date separately and emits its start-of-day UTC instant. Same-pattern scanning found the other
+  operational transaction producers already emit aware UTC values. Reused-stack diagnostic
+  `20260809T114049Z` then passed with exact `10` transactions/jobs/snapshots/position rows, two
+  portfolio rows, exact quantity and market-value reconciliation, attempts `2/2`, zero repeats,
+  closed valuation/aggregation queues, and no failures. This proves the generator correction only;
+  it does not substitute for the 100,000-transaction certifying profile.
 
 Implementation commits include `23fc6faf3`, `d51adb739`, `ad1ad179d`, `57f8c60e2`,
 `4f05be9a5`, `c230d660a`, `f42f6eaa3`, `d56e14dbf`, `2d49fc8f1`, `70ae16f0f`,
@@ -729,3 +741,9 @@ topics, partition counts, consumer concurrency, APIs, event schemas, database sc
 or runtime settings. The existing load command is unchanged, and this review/context update is
 sufficient durable guidance; no OpenAPI, migration, operator-runbook, or authored wiki change is
 required.
+The bank-day temporal-input correction changes only repository-owned workload payload generation.
+It aligns `transaction_date` with the already-governed ingestion/event contract while preserving
+the separate business/trade date, transaction identities, workload volume, ordering keys, APIs,
+OpenAPI, events, database schemas, calculations, Kafka configuration, and production runtime. The
+existing command and operator procedure are unchanged; repository context and this review own the
+repeatable rule, so no migration, runbook, or authored wiki change is required.

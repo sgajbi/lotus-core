@@ -368,6 +368,18 @@ def _build_portfolios(
     ]
 
 
+def _governed_transaction_timestamp(trade_date: str) -> str:
+    """Represent a workload business date as the canonical start-of-day UTC instant."""
+
+    trade_day = date.fromisoformat(trade_date)
+    return datetime(
+        trade_day.year,
+        trade_day.month,
+        trade_day.day,
+        tzinfo=UTC,
+    ).isoformat().replace("+00:00", "Z")
+
+
 def _build_instrument_specs(*, run_id: str, instrument_count: int) -> list[InstrumentSpec]:
     specs: list[InstrumentSpec] = []
     for index in range(instrument_count):
@@ -448,6 +460,7 @@ def iter_transaction_batches(
 ) -> Iterable[list[dict[str, Any]]]:
     batch: list[dict[str, Any]] = []
     sequence = 1
+    transaction_timestamp = _governed_transaction_timestamp(trade_date)
     for portfolio in portfolios:
         portfolio_id = portfolio["portfolio_id"]
         for spec in specs:
@@ -457,7 +470,7 @@ def iter_transaction_batches(
                     "portfolio_id": portfolio_id,
                     "instrument_id": spec.security_id,
                     "security_id": spec.security_id,
-                    "transaction_date": trade_date,
+                    "transaction_date": transaction_timestamp,
                     "transaction_type": "BUY",
                     "quantity": "1",
                     "price": f"{spec.trade_price:.2f}",
