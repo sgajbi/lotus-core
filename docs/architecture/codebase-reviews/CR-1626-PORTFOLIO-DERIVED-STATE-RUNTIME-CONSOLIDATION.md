@@ -317,9 +317,10 @@ explicit no-change decisions because this cutover changes internal runtime topol
 
 ## Remaining Work
 
-1. Run the managed daily, market-price burst, and backdated profiles; fix #791 and run the separate
-   FX correction profile. Compare both stage p50/p95/p99/max results against the configured lease
-   duration and use the longest measured owned-job duration to finalize fixed expiry versus
+1. Run the managed daily, market-price burst/restatement, and FX-restatement profiles at the current
+   source. #791 is already verified closed on exact main; its retained FX baseline does not replace
+   current-source certification. Compare both stage p50/p95/p99/max results against the configured
+   lease duration and use the longest measured owned-job duration to finalize fixed expiry versus
    heartbeat renewal.
 2. Run remaining duplicate, poison, stale-lease, concurrency, load, release, and exact-main
    validation before closing #714.

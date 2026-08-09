@@ -51,3 +51,16 @@ def test_end_state_vision_distinguishes_implemented_topology_from_pending_certif
     ) in vision
     assert "Implemented as one derived-state deployable with separate modules" in vision
     assert "Target candidate combining generator and aggregation" not in vision
+
+
+def test_fx_correction_docs_preserve_verified_main_closure_and_current_rerun_requirement() -> None:
+    paths = (
+        REPO_ROOT / "docs/features/portfolio-derived-state/operations-runbook.md",
+        REPO_ROOT / "wiki/Timeseries-and-Aggregation.md",
+    )
+    for path in paths:
+        content = path.read_text(encoding="utf-8")
+        assert "c44d863bb849eddb7c751dab4a02d1be18a3d75f" in content
+        assert "29475491036" in content
+        assert "current-source FX restatement rerun" in content
+        assert "#791 is locally fixed pending" not in content

@@ -131,7 +131,10 @@ Local certifying run `20260715T233241Z` passed the exact five-business-date FX c
 affected snapshot, valuation-job, and position-series refreshes; 500 portfolio-series refreshes;
 one source observation and one pair replay; exact market value and unrealized price/FX/total P&L;
 measured stop/restart recovery; closed queues; zero failures; and complete resource evidence. Issue
-#791 is locally fixed pending PR, CI, exact-main validation, and QA closure.
+#791 is verified closed on main through PR #797 at exact SHA
+`c44d863bb849eddb7c751dab4a02d1be18a3d75f` and Main Releasability run `29475491036`. This remains
+the retained FX baseline; #714 requires a current-source FX restatement rerun with the rest of its
+certification matrix.
 
 Valuation dispatch is capped by `VALUATION_SCHEDULER_MAX_IN_FLIGHT_JOBS` across scheduler replicas,
 so Kafka backlog cannot grow into false stale-worker failures. App-local workloads use eight
