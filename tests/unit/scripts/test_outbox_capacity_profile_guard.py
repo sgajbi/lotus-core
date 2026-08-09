@@ -36,3 +36,25 @@ def test_outbox_capacity_profile_rejects_runtime_binding_drift() -> None:
 
     assert any(finding.get("binding") == "development" for finding in findings)
     assert any(finding.get("binding") == "production_safe_baseline" for finding in findings)
+
+
+def test_outbox_capacity_profile_rejects_missing_failure_mode_evidence() -> None:
+    contract = deepcopy(_load_json(REPO_ROOT / CONTRACT_PATH))
+    del contract["acceptance_evidence"]["broker_timeout"]
+
+    findings = validate_outbox_capacity_contract(contract, repo_root=REPO_ROOT)
+
+    assert {"missing_acceptance_evidence": ["broker_timeout"]} in findings
+
+
+def test_outbox_capacity_profile_rejects_missing_test_node() -> None:
+    contract = deepcopy(_load_json(REPO_ROOT / CONTRACT_PATH))
+    missing_ref = "tests/unit/scripts/test_outbox_capacity_profile_guard.py::test_missing"
+    contract["acceptance_evidence"]["broker_timeout"] = [missing_ref]
+
+    findings = validate_outbox_capacity_contract(contract, repo_root=REPO_ROOT)
+
+    assert {
+        "acceptance_evidence": "broker_timeout",
+        "missing_references": [missing_ref],
+    } in findings

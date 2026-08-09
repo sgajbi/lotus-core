@@ -31,6 +31,16 @@ REQUIRED_ENVIRONMENT_KEYS = {
     "OUTBOX_DISPATCHER_RETRY_JITTER_SECONDS",
 }
 REQUIRED_BINDINGS = {"development", "ci", "production_safe_baseline"}
+REQUIRED_ACCEPTANCE_EVIDENCE = {
+    "duplicate_prevention",
+    "dispatcher_restart",
+    "expired_claim_recovery",
+    "partial_kafka_acknowledgements",
+    "broker_timeout",
+    "database_rollback",
+    "terminal_failure",
+    "claim_token_fencing",
+}
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -77,6 +87,34 @@ def _kubernetes_literals(path: Path) -> list[dict[str, int]]:
                     values[str(name)] = int(value)
             deployments.append(values)
     return deployments
+
+
+def _make_targets(repo_root: Path) -> set[str]:
+    target_pattern = re.compile(r"^([A-Za-z0-9_.-]+):(?:\s|$)")
+    return {
+        match.group(1)
+        for line in (repo_root / "Makefile").read_text(encoding="utf-8").splitlines()
+        if (match := target_pattern.match(line)) is not None
+    }
+
+
+def _evidence_ref_exists(ref: str, *, repo_root: Path, make_targets: set[str]) -> bool:
+    if ref.startswith("make "):
+        return ref.removeprefix("make ").split()[0] in make_targets
+    path_value, separator, test_name = ref.partition("::")
+    path = repo_root / path_value
+    if not path.is_file():
+        return False
+    if not separator:
+        return True
+    return (
+        re.search(
+            rf"^(?:async\s+)?def\s+{re.escape(test_name)}\s*\(",
+            path.read_text(encoding="utf-8"),
+            flags=re.MULTILINE,
+        )
+        is not None
+    )
 
 
 def _validate_profile(profile_name: str, profile: object) -> list[dict[str, Any]]:
@@ -233,6 +271,26 @@ def validate_outbox_capacity_contract(
                             "actual": actual,
                         }
                     )
+    acceptance_evidence = contract.get("acceptance_evidence")
+    if not isinstance(acceptance_evidence, dict):
+        return [*findings, {"missing": "acceptance_evidence"}]
+    missing_acceptance_evidence = sorted(REQUIRED_ACCEPTANCE_EVIDENCE - acceptance_evidence.keys())
+    if missing_acceptance_evidence:
+        findings.append({"missing_acceptance_evidence": missing_acceptance_evidence})
+    make_targets = _make_targets(repo_root)
+    for failure_mode, references in acceptance_evidence.items():
+        if not isinstance(references, list) or not references:
+            findings.append({"acceptance_evidence": failure_mode, "missing": "references"})
+            continue
+        missing_refs = sorted(
+            str(ref)
+            for ref in references
+            if not _evidence_ref_exists(str(ref), repo_root=repo_root, make_targets=make_targets)
+        )
+        if missing_refs:
+            findings.append(
+                {"acceptance_evidence": failure_mode, "missing_references": missing_refs}
+            )
     return findings
 
 
