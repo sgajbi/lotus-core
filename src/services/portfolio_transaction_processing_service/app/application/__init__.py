@@ -11,6 +11,10 @@ from .commands import (
     TransactionEventMetadata,
     TransactionProcessingIntent,
 )
+from .corporate_action_event_graph import (
+    RegisterCorporateActionChildObservationUseCase,
+    RegisterCorporateActionManifestUseCase,
+)
 from .corporate_action_reconciliation import (
     CORPORATE_ACTION_RECONCILIATION_TYPE,
     CorporateActionReconciliationCoordinator,
@@ -60,6 +64,8 @@ __all__ = [
     "CorporateActionReconciliationFindingType",
     "CorporateActionReconciliationReasonCode",
     "CorporateActionReconciliationRunEvidence",
+    "RegisterCorporateActionChildObservationUseCase",
+    "RegisterCorporateActionManifestUseCase",
     "ProcessTransactionCommand",
     "ProcessTransactionCashflowUseCase",
     "ProcessTransactionResult",

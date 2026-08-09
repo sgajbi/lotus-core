@@ -6,7 +6,10 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from portfolio_common.database_models import CorporateActionEventRecord
+from portfolio_common.database_models import (
+    CorporateActionChildObservationRecord,
+    CorporateActionEventRecord,
+)
 from portfolio_common.domain.calculation_lineage import FinancialSourceReference
 
 from src.services.portfolio_transaction_processing_service.app.domain.transaction import (
@@ -26,6 +29,8 @@ SqlAlchemyCorporateActionEventGraphRepository = (
     repository_module.SqlAlchemyCorporateActionEventGraphRepository
 )
 _manifest_json_payload = repository_module._manifest_json_payload
+_child_from_observation = repository_module._child_from_observation
+_require_valid_manifest_chain = repository_module._require_valid_manifest_chain
 ConflictingCorporateActionManifestError = port_module.ConflictingCorporateActionManifestError
 CorporateActionManifestAppendOutcome = port_module.CorporateActionManifestAppendOutcome
 
@@ -135,14 +140,30 @@ async def test_append_serializes_then_bulk_persists_and_advances_one_state() -> 
     repository._latest_observed_children = AsyncMock(  # type: ignore[method-assign]
         return_value=()
     )
+
+    async def advance_event(event_record, **_kwargs) -> None:
+        calls.append("advance")
+        event_record.state_version += 1
+
     repository._advance_event = AsyncMock(  # type: ignore[method-assign]
-        side_effect=lambda *_args, **_kwargs: calls.append("advance")
+        side_effect=advance_event
+    )
+    repository._insert_readiness_evaluation = AsyncMock(  # type: ignore[method-assign]
+        side_effect=lambda **_kwargs: calls.append("evaluation")
     )
 
     outcome = await repository.append_manifest(manifest)
 
     assert outcome is CorporateActionManifestAppendOutcome.APPENDED
-    assert calls == ["lock", "event", "manifest", "nodes", "edges", "advance"]
+    assert calls == [
+        "lock",
+        "event",
+        "manifest",
+        "nodes",
+        "edges",
+        "advance",
+        "evaluation",
+    ]
     node_args = repository._insert_nodes.await_args.args
     assert node_args[0] == 101
     assert node_args[2] == {"CA-SOURCE-001": 0, "CA-TARGET-001": 1}
@@ -151,6 +172,7 @@ async def test_append_serializes_then_bulk_persists_and_advances_one_state() -> 
         manifest_version=1,
         readiness_status=CorporateActionManifestReadinessStatus.AWAITING_CHILDREN,
     )
+    assert repository._insert_readiness_evaluation.await_args.kwargs["state_version"] == 1
 
 
 @pytest.mark.asyncio
@@ -207,3 +229,59 @@ def test_manifest_json_payload_uses_canonical_timezone_text() -> None:
 
     assert isinstance(source, dict)
     assert source["observed_at"] == "2026-08-09T01:00:00+00:00"
+
+
+def test_observation_reconstruction_rejects_relational_identity_drift() -> None:
+    child = _manifest().expected_children[0]
+    record = MagicMock(spec=CorporateActionChildObservationRecord)
+    record.transaction_id = "CA-DIFFERENT-001"
+    record.observed_payload = child.lineage_payload()
+    record.observed_content_hash = child.content_hash
+
+    with pytest.raises(ConflictingCorporateActionManifestError, match="identity is inconsistent"):
+        _child_from_observation(record)
+
+
+def test_manifest_chain_accepts_root_and_contiguous_successor() -> None:
+    root = _manifest_record(version=1, record_id=11, content_hash="a" * 64)
+    successor = _manifest_record(
+        version=2,
+        record_id=12,
+        content_hash="b" * 64,
+        previous_id=11,
+        previous_hash="a" * 64,
+    )
+
+    _require_valid_manifest_chain(root, (root,))
+    _require_valid_manifest_chain(successor, (root, successor))
+
+
+def test_manifest_chain_rejects_incorrect_predecessor_hash() -> None:
+    root = _manifest_record(version=1, record_id=11, content_hash="a" * 64)
+    successor = _manifest_record(
+        version=2,
+        record_id=12,
+        content_hash="b" * 64,
+        previous_id=11,
+        previous_hash="f" * 64,
+    )
+
+    with pytest.raises(ConflictingCorporateActionManifestError, match="chain is inconsistent"):
+        _require_valid_manifest_chain(successor, (root, successor))
+
+
+def _manifest_record(
+    *,
+    version: int,
+    record_id: int,
+    content_hash: str,
+    previous_id: int | None = None,
+    previous_hash: str | None = None,
+) -> MagicMock:
+    record = MagicMock(spec=repository_module.CorporateActionManifestVersionRecord)
+    record.id = record_id
+    record.manifest_version = version
+    record.manifest_content_hash = content_hash
+    record.previous_manifest_id = previous_id
+    record.previous_manifest_content_hash = previous_hash
+    return record
