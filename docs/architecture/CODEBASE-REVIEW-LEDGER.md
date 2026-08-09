@@ -6,11 +6,16 @@ repeats and 1,007 snapshot publications. Core now snapshots the maximum committe
 readiness outbox ID when claiming a valuation job and accepts rearm/requeue authority only from a
 newer positive delivered sequence. Review then removed transport-header initialization of claimed
 authority and made malformed-present sequences fail closed before idempotency. Eleven live
-PostgreSQL cases prove commit visibility, replay,
-retention, scope isolation, delimiter-collision safety, rollback gaps, and concurrent publication.
-Migration `c150b2c3d517` adds the default-zero monotonic watermark. No API/OpenAPI or Kafka payload
-shape changes; CR-1630 contains the detailed evidence and certification remains pending an
-exact-head fan-in rerun.
+PostgreSQL cases prove commit visibility, replay, retention, scope isolation, delimiter-collision
+safety, rollback gaps, and concurrent publication. Migration `c150b2c3d517` adds the default-zero
+monotonic watermark. A 10,000-row live query-plan guard requires the aggregate-ID index and rejects
+a sequential scan. The ordinary readiness path now keeps its advisory lock separate but atomically
+captures existing state, upserts the current epoch, and claims completion, reducing serial database
+calls from four to two. Exact-head fan-in at signed `640603322` reconciled all 1,000 rows with
+attempts `2/2`, zero repeats, closed jobs/outbox, and `80.982s` drain versus `115.998s` before
+(30.19% lower). No API/OpenAPI, Kafka payload, calculation, partition, or operator-command shape
+changed; CR-1630 contains detailed evidence and the exact-head 100,000-transaction daily profile is
+now the remaining capacity decision.
 
 CR-1681 report-only technology-governance pilot (2026-08-09): issue #917 maps every
 dependency artifact, container identity field, container artifact, vulnerability severity, and
