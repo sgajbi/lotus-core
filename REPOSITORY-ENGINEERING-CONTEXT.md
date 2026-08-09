@@ -2695,7 +2695,21 @@ Most relevant current governance:
      content hash, every declared node's latest observed content hash, deterministic node order,
      and the declared forward-only edge graph. Retain correction-safe multiple READY evaluations
      across state versions; do not restore a lifetime one-READY-per-manifest constraint or permit
-     historical ledger mutation.
+     historical ledger mutation. Parent-manifest persistence belongs behind
+     `app.ports.corporate_action_event_graph` and the transaction-service-owned SQLAlchemy adapter,
+     not in `portfolio_common`. Resolve tenant/legal-book scope from the governed portfolio, acquire
+     deterministically ordered event-id and parent-identity advisory locks before root/head reads,
+     append each node/edge cohort in one bulk statement, classify exact replay versus
+     source/version/content conflict, and CAS both `state_version` and `current_manifest_version`.
+     Keep the complete mutation behind a savepoint so a typed CAS loser cannot strand graph rows if
+     the caller catches the conflict and commits other UoW work. Reconstruct and hash-verify
+     immutable source truth, declared edge count, and deterministic execution ordinals after
+     restart. Canonical payloads carry an independent serializer version; canonicalize
+     timezone-aware source timestamps to UTC in stored JSON so equivalent instants do not become
+     false integrity conflicts. Manifest append resolves latest child epochs in one bounded bulk
+     read so child-before-manifest and corrected-manifest recovery cannot remain falsely awaiting.
+     The repository never commits; ingress and later observation/readiness activation use
+     caller-owned atomic UoWs.
 176. Transaction and product lifecycle publication is governed by
      `contracts/transaction-processing/transaction-capability-catalog.v1.json`, refreshed with
      `python scripts/transaction_processing/generate_capability_catalog.py`, and blocked by

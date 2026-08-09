@@ -261,6 +261,22 @@ def test_manifest_content_hash_is_independent_of_expected_child_order() -> None:
     )
 
 
+def test_manifest_and_child_expose_the_exact_canonical_persistence_payload() -> None:
+    manifest = _manifest()
+    payload = manifest.lineage_payload()
+
+    assert payload["canonical_payload_version"] == 1
+    first_child = manifest.expected_children[0]
+
+    assert payload["portfolio_id"] == manifest.portfolio_id
+    assert payload["source_reference"] == manifest.source_reference.lineage_payload()
+    persisted_children = payload["expected_children"]
+    assert isinstance(persisted_children, list)
+    assert first_child.lineage_payload() in persisted_children
+    assert first_child.lineage_payload()["canonical_payload_version"] == 1
+    assert len(first_child.content_hash) == 64
+
+
 def test_manifest_identity_and_observation_ignore_dependency_declaration_order() -> None:
     children = _children()
     reordered_cash = replace(

@@ -102,28 +102,29 @@ class CorporateActionParentManifest:
     def content_hash(self) -> str:
         """Bind parent identity, expected nodes/edges and source-version evidence."""
 
-        return cast(
-            str,
-            canonical_content_hash(
-                {
-                    "completion_declared": self.completion_declared,
-                    "corporate_action_event_id": self.corporate_action_event_id,
-                    "corporate_action_type": self.corporate_action_type,
-                    "expected_children": [
-                        _child_payload(child)
-                        for child in sorted(
-                            self.expected_children,
-                            key=lambda value: value.transaction_id,
-                        )
-                    ],
-                    "linked_transaction_group_id": self.linked_transaction_group_id,
-                    "parent_event_reference": self.parent_event_reference,
-                    "portfolio_id": self.portfolio_id,
-                    "source_reference": self.source_reference.lineage_payload(),
-                    "version": self.version,
-                }
-            ),
-        )
+        return cast(str, canonical_content_hash(self.lineage_payload()))
+
+    def lineage_payload(self) -> dict[str, object]:
+        """Return the closed canonical parent-manifest representation."""
+
+        return {
+            "canonical_payload_version": 1,
+            "completion_declared": self.completion_declared,
+            "corporate_action_event_id": self.corporate_action_event_id,
+            "corporate_action_type": self.corporate_action_type,
+            "expected_children": [
+                child.lineage_payload()
+                for child in sorted(
+                    self.expected_children,
+                    key=lambda value: value.transaction_id,
+                )
+            ],
+            "linked_transaction_group_id": self.linked_transaction_group_id,
+            "parent_event_reference": self.parent_event_reference,
+            "portfolio_id": self.portfolio_id,
+            "source_reference": self.source_reference.lineage_payload(),
+            "version": self.version,
+        }
 
 
 @dataclass(frozen=True, slots=True)
@@ -438,16 +439,7 @@ def _semantic_findings(
 
 
 def _child_payload(child: CorporateActionEventChild) -> dict[str, object]:
-    return {
-        "child_role": child.child_role,
-        "child_sequence_hint": child.child_sequence_hint,
-        "dependency_transaction_ids": sorted(child.dependency_transaction_ids),
-        "instrument_id": child.instrument_id,
-        "source_instrument_id": child.source_instrument_id,
-        "target_instrument_id": child.target_instrument_id,
-        "transaction_id": child.transaction_id,
-        "transaction_type": child.transaction_type,
-    }
+    return child.lineage_payload()
 
 
 def _observed_identity_findings(

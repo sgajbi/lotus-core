@@ -243,6 +243,18 @@ def test_corporate_action_event_graph_apply_constraints_and_rollback(
                 "parent_reference": "CA-PARENT-DB-INVALID",
             },
         )
+        _expect_integrity_error(
+            connection,
+            text(
+                """
+                UPDATE corporate_action_events
+                SET parent_event_reference = 'CA-PARENT-DB-TAMPERED'
+                WHERE id = :event_id
+                """
+            ),
+            {"event_id": event_id},
+            match="event identity is immutable",
+        )
 
         manifest_insert = text(
             """

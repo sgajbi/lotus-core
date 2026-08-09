@@ -7,6 +7,12 @@ from .cashflow import (
     CashflowProcessingStatePort,
     CashflowRuleResolutionPort,
 )
+from .corporate_action_event_graph import (
+    ConflictingCorporateActionManifestError,
+    CorporateActionBookScopeError,
+    CorporateActionEventGraphPort,
+    CorporateActionManifestAppendOutcome,
+)
 from .corporate_action_reconciliation import (
     CorporateActionReconciliationEvidence,
     CorporateActionReconciliationFindingEvidence,
@@ -132,6 +138,10 @@ __all__ = [
     "CorporateActionReconciliationObserver",
     "CorporateActionReconciliationRepository",
     "CorporateActionReconciliationRunEvidence",
+    "ConflictingCorporateActionManifestError",
+    "CorporateActionBookScopeError",
+    "CorporateActionEventGraphPort",
+    "CorporateActionManifestAppendOutcome",
     "CostProcessingPort",
     "CostProcessingResult",
     "ForeignExchangeTransactionPersistencePort",

@@ -6,6 +6,9 @@ import hashlib
 import json
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import cast
+
+from portfolio_common.domain.calculation_lineage import canonical_content_hash
 
 from ..event_graph import (
     DirectedEventGraphReason,
@@ -91,6 +94,27 @@ class CorporateActionEventChild:
                 field_name,
                 _required_text(value, field_name),
             )
+
+    def lineage_payload(self) -> dict[str, object]:
+        """Return the canonical child definition used by manifests and persistence."""
+
+        return {
+            "canonical_payload_version": 1,
+            "child_role": self.child_role,
+            "child_sequence_hint": self.child_sequence_hint,
+            "dependency_transaction_ids": sorted(self.dependency_transaction_ids),
+            "instrument_id": self.instrument_id,
+            "source_instrument_id": self.source_instrument_id,
+            "target_instrument_id": self.target_instrument_id,
+            "transaction_id": self.transaction_id,
+            "transaction_type": self.transaction_type,
+        }
+
+    @property
+    def content_hash(self) -> str:
+        """Bind one normalized child definition to a stable SHA-256 identity."""
+
+        return cast(str, canonical_content_hash(self.lineage_payload()))
 
 
 @dataclass(frozen=True, slots=True)
