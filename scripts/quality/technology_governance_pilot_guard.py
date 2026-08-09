@@ -79,8 +79,27 @@ def load_manifest(path: Path = MANIFEST_PATH) -> dict[str, Any]:
     return payload
 
 
+@lru_cache(maxsize=None)
+def _git_file_content(root: Path, commit: str, evidence_path: str) -> str:
+    result = subprocess.run(
+        ["git", "show", f"{commit}:{evidence_path}"],
+        cwd=root,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode:
+        raise ValueError(evidence_path)
+    return result.stdout
+
+
 def _validate_local_evidence(
-    evidence: dict[str, Any], *, root: Path, location: str, errors: list[str]
+    evidence: dict[str, Any],
+    *,
+    root: Path,
+    location: str,
+    inspected_commit: str,
+    errors: list[str],
 ) -> None:
     evidence_path = evidence.get("path")
     if not isinstance(evidence_path, str) or not evidence_path:
@@ -103,7 +122,13 @@ def _validate_local_evidence(
     ):
         errors.append(f"{location}: anchors must be non-empty strings")
         return
-    content = candidate.read_text(encoding="utf-8")
+    try:
+        content = _git_file_content(root, inspected_commit, evidence_path)
+    except ValueError:
+        errors.append(
+            f"{location}: evidence file does not exist at inspected_core_commit: {evidence_path}"
+        )
+        return
     for anchor in anchors:
         if anchor not in content:
             errors.append(f"{location}: {evidence_path} is missing anchor {anchor!r}")
@@ -127,7 +152,13 @@ def _validate_evidence_refs(
             continue
         kind = evidence.get("kind")
         if kind == "local_file":
-            _validate_local_evidence(evidence, root=root, location=ref_location, errors=errors)
+            _validate_local_evidence(
+                evidence,
+                root=root,
+                location=ref_location,
+                inspected_commit=inspected_commit,
+                errors=errors,
+            )
         elif kind == "github_run":
             _validate_github_run_evidence(
                 evidence,
@@ -303,7 +334,7 @@ def _validate_manifest_identity(manifest: dict[str, Any], *, root: Path, errors:
     if not isinstance(inspected_commit, str) or not FULL_SHA_PATTERN.fullmatch(inspected_commit):
         errors.append("inspected_core_commit must be a full Git SHA")
         return ""
-    if not _git_commit_resolves(root, inspected_commit) and not _is_shallow_repository(root):
+    if not _git_commit_resolves(root, inspected_commit):
         errors.append("inspected_core_commit must resolve to a Core commit")
     return inspected_commit
 
@@ -316,17 +347,6 @@ def _git_commit_resolves(root: Path, commit: str) -> bool:
         capture_output=True,
     )
     return result.returncode == 0
-
-
-def _is_shallow_repository(root: Path) -> bool:
-    result = subprocess.run(
-        ["git", "rev-parse", "--is-shallow-repository"],
-        cwd=root,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    return result.returncode == 0 and result.stdout.strip() == "true"
 
 
 def _validate_policy_ref(manifest: dict[str, Any], errors: list[str]) -> dict[str, Any] | None:

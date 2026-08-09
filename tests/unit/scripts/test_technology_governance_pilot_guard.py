@@ -64,6 +64,58 @@ def test_empty_evidence_anchors_fail() -> None:
     assert any("anchors must be non-empty strings" in error for error in errors)
 
 
+def test_local_evidence_is_read_from_inspected_commit_not_worktree(tmp_path: Path) -> None:
+    repository = tmp_path / "repository"
+    repository.mkdir()
+    subprocess.run(["git", "init"], cwd=repository, check=True, capture_output=True)
+    evidence_path = repository / "evidence.txt"
+    evidence_path.write_text("inspected authority\n", encoding="utf-8")
+    subprocess.run(["git", "add", "evidence.txt"], cwd=repository, check=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=Lotus Test",
+            "-c",
+            "user.email=lotus-test@example.invalid",
+            "commit",
+            "-m",
+            "evidence baseline",
+        ],
+        cwd=repository,
+        check=True,
+        capture_output=True,
+    )
+    inspected_commit = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=repository,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    evidence_path.write_text("current worktree drift\n", encoding="utf-8")
+
+    inspected_errors: list[str] = []
+    guard._validate_local_evidence(
+        {"path": "evidence.txt", "anchors": ["inspected authority"]},
+        root=repository,
+        location="evidence",
+        inspected_commit=inspected_commit,
+        errors=inspected_errors,
+    )
+    drift_errors: list[str] = []
+    guard._validate_local_evidence(
+        {"path": "evidence.txt", "anchors": ["current worktree drift"]},
+        root=repository,
+        location="evidence",
+        inspected_commit=inspected_commit,
+        errors=drift_errors,
+    )
+
+    assert inspected_errors == []
+    assert any("missing anchor" in error for error in drift_errors)
+
+
 def test_actionable_posture_requires_canonical_issue() -> None:
     manifest = copy.deepcopy(_manifest())
     mappings = manifest["container_artifacts"]
@@ -130,25 +182,13 @@ def test_github_run_evidence_is_numeric_and_bound_to_inspected_commit() -> None:
     assert any("must match inspected_core_commit" in error for error in errors)
 
 
-def test_inspected_commit_must_resolve_in_core(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_inspected_commit_must_resolve_in_core() -> None:
     manifest = copy.deepcopy(_manifest())
     manifest["inspected_core_commit"] = "f" * 40
-    monkeypatch.setattr(guard, "_is_shallow_repository", lambda *_args: False)
 
     errors = guard.validate_manifest(manifest)
 
     assert any("must resolve to a Core commit" in error for error in errors)
-
-
-def test_shallow_checkout_uses_run_binding_instead_of_absent_ancestor(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(guard, "_git_commit_resolves", lambda *_args: False)
-    monkeypatch.setattr(guard, "_is_shallow_repository", lambda *_args: True)
-
-    errors = guard.validate_manifest(_manifest())
-
-    assert not any("must resolve to a Core commit" in error for error in errors)
 
 
 def test_online_receipt_verification_rejects_missing_artifact(
