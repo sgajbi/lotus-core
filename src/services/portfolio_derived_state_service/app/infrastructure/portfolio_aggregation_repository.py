@@ -420,7 +420,7 @@ class PortfolioAggregationRepository(TimeseriesMarketDataReader):
                     func.min(PortfolioAggregationJob.created_at)
                     .filter(PortfolioAggregationJob.status == "PENDING")
                     .label("oldest_pending_created_at"),
-                )
+                ).where(PortfolioAggregationJob.status.in_(("PENDING", "FAILED")))
             )
         ).one()
         return {
