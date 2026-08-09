@@ -671,13 +671,24 @@ does not publish this key policy; the operator-owned migration runbook is the du
   returned `0.208127s / 0.77536835s / 1.08417709s`; `EXPLAIN (ANALYZE, BUFFERS)` used a backward
   `outbox_events_pkey` scan, limited exactly 10,000 rows, and completed in `63.624ms` without a new
   index or migration. Exact pending/retry/failed totals and topic cohorts remain full-table evidence.
+- #794 now owns one machine-readable `docs/standards/outbox-capacity-profile.v1.json` capacity
+  profile for development, CI, and the two consolidated production runtimes. It binds the candidate
+  `1s/1000` cadence with the complete claim, shutdown, and retry settings.
+  `make outbox-capacity-profile-guard` cross-checks Kafka delivery and runtime supervision constants
+  and rejects deployment drift. The profile remains
+  `candidate_pending_exact_source` until the final current-source daily receipt passes.
+- Capacity evidence now retains low-cardinality producer aggregate-type/topic cohorts from the
+  existing topic query and fails closed when cohort, topic, and final status totals diverge. Live
+  `EXPLAIN (ANALYZE, BUFFERS)` completed the extended query in `187.430ms` versus `218.392ms` for
+  the prior topic-only query on the active amplified table; both used the same parallel sequential
+  scan and tiny 24–26kB aggregates, so no index or migration was added.
 
 Implementation commits include `23fc6faf3`, `d51adb739`, `ad1ad179d`, `57f8c60e2`,
 `4f05be9a5`, `c230d660a`, `f42f6eaa3`, `d56e14dbf`, `2d49fc8f1`, `70ae16f0f`,
 `a3c9eeaac`, `b7e7e1be2`, `35fb5d84f`, `20333978a`, `37abbf19b`, `6640ec911`, `37ffa2fad`, and
 `45295cf24`, `a8d6ee302`, `704358fe0`, `e79496822`, `2f34dcd1c`, `92d4eedea`,
 `d7ae37da2`, `4c0289900`, `2fb5ecb09`, and `c79bf0afe`. Evidence alignment continues through
-`c79bf0afe`; human
+`c79bf0afe`; #794 capacity governance continues through `39b9aac48` and `29e63a1eb`; human
 contract/context alignment starts in `9d6dbbbf9`.
 
 ## Documentation Decision

@@ -2956,6 +2956,12 @@ Most relevant current governance:
      include monotonic recent publication-age p50/p95/p99 and an observed processed-event throughput
      window. Bound the age percentile query to the newest 10,000 primary-key rows; do not restore a
      repeated full-outbox percentile sort. Pending/retry/failed totals and topic cohorts stay exact.
+     Govern development, CI, and production-safe dispatcher values through
+     `docs/standards/outbox-capacity-profile.v1.json` and
+     `make outbox-capacity-profile-guard`; do not let production silently fall back to the shared
+     `5s/50` compatibility defaults. Certifying reports must also retain bounded
+     `(producer aggregate type, topic, count)` cohorts and reject missing or count-divergent
+     attribution without adding business identifiers or another database sampling query.
 198. Position-state acquisition must use the conflict-aware insert result as the authoritative
      newly-created state and perform a fallback read only when another transaction already owns the
      natural key. Preserve one state row per portfolio/security/account boundary, caller-owned

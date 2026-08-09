@@ -117,7 +117,12 @@ valuation orchestration is stopped, restores the service, and certifies the reco
 execution requires building the exact branch source and fails fast if existing images are selected.
 Certifying reports require monotonic recent outbox publication-age p50/p95/p99 and observed
 processed-event throughput. Publication-age sampling is bounded to the newest 10,000 primary-key
-rows; exact pending/retry/failed totals and topic cohorts remain unbounded truth.
+rows; exact pending/retry/failed totals and topic cohorts remain unbounded truth. The same report
+retains bounded producer-aggregate/topic cohorts and fails closed when their counts diverge from
+topic or final status totals. Development, CI, and production dispatcher values are bound through
+the single `docs/standards/outbox-capacity-profile.v1.json` contract and
+`make outbox-capacity-profile-guard`; its `1s/1000` profile remains a candidate until exact-source
+daily certification passes.
 If managed startup, migration, recovery, or poison orchestration fails before the normal report,
 the gate writes an atomic `lotus.managed-gate-orchestration-failure.v1` JSON receipt with the
 failed phase and owned Compose/log context. Credentials are redacted, the original error is

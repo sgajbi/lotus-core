@@ -62,6 +62,19 @@ close a #714 workload requirement. Certifying profiles fail fast unless `--build
 the repo-native profile targets supply it, so existing/stale local images cannot emit certifying
 evidence.
 
+Dispatcher capacity is governed once in
+`docs/standards/outbox-capacity-profile.v1.json`. Run
+`make outbox-capacity-profile-guard` to prove that development, CI, and the consolidated production
+deployments use the same candidate `1s` poll, `1000` row batch, `130s` claim lease, `150s`
+termination grace, and unchanged three-attempt retry ceiling. The guard cross-checks the Kafka
+delivery fence and supervised shutdown safety bounds and rejects Compose/Kubernetes drift. The
+profile remains `candidate_pending_exact_source` until its current-source 100,000-transaction run
+passes; do not describe the configuration as certified or tune it independently in one environment
+before that receipt exists.
+Certifying evidence also requires monotonic recent publication-age p50/p95/p99, an observed
+processed-event throughput window, exact pending/retry/failed/topic totals, and count-reconciled
+producer cohorts; the newest 10,000 rows bound only the publication-age percentile sample.
+
 Service readiness and seed materialization use separate deadlines. Readiness remains a short
 startup check, while certifying profiles allow up to 600 seconds for source records to become
 durable before transaction submission. Seed timeout failures remain hard failures and do not
@@ -73,7 +86,12 @@ and reads those committed source facts. A delayed source notification also skips
 same-day snapshots were materialized after that source row; a later correction updates the source
 freshness and reopens valuation. Backdated and future source facts still require durable replay. A
 daily run that creates materially more valuation-snapshot events than source position keys must be
-investigated as work amplification rather than accepted by extending the drain deadline.
+investigated as work amplification rather than accepted by extending the drain deadline. Capacity
+evidence retains exact topic totals plus bounded `(producer aggregate type, topic, count)` cohorts
+for created and pending rows. Certifying reports reject absent cohort attribution and any cohort
+total that diverges from topic or final status totals. These are domain-level diagnostic dimensions;
+portfolio, security, transaction, correlation, claim, and other business identifiers must not
+become metric or capacity-report dimensions.
 Likewise, a normal valuation job should have one claim and one completion transition in its
 attempt count. Jobs with repeated normal-lifecycle transitions indicate duplicate scheduling or
 rearm amplification. Different correlation ids are lineage evidence only and must not reopen
