@@ -49,6 +49,12 @@ def _mandate_binding() -> dict:
 def _dpm_portfolio_universe_candidates() -> dict:
     return {
         "product_name": "DpmPortfolioUniverseCandidate",
+        "content_hash": "sha256:" + "1" * 64,
+        "source_digest": "sha256:" + "1" * 64,
+        "source_batch_fingerprint": None,
+        "data_quality_status": "COMPLETE",
+        "source_evidence_current": True,
+        "freshness_status": "CURRENT",
         "supportability": {"state": "READY", "returned_candidate_count": 3},
         "candidates": [
             {
@@ -343,6 +349,36 @@ def test_live_dpm_source_validator_requires_full_candidate_source_scenario() -> 
         "PB_SG_GLOBAL_GROWTH_003",
         "PB_SG_GLOBAL_INC_002",
     ]
+
+
+def test_live_dpm_source_validator_rejects_missing_ready_candidate_content_identity() -> None:
+    candidates = _dpm_portfolio_universe_candidates()
+    candidates.pop("content_hash")
+    candidates.pop("source_digest")
+
+    summary = _run({"/integration/dpm/portfolio-universe/candidates": (200, candidates)})
+
+    failure = next(
+        result
+        for result in summary["failures"]
+        if result["name"] == "dpm_portfolio_universe_candidates_ready"
+    )
+    assert failure["details"]["content_hash"] is None
+    assert failure["details"]["source_digest_matches"] is False
+
+
+def test_live_dpm_source_validator_rejects_fabricated_candidate_batch_lineage() -> None:
+    candidates = _dpm_portfolio_universe_candidates()
+    candidates["source_batch_fingerprint"] = candidates["content_hash"]
+
+    summary = _run({"/integration/dpm/portfolio-universe/candidates": (200, candidates)})
+
+    failure = next(
+        result
+        for result in summary["failures"]
+        if result["name"] == "dpm_portfolio_universe_candidates_ready"
+    )
+    assert failure["details"]["source_batch_fingerprint"] == candidates["content_hash"]
 
 
 def test_live_dpm_source_validator_walks_all_candidate_page_tokens() -> None:

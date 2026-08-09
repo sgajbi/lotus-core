@@ -1,13 +1,16 @@
 """Application use cases for CIO cohorts and DPM portfolio populations."""
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import date, datetime
 from typing import Any, Literal, cast
 
 from portfolio_common.reference_data_paging import ReferencePageMetadata
 from portfolio_common.request_fingerprints import request_fingerprint
 from portfolio_common.runtime_providers import Clock
-from portfolio_common.source_data_product_metadata import source_data_product_runtime_metadata
+from portfolio_common.source_data_product_metadata import (
+    source_data_product_runtime_metadata,
+    stable_content_hash,
+)
 
 from ..contracts.dpm_portfolio_population import (
     CioModelChangeAffectedCohortRequest,
@@ -99,6 +102,7 @@ class DpmPortfolioPopulationService:
         return _universe_response(
             request=request,
             scope=scope,
+            after_sort_key=after_sort_key,
             rows=page_rows,
             has_more=has_more,
             next_page_token=_next_page_token(
@@ -229,6 +233,7 @@ def _universe_response(
     *,
     request: DpmPortfolioUniverseCandidateRequest,
     scope: DpmPortfolioUniverseScope,
+    after_sort_key: tuple[str, str] | None,
     rows: list[DiscretionaryMandatePopulationMember],
     has_more: bool,
     next_page_token: str | None,
@@ -244,11 +249,25 @@ def _universe_response(
         filters.append("active_discretionary_authority")
     state: Literal["READY", "DEGRADED", "INCOMPLETE"] = "READY"
     reason = "DPM_PORTFOLIO_UNIVERSE_READY"
-    quality = "ACCEPTED"
+    quality = "COMPLETE"
     if not candidates:
         state, reason, quality = "INCOMPLETE", "DPM_PORTFOLIO_UNIVERSE_EMPTY", "MISSING"
     elif has_more:
         state, reason, quality = "DEGRADED", "DPM_PORTFOLIO_UNIVERSE_PAGE_PARTIAL", "PARTIAL"
+    elif any(_latest_evidence_timestamp(row) is None for row in rows):
+        state = "DEGRADED"
+        reason = "DPM_PORTFOLIO_UNIVERSE_EVIDENCE_TIME_UNAVAILABLE"
+        quality = "PARTIAL"
+    content_hash = (
+        _ready_universe_content_hash(
+            request=request,
+            scope=scope,
+            after_sort_key=after_sort_key,
+            rows=rows,
+        )
+        if state == "READY"
+        else None
+    )
     return DpmPortfolioUniverseCandidateResponse(
         candidates=candidates,
         page=ReferencePageMetadata(
@@ -293,7 +312,43 @@ def _universe_response(
             quality=quality,
             evidence=rows,
             snapshot_id=f"dpm_portfolio_universe:{scope.fingerprint}",
+            content_hash=content_hash,
         ),
+    )
+
+
+def _ready_universe_content_hash(
+    *,
+    request: DpmPortfolioUniverseCandidateRequest,
+    scope: DpmPortfolioUniverseScope,
+    after_sort_key: tuple[str, str] | None,
+    rows: list[DiscretionaryMandatePopulationMember],
+) -> str:
+    """Bind a complete candidate page to its normalized scope and source evidence."""
+
+    return cast(
+        str,
+        stable_content_hash(
+            {
+                "product_name": "DpmPortfolioUniverseCandidate",
+                "product_version": "v1",
+                "tenant_id": request.tenant_id,
+                "as_of_date": request.as_of_date,
+                "booking_center_code": scope.booking_center_code,
+                "model_portfolio_ids": scope.model_portfolio_ids,
+                "include_inactive_mandates": request.include_inactive_mandates,
+                "page_size": request.page.page_size,
+                "after_sort_key": after_sort_key,
+                "source_rows": [asdict(row) for row in rows],
+            }
+        ),
+    )
+
+
+def _latest_evidence_timestamp(row: Any) -> datetime | None:
+    return max(
+        (value for value in (row.observed_at, row.updated_at, row.created_at) if value is not None),
+        default=None,
     )
 
 
@@ -343,13 +398,9 @@ def _metadata(
     quality: str,
     evidence: list[Any],
     snapshot_id: str,
+    content_hash: str | None = None,
 ) -> dict[str, object]:
-    timestamps = [
-        value
-        for row in evidence
-        for value in (row.observed_at, row.updated_at, row.created_at)
-        if value is not None
-    ]
+    timestamps = [timestamp for row in evidence if (timestamp := _latest_evidence_timestamp(row))]
     return cast(
         dict[str, object],
         source_data_product_runtime_metadata(
@@ -360,5 +411,6 @@ def _metadata(
             latest_evidence_timestamp=max(timestamps, default=None),
             source_batch_fingerprint=None,
             snapshot_id=snapshot_id,
+            content_hash=content_hash,
         ),
     )

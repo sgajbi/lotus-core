@@ -1,8 +1,11 @@
 """Behavior tests for QCP-owned DPM portfolio population products."""
 
+from dataclasses import replace
 from datetime import UTC, date, datetime
 
 import pytest
+from portfolio_common.page_tokens import PageTokenCodec
+from portfolio_common.source_data_product_metadata import SOURCE_METADATA_UNAVAILABLE_HASH
 
 from src.services.query_control_plane_service.app.application.dpm_portfolio_population import (
     DpmPortfolioPopulationService,
@@ -176,6 +179,9 @@ async def test_universe_normalizes_scope_and_emits_bounded_continuation() -> Non
     assert response.supportability.state == "DEGRADED"
     assert response.data_quality_status == "PARTIAL"
     assert response.page.next_page_token == "next-page"
+    assert response.content_hash == SOURCE_METADATA_UNAVAILABLE_HASH
+    assert response.source_digest == SOURCE_METADATA_UNAVAILABLE_HASH
+    assert response.source_batch_fingerprint is None
     assert reader.calls[-1][1]["booking_center_code"] == "Singapore"
     assert reader.calls[-1][1]["model_portfolio_ids"] == ("MODEL_A", "MODEL_B")
     assert reader.calls[-1][1]["limit"] == 2
@@ -218,3 +224,135 @@ async def test_empty_universe_is_explicitly_incomplete() -> None:
     assert response.candidates == []
     assert response.supportability.reason == "DPM_PORTFOLIO_UNIVERSE_EMPTY"
     assert response.data_quality_status == "MISSING"
+    assert response.content_hash == SOURCE_METADATA_UNAVAILABLE_HASH
+    assert response.source_digest == SOURCE_METADATA_UNAVAILABLE_HASH
+    assert response.source_batch_fingerprint is None
+
+
+@pytest.mark.asyncio
+async def test_universe_without_source_evidence_time_fails_closed() -> None:
+    reader = _Reader()
+    reader.universe = [
+        replace(
+            _mandate(),
+            observed_at=None,
+            created_at=None,
+            updated_at=None,
+        )
+    ]
+
+    response = await _service(reader).resolve_universe_candidates(
+        request=DpmPortfolioUniverseCandidateRequest(as_of_date=date(2026, 5, 3))
+    )
+
+    assert response.supportability.state == "DEGRADED"
+    assert response.supportability.reason == "DPM_PORTFOLIO_UNIVERSE_EVIDENCE_TIME_UNAVAILABLE"
+    assert response.content_hash == SOURCE_METADATA_UNAVAILABLE_HASH
+    assert response.source_digest == SOURCE_METADATA_UNAVAILABLE_HASH
+    assert response.source_evidence_current is False
+    assert response.freshness_status == "UNAVAILABLE"
+
+
+@pytest.mark.asyncio
+async def test_ready_universe_publishes_stable_core_owned_content_identity() -> None:
+    request = DpmPortfolioUniverseCandidateRequest(
+        as_of_date=date(2026, 5, 3),
+        tenant_id="default",
+        booking_center_code="Singapore",
+        model_portfolio_ids=["MODEL_PB_SG_GLOBAL_BAL_DPM"],
+        page={"page_size": 500},
+    )
+
+    first = await _service(_Reader()).resolve_universe_candidates(request=request)
+    replay = await _service(_Reader()).resolve_universe_candidates(request=request)
+
+    assert first.supportability.state == "READY"
+    assert first.candidates[0].portfolio_id == "PB_SG_GLOBAL_BAL_001"
+    assert first.content_hash.startswith("sha256:")
+    assert first.content_hash != SOURCE_METADATA_UNAVAILABLE_HASH
+    assert first.source_digest == first.content_hash
+    assert first.source_batch_fingerprint is None
+    assert first.data_quality_status == "COMPLETE"
+    assert first.source_evidence_current is True
+    assert first.freshness_status == "CURRENT"
+    assert replay.content_hash == first.content_hash
+
+
+@pytest.mark.asyncio
+async def test_ready_universe_content_identity_changes_with_source_evidence() -> None:
+    request = DpmPortfolioUniverseCandidateRequest(as_of_date=date(2026, 5, 3))
+    baseline_reader = _Reader()
+    changed_reader = _Reader()
+    changed_reader.universe = [
+        replace(
+            _mandate(),
+            updated_at=datetime(2026, 5, 3, 9, 1, tzinfo=UTC),
+        )
+    ]
+    expanded_reader = _Reader()
+    expanded_reader.universe = [
+        _mandate(),
+        _mandate(portfolio_id="PB_SG_GLOBAL_INC_002", mandate_id="MANDATE_002"),
+    ]
+
+    baseline = await _service(baseline_reader).resolve_universe_candidates(request=request)
+    changed = await _service(changed_reader).resolve_universe_candidates(request=request)
+    expanded = await _service(expanded_reader).resolve_universe_candidates(request=request)
+
+    assert changed.candidates == baseline.candidates
+    assert changed.content_hash != baseline.content_hash
+    assert len(expanded.candidates) == 2
+    assert expanded.content_hash not in {baseline.content_hash, changed.content_hash}
+
+
+@pytest.mark.asyncio
+async def test_ready_universe_content_identity_changes_with_selection_and_page_scope() -> None:
+    reader = _Reader()
+    baseline = await _service(reader).resolve_universe_candidates(
+        request=DpmPortfolioUniverseCandidateRequest(as_of_date=date(2026, 5, 3))
+    )
+    filtered = await _service(reader).resolve_universe_candidates(
+        request=DpmPortfolioUniverseCandidateRequest(
+            as_of_date=date(2026, 5, 3),
+            booking_center_code="Singapore",
+        )
+    )
+    resized = await _service(reader).resolve_universe_candidates(
+        request=DpmPortfolioUniverseCandidateRequest(
+            as_of_date=date(2026, 5, 3),
+            page={"page_size": 500},
+        )
+    )
+
+    assert filtered.candidates == baseline.candidates
+    assert filtered.content_hash != baseline.content_hash
+    assert resized.content_hash != baseline.content_hash
+
+
+@pytest.mark.asyncio
+async def test_ready_universe_content_identity_uses_canonical_cursor_not_token_envelope() -> None:
+    reader = _Reader()
+    initial = await _service(reader).resolve_universe_candidates(
+        request=DpmPortfolioUniverseCandidateRequest(as_of_date=date(2026, 5, 3))
+    )
+    cursor = {
+        "scope_fingerprint": initial.page.request_scope_fingerprint,
+        "last_portfolio_id": "PB_000",
+        "last_mandate_id": "MANDATE_000",
+    }
+    codec = PageTokenCodec(secret="test-secret")
+    first_token = codec.encode(cursor, expires_at=datetime(2099, 1, 1, tzinfo=UTC))
+    second_token = codec.encode(cursor, expires_at=datetime(2100, 1, 1, tzinfo=UTC))
+
+    first = await _service(reader, codec).resolve_universe_candidates(
+        request=DpmPortfolioUniverseCandidateRequest(
+            as_of_date=date(2026, 5, 3), page={"page_token": first_token}
+        )
+    )
+    replay = await _service(reader, codec).resolve_universe_candidates(
+        request=DpmPortfolioUniverseCandidateRequest(
+            as_of_date=date(2026, 5, 3), page={"page_token": second_token}
+        )
+    )
+
+    assert first.content_hash == replay.content_hash
