@@ -37,3 +37,17 @@ def test_current_event_topology_sections_exclude_retired_deployables() -> None:
         assert "portfolio_derived_state_service" in section
         for retired_service in RETIRED_DERIVED_STATE_SERVICES:
             assert f"`{retired_service}`" not in section
+
+
+def test_end_state_vision_distinguishes_implemented_topology_from_pending_certification() -> None:
+    vision = (REPO_ROOT / "docs/architecture/lotus-core-end-state-runtime-vision.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "topology contains\n10 deployables" in vision
+    assert (
+        "Current consolidated deployable with separate position and portfolio modules; final "
+        "acceptance remains workload- and recovery-evidence-gated."
+    ) in vision
+    assert "Implemented as one derived-state deployable with separate modules" in vision
+    assert "Target candidate combining generator and aggregation" not in vision

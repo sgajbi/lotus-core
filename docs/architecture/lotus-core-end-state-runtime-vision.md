@@ -1,7 +1,7 @@
 # Lotus Core End-State Runtime Vision
 
-Status: Governed target hypothesis; runtime decisions remain evidence-gated
-Date: 2026-07-15
+Status: Governed current/target map; unresolved runtime decisions remain evidence-gated
+Date: 2026-07-15; current-state reconciliation 2026-08-09
 Issue: #468
 
 ## Purpose
@@ -12,8 +12,10 @@ does not approve a merge solely because two capabilities form a serial pipeline.
 
 ## Runtime Count
 
-The current governed post-pipeline-retirement topology contains 11 deployables. The target
-hypothesis is 9 deployables, or 10 when valuation scheduler/compute isolation remains justified.
+The current governed post-pipeline-retirement and derived-state-consolidation topology contains
+10 deployables. The remaining target hypothesis is 9 deployables if valuation scheduler/compute
+consolidation is proven, or the current 10 when their independent scaling and availability boundary
+remains justified.
 
 | End-state deployable | Capability and owned state | Boundary posture |
 | --- | --- | --- |
@@ -21,7 +23,7 @@ hypothesis is 9 deployables, or 10 when valuation scheduler/compute isolation re
 | `persistence_service` | Canonical portfolio, transaction, instrument, price, FX, and calendar persistence | Keep; canonical write authority. |
 | `portfolio_transaction_processing_service` | Atomic cost, cashflow, position, corporate actions, transfers, income classification, P&L, replay | Approved consolidation; separate in-process domain modules and one financial unit of work. |
 | `valuation_service` | Valuation scheduling, backdated/market-triggered revaluation, compute, snapshot publication | Target candidate combining orchestrator and worker; retain two deployables if saturation or availability evidence requires isolation. |
-| `portfolio_derived_state_service` | Position timeseries, portfolio aggregation, backfill, aggregation queue, completion publication | Target candidate combining generator and aggregation as separate modules. |
+| `portfolio_derived_state_service` | Position timeseries, portfolio aggregation, backfill, aggregation queue, completion publication | Current consolidated deployable with separate position and portfolio modules; final acceptance remains workload- and recovery-evidence-gated. |
 | `financial_reconciliation_service` | Independent controls, findings, rerunnable tie-outs, publishability decision | Keep as an independent financial-control boundary. |
 | `query_service` | High-throughput canonical operational reads | Keep separate from operator/simulation/export workloads. |
 | `query_control_plane_service` | Source products, simulations, lineage, support, exports, capabilities | Keep separate for security, workload, and operator-contract isolation. |
@@ -87,7 +89,7 @@ with their service.
 | --- | --- | --- |
 | cost + cashflow + position | One transaction deployable | Complete target source ownership, downstream compatibility retirement, deployed load/recovery, release provenance, and canonical QA. |
 | valuation orchestrator + valuation worker | One valuation deployable | Scheduler availability under compute saturation, independent scaling comparison, backfill load, failure recovery, rollback, and SLO evidence. |
-| timeseries generator + portfolio aggregation | One derived-state deployable | Bounded fan-in/backfill, ordering, queue recovery, load, failure isolation, table ownership, and rollback evidence. |
+| timeseries generator + portfolio aggregation | Implemented as one derived-state deployable with separate modules | Complete bounded fan-in/backfill, ordering, queue recovery, daily load, failure isolation, restatement, rollback, and exact-main certification before closing the decision. |
 | pipeline orchestrator | Retired | Transition ownership is reassigned, the runtime/image/consumer surface is removed, and a regression guard prevents restoration. Compatibility events and the shared support table remain until separate consumer/retention proof permits removal. |
 | ingestion + persistence | Keep separate | Merge only if security isolation, replay, source-validation scaling, and canonical-write protection no longer justify separation. |
 | query + query control plane | Keep separate | Merge only if authorization, operator, simulation, export, and latency workloads have equivalent policy/SLO needs. |
