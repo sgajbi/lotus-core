@@ -821,6 +821,31 @@ does not publish this key policy; the operator-owned migration runbook is the du
   records two aggregation-completion revisions for the one portfolio day; distinct revisions are
   valid continuous-processing evidence, but this superseded run does not carry enough lineage to
   classify their trigger. Corrected-head fan-in remains mandatory.
+- The transaction-readiness lookup now has a live PostgreSQL query-plan regression at 10,000
+  unrelated outbox rows. It requires `ix_outbox_events_aggregate_id` in the executed plan and
+  rejects a sequential scan, while retaining exact-scope payload verification after the indexed
+  candidate lookup. Twenty-five focused PostgreSQL integration tests, two helper unit tests, and
+  scoped Ruff, format, MyPy, and diff checks passed at signed commit `3d6e3aed7`.
+- Transaction readiness previously used four serial database calls on the ordinary successful
+  path: advisory-lock acquisition, latest-epoch read, stage upsert, and completion claim. Signed
+  commit `640603322` keeps lock acquisition as its own statement so a waiter receives a fresh
+  PostgreSQL READ COMMITTED snapshot, then performs the existing-stage capture, monotonic upsert,
+  and exact-epoch completion claim in one data-modifying statement. The path is now two database
+  calls without weakening same-owner collision handling, stale-epoch suppression, duplicate
+  completion behavior, rollback atomicity, or durable outbox authority. Eleven focused unit/live
+  PostgreSQL tests and the 122-test transaction-processing contract passed.
+- Exact clean fan-in task
+  `eng-task-20260810-055424-lotus-core-certification-make-profile-derived-state-fan-in` at signed
+  head `640603322` completed with exact 1,000 transaction, snapshot, position-series, and
+  portfolio-series reconciliation; attempts `2/2`; zero repeated processing; zero open valuation
+  or aggregation jobs; and final pending/failed outbox `0/0`. Artifact
+  `20260809T215625Z-bank-day-load.json` has SHA-256
+  `621D0C1BA13F2B69224F431679610FE03991BE042C2C5C96F2522273C106C51C`. Drain fell from the
+  accepted corrected-head `115.998s` to `80.982s`, a 30.19% reduction. Mean readiness-pipeline
+  duration fell from about `0.0958s` to `0.035358507s` (63.09%), and mean total transaction
+  processing fell from about `0.8757s` to `0.644479942s` (26.41%). Exact project-scoped teardown
+  left zero owned containers, networks, or volumes and did not touch the healthy shared stack.
+  This passes the retain gate and authorizes one exact-head daily capacity rerun.
 
 Implementation commits include `23fc6faf3`, `d51adb739`, `ad1ad179d`, `57f8c60e2`,
 `4f05be9a5`, `c230d660a`, `f42f6eaa3`, `d56e14dbf`, `2d49fc8f1`, `70ae16f0f`,
@@ -939,3 +964,9 @@ Exact-head review changed no API, schema, Kafka payload, or operator command. It
 consumer boundary and claimed-authority source, replaced a timing-dependent lock test with an
 explicit failed try-lock followed by the production lock adapter, and requires one corrected-head
 profile rerun. No additional wiki or OpenAPI change is required.
+The readiness lookup plan guard and atomic readiness claim change only an internal indexed query,
+repository port, and transaction-processing persistence statement. They preserve the separate
+advisory-lock freshness boundary, event payloads, outbox authority, public APIs/OpenAPI, database
+schema, calculations, partition policy, runtime settings, and operator commands. This review and
+executable PostgreSQL tests are the durable truth; no migration, event-contract, runbook,
+calculation-methodology, or additional authored-wiki change is required.

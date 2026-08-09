@@ -3569,6 +3569,17 @@ Most relevant current governance:
      operational transaction producer, and a corrected generator requires a live diagnostic pass
      before another expensive certifying profile is authorized.
 
+237. Transaction-readiness registration must retain a fresh-snapshot boundary after its
+     transaction-scoped advisory-lock wait. Acquire the advisory lock in its own statement, then
+     capture existing stage state, apply the monotonic epoch upsert, and claim completion in one
+     caller-owned-transaction statement. Preserve exact stage/portfolio/transaction collision
+     checks, same-owner replay, stale-epoch suppression, duplicate-completion non-emission, and
+     rollback atomicity. Lookup of readiness outbox authority must remain aggregate-ID indexed and
+     verify the exact JSON payload after candidate selection; live PostgreSQL plan proof at bounded
+     fan-in must reject a sequential scan. Do not combine a freshness-dependent read into the
+     waiting lock statement under PostgreSQL READ COMMITTED, because that statement's snapshot can
+     predate the predecessor commit.
+
 ## Context Maintenance Rule
 
 Update this document when:
