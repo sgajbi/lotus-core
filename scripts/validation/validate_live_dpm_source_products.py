@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from dataclasses import asdict, dataclass
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
 import httpx
+from portfolio_common.source_data_product_metadata import SOURCE_METADATA_UNAVAILABLE_HASH
 
 DEFAULT_PORTFOLIO_ID = "PB_SG_GLOBAL_BAL_001"
 EXPECTED_DPM_UNIVERSE_PORTFOLIO_IDS = (
@@ -33,6 +35,7 @@ EXPECTED_OPENAPI_PATHS = {
     "/integration/market-data/coverage",
     "/integration/portfolios/{portfolio_id}/dpm-source-readiness",
 }
+SHA256_CONTENT_HASH = re.compile(r"^sha256:[0-9a-f]{64}$")
 
 
 @dataclass(frozen=True)
@@ -72,6 +75,20 @@ def _decimal(value: Any) -> Decimal | None:
         return Decimal(str(value))
     except (InvalidOperation, TypeError, ValueError):
         return None
+
+
+def _has_canonical_content_identity(body: dict[str, Any]) -> bool:
+    content_hash = body.get("content_hash")
+    return (
+        isinstance(content_hash, str)
+        and content_hash != SOURCE_METADATA_UNAVAILABLE_HASH
+        and SHA256_CONTENT_HASH.fullmatch(content_hash) is not None
+        and body.get("source_digest") == content_hash
+        and body.get("source_batch_fingerprint") is None
+        and body.get("data_quality_status") == "COMPLETE"
+        and body.get("source_evidence_current") is True
+        and body.get("freshness_status") == "CURRENT"
+    )
 
 
 def _probe_openapi_dpm_source_routes(client: httpx.Client) -> ProbeResult:
@@ -169,9 +186,10 @@ def _probe_dpm_portfolio_universe_candidates(
     return _result(
         "dpm_portfolio_universe_candidates_ready",
         response.status_code == 200
-        and supportability.get("state") in {"READY", "DEGRADED"}
+        and supportability.get("state") == "READY"
         and contains_portfolio
-        and not missing_expected_portfolio_ids,
+        and not missing_expected_portfolio_ids
+        and _has_canonical_content_identity(body_dict),
         {
             "status_code": response.status_code,
             "product_name": body_dict.get("product_name"),
@@ -180,6 +198,14 @@ def _probe_dpm_portfolio_universe_candidates(
             "contains_portfolio": contains_portfolio,
             "missing_expected_portfolio_ids": missing_expected_portfolio_ids,
             "next_page_token": _dict_body(body_dict.get("page")).get("next_page_token"),
+            "content_hash": body_dict.get("content_hash"),
+            "source_digest_matches": (
+                isinstance(body_dict.get("content_hash"), str)
+                and body_dict.get("source_digest") == body_dict.get("content_hash")
+            ),
+            "source_batch_fingerprint": body_dict.get("source_batch_fingerprint"),
+            "source_evidence_current": body_dict.get("source_evidence_current"),
+            "freshness_status": body_dict.get("freshness_status"),
         },
     )
 
