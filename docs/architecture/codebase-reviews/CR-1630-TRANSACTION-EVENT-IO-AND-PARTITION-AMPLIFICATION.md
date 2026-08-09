@@ -682,6 +682,14 @@ does not publish this key policy; the operator-owned migration runbook is the du
   `EXPLAIN (ANALYZE, BUFFERS)` completed the extended query in `187.430ms` versus `218.392ms` for
   the prior topic-only query on the active amplified table; both used the same parallel sequential
   scan and tiny 24–26kB aggregates, so no index or migration was added.
+- The detached old-source daily diagnostic at `314f9d8ae` reached 64,517 measured transaction
+  completions with `0.927174s` mean transaction time and `0.350548s` mean cost-stage time, while
+  pure FIFO recalculation remained only `0.001121s` mean at depth one. Existing repository metrics
+  attributed repeated position/state/lock/rule operations but left most cost persistence opaque.
+  Signed commit `b8e26d927` adds bounded static repository/method timings for that persistence path
+  and makes the certifier fail closed unless eight representative cost series are present. It does
+  not change statements, locking, calculations, or runtime concurrency; the next exact-source run
+  must use the new series to justify any persistence change.
 
 Implementation commits include `23fc6faf3`, `d51adb739`, `ad1ad179d`, `57f8c60e2`,
 `4f05be9a5`, `c230d660a`, `f42f6eaa3`, `d56e14dbf`, `2d49fc8f1`, `70ae16f0f`,
@@ -770,3 +778,7 @@ the separate business/trade date, transaction identities, workload volume, order
 OpenAPI, events, database schemas, calculations, Kafka configuration, and production runtime. The
 existing command and operator procedure are unchanged; repository context and this review own the
 repeatable rule, so no migration, runbook, or authored wiki change is required.
+The cost-persistence timing extension changes only bounded internal metrics and certifying evidence
+completeness. Its labels are fixed repository/method names without business identifiers, and it
+changes no API, OpenAPI, event, database statement/schema, calculation, lock, partition, runtime
+setting, operator command, or authored wiki truth.
