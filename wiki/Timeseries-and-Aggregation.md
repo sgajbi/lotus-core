@@ -119,8 +119,10 @@ Certifying reports require monotonic recent outbox publication-age p50/p95/p99 a
 processed-event throughput. Publication-age sampling is bounded to the newest 10,000 primary-key
 rows; exact pending/retry/failed totals and topic cohorts remain unbounded truth. The same report
 retains bounded producer-aggregate/topic cohorts and fails closed when their counts diverge from
-topic or final status totals. Development, CI, and production dispatcher values are bound through
-the single `docs/standards/outbox-capacity-profile.v1.json` contract and
+topic or final status totals. At most 25 synthetic repeated-job lineage samples support trigger
+diagnosis; this bound must not become an unbounded business-identifier export. Development, CI,
+and production dispatcher values are bound through the single
+`docs/standards/outbox-capacity-profile.v1.json` contract and
 `make outbox-capacity-profile-guard`; its `1s/1000` profile remains a candidate until exact-source
 daily certification passes.
 If managed startup, migration, recovery, or poison orchestration fails before the normal report,

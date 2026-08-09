@@ -775,6 +775,19 @@ does not publish this key policy; the operator-owned migration runbook is the du
   schedules revaluation. Six live PostgreSQL cases cover long/short positions, source-before-
   position convergence, source-after-position correction, snapshot freshness, and a subsequent
   correction; 36 valuation scheduling/requeue unit tests also pass.
+- Exact clean fan-in task
+  `eng-task-20260810-012200-lotus-core-certification-make-profile-derived-state-fan-in` at signed
+  head `2c68a905f` proved that freshness correction was beneficial but incomplete. Artifact
+  `20260809T172908Z-bank-day-load.json` has SHA-256
+  `D11CD9B6A8BD5369F4D9565FD82ED94B80260374DF0C1CEB179473AE95248964`. It reconciled all
+  1,000 transactions and derived rows with zero open jobs, failed outbox rows, DLQ events, log
+  errors, or financial findings. Drain fell from `161.436s` to `85.804s`, the
+  position-to-portfolio tail fell from `84.110312s` to `2.366197s`, and aggregation completion
+  cohorts fell from three to two. It still correctly failed: 40 valuation jobs reached attempt four
+  and 1,001 snapshot events were emitted. Daily certification remains withheld. The workload
+  receipt now retains at most 25 synthetic repeated-job samples with source-correction and
+  correlation lineage so the next exact run can identify the winning trigger without retaining an
+  unbounded high-cardinality dump or relying on timing inference.
 
 Implementation commits include `23fc6faf3`, `d51adb739`, `ad1ad179d`, `57f8c60e2`,
 `4f05be9a5`, `c230d660a`, `f42f6eaa3`, `d56e14dbf`, `2d49fc8f1`, `70ae16f0f`,
