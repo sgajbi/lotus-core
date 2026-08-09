@@ -743,6 +743,16 @@ does not publish this key policy; the operator-owned migration runbook is the du
   cost round-trip work must keep lock acquisition and freshness-dependent reads in separate
   statements or prove an equivalent fresh-snapshot boundary; a lower statement count is never a
   substitute for deterministic replay authority.
+- Canonical transaction economics update and stale fee-breakdown deletion were two sequential
+  executes even though both mutations already shared one caller-owned transaction. One PostgreSQL
+  data-modifying CTE now makes the fee deletion depend on the successful canonical-row update,
+  returns the updated row without rereading it, and leaves replacement fee inserts staged for the
+  same unit-of-work flush. A missing canonical row therefore cannot delete fee evidence. The
+  ordinary initial-BUY cost shape falls from 11 to 10 database statements, removing one call from
+  a repository operation that measured `0.058990828s` mean in the exact-source daily failure.
+  Thirty-four focused repository tests, live PostgreSQL fee replacement/rollback proof, and the
+  exact initial-BUY statement-count test passed. Calculations, lineage, fee identity, lock order,
+  replay behavior, schema, events, and public contracts are unchanged.
 
 Implementation commits include `23fc6faf3`, `d51adb739`, `ad1ad179d`, `57f8c60e2`,
 `4f05be9a5`, `c230d660a`, `f42f6eaa3`, `d56e14dbf`, `2d49fc8f1`, `70ae16f0f`,
@@ -784,6 +794,11 @@ shape only. It preserves lock order, delete and replay boundaries, deterministic
 epoch fencing, calculations, lineage, APIs, OpenAPI, events, database schema, runtime settings, and
 operator commands. This review record is the durable evidence; no migration, runbook, repository
 context, calculation-methodology, or authored wiki change is required.
+The atomic transaction-economics/fee-replacement statement changes only internal PostgreSQL query
+shape inside the existing unit of work. It preserves fail-closed missing-row behavior, rollback,
+fee components, calculation lineage, APIs, OpenAPI, events, database schema, locks, runtime settings,
+and operator commands. No migration, runbook, repository context, calculation-methodology, or
+authored wiki change is required.
 The rejected source-version interval and its operator setting were reverted forward. The canonical
 immediate source-version validation contract is restored; retaining the experiment evidence requires
 no OpenAPI, migration, event-contract, calculation-methodology, operator-runbook, or wiki-source
