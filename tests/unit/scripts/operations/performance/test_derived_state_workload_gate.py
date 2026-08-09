@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import sys
 from argparse import Namespace
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -10,6 +12,8 @@ from types import SimpleNamespace
 
 import pytest
 
+from scripts.operations.managed_gate_evidence import write_managed_gate_failure_receipt
+from scripts.operations.performance import derived_state_workload_gate
 from scripts.operations.performance.derived_state_workload_gate import (
     build_bank_day_command,
     build_workload_environment,
@@ -21,6 +25,90 @@ from scripts.operations.performance.derived_state_workload_gate import (
 from scripts.quality.ci_service_sets import DERIVED_STATE_WORKLOAD_GATE_SERVICES
 
 ROOT = Path(__file__).resolve().parents[5]
+
+
+def test_orchestration_failure_receipt_is_durable_redacted_and_non_certifying(
+    tmp_path: Path,
+) -> None:
+    profile = resolve_workload_profile(profile_name="daily", diagnostic_smoke=False)
+
+    path = write_managed_gate_failure_receipt(
+        output_dir=tmp_path,
+        gate_name=profile.name,
+        phase="wait-for-migration",
+        error=RuntimeError("postgresql://operator:secret@postgres/core unavailable"),
+        started_at=datetime(2026, 8, 9, 11, 0, tzinfo=UTC),
+        failed_at=datetime(2026, 8, 9, 11, 5, tzinfo=UTC),
+        compose_project_name="lotus-derived-state-certification",
+        compose_log_path=tmp_path / "diagnostics" / "compose.log",
+        context={
+            "profile": profile.name,
+            "certifying_profile": profile.certifying,
+            "transaction_count": profile.transaction_count,
+        },
+    )
+
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    assert path.name.startswith("20260809T110500Z-")
+    assert payload["schema_version"] == "lotus.managed-gate-orchestration-failure.v1"
+    assert payload["evidence_classification"] == "non_certifying_failure"
+    assert payload["context"]["certifying_profile"] is True
+    assert payload["context"]["transaction_count"] == 100_000
+    assert payload["failure_phase"] == "wait-for-migration"
+    assert payload["compose_project_name"] == "lotus-derived-state-certification"
+    assert "secret" not in payload["error_message"]
+    assert "***REDACTED***" in payload["error_message"]
+    assert not path.with_suffix(f"{path.suffix}.tmp").exists()
+
+
+def test_main_writes_failure_receipt_when_managed_runtime_start_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    class FailingManagedRun:
+        compose_file = tmp_path / "docker-compose.yml"
+        runtime = SimpleNamespace(
+            endpoints=SimpleNamespace(compose_project_name="lotus-derived-state-failure"),
+            export_to=lambda _environment: None,
+        )
+
+        def __enter__(self) -> None:
+            raise RuntimeError("postgresql://operator:secret@postgres/core unavailable")
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+    monkeypatch.setattr(
+        derived_state_workload_gate,
+        "prepare_managed_run",
+        lambda **_kwargs: FailingManagedRun(),
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "derived_state_workload_gate",
+            "--repo-root",
+            str(tmp_path),
+            "--diagnostic-smoke",
+            "--output-dir",
+            "output/task-runs",
+        ],
+    )
+
+    with pytest.raises(RuntimeError, match="secret"):
+        derived_state_workload_gate.main()
+
+    receipts = list(
+        (tmp_path / "output/task-runs").glob(
+            "*-diagnostic-derived-state-workload-smoke-orchestration-failure.json"
+        )
+    )
+    assert len(receipts) == 1
+    payload = json.loads(receipts[0].read_text(encoding="utf-8"))
+    assert payload["failure_phase"] == "start-managed-runtime"
+    assert payload["compose_project_name"] == "lotus-derived-state-failure"
+    assert "secret" not in payload["error_message"]
 
 
 def test_daily_profile_models_the_governed_bank_day_volume() -> None:
