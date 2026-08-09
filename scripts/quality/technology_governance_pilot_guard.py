@@ -333,12 +333,24 @@ def _validate_manifest_identity(manifest: dict[str, Any], *, root: Path, errors:
         return ""
     if not _git_commit_resolves(root, inspected_commit):
         errors.append("inspected_core_commit must resolve to a Core commit")
+    elif not _git_commit_is_on_main(root, inspected_commit):
+        errors.append("inspected_core_commit must be an ancestor of origin/main")
     return inspected_commit
 
 
 def _git_commit_resolves(root: Path, commit: str) -> bool:
     result = subprocess.run(
         ["git", "cat-file", "-e", f"{commit}^{{commit}}"],
+        cwd=root,
+        check=False,
+        capture_output=True,
+    )
+    return result.returncode == 0
+
+
+def _git_commit_is_on_main(root: Path, commit: str) -> bool:
+    result = subprocess.run(
+        ["git", "merge-base", "--is-ancestor", commit, "refs/remotes/origin/main"],
         cwd=root,
         check=False,
         capture_output=True,
