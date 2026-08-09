@@ -256,6 +256,9 @@ def test_iter_transaction_batches_yields_expected_records_and_batches() -> None:
     flattened = [item for batch in batches for item in batch]
     assert len(flattened) == 6
     assert flattened[0]["transaction_id"] == "LOAD_RUN1_TX_00000001"
+    assert {transaction["transaction_date"] for transaction in flattened} == {
+        "2026-04-17T00:00:00Z"
+    }
     assert flattened[-1]["transaction_id"] == "LOAD_RUN1_TX_00000006"
     assert all(item["quantity"] == "1" for item in flattened)
 

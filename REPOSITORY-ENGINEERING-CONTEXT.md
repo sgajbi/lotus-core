@@ -3539,6 +3539,14 @@ Most relevant current governance:
      report-only pilot must keep release-certifying, production-ready, bank-buyable, and
      supported-feature claims false.
 
+236. Repository-owned workload and certification producers must satisfy the same temporal contract
+     as external callers. Keep business dates as date-only values, but emit `transaction_date` as a
+     timezone-aware instant normalized to UTC; the bank-day generator uses start-of-day UTC for its
+     governed trade date. Do not weaken ingestion validation or silently attach UTC inside a
+     financial domain boundary to accommodate stale test data. Same-pattern scans must cover every
+     operational transaction producer, and a corrected generator requires a live diagnostic pass
+     before another expensive certifying profile is authorized.
+
 ## Context Maintenance Rule
 
 Update this document when:
