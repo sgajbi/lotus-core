@@ -73,3 +73,45 @@ def test_market_price_capacity_bounds_canonical_key_skew() -> None:
 
     assert len(distribution) == 7
     assert max(distribution.values()) == 3
+
+
+def test_partition_migration_contract_proves_historical_crc32_remapping() -> None:
+    contract = _contract()
+    migration = contract["partition_migrations"]["eight_to_twelve_v1"]
+    topics = {topic["topic"]: topic for topic in contract["topics"]}
+
+    assert contract["contract_version"] == "1.3.0"
+    assert migration["status"] == "implemented_pending_final_runtime_revalidation"
+    assert migration["source_partition_count"] == 8
+    assert migration["target_partition_count"] == 12
+    assert all(topics[topic]["partitions"] == 12 for topic in migration["topics"])
+
+    mappings = {
+        key: (
+            zlib.crc32(key.encode("utf-8")) % migration["source_partition_count"],
+            zlib.crc32(key.encode("utf-8")) % migration["target_partition_count"],
+        )
+        for key in migration["representative_crc32_keys"]
+    }
+    remapped_keys = {key for key, (before, after) in mappings.items() if before != after}
+
+    assert len(mappings) == 10
+    assert len(remapped_keys) == 8
+    assert mappings["CASH_EUR_BOOK_OPERATING"] == (6, 2)
+    assert mappings["CASH_USD_BOOK_OPERATING"] == (4, 4)
+
+
+def test_partition_migration_contract_retains_fail_closed_cutover_and_rollback() -> None:
+    contract = _contract()
+    migration = contract["partition_migrations"]["eight_to_twelve_v1"]
+    runbook = (REPO_ROOT / migration["runbook"]).read_text(encoding="utf-8")
+
+    assert "zero lag" in migration["precondition"]
+    assert (
+        "historical records remain in their original partitions"
+        in migration["historical_record_contract"]
+    )
+    assert "cannot reduce partitions in place" in migration["rollback_contract"]
+    assert "Do not use a live partition increase while old-partition lag remains" in runbook
+    assert "Kafka cannot reduce a topic's partition count in place" in runbook
+    assert "versioned replacement-topic migration" in runbook
