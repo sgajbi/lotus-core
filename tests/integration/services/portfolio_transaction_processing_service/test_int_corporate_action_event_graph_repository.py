@@ -18,9 +18,12 @@ from portfolio_common.database_models import (
     CorporateActionManifestEdgeRecord,
     CorporateActionManifestNodeRecord,
     CorporateActionManifestVersionRecord,
+    CorporateActionReadinessEvaluationRecord,
 )
 from portfolio_common.domain.calculation_lineage import FinancialSourceReference
-from sqlalchemy import Engine, func, insert, inspect, select, text, update
+from sqlalchemy import Engine, func, insert, inspect, select, text
+from sqlalchemy import event as sqlalchemy_event
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.services.portfolio_transaction_processing_service.app.domain.transaction import (
@@ -31,7 +34,11 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure.co
 )
 from src.services.portfolio_transaction_processing_service.app.ports import (
     ConflictingCorporateActionManifestError,
+    ConflictingCorporateActionObservationError,
+    CorporateActionBookScopeError,
+    CorporateActionChildObservation,
     CorporateActionManifestAppendOutcome,
+    CorporateActionObservationAppendOutcome,
 )
 from tests.test_support.async_task_coordination import (
     cancel_pending_tasks,
@@ -150,6 +157,12 @@ async def test_manifest_append_retry_conflict_chain_and_reconstruction(
             "DISABLE TRIGGER trg_ca_manifest_version_immutable"
         )
     )
+    await async_db_session.execute(
+        text(
+            "ALTER TABLE corporate_action_manifest_versions "
+            "DISABLE TRIGGER trg_ca_manifest_predecessor"
+        )
+    )
     try:
         await async_db_session.execute(
             text(
@@ -172,7 +185,36 @@ async def test_manifest_append_retry_conflict_chain_and_reconstruction(
             {"manifest_id": manifest_record_id},
         )
         async_db_session.expire_all()
+        await async_db_session.execute(
+            text(
+                "UPDATE corporate_action_manifest_versions "
+                "SET previous_manifest_content_hash = :incorrect_hash "
+                "WHERE id = :manifest_id"
+            ),
+            {"incorrect_hash": "f" * 64, "manifest_id": manifest_record_id},
+        )
+        async_db_session.expire_all()
+        with pytest.raises(ConflictingCorporateActionManifestError, match="predecessor chain"):
+            await repository.load_current_manifest(
+                portfolio_id=first.portfolio_id,
+                corporate_action_event_id=first.corporate_action_event_id,
+            )
+        await async_db_session.execute(
+            text(
+                "UPDATE corporate_action_manifest_versions "
+                "SET previous_manifest_content_hash = :expected_hash "
+                "WHERE id = :manifest_id"
+            ),
+            {"expected_hash": first.content_hash, "manifest_id": manifest_record_id},
+        )
+        async_db_session.expire_all()
     finally:
+        await async_db_session.execute(
+            text(
+                "ALTER TABLE corporate_action_manifest_versions "
+                "ENABLE TRIGGER trg_ca_manifest_predecessor"
+            )
+        )
         await async_db_session.execute(
             text(
                 "ALTER TABLE corporate_action_manifest_versions "
@@ -309,58 +351,422 @@ async def test_child_observations_before_manifest_restore_ready_state(
     await _seed_portfolio(async_db_session)
     manifest = _manifest()
     await _seed_transactions(async_db_session, manifest.expected_children)
-    event_id = (
-        await async_db_session.execute(
-            insert(CorporateActionEventRecord)
-            .values(
-                tenant_id="TENANT-SG",
-                legal_book_id="PB-SG-01",
-                portfolio_id=manifest.portfolio_id,
-                corporate_action_event_id=manifest.corporate_action_event_id,
-                linked_transaction_group_id=manifest.linked_transaction_group_id,
-                parent_event_reference=manifest.parent_event_reference,
-            )
-            .returning(CorporateActionEventRecord.id)
-        )
-    ).scalar_one()
-    await async_db_session.execute(
-        insert(CorporateActionChildObservationRecord),
-        [
-            {
-                "event_id": event_id,
-                "observation_sequence": sequence,
-                "transaction_id": child.transaction_id,
-                "transaction_epoch": 1,
-                "delivery_event_id": f"delivery-{sequence}",
-                "observed_content_hash": child.content_hash,
-                "observed_payload": child.lineage_payload(),
-                "observed_at": manifest.source_reference.observed_at,
-            }
-            for sequence, child in enumerate(manifest.expected_children, start=1)
-        ],
-    )
-    await async_db_session.execute(
-        update(CorporateActionEventRecord)
-        .where(CorporateActionEventRecord.id == event_id)
-        .values(last_observation_sequence=len(manifest.expected_children))
-    )
     repository = SqlAlchemyCorporateActionEventGraphRepository(async_db_session)
+
+    for sequence, child in enumerate(manifest.expected_children, start=1):
+        decision = await repository.observe_child(
+            _observation(manifest, child, delivery_event_id=f"delivery-{sequence}")
+        )
+        assert decision.readiness_status == "AWAITING_MANIFEST"
 
     assert (
         await repository.append_manifest(manifest) is CorporateActionManifestAppendOutcome.APPENDED
     )
+    retry = await repository.observe_child(
+        _observation(manifest, manifest.expected_children[0], delivery_event_id="delivery-1")
+    )
+    assert retry.observation_outcome is CorporateActionObservationAppendOutcome.UNCHANGED
+    assert retry.readiness_status == "READY"
+    with pytest.raises(ConflictingCorporateActionObservationError, match="different evidence"):
+        await repository.observe_child(
+            replace(
+                _observation(
+                    manifest,
+                    manifest.expected_children[0],
+                    delivery_event_id="delivery-1",
+                ),
+                correlation_id="conflicting-correlation",
+            )
+        )
+    assert await async_db_session.scalar(text("SELECT 1")) == 1
     await async_db_session.commit()
     async_db_session.expire_all()
 
-    event = await async_db_session.get(CorporateActionEventRecord, event_id)
+    event = await async_db_session.scalar(select(CorporateActionEventRecord))
     assert event is not None
     assert event.readiness_status == "READY"
+    assert event.last_observation_sequence == 2
+    assert event.state_version == 3
+    assert (
+        await async_db_session.scalar(
+            select(func.count()).select_from(CorporateActionReadinessEvaluationRecord)
+        )
+        == 3
+    )
     reconstructed = await repository.load_current_manifest(
         portfolio_id=manifest.portfolio_id,
         corporate_action_event_id=manifest.corporate_action_event_id,
     )
     assert reconstructed is not None
     assert reconstructed.lineage_payload() == manifest.lineage_payload()
+
+
+async def test_first_manifest_rejects_rogue_pre_manifest_child(
+    clean_db,
+    db_engine: Engine,
+    async_db_session: AsyncSession,
+) -> None:
+    _apply_migration(db_engine)
+    await _seed_portfolio(async_db_session)
+    manifest = _manifest()
+    rogue = replace(
+        manifest.expected_children[1],
+        transaction_id="CA-ROGUE-001",
+        instrument_id="ROGUE-SEC",
+        target_instrument_id="ROGUE-SEC",
+    )
+    await _seed_transactions(async_db_session, (*manifest.expected_children, rogue))
+    repository = SqlAlchemyCorporateActionEventGraphRepository(async_db_session)
+
+    for sequence, child in enumerate((*manifest.expected_children, rogue), start=1):
+        await repository.observe_child(
+            _observation(manifest, child, delivery_event_id=f"pre-manifest-{sequence}")
+        )
+    assert (
+        await repository.append_manifest(manifest) is CorporateActionManifestAppendOutcome.APPENDED
+    )
+    await async_db_session.commit()
+
+    event = await async_db_session.scalar(select(CorporateActionEventRecord))
+    evaluation = await async_db_session.scalar(
+        select(CorporateActionReadinessEvaluationRecord).order_by(
+            CorporateActionReadinessEvaluationRecord.state_version.desc()
+        )
+    )
+    assert event is not None
+    assert evaluation is not None
+    assert event.readiness_status == "INVALID"
+    assert evaluation.readiness_status == "INVALID"
+    assert any(
+        finding["reason"] == "CA_MANIFEST_UNEXPECTED_CHILD" for finding in evaluation.findings
+    )
+
+
+async def test_child_correction_epochs_are_monotonic_and_retries_are_neutral(
+    clean_db,
+    db_engine: Engine,
+    async_db_session: AsyncSession,
+) -> None:
+    _apply_migration(db_engine)
+    await _seed_portfolio(async_db_session)
+    manifest = _manifest()
+    await _seed_transactions(async_db_session, manifest.expected_children)
+    repository = SqlAlchemyCorporateActionEventGraphRepository(async_db_session)
+    assert (
+        await repository.append_manifest(manifest) is CorporateActionManifestAppendOutcome.APPENDED
+    )
+    for sequence, child in enumerate(manifest.expected_children, start=1):
+        await repository.observe_child(
+            _observation(manifest, child, delivery_event_id=f"initial-{sequence}")
+        )
+
+    corrected_child = replace(manifest.expected_children[0], child_sequence_hint=99)
+    corrected = await repository.observe_child(
+        _observation(
+            manifest,
+            corrected_child,
+            delivery_event_id="correction-2",
+            transaction_epoch=2,
+        )
+    )
+    assert corrected.observation_outcome is CorporateActionObservationAppendOutcome.APPENDED
+    assert corrected.readiness_status == "INVALID"
+
+    semantic_retry = await repository.observe_child(
+        _observation(
+            manifest,
+            manifest.expected_children[0],
+            delivery_event_id="semantic-retry",
+        )
+    )
+    assert semantic_retry.observation_outcome is CorporateActionObservationAppendOutcome.UNCHANGED
+    assert semantic_retry.readiness_status == "INVALID"
+
+    with pytest.raises(ConflictingCorporateActionObservationError, match="increase monotonically"):
+        await repository.observe_child(
+            _observation(
+                manifest,
+                replace(manifest.expected_children[0], child_sequence_hint=7),
+                delivery_event_id="stale-different-content",
+            )
+        )
+    assert await async_db_session.scalar(text("SELECT 1")) == 1
+    await async_db_session.commit()
+    assert (
+        await async_db_session.scalar(
+            select(func.count()).select_from(CorporateActionChildObservationRecord)
+        )
+        == 3
+    )
+
+
+async def test_corrected_manifest_reuses_expected_epochs_and_ignores_removed_old_child(
+    clean_db,
+    db_engine: Engine,
+    async_db_session: AsyncSession,
+) -> None:
+    _apply_migration(db_engine)
+    await _seed_portfolio(async_db_session)
+    base = _manifest()
+    source = next(
+        child for child in base.expected_children if child.child_role == "SOURCE_POSITION_REDUCE"
+    )
+    extra_target = replace(
+        next(
+            child for child in base.expected_children if child.child_role == "TARGET_POSITION_ADD"
+        ),
+        transaction_id="CA-TARGET-002",
+        instrument_id="TARGET-SEC-002",
+        target_instrument_id="TARGET-SEC-002",
+    )
+    first = replace(base, expected_children=base.expected_children + (extra_target,))
+    second = replace(
+        base,
+        version=2,
+        source_reference=replace(
+            base.source_reference,
+            source_revision="2",
+            source_content_hash="b" * 64,
+        ),
+    )
+    await _seed_transactions(async_db_session, first.expected_children)
+    repository = SqlAlchemyCorporateActionEventGraphRepository(async_db_session)
+
+    for sequence, child in enumerate(first.expected_children, start=1):
+        await repository.observe_child(
+            _observation(first, child, delivery_event_id=f"correction-delivery-{sequence}")
+        )
+    assert await repository.append_manifest(first) is CorporateActionManifestAppendOutcome.APPENDED
+    assert await repository.append_manifest(second) is CorporateActionManifestAppendOutcome.APPENDED
+    await async_db_session.commit()
+    async_db_session.expire_all()
+
+    event = await async_db_session.scalar(select(CorporateActionEventRecord))
+    assert event is not None
+    assert event.current_manifest_version == 2
+    assert event.readiness_status == "READY"
+    assert event.last_observation_sequence == 3
+    latest_evaluation = await async_db_session.scalar(
+        select(CorporateActionReadinessEvaluationRecord).order_by(
+            CorporateActionReadinessEvaluationRecord.state_version.desc()
+        )
+    )
+    assert latest_evaluation is not None
+    assert latest_evaluation.ordered_transaction_ids == [
+        source.transaction_id,
+        "CA-TARGET-001",
+    ]
+
+
+async def test_concurrent_last_child_has_one_state_winner_and_neutral_retry(
+    clean_db,
+    db_engine: Engine,
+    async_db_session: AsyncSession,
+) -> None:
+    _apply_migration(db_engine)
+    await _seed_portfolio(async_db_session)
+    manifest = _manifest()
+    await _seed_transactions(async_db_session, manifest.expected_children)
+    seed_repository = SqlAlchemyCorporateActionEventGraphRepository(async_db_session)
+    assert (
+        await seed_repository.append_manifest(manifest)
+        is CorporateActionManifestAppendOutcome.APPENDED
+    )
+    source = next(
+        child
+        for child in manifest.expected_children
+        if child.child_role == "SOURCE_POSITION_REDUCE"
+    )
+    target = next(
+        child for child in manifest.expected_children if child.child_role == "TARGET_POSITION_ADD"
+    )
+    await seed_repository.observe_child(
+        _observation(manifest, source, delivery_event_id="source-delivery")
+    )
+    await async_db_session.commit()
+    bind = async_db_session.bind
+    assert bind is not None
+    session_factory = async_sessionmaker(bind, expire_on_commit=False)
+
+    contender_task: asyncio.Task[Any] | None = None
+    async with session_factory() as owner, session_factory() as contender:
+        try:
+            owner_repository = SqlAlchemyCorporateActionEventGraphRepository(owner)
+            contender_repository = SqlAlchemyCorporateActionEventGraphRepository(contender)
+            owner_decision = await owner_repository.observe_child(
+                _observation(manifest, target, delivery_event_id="target-owner")
+            )
+            assert owner_decision.readiness_status == "READY"
+            contender_pid = await contender.scalar(text("SELECT pg_backend_pid()"))
+            assert contender_pid is not None
+            contender_task = asyncio.create_task(
+                contender_repository.observe_child(
+                    _observation(manifest, target, delivery_event_id="target-contender")
+                )
+            )
+            await wait_for_postgres_advisory_lock_wait(
+                contender_task,
+                session_factory,
+                backend_pid=contender_pid,
+                timeout=2,
+            )
+            await owner.commit()
+            contender_decision = await asyncio.wait_for(contender_task, timeout=5)
+            assert (
+                contender_decision.observation_outcome
+                is CorporateActionObservationAppendOutcome.UNCHANGED
+            )
+            assert contender_decision.readiness_status == "READY"
+            await contender.commit()
+        finally:
+            await cancel_pending_tasks(contender_task)
+
+    async with session_factory() as verification:
+        event = await verification.scalar(select(CorporateActionEventRecord))
+        assert event is not None
+        assert event.state_version == 3
+        assert event.last_observation_sequence == 2
+        assert (
+            await verification.scalar(
+                select(func.count()).select_from(CorporateActionReadinessEvaluationRecord)
+            )
+            == 3
+        )
+
+
+async def test_manifest_append_statement_count_is_constant_at_one_thousand_nodes(
+    clean_db,
+    db_engine: Engine,
+    async_db_session: AsyncSession,
+) -> None:
+    _apply_migration(db_engine)
+    await _seed_portfolio(async_db_session)
+    repository = SqlAlchemyCorporateActionEventGraphRepository(async_db_session)
+    small_manifest = _large_manifest(node_count=10, suffix="SMALL")
+    large_manifest = _large_manifest(node_count=1_000, suffix="LARGE")
+    bind = async_db_session.bind
+    assert bind is not None
+    statements: list[str] = []
+
+    def record_statement(
+        _connection,
+        _cursor,
+        statement,
+        _parameters,
+        _context,
+        _executemany,
+    ) -> None:
+        statements.append(statement)
+
+    sqlalchemy_event.listen(bind.sync_engine, "before_cursor_execute", record_statement)
+    try:
+        before_small = len(statements)
+        assert (
+            await repository.append_manifest(small_manifest)
+            is CorporateActionManifestAppendOutcome.APPENDED
+        )
+        small_statement_count = len(statements) - before_small
+        before_large = len(statements)
+        assert (
+            await repository.append_manifest(large_manifest)
+            is CorporateActionManifestAppendOutcome.APPENDED
+        )
+        large_statement_count = len(statements) - before_large
+    finally:
+        sqlalchemy_event.remove(bind.sync_engine, "before_cursor_execute", record_statement)
+
+    assert small_statement_count == large_statement_count
+    assert large_statement_count <= 15
+
+    await _seed_transactions(
+        async_db_session,
+        (*small_manifest.expected_children, *large_manifest.expected_children),
+    )
+    events = {
+        event.corporate_action_event_id: event
+        for event in (await async_db_session.scalars(select(CorporateActionEventRecord))).all()
+    }
+    await _seed_observations(
+        async_db_session,
+        events[small_manifest.corporate_action_event_id].id,
+        small_manifest,
+    )
+    await _seed_observations(
+        async_db_session,
+        events[large_manifest.corporate_action_event_id].id,
+        large_manifest,
+    )
+
+    statements.clear()
+    sqlalchemy_event.listen(bind.sync_engine, "before_cursor_execute", record_statement)
+    try:
+        before_small = len(statements)
+        small_readiness, _ = await repository._evaluate_current_event(
+            events[small_manifest.corporate_action_event_id]
+        )
+        small_read_statement_count = len(statements) - before_small
+        before_large = len(statements)
+        large_readiness, _ = await repository._evaluate_current_event(
+            events[large_manifest.corporate_action_event_id]
+        )
+        large_read_statement_count = len(statements) - before_large
+    finally:
+        sqlalchemy_event.remove(bind.sync_engine, "before_cursor_execute", record_statement)
+
+    assert small_readiness.status == "READY"
+    assert large_readiness.status == "READY"
+    assert small_read_statement_count == large_read_statement_count
+    assert large_read_statement_count <= 6
+
+
+async def test_observation_book_scope_fails_closed_in_repository_and_database(
+    clean_db,
+    db_engine: Engine,
+    async_db_session: AsyncSession,
+) -> None:
+    _apply_migration(db_engine)
+    await _seed_portfolio(async_db_session)
+    manifest = _manifest()
+    await _seed_transactions(async_db_session, manifest.expected_children)
+    repository = SqlAlchemyCorporateActionEventGraphRepository(async_db_session)
+    assert (
+        await repository.append_manifest(manifest) is CorporateActionManifestAppendOutcome.APPENDED
+    )
+    await _seed_other_portfolio_and_transaction(async_db_session)
+    foreign_child = replace(
+        manifest.expected_children[0],
+        transaction_id="CA-FOREIGN-001",
+        instrument_id="FOREIGN-SEC",
+        target_instrument_id="FOREIGN-SEC",
+    )
+    observation = _observation(
+        manifest,
+        foreign_child,
+        delivery_event_id="foreign-delivery",
+    )
+
+    with pytest.raises(CorporateActionBookScopeError, match="outside event portfolio"):
+        await repository.observe_child(observation)
+    assert await async_db_session.scalar(text("SELECT 1")) == 1
+
+    event_id = await async_db_session.scalar(select(CorporateActionEventRecord.id))
+    assert event_id is not None
+    with pytest.raises(IntegrityError, match="outside event portfolio"):
+        async with async_db_session.begin_nested():
+            await async_db_session.execute(
+                insert(CorporateActionChildObservationRecord).values(
+                    event_id=event_id,
+                    observation_sequence=1,
+                    transaction_id=foreign_child.transaction_id,
+                    transaction_epoch=1,
+                    delivery_event_id="foreign-direct",
+                    correlation_id="correlation-001",
+                    observed_content_hash=foreign_child.content_hash,
+                    observed_payload=foreign_child.lineage_payload(),
+                    observed_at=manifest.source_reference.observed_at,
+                )
+            )
+    assert await async_db_session.scalar(text("SELECT 1")) == 1
 
 
 async def test_cas_conflict_savepoint_prevents_stranded_graph_commit(
@@ -424,6 +830,61 @@ async def test_cas_conflict_savepoint_prevents_stranded_graph_commit(
     )
 
 
+async def test_observation_cas_conflict_rolls_back_observation_and_evaluation(
+    clean_db,
+    db_engine: Engine,
+    async_db_session: AsyncSession,
+) -> None:
+    _apply_migration(db_engine)
+    await _seed_portfolio(async_db_session)
+    manifest = _manifest()
+    await _seed_transactions(async_db_session, manifest.expected_children)
+    repository = SqlAlchemyCorporateActionEventGraphRepository(async_db_session)
+    assert (
+        await repository.append_manifest(manifest) is CorporateActionManifestAppendOutcome.APPENDED
+    )
+    await async_db_session.commit()
+    original_advance = repository._advance_observation_state
+
+    async def force_cas_loss(event, *, observation_sequence, readiness_status) -> None:
+        await async_db_session.execute(
+            text(
+                "UPDATE corporate_action_events "
+                "SET state_version = state_version + 1 WHERE id = :event_id"
+            ),
+            {"event_id": event.id},
+        )
+        await original_advance(
+            event,
+            observation_sequence=observation_sequence,
+            readiness_status=readiness_status,
+        )
+
+    repository._advance_observation_state = force_cas_loss  # type: ignore[method-assign]
+    with pytest.raises(ConflictingCorporateActionObservationError, match="state changed"):
+        await repository.observe_child(
+            _observation(manifest, manifest.expected_children[0], delivery_event_id="cas-loss")
+        )
+    await async_db_session.commit()
+
+    event = await async_db_session.scalar(select(CorporateActionEventRecord))
+    assert event is not None
+    assert event.state_version == 1
+    assert event.last_observation_sequence == 0
+    assert (
+        await async_db_session.scalar(
+            select(func.count()).select_from(CorporateActionChildObservationRecord)
+        )
+        == 0
+    )
+    assert (
+        await async_db_session.scalar(
+            select(func.count()).select_from(CorporateActionReadinessEvaluationRecord)
+        )
+        == 1
+    )
+
+
 def _manifest() -> corporate_action.CorporateActionParentManifest:
     source = corporate_action.CorporateActionEventChild(
         transaction_id="CA-SOURCE-001",
@@ -462,6 +923,71 @@ def _manifest() -> corporate_action.CorporateActionParentManifest:
                 9,
                 tzinfo=timezone(timedelta(hours=8)),
             ),
+        ),
+    )
+
+
+def _observation(
+    manifest: corporate_action.CorporateActionParentManifest,
+    child: corporate_action.CorporateActionEventChild,
+    *,
+    delivery_event_id: str,
+    transaction_epoch: int = 1,
+) -> CorporateActionChildObservation:
+    return CorporateActionChildObservation(
+        corporate_action_event_id=manifest.corporate_action_event_id,
+        portfolio_id=manifest.portfolio_id,
+        linked_transaction_group_id=manifest.linked_transaction_group_id,
+        parent_event_reference=manifest.parent_event_reference,
+        child=child,
+        transaction_epoch=transaction_epoch,
+        delivery_event_id=delivery_event_id,
+        correlation_id="correlation-001",
+        observed_at=manifest.source_reference.observed_at,
+    )
+
+
+def _large_manifest(
+    *,
+    node_count: int,
+    suffix: str,
+) -> corporate_action.CorporateActionParentManifest:
+    if node_count < 2:
+        raise ValueError("node_count must include one source and at least one target")
+    source = corporate_action.CorporateActionEventChild(
+        transaction_id=f"CA-SOURCE-{suffix}",
+        transaction_type="DEMERGER_OUT",
+        child_role="SOURCE_POSITION_REDUCE",
+        instrument_id=f"SOURCE-{suffix}",
+        source_instrument_id=f"SOURCE-{suffix}",
+    )
+    targets = tuple(
+        corporate_action.CorporateActionEventChild(
+            transaction_id=f"CA-TARGET-{suffix}-{index:04d}",
+            transaction_type="DEMERGER_IN",
+            child_role="TARGET_POSITION_ADD",
+            dependency_transaction_ids=(source.transaction_id,),
+            instrument_id=f"TARGET-{suffix}-{index:04d}",
+            source_instrument_id=source.instrument_id,
+            target_instrument_id=f"TARGET-{suffix}-{index:04d}",
+        )
+        for index in range(1, node_count)
+    )
+    return corporate_action.CorporateActionParentManifest(
+        corporate_action_event_id=f"CA-EVENT-{suffix}",
+        portfolio_id="CA-PORT-001",
+        linked_transaction_group_id=f"CA-GROUP-{suffix}",
+        parent_event_reference=f"CA-PARENT-{suffix}",
+        corporate_action_type="DEMERGER",
+        version=1,
+        completion_declared=True,
+        expected_children=(source, *targets),
+        source_reference=FinancialSourceReference(
+            source_system="custodian-ca",
+            source_record_id=f"SOURCE-CA-{suffix}",
+            source_revision="1",
+            source_content_hash="c" * 64,
+            observed_at=datetime(2026, 8, 9, tzinfo=timezone.utc),
         ),
     )
 
@@ -544,6 +1070,97 @@ async def _seed_transactions(
             }
             for child in children
         ],
+    )
+
+
+async def _seed_observations(
+    session: AsyncSession,
+    event_id: int,
+    manifest: corporate_action.CorporateActionParentManifest,
+) -> None:
+    await session.execute(
+        insert(CorporateActionChildObservationRecord),
+        [
+            {
+                "event_id": event_id,
+                "observation_sequence": sequence,
+                "transaction_id": child.transaction_id,
+                "transaction_epoch": 1,
+                "delivery_event_id": f"capacity-{manifest.corporate_action_event_id}-{sequence}",
+                "correlation_id": "capacity-correlation",
+                "observed_content_hash": child.content_hash,
+                "observed_payload": child.lineage_payload(),
+                "observed_at": manifest.source_reference.observed_at,
+            }
+            for sequence, child in enumerate(manifest.expected_children, start=1)
+        ],
+    )
+
+
+async def _seed_other_portfolio_and_transaction(session: AsyncSession) -> None:
+    await session.execute(
+        text(
+            """
+            INSERT INTO portfolios (
+                portfolio_id,
+                tenant_id,
+                legal_book_id,
+                base_currency,
+                open_date,
+                risk_exposure,
+                investment_time_horizon,
+                portfolio_type,
+                booking_center_code,
+                client_id,
+                is_leverage_allowed,
+                status
+            ) VALUES (
+                'CA-PORT-OTHER',
+                'TENANT-SG',
+                'PB-SG-02',
+                'USD',
+                DATE '2026-01-01',
+                'BALANCED',
+                'LONG_TERM',
+                'DISCRETIONARY',
+                'SG',
+                'CA-CLIENT-OTHER',
+                false,
+                'ACTIVE'
+            )
+            """
+        )
+    )
+    await session.execute(
+        text(
+            """
+            INSERT INTO transactions (
+                transaction_id,
+                portfolio_id,
+                instrument_id,
+                security_id,
+                transaction_type,
+                quantity,
+                price,
+                gross_transaction_amount,
+                trade_currency,
+                currency,
+                transaction_date
+            ) VALUES (
+                'CA-FOREIGN-001',
+                'CA-PORT-OTHER',
+                'FOREIGN-SEC',
+                'FOREIGN-SEC',
+                'DEMERGER_IN',
+                1,
+                1,
+                1,
+                'USD',
+                'USD',
+                TIMESTAMPTZ '2026-08-09 01:00:00+00'
+            )
+            """
+        )
     )
 
 
