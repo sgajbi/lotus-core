@@ -139,6 +139,17 @@ def test_inspected_commit_must_resolve_in_core() -> None:
     assert any("must resolve to a Core commit" in error for error in errors)
 
 
+def test_shallow_checkout_uses_run_binding_instead_of_absent_ancestor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(guard, "_git_commit_resolves", lambda *_args: False)
+    monkeypatch.setattr(guard, "_is_shallow_repository", lambda *_args: True)
+
+    errors = guard.validate_manifest(_manifest())
+
+    assert not any("must resolve to a Core commit" in error for error in errors)
+
+
 def test_online_receipt_verification_rejects_missing_artifact(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
