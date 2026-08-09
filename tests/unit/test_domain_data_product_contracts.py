@@ -205,6 +205,41 @@ def test_core_declaration_preserves_high_value_mesh_products_and_trust_posture()
         assert products[evidence_product]["lineage_policy"]["evidence_bundle_required"] is True
 
 
+def test_core_declaration_request_scope_matches_product_grain_and_routes() -> None:
+    products = {product["product_name"]: product for product in _load_declaration()["products"]}
+
+    expected_scope = {
+        "HoldingsAsOf": {
+            "request_scope": {"scope_level": "portfolio", "supports_bulk": True},
+            "identifier_refs": [
+                "portfolio_id",
+                "position_id",
+                "instrument_id",
+                "tenant_id",
+            ],
+        },
+        "IngestionEvidenceBundle": {
+            "request_scope": {
+                "scope_level": "ingestion_job",
+                "supports_bulk": False,
+            },
+            "identifier_refs": ["job_id", "correlation_id", "tenant_id"],
+        },
+        "ReconciliationEvidenceBundle": {
+            "request_scope": {"scope_level": "portfolio", "supports_bulk": True},
+            "identifier_refs": ["portfolio_id", "run_id", "snapshot_id", "tenant_id"],
+        },
+        "PortfolioManagerBookMembership": {
+            "request_scope": {"scope_level": "book", "supports_bulk": False},
+            "identifier_refs": ["portfolio_manager_id", "portfolio_id", "tenant_id"],
+        },
+    }
+
+    for product_name, expected in expected_scope.items():
+        assert products[product_name]["request_scope"] == expected["request_scope"]
+        assert products[product_name]["identifier_refs"] == expected["identifier_refs"]
+
+
 def test_core_declaration_readme_documents_local_validation_path() -> None:
     readme = (LOCAL_DECLARATION_DIR / "README.md").read_text(encoding="utf-8")
 
