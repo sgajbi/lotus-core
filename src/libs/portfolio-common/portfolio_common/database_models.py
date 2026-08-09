@@ -2195,6 +2195,480 @@ class Transaction(Base):
     )
 
 
+class CorporateActionEventRecord(Base):
+    """Mutable pointer and CAS state for one book-scoped corporate-action event."""
+
+    __tablename__ = "corporate_action_events"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    tenant_id = Column(String, nullable=False)
+    legal_book_id = Column(String, nullable=False)
+    portfolio_id = Column(String, nullable=False)
+    corporate_action_event_id = Column(String, nullable=False)
+    linked_transaction_group_id = Column(String, nullable=False)
+    parent_event_reference = Column(String, nullable=False)
+    current_manifest_version = Column(Integer, nullable=True)
+    last_observation_sequence = Column(Integer, nullable=False, server_default="0")
+    state_version = Column(Integer, nullable=False, server_default="0")
+    readiness_status = Column(String, nullable=False, server_default="AWAITING_MANIFEST")
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["tenant_id", "legal_book_id", "portfolio_id"],
+            ["portfolios.tenant_id", "portfolios.legal_book_id", "portfolios.portfolio_id"],
+            name="fk_ca_event_book_scope",
+        ),
+        ForeignKeyConstraint(
+            ["id", "current_manifest_version"],
+            [
+                "corporate_action_manifest_versions.event_id",
+                "corporate_action_manifest_versions.manifest_version",
+            ],
+            name="fk_ca_event_current_manifest",
+            use_alter=True,
+        ),
+        UniqueConstraint(
+            "portfolio_id",
+            "corporate_action_event_id",
+            name="uq_ca_event_portfolio_identity",
+        ),
+        UniqueConstraint(
+            "portfolio_id",
+            "linked_transaction_group_id",
+            "parent_event_reference",
+            name="uq_ca_event_parent_group",
+        ),
+        CheckConstraint(
+            "tenant_id = btrim(tenant_id) AND tenant_id <> '' "
+            "AND legal_book_id = btrim(legal_book_id) AND legal_book_id <> '' "
+            "AND portfolio_id = btrim(portfolio_id) AND portfolio_id <> '' "
+            "AND corporate_action_event_id = btrim(corporate_action_event_id) "
+            "AND corporate_action_event_id <> '' "
+            "AND linked_transaction_group_id = btrim(linked_transaction_group_id) "
+            "AND linked_transaction_group_id <> '' "
+            "AND parent_event_reference = btrim(parent_event_reference) "
+            "AND parent_event_reference <> ''",
+            name="ck_ca_event_identity_normalized",
+        ),
+        CheckConstraint(
+            "current_manifest_version IS NULL OR current_manifest_version >= 1",
+            name="ck_ca_event_manifest_version",
+        ),
+        CheckConstraint(
+            "last_observation_sequence >= 0 AND state_version >= 0",
+            name="ck_ca_event_counters_nonnegative",
+        ),
+        CheckConstraint(
+            "readiness_status IN ('AWAITING_MANIFEST', 'AWAITING_COMPLETION', "
+            "'AWAITING_CHILDREN', 'INVALID', 'READY')",
+            name="ck_ca_event_readiness_status",
+        ),
+        CheckConstraint(
+            "(current_manifest_version IS NULL AND readiness_status = 'AWAITING_MANIFEST') "
+            "OR (current_manifest_version IS NOT NULL "
+            "AND readiness_status <> 'AWAITING_MANIFEST')",
+            name="ck_ca_event_manifest_status_shape",
+        ),
+        Index(
+            "ix_ca_event_portfolio_status_updated",
+            "portfolio_id",
+            "readiness_status",
+            updated_at.desc(),
+        ),
+    )
+
+
+class CorporateActionManifestVersionRecord(Base):
+    """Immutable source-owned parent-manifest version and content identity."""
+
+    __tablename__ = "corporate_action_manifest_versions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    event_id = Column(
+        Integer,
+        ForeignKey("corporate_action_events.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    manifest_version = Column(Integer, nullable=False)
+    corporate_action_type = Column(String, nullable=False)
+    completion_declared = Column(Boolean, nullable=False)
+    source_system = Column(String, nullable=False)
+    source_record_id = Column(String, nullable=False)
+    source_revision = Column(String, nullable=False)
+    source_content_hash = Column(String(64), nullable=False)
+    source_observed_at = Column(DateTime(timezone=True), nullable=False)
+    manifest_content_hash = Column(String(64), nullable=False)
+    previous_manifest_id = Column(Integer, nullable=True)
+    previous_manifest_content_hash = Column(String(64), nullable=True)
+    expected_node_count = Column(Integer, nullable=False)
+    expected_edge_count = Column(Integer, nullable=False)
+    opened_observation_sequence = Column(Integer, nullable=False)
+    manifest_payload = Column(JSONB(none_as_null=True), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "event_id",
+            "id",
+            name="uq_ca_manifest_event_record",
+        ),
+        UniqueConstraint(
+            "event_id",
+            "manifest_version",
+            name="uq_ca_manifest_event_version",
+        ),
+        UniqueConstraint(
+            "event_id",
+            "source_system",
+            "source_record_id",
+            "source_revision",
+            name="uq_ca_manifest_source_revision",
+        ),
+        UniqueConstraint(
+            "event_id",
+            "manifest_content_hash",
+            name="uq_ca_manifest_event_content",
+        ),
+        ForeignKeyConstraint(
+            ["event_id", "previous_manifest_id"],
+            [
+                "corporate_action_manifest_versions.event_id",
+                "corporate_action_manifest_versions.id",
+            ],
+            name="fk_ca_manifest_predecessor",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "manifest_version >= 1 AND expected_node_count >= 0 "
+            "AND expected_edge_count >= 0 AND opened_observation_sequence >= 0",
+            name="ck_ca_manifest_counts",
+        ),
+        CheckConstraint(
+            "corporate_action_type = btrim(corporate_action_type) "
+            "AND corporate_action_type <> '' "
+            "AND source_system = btrim(source_system) AND source_system <> '' "
+            "AND source_record_id = btrim(source_record_id) AND source_record_id <> '' "
+            "AND source_revision = btrim(source_revision) AND source_revision <> ''",
+            name="ck_ca_manifest_identity_normalized",
+        ),
+        CheckConstraint(
+            "source_content_hash ~ '^[0-9a-f]{64}$' "
+            "AND manifest_content_hash ~ '^[0-9a-f]{64}$' "
+            "AND (previous_manifest_content_hash IS NULL "
+            "OR previous_manifest_content_hash ~ '^[0-9a-f]{64}$')",
+            name="ck_ca_manifest_hashes",
+        ),
+        CheckConstraint(
+            "(manifest_version = 1 AND previous_manifest_id IS NULL "
+            "AND previous_manifest_content_hash IS NULL) "
+            "OR (manifest_version > 1 AND previous_manifest_id IS NOT NULL "
+            "AND previous_manifest_content_hash IS NOT NULL)",
+            name="ck_ca_manifest_chain_shape",
+        ),
+        CheckConstraint(
+            "source_observed_at NOT IN ('infinity'::timestamptz, '-infinity'::timestamptz)",
+            name="ck_ca_manifest_observed_at_finite",
+        ),
+        CheckConstraint(
+            "jsonb_typeof(manifest_payload) = 'object'",
+            name="ck_ca_manifest_payload_object",
+        ),
+        Index(
+            "ix_ca_manifest_source_history",
+            "source_system",
+            "source_record_id",
+            "source_revision",
+        ),
+    )
+
+
+class CorporateActionManifestNodeRecord(Base):
+    """Immutable expected child node for one parent-manifest version."""
+
+    __tablename__ = "corporate_action_manifest_nodes"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    manifest_id = Column(
+        Integer,
+        ForeignKey("corporate_action_manifest_versions.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    transaction_id = Column(String, nullable=False)
+    transaction_type = Column(String, nullable=False)
+    child_role = Column(String, nullable=False)
+    child_sequence_hint = Column(Integer, nullable=True)
+    instrument_id = Column(String, nullable=True)
+    source_instrument_id = Column(String, nullable=True)
+    target_instrument_id = Column(String, nullable=True)
+    child_content_hash = Column(String(64), nullable=False)
+    resolved_execution_ordinal = Column(Integer, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "manifest_id",
+            "transaction_id",
+            name="uq_ca_manifest_node_identity",
+        ),
+        CheckConstraint(
+            "transaction_id = btrim(transaction_id) AND transaction_id <> '' "
+            "AND transaction_type = btrim(transaction_type) AND transaction_type <> '' "
+            "AND child_role = btrim(child_role) AND child_role <> ''",
+            name="ck_ca_manifest_node_normalized",
+        ),
+        CheckConstraint(
+            "(instrument_id IS NULL OR "
+            "(instrument_id = btrim(instrument_id) AND instrument_id <> '')) "
+            "AND (source_instrument_id IS NULL OR "
+            "(source_instrument_id = btrim(source_instrument_id) "
+            "AND source_instrument_id <> '')) "
+            "AND (target_instrument_id IS NULL OR "
+            "(target_instrument_id = btrim(target_instrument_id) "
+            "AND target_instrument_id <> ''))",
+            name="ck_ca_manifest_node_instruments",
+        ),
+        CheckConstraint(
+            "child_sequence_hint IS NULL OR child_sequence_hint >= 0",
+            name="ck_ca_manifest_node_sequence",
+        ),
+        CheckConstraint(
+            "resolved_execution_ordinal IS NULL OR resolved_execution_ordinal >= 0",
+            name="ck_ca_manifest_node_ordinal",
+        ),
+        CheckConstraint(
+            "child_content_hash ~ '^[0-9a-f]{64}$'",
+            name="ck_ca_manifest_node_hash",
+        ),
+        Index(
+            "ix_ca_manifest_node_order",
+            "manifest_id",
+            "resolved_execution_ordinal",
+            "transaction_id",
+        ),
+        Index("ix_ca_manifest_node_transaction", "transaction_id"),
+        Index(
+            "uq_ca_manifest_node_resolved_ordinal",
+            "manifest_id",
+            "resolved_execution_ordinal",
+            unique=True,
+            postgresql_where=text("resolved_execution_ordinal IS NOT NULL"),
+        ),
+    )
+
+
+class CorporateActionManifestEdgeRecord(Base):
+    """Immutable predecessor edge within one parent-manifest version."""
+
+    __tablename__ = "corporate_action_manifest_edges"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    manifest_id = Column(
+        Integer,
+        ForeignKey("corporate_action_manifest_versions.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    predecessor_transaction_id = Column(String, nullable=False)
+    successor_transaction_id = Column(String, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["manifest_id", "predecessor_transaction_id"],
+            [
+                "corporate_action_manifest_nodes.manifest_id",
+                "corporate_action_manifest_nodes.transaction_id",
+            ],
+            name="fk_ca_edge_predecessor_node",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["manifest_id", "successor_transaction_id"],
+            [
+                "corporate_action_manifest_nodes.manifest_id",
+                "corporate_action_manifest_nodes.transaction_id",
+            ],
+            name="fk_ca_edge_successor_node",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "manifest_id",
+            "predecessor_transaction_id",
+            "successor_transaction_id",
+            name="uq_ca_manifest_edge",
+        ),
+        CheckConstraint(
+            "predecessor_transaction_id <> successor_transaction_id",
+            name="ck_ca_manifest_edge_not_self",
+        ),
+        Index(
+            "ix_ca_manifest_edge_successor",
+            "manifest_id",
+            "successor_transaction_id",
+        ),
+    )
+
+
+class CorporateActionChildObservationRecord(Base):
+    """Append-only child arrival evidence used to reconstruct readiness after restart."""
+
+    __tablename__ = "corporate_action_child_observations"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    event_id = Column(
+        Integer,
+        ForeignKey("corporate_action_events.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    observation_sequence = Column(Integer, nullable=False)
+    transaction_id = Column(
+        String,
+        ForeignKey("transactions.transaction_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    transaction_epoch = Column(Integer, nullable=False)
+    delivery_event_id = Column(String, nullable=False)
+    correlation_id = Column(String, nullable=True)
+    observed_content_hash = Column(String(64), nullable=False)
+    observed_payload = Column(JSONB(none_as_null=True), nullable=False)
+    observed_at = Column(DateTime(timezone=True), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "event_id",
+            "observation_sequence",
+            name="uq_ca_observation_sequence",
+        ),
+        UniqueConstraint(
+            "event_id",
+            "delivery_event_id",
+            name="uq_ca_observation_delivery",
+        ),
+        UniqueConstraint(
+            "event_id",
+            "transaction_id",
+            "transaction_epoch",
+            "observed_content_hash",
+            name="uq_ca_observation_semantic_retry",
+        ),
+        CheckConstraint(
+            "observation_sequence >= 1 AND transaction_epoch >= 0",
+            name="ck_ca_observation_counters",
+        ),
+        CheckConstraint(
+            "delivery_event_id = btrim(delivery_event_id) AND delivery_event_id <> '' "
+            "AND transaction_id = btrim(transaction_id) AND transaction_id <> ''",
+            name="ck_ca_observation_identity_normalized",
+        ),
+        CheckConstraint(
+            "observed_content_hash ~ '^[0-9a-f]{64}$'",
+            name="ck_ca_observation_hash",
+        ),
+        CheckConstraint(
+            "observed_at NOT IN ('infinity'::timestamptz, '-infinity'::timestamptz)",
+            name="ck_ca_observation_observed_at_finite",
+        ),
+        CheckConstraint(
+            "jsonb_typeof(observed_payload) = 'object'",
+            name="ck_ca_observation_payload_object",
+        ),
+        Index(
+            "ix_ca_observation_event_transaction",
+            "event_id",
+            "transaction_id",
+            transaction_epoch.desc(),
+            observation_sequence.desc(),
+        ),
+        Index("ix_ca_observation_transaction", "transaction_id"),
+    )
+
+
+class CorporateActionReadinessEvaluationRecord(Base):
+    """Append-only deterministic evaluation and execution-plan evidence."""
+
+    __tablename__ = "corporate_action_readiness_evaluations"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    event_id = Column(
+        Integer,
+        ForeignKey("corporate_action_events.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    state_version = Column(Integer, nullable=False)
+    manifest_id = Column(
+        Integer,
+        nullable=True,
+    )
+    through_observation_sequence = Column(Integer, nullable=False)
+    readiness_status = Column(String, nullable=False)
+    manifest_content_hash = Column(String(64), nullable=True)
+    execution_plan_content_hash = Column(String(64), nullable=True)
+    findings = Column(JSONB(none_as_null=True), nullable=False)
+    ordered_transaction_ids = Column(JSONB(none_as_null=True), nullable=False)
+    correlation_id = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["event_id", "manifest_id"],
+            [
+                "corporate_action_manifest_versions.event_id",
+                "corporate_action_manifest_versions.id",
+            ],
+            name="fk_ca_readiness_event_manifest",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "event_id",
+            "state_version",
+            name="uq_ca_readiness_state_version",
+        ),
+        CheckConstraint(
+            "state_version >= 1 AND through_observation_sequence >= 0",
+            name="ck_ca_readiness_counters",
+        ),
+        CheckConstraint(
+            "readiness_status IN ('AWAITING_MANIFEST', 'AWAITING_COMPLETION', "
+            "'AWAITING_CHILDREN', 'INVALID', 'READY')",
+            name="ck_ca_readiness_status",
+        ),
+        CheckConstraint(
+            "(manifest_content_hash IS NULL OR manifest_content_hash ~ '^[0-9a-f]{64}$') "
+            "AND (execution_plan_content_hash IS NULL "
+            "OR execution_plan_content_hash ~ '^[0-9a-f]{64}$')",
+            name="ck_ca_readiness_hashes",
+        ),
+        CheckConstraint(
+            "jsonb_typeof(findings) = 'array' AND jsonb_typeof(ordered_transaction_ids) = 'array'",
+            name="ck_ca_readiness_evidence_arrays",
+        ),
+        CheckConstraint(
+            "(manifest_id IS NULL AND readiness_status = 'AWAITING_MANIFEST' "
+            "AND manifest_content_hash IS NULL) "
+            "OR (manifest_id IS NOT NULL AND readiness_status <> 'AWAITING_MANIFEST' "
+            "AND manifest_content_hash IS NOT NULL)",
+            name="ck_ca_readiness_manifest_shape",
+        ),
+        CheckConstraint(
+            "(readiness_status = 'READY' AND execution_plan_content_hash IS NOT NULL "
+            "AND jsonb_array_length(findings) = 0 "
+            "AND jsonb_array_length(ordered_transaction_ids) > 0) "
+            "OR (readiness_status <> 'READY' AND execution_plan_content_hash IS NULL "
+            "AND jsonb_array_length(ordered_transaction_ids) = 0)",
+            name="ck_ca_readiness_ready_shape",
+        ),
+        Index(
+            "ix_ca_readiness_status_created",
+            "readiness_status",
+            created_at.desc(),
+        ),
+    )
+
+
 class TransactionCost(Base):
     __tablename__ = "transaction_costs"
 
