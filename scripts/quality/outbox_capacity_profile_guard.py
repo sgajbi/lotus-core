@@ -196,6 +196,8 @@ def validate_outbox_capacity_contract(
         findings.append({"invalid_schema_version": contract.get("schema_version")})
     if contract.get("issue") != "sgajbi/lotus-core#794":
         findings.append({"invalid_issue": contract.get("issue")})
+    if contract.get("acceptance_command") != "make test-outbox-capacity-acceptance":
+        findings.append({"invalid_acceptance_command": contract.get("acceptance_command")})
     expected_safety_invariants = {
         "delivery_fence_rounding_seconds": 1,
         "claim_lease_safety_seconds": CLAIM_LEASE_SAFETY_SECONDS,
@@ -278,6 +280,8 @@ def validate_outbox_capacity_contract(
     if missing_acceptance_evidence:
         findings.append({"missing_acceptance_evidence": missing_acceptance_evidence})
     make_targets = _make_targets(repo_root)
+    if "test-outbox-capacity-acceptance" not in make_targets:
+        findings.append({"missing_make_target": "test-outbox-capacity-acceptance"})
     for failure_mode, references in acceptance_evidence.items():
         if not isinstance(references, list) or not references:
             findings.append({"acceptance_evidence": failure_mode, "missing": "references"})
