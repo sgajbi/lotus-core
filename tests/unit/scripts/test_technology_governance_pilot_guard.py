@@ -202,6 +202,69 @@ def test_inspected_commit_must_resolve_in_core() -> None:
     assert any("must resolve to a Core commit" in error for error in errors)
 
 
+def test_inspected_commit_must_be_on_origin_main(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(guard, "_git_commit_resolves", lambda *_args: True)
+    monkeypatch.setattr(guard, "_git_commit_is_on_main", lambda *_args: False)
+
+    errors = guard.validate_manifest(_manifest())
+
+    assert any("must be an ancestor of origin/main" in error for error in errors)
+
+
+def test_git_commit_main_ancestry_rejects_branch_only_commit(tmp_path: Path) -> None:
+    repository = tmp_path / "repository"
+    repository.mkdir()
+    subprocess.run(["git", "init"], cwd=repository, check=True, capture_output=True)
+    evidence_path = repository / "evidence.txt"
+    evidence_path.write_text("main evidence\n", encoding="utf-8")
+    subprocess.run(["git", "add", "evidence.txt"], cwd=repository, check=True)
+    commit_command = [
+        "git",
+        "-c",
+        "user.name=Lotus Test",
+        "-c",
+        "user.email=lotus-test@example.invalid",
+        "commit",
+        "-m",
+    ]
+    subprocess.run(
+        [*commit_command, "main evidence"],
+        cwd=repository,
+        check=True,
+        capture_output=True,
+    )
+    main_commit = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=repository,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    subprocess.run(
+        ["git", "update-ref", "refs/remotes/origin/main", main_commit],
+        cwd=repository,
+        check=True,
+    )
+    evidence_path.write_text("branch-only evidence\n", encoding="utf-8")
+    subprocess.run(["git", "add", "evidence.txt"], cwd=repository, check=True)
+    subprocess.run(
+        [*commit_command, "branch evidence"],
+        cwd=repository,
+        check=True,
+        capture_output=True,
+    )
+    branch_commit = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=repository,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+
+    assert guard._git_commit_is_on_main(repository, main_commit)
+    assert not guard._git_commit_is_on_main(repository, branch_commit)
+
+
 def test_online_receipt_verification_rejects_missing_artifact(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
