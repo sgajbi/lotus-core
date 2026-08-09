@@ -1,5 +1,16 @@
 # Codebase Review Ledger
 
+CR-1680 domain-product request-scope correction (2026-08-09): issue #885 found that
+`HoldingsAsOf:v1` advertised ingestion-job/non-bulk scope and `IngestionEvidenceBundle:v1`
+advertised portfolio/bulk scope, contradicting their route and response grains. The same-pattern
+route audit found missing material `run_id` and `portfolio_manager_id` identifiers in
+`ReconciliationEvidenceBundle:v1` and `PortfolioManagerBookMembership:v1`. Core now declares the
+four canonical grains, bulk postures, and material identifiers exactly; an executable regression
+locks all four products and the sibling Platform validator rejects ungoverned taxonomy/scope
+values. Response DTOs, routes, OpenAPI, persistence, migrations, events, and runtime behavior are
+unchanged because this is a producer metadata correction. Existing Mesh Data Products wiki truth
+now records the corrected declaration semantics rather than adding a standalone document.
+
 CR-1679 DPM universe source-authority addendum (2026-08-09): issue #882 proved that complete
 `DpmPortfolioUniverseCandidate:v1` READY responses still carried the shared unavailable content
 digest after request/snapshot fingerprints were correctly removed from `source_batch_fingerprint`.
