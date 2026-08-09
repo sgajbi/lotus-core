@@ -3,6 +3,7 @@ from decimal import Decimal
 from types import SimpleNamespace
 
 import pytest
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.exc import SQLAlchemyError
 
 from src.services.ingestion_service.app.services import ingestion_job_service as service_module
@@ -368,6 +369,8 @@ async def test_get_reprocessing_queue_health_aggregates_by_job_type(
     service: IngestionJobService,
     monkeypatch: pytest.MonkeyPatch,
 ):
+    captured: dict[str, object] = {}
+
     class _FakeBegin:
         async def __aenter__(self):
             return self
@@ -399,7 +402,8 @@ async def test_get_reprocessing_queue_health_aggregates_by_job_type(
             ]
 
     class _FakeSession:
-        async def execute(self, _stmt):
+        async def execute(self, stmt):
+            captured["stmt"] = stmt
             return _FakeResult()
 
         def begin(self):
@@ -416,6 +420,13 @@ async def test_get_reprocessing_queue_health_aggregates_by_job_type(
     assert response.total_failed_jobs == 2
     assert response.queues[0].job_type == "RESET_WATERMARKS"
     assert response.queues[0].oldest_pending_age_seconds > 0
+    compiled_query = str(
+        captured["stmt"].compile(
+            dialect=postgresql.dialect(),
+            compile_kwargs={"literal_binds": True},
+        )
+    )
+    assert "reprocessing_jobs.status IN ('PENDING', 'PROCESSING', 'FAILED')" in compiled_query
 
 
 async def test_get_consumer_lag_classifies_dlq_pressure(

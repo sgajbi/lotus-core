@@ -1935,7 +1935,8 @@ Current posture:
 
 The route uses the correct durable queue state source:
 
-1. it aggregates `ReprocessingJob` rows by `job_type`;
+1. it aggregates actionable or failed `ReprocessingJob` rows by `job_type` and excludes
+   completed-only history from queue pressure;
 2. it separately counts `PENDING`, `PROCESSING`, and `FAILED` states;
 3. it computes `oldest_pending_created_at` and `oldest_pending_age_seconds` per job type;
 4. it sorts queue rows by highest pending and processing pressure.

@@ -17,22 +17,28 @@ async def load_reprocessing_queue_health_response(
 ) -> IngestionReprocessingQueueHealthResponse:
     now = datetime.now(UTC)
     async for db in session_factory():
-        stmt = select(
-            DBReprocessingJob.job_type.label("job_type"),
-            func.sum(case((DBReprocessingJob.status == "PENDING", 1), else_=0)).label(
-                "pending_jobs"
-            ),
-            func.sum(case((DBReprocessingJob.status == "PROCESSING", 1), else_=0)).label(
-                "processing_jobs"
-            ),
-            func.sum(case((DBReprocessingJob.status == "FAILED", 1), else_=0)).label("failed_jobs"),
-            func.min(
-                case(
-                    (DBReprocessingJob.status == "PENDING", DBReprocessingJob.created_at),
-                    else_=None,
-                )
-            ).label("oldest_pending_created_at"),
-        ).group_by(DBReprocessingJob.job_type)
+        stmt = (
+            select(
+                DBReprocessingJob.job_type.label("job_type"),
+                func.sum(case((DBReprocessingJob.status == "PENDING", 1), else_=0)).label(
+                    "pending_jobs"
+                ),
+                func.sum(case((DBReprocessingJob.status == "PROCESSING", 1), else_=0)).label(
+                    "processing_jobs"
+                ),
+                func.sum(case((DBReprocessingJob.status == "FAILED", 1), else_=0)).label(
+                    "failed_jobs"
+                ),
+                func.min(
+                    case(
+                        (DBReprocessingJob.status == "PENDING", DBReprocessingJob.created_at),
+                        else_=None,
+                    )
+                ).label("oldest_pending_created_at"),
+            )
+            .where(DBReprocessingJob.status.in_(("PENDING", "PROCESSING", "FAILED")))
+            .group_by(DBReprocessingJob.job_type)
+        )
         result = await db.execute(stmt)
         rows = result.mappings().all()
         break

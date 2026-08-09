@@ -677,6 +677,10 @@ does not publish this key policy; the operator-owned migration runbook is the du
   `make outbox-capacity-profile-guard` cross-checks Kafka delivery and runtime supervision constants
   and rejects deployment drift. The profile remains
   `candidate_pending_exact_source` until the final current-source daily receipt passes.
+- `make test-outbox-capacity-acceptance` now executes the same contract's deduplicated direct
+  PostgreSQL nodes before its allow-listed managed restart target. It accepts only exact test-node
+  references and single Make targets, passes argv directly without a shell, and stops on the first
+  failed phase. The JSON remains the only failure-mode list; no parallel test manifest was added.
 - Capacity evidence now retains low-cardinality producer aggregate-type/topic cohorts from the
   existing topic query and fails closed when cohort, topic, and final status totals diverge. Live
   `EXPLAIN (ANALYZE, BUFFERS)` completed the extended query in `187.430ms` versus `218.392ms` for
@@ -690,6 +694,11 @@ does not publish this key policy; the operator-owned migration runbook is the du
   and makes the certifier fail closed unless eight representative cost series are present. It does
   not change statements, locking, calculations, or runtime concurrency; the next exact-source run
   must use the new series to justify any persistence change.
+- The same-pattern queue scan found ingestion's operator health projection aggregating completed
+  reprocessing history even though its contract reports only pending, processing, and failed
+  pressure. The bounded query excludes completed-only history before grouping, retains every
+  observable state, and documents that zero-pressure historical job types are absent rather than
+  forcing the database to revisit their terminal rows.
 
 Implementation commits include `23fc6faf3`, `d51adb739`, `ad1ad179d`, `57f8c60e2`,
 `4f05be9a5`, `c230d660a`, `f42f6eaa3`, `d56e14dbf`, `2d49fc8f1`, `70ae16f0f`,
