@@ -41,6 +41,33 @@
       ]
     }
   },
+  "acceptance_evidence": {
+    "duplicate_prevention": [
+      "tests/integration/libs/portfolio-common/test_outbox_dispatcher.py::test_dispatcher_is_concurrent_safe",
+      "tests/integration/libs/portfolio-common/test_outbox_dispatcher.py::test_concurrent_dispatcher_cannot_claim_later_event_for_active_ordering_stream"
+    ],
+    "dispatcher_restart": [
+      "make test-derived-state-recovery-gate"
+    ],
+    "expired_claim_recovery": [
+      "tests/integration/libs/portfolio-common/test_outbox_dispatcher.py::test_dispatcher_reclaims_expired_claim"
+    ],
+    "partial_kafka_acknowledgements": [
+      "tests/integration/libs/portfolio-common/test_outbox_dispatcher_delivery_results.py::test_marks_only_success_on_delivery"
+    ],
+    "broker_timeout": [
+      "tests/integration/libs/portfolio-common/test_outbox_dispatcher_delivery_results.py::test_flush_timeout_without_callbacks_is_accounted_as_retry"
+    ],
+    "database_rollback": [
+      "tests/integration/services/portfolio_transaction_processing_service/test_int_atomic_unit_of_work.py::test_combined_use_case_rolls_back_every_module_and_idempotency_on_failure"
+    ],
+    "terminal_failure": [
+      "tests/integration/libs/portfolio-common/test_outbox_dispatcher.py::test_dispatcher_marks_terminal_failures_as_failed"
+    ],
+    "claim_token_fencing": [
+      "tests/integration/libs/portfolio-common/test_outbox_dispatcher.py::test_dispatcher_does_not_update_result_after_claim_is_reclaimed"
+    ]
+  },
   "safety_invariants": {
     "delivery_fence_rounding_seconds": 1,
     "claim_lease_safety_seconds": 5,
