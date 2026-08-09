@@ -115,7 +115,7 @@ def _validate_local_evidence(
     if (
         not isinstance(anchors, list)
         or not anchors
-        or not all(isinstance(anchor, str) and anchor for anchor in anchors)
+        or not all(isinstance(anchor, str) and anchor.strip() for anchor in anchors)
     ):
         errors.append(f"{location}: anchors must be non-empty strings")
         return

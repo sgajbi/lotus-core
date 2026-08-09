@@ -49,7 +49,8 @@ def test_missing_file_and_anchor_fail() -> None:
     assert any("missing anchor" in error for error in errors)
 
 
-def test_empty_evidence_anchors_fail() -> None:
+@pytest.mark.parametrize("anchors", [[], [""], [" \n\t"]])
+def test_empty_evidence_anchors_fail(anchors: list[str]) -> None:
     manifest = copy.deepcopy(_manifest())
     mappings = manifest["dependency_artifacts"]
     assert isinstance(mappings, list)
@@ -57,7 +58,7 @@ def test_empty_evidence_anchors_fail() -> None:
     assert isinstance(mapping, dict)
     refs = mapping["evidence_refs"]
     assert isinstance(refs, list)
-    refs[0]["anchors"] = []
+    refs[0]["anchors"] = anchors
 
     errors = guard.validate_manifest(manifest)
 
