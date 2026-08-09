@@ -18,6 +18,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
+  actions: read
   contents: read
 
 env:
@@ -55,6 +56,10 @@ jobs:
         run: make verify-dependencies-clean
       - name: Lint
         run: make lint
+      - name: Verify Technology Governance Receipts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: make technology-governance-pilot-receipt-guard
       - name: No-Alias Contract Guard
         run: make no-alias-gate
       - name: Typecheck

@@ -193,6 +193,31 @@ def test_github_run_evidence_is_numeric_and_bound_to_inspected_commit() -> None:
     assert any("must match inspected_core_commit" in error for error in errors)
 
 
+def test_github_run_evidence_requires_governed_main_receipt_identity() -> None:
+    manifest = copy.deepcopy(_manifest())
+    _, run_ref = next(guard._github_run_refs(manifest))
+    run_ref.update(
+        {
+            "artifact_digest": "not-a-digest",
+            "workflow_id": 1,
+            "workflow_path": ".github/workflows/feature-lane.yml",
+            "event": "pull_request",
+            "head_branch": "feature/unrelated",
+        }
+    )
+
+    errors = guard.validate_manifest(manifest)
+
+    for expected in (
+        "artifact_digest must be a SHA-256 artifact digest",
+        "workflow_id must identify Main Releasability Gate",
+        "workflow_path must identify Main Releasability Gate",
+        "GitHub run event must be push",
+        "GitHub run head_branch must be main",
+    ):
+        assert any(expected in error for error in errors)
+
+
 def test_inspected_commit_must_resolve_in_core() -> None:
     manifest = copy.deepcopy(_manifest())
     manifest["inspected_core_commit"] = "f" * 40
@@ -275,6 +300,10 @@ def test_online_receipt_verification_rejects_missing_artifact(
             return {"artifacts": []}
         return {
             "head_sha": manifest["inspected_core_commit"],
+            "workflow_id": guard.RECEIPT_WORKFLOW_ID,
+            "path": guard.RECEIPT_WORKFLOW_PATH,
+            "event": guard.RECEIPT_EVENT,
+            "head_branch": guard.RECEIPT_BRANCH,
             "status": "completed",
             "conclusion": "success",
         }
@@ -284,6 +313,83 @@ def test_online_receipt_verification_rejects_missing_artifact(
     errors = guard.validate_manifest(manifest, verify_github=True)
 
     assert any("GitHub artifact does not exist" in error for error in errors)
+
+
+def _receipt_artifacts(manifest: dict[str, object]) -> list[dict[str, object]]:
+    return [
+        {
+            "name": evidence["artifact"],
+            "digest": evidence["artifact_digest"],
+            "expired": False,
+        }
+        for _, evidence in guard._github_run_refs(manifest)
+    ]
+
+
+def test_online_receipt_verification_binds_main_run_and_artifact_digest(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manifest = _manifest()
+    artifacts = _receipt_artifacts(manifest)
+    artifacts[0]["digest"] = "sha256:" + "0" * 64
+
+    def github_payload(endpoint: str) -> dict[str, object]:
+        if endpoint.endswith("artifacts?per_page=100"):
+            return {"artifacts": artifacts}
+        return {
+            "head_sha": manifest["inspected_core_commit"],
+            "workflow_id": guard.RECEIPT_WORKFLOW_ID,
+            "path": guard.RECEIPT_WORKFLOW_PATH,
+            "event": guard.RECEIPT_EVENT,
+            "head_branch": "feature/unrelated",
+            "status": "completed",
+            "conclusion": "success",
+        }
+
+    monkeypatch.setattr(guard, "_github_api_payload", github_payload)
+
+    errors = guard.validate_manifest(manifest, verify_github=True)
+
+    assert any("head branch does not match evidence" in error for error in errors)
+    assert any("artifact digest does not match evidence" in error for error in errors)
+
+
+def test_online_receipt_verification_accepts_exact_main_receipts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manifest = _manifest()
+
+    def github_payload(endpoint: str) -> dict[str, object]:
+        if endpoint.endswith("artifacts?per_page=100"):
+            return {"artifacts": _receipt_artifacts(manifest)}
+        return {
+            "head_sha": manifest["inspected_core_commit"],
+            "workflow_id": guard.RECEIPT_WORKFLOW_ID,
+            "path": guard.RECEIPT_WORKFLOW_PATH,
+            "event": guard.RECEIPT_EVENT,
+            "head_branch": guard.RECEIPT_BRANCH,
+            "status": "completed",
+            "conclusion": "success",
+        }
+
+    monkeypatch.setattr(guard, "_github_api_payload", github_payload)
+
+    assert guard.validate_manifest(manifest, verify_github=True) == []
+
+
+@pytest.mark.parametrize(
+    "workflow_path",
+    [
+        ".github/workflows/pr-merge-gate.yml",
+        ".github/workflows/main-releasability.yml",
+    ],
+)
+def test_protected_ci_enforces_online_receipt_verification(workflow_path: str) -> None:
+    workflow = (guard.REPO_ROOT / workflow_path).read_text(encoding="utf-8")
+
+    assert "actions: read" in workflow
+    assert "GH_TOKEN: ${{ github.token }}" in workflow
+    assert "make technology-governance-pilot-receipt-guard" in workflow
 
 
 def _write_platform_policy_repo(tmp_path: Path, policy: dict[str, object]) -> Path:

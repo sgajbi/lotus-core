@@ -28,6 +28,11 @@ CORE_ISSUE_PATTERN = re.compile(r"^https://github\.com/sgajbi/lotus-core/issues/
 CORE_RUN_PATTERN = re.compile(r"^https://github\.com/sgajbi/lotus-core/actions/runs/\d+$")
 FULL_SHA_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
+ARTIFACT_DIGEST_PATTERN = re.compile(r"^sha256:[0-9a-f]{64}$")
+RECEIPT_WORKFLOW_ID = 259248882
+RECEIPT_WORKFLOW_PATH = ".github/workflows/main-releasability.yml"
+RECEIPT_EVENT = "push"
+RECEIPT_BRANCH = "main"
 EXPECTED_POLICY_REF = {
     "repository": "sgajbi/lotus-platform",
     "commit": "c3af9ace58f54fb070db32d2b428ff79c852d818",
@@ -177,6 +182,7 @@ def _validate_github_run_evidence(
     url = evidence.get("url")
     source_commit = evidence.get("source_commit")
     artifact = evidence.get("artifact")
+    artifact_digest = evidence.get("artifact_digest")
     if not isinstance(url, str) or not CORE_RUN_PATTERN.fullmatch(url):
         errors.append(f"{location}: invalid Core GitHub run URL")
     if not isinstance(source_commit, str) or not FULL_SHA_PATTERN.fullmatch(source_commit):
@@ -185,6 +191,18 @@ def _validate_github_run_evidence(
         errors.append(f"{location}: source_commit must match inspected_core_commit")
     if not isinstance(artifact, str) or not artifact:
         errors.append(f"{location}: GitHub run evidence requires artifact")
+    if not isinstance(artifact_digest, str) or not ARTIFACT_DIGEST_PATTERN.fullmatch(
+        artifact_digest
+    ):
+        errors.append(f"{location}: artifact_digest must be a SHA-256 artifact digest")
+    if evidence.get("workflow_id") != RECEIPT_WORKFLOW_ID:
+        errors.append(f"{location}: workflow_id must identify Main Releasability Gate")
+    if evidence.get("workflow_path") != RECEIPT_WORKFLOW_PATH:
+        errors.append(f"{location}: workflow_path must identify Main Releasability Gate")
+    if evidence.get("event") != RECEIPT_EVENT:
+        errors.append(f"{location}: GitHub run event must be push")
+    if evidence.get("head_branch") != RECEIPT_BRANCH:
+        errors.append(f"{location}: GitHub run head_branch must be main")
 
 
 def _validate_mapping(
@@ -481,6 +499,14 @@ def _validate_github_receipt(evidence: dict[str, Any], *, location: str, errors:
         return
     if run.get("head_sha") != evidence.get("source_commit"):
         errors.append(f"{location}: GitHub run head SHA does not match source_commit")
+    if run.get("workflow_id") != evidence.get("workflow_id"):
+        errors.append(f"{location}: GitHub run workflow ID does not match evidence")
+    if run.get("path") != evidence.get("workflow_path"):
+        errors.append(f"{location}: GitHub run workflow path does not match evidence")
+    if run.get("event") != evidence.get("event"):
+        errors.append(f"{location}: GitHub run event does not match evidence")
+    if run.get("head_branch") != evidence.get("head_branch"):
+        errors.append(f"{location}: GitHub run head branch does not match evidence")
     if run.get("status") != "completed" or run.get("conclusion") != "success":
         errors.append(f"{location}: GitHub run is not completed successfully")
     artifacts = artifacts_payload.get("artifacts")
@@ -493,6 +519,12 @@ def _validate_github_receipt(evidence: dict[str, Any], *, location: str, errors:
         errors.append(f"{location}: GitHub artifact does not exist: {artifact_name}")
     elif all(bool(artifact.get("expired")) for artifact in matches):
         errors.append(f"{location}: GitHub artifact is expired: {artifact_name}")
+    elif not any(
+        not bool(artifact.get("expired"))
+        and artifact.get("digest") == evidence.get("artifact_digest")
+        for artifact in matches
+    ):
+        errors.append(f"{location}: GitHub artifact digest does not match evidence")
 
 
 def _validate_github_receipts(manifest: dict[str, Any], errors: list[str]) -> None:
