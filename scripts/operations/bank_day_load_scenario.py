@@ -93,6 +93,17 @@ LOG_SERVICE_NAMES = (
     "financial_reconciliation_service",
 )
 
+REQUIRED_COST_DATABASE_OPERATION_EVIDENCE = (
+    ("CostBasisReferenceDataRepository", "get_cost_basis_reference_data"),
+    ("CostBasisProcessingStateRepository", "acquire_cost_basis_processing_lock"),
+    ("CostBasisProcessingStateRepository", "get_cost_basis_processing_checkpoint"),
+    ("CostBasisProcessingStateRepository", "upsert_cost_basis_processing_checkpoint"),
+    ("CostBasisTransactionRepository", "get_transaction_history"),
+    ("CostBasisTransactionRepository", "apply_transaction_costs_and_replace_breakdown"),
+    ("CostBasisLotRepository", "upsert_buy_lot_state"),
+    ("CostProcessingEffectStager", "stage_processed_transactions"),
+)
+
 
 @dataclass(frozen=True)
 class IngestPhaseResult:
@@ -1626,6 +1637,16 @@ def _collect_log_evidence(
     return evidence
 
 
+def _missing_required_database_operations(
+    *,
+    required: Iterable[Mapping[str, object]],
+    observed: Iterable[DatabaseOperationEvidence],
+) -> list[tuple[str, str]]:
+    required_operations = {(str(item["repository"]), str(item["method"])) for item in required}
+    observed_operations = {(item.repository, item.method) for item in observed}
+    return sorted(required_operations - observed_operations)
+
+
 def _evaluate_report(report: ScenarioReport) -> list[str]:
     failures: list[str] = []
     if (
@@ -1645,6 +1666,17 @@ def _evaluate_report(report: ScenarioReport) -> list[str]:
         and not report.database_operation_evidence
     ):
         failures.append("database operation evidence has no bounded samples")
+    missing_database_operations = _missing_required_database_operations(
+        required=report.config.get("required_database_operation_evidence", []),
+        observed=report.database_operation_evidence or [],
+    )
+    if missing_database_operations:
+        failures.append(
+            "database operation evidence is missing required cost-persistence samples: "
+            + ", ".join(
+                f"{repository}.{method}" for repository, method in missing_database_operations
+            )
+        )
     if report.terminal_status != "complete":
         failures.append(f"scenario terminal_status is {report.terminal_status}")
     tie_out = report.database_tie_out
@@ -2326,6 +2358,10 @@ def _build_config(args: argparse.Namespace, *, resolved_trade_date: str) -> dict
         "transaction_processing_operation_evidence_required": True,
         "cost_processing_runtime_evidence_required": True,
         "database_operation_evidence_required": True,
+        "required_database_operation_evidence": [
+            {"repository": repository, "method": method}
+            for repository, method in REQUIRED_COST_DATABASE_OPERATION_EVIDENCE
+        ],
         "derived_state_service": args.derived_state_service,
         "resource_poll_interval_seconds": args.resource_poll_interval_seconds,
         "derived_state_resource_evidence_required": True,

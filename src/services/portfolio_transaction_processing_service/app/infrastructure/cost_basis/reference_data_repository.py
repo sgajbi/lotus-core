@@ -3,6 +3,7 @@
 from portfolio_common.database_models import Instrument, Portfolio
 from portfolio_common.domain.cost_basis_method import normalize_cost_basis_method
 from portfolio_common.identifiers import normalize_lookup_identifier
+from portfolio_common.utils import async_timed
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,6 +20,10 @@ class SqlAlchemyCostBasisReferenceDataRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
+    @async_timed(
+        repository="CostBasisReferenceDataRepository",
+        method="get_cost_basis_reference_data",
+    )
     async def get_cost_basis_reference_data(
         self,
         *,

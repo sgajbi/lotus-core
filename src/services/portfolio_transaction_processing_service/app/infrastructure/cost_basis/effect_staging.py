@@ -10,6 +10,7 @@ from portfolio_common.domain.eventing import portfolio_partition_key, security_p
 from portfolio_common.events import event_business_payload
 from portfolio_common.monitoring import BUY_LIFECYCLE_STAGE_TOTAL, SELL_LIFECYCLE_STAGE_TOTAL
 from portfolio_common.outbox_repository import OutboxRepository
+from portfolio_common.utils import async_timed
 
 from ...domain.transaction import BookedTransaction
 from ...domain.transaction.fx import FxContractInstrument
@@ -40,6 +41,7 @@ class TransactionalCostProcessingEffectStager:
     def __init__(self, outbox_repository: OutboxRepository) -> None:
         self._outbox_repository = outbox_repository
 
+    @async_timed(repository="CostProcessingEffectStager", method="stage_processed_transactions")
     async def stage_processed_transactions(
         self,
         transactions: Sequence[BookedTransaction],
@@ -65,6 +67,7 @@ class TransactionalCostProcessingEffectStager:
             )
             _record_outbox_lifecycle(event.transaction_type)
 
+    @async_timed(repository="CostProcessingEffectStager", method="stage_instrument_updates")
     async def stage_instrument_updates(
         self,
         instruments: Sequence[FxContractInstrument],
