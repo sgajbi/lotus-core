@@ -5,8 +5,8 @@
   "base_branch": "main",
   "issue_closure_policy": "final_validated_main_only",
   "commit_budget": {
-    "warning_at": 40,
-    "split_required_at": 60,
+    "warning_at": 55,
+    "split_required_at": 75,
     "fail_above": 90
   },
   "campaign_issues": [
@@ -117,13 +117,68 @@
       "tranche_id": "tranche-3-derived-state-certification-closure",
       "branch": "feat/derived-state-certification-closure",
       "base_sha": "6bc937bb173051e0bd4ee9a07ffebd54face0163",
-      "head_sha": "28a475c9d0ccca95ad95017b5a8a86ab30bb48be",
+      "head_sha": "d82ea9ac805afe9ea5fd08125c5071a182e78e39",
+      "head_sha_role": "latest_evidence_head_before_campaign_manifest_update",
       "post_merge_main_sha": "pending",
       "required_predecessor_main_sha": "6bc937bb173051e0bd4ee9a07ffebd54face0163",
       "capability_boundary": "Combined derived-state runtime certification, bounded outbox capacity, deterministic workload evidence, stale-source and delayed-readiness suppression, and transaction hot-path round-trip reduction",
-      "commit_count": 46,
-      "tranche_decision": "Retain the combined deployable with separately attributable position and portfolio modules, the twelve-partition transaction ceiling, and the atomic two-call readiness claim. Keep PR #931 draft until daily, recovery, poison, duplicate/outbox, correction, restatement, rollback, and downstream proofs pass.",
+      "commit_count": 61,
+      "commit_count_scope": "origin/main_through_head_sha",
+      "tranche_decision": "Retain the combined deployable with separately attributable position and portfolio modules, the twelve-partition transaction ceiling, the atomic two-call readiness claim, and the exact-project controlled-release tooling. Keep PR #931 draft until daily, recovery, poison, duplicate/outbox, correction, restatement, qualified release, and downstream proofs pass.",
       "issue_closure_decision": "close_only_after_merge_exact_main_and_wiki_publication",
+      "acceptance_matrix": {
+        "daily_capacity": {
+          "status": "running",
+          "task_id": "eng-task-20260810-170501-lotus-core-certification-make-profile-derived-state-daily",
+          "source_sha": "f099360a2921f41742b94eff1fea0a3747113d60",
+          "receipt": null
+        },
+        "recovery_outbox": {
+          "status": "pending",
+          "receipt": null
+        },
+        "poison_message": {
+          "status": "pending",
+          "receipt": null
+        },
+        "duplicate_concurrency": {
+          "status": "pending",
+          "receipt": null
+        },
+        "price_restatement": {
+          "status": "pending",
+          "receipt": null
+        },
+        "fx_restatement": {
+          "status": "pending",
+          "receipt": null
+        },
+        "release_rehearsal": {
+          "status": "tooling_implemented_execution_pending",
+          "receipt": null
+        },
+        "downstream_canonical_qa": {
+          "status": "pending",
+          "receipt": null
+        },
+        "merge": {
+          "status": "pending",
+          "main_sha": null
+        },
+        "exact_main_validation": {
+          "status": "pending",
+          "run_id": null
+        },
+        "wiki_publication": {
+          "status": "pending",
+          "published_sha": null,
+          "strict_parity": null
+        },
+        "issue_closure": {
+          "status": "pending",
+          "issues": [714, 794, 795]
+        }
+      },
       "local_evidence": [
         "Exact clean daily 20260809T190656Z at signed bad4645977ac481aa43270c3a27c177641c97590 made all 100000 source transactions durable and reached 83668 snapshots with attempts 2/2, zero repeated processing, failed outbox 0, and advancing terminal timestamps; this is a valid remaining capacity failure, not a harness failure",
         "Signed 3d6e3aed7c483c2dd7db51b33661b8044e0e1005 adds a live 10000-distractor PostgreSQL query-plan proof that requires ix_outbox_events_aggregate_id and rejects sequential scans",
@@ -146,7 +201,10 @@
         "Signed 9babe76fa2d3e21151c3515d24bfeb2837edb00b persists the ordinary initial BUY opening lot, accrued-income offset, and deterministic processing checkpoint through one dedicated cost-state aggregate statement, removing two database round trips while preserving specialized correction, replay, disposal, transfer, and AVCO paths",
         "Exact fan-in task eng-task-20260810-140612-lotus-core-certification-make-profile-derived-state-fan-in passed exact reconciliation at 9babe76fa2d3e21151c3515d24bfeb2837edb00b but drained in 136.278 seconds because position-to-portfolio aggregation latency was a 63.057-second downstream outlier; cost-stage time still fell 24.81 percent and whole-transaction time fell 17.96 percent; artifact SHA-256 5D4ED65591CFD402CA817E706B4DDBB68FB469F984443C93B692C7C4EEA13085",
         "Same-code repeat fan-in task eng-task-20260810-141344-lotus-core-certification-make-profile-derived-state-fan-in at 28a475c9d0ccca95ad95017b5a8a86ab30bb48be passed exact reconciliation with attempts 2/2, repeats 0, closed jobs/outbox, zero governed errors, 80.866-second drain, and cleanup DONE; this improves the restored-path 90.979-second drain by 11.11 percent and authorizes one exact-head daily run; artifact SHA-256 6A5285C17DADEBFB2FFDCBCCDA1E9FD7C402BBA5FB93A5FA7FFA11BAFA3AB1F2",
-        "Focused readiness claim and query-plan proof passed 25 live PostgreSQL integration tests, 2 plan-helper unit tests, 11 atomic-claim unit/live cases, the 122-test transaction-processing contract, scoped MyPy/Ruff/format/diff checks, and docs/wiki/architecture guards"
+        "Focused readiness claim and query-plan proof passed 25 live PostgreSQL integration tests, 2 plan-helper unit tests, 11 atomic-claim unit/live cases, the 122-test transaction-processing contract, scoped MyPy/Ruff/format/diff checks, and docs/wiki/architecture guards",
+        "Signed f099360a2921f41742b94eff1fea0a3747113d60 closes controlled-release and recovery-evidence review: release runtime metadata is an exact six-key allowlist, durable DLQ evidence is exact group/topic scoped, backwards-moving counts fail terminally, and dead readiness credential surface is removed; 58 focused release/recovery/documentation tests pass",
+        "Signed documentation head d82ea9ac805afe9ea5fd08125c5071a182e78e39 removes stale hashed-transport readiness guidance and aligns repository context, CR-1626, CR-1630, the review ledger, and PR chronology without changing runtime behavior",
+        "Daily task eng-task-20260810-145143-lotus-core-certification-make-profile-derived-state-daily is diagnostic only after an Agent 1 observation-fence breach; its exact project terminated with zero containers, networks, and volumes and its result cannot certify or reject capacity"
       ],
       "remote_evidence": [
         "PR #931 exact implementation head 6406033221b36d9c21fbcaee3bfa53ba975cc984 passed Remote Feature Lane 31338004146, PR Merge Gate 31338007004, and Quality Baseline 31338007006",
