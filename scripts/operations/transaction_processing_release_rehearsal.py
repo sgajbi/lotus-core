@@ -132,7 +132,10 @@ def build_rehearsal_plan(
 def plan_content_hash(plan: Mapping[str, Any]) -> str:
     """Return the deterministic plan digest without its self-referential field."""
 
-    return canonical_content_hash(plan, excluded_fields={"plan_content_hash"})
+    return cast(
+        str,
+        canonical_content_hash(plan, excluded_fields={"plan_content_hash"}),
+    )
 
 
 def execute_release_rehearsal(
@@ -289,19 +292,22 @@ def execute_release_rehearsal(
         except _PhaseFailure as cleanup_failure:
             failures.append(f"cleanup: {cleanup_failure.cause}")
 
-    return build_terminal_receipt(
-        receipt_id=context.receipt_id,
-        started_at=started_at,
-        ended_at=_timestamp(clock()),
-        source_revision=context.source_revision,
-        source_tree_state=context.source_tree_state,
-        compose_project=context.compose_project,
-        candidate=candidate,
-        rollback=rollback,
-        phases=phases,
-        invariants=invariants,
-        failures=failures,
-        cleanup_owned_resource_count=cleanup_owned_resource_count,
+    return cast(
+        dict[str, Any],
+        build_terminal_receipt(
+            receipt_id=context.receipt_id,
+            started_at=started_at,
+            ended_at=_timestamp(clock()),
+            source_revision=context.source_revision,
+            source_tree_state=context.source_tree_state,
+            compose_project=context.compose_project,
+            candidate=candidate,
+            rollback=rollback,
+            phases=phases,
+            invariants=invariants,
+            failures=failures,
+            cleanup_owned_resource_count=cleanup_owned_resource_count,
+        ),
     )
 
 
@@ -411,20 +417,29 @@ def _timestamp(value: datetime) -> str:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    """Build the non-mutating release-rehearsal planning CLI."""
+    """Build the planning and explicit local-execution CLI."""
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--candidate-release-manifest", required=True, type=Path)
     parser.add_argument("--rollback-release-manifest", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--repo-root", default=Path("."), type=Path)
+    parser.add_argument("--execute", action="store_true")
+    parser.add_argument("--pull-images", action="store_true")
+    parser.add_argument("--compose-file", default=Path("docker-compose.yml"), type=Path)
+    parser.add_argument("--ready-timeout-seconds", default=240, type=int)
+    parser.add_argument("--canary-timeout-seconds", default=300, type=int)
+    parser.add_argument("--canary-transaction-count", default=20, type=int)
     return parser
 
 
 def main() -> int:
-    """Validate release inputs and write one immutable, non-mutating rehearsal plan."""
+    """Write an immutable plan or explicitly execute its isolated local rehearsal."""
 
-    args = build_parser().parse_args()
+    parser = build_parser()
+    args = parser.parse_args()
+    if args.pull_images and not args.execute:
+        parser.error("--pull-images requires --execute")
     repo_root = args.repo_root.resolve()
     now = datetime.now(UTC)
     run_identity = now.strftime("%Y%m%d-%H%M%S") + "-" + uuid.uuid4().hex[:8]
@@ -436,15 +451,98 @@ def main() -> int:
     )
     candidate_manifest = _read_json_object(args.candidate_release_manifest)
     rollback_manifest = _read_json_object(args.rollback_release_manifest)
-    plan = build_rehearsal_plan(
-        context=context,
+    if not args.execute:
+        plan = build_rehearsal_plan(
+            context=context,
+            candidate_manifest=candidate_manifest,
+            rollback_manifest=rollback_manifest,
+            generated_at=now,
+        )
+        _write_json_atomic(args.output, plan)
+        print(json.dumps(plan, separators=(",", ":")))
+        return 0
+
+    candidate, rollback = validate_release_pair(
         candidate_manifest=candidate_manifest,
         rollback_manifest=rollback_manifest,
-        generated_at=now,
     )
-    _write_json_atomic(args.output, plan)
-    print(json.dumps(plan, separators=(",", ":")))
-    return 0
+    _validate_execution_source(context=context, candidate=candidate)
+    runtime = _prepare_local_compose_runtime(
+        args=args,
+        context=context,
+        repo_root=repo_root,
+    )
+    receipt = execute_release_rehearsal(
+        runtime=runtime,
+        context=context,
+        candidate=candidate,
+        rollback=rollback,
+    )
+    _write_json_atomic(args.output, receipt)
+    print(json.dumps(receipt, separators=(",", ":")))
+    return 0 if receipt["terminal_status"] == "passed" else 1
+
+
+def _validate_execution_source(
+    *,
+    context: RehearsalContext,
+    candidate: ReleaseIdentity,
+) -> None:
+    validate_source_identity(
+        source_revision=context.source_revision,
+        source_tree_state=context.source_tree_state,
+    )
+    if context.source_tree_state != "clean":
+        raise ReleaseEvidenceError("release rehearsal execution requires a clean source tree")
+    if candidate.git_commit_sha != context.source_revision:
+        raise ReleaseEvidenceError(
+            "candidate release Git SHA must match the exact rehearsal source revision"
+        )
+
+
+def _prepare_local_compose_runtime(
+    *,
+    args: argparse.Namespace,
+    context: RehearsalContext,
+    repo_root: Path,
+) -> ReleaseRehearsalRuntime:
+    from scripts.operations.transaction_processing_release_compose_runtime import (
+        LocalComposeReleaseConfig,
+        LocalComposeReleaseRuntime,
+    )
+    from scripts.quality.ci_service_sets import FAILURE_RECOVERY_GATE_SERVICES
+    from tests.test_support.managed_compose_run import prepare_managed_compose_run
+
+    compose_file = args.compose_file
+    if not compose_file.is_absolute():
+        compose_file = repo_root / compose_file
+    output_path = args.output.resolve()
+    managed_run = prepare_managed_compose_run(
+        profile="integration",
+        scope="transaction-release-rehearsal",
+        compose_project_name=context.compose_project,
+        compose_file=compose_file,
+        services=FAILURE_RECOVERY_GATE_SERVICES,
+        build=False,
+        log_path=output_path.with_suffix(".compose.log"),
+        allocate_dynamic_ports=True,
+        keep_stack=False,
+        reset_volumes=False,
+    )
+    return cast(
+        ReleaseRehearsalRuntime,
+        LocalComposeReleaseRuntime(
+            managed_run=managed_run,
+            config=LocalComposeReleaseConfig(
+                receipt_id=context.receipt_id,
+                repo_root=repo_root,
+                ready_timeout_seconds=args.ready_timeout_seconds,
+                canary_timeout_seconds=args.canary_timeout_seconds,
+                canary_transaction_count=args.canary_transaction_count,
+                pull_images=args.pull_images,
+            ),
+        ),
+    )
 
 
 def _git_output(repo_root: Path, *arguments: str) -> str:
