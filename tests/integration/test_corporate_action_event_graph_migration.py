@@ -381,10 +381,13 @@ def test_corporate_action_event_graph_apply_constraints_and_rollback(
         )
         forged_manifest_payload = json.loads(manifest_payload)
         forged_manifest_payload["corporate_action_type"] = "SPIN_OFF"
-        assert connection.scalar(
-            text("SELECT canonical_ca_manifest_payload_hash(CAST(:payload AS jsonb))"),
-            {"payload": json.dumps(forged_manifest_payload)},
-        ) != manifest_content_hash
+        assert (
+            connection.scalar(
+                text("SELECT canonical_ca_manifest_payload_hash(CAST(:payload AS jsonb))"),
+                {"payload": json.dumps(forged_manifest_payload)},
+            )
+            != manifest_content_hash
+        )
         manifest_insert = text(
             """
             INSERT INTO corporate_action_manifest_versions (
