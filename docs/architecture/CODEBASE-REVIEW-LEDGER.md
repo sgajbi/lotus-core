@@ -1,5 +1,15 @@
 # Codebase Review Ledger
 
+CR-1630 aggregate/readiness addendum (2026-08-10): adversarial review found that normalized BUY
+selection could reach a later exact-string persistence guard and that the atomic initial-opening
+adapter accepted independently scoped transaction/checkpoint values. The application now reuses
+the canonical control-code normalizer and the adapter rejects mismatched portfolio, security, or
+transaction identities before SQL. The same review found order-dependent authority when Kafka
+carried duplicate `outbox_id` headers; readiness now requires at most one and rejects duplicates
+before idempotency. The database catalog was reconciled with all live valuation-job columns.
+Focused validation passes 35 tests plus scoped Ruff. No public API, OpenAPI, event payload,
+partition, calculation, migration, or wiki workflow changed; no wiki source change is required.
+
 CR-1630 release-evidence addendum (2026-08-10): adversarial review found that a qualified image
 manifest could carry additional `runtime_env` entries into the generated Compose project, including
 `DATABASE_URL`, and that the interruption-recovery gate defaulted a nonexistent readiness DLQ field

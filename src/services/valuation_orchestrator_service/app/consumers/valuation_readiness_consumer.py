@@ -46,9 +46,12 @@ def _readiness_outbox_id(msg: Message) -> int | None:
         raise EventContractValidationError(
             "Valuation readiness headers could not be inspected"
         ) from exc
-    for name, raw_value in reversed(headers):
-        if name != "outbox_id":
-            continue
+    outbox_headers = [raw_value for name, raw_value in headers if name == "outbox_id"]
+    if len(outbox_headers) > 1:
+        raise EventContractValidationError(
+            "Valuation readiness must contain at most one outbox_id header"
+        )
+    for raw_value in outbox_headers:
         if isinstance(raw_value, (bytes, bytearray)):
             try:
                 value = raw_value.decode("utf-8")

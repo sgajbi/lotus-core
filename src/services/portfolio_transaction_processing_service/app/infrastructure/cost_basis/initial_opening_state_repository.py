@@ -30,6 +30,7 @@ class SqlAlchemyInitialOpeningCostStateRepository:
     ) -> None:
         """Write all initial opening state atomically without extra database round trips."""
 
+        _validate_initial_opening_scope(transaction=transaction, checkpoint=checkpoint)
         opening_lot = (
             buy_lot_state_upsert_statement(transaction)
             .returning(literal(1))
@@ -42,3 +43,25 @@ class SqlAlchemyInitialOpeningCostStateRepository:
         )
         checkpoint_statement = cost_basis_processing_checkpoint_upsert_statement(checkpoint)
         await self._session.execute(checkpoint_statement.add_cte(opening_lot, income_offset))
+
+
+def _validate_initial_opening_scope(
+    *,
+    transaction: CostBasisTransaction,
+    checkpoint: CostBasisProcessingCheckpoint,
+) -> None:
+    """Reject an aggregate assembled from different domain identities before SQL execution."""
+
+    if (
+        checkpoint.portfolio_id,
+        checkpoint.security_id,
+        checkpoint.latest_transaction_id,
+    ) != (
+        transaction.portfolio_id,
+        transaction.security_id,
+        transaction.transaction_id,
+    ):
+        raise ValueError(
+            "Initial opening checkpoint scope must match the transaction portfolio, "
+            "security, and transaction identity"
+        )

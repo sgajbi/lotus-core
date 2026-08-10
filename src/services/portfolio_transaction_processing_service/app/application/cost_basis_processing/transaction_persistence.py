@@ -3,6 +3,8 @@
 from dataclasses import replace
 from decimal import Decimal
 
+from portfolio_common.domain.transaction_control_codes import normalize_transaction_control_code
+
 from ...domain.cost_basis import (
     LOT_OPENING_BEHAVIORS,
     CostBasisProcessingCheckpoint,
@@ -112,7 +114,10 @@ async def _persist_cost_basis_transaction(
             status=CostBasisPersistenceStatus.SUCCESS,
         )
 
-    if transaction.transaction_type == "BUY" and initial_opening_checkpoint is None:
+    if (
+        normalize_transaction_control_code(transaction.transaction_type) == "BUY"
+        and initial_opening_checkpoint is None
+    ):
         _observe(
             observer,
             transaction=transaction,
@@ -142,7 +147,7 @@ async def _persist_initial_opening_state(
     state: InitialOpeningCostStatePort,
     observer: CostBasisPersistenceObserver,
 ) -> None:
-    if transaction.transaction_type != "BUY":
+    if normalize_transaction_control_code(transaction.transaction_type) != "BUY":
         raise ValueError("Initial opening cost state requires a BUY transaction")
     for stage in (
         CostBasisPersistenceStage.OPEN_LOT,

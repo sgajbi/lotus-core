@@ -124,6 +124,18 @@ rearmed and completed `525` times for one final portfolio-day row.
     `consumer_dlq_events` ledger, scoped to the exact transaction consumer group and source topic.
     Standard readiness remains readiness evidence only and cannot silently fabricate a zero DLQ
     baseline when a field is absent.
+24. Initial-opening cost persistence applies the same canonical transaction-control-code policy as
+    aggregate selection, so case and surrounding whitespace cannot route a valid BUY into a later
+    case-sensitive rejection. The atomic repository also rejects mismatched portfolio, security,
+    or transaction/checkpoint identities before constructing or executing SQL. `TRANSFER_IN`
+    remains on the generic opening-lot path and all public transaction contracts are unchanged.
+25. Valuation readiness accepts at most one `outbox_id` header. Duplicate header keys are rejected
+    before idempotency regardless of value or order, preventing Kafka header ordering from choosing
+    which source authority is trusted. Headerless compatibility and one valid positive sequence
+    retain their existing behavior.
+26. The governed database catalog now records every live valuation-job lifecycle and diagnostic
+    column, including the default-zero exact-scope claimed readiness watermark. This is a truth
+    reconciliation only; the underlying schema is unchanged in this slice.
 
 ## Measured Result
 

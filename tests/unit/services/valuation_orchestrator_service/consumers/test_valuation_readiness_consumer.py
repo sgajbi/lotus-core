@@ -244,6 +244,43 @@ async def test_readiness_rejects_non_text_transport_sequences(
         _readiness_outbox_id(kafka_message)
 
 
+@pytest.mark.parametrize(
+    "outbox_headers",
+    [
+        [("outbox_id", b"bad"), ("outbox_id", b"417")],
+        [("outbox_id", b"417"), ("outbox_id", b"bad")],
+        [("outbox_id", b"417"), ("outbox_id", b"418")],
+        [("outbox_id", b"417"), ("outbox_id", b"417")],
+    ],
+)
+async def test_readiness_rejects_duplicate_sequence_authority_headers(
+    outbox_headers: list[tuple[str, bytes]],
+) -> None:
+    message = MagicMock()
+    message.headers.return_value = outbox_headers
+
+    with pytest.raises(EventContractValidationError, match="at most one outbox_id"):
+        _readiness_outbox_id(message)
+
+
+async def test_duplicate_sequence_headers_fail_before_idempotency_claim(
+    consumer: ValuationReadinessConsumer,
+    mock_kafka_message: MagicMock,
+    mock_dependencies: dict,
+) -> None:
+    mock_kafka_message.headers.return_value = [
+        ("outbox_id", b"417"),
+        ("outbox_id", b"417"),
+    ]
+
+    with pytest.raises(EventContractValidationError, match="at most one outbox_id"):
+        await consumer.process_message(mock_kafka_message)
+
+    mock_dependencies["idempotency_repo"].claim_event_processing.assert_not_awaited()
+    mock_dependencies["job_repo"].upsert_job.assert_not_awaited()
+    mock_dependencies["job_repo"].upsert_position_readiness_job.assert_not_awaited()
+
+
 async def test_readiness_fails_closed_when_transport_headers_are_unreadable() -> None:
     message = MagicMock()
     message.headers.side_effect = RuntimeError("transport unavailable")

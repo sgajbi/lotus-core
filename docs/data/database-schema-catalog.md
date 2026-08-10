@@ -1268,9 +1268,14 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
   - `valuation_date` (Date): Business/event date or timestamp used for ordering, as-of queries, or lifecycle tracking.
   - `epoch` (Integer): Deterministic reprocessing generation/version for state isolation.
   - `status` (String): Current lifecycle status for the record/work item.
+  - `requeue_requested` (Boolean): Whether newer source readiness arrived during active processing and requires another claim after the current attempt.
+  - `source_correction_id` (String): Stable identity of the source mutation that most recently armed or rearmed the job.
   - `correlation_id` (String): Trace/correlation id used across logs and events.
+  - `correlation_missing_reason` (String): Diagnostic reason recorded when upstream correlation authority was unavailable.
+  - `alternate_lookup_key` (String): Governed fallback lookup identity used for operational diagnostics.
   - `failure_reason` (Text): Human-readable reason for failure/exception status.
   - `attempt_count` (Integer): Domain attribute used by the owning module.
+  - `claimed_readiness_outbox_id` (BigInteger): Maximum committed positive outbox sequence claimed for this exact portfolio/security/date/epoch scope; defaults to zero until source-owned sequence authority is available.
   - `created_at` (DateTime): Server timestamp when row was created.
   - `updated_at` (DateTime): Server timestamp when row was last updated.
 
