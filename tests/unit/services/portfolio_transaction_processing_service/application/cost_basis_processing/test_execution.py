@@ -10,6 +10,7 @@ from portfolio_common.domain.cost_basis_method import CostBasisMethod
 
 from src.services.portfolio_transaction_processing_service.app.application.cost_basis_processing import (  # noqa: E501
     CostProcessingRoute,
+    OpenLotPersistenceScope,
     PreparedCostProcessingUseCase,
     PreparedCostTransaction,
 )
@@ -218,6 +219,88 @@ async def test_cost_basis_execution_acquires_key_lock_before_calculation(
         "lot-state",
         "checkpoint",
     ]
+
+
+@pytest.mark.asyncio
+async def test_non_buy_initial_opening_uses_generic_lot_and_checkpoint_paths(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Keep transfers out of the BUY-only aggregate persistence optimization."""
+    transaction = _transaction(transaction_type="TRANSFER_IN")
+    prepared = PreparedCostTransaction(
+        transaction=transaction,
+        transaction_type="TRANSFER_IN",
+        cost_basis_method=CostBasisMethod.FIFO,
+        route=CostProcessingRoute.COST_BASIS,
+    )
+    calculation = MagicMock(
+        processed=[transaction],
+        errored=[],
+        open_lot_states={},
+        incremental=True,
+        open_lot_persistence_scope=OpenLotPersistenceScope.INITIAL_OPENING_LOT,
+        average_cost_pool_transition=None,
+        disposals=(),
+        basis_transfers=(),
+    )
+    coordinator = MagicMock()
+    coordinator.return_value.calculate = AsyncMock(return_value=calculation)
+    monkeypatch.setattr(execution_module, "CostBasisCalculationCoordinator", coordinator)
+    monkeypatch.setattr(
+        execution_module,
+        "apply_effective_amortized_cost_to_disposals",
+        AsyncMock(return_value=calculation),
+    )
+    persist_transactions = AsyncMock(return_value=(transaction,))
+    persist_lot_state = AsyncMock()
+    persist_checkpoint = AsyncMock()
+    monkeypatch.setattr(
+        execution_module,
+        "persist_cost_basis_transactions",
+        persist_transactions,
+    )
+    monkeypatch.setattr(execution_module, "persist_open_lot_state", persist_lot_state)
+    monkeypatch.setattr(
+        execution_module,
+        "persist_current_lot_disposals",
+        AsyncMock(),
+    )
+    monkeypatch.setattr(
+        execution_module,
+        "persist_current_lot_basis_transfers",
+        AsyncMock(),
+    )
+    monkeypatch.setattr(
+        execution_module,
+        "_persist_processing_checkpoint",
+        persist_checkpoint,
+    )
+    dependencies = _dependencies()
+
+    result = await PreparedCostProcessingUseCase()._calculate_cost_basis(
+        prepared=prepared,
+        portfolio=dependencies["portfolio"],
+        instrument=dependencies["instrument"],
+        transaction_state=dependencies["transaction_state"],
+        average_cost_pools=dependencies["average_cost_pools"],
+        lot_disposals=dependencies["lot_disposals"],
+        lot_basis_transfers=dependencies["lot_basis_transfers"],
+        lot_states=dependencies["lot_states"],
+        amortized_cost_profiles=dependencies["amortized_cost_profiles"],
+        income_offsets=dependencies["income_offsets"],
+        initial_opening_state=dependencies["initial_opening_state"],
+        fx_rates=dependencies["fx_rates"],
+        processing_state=dependencies["processing_state"],
+    )
+
+    assert result == (transaction,)
+    assert persist_transactions.await_args.kwargs["initial_opening_checkpoint"] is None
+    persist_lot_state.assert_awaited_once()
+    assert (
+        persist_lot_state.await_args.kwargs["persistence_scope"]
+        is OpenLotPersistenceScope.INITIAL_OPENING_LOT
+    )
+    persist_checkpoint.assert_awaited_once()
 
 
 @pytest.mark.asyncio
