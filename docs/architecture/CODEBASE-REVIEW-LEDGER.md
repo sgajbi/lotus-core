@@ -12,7 +12,10 @@ statement tests; complete architecture guards; and docs/wiki guards. #450 remain
 until protected merge, exact-main validation, and wiki publication. #480 remains in progress because
 runtime parking, leased ordered release, and restart recovery are not activated. No public API,
 OpenAPI, Kafka, topology, pool, dependency, or supported-feature contract changed in this
-integration-only slice.
+integration-only slice. PR #932's Quality Baseline then exposed rank-F complexity in the manifest
+semantic validator. The same review slice separated cohort shape, source-child, target-child, and
+non-position dependency policies into small pure helpers without changing finding order or
+fail-closed behavior; Xenon, Ruff, strict MyPy, and all 84 focused tests pass.
 
 CR-1630 delivery-tranche boundary addendum (2026-08-10): PR #931 reaches its governed delivery
 boundary with 73 signed commits at evidence head `c220b33de`. The retained implementation includes

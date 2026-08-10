@@ -12,7 +12,7 @@ from portfolio_common.domain.calculation_lineage import (
 )
 
 from .classification import QUANTITY_TRANSFER_CORPORATE_ACTION_PAIRS
-from .cohort_policy import corporate_action_cohort_policy
+from .cohort_policy import CorporateActionCohortPolicy, corporate_action_cohort_policy
 from .event_graph import (
     CorporateActionEventChild,
     CorporateActionEventGraph,
@@ -278,9 +278,7 @@ _ROLE_BY_NON_POSITION_TYPE = {
 def _semantic_findings(
     manifest: CorporateActionParentManifest,
 ) -> tuple[CorporateActionManifestFinding, ...]:
-    findings: list[CorporateActionManifestFinding] = []
     children = manifest.expected_children
-    children_by_id = {child.transaction_id: child for child in children}
     policy = corporate_action_cohort_policy(manifest.corporate_action_type)
     if policy is None:
         return (
@@ -289,6 +287,33 @@ def _semantic_findings(
             ),
         )
 
+    findings, target_children = _cohort_shape_findings(children, policy)
+    children_by_id = {child.transaction_id: child for child in children}
+    target_ids = frozenset(child.transaction_id for child in target_children)
+    consideration_ids = frozenset(
+        child.transaction_id
+        for child in children
+        if child.transaction_type in {"CASH_CONSIDERATION", "CASH_IN_LIEU"}
+    )
+    for child in sorted(children, key=lambda value: value.transaction_id):
+        findings.extend(
+            _child_semantic_findings(
+                child,
+                policy=policy,
+                children_by_id=children_by_id,
+                target_children=target_children,
+                target_ids=target_ids,
+                consideration_ids=consideration_ids,
+            )
+        )
+    return tuple(findings)
+
+
+def _cohort_shape_findings(
+    children: tuple[CorporateActionEventChild, ...],
+    policy: CorporateActionCohortPolicy,
+) -> tuple[list[CorporateActionManifestFinding], tuple[CorporateActionEventChild, ...]]:
+    findings: list[CorporateActionManifestFinding] = []
     disallowed_children = tuple(
         sorted(
             child.transaction_id
@@ -324,122 +349,142 @@ def _semantic_findings(
         findings.append(
             CorporateActionManifestFinding(CorporateActionManifestReason.TARGET_CHILD_REQUIRED)
         )
+    return findings, target_children
 
-    target_ids = frozenset(child.transaction_id for child in target_children)
-    consideration_children = tuple(
-        child
-        for child in children
-        if child.transaction_type in {"CASH_CONSIDERATION", "CASH_IN_LIEU"}
+
+def _child_semantic_findings(
+    child: CorporateActionEventChild,
+    *,
+    policy: CorporateActionCohortPolicy,
+    children_by_id: dict[str, CorporateActionEventChild],
+    target_children: tuple[CorporateActionEventChild, ...],
+    target_ids: frozenset[str],
+    consideration_ids: frozenset[str],
+) -> tuple[CorporateActionManifestFinding, ...]:
+    if child.transaction_type in _SOURCE_ROLE_BY_TYPE:
+        return _source_child_findings(child, policy)
+    expected_source_type = _TARGET_SOURCE_TYPE.get(child.transaction_type)
+    if expected_source_type is not None:
+        return _target_child_findings(child, expected_source_type, children_by_id)
+    return _non_position_child_findings(
+        child,
+        target_children=target_children,
+        target_ids=target_ids,
+        consideration_ids=consideration_ids,
     )
-    consideration_ids = frozenset(child.transaction_id for child in consideration_children)
-    for child in sorted(children, key=lambda value: value.transaction_id):
-        allowed_source_roles = _SOURCE_ROLE_BY_TYPE.get(child.transaction_type)
-        expected_source_type = _TARGET_SOURCE_TYPE.get(child.transaction_type)
-        expected_non_position_role = _ROLE_BY_NON_POSITION_TYPE.get(child.transaction_type)
-        if allowed_source_roles is not None:
-            if child.child_role != policy.source_role:
-                findings.append(
-                    _finding(CorporateActionManifestReason.INVALID_ROLE_FOR_TRANSACTION_TYPE, child)
-                )
-            if child.source_instrument_id is None:
-                findings.append(
-                    _finding(CorporateActionManifestReason.SOURCE_INSTRUMENT_REQUIRED, child)
-                )
-            if child.instrument_id is None:
-                findings.append(
-                    _finding(CorporateActionManifestReason.SOURCE_INSTRUMENT_REQUIRED, child)
-                )
-            elif (
-                child.source_instrument_id is not None
-                and child.instrument_id != child.source_instrument_id
-            ):
-                findings.append(
-                    _finding(
-                        CorporateActionManifestReason.SOURCE_CHILD_INSTRUMENT_MISMATCH,
-                        child,
-                    )
-                )
-            continue
-        if expected_source_type is not None:
-            if child.child_role != "TARGET_POSITION_ADD":
-                findings.append(
-                    _finding(CorporateActionManifestReason.INVALID_ROLE_FOR_TRANSACTION_TYPE, child)
-                )
-            if child.source_instrument_id is None:
-                findings.append(
-                    _finding(CorporateActionManifestReason.SOURCE_INSTRUMENT_REQUIRED, child)
-                )
-            if child.target_instrument_id is None:
-                findings.append(
-                    _finding(CorporateActionManifestReason.TARGET_INSTRUMENT_REQUIRED, child)
-                )
-            elif child.target_instrument_id == child.source_instrument_id:
-                findings.append(
-                    _finding(
-                        CorporateActionManifestReason.TARGET_INSTRUMENT_EQUALS_SOURCE,
-                        child,
-                    )
-                )
-            if child.instrument_id is None:
-                findings.append(
-                    _finding(CorporateActionManifestReason.TARGET_INSTRUMENT_REQUIRED, child)
-                )
-            elif (
-                child.target_instrument_id is not None
-                and child.instrument_id != child.target_instrument_id
-            ):
-                findings.append(
-                    _finding(
-                        CorporateActionManifestReason.TARGET_CHILD_INSTRUMENT_MISMATCH,
-                        child,
-                    )
-                )
-            compatible_sources = tuple(
-                children_by_id[dependency_id]
-                for dependency_id in child.dependency_transaction_ids
-                if dependency_id in children_by_id
-                and children_by_id[dependency_id].transaction_type == expected_source_type
-            )
-            if len(compatible_sources) != 1:
-                findings.append(
-                    _finding(CorporateActionManifestReason.TARGET_SOURCE_DEPENDENCY_REQUIRED, child)
-                )
-            elif child.source_instrument_id != compatible_sources[0].instrument_id:
-                findings.append(
-                    _finding(CorporateActionManifestReason.TARGET_SOURCE_INSTRUMENT_MISMATCH, child)
-                )
-            continue
-        if expected_non_position_role is None or child.child_role != expected_non_position_role:
-            findings.append(
-                _finding(CorporateActionManifestReason.INVALID_ROLE_FOR_TRANSACTION_TYPE, child)
-            )
-            continue
-        dependencies = frozenset(child.dependency_transaction_ids)
-        if child.transaction_type == "CASH_CONSIDERATION":
-            has_governed_dependencies = target_ids.issubset(dependencies)
-        elif child.transaction_type == "CASH_IN_LIEU":
-            matching_target_ids = frozenset(
-                target.transaction_id
-                for target in target_children
-                if target.instrument_id == child.instrument_id
-            )
-            has_governed_dependencies = bool(matching_target_ids.intersection(dependencies))
-        elif child.transaction_type == "ADJUSTMENT":
-            has_governed_dependencies = len(dependencies) == 1 and dependencies.issubset(
-                consideration_ids
-            )
-        else:
-            terminal_ids = target_ids.union(consideration_ids)
-            has_governed_dependencies = bool(terminal_ids) and terminal_ids.issubset(dependencies)
-        if not has_governed_dependencies:
-            findings.append(
-                _finding(CorporateActionManifestReason.NON_POSITION_DEPENDENCY_REQUIRED, child)
-            )
+
+
+def _source_child_findings(
+    child: CorporateActionEventChild,
+    policy: CorporateActionCohortPolicy,
+) -> tuple[CorporateActionManifestFinding, ...]:
+    findings: list[CorporateActionManifestFinding] = []
+    if child.child_role != policy.source_role:
+        findings.append(
+            _finding(CorporateActionManifestReason.INVALID_ROLE_FOR_TRANSACTION_TYPE, child)
+        )
+    if child.source_instrument_id is None:
+        findings.append(_finding(CorporateActionManifestReason.SOURCE_INSTRUMENT_REQUIRED, child))
+    if child.instrument_id is None:
+        findings.append(_finding(CorporateActionManifestReason.SOURCE_INSTRUMENT_REQUIRED, child))
+    elif (
+        child.source_instrument_id is not None and child.instrument_id != child.source_instrument_id
+    ):
+        findings.append(
+            _finding(CorporateActionManifestReason.SOURCE_CHILD_INSTRUMENT_MISMATCH, child)
+        )
     return tuple(findings)
 
 
+def _target_child_findings(
+    child: CorporateActionEventChild,
+    expected_source_type: str,
+    children_by_id: dict[str, CorporateActionEventChild],
+) -> tuple[CorporateActionManifestFinding, ...]:
+    findings: list[CorporateActionManifestFinding] = []
+    if child.child_role != "TARGET_POSITION_ADD":
+        findings.append(
+            _finding(CorporateActionManifestReason.INVALID_ROLE_FOR_TRANSACTION_TYPE, child)
+        )
+    if child.source_instrument_id is None:
+        findings.append(_finding(CorporateActionManifestReason.SOURCE_INSTRUMENT_REQUIRED, child))
+    if child.target_instrument_id is None:
+        findings.append(_finding(CorporateActionManifestReason.TARGET_INSTRUMENT_REQUIRED, child))
+    elif child.target_instrument_id == child.source_instrument_id:
+        findings.append(
+            _finding(CorporateActionManifestReason.TARGET_INSTRUMENT_EQUALS_SOURCE, child)
+        )
+    if child.instrument_id is None:
+        findings.append(_finding(CorporateActionManifestReason.TARGET_INSTRUMENT_REQUIRED, child))
+    elif (
+        child.target_instrument_id is not None and child.instrument_id != child.target_instrument_id
+    ):
+        findings.append(
+            _finding(CorporateActionManifestReason.TARGET_CHILD_INSTRUMENT_MISMATCH, child)
+        )
+
+    compatible_sources = tuple(
+        children_by_id[dependency_id]
+        for dependency_id in child.dependency_transaction_ids
+        if dependency_id in children_by_id
+        and children_by_id[dependency_id].transaction_type == expected_source_type
+    )
+    if len(compatible_sources) != 1:
+        findings.append(
+            _finding(CorporateActionManifestReason.TARGET_SOURCE_DEPENDENCY_REQUIRED, child)
+        )
+    elif child.source_instrument_id != compatible_sources[0].instrument_id:
+        findings.append(
+            _finding(CorporateActionManifestReason.TARGET_SOURCE_INSTRUMENT_MISMATCH, child)
+        )
+    return tuple(findings)
+
+
+def _non_position_child_findings(
+    child: CorporateActionEventChild,
+    *,
+    target_children: tuple[CorporateActionEventChild, ...],
+    target_ids: frozenset[str],
+    consideration_ids: frozenset[str],
+) -> tuple[CorporateActionManifestFinding, ...]:
+    expected_role = _ROLE_BY_NON_POSITION_TYPE.get(child.transaction_type)
+    if expected_role is None or child.child_role != expected_role:
+        return (_finding(CorporateActionManifestReason.INVALID_ROLE_FOR_TRANSACTION_TYPE, child),)
+    if _has_governed_non_position_dependencies(
+        child,
+        target_children=target_children,
+        target_ids=target_ids,
+        consideration_ids=consideration_ids,
+    ):
+        return ()
+    return (_finding(CorporateActionManifestReason.NON_POSITION_DEPENDENCY_REQUIRED, child),)
+
+
+def _has_governed_non_position_dependencies(
+    child: CorporateActionEventChild,
+    *,
+    target_children: tuple[CorporateActionEventChild, ...],
+    target_ids: frozenset[str],
+    consideration_ids: frozenset[str],
+) -> bool:
+    dependencies = frozenset(child.dependency_transaction_ids)
+    if child.transaction_type == "CASH_CONSIDERATION":
+        return target_ids.issubset(dependencies)
+    if child.transaction_type == "CASH_IN_LIEU":
+        matching_target_ids = frozenset(
+            target.transaction_id
+            for target in target_children
+            if target.instrument_id == child.instrument_id
+        )
+        return bool(matching_target_ids.intersection(dependencies))
+    if child.transaction_type == "ADJUSTMENT":
+        return len(dependencies) == 1 and dependencies.issubset(consideration_ids)
+    terminal_ids = target_ids.union(consideration_ids)
+    return bool(terminal_ids) and terminal_ids.issubset(dependencies)
+
+
 def _child_payload(child: CorporateActionEventChild) -> dict[str, object]:
-    return child.lineage_payload()
+    return cast(dict[str, object], child.lineage_payload())
 
 
 def _observed_identity_findings(
