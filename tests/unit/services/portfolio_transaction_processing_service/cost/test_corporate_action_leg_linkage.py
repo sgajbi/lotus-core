@@ -110,6 +110,24 @@ def test_target_without_persisted_source_is_reported() -> None:
     )
 
 
+def test_duplicate_target_identity_does_not_select_an_arbitrary_reciprocal_leg() -> None:
+    source, target = _reciprocal_pair()
+    conflicting_target = replace(target, source_transaction_reference="OTHER-SOURCE")
+
+    findings = reconcile_corporate_action_leg_linkage((source, target, conflicting_target))
+
+    assert findings == (
+        CorporateActionLegLinkageFinding(
+            finding_type=CorporateActionLegLinkageFindingType.MISSING_RECIPROCAL_LEG,
+            source_transaction_id="SOURCE-OUT-01",
+            target_transaction_id="TARGET-IN-01",
+            field="target_transaction_reference",
+            expected_value="TARGET-IN-01",
+            observed_value=None,
+        ),
+    )
+
+
 def test_wrong_target_family_and_non_reciprocal_reference_are_both_reported() -> None:
     source, target = _reciprocal_pair(target_type="MERGER_IN")
     target = replace(target, source_transaction_reference="OTHER-SOURCE")

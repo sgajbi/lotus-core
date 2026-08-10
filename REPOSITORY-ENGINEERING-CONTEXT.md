@@ -2687,10 +2687,14 @@ Most relevant current governance:
      less explicit fractional basis, and retained target plus fractional, cash-consideration, and
      governed adjustment basis must equal source basis out. Bind canonical per-child input lineage,
      reject negative retained target basis even when net conservation is zero, exclude only exact
-     generated settlement pairs (`CASH_IN_LIEU`/`CASH_IN_LIEU_SETTLEMENT` and
-     `CASH_CONSIDERATION`/`CASH_CONSIDERATION_SETTLEMENT`), and fail closed on every other
-     adjustment identity. Expose this evidence through the existing reconciliation-run summary
-     rather than a duplicate endpoint. Issues #480 and #481 retain the broader parent-event graph
+     governed upstream settlement pairs (`CASH_IN_LIEU`/`CASH_IN_LIEU_SETTLEMENT` and
+     `CASH_CONSIDERATION`/`CASH_CONSIDERATION_SETTLEMENT`) only when the adjustment carries the
+     exact settlement link type, references one unambiguous matching-type origin transaction in the
+     current reconciliation cohort, and passes the shared upstream cash-pair policy for reciprocal
+     identity, portfolio, event, and group scope. Missing, external, duplicate, type-mismatched, or
+     scope-mismatched origins fail closed as unsupported adjustments. Expose this evidence through
+     the existing reconciliation-run summary rather than a duplicate endpoint. Issues #480 and #481 retain the
+     broader parent-event graph
      and lot-lineage closure. The #480 persistence foundation uses a mutable, book-scoped event
      pointer plus immutable manifest-version, node, edge, child-observation, and
      readiness-evaluation ledgers.

@@ -5,7 +5,10 @@ from decimal import Decimal
 from enum import StrEnum
 from typing import Iterable
 
-from ..transaction import BookedTransaction
+from ..transaction import (
+    BookedTransaction,
+    validate_upstream_cash_leg_pairing,
+)
 from ..transaction.corporate_action import is_reconcilable_corporate_action
 from ..transaction.corporate_action.classification import (
     CASH_CONSIDERATION_TRANSACTION_TYPE,
@@ -98,9 +101,11 @@ def reconcile_corporate_action_basis(
 ) -> CorporateActionBasisReconciliation:
     """Evaluate source, target, and cash basis conservation for a linked group."""
 
+    transaction_cohort = tuple(transactions)
+    transaction_by_id = _index_unambiguous_transactions(transaction_cohort)
     totals = _BasisTotals()
-    for transaction in transactions:
-        _accumulate(totals, transaction)
+    for transaction in transaction_cohort:
+        _accumulate(totals, transaction, transaction_by_id)
     target_basis_retained_local = totals.target_basis_in_local - totals.fractional_basis_local
     net_basis_delta_local = (
         target_basis_retained_local
@@ -155,10 +160,13 @@ def reconcile_corporate_action_leg_linkage(
 ) -> tuple[CorporateActionLegLinkageFinding, ...]:
     """Validate reciprocal quantity-transfer references without relying on arrival order."""
 
+    ordered_transactions = tuple(sorted(transactions, key=lambda item: item.transaction_id.strip()))
     transaction_by_id = {
-        transaction.transaction_id.strip(): transaction
-        for transaction in sorted(transactions, key=lambda item: item.transaction_id.strip())
-        if transaction.transaction_id.strip()
+        transaction_id: transaction
+        for transaction_id, transaction in _index_unambiguous_transactions(
+            ordered_transactions
+        ).items()
+        if transaction is not None
     }
     findings: list[CorporateActionLegLinkageFinding] = []
     referenced_source_ids: set[str] = set()
@@ -329,7 +337,28 @@ def _normalized_reference(value: str | None) -> str | None:
     return normalized or None
 
 
-def _accumulate(totals: _BasisTotals, transaction: BookedTransaction) -> None:
+def _index_unambiguous_transactions(
+    transactions: tuple[BookedTransaction, ...],
+) -> dict[str, BookedTransaction | None]:
+    """Index unique transaction identities and mark duplicate identities ambiguous."""
+
+    transaction_by_id: dict[str, BookedTransaction | None] = {}
+    for transaction in transactions:
+        transaction_id = transaction.transaction_id.strip()
+        if not transaction_id:
+            continue
+        if transaction_id in transaction_by_id:
+            transaction_by_id[transaction_id] = None
+        else:
+            transaction_by_id[transaction_id] = transaction
+    return transaction_by_id
+
+
+def _accumulate(
+    totals: _BasisTotals,
+    transaction: BookedTransaction,
+    transaction_by_id: dict[str, BookedTransaction | None],
+) -> None:
     transaction_type = normalize_corporate_action_transaction_type(transaction.transaction_type)
     if transaction_type in (
         SOURCE_BASIS_TRANSFER_TRANSACTION_TYPES | SOURCE_QUANTITY_TRANSFER_TRANSACTION_TYPES
@@ -370,21 +399,42 @@ def _accumulate(totals: _BasisTotals, transaction: BookedTransaction) -> None:
             totals.fractional_basis_local += transaction.allocated_cost_basis_local
             totals.cash_basis_local += transaction.allocated_cost_basis_local
     elif transaction_type == "ADJUSTMENT":
-        if _is_generated_cash_settlement_adjustment(transaction):
+        if _is_governed_cash_settlement_adjustment(transaction, transaction_by_id):
             totals.excluded_cash_settlement_adjustment_count += 1
         else:
             totals.unsupported_adjustment_count += 1
 
 
-def _is_generated_cash_settlement_adjustment(transaction: BookedTransaction) -> bool:
+def _is_governed_cash_settlement_adjustment(
+    transaction: BookedTransaction,
+    transaction_by_id: dict[str, BookedTransaction | None],
+) -> bool:
     originating_type = normalize_corporate_action_transaction_type(
         transaction.originating_transaction_type
     )
     adjustment_reason = str(transaction.adjustment_reason or "").strip().upper()
-    return (originating_type, adjustment_reason) in {
+    if (originating_type, adjustment_reason) not in {
         ("CASH_IN_LIEU", "CASH_IN_LIEU_SETTLEMENT"),
         ("CASH_CONSIDERATION", "CASH_CONSIDERATION_SETTLEMENT"),
-    }
+    }:
+        return False
+
+    originating_transaction_id = _normalized_reference(transaction.originating_transaction_id)
+    if originating_transaction_id is None:
+        return False
+    originating_transaction = transaction_by_id.get(originating_transaction_id)
+    if originating_transaction is None:
+        return False
+    if (
+        normalize_corporate_action_transaction_type(originating_transaction.transaction_type)
+        != originating_type
+    ):
+        return False
+    expected_link_type = f"{originating_type}_TO_CASH"
+    if str(transaction.link_type or "").strip().upper() != expected_link_type:
+        return False
+
+    return not validate_upstream_cash_leg_pairing(originating_transaction, transaction)
 
 
 def _status(

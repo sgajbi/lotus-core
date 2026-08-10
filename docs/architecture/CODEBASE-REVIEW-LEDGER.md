@@ -50,6 +50,20 @@ and `CA_BUNDLE_A_INVALID_BASIS_ALLOCATION` reason with an explicit repair recomm
 unit and real-PostgreSQL correction proofs bind all three review findings without adding a public
 API shape, OpenAPI schema, dependency, image, Kafka, or topology change. The additive stable finding
 and reason vocabulary is documented in repository context and the Financial Reconciliation wiki.
+Final linkage review then showed that the exact settlement type/reason pair alone did not prove a
+governed upstream cash pair: a source-authored adjustment could omit or forge its origin and link.
+Settlement exclusion now uses one linear-time ambiguity-aware cohort index and requires an
+unambiguous in-cohort origin whose normalized transaction type matches the declared origin plus the
+exact `<ORIGIN_TYPE>_TO_CASH` link. It then reuses the existing upstream cash-pair policy to prove
+reciprocal identity and matching portfolio, economic-event, and linked-group scope. Missing,
+external, duplicate, wrong-type, wrong-link, and scope-mismatched evidence fails closed. The same
+index now prevents duplicate-ID selection in reciprocal quantity-transfer validation. Focused tests
+bind both governed settlement pairs, each forged-link posture, duplicate reciprocal IDs, and one
+normalization per row in a 1,002-transaction cohort. The existing PostgreSQL mixed-demerger proof
+binds both complete upstream pair shapes after persistence. `CASH_IN_LIEU` and
+`CASH_CONSIDERATION` do not support `AUTO_GENERATE`, so incomplete legacy pair metadata now fails
+closed without inventing an incompatible generated-child path. This adds no dependency, image,
+schema, API, Kafka, or topology change.
 
 CR-1630 delivery-tranche boundary addendum (2026-08-10): PR #931 reaches its governed delivery
 boundary with 73 signed commits at evidence head `c220b33de`. The retained implementation includes
