@@ -5,12 +5,15 @@
 .PHONY: calculated-output-policy-guard
 .PHONY: test-fixed-income-book-cost-recovery-gate
 .PHONY: test-import-root-guard
+.PHONY: transaction-release-rehearsal-plan transaction-release-rehearsal
 
 LATENCY_SEED_COMPLETION_TIMEOUT_SECONDS ?= 900
 OPENAPI_ARTIFACT_DIR ?= output/openapi
 RUNTIME_BUILD_ARGUMENT = $(if $(filter true,$(LOTUS_RUNTIME_IMAGE_SET_VERIFIED)),,--build)
 CERTIFICATION_RUNTIME_BUILD_ARGUMENT = $(if $(filter true,$(LOTUS_RUNTIME_IMAGE_SET_VERIFIED)),,--runtime-build)
 REPOSITORY_PYTHON := python scripts/development/repository_python.py
+TRANSACTION_RELEASE_OUTPUT ?= output/task-runs/transaction-processing-release-rehearsal.json
+TRANSACTION_RELEASE_PULL_IMAGES ?= false
 
 install:
 	$(REPOSITORY_PYTHON) scripts/development/bootstrap_dev.py
@@ -484,6 +487,23 @@ profile-cost-processing-modes:
 
 test-failure-recovery-gate:
 	$(REPOSITORY_PYTHON) scripts/operations/failure_recovery_gate.py $(RUNTIME_BUILD_ARGUMENT) --enforce
+
+transaction-release-rehearsal-plan:
+	$(if $(strip $(TRANSACTION_RELEASE_CANDIDATE_MANIFEST)),,$(error TRANSACTION_RELEASE_CANDIDATE_MANIFEST is required))
+	$(if $(strip $(TRANSACTION_RELEASE_ROLLBACK_MANIFEST)),,$(error TRANSACTION_RELEASE_ROLLBACK_MANIFEST is required))
+	$(REPOSITORY_PYTHON) -m scripts.operations.transaction_processing_release_rehearsal \
+		--candidate-release-manifest "$(TRANSACTION_RELEASE_CANDIDATE_MANIFEST)" \
+		--rollback-release-manifest "$(TRANSACTION_RELEASE_ROLLBACK_MANIFEST)" \
+		--output "$(TRANSACTION_RELEASE_OUTPUT)"
+
+transaction-release-rehearsal:
+	$(if $(strip $(TRANSACTION_RELEASE_CANDIDATE_MANIFEST)),,$(error TRANSACTION_RELEASE_CANDIDATE_MANIFEST is required))
+	$(if $(strip $(TRANSACTION_RELEASE_ROLLBACK_MANIFEST)),,$(error TRANSACTION_RELEASE_ROLLBACK_MANIFEST is required))
+	$(REPOSITORY_PYTHON) -m scripts.operations.transaction_processing_release_rehearsal \
+		--candidate-release-manifest "$(TRANSACTION_RELEASE_CANDIDATE_MANIFEST)" \
+		--rollback-release-manifest "$(TRANSACTION_RELEASE_ROLLBACK_MANIFEST)" \
+		--output "$(TRANSACTION_RELEASE_OUTPUT)" \
+		--execute $(if $(filter true,$(TRANSACTION_RELEASE_PULL_IMAGES)),--pull-images,)
 
 test-fixed-income-book-cost-recovery-gate:
 	$(REPOSITORY_PYTHON) scripts/quality/test_manifest.py --suite fixed-income-book-cost-recovery --quiet

@@ -51,6 +51,47 @@ only their runtime shell and normal-path transaction boundary are consolidated.
    live/replay lag to baseline with exact cost/cashflow/position/claim counts and no added DLQ event.
 7. Run the bank-day scenario with the active Compose project and require exact DB/API/log tie-out.
 
+## Controlled Local Image Rehearsal
+
+The consumer-group handoff above moves from the retired calculator groups to the unified runtime.
+It does not prove that a qualified transaction-service image can be canaried and rolled back while
+retaining the unified group's offsets. Use the separate release rehearsal for that evidence.
+
+First generate and review a non-mutating plan:
+
+```bash
+make transaction-release-rehearsal-plan \
+  TRANSACTION_RELEASE_CANDIDATE_MANIFEST=output/releases/candidate.json \
+  TRANSACTION_RELEASE_ROLLBACK_MANIFEST=output/releases/rollback.json \
+  TRANSACTION_RELEASE_OUTPUT=output/task-runs/transaction-release-plan.json
+```
+
+The plan requires two distinct, supply-chain-qualified digest manifests and a clean exact source
+revision. It records `mutates_runtime=false` and `cluster_certification=false`.
+
+Execute only from the exact candidate Git SHA after reviewing the plan:
+
+```bash
+make transaction-release-rehearsal \
+  TRANSACTION_RELEASE_CANDIDATE_MANIFEST=output/releases/candidate.json \
+  TRANSACTION_RELEASE_ROLLBACK_MANIFEST=output/releases/rollback.json \
+  TRANSACTION_RELEASE_OUTPUT=output/task-runs/transaction-release-receipt.json \
+  TRANSACTION_RELEASE_PULL_IMAGES=true
+```
+
+Execution creates one generated `lotus-integration-transaction-release-rehearsal-*` project. It
+starts the prior digest, runs a fixed baseline canary, stops only the transaction worker, proves the
+stable live group is inactive and drained, recreates only that worker with the candidate digest,
+runs the candidate canary, restores the prior digest, and runs a rollback canary. PostgreSQL and
+Kafka remain running across the two image changes. Every canary requires exact transaction, cost,
+cashflow, position, processing-claim, outbox, DLQ, duplicate-effect, and reconciliation evidence.
+
+The terminal receipt is redacted and content-hashed. A passing receipt also proves zero remaining
+containers, networks, or volumes with the exact generated project label. The adapter cannot target
+`lotus-core-app-local`, does not run Docker prune, and does not certify Kubernetes rollout,
+multi-replica behavior, production traffic, alert routing, or rollback RTO. Those remain
+post-merge environment evidence.
+
 ## Stop And Roll Back
 
 Stop the rollout if source groups are active, source lag is non-zero, legacy live offsets differ,
