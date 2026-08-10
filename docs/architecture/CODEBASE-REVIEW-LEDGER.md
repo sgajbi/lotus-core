@@ -64,6 +64,18 @@ binds both complete upstream pair shapes after persistence. `CASH_IN_LIEU` and
 `CASH_CONSIDERATION` do not support `AUTO_GENERATE`, so incomplete legacy pair metadata now fails
 closed without inventing an incompatible generated-child path. This adds no dependency, image,
 schema, API, Kafka, or topology change.
+Two post-gate reviews then found aggregate and database-authentication gaps. Aggregate retained
+basis could let a large allocation on target B conceal fractional basis above target A's incoming
+basis. Reconciliation now maintains linear-time per-instrument target/fractional totals and rejects
+any negative retained target allocation while preserving the aggregate evidence contract. The
+READY trigger also no longer trusts independently writable observation hashes: an immutable
+database function validates the exact child-payload shape, canonicalizes strings (including Unicode
+and JSON escaping), sorts dependencies, recomputes SHA-256, and requires it to equal both the
+observation and manifest-node hashes. Focused domain proof covers the hidden multi-target negative;
+the full 14-test PostgreSQL graph suite covers copied-hash/different-payload rejection, Unicode
+serializer parity with the domain, correction/restart/concurrency behavior, and reversible
+migration. No public API, OpenAPI, Kafka, dependency, image, pool, or topology contract changed;
+the not-yet-main migration is hardened in place.
 
 CR-1630 delivery-tranche boundary addendum (2026-08-10): PR #931 reaches its governed delivery
 boundary with 73 signed commits at evidence head `c220b33de`. The retained implementation includes

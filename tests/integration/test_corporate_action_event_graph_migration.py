@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import runpy
 from pathlib import Path
 from typing import Any
@@ -11,6 +12,10 @@ from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from sqlalchemy import inspect, text
 from sqlalchemy.exc import IntegrityError
+
+from src.services.portfolio_transaction_processing_service.app.domain.transaction import (
+    corporate_action,
+)
 
 pytestmark = [pytest.mark.integration_db, pytest.mark.db_direct, pytest.mark.lifecycle]
 
@@ -52,6 +57,28 @@ def _expect_integrity_error(
     with pytest.raises(IntegrityError, match=match):
         connection.execute(statement, parameters)
     savepoint.rollback()
+
+
+def _child_payload_and_hash(
+    *,
+    transaction_id: str,
+    transaction_type: str,
+    child_role: str,
+    dependency_transaction_ids: tuple[str, ...] = (),
+    instrument_id: str | None = None,
+    source_instrument_id: str | None = None,
+    target_instrument_id: str | None = None,
+) -> tuple[str, str]:
+    child = corporate_action.CorporateActionEventChild(
+        transaction_id=transaction_id,
+        transaction_type=transaction_type,
+        child_role=child_role,
+        dependency_transaction_ids=dependency_transaction_ids,
+        instrument_id=instrument_id,
+        source_instrument_id=source_instrument_id,
+        target_instrument_id=target_instrument_id,
+    )
+    return json.dumps(child.lineage_payload()), child.content_hash
 
 
 def _seed_book_scope(connection) -> None:
@@ -216,6 +243,25 @@ def test_corporate_action_event_graph_apply_constraints_and_rollback(
             index["name"]
             for index in inspector.get_indexes("corporate_action_readiness_evaluations")
         }
+        unicode_payload, unicode_content_hash = _child_payload_and_hash(
+            transaction_id='CA-É-"QUOTED"-😀',
+            transaction_type="DEMERGER_OUT",
+            child_role="SOURCE_POSITION_REDUCE",
+            dependency_transaction_ids=("依存-😀", "A-É"),
+            instrument_id="証券-É-😀",
+        )
+        assert (
+            connection.scalar(
+                text("SELECT canonical_ca_child_payload_hash(CAST(:payload AS jsonb))"),
+                {"payload": unicode_payload},
+            )
+            == unicode_content_hash
+        )
+        json_escape_vector = 'quote" backslash\\ controls\b\f\n\r\t low\x01\x1f delete\x7f'
+        assert connection.scalar(
+            text("SELECT canonical_ca_json_string(:value)"),
+            {"value": json_escape_vector},
+        ) == json.dumps(json_escape_vector)
 
         _seed_book_scope(connection)
         event_insert = text(
@@ -441,6 +487,28 @@ def test_corporate_action_event_graph_apply_constraints_and_rollback(
             )
             """
         )
+        source_payload, source_content_hash = _child_payload_and_hash(
+            transaction_id="CA-SOURCE-DB-001",
+            transaction_type="DEMERGER_OUT",
+            child_role="SOURCE_POSITION_REDUCE",
+            instrument_id="SOURCE-SEC",
+            source_instrument_id="SOURCE-SEC",
+        )
+        target_payload, target_content_hash = _child_payload_and_hash(
+            transaction_id="CA-TARGET-DB-001",
+            transaction_type="DEMERGER_IN",
+            child_role="TARGET_POSITION_ADD",
+            dependency_transaction_ids=("CA-SOURCE-DB-001",),
+            instrument_id="TARGET-SEC",
+            source_instrument_id="SOURCE-SEC",
+            target_instrument_id="TARGET-SEC",
+        )
+        unexpected_payload, unexpected_content_hash = _child_payload_and_hash(
+            transaction_id="CA-UNEXPECTED-DB-001",
+            transaction_type="ADJUSTMENT",
+            child_role="UNEXPECTED_SETTLEMENT",
+            instrument_id="SOURCE-SEC",
+        )
         source_node = {
             "manifest_id": manifest_id,
             "transaction_id": "CA-SOURCE-DB-001",
@@ -449,7 +517,7 @@ def test_corporate_action_event_graph_apply_constraints_and_rollback(
             "instrument_id": "SOURCE-SEC",
             "source_instrument_id": "SOURCE-SEC",
             "target_instrument_id": None,
-            "child_content_hash": "e" * 64,
+            "child_content_hash": source_content_hash,
             "resolved_execution_ordinal": 0,
         }
         target_node = source_node | {
@@ -458,7 +526,7 @@ def test_corporate_action_event_graph_apply_constraints_and_rollback(
             "child_role": "TARGET_POSITION_ADD",
             "instrument_id": "TARGET-SEC",
             "target_instrument_id": "TARGET-SEC",
-            "child_content_hash": "f" * 64,
+            "child_content_hash": target_content_hash,
             "resolved_execution_ordinal": 1,
         }
         connection.execute(node_insert, [source_node, target_node])
@@ -593,8 +661,8 @@ def test_corporate_action_event_graph_apply_constraints_and_rollback(
             "transaction_id": "CA-SOURCE-DB-001",
             "transaction_epoch": 0,
             "delivery_event_id": "delivery-ca-db-001",
-            "observed_content_hash": "e" * 64,
-            "observed_payload": '{"transaction_id":"CA-SOURCE-DB-001"}',
+            "observed_content_hash": source_content_hash,
+            "observed_payload": source_payload,
         }
         connection.execute(observation_insert, observation)
         _expect_integrity_error(connection, observation_insert, observation)
@@ -639,8 +707,8 @@ def test_corporate_action_event_graph_apply_constraints_and_rollback(
             "observation_sequence": 2,
             "transaction_id": "CA-TARGET-DB-001",
             "delivery_event_id": "delivery-ca-db-002",
-            "observed_content_hash": "f" * 64,
-            "observed_payload": '{"transaction_id":"CA-TARGET-DB-001"}',
+            "observed_content_hash": target_content_hash,
+            "observed_payload": target_payload,
         }
         connection.execute(observation_insert, target_observation)
         _expect_integrity_error(
@@ -660,6 +728,34 @@ def test_corporate_action_event_graph_apply_constraints_and_rollback(
             {"event_id": event_id},
         )
         readiness["through_observation_sequence"] = 2
+        forged_payload_savepoint = connection.begin_nested()
+        connection.execute(
+            observation_insert,
+            target_observation
+            | {
+                "observation_sequence": 3,
+                "transaction_epoch": 1,
+                "delivery_event_id": "delivery-ca-db-forged-payload",
+                "observed_payload": source_payload,
+            },
+        )
+        connection.execute(
+            text(
+                """
+                UPDATE corporate_action_events
+                SET last_observation_sequence = 3
+                WHERE id = :event_id
+                """
+            ),
+            {"event_id": event_id},
+        )
+        _expect_integrity_error(
+            connection,
+            readiness_insert,
+            readiness | {"through_observation_sequence": 3},
+            match="latest child observations",
+        )
+        forged_payload_savepoint.rollback()
         _expect_integrity_error(
             connection,
             readiness_insert,
@@ -677,8 +773,8 @@ def test_corporate_action_event_graph_apply_constraints_and_rollback(
             "observation_sequence": 3,
             "transaction_id": "CA-UNEXPECTED-DB-001",
             "delivery_event_id": "delivery-ca-db-unexpected",
-            "observed_content_hash": "4" * 64,
-            "observed_payload": '{"transaction_id":"CA-UNEXPECTED-DB-001"}',
+            "observed_content_hash": unexpected_content_hash,
+            "observed_payload": unexpected_payload,
         }
         connection.execute(observation_insert, unexpected_observation)
         connection.execute(

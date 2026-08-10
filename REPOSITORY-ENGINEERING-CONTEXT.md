@@ -2685,8 +2685,10 @@ Most relevant current governance:
      target transaction and instrument references are complete. Reconcile the linked group through
      `CORPORATE_ACTION_BASIS_CONSERVATION@1.0.0`: retained target basis equals incoming target basis
      less explicit fractional basis, and retained target plus fractional, cash-consideration, and
-     governed adjustment basis must equal source basis out. Bind canonical per-child input lineage,
-     reject negative retained target basis even when net conservation is zero, exclude only exact
+     governed adjustment basis must equal source basis out. Perform the retained-basis test per
+     linked target instrument as well as in aggregate so one well-funded target cannot conceal a
+     negative allocation on another. Bind canonical per-child input lineage, reject negative
+     retained target basis even when net conservation is zero, exclude only exact
      governed upstream settlement pairs (`CASH_IN_LIEU`/`CASH_IN_LIEU_SETTLEMENT` and
      `CASH_CONSIDERATION`/`CASH_CONSIDERATION_SETTLEMENT`) only when the adjustment carries the
      exact settlement link type, references one unambiguous matching-type origin transaction in the
@@ -2700,7 +2702,10 @@ Most relevant current governance:
      readiness-evaluation ledgers.
      A READY row must match the event's current manifest/state/observation pointers, the manifest
      content hash, every declared node's latest observed content hash, deterministic node order,
-     and the declared forward-only edge graph. Retain correction-safe multiple READY evaluations
+     and the declared forward-only edge graph. Before READY, the database recomputes each latest
+     observation's SHA-256 from the same canonical, float-free child payload used by the domain;
+     copied hashes over different, malformed, or non-canonical payloads fail closed. Retain
+     correction-safe multiple READY evaluations
      across state versions; do not restore a lifetime one-READY-per-manifest constraint or permit
      historical ledger mutation. Parent-manifest persistence belongs behind
      `app.ports.corporate_action_event_graph` and the transaction-service-owned SQLAlchemy adapter,

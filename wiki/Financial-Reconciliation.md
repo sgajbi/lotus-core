@@ -123,7 +123,9 @@ settlement adjustments,
 unsupported adjustments, and canonical per-child input lineage. Retained target basis is incoming
 target basis less basis consumed by an explicit cash-in-lieu leg; do not add fractional basis to
 incoming target basis a second time. A fractional allocation greater than incoming target basis is
-invalid even when the resulting conservation delta is zero. Governed upstream settlement
+invalid even when the resulting conservation delta is zero. For multi-target events, this check is
+performed for each linked target instrument as well as in aggregate; excess basis on one target
+cannot conceal a negative retained allocation on another. Governed upstream settlement
 adjustments are excluded only when their originating type and reason form the exact governed pair,
 their link type matches that originating type, and their originating transaction resolves
 unambiguously to a matching-type transaction in the current reconciliation cohort. The shared

@@ -49,6 +49,188 @@ def upgrade() -> None:
             """
         )
     )
+    op.execute(
+        sa.text(
+            r"""
+            CREATE FUNCTION canonical_ca_json_string(value text)
+            RETURNS text
+            LANGUAGE plpgsql
+            IMMUTABLE
+            STRICT
+            AS $$
+            DECLARE
+                result text := '"';
+                character_value text;
+                codepoint integer;
+                shifted_codepoint integer;
+                character_index integer;
+            BEGIN
+                FOR character_index IN 1..char_length(value) LOOP
+                    character_value := substr(value, character_index, 1);
+                    codepoint := ascii(character_value);
+                    IF character_value = '"' THEN
+                        result := result || E'\\"';
+                    ELSIF character_value = E'\\' THEN
+                        result := result || E'\\\\';
+                    ELSIF character_value = E'\b' THEN
+                        result := result || E'\\b';
+                    ELSIF character_value = E'\f' THEN
+                        result := result || E'\\f';
+                    ELSIF character_value = E'\n' THEN
+                        result := result || E'\\n';
+                    ELSIF character_value = E'\r' THEN
+                        result := result || E'\\r';
+                    ELSIF character_value = E'\t' THEN
+                        result := result || E'\\t';
+                    ELSIF codepoint < 32 THEN
+                        result := result || E'\\u' || lpad(to_hex(codepoint), 4, '0');
+                    ELSIF codepoint <= 126 THEN
+                        result := result || character_value;
+                    ELSIF codepoint <= 65535 THEN
+                        result := result || E'\\u' || lpad(to_hex(codepoint), 4, '0');
+                    ELSE
+                        shifted_codepoint := codepoint - 65536;
+                        result := result
+                            || E'\\u'
+                            || lpad(to_hex(55296 + (shifted_codepoint >> 10)), 4, '0')
+                            || E'\\u'
+                            || lpad(to_hex(56320 + (shifted_codepoint & 1023)), 4, '0');
+                    END IF;
+                END LOOP;
+                RETURN result || '"';
+            END;
+            $$;
+
+            CREATE FUNCTION canonical_ca_child_payload_hash(payload jsonb)
+            RETURNS text
+            LANGUAGE plpgsql
+            IMMUTABLE
+            STRICT
+            AS $$
+            DECLARE
+                payload_keys text[];
+                dependency_json text;
+                canonical_payload text;
+            BEGIN
+                IF jsonb_typeof(payload) <> 'object' THEN
+                    RAISE EXCEPTION 'corporate-action observation payload must be an object'
+                        USING ERRCODE = '23514';
+                END IF;
+
+                SELECT array_agg(key ORDER BY key COLLATE "C")
+                INTO payload_keys
+                FROM jsonb_object_keys(payload) AS key;
+                IF payload_keys IS DISTINCT FROM ARRAY[
+                    'canonical_payload_version',
+                    'child_role',
+                    'child_sequence_hint',
+                    'dependency_transaction_ids',
+                    'instrument_id',
+                    'source_instrument_id',
+                    'target_instrument_id',
+                    'transaction_id',
+                    'transaction_type'
+                ]::text[] THEN
+                    RAISE EXCEPTION 'corporate-action observation payload shape is not canonical'
+                        USING ERRCODE = '23514';
+                END IF;
+
+                IF jsonb_typeof(payload -> 'canonical_payload_version') <> 'number'
+                   OR payload ->> 'canonical_payload_version' <> '1'
+                   OR jsonb_typeof(payload -> 'child_role') <> 'string'
+                   OR payload ->> 'child_role' <> btrim(payload ->> 'child_role')
+                   OR payload ->> 'child_role' = ''
+                   OR jsonb_typeof(payload -> 'transaction_id') <> 'string'
+                   OR payload ->> 'transaction_id' <> btrim(payload ->> 'transaction_id')
+                   OR payload ->> 'transaction_id' = ''
+                   OR jsonb_typeof(payload -> 'transaction_type') <> 'string'
+                   OR payload ->> 'transaction_type' <> btrim(payload ->> 'transaction_type')
+                   OR payload ->> 'transaction_type' = ''
+                   OR jsonb_typeof(payload -> 'dependency_transaction_ids') <> 'array'
+                   OR (
+                       jsonb_typeof(payload -> 'child_sequence_hint') <> 'null'
+                       AND (
+                           jsonb_typeof(payload -> 'child_sequence_hint') <> 'number'
+                           OR (payload -> 'child_sequence_hint')::text
+                               !~ '^(0|[1-9][0-9]*)$'
+                       )
+                   ) THEN
+                    RAISE EXCEPTION 'corporate-action observation payload values are not canonical'
+                        USING ERRCODE = '23514';
+                END IF;
+
+                IF EXISTS (
+                    SELECT 1
+                    FROM unnest(ARRAY[
+                        'instrument_id',
+                        'source_instrument_id',
+                        'target_instrument_id'
+                    ]) AS optional_key
+                    WHERE jsonb_typeof(payload -> optional_key) NOT IN ('null', 'string')
+                       OR (
+                           jsonb_typeof(payload -> optional_key) = 'string'
+                           AND (
+                               payload ->> optional_key <> btrim(payload ->> optional_key)
+                               OR payload ->> optional_key = ''
+                           )
+                       )
+                ) OR EXISTS (
+                    SELECT 1
+                    FROM jsonb_array_elements(
+                        payload -> 'dependency_transaction_ids'
+                    ) AS dependency(value)
+                    WHERE jsonb_typeof(value) <> 'string'
+                       OR value #>> '{}' <> btrim(value #>> '{}')
+                       OR value #>> '{}' = ''
+                ) THEN
+                    RAISE EXCEPTION 'corporate-action observation payload members are not canonical'
+                        USING ERRCODE = '23514';
+                END IF;
+
+                SELECT '[' || coalesce(
+                    string_agg(
+                        canonical_ca_json_string(value #>> '{}'),
+                        ',' ORDER BY (value #>> '{}') COLLATE "C"
+                    ),
+                    ''
+                ) || ']'
+                INTO dependency_json
+                FROM jsonb_array_elements(
+                    payload -> 'dependency_transaction_ids'
+                ) AS dependency(value);
+
+                canonical_payload := '{"canonical_payload_version"\:1'
+                    || ',"child_role":'
+                    || canonical_ca_json_string(payload ->> 'child_role')
+                    || ',"child_sequence_hint":'
+                    || (payload -> 'child_sequence_hint')::text
+                    || ',"dependency_transaction_ids":' || dependency_json
+                    || ',"instrument_id":'
+                    || CASE
+                        WHEN jsonb_typeof(payload -> 'instrument_id') = 'null' THEN 'null'
+                        ELSE canonical_ca_json_string(payload ->> 'instrument_id')
+                    END
+                    || ',"source_instrument_id":'
+                    || CASE
+                        WHEN jsonb_typeof(payload -> 'source_instrument_id') = 'null' THEN 'null'
+                        ELSE canonical_ca_json_string(payload ->> 'source_instrument_id')
+                    END
+                    || ',"target_instrument_id":'
+                    || CASE
+                        WHEN jsonb_typeof(payload -> 'target_instrument_id') = 'null' THEN 'null'
+                        ELSE canonical_ca_json_string(payload ->> 'target_instrument_id')
+                    END
+                    || ',"transaction_id":'
+                    || canonical_ca_json_string(payload ->> 'transaction_id')
+                    || ',"transaction_type":'
+                    || canonical_ca_json_string(payload ->> 'transaction_type')
+                    || '}';
+                RETURN encode(sha256(convert_to(canonical_payload, 'UTF8')), 'hex');
+            END;
+            $$;
+            """
+        )
+    )
 
     op.create_table(
         "corporate_action_events",
@@ -826,7 +1008,10 @@ def upgrade() -> None:
                 WITH latest_observation AS (
                     SELECT DISTINCT ON (observation.transaction_id)
                         observation.transaction_id,
-                        observation.observed_content_hash
+                        observation.observed_content_hash,
+                        canonical_ca_child_payload_hash(
+                            observation.observed_payload
+                        ) AS canonical_payload_hash
                     FROM corporate_action_child_observations AS observation
                     WHERE observation.event_id = NEW.event_id
                       AND observation.observation_sequence
@@ -861,7 +1046,9 @@ def upgrade() -> None:
                     count(*) FILTER (
                         WHERE latest_observation.transaction_id IS NULL
                            OR latest_observation.observed_content_hash
-                              <> node.child_content_hash
+                               <> node.child_content_hash
+                           OR latest_observation.canonical_payload_hash
+                               <> latest_observation.observed_content_hash
                     ),
                     (
                         SELECT count(*)
@@ -908,6 +1095,8 @@ def downgrade() -> None:
 
     op.drop_table("corporate_action_readiness_evaluations")
     op.execute(sa.text("DROP FUNCTION enforce_ca_readiness_plan()"))
+    op.execute(sa.text("DROP FUNCTION canonical_ca_child_payload_hash(jsonb)"))
+    op.execute(sa.text("DROP FUNCTION canonical_ca_json_string(text)"))
     op.drop_table("corporate_action_child_observations")
     op.execute(sa.text("DROP FUNCTION enforce_ca_observation_book_scope()"))
     op.drop_table("corporate_action_manifest_edges")
