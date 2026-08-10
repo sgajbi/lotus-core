@@ -1,5 +1,15 @@
 # Codebase Review Ledger
 
+CR-1630 valuation-ownership addendum (2026-08-10): exact-head adversarial review proved that a
+timed-out valuation worker could complete a later `PROCESSING` claim because terminal ownership was
+only natural scope plus status. Valuation claims now rotate a durable opaque token, carry it in an
+additive internal dispatch header, require it on every terminal transition, and clear it on every
+release/recovery path. A rebuilt isolated PostgreSQL two-session test proves stale A is rejected
+after reset/reclaim B, while B completes. Migration `c151b2c3d518` is the single head. Focused unit
+evidence passes 140 tests and the live fence proof passes; the first cached-image attempt was
+invalid infrastructure evidence because its migration image predated the working tree. No public
+API/OpenAPI/event payload, partition, calculation, or downstream contract changed.
+
 CR-1630 aggregate/readiness addendum (2026-08-10): adversarial review found that normalized BUY
 selection could reach a later exact-string persistence guard and that the atomic initial-opening
 adapter accepted independently scoped transaction/checkpoint values. The application now reuses

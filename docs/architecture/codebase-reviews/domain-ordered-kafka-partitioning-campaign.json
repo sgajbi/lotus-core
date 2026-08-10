@@ -117,21 +117,21 @@
       "tranche_id": "tranche-3-derived-state-certification-closure",
       "branch": "feat/derived-state-certification-closure",
       "base_sha": "6bc937bb173051e0bd4ee9a07ffebd54face0163",
-      "head_sha": "d82ea9ac805afe9ea5fd08125c5071a182e78e39",
+      "head_sha": "e0066e82df741da5a22c6a7fe5c403c5aaf60733",
       "head_sha_role": "latest_evidence_head_before_campaign_manifest_update",
       "post_merge_main_sha": "pending",
       "required_predecessor_main_sha": "6bc937bb173051e0bd4ee9a07ffebd54face0163",
       "capability_boundary": "Combined derived-state runtime certification, bounded outbox capacity, deterministic workload evidence, stale-source and delayed-readiness suppression, and transaction hot-path round-trip reduction",
-      "commit_count": 61,
+      "commit_count": 64,
       "commit_count_scope": "origin/main_through_head_sha",
       "tranche_decision": "Retain the combined deployable with separately attributable position and portfolio modules, the twelve-partition transaction ceiling, the atomic two-call readiness claim, and the exact-project controlled-release tooling. Keep PR #931 draft until daily, recovery, poison, duplicate/outbox, correction, restatement, qualified release, and downstream proofs pass.",
       "issue_closure_decision": "close_only_after_merge_exact_main_and_wiki_publication",
       "acceptance_matrix": {
         "daily_capacity": {
-          "status": "running",
+          "status": "restart_required_after_review_fix",
           "task_id": "eng-task-20260810-170501-lotus-core-certification-make-profile-derived-state-daily",
           "source_sha": "f099360a2921f41742b94eff1fea0a3747113d60",
-          "receipt": null
+          "receipt": "Platform ledger LOST; deliberately stopped after #487 valuation claim-fencing defect; exact project cleanup 0/0/0"
         },
         "recovery_outbox": {
           "status": "pending",
@@ -204,11 +204,13 @@
         "Focused readiness claim and query-plan proof passed 25 live PostgreSQL integration tests, 2 plan-helper unit tests, 11 atomic-claim unit/live cases, the 122-test transaction-processing contract, scoped MyPy/Ruff/format/diff checks, and docs/wiki/architecture guards",
         "Signed f099360a2921f41742b94eff1fea0a3747113d60 closes controlled-release and recovery-evidence review: release runtime metadata is an exact six-key allowlist, durable DLQ evidence is exact group/topic scoped, backwards-moving counts fail terminally, and dead readiness credential surface is removed; 58 focused release/recovery/documentation tests pass",
         "Signed documentation head d82ea9ac805afe9ea5fd08125c5071a182e78e39 removes stale hashed-transport readiness guidance and aligns repository context, CR-1626, CR-1630, the review ledger, and PR chronology without changing runtime behavior",
-        "Daily task eng-task-20260810-145143-lotus-core-certification-make-profile-derived-state-daily is diagnostic only after an Agent 1 observation-fence breach; its exact project terminated with zero containers, networks, and volumes and its result cannot certify or reject capacity"
+        "Daily task eng-task-20260810-145143-lotus-core-certification-make-profile-derived-state-daily is diagnostic only after an Agent 1 observation-fence breach; its exact project terminated with zero containers, networks, and volumes and its result cannot certify or reject capacity",
+        "Daily task eng-task-20260810-170501-lotus-core-certification-make-profile-derived-state-daily is LOST/non-certifying after deliberate early stop for #487; exact process/project cleanup is zero and no capacity verdict is claimed",
+        "Signed e0066e82df741da5a22c6a7fe5c403c5aaf60733 adds valuation claim-generation fencing; 140 focused unit tests and one rebuilt two-session PostgreSQL stale-owner proof pass; migration c151b2c3d518 is the single head"
       ],
       "remote_evidence": [
         "PR #931 exact implementation head 6406033221b36d9c21fbcaee3bfa53ba975cc984 passed Remote Feature Lane 31338004146, PR Merge Gate 31338007004, and Quality Baseline 31338007006",
-        "PR #931 remains draft; normalized-history head 0859fb0c13bfd7bdc1306a0f6591c587721cd652 must complete fresh protected lanes and the remaining certification matrix before readiness"
+        "PR #931 remains draft; corrected valuation-fence head e0066e82df741da5a22c6a7fe5c403c5aaf60733 must complete fresh protected lanes and the remaining certification matrix before readiness"
       ]
     }
   ],

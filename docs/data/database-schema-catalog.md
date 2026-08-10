@@ -1259,7 +1259,7 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
 - **Purpose**: Durable valuation work queue.
 - **Description**: Portfolio/security/date/epoch valuation tasks with retry and failure metadata.
 - **Relationships**: No explicit foreign-key relationships declared.
-- **Usage (modules/features)**: `src/services/query_service/app/repositories/operations_repository.py`, `src/services/calculators/position_valuation_calculator/app/repositories/valuation_repository.py`, `src/libs/portfolio-common/portfolio_common/valuation_job_repository.py`, `src/services/valuation_orchestrator_service/app/core/valuation_scheduler.py`
+- **Usage (modules/features)**: `src/services/query_control_plane_service/app/infrastructure/operations/repository.py`, `src/services/calculators/position_valuation_calculator/app/repositories/valuation_repository.py`, `src/libs/portfolio-common/portfolio_common/valuation_job_repository.py`, `src/services/valuation_orchestrator_service/app/core/valuation_scheduler.py`
 - **Typical access patterns**: As-of/date-range reads, idempotent upserts for event processing, status-filtered job polling where applicable.
 - **Column definitions**:
   - `id` (Integer): Surrogate primary key for internal row identity.
@@ -1276,6 +1276,7 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
   - `failure_reason` (Text): Human-readable reason for failure/exception status.
   - `attempt_count` (Integer): Domain attribute used by the owning module.
   - `claimed_readiness_outbox_id` (BigInteger): Maximum committed positive outbox sequence claimed for this exact portfolio/security/date/epoch scope; defaults to zero until source-owned sequence authority is available.
+  - `valuation_claim_token` (String): Nullable opaque claim-generation token; each active claim rotates it and terminal writes require an exact match so a stale worker cannot complete a later claim.
   - `created_at` (DateTime): Server timestamp when row was created.
   - `updated_at` (DateTime): Server timestamp when row was last updated.
 
