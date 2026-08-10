@@ -1,6 +1,6 @@
 """Reconcile basis conservation across linked corporate-action transactions."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal
 from enum import StrEnum
 from typing import Iterable
@@ -92,6 +92,8 @@ class _BasisTotals:
     missing_cash_basis_count: int = 0
     excluded_cash_settlement_adjustment_count: int = 0
     unsupported_adjustment_count: int = 0
+    target_basis_by_instrument: dict[str, Decimal] = field(default_factory=dict)
+    fractional_basis_by_instrument: dict[str, Decimal] = field(default_factory=dict)
 
 
 def reconcile_corporate_action_basis(
@@ -373,10 +375,16 @@ def _accumulate(
         TARGET_BASIS_TRANSFER_TRANSACTION_TYPES | TARGET_QUANTITY_TRANSFER_TRANSACTION_TYPES
     ):
         totals.target_leg_count += 1
-        totals.target_basis_in_local += abs(
+        target_basis = abs(
             transaction.net_cost_local
             if transaction.net_cost_local is not None
             else transaction.gross_transaction_amount
+        )
+        totals.target_basis_in_local += target_basis
+        _add_instrument_basis(
+            totals.target_basis_by_instrument,
+            transaction.instrument_id,
+            target_basis,
         )
     elif transaction_type == CASH_CONSIDERATION_TRANSACTION_TYPE:
         totals.cash_consideration_count += 1
@@ -398,6 +406,11 @@ def _accumulate(
         else:
             totals.fractional_basis_local += transaction.allocated_cost_basis_local
             totals.cash_basis_local += transaction.allocated_cost_basis_local
+            _add_instrument_basis(
+                totals.fractional_basis_by_instrument,
+                transaction.instrument_id,
+                transaction.allocated_cost_basis_local,
+            )
     elif transaction_type == "ADJUSTMENT":
         if _is_governed_cash_settlement_adjustment(transaction, transaction_by_id):
             totals.excluded_cash_settlement_adjustment_count += 1
@@ -437,6 +450,24 @@ def _is_governed_cash_settlement_adjustment(
     return not validate_upstream_cash_leg_pairing(originating_transaction, transaction)
 
 
+def _add_instrument_basis(
+    basis_by_instrument: dict[str, Decimal],
+    instrument_id: str,
+    basis: Decimal,
+) -> None:
+    normalized_instrument_id = instrument_id.strip()
+    basis_by_instrument[normalized_instrument_id] = (
+        basis_by_instrument.get(normalized_instrument_id, Decimal(0)) + basis
+    )
+
+
+def _has_negative_target_basis_allocation(totals: _BasisTotals) -> bool:
+    return any(
+        fractional_basis > totals.target_basis_by_instrument.get(instrument_id, Decimal(0))
+        for instrument_id, fractional_basis in totals.fractional_basis_by_instrument.items()
+    )
+
+
 def _status(
     totals: _BasisTotals,
     target_basis_retained_local: Decimal,
@@ -447,7 +478,7 @@ def _status(
         return CorporateActionBasisReconciliationStatus.INSUFFICIENT_LEGS
     if totals.missing_cash_basis_count > 0:
         return CorporateActionBasisReconciliationStatus.INSUFFICIENT_CASH_BASIS
-    if target_basis_retained_local < 0:
+    if target_basis_retained_local < 0 or _has_negative_target_basis_allocation(totals):
         return CorporateActionBasisReconciliationStatus.INVALID_BASIS_ALLOCATION
     if totals.unsupported_adjustment_count > 0:
         return CorporateActionBasisReconciliationStatus.UNSUPPORTED_ADJUSTMENT

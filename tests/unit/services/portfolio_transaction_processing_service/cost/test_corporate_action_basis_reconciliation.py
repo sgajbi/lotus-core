@@ -457,6 +457,48 @@ def test_corporate_action_basis_reconciliation_rejects_negative_retained_target_
     assert result.net_basis_delta_local == Decimal(0)
 
 
+def test_reconciliation_rejects_hidden_negative_basis_using_cash_leg_instrument() -> None:
+    source = replace(
+        _booked_transaction(
+            transaction_id="SRC_01", transaction_type="DEMERGER_OUT", gross_amount="110"
+        ),
+        net_cost_local=Decimal("-110"),
+    )
+    target_a = replace(
+        _booked_transaction(
+            transaction_id="TGT_A", transaction_type="DEMERGER_IN", gross_amount="10"
+        ),
+        instrument_id="SEC_A",
+        security_id="SEC_A",
+        net_cost_local=Decimal("10"),
+    )
+    target_b = replace(
+        _booked_transaction(
+            transaction_id="TGT_B", transaction_type="DEMERGER_IN", gross_amount="100"
+        ),
+        instrument_id="SEC_B",
+        security_id="SEC_B",
+        net_cost_local=Decimal("100"),
+    )
+    fractional = replace(
+        _booked_transaction(
+            transaction_id="CIL_A", transaction_type="CASH_IN_LIEU", gross_amount="20"
+        ),
+        instrument_id="SEC_A",
+        security_id="SEC_A",
+        target_instrument_id="SEC_B",
+        allocated_cost_basis_local=Decimal("20"),
+    )
+
+    result = reconcile_corporate_action_basis((source, target_a, target_b, fractional))
+
+    assert result.status == "invalid_basis_allocation"
+    assert result.target_basis_in_local == Decimal("110")
+    assert result.target_basis_retained_local == Decimal("90")
+    assert result.fractional_basis_local == Decimal("20")
+    assert result.net_basis_delta_local == Decimal(0)
+
+
 def test_corporate_action_basis_reconciliation_distinguishes_incomplete_evidence() -> None:
     source = replace(
         _booked_transaction(
