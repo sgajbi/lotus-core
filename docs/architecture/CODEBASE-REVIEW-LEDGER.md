@@ -1,5 +1,13 @@
 # Codebase Review Ledger
 
+CR-1630 release-evidence addendum (2026-08-10): adversarial review found that a qualified image
+manifest could carry additional `runtime_env` entries into the generated Compose project, including
+`DATABASE_URL`, and that the interruption-recovery gate defaulted a nonexistent readiness DLQ field
+to zero. Runtime metadata is now an exact six-key allowlist copied explicitly by the adapter. Both
+release and recovery gates use one durable, consumer-group/topic-scoped `consumer_dlq_events`
+query. Focused release/recovery validation passes 48 tests; no API, event, migration, or production
+runtime contract changed.
+
 CR-1630 initial-opening cost-state addendum (2026-08-10): signed `9babe76fa` replaces the
 ordinary first BUY's separate opening-lot, accrued-income-offset, and processing-checkpoint writes
 with one dedicated aggregate statement, removing two database round trips while preserving the

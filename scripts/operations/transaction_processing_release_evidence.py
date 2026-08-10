@@ -23,6 +23,16 @@ RUNTIME_SERVICE_NAME = "portfolio_transaction_processing_service_web"
 COMPOSE_PROJECT_PREFIX = "lotus-integration-transaction-release-rehearsal-"
 SHARED_COMPOSE_PROJECTS = frozenset({"lotus-core-app-local", "lotus-core-canonical-ui"})
 UNKNOWN_METADATA_VALUE = "unknown"
+GOVERNED_RELEASE_RUNTIME_ENV_KEYS = frozenset(
+    {
+        "LOTUS_GIT_COMMIT_SHA",
+        "LOTUS_GIT_BRANCH",
+        "LOTUS_BUILD_TIMESTAMP",
+        "LOTUS_REPO_URL",
+        "LOTUS_IMAGE_VERSION",
+        "LOTUS_CI_RUN_ID",
+    }
+)
 
 _SECRET_KEY_MARKERS = (
     "authorization",
@@ -135,6 +145,14 @@ def release_identity(manifest: Mapping[str, Any]) -> ReleaseIdentity:
     except DeploymentRenderError as exc:
         raise ReleaseEvidenceError(str(exc)) from exc
     runtime_env = _string_mapping(manifest.get("runtime_env"), field_name="runtime_env")
+    runtime_env_keys = set(runtime_env)
+    if runtime_env_keys != GOVERNED_RELEASE_RUNTIME_ENV_KEYS:
+        missing = sorted(GOVERNED_RELEASE_RUNTIME_ENV_KEYS - runtime_env_keys)
+        unexpected = sorted(runtime_env_keys - GOVERNED_RELEASE_RUNTIME_ENV_KEYS)
+        raise ReleaseEvidenceError(
+            "release runtime environment must contain exactly the governed metadata keys: "
+            f"missing={missing}, unexpected={unexpected}"
+        )
     git_commit_sha = _required_string(manifest, "git_commit_sha")
     image_digest = _required_string(manifest, "image_digest")
     oci_labels = _string_mapping(manifest.get("oci_labels"), field_name="oci_labels")

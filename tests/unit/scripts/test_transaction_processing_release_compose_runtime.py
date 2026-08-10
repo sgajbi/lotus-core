@@ -152,7 +152,14 @@ def _release(
         git_commit_sha=git_sha,
         digest_image_ref=digest_ref,
         image_digest=digest,
-        runtime_env={"LOTUS_GIT_COMMIT_SHA": git_sha},
+        runtime_env={
+            "LOTUS_GIT_COMMIT_SHA": git_sha,
+            "LOTUS_GIT_BRANCH": "main",
+            "LOTUS_BUILD_TIMESTAMP": "2026-08-10T07:00:00Z",
+            "LOTUS_REPO_URL": "https://github.com/sgajbi/lotus-core",
+            "LOTUS_IMAGE_VERSION": git_sha,
+            "LOTUS_CI_RUN_ID": "31366752006",
+        },
         oci_labels={"org.opencontainers.image.digest": digest},
         sbom_generated=True,
         vulnerability_scan_status="passed",
@@ -332,6 +339,11 @@ def test_release_image_override_cannot_change_project_authority(tmp_path: Path) 
 
     assert managed.runtime.values == {
         "LOTUS_GIT_COMMIT_SHA": "a" * 40,
+        "LOTUS_GIT_BRANCH": "main",
+        "LOTUS_BUILD_TIMESTAMP": "2026-08-10T07:00:00Z",
+        "LOTUS_REPO_URL": "https://github.com/sgajbi/lotus-core",
+        "LOTUS_IMAGE_VERSION": "a" * 40,
+        "LOTUS_CI_RUN_ID": "31366752006",
         IMAGE_DIGEST_ENV: DIGEST,
         TRANSACTION_IMAGE_ENV: DIGEST_REF,
     }

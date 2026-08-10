@@ -78,6 +78,32 @@ class DatabaseOperationEvidence:
     average_duration_seconds: float | None
 
 
+def consumer_dlq_event_count(
+    *,
+    engine: Engine,
+    consumer_group: str,
+    original_topic: str,
+) -> int:
+    """Count durable DLQ evidence for one exact consumer group and source topic."""
+
+    with engine.connect() as connection:
+        count = connection.execute(
+            text(
+                """
+                SELECT count(*)
+                FROM consumer_dlq_events
+                WHERE consumer_group = :consumer_group
+                  AND original_topic = :original_topic
+                """
+            ),
+            {
+                "consumer_group": consumer_group,
+                "original_topic": original_topic,
+            },
+        ).scalar_one()
+    return int(count)
+
+
 def build_transaction_batch(
     *,
     portfolio_id: str,
