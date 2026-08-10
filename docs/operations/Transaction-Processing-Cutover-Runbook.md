@@ -85,6 +85,11 @@ stable live group is inactive and drained, recreates only that worker with the c
 runs the candidate canary, restores the prior digest, and runs a rollback canary. PostgreSQL and
 Kafka remain running across the two image changes. Every canary requires exact transaction, cost,
 cashflow, position, processing-claim, outbox, DLQ, duplicate-effect, and reconciliation evidence.
+Release manifests may contain only the governed Git SHA, branch, build timestamp, repository URL,
+image version, and CI run ID runtime metadata. The runner rejects database URLs, port settings,
+Compose controls, and any other environment override before it prepares Docker resources. DLQ
+growth is measured from durable consumer-DLQ rows scoped to the stable transaction group and source
+topic, not inferred from the readiness payload.
 
 The terminal receipt is redacted and content-hashed. A passing receipt also proves zero remaining
 containers, networks, or volumes with the exact generated project label. The adapter cannot target

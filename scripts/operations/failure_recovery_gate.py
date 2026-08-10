@@ -48,6 +48,7 @@ try:
     from scripts.operations.transaction_processing_cutover_offsets import KafkaOffsetStore
     from scripts.operations.transaction_processing_load_support import (
         TransactionProcessingCounts,
+        consumer_dlq_event_count,
         ingest_transactions,
         seed_load_context,
         transaction_processing_counts,
@@ -61,8 +62,9 @@ except ModuleNotFoundError:  # pragma: no cover - direct script execution
         FAILURE_RECOVERY_GATE_SERVICES as _FAILURE_RECOVERY_GATE_SERVICES,
     )
     from transaction_processing_cutover_offsets import KafkaOffsetStore
-    from transaction_processing_load_support import (
+    from transaction_processing_load_support import (  # type: ignore[no-redef]
         TransactionProcessingCounts,
+        consumer_dlq_event_count,
         ingest_transactions,
         seed_load_context,
         transaction_processing_counts,
@@ -599,11 +601,11 @@ def main() -> int:
             timeout_seconds=args.ready_timeout_seconds,
         )
 
-        baseline_health = _get_health_snapshot(
-            event_replay_base_url=event_replay_base_url,
-            ops_token=args.ops_token,
+        baseline_dlq = consumer_dlq_event_count(
+            engine=engine,
+            consumer_group=args.consumer_group,
+            original_topic=args.transaction_topic,
         )
-        baseline_dlq = int(baseline_health.get("dlq_events_in_window", 0))
         baseline_consumer_lag = _consumer_lag(
             store=offset_store,
             consumer_group=args.consumer_group,
@@ -669,11 +671,11 @@ def main() -> int:
         actual_interruption_seconds = round(time.time() - interruption_started, 3)
 
         def dlq_terminal_condition() -> str | None:
-            health = _get_health_snapshot(
-                event_replay_base_url=event_replay_base_url,
-                ops_token=args.ops_token,
+            current_dlq = consumer_dlq_event_count(
+                engine=engine,
+                consumer_group=args.consumer_group,
+                original_topic=args.transaction_topic,
             )
-            current_dlq = int(health.get("dlq_events_in_window", 0))
             if current_dlq <= baseline_dlq:
                 return None
             return f"DLQ events increased: baseline={baseline_dlq} current={current_dlq}"
@@ -690,11 +692,11 @@ def main() -> int:
             timeout_seconds=args.recovery_timeout_seconds,
             terminal_condition=dlq_terminal_condition,
         )
-        recovery_health = _get_health_snapshot(
-            event_replay_base_url=event_replay_base_url,
-            ops_token=args.ops_token,
+        recovery_dlq = consumer_dlq_event_count(
+            engine=engine,
+            consumer_group=args.consumer_group,
+            original_topic=args.transaction_topic,
         )
-        recovery_dlq = int(recovery_health.get("dlq_events_in_window", 0))
         dlq_events_added = max(recovery_dlq - baseline_dlq, 0)
         replay_consumer_lag_after_recovery = _consumer_lag(
             store=offset_store,

@@ -14,7 +14,9 @@ from scripts.operations.transaction_processing_cutover_offsets import (
 from scripts.operations.transaction_processing_release_evidence import (
     COMPOSE_PROJECT_PREFIX,
     FinancialEffectEvidence,
+    ReleaseEvidenceError,
     ReleaseIdentity,
+    release_identity,
     validate_release_pair,
 )
 from scripts.operations.transaction_processing_release_rehearsal import (
@@ -61,6 +63,32 @@ def _releases() -> tuple[ReleaseIdentity, ReleaseIdentity]:
         candidate_manifest=_manifest(sha=CANDIDATE_SHA, digest=CANDIDATE_DIGEST),
         rollback_manifest=_manifest(sha=ROLLBACK_SHA, digest=ROLLBACK_DIGEST),
     )
+
+
+@pytest.mark.parametrize(
+    "injected_key",
+    ["DATABASE_URL", "POSTGRES_PORT", "COMPOSE_PROJECT_NAME", "ARBITRARY_OVERRIDE"],
+)
+def test_release_manifest_rejects_non_governed_runtime_environment_keys(
+    injected_key: str,
+) -> None:
+    manifest = _manifest(sha=CANDIDATE_SHA, digest=CANDIDATE_DIGEST)
+    runtime_env = manifest["runtime_env"]
+    assert isinstance(runtime_env, dict)
+    runtime_env[injected_key] = "attacker-controlled"
+
+    with pytest.raises(ReleaseEvidenceError, match=rf"unexpected=.*{injected_key}"):
+        release_identity(manifest)
+
+
+def test_release_manifest_rejects_missing_governed_runtime_environment_key() -> None:
+    manifest = _manifest(sha=CANDIDATE_SHA, digest=CANDIDATE_DIGEST)
+    runtime_env = manifest["runtime_env"]
+    assert isinstance(runtime_env, dict)
+    del runtime_env["LOTUS_CI_RUN_ID"]
+
+    with pytest.raises(ReleaseEvidenceError, match="missing=.*LOTUS_CI_RUN_ID"):
+        release_identity(manifest)
 
 
 def _offsets(offset: int, *, active: int = 0) -> ConsumerGroupSnapshot:
@@ -361,6 +389,58 @@ def test_execution_cli_rejects_candidate_from_different_source_revision(
 
     with pytest.raises(ValueError, match="must match the exact rehearsal source"):
         main()
+
+
+def test_execution_cli_rejects_runtime_environment_injection_before_docker_preparation(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    candidate_manifest = _manifest(sha=CANDIDATE_SHA, digest=CANDIDATE_DIGEST)
+    runtime_env = candidate_manifest["runtime_env"]
+    assert isinstance(runtime_env, dict)
+    runtime_env["DATABASE_URL"] = "postgresql://external/shared"
+    candidate_path = tmp_path / "candidate.json"
+    rollback_path = tmp_path / "rollback.json"
+    candidate_path.write_text(json.dumps(candidate_manifest), encoding="utf-8")
+    rollback_path.write_text(
+        json.dumps(_manifest(sha=ROLLBACK_SHA, digest=ROLLBACK_DIGEST)),
+        encoding="utf-8",
+    )
+    prepared = False
+
+    def prepare_runtime(**_kwargs) -> None:
+        nonlocal prepared
+        prepared = True
+
+    monkeypatch.setattr(
+        "scripts.operations.transaction_processing_release_rehearsal._git_output",
+        lambda _root, *arguments: CANDIDATE_SHA if arguments[-1] == "HEAD" else "",
+    )
+    monkeypatch.setattr(
+        "scripts.operations.transaction_processing_release_rehearsal._prepare_local_compose_runtime",
+        prepare_runtime,
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "transaction_processing_release_rehearsal.py",
+            "--candidate-release-manifest",
+            str(candidate_path),
+            "--rollback-release-manifest",
+            str(rollback_path),
+            "--output",
+            str(tmp_path / "receipt.json"),
+            "--repo-root",
+            str(tmp_path),
+            "--execute",
+        ],
+    )
+
+    with pytest.raises(ReleaseEvidenceError, match="unexpected=.*DATABASE_URL"):
+        main()
+
+    assert prepared is False
 
 
 def test_pull_images_is_rejected_for_non_mutating_plan(

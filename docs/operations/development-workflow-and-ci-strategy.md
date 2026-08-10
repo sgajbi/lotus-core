@@ -117,6 +117,9 @@ changing rather than returning only a generic timeout.
 Exact-count overshoot and DLQ growth relative to the pre-interruption baseline are terminal. The
 gate records the source-safe terminal reason and exits polling immediately instead of consuming the
 remaining timeout budget.
+The DLQ baseline and terminal delta come from durable `consumer_dlq_events` rows filtered by the
+exact transaction consumer group and source topic. Do not default an absent readiness field to zero;
+the transaction readiness contract does not own DLQ-count evidence.
 
 ## Merge and Hygiene Rules
 1. Merge only when required checks are green.

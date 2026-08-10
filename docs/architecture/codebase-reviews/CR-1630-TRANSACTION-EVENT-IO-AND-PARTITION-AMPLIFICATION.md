@@ -112,6 +112,14 @@ rearmed and completed `525` times for one final portfolio-day row.
     `409` replay blocks contribute zero expected completions, while `202` responses contribute only
     their validated `accepted_count`. The observation window is separate from, and longer than,
     the unchanged profile SLOs so a failure report can retain final domain-count diagnostics.
+22. Release rehearsal manifests may provide only the six governed, non-secret build metadata
+    values consumed by `/version`. Database URLs, ports, Compose controls, and arbitrary environment
+    overrides are rejected before runtime preparation; image digest and service image overrides
+    remain adapter-owned.
+23. Transaction release and interruption-recovery gates measure DLQ growth from the durable
+    `consumer_dlq_events` ledger, scoped to the exact transaction consumer group and source topic.
+    Standard readiness remains readiness evidence only and cannot silently fabricate a zero DLQ
+    baseline when a field is absent.
 
 ## Measured Result
 

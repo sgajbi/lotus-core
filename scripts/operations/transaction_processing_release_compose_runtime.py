@@ -25,12 +25,14 @@ from scripts.operations.transaction_processing_cutover_offsets import (
     KafkaOffsetStore,
 )
 from scripts.operations.transaction_processing_load_support import (
+    consumer_dlq_event_count,
     ingest_transactions,
     seed_load_context,
     transaction_processing_counts,
     wait_for_transaction_processing,
 )
 from scripts.operations.transaction_processing_release_evidence import (
+    GOVERNED_RELEASE_RUNTIME_ENV_KEYS,
     FinancialEffectEvidence,
     ReleaseEvidenceError,
     ReleaseIdentity,
@@ -309,7 +311,8 @@ class LocalComposeReleaseRuntime:
 
     def _set_release_image(self, release: ReleaseIdentity) -> None:
         runtime_values = self._managed_run.runtime.values
-        runtime_values.update(release.runtime_env)
+        for key in GOVERNED_RELEASE_RUNTIME_ENV_KEYS:
+            runtime_values[key] = release.runtime_env[key]
         runtime_values[IMAGE_DIGEST_ENV] = release.image_digest
         runtime_values[TRANSACTION_IMAGE_ENV] = release.digest_image_ref
 
@@ -492,22 +495,11 @@ class LocalComposeReleaseRuntime:
     def _consumer_dlq_count(self) -> int:
         if self._engine is None:  # pragma: no cover - guarded by caller
             raise ReleaseEvidenceError("release canary database is not initialized")
-        with self._engine.connect() as connection:
-            count = connection.execute(
-                text(
-                    """
-                    SELECT count(*)
-                    FROM consumer_dlq_events
-                    WHERE consumer_group = :consumer_group
-                      AND original_topic = :original_topic
-                    """
-                ),
-                {
-                    "consumer_group": self._config.consumer_group,
-                    "original_topic": self._config.transaction_topic,
-                },
-            ).scalar_one()
-        return int(count)
+        return consumer_dlq_event_count(
+            engine=self._engine,
+            consumer_group=self._config.consumer_group,
+            original_topic=self._config.transaction_topic,
+        )
 
     def _wait_for_outbox_drain(self) -> dict[str, int]:
         if self._engine is None:  # pragma: no cover - guarded by caller

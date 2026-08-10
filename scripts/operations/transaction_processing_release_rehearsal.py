@@ -532,6 +532,14 @@ def _prepare_local_compose_runtime(
     if not compose_file.is_absolute():
         compose_file = repo_root / compose_file
     output_path = args.output.resolve()
+    config = LocalComposeReleaseConfig(
+        receipt_id=context.receipt_id,
+        repo_root=repo_root,
+        ready_timeout_seconds=args.ready_timeout_seconds,
+        canary_timeout_seconds=args.canary_timeout_seconds,
+        canary_transaction_count=args.canary_transaction_count,
+        pull_images=args.pull_images,
+    )
     managed_run = prepare_managed_compose_run(
         profile="integration",
         scope="transaction-release-rehearsal",
@@ -544,20 +552,12 @@ def _prepare_local_compose_runtime(
         keep_stack=False,
         reset_volumes=False,
     )
-    return cast(
-        ReleaseRehearsalRuntime,
-        LocalComposeReleaseRuntime(
-            managed_run=managed_run,
-            config=LocalComposeReleaseConfig(
-                receipt_id=context.receipt_id,
-                repo_root=repo_root,
-                ready_timeout_seconds=args.ready_timeout_seconds,
-                canary_timeout_seconds=args.canary_timeout_seconds,
-                canary_transaction_count=args.canary_transaction_count,
-                pull_images=args.pull_images,
-            ),
-        ),
-    )
+    try:
+        runtime = LocalComposeReleaseRuntime(managed_run=managed_run, config=config)
+    except Exception:
+        managed_run.runtime.port_reservation.release()
+        raise
+    return cast(ReleaseRehearsalRuntime, runtime)
 
 
 def _git_output(repo_root: Path, *arguments: str) -> str:

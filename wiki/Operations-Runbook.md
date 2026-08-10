@@ -84,6 +84,9 @@ generated `lotus-integration-transaction-release-rehearsal-*` Compose project, r
 financial canaries, and fails unless its exact project has zero cleanup residue. Its receipt is
 local Compose evidence with `cluster_certification=false`; Kubernetes rollout, production canary,
 and rollback-RTO evidence remain environment-owned.
+Qualified manifests may supply only six governed build-metadata values; database, port, Compose,
+and arbitrary environment overrides fail before runtime preparation. Canary DLQ evidence comes
+from durable rows scoped to the exact stable consumer group and source topic, not from readiness.
 
 ```bash
 python scripts/operations/transaction_processing_cutover_offsets.py --bootstrap-servers localhost:9092
