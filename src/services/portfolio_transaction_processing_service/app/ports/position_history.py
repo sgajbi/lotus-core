@@ -65,7 +65,7 @@ class PositionHistoryRepository(Protocol):
         self, *, portfolio_id: str, security_id: str
     ) -> tuple[BookedTransaction, ...]: ...
 
-    async def reset_and_load_replay_window(
+    async def load_replay_window(
         self,
         *,
         portfolio_id: str,

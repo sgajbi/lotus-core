@@ -163,8 +163,8 @@ class SqlAlchemyPositionHistoryRepository:
         result = await self._session.execute(statement)
         return tuple(_to_booked_transaction(row) for row in result.scalars().all())
 
-    @async_timed(repository="PositionRepository", method="reset_and_load_position_replay_window")
-    async def reset_and_load_replay_window(
+    @async_timed(repository="PositionRepository", method="load_position_replay_window")
+    async def load_replay_window(
         self,
         *,
         portfolio_id: str,
@@ -172,26 +172,9 @@ class SqlAlchemyPositionHistoryRepository:
         position_date: date,
         epoch: int,
     ) -> PositionReplayWindow:
-        """Delete the stale suffix and load its replay inputs in one statement.
-
-        PostgreSQL data-modifying CTEs share the statement snapshot. The anchor
-        predicate reads only rows before ``position_date``, so it is intentionally
-        unaffected by the suffix deletion while the caller avoids a second round
-        trip inside the position-key lock.
-        """
+        """Load the prior anchor and ordered replay transactions in one query."""
         normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
         normalized_security_id = normalize_lookup_identifier(security_id)
-        deleted_suffix = (
-            delete(PositionHistory)
-            .where(
-                func.trim(PositionHistory.portfolio_id) == normalized_portfolio_id,
-                func.trim(PositionHistory.security_id) == normalized_security_id,
-                PositionHistory.position_date >= position_date,
-                PositionHistory.epoch == epoch,
-            )
-            .returning(PositionHistory.id)
-            .cte("deleted_position_history_suffix")
-        )
         anchor_cte = (
             select(PositionHistory)
             .where(
@@ -207,7 +190,6 @@ class SqlAlchemyPositionHistoryRepository:
         anchor = aliased(PositionHistory, anchor_cte)
         statement = (
             select(Transaction, anchor)
-            .add_cte(deleted_suffix)
             .select_from(Transaction)
             .outerjoin(anchor, true())
             .where(
@@ -219,16 +201,6 @@ class SqlAlchemyPositionHistoryRepository:
         )
         rows = (await self._session.execute(statement)).all()
         anchor_row = rows[0][1] if rows else None
-        logger.debug(
-            "Reset stale position history and loaded replay window.",
-            extra={
-                "portfolio_id": normalized_portfolio_id,
-                "security_id": normalized_security_id,
-                "epoch": epoch,
-                "position_date": position_date.isoformat(),
-                "replay_transaction_count": len(rows),
-            },
-        )
         return PositionReplayWindow(
             anchor=(_to_position_history_record(anchor_row) if anchor_row is not None else None),
             transactions=tuple(_to_booked_transaction(row[0]) for row in rows),

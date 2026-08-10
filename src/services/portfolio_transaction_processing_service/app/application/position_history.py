@@ -214,7 +214,13 @@ class PositionHistoryProcessor:
             security_id=transaction.security_id,
             epoch=message_epoch,
         )
-        replay_window = await self._repository.reset_and_load_replay_window(
+        await self._repository.delete_records_from(
+            portfolio_id=transaction.portfolio_id,
+            security_id=transaction.security_id,
+            position_date=transaction_date,
+            epoch=message_epoch,
+        )
+        replay_window = await self._repository.load_replay_window(
             portfolio_id=transaction.portfolio_id,
             security_id=transaction.security_id,
             position_date=transaction_date,
