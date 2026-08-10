@@ -86,17 +86,29 @@ def _child_payload_and_hash(
     return json.dumps(child.lineage_payload()), child.content_hash
 
 
-def _manifest_payload_and_hash() -> tuple[str, str, str]:
+def _manifest_payload_and_hash(
+    policy: corporate_action.CorporateActionCohortPolicy | None = None,
+    *,
+    identity_suffix: str = "DB-001",
+) -> tuple[str, str, str]:
+    if policy is None:
+        policy = next(
+            candidate
+            for candidate in corporate_action.CORPORATE_ACTION_COHORT_POLICIES
+            if candidate.corporate_action_type == "DEMERGER"
+        )
+    source_transaction_id = f"CA-SOURCE-{identity_suffix}"
+    target_transaction_id = f"CA-TARGET-{identity_suffix}"
     source = corporate_action.CorporateActionEventChild(
-        transaction_id="CA-SOURCE-DB-001",
-        transaction_type="DEMERGER_OUT",
-        child_role="SOURCE_POSITION_REDUCE",
+        transaction_id=source_transaction_id,
+        transaction_type=policy.source_transaction_type,
+        child_role=policy.source_role,
         instrument_id="SOURCE-SEC",
         source_instrument_id="SOURCE-SEC",
     )
     target = corporate_action.CorporateActionEventChild(
-        transaction_id="CA-TARGET-DB-001",
-        transaction_type="DEMERGER_IN",
+        transaction_id=target_transaction_id,
+        transaction_type=policy.target_transaction_type,
         child_role="TARGET_POSITION_ADD",
         dependency_transaction_ids=(source.transaction_id,),
         instrument_id="TARGET-SEC",
@@ -104,11 +116,11 @@ def _manifest_payload_and_hash() -> tuple[str, str, str]:
         target_instrument_id="TARGET-SEC",
     )
     manifest = corporate_action.CorporateActionParentManifest(
-        corporate_action_event_id="CA-EVENT-DB-001",
+        corporate_action_event_id=f"CA-EVENT-{identity_suffix}",
         portfolio_id="CA-PORT-DB-001",
-        linked_transaction_group_id="CA-GROUP-DB-001",
-        parent_event_reference="CA-PARENT-DB-001",
-        corporate_action_type="DEMERGER",
+        linked_transaction_group_id=f"CA-GROUP-{identity_suffix}",
+        parent_event_reference=f"CA-PARENT-{identity_suffix}",
+        corporate_action_type=policy.corporate_action_type,
         version=1,
         completion_declared=True,
         expected_children=(source, target),
@@ -372,21 +384,84 @@ def test_corporate_action_event_graph_apply_constraints_and_rollback(
         manifest_payload, manifest_content_hash, execution_plan_content_hash = (
             _manifest_payload_and_hash()
         )
+        manifest_hash_select = text(
+            "SELECT canonical_ca_manifest_payload_hash(CAST(:payload AS jsonb))"
+        )
+        for policy in corporate_action.CORPORATE_ACTION_COHORT_POLICIES:
+            policy_payload, policy_content_hash, _ = _manifest_payload_and_hash(
+                policy,
+                identity_suffix=f"POLICY-{policy.corporate_action_type}",
+            )
+            assert (
+                connection.scalar(
+                    manifest_hash_select,
+                    {"payload": policy_payload},
+                )
+                == policy_content_hash
+            )
         assert (
             connection.scalar(
-                text("SELECT canonical_ca_manifest_payload_hash(CAST(:payload AS jsonb))"),
+                manifest_hash_select,
                 {"payload": manifest_payload},
             )
             == manifest_content_hash
         )
         forged_manifest_payload = json.loads(manifest_payload)
-        forged_manifest_payload["corporate_action_type"] = "SPIN_OFF"
+        forged_manifest_payload["parent_event_reference"] = "forged-parent-reference"
         assert (
             connection.scalar(
-                text("SELECT canonical_ca_manifest_payload_hash(CAST(:payload AS jsonb))"),
+                manifest_hash_select,
                 {"payload": json.dumps(forged_manifest_payload)},
             )
             != manifest_content_hash
+        )
+        reordered_manifest_payload = json.loads(manifest_payload)
+        reordered_manifest_payload["expected_children"].reverse()
+        assert (
+            connection.scalar(
+                manifest_hash_select,
+                {"payload": json.dumps(reordered_manifest_payload)},
+            )
+            == manifest_content_hash
+        )
+        dependency_order_a = json.loads(manifest_payload)
+        dependency_order_a["expected_children"][1]["dependency_transaction_ids"].append(
+            "ZZZ-NONCANONICAL-DEPENDENCY"
+        )
+        dependency_order_b = json.loads(json.dumps(dependency_order_a))
+        dependency_order_b["expected_children"].reverse()
+        dependency_order_b["expected_children"][0]["dependency_transaction_ids"].reverse()
+        assert connection.scalar(
+            manifest_hash_select,
+            {"payload": json.dumps(dependency_order_a)},
+        ) == connection.scalar(
+            manifest_hash_select,
+            {"payload": json.dumps(dependency_order_b)},
+        )
+
+        unsupported_manifest_payload = json.loads(manifest_payload)
+        unsupported_manifest_payload["corporate_action_type"] = "UNSUPPORTED_EVENT"
+        _expect_integrity_error(
+            connection,
+            manifest_hash_select,
+            {"payload": json.dumps(unsupported_manifest_payload)},
+            match="no governed cohort policy",
+        )
+        disallowed_type_payload = json.loads(manifest_payload)
+        disallowed_type_payload["expected_children"][0]["transaction_type"] = "SELL"
+        _expect_integrity_error(
+            connection,
+            manifest_hash_select,
+            {"payload": json.dumps(disallowed_type_payload)},
+            match="governed cohort shape",
+        )
+        disallowed_role_payload = json.loads(manifest_payload)
+        disallowed_role_payload["expected_children"][0]["child_role"] = "TARGET_POSITION_ADD"
+        _expect_integrity_error(
+            connection,
+            manifest_hash_select,
+            {"payload": json.dumps(disallowed_role_payload)},
+            match="source child violates cohort policy",
         )
         manifest_insert = text(
             """

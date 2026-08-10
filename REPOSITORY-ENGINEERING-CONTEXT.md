@@ -2708,8 +2708,12 @@ Most relevant current governance:
      correction-boundary redeliveries as fresh immutable observations when a newly declared or
      removed child must be evaluated again, while rejecting lower epochs and changed content at the
      same epoch. READY must also reconstruct the manifest from event/source columns, nodes and
-     edges, recompute the domain's canonical topological order and execution-plan hash, and reject
-     any payload, ordinal or relational evidence drift.
+     edges, normalize expected-child and dependency arrays exactly like the domain serializer,
+     enforce the same closed cohort policy for supported event families, child types, roles,
+     source/target instruments, and overlay dependencies, recompute the domain's canonical
+     topological order and execution-plan hash, and reject any semantic, payload, ordinal, or
+     relational evidence drift. Direct SQL must never certify a cohort that the domain evaluator
+     classifies as invalid.
      correction-safe multiple READY evaluations
      across state versions; do not restore a lifetime one-READY-per-manifest constraint or permit
      historical ledger mutation. Parent-manifest persistence belongs behind
