@@ -76,6 +76,16 @@ the full 14-test PostgreSQL graph suite covers copied-hash/different-payload rej
 serializer parity with the domain, correction/restart/concurrency behavior, and reversible
 migration. No public API, OpenAPI, Kafka, dependency, image, pool, or topology contract changed;
 the not-yet-main migration is hardened in place.
+Four later reviews exposed the same trust-boundary pattern across correction and plan evidence.
+Post-manifest semantic redeliveries now append when the active opening boundary requires fresh
+evidence; delivery identity remains unique, while a serialized database trigger rejects lower
+epochs or changed content at the same epoch. READY reconstructs and authenticates parent payload,
+event/source columns, child nodes, dependency edges, deterministic domain topological order, and
+the execution-plan hash instead of trusting stored hashes or ordinals independently. Direct
+PostgreSQL proof covers manifest/plan hash parity, forged payloads, epoch regression, same-epoch
+conflict, and graph-order drift. The obsolete global semantic-retry uniqueness path was removed
+because it prevented required post-correction immutable evidence. No external contract or runtime
+topology changed.
 
 CR-1630 delivery-tranche boundary addendum (2026-08-10): PR #931 reaches its governed delivery
 boundary with 73 signed commits at evidence head `c220b33de`. The retained implementation includes

@@ -2705,6 +2705,11 @@ Most relevant current governance:
      and the declared forward-only edge graph. Before READY, the database recomputes each latest
      observation's SHA-256 from the same canonical, float-free child payload used by the domain;
      copied hashes over different, malformed, or non-canonical payloads fail closed. Retain
+     correction-boundary redeliveries as fresh immutable observations when a newly declared or
+     removed child must be evaluated again, while rejecting lower epochs and changed content at the
+     same epoch. READY must also reconstruct the manifest from event/source columns, nodes and
+     edges, recompute the domain's canonical topological order and execution-plan hash, and reject
+     any payload, ordinal or relational evidence drift.
      correction-safe multiple READY evaluations
      across state versions; do not restore a lifetime one-READY-per-manifest constraint or permit
      historical ledger mutation. Parent-manifest persistence belongs behind

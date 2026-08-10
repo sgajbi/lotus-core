@@ -101,6 +101,47 @@ def upgrade() -> None:
             END;
             $$;
 
+            CREATE FUNCTION canonical_ca_json_value(value jsonb)
+            RETURNS text
+            LANGUAGE plpgsql
+            IMMUTABLE
+            STRICT
+            AS $$
+            DECLARE
+                canonical_value text;
+            BEGIN
+                CASE jsonb_typeof(value)
+                    WHEN 'null' THEN RETURN 'null';
+                    WHEN 'boolean' THEN RETURN value::text;
+                    WHEN 'number' THEN RETURN value::text;
+                    WHEN 'string' THEN RETURN canonical_ca_json_string(value #>> '{}');
+                    WHEN 'array' THEN
+                        SELECT '[' || coalesce(
+                            string_agg(canonical_ca_json_value(item), ',' ORDER BY ordinal),
+                            ''
+                        ) || ']'
+                        INTO canonical_value
+                        FROM jsonb_array_elements(value) WITH ORDINALITY AS element(item, ordinal);
+                        RETURN canonical_value;
+                    WHEN 'object' THEN
+                        SELECT '{' || coalesce(
+                            string_agg(
+                                canonical_ca_json_string(key) || chr(58)
+                                    || canonical_ca_json_value(item),
+                                ',' ORDER BY key COLLATE "C"
+                            ),
+                            ''
+                        ) || '}'
+                        INTO canonical_value
+                        FROM jsonb_each(value) AS member(key, item);
+                        RETURN canonical_value;
+                    ELSE
+                        RAISE EXCEPTION 'unsupported corporate-action JSON value'
+                            USING ERRCODE = '23514';
+                END CASE;
+            END;
+            $$;
+
             CREATE FUNCTION canonical_ca_child_payload_hash(payload jsonb)
             RETURNS text
             LANGUAGE plpgsql
@@ -226,6 +267,92 @@ def upgrade() -> None:
                     || canonical_ca_json_string(payload ->> 'transaction_type')
                     || '}';
                 RETURN encode(sha256(convert_to(canonical_payload, 'UTF8')), 'hex');
+            END;
+            $$;
+
+            CREATE FUNCTION canonical_ca_manifest_payload_hash(payload jsonb)
+            RETURNS text
+            LANGUAGE plpgsql
+            IMMUTABLE
+            STRICT
+            AS $$
+            DECLARE
+                payload_keys text[];
+                source_keys text[];
+                normalized_payload jsonb;
+            BEGIN
+                IF jsonb_typeof(payload) <> 'object' THEN
+                    RAISE EXCEPTION 'corporate-action manifest payload must be an object'
+                        USING ERRCODE = '23514';
+                END IF;
+                SELECT array_agg(key ORDER BY key COLLATE "C")
+                INTO payload_keys
+                FROM jsonb_object_keys(payload) AS key;
+                IF payload_keys IS DISTINCT FROM ARRAY[
+                    'canonical_payload_version', 'completion_declared',
+                    'corporate_action_event_id', 'corporate_action_type',
+                    'expected_children', 'linked_transaction_group_id',
+                    'parent_event_reference', 'portfolio_id', 'source_reference', 'version'
+                ]::text[]
+                   OR payload ->> 'canonical_payload_version' <> '1'
+                   OR jsonb_typeof(payload -> 'completion_declared') <> 'boolean'
+                   OR jsonb_typeof(payload -> 'version') <> 'number'
+                   OR (payload -> 'version')::text !~ '^[1-9][0-9]*$'
+                   OR jsonb_typeof(payload -> 'expected_children') <> 'array'
+                   OR jsonb_typeof(payload -> 'source_reference') <> 'object' THEN
+                    RAISE EXCEPTION 'corporate-action manifest payload shape is not canonical'
+                        USING ERRCODE = '23514';
+                END IF;
+                IF EXISTS (
+                    SELECT 1
+                    FROM unnest(ARRAY[
+                        'corporate_action_event_id', 'corporate_action_type',
+                        'linked_transaction_group_id', 'parent_event_reference', 'portfolio_id'
+                    ]) AS required_key
+                    WHERE jsonb_typeof(payload -> required_key) <> 'string'
+                       OR payload ->> required_key <> btrim(payload ->> required_key)
+                       OR payload ->> required_key = ''
+                ) THEN
+                    RAISE EXCEPTION 'corporate-action manifest identity is not canonical'
+                        USING ERRCODE = '23514';
+                END IF;
+                SELECT array_agg(key ORDER BY key COLLATE "C")
+                INTO source_keys
+                FROM jsonb_object_keys(payload -> 'source_reference') AS key;
+                IF source_keys IS DISTINCT FROM ARRAY[
+                    'observed_at', 'source_content_hash', 'source_record_id',
+                    'source_revision', 'source_system'
+                ]::text[]
+                   OR EXISTS (
+                       SELECT 1
+                       FROM unnest(ARRAY[
+                           'observed_at', 'source_content_hash', 'source_record_id',
+                           'source_revision', 'source_system'
+                       ]) AS source_key
+                       WHERE jsonb_typeof(payload -> 'source_reference' -> source_key) <> 'string'
+                          OR payload #>> ARRAY['source_reference', source_key]
+                              <> btrim(payload #>> ARRAY['source_reference', source_key])
+                          OR payload #>> ARRAY['source_reference', source_key] = ''
+                   )
+                   OR payload #>> '{source_reference,source_content_hash}'
+                       !~ '^[0-9a-f]{64}$' THEN
+                    RAISE EXCEPTION 'corporate-action manifest source evidence is not canonical'
+                        USING ERRCODE = '23514';
+                END IF;
+                PERFORM canonical_ca_child_payload_hash(child)
+                FROM jsonb_array_elements(payload -> 'expected_children') AS expected(child);
+                normalized_payload := jsonb_set(
+                    payload,
+                    '{source_reference,observed_at}',
+                    jsonb_build_object(
+                        'datetime', payload #> '{source_reference,observed_at}'
+                    ),
+                    false
+                );
+                RETURN encode(
+                    sha256(convert_to(canonical_ca_json_value(normalized_payload), 'UTF8')),
+                    'hex'
+                );
             END;
             $$;
             """
@@ -713,13 +840,55 @@ def upgrade() -> None:
             "delivery_event_id",
             name="uq_ca_observation_delivery",
         ),
-        sa.UniqueConstraint(
-            "event_id",
-            "transaction_id",
-            "transaction_epoch",
-            "observed_content_hash",
-            name="uq_ca_observation_semantic_retry",
-        ),
+    )
+    op.execute(
+        sa.text(
+            """
+            CREATE FUNCTION enforce_ca_observation_epoch_monotonic()
+            RETURNS trigger
+            LANGUAGE plpgsql
+            AS $$
+            DECLARE
+                latest_epoch integer;
+                latest_hash text;
+            BEGIN
+                PERFORM pg_advisory_xact_lock(
+                    hashtextextended(
+                        NEW.event_id::text || chr(31) || NEW.transaction_id,
+                        0
+                    )
+                );
+                SELECT observation.transaction_epoch, observation.observed_content_hash
+                INTO latest_epoch, latest_hash
+                FROM corporate_action_child_observations AS observation
+                WHERE observation.event_id = NEW.event_id
+                  AND observation.transaction_id = NEW.transaction_id
+                ORDER BY
+                    observation.transaction_epoch DESC,
+                    observation.observation_sequence DESC
+                LIMIT 1;
+                IF latest_epoch IS NOT NULL
+                   AND (
+                       NEW.transaction_epoch < latest_epoch
+                       OR (
+                           NEW.transaction_epoch = latest_epoch
+                           AND NEW.observed_content_hash <> latest_hash
+                       )
+                   ) THEN
+                    RAISE EXCEPTION
+                        'corporate-action child correction epoch must increase monotonically'
+                        USING ERRCODE = '23514';
+                END IF;
+                RETURN NEW;
+            END;
+            $$;
+
+            CREATE TRIGGER trg_ca_observation_epoch_monotonic
+            BEFORE INSERT ON corporate_action_child_observations
+            FOR EACH ROW
+            EXECUTE FUNCTION enforce_ca_observation_epoch_monotonic();
+            """
+        )
     )
     _create_immutable_ledger_trigger("corporate_action_child_observations", "child_observation")
     op.create_index(
@@ -863,12 +1032,74 @@ def upgrade() -> None:
     op.execute(
         sa.text(
             """
+            CREATE FUNCTION canonical_ca_execution_order(target_manifest_id integer)
+            RETURNS jsonb
+            LANGUAGE plpgsql
+            STABLE
+            STRICT
+            AS $$
+            DECLARE
+                ordered_ids text[] := ARRAY[]::text[];
+                next_transaction_id text;
+                node_count integer;
+            BEGIN
+                SELECT count(*) INTO node_count
+                FROM corporate_action_manifest_nodes
+                WHERE manifest_id = target_manifest_id;
+                WHILE cardinality(ordered_ids) < node_count LOOP
+                    SELECT node.transaction_id
+                    INTO next_transaction_id
+                    FROM corporate_action_manifest_nodes AS node
+                    WHERE node.manifest_id = target_manifest_id
+                      AND NOT node.transaction_id = ANY(ordered_ids)
+                      AND NOT EXISTS (
+                          SELECT 1
+                          FROM corporate_action_manifest_edges AS edge
+                          WHERE edge.manifest_id = target_manifest_id
+                            AND edge.successor_transaction_id = node.transaction_id
+                            AND NOT edge.predecessor_transaction_id = ANY(ordered_ids)
+                      )
+                    ORDER BY
+                        CASE node.transaction_type
+                            WHEN 'SPIN_OFF' THEN 0
+                            WHEN 'DEMERGER_OUT' THEN 0
+                            WHEN 'RIGHTS_ANNOUNCE' THEN 0
+                            WHEN 'RIGHTS_ALLOCATE' THEN 0
+                            WHEN 'SPIN_IN' THEN 1
+                            WHEN 'DEMERGER_IN' THEN 1
+                            WHEN 'RIGHTS_SUBSCRIBE' THEN 1
+                            WHEN 'RIGHTS_OVERSUBSCRIBE' THEN 1
+                            WHEN 'RIGHTS_SELL' THEN 1
+                            WHEN 'RIGHTS_EXPIRE' THEN 1
+                            WHEN 'RIGHTS_ADJUSTMENT' THEN 1
+                            WHEN 'CASH_CONSIDERATION' THEN 2
+                            WHEN 'RIGHTS_SHARE_DELIVERY' THEN 2
+                            WHEN 'RIGHTS_REFUND' THEN 3
+                            ELSE 4
+                        END,
+                        coalesce(node.child_sequence_hint, 2147483647),
+                        coalesce(node.target_instrument_id, '-') COLLATE "C",
+                        node.child_role COLLATE "C",
+                        node.transaction_id COLLATE "C"
+                    LIMIT 1;
+                    IF next_transaction_id IS NULL THEN
+                        RAISE EXCEPTION
+                            'corporate-action manifest graph has no canonical execution order'
+                            USING ERRCODE = '23514';
+                    END IF;
+                    ordered_ids := array_append(ordered_ids, next_transaction_id);
+                END LOOP;
+                RETURN to_jsonb(ordered_ids);
+            END;
+            $$;
+
             CREATE FUNCTION enforce_ca_readiness_plan()
             RETURNS trigger
             LANGUAGE plpgsql
             AS $$
             DECLARE
                 expected_order jsonb;
+                canonical_order jsonb;
                 expected_count integer;
                 resolved_count integer;
                 minimum_ordinal integer;
@@ -885,6 +1116,14 @@ def upgrade() -> None:
                 event_manifest_version integer;
                 manifest_version integer;
                 declared_manifest_content_hash text;
+                canonical_manifest_content_hash text;
+                expected_execution_plan_hash text;
+                manifest_payload_matches_relational boolean;
+                payload_node_count integer;
+                payload_distinct_node_count integer;
+                payload_node_mismatch_count integer;
+                payload_edge_count integer;
+                payload_edge_mismatch_count integer;
                 completion_declared boolean;
                 manifest_opened_observation_sequence integer;
                 predecessor_manifest_id integer;
@@ -937,11 +1176,18 @@ def upgrade() -> None:
                         'corporate-action READY plan does not match manifest node order'
                         USING ERRCODE = '23514';
                 END IF;
+                canonical_order := canonical_ca_execution_order(NEW.manifest_id);
+                IF expected_order <> canonical_order THEN
+                    RAISE EXCEPTION
+                        'corporate-action READY plan does not match canonical graph order'
+                        USING ERRCODE = '23514';
+                END IF;
 
                 SELECT
                     manifest.expected_edge_count,
                     manifest.manifest_version,
                     manifest.manifest_content_hash,
+                    canonical_ca_manifest_payload_hash(manifest.manifest_payload),
                     manifest.completion_declared,
                     count(edge.id),
                     count(edge.id) FILTER (
@@ -952,6 +1198,7 @@ def upgrade() -> None:
                     declared_edge_count,
                     manifest_version,
                     declared_manifest_content_hash,
+                    canonical_manifest_content_hash,
                     completion_declared,
                     actual_edge_count,
                     invalid_edge_count
@@ -970,6 +1217,7 @@ def upgrade() -> None:
                     manifest.expected_edge_count,
                     manifest.manifest_version,
                     manifest.manifest_content_hash,
+                    manifest.manifest_payload,
                     manifest.completion_declared;
 
                 IF actual_edge_count <> declared_edge_count
@@ -979,10 +1227,146 @@ def upgrade() -> None:
                         USING ERRCODE = '23514';
                 END IF;
 
+                SELECT
+                    manifest.manifest_payload ->> 'corporate_action_event_id'
+                        = event.corporate_action_event_id
+                    AND manifest.manifest_payload ->> 'portfolio_id' = event.portfolio_id
+                    AND manifest.manifest_payload ->> 'linked_transaction_group_id'
+                        = event.linked_transaction_group_id
+                    AND manifest.manifest_payload ->> 'parent_event_reference'
+                        = event.parent_event_reference
+                    AND manifest.manifest_payload ->> 'corporate_action_type'
+                        = manifest.corporate_action_type
+                    AND (manifest.manifest_payload ->> 'version')::integer
+                        = manifest.manifest_version
+                    AND (manifest.manifest_payload ->> 'completion_declared')::boolean
+                        = manifest.completion_declared
+                    AND manifest.manifest_payload #>> '{source_reference,source_system}'
+                        = manifest.source_system
+                    AND manifest.manifest_payload #>> '{source_reference,source_record_id}'
+                        = manifest.source_record_id
+                    AND manifest.manifest_payload #>> '{source_reference,source_revision}'
+                        = manifest.source_revision
+                    AND manifest.manifest_payload #>> '{source_reference,source_content_hash}'
+                        = manifest.source_content_hash
+                    AND manifest.manifest_payload #>> '{source_reference,observed_at}'
+                        = to_char(
+                            manifest.source_observed_at AT TIME ZONE 'UTC',
+                            'YYYY-MM-DD"T"HH24:MI:SS'
+                        )
+                        || CASE
+                            WHEN extract(microseconds FROM manifest.source_observed_at)::integer
+                                 % 1000000 = 0 THEN ''
+                            ELSE to_char(
+                                manifest.source_observed_at AT TIME ZONE 'UTC',
+                                '.US'
+                            )
+                        END
+                        || '+00:00'
+                INTO manifest_payload_matches_relational
+                FROM corporate_action_manifest_versions AS manifest
+                JOIN corporate_action_events AS event ON event.id = manifest.event_id
+                WHERE manifest.id = NEW.manifest_id;
+
+                SELECT
+                    count(*),
+                    count(DISTINCT child ->> 'transaction_id'),
+                    count(*) FILTER (
+                        WHERE node.id IS NULL
+                           OR canonical_ca_child_payload_hash(child) <> node.child_content_hash
+                           OR canonical_ca_child_payload_hash(
+                               jsonb_build_object(
+                                   'canonical_payload_version', 1,
+                                   'child_role', node.child_role,
+                                   'child_sequence_hint', node.child_sequence_hint,
+                                   'dependency_transaction_ids', coalesce(
+                                       (
+                                           SELECT jsonb_agg(
+                                               edge.predecessor_transaction_id
+                                               ORDER BY edge.predecessor_transaction_id COLLATE "C"
+                                           )
+                                           FROM corporate_action_manifest_edges AS edge
+                                           WHERE edge.manifest_id = node.manifest_id
+                                             AND edge.successor_transaction_id
+                                                 = node.transaction_id
+                                       ),
+                                       '[]'::jsonb
+                                   ),
+                                   'instrument_id', node.instrument_id,
+                                   'source_instrument_id', node.source_instrument_id,
+                                   'target_instrument_id', node.target_instrument_id,
+                                   'transaction_id', node.transaction_id,
+                                   'transaction_type', node.transaction_type
+                               )
+                           ) <> node.child_content_hash
+                    )
+                INTO
+                    payload_node_count,
+                    payload_distinct_node_count,
+                    payload_node_mismatch_count
+                FROM corporate_action_manifest_versions AS manifest
+                CROSS JOIN LATERAL jsonb_array_elements(
+                    manifest.manifest_payload -> 'expected_children'
+                ) AS expected(child)
+                LEFT JOIN corporate_action_manifest_nodes AS node
+                  ON node.manifest_id = manifest.id
+                 AND node.transaction_id = child ->> 'transaction_id'
+                WHERE manifest.id = NEW.manifest_id;
+
+                SELECT
+                    count(*),
+                    count(*) FILTER (WHERE edge.id IS NULL)
+                INTO payload_edge_count, payload_edge_mismatch_count
+                FROM corporate_action_manifest_versions AS manifest
+                CROSS JOIN LATERAL jsonb_array_elements(
+                    manifest.manifest_payload -> 'expected_children'
+                ) AS expected(child)
+                CROSS JOIN LATERAL jsonb_array_elements_text(
+                    child -> 'dependency_transaction_ids'
+                ) AS dependency(predecessor_transaction_id)
+                LEFT JOIN corporate_action_manifest_edges AS edge
+                  ON edge.manifest_id = manifest.id
+                 AND edge.predecessor_transaction_id = dependency.predecessor_transaction_id
+                 AND edge.successor_transaction_id = child ->> 'transaction_id'
+                WHERE manifest.id = NEW.manifest_id;
+
+                IF NOT manifest_payload_matches_relational
+                   OR payload_node_count <> declared_node_count
+                   OR payload_distinct_node_count <> declared_node_count
+                   OR payload_node_mismatch_count <> 0
+                   OR payload_edge_count <> declared_edge_count
+                   OR payload_edge_mismatch_count <> 0 THEN
+                    RAISE EXCEPTION
+                        'corporate-action READY manifest payload does not match relational graph'
+                        USING ERRCODE = '23514';
+                END IF;
+
                 IF NEW.manifest_content_hash <> declared_manifest_content_hash
+                   OR declared_manifest_content_hash <> canonical_manifest_content_hash
                    OR NOT completion_declared THEN
                     RAISE EXCEPTION
                         'corporate-action READY evidence does not match complete manifest'
+                        USING ERRCODE = '23514';
+                END IF;
+
+                expected_execution_plan_hash := encode(
+                    sha256(
+                        convert_to(
+                            canonical_ca_json_value(
+                                jsonb_build_object(
+                                    'canonical_payload_version', 1,
+                                    'manifest_content_hash', declared_manifest_content_hash,
+                                    'ordered_transaction_ids', expected_order
+                                )
+                            ),
+                            'UTF8'
+                        )
+                    ),
+                    'hex'
+                );
+                IF NEW.execution_plan_content_hash <> expected_execution_plan_hash THEN
+                    RAISE EXCEPTION
+                        'corporate-action READY execution-plan hash is not canonical'
                         USING ERRCODE = '23514';
                 END IF;
 
@@ -1095,9 +1479,13 @@ def downgrade() -> None:
 
     op.drop_table("corporate_action_readiness_evaluations")
     op.execute(sa.text("DROP FUNCTION enforce_ca_readiness_plan()"))
+    op.execute(sa.text("DROP FUNCTION canonical_ca_execution_order(integer)"))
+    op.execute(sa.text("DROP FUNCTION canonical_ca_manifest_payload_hash(jsonb)"))
     op.execute(sa.text("DROP FUNCTION canonical_ca_child_payload_hash(jsonb)"))
+    op.execute(sa.text("DROP FUNCTION canonical_ca_json_value(jsonb)"))
     op.execute(sa.text("DROP FUNCTION canonical_ca_json_string(text)"))
     op.drop_table("corporate_action_child_observations")
+    op.execute(sa.text("DROP FUNCTION enforce_ca_observation_epoch_monotonic()"))
     op.execute(sa.text("DROP FUNCTION enforce_ca_observation_book_scope()"))
     op.drop_table("corporate_action_manifest_edges")
     op.drop_table("corporate_action_manifest_nodes")

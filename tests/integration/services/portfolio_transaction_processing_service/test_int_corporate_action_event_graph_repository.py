@@ -604,10 +604,33 @@ async def test_corrected_manifest_requires_newly_declared_child_after_opening_bo
             second,
             extra_target,
             delivery_event_id="post-correction-extra-target",
-            transaction_epoch=2,
         )
     )
+    assert decision.observation_outcome is CorporateActionObservationAppendOutcome.APPENDED
     assert decision.readiness_status == "READY"
+
+    third = replace(
+        first,
+        version=3,
+        source_reference=replace(
+            first.source_reference,
+            source_revision="3",
+            source_content_hash="c" * 64,
+        ),
+    )
+    assert await repository.append_manifest(third) is CorporateActionManifestAppendOutcome.APPENDED
+    removed_child_redelivery = await repository.observe_child(
+        _observation(
+            third,
+            extra_target,
+            delivery_event_id="post-removal-extra-target",
+        )
+    )
+    assert (
+        removed_child_redelivery.observation_outcome
+        is CorporateActionObservationAppendOutcome.APPENDED
+    )
+    assert removed_child_redelivery.readiness_status == "INVALID"
     await async_db_session.commit()
 
 
