@@ -13,7 +13,6 @@ from portfolio_common.database_models import (
     Transaction,
 )
 from sqlalchemy import event as sqlalchemy_event
-from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
@@ -180,7 +179,7 @@ async def test_materialization_progress_is_epoch_scoped(
     )
 
 
-async def test_replay_window_reset_loads_exact_anchor_and_ordered_transactions_once(
+async def test_replay_window_loads_exact_anchor_and_ordered_transactions_once(
     clean_db,
     position_history_repository_data: None,
     async_db_session: AsyncSession,
@@ -202,7 +201,7 @@ async def test_replay_window_reset_loads_exact_anchor_and_ordered_transactions_o
     sync_engine = async_db_session.bind.sync_engine
     sqlalchemy_event.listen(sync_engine, "before_cursor_execute", capture_statement)
     try:
-        window = await repository.reset_and_load_replay_window(
+        window = await repository.load_replay_window(
             portfolio_id=f" {PORTFOLIO_ID} ",
             security_id=f" {SECURITY_ID} ",
             position_date=date(2025, 8, 6),
@@ -219,12 +218,3 @@ async def test_replay_window_reset_loads_exact_anchor_and_ordered_transactions_o
         "TX_POSITION_HISTORY_E0_B",
         "TX_POSITION_HISTORY_E1_A",
     )
-    stale_suffix_count = await async_db_session.scalar(
-        select(func.count(PositionHistory.id)).where(
-            PositionHistory.portfolio_id == PORTFOLIO_ID,
-            PositionHistory.security_id == SECURITY_ID,
-            PositionHistory.position_date >= date(2025, 8, 6),
-            PositionHistory.epoch == 0,
-        )
-    )
-    assert stale_suffix_count == 0

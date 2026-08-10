@@ -76,7 +76,7 @@ async def test_list_all_transactions_maps_orm_rows_to_booked_transactions() -> N
 
 
 @pytest.mark.asyncio
-async def test_reset_and_load_replay_window_maps_anchor_and_transactions_in_one_query() -> None:
+async def test_load_replay_window_maps_anchor_and_transactions_in_one_query() -> None:
     session = AsyncMock(spec=AsyncSession)
     anchor_row = PositionHistory(
         portfolio_id="PB-001",
@@ -106,7 +106,7 @@ async def test_reset_and_load_replay_window_maps_anchor_and_transactions_in_one_
     session.execute.return_value = result
     repository = SqlAlchemyPositionHistoryRepository(session)
 
-    window = await repository.reset_and_load_replay_window(
+    window = await repository.load_replay_window(
         portfolio_id="PB-001",
         security_id="SEC-001",
         position_date=date(2026, 4, 10),
@@ -128,7 +128,7 @@ async def test_reset_and_load_replay_window_maps_anchor_and_transactions_in_one_
 
 
 @pytest.mark.asyncio
-async def test_reset_and_load_replay_window_rehydrates_anchor_calculation_lineage() -> None:
+async def test_load_replay_window_rehydrates_anchor_calculation_lineage() -> None:
     session = AsyncMock(spec=AsyncSession)
     lineage = _calculation_lineage()
     row = PositionHistory(
@@ -159,7 +159,7 @@ async def test_reset_and_load_replay_window_rehydrates_anchor_calculation_lineag
     result.all.return_value = [(transaction_row, row)]
     session.execute.return_value = result
 
-    window = await SqlAlchemyPositionHistoryRepository(session).reset_and_load_replay_window(
+    window = await SqlAlchemyPositionHistoryRepository(session).load_replay_window(
         portfolio_id="PB-001",
         security_id="SEC-001",
         position_date=date(2026, 4, 10),
@@ -311,14 +311,14 @@ async def test_contains_transaction_normalizes_lineage_and_position_key() -> Non
 
 
 @pytest.mark.asyncio
-async def test_reset_and_load_replay_window_normalizes_key_and_orders_deterministically() -> None:
+async def test_load_replay_window_normalizes_key_and_orders_deterministically() -> None:
     session = AsyncMock(spec=AsyncSession)
     result = MagicMock()
     result.all.return_value = []
     session.execute.return_value = result
     repository = SqlAlchemyPositionHistoryRepository(session)
 
-    window = await repository.reset_and_load_replay_window(
+    window = await repository.load_replay_window(
         portfolio_id=" PORT_COST_01 ",
         security_id=" SEC01 ",
         position_date=date(2026, 5, 28),
@@ -333,8 +333,6 @@ async def test_reset_and_load_replay_window_normalizes_key_and_orders_determinis
     assert "trim(transactions.security_id) = 'SEC01'" in compiled_query
     assert "transactions.transaction_date >= '2026-05-28 00:00:00'" in compiled_query
     assert "position_replay_anchor" in compiled_query
-    assert "deleted_position_history_suffix" in compiled_query
-    assert "DELETE FROM position_history" in compiled_query
     assert "position_history.position_date < '2026-05-28'" in compiled_query
     assert "position_history.epoch = 42" in compiled_query
     assert (
