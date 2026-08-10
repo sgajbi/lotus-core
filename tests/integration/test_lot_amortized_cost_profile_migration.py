@@ -50,6 +50,12 @@ BASIS_TRANSFER_MIGRATION = (
     / "versions"
     / "c146b2c3d513_feat_add_lot_basis_transfer_receipts.py"
 )
+CORPORATE_ACTION_GRAPH_MIGRATION = (
+    Path(__file__).resolve().parents[2]
+    / "alembic"
+    / "versions"
+    / "c152b2c3d519_feat_add_corporate_action_event_graph.py"
+)
 
 PROFILE_INSERT = text(
     """
@@ -174,6 +180,7 @@ def _downgrade_later_revisions(connection) -> list[dict[str, Any]]:
 
     later_migrations: list[dict[str, Any]] = []
     for table_name, marker_column, migration_path in (
+        ("corporate_action_events", None, CORPORATE_ACTION_GRAPH_MIGRATION),
         ("lot_basis_transfer_allocations", None, BASIS_TRANSFER_MIGRATION),
         ("position_lot_state", "amortized_cost_profile_id", RESIDUAL_CARRY_MIGRATION),
         ("lot_disposal_allocations", "amortized_cost_profile_id", DISPOSAL_EVIDENCE_MIGRATION),
