@@ -227,6 +227,37 @@ async def test_initial_buy_persists_lot_offset_and_checkpoint_through_one_aggreg
     ]
 
 
+async def test_normalized_initial_buy_uses_buy_only_aggregate_and_offset_policy() -> None:
+    transaction = _calculated_transaction("BUY-NORMALIZED-1", transaction_type=" buy ")
+    checkpoint = CostBasisProcessingCheckpoint.from_transaction(
+        transaction,
+        cost_basis_method="FIFO",
+    )
+    repository, lot_states, income_offsets, observer = _ports()
+    initial_opening_state = AsyncMock(spec=InitialOpeningCostStatePort)
+    repository.apply_transaction_costs_and_replace_breakdown.return_value = _booked_transaction(
+        transaction
+    )
+
+    await persist_cost_basis_transactions(
+        processed=[transaction],
+        incoming_transaction_ids={transaction.transaction_id},
+        transactions=repository,
+        lot_states=lot_states,
+        income_offsets=income_offsets,
+        initial_opening_state=initial_opening_state,
+        initial_opening_checkpoint=checkpoint,
+        observer=observer,
+    )
+
+    initial_opening_state.persist_initial_opening_cost_state.assert_awaited_once_with(
+        transaction=transaction,
+        checkpoint=checkpoint,
+    )
+    lot_states.upsert_buy_lot_state.assert_not_awaited()
+    income_offsets.upsert_accrued_income_offset.assert_not_awaited()
+
+
 @pytest.mark.parametrize(
     ("transaction_type", "fee", "persists_open_lot", "persists_accrued_income"),
     [

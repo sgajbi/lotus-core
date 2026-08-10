@@ -1,5 +1,6 @@
 """Verify the initial opening cost-state aggregate statement."""
 
+from dataclasses import replace
 from datetime import datetime
 from decimal import Decimal
 from unittest.mock import AsyncMock
@@ -54,3 +55,48 @@ async def test_initial_opening_state_executes_three_writes_as_one_postgresql_sta
     assert "persist_initial_income_offset AS" in compiled
     assert "INSERT INTO cost_basis_processing_state" in compiled
     assert compiled.count("ON CONFLICT") == 3
+
+
+@pytest.mark.parametrize(
+    ("checkpoint_change", "value"),
+    [
+        ("portfolio_id", "PORT-OTHER"),
+        ("security_id", "SECURITY-OTHER"),
+        ("latest_transaction_id", "BUY-OTHER"),
+    ],
+)
+@pytest.mark.asyncio
+async def test_initial_opening_state_rejects_mismatched_aggregate_scope_before_sql(
+    checkpoint_change: str,
+    value: str,
+) -> None:
+    transaction = CostBasisTransaction(
+        transaction_id="BUY-ATOMIC-INITIAL-1",
+        portfolio_id="PORT-ATOMIC-1",
+        instrument_id="INSTRUMENT-ATOMIC-1",
+        security_id="SECURITY-ATOMIC-1",
+        transaction_type="BUY",
+        transaction_date=datetime(2026, 8, 10, 10, 0),
+        quantity=Decimal("100"),
+        gross_transaction_amount=Decimal("9800"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+    )
+    checkpoint = replace(
+        CostBasisProcessingCheckpoint.from_transaction(
+            transaction,
+            cost_basis_method=CostBasisMethod.FIFO,
+        ),
+        **{checkpoint_change: value},
+    )
+    session = AsyncMock(spec=AsyncSession)
+
+    with pytest.raises(ValueError, match="checkpoint scope must match"):
+        await SqlAlchemyInitialOpeningCostStateRepository(
+            session
+        ).persist_initial_opening_cost_state(
+            transaction=transaction,
+            checkpoint=checkpoint,
+        )
+
+    session.execute.assert_not_awaited()
