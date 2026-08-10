@@ -32,6 +32,12 @@ The same review round found that direct SQL could claim `READY` with an unexpect
 even though the domain evaluator rejects that cohort. The database READY trigger now counts latest
 observations outside the active manifest and rejects the claim. Executable migration coverage and a
 real PostgreSQL savepoint proof bind the database invariant to the domain's fail-closed posture.
+Follow-up review showed that unexpected-child rejection must also honor a corrected manifest's
+opening sequence. The trigger now mirrors repository policy: observations for expected children may
+be reused across manifest versions, while observations for removed or newly unexpected children are
+considered only when they occur after the active manifest opened. The existing real PostgreSQL
+corrected-manifest test proves a removed version-one child does not prevent version two reaching
+`READY`.
 
 CR-1630 delivery-tranche boundary addendum (2026-08-10): PR #931 reaches its governed delivery
 boundary with 73 signed commits at evidence head `c220b33de`. The retained implementation includes
