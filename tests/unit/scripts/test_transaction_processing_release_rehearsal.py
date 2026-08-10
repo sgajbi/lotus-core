@@ -80,7 +80,7 @@ def _offsets(offset: int, *, active: int = 0) -> ConsumerGroupSnapshot:
 
 def _runtime_payload(release: ReleaseIdentity) -> dict[str, Any]:
     return {
-        "service_name": release.service,
+        "service_name": release.runtime_service_name,
         "git_commit_sha": release.runtime_env["LOTUS_GIT_COMMIT_SHA"],
         "git_branch": release.runtime_env["LOTUS_GIT_BRANCH"],
         "build_timestamp": release.runtime_env["LOTUS_BUILD_TIMESTAMP"],
@@ -115,6 +115,7 @@ class FakeRuntime:
         rollback: ReleaseIdentity,
         candidate_deploy_failure: Exception | None = None,
         candidate_failure: Exception | None = None,
+        candidate_quiesce_failure: Exception | None = None,
         rollback_failure: Exception | None = None,
         cleanup_count: int = 0,
     ) -> None:
@@ -122,6 +123,7 @@ class FakeRuntime:
         self.rollback = rollback
         self.candidate_deploy_failure = candidate_deploy_failure
         self.candidate_failure = candidate_failure
+        self.candidate_quiesce_failure = candidate_quiesce_failure
         self.rollback_failure = rollback_failure
         self.cleanup_count = cleanup_count
         self.calls: list[str] = []
@@ -160,6 +162,13 @@ class FakeRuntime:
             offsets=_offsets(offset, active=1),
             evidence={"profile": f"release-rehearsal-{stage}"},
         )
+
+    def quiesce(self, *, stage: str):
+        self.calls.append(f"quiesce-{stage}")
+        if stage.startswith("candidate") and self.candidate_quiesce_failure is not None:
+            raise self.candidate_quiesce_failure
+        offset = 20 if stage.startswith("candidate") else 30
+        return _offsets(offset)
 
     def cleanup(self) -> int:
         self.calls.append("cleanup")
@@ -404,8 +413,10 @@ def test_release_rehearsal_executes_candidate_and_rollback_in_order() -> None:
         "handoff",
         "deploy-candidate",
         "canary-candidate",
+        "quiesce-candidate",
         "deploy-rollback",
         "canary-rollback",
+        "quiesce-rollback",
         "cleanup",
     ]
 
@@ -433,6 +444,28 @@ def test_candidate_canary_failure_attempts_rollback_and_emits_failed_receipt() -
     assert any("candidate canary failed" in failure for failure in receipt["failures"])
 
 
+def test_candidate_must_quiesce_before_rollback_replacement() -> None:
+    candidate, rollback = _releases()
+    runtime = FakeRuntime(
+        candidate=candidate,
+        rollback=rollback,
+        candidate_quiesce_failure=RuntimeError("candidate group did not drain"),
+    )
+
+    receipt = execute_release_rehearsal(
+        runtime=runtime,
+        context=_context(),
+        candidate=candidate,
+        rollback=rollback,
+        clock=Clock(),
+    )
+
+    assert receipt["terminal_status"] == "failed"
+    assert "deploy-rollback" not in runtime.calls
+    assert runtime.calls[-1] == "cleanup"
+    assert any("candidate group did not drain" in failure for failure in receipt["failures"])
+
+
 def test_partial_candidate_deploy_failure_still_attempts_rollback() -> None:
     candidate, rollback = _releases()
     runtime = FakeRuntime(
@@ -450,7 +483,13 @@ def test_partial_candidate_deploy_failure_still_attempts_rollback() -> None:
     )
 
     assert receipt["terminal_status"] == "failed"
-    assert runtime.calls[-3:] == ["deploy-rollback", "canary-rollback", "cleanup"]
+    assert runtime.calls[-5:] == [
+        "quiesce-candidate_failure",
+        "deploy-rollback",
+        "canary-rollback",
+        "quiesce-rollback",
+        "cleanup",
+    ]
     assert any("candidate readiness failed" in item for item in receipt["failures"])
 
 

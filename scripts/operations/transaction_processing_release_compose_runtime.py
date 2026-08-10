@@ -227,6 +227,15 @@ class LocalComposeReleaseRuntime:
             raise ReleaseEvidenceError(f"unsupported release canary stage: {stage}")
         return self._run_fixed_canary(stage=stage)
 
+    def quiesce(self, *, stage: str) -> ConsumerGroupSnapshot:
+        """Stop only the transaction worker and prove its stable group is drained."""
+
+        self._require_started()
+        if stage not in {"candidate", "candidate_failure", "rollback"}:
+            raise ReleaseEvidenceError(f"unsupported release quiesce stage: {stage}")
+        self._stop_transaction_service()
+        return self._wait_for_drained_offsets()
+
     def cleanup(self) -> int:
         """Close clients, tear down only the owned project, and count leftovers."""
 
@@ -399,7 +408,7 @@ class LocalComposeReleaseRuntime:
         transaction_prefix = f"TX_{seed_prefix}"
         business_date = datetime.now(UTC).date().isoformat()
         endpoints = self._managed_run.runtime.endpoints
-        baseline_ready = self._get_json(f"{endpoints.e2e_transaction_processing_url}/health/ready")
+        baseline_dlq = self._consumer_dlq_count()
         seed_load_context(
             engine=self._engine,
             ingestion_base_url=endpoints.e2e_ingestion_url,
@@ -439,22 +448,16 @@ class LocalComposeReleaseRuntime:
             portfolio_id=portfolio_id,
             transaction_prefix=transaction_prefix,
         )
-        current_ready = self._get_json(f"{endpoints.e2e_transaction_processing_url}/health/ready")
-        baseline_dlq = _required_nonnegative_int(
-            baseline_ready,
-            "dlq_events_in_window",
-        )
-        current_dlq = _required_nonnegative_int(
-            current_ready,
-            "dlq_events_in_window",
-        )
-        unresolved_work = sum(
-            abs(actual - self._config.canary_transaction_count)
-            for actual in (counts.cost_count, counts.cashflow_count, counts.position_count)
-        )
-        unresolved_work += max(
-            self._config.canary_transaction_count - counts.processing_claim_count,
-            0,
+        readiness = self._wait_for_ready(endpoints.e2e_transaction_processing_url)
+        current_dlq = self._consumer_dlq_count()
+        if current_dlq < baseline_dlq:
+            raise ReleaseEvidenceError("consumer DLQ evidence count moved backwards")
+        unresolved_work = count_unresolved_canary_work(
+            expected=self._config.canary_transaction_count,
+            cost_count=counts.cost_count,
+            cashflow_count=counts.cashflow_count,
+            position_count=counts.position_count,
+            processing_claim_count=counts.processing_claim_count,
         )
         effects = FinancialEffectEvidence(
             expected_transactions=self._config.canary_transaction_count,
@@ -480,8 +483,31 @@ class LocalComposeReleaseRuntime:
                 "cost_count": counts.cost_count,
                 "cashflow_count": counts.cashflow_count,
                 "processing_claim_count": counts.processing_claim_count,
+                "readiness": readiness,
+                "consumer_dlq_count_before": baseline_dlq,
+                "consumer_dlq_count_after": current_dlq,
             },
         )
+
+    def _consumer_dlq_count(self) -> int:
+        if self._engine is None:  # pragma: no cover - guarded by caller
+            raise ReleaseEvidenceError("release canary database is not initialized")
+        with self._engine.connect() as connection:
+            count = connection.execute(
+                text(
+                    """
+                    SELECT count(*)
+                    FROM consumer_dlq_events
+                    WHERE consumer_group = :consumer_group
+                      AND original_topic = :original_topic
+                    """
+                ),
+                {
+                    "consumer_group": self._config.consumer_group,
+                    "original_topic": self._config.transaction_topic,
+                },
+            ).scalar_one()
+        return int(count)
 
     def _wait_for_outbox_drain(self) -> dict[str, int]:
         if self._engine is None:  # pragma: no cover - guarded by caller
@@ -628,6 +654,27 @@ def transaction_service_recreate_command(managed_run: ManagedComposeRun) -> list
     )
 
 
+def count_unresolved_canary_work(
+    *,
+    expected: int,
+    cost_count: int,
+    cashflow_count: int,
+    position_count: int,
+    processing_claim_count: int,
+) -> int:
+    """Count shortages or overproduction across exact canary side effects."""
+
+    return sum(
+        abs(actual - expected)
+        for actual in (
+            cost_count,
+            cashflow_count,
+            position_count,
+            processing_claim_count,
+        )
+    )
+
+
 def owned_compose_resource_count(project: str, *, runner: Runner = subprocess.run) -> int:
     """Count only resources carrying the exact generated project label."""
 
@@ -663,12 +710,3 @@ def _json_string_list(raw: str, *, label: str) -> list[str]:
     if not isinstance(payload, list) or not all(isinstance(item, str) for item in payload):
         raise ReleaseEvidenceError(f"{label} must be a JSON string list")
     return cast(list[str], payload)
-
-
-def _required_nonnegative_int(payload: Mapping[str, Any], field_name: str) -> int:
-    value = payload.get(field_name)
-    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
-        raise ReleaseEvidenceError(
-            f"runtime evidence field must be a non-negative integer: {field_name}"
-        )
-    return value

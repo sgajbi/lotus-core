@@ -19,6 +19,7 @@ from scripts.release.render_release_deployment import (
 RECEIPT_SCHEMA = "lotus-core.transaction-processing-release-rehearsal.v1"
 EVIDENCE_CLASSIFICATION = "local_compose_release_rehearsal"
 SERVICE_NAME = "portfolio_transaction_processing_service"
+RUNTIME_SERVICE_NAME = "portfolio_transaction_processing_service_web"
 COMPOSE_PROJECT_PREFIX = "lotus-integration-transaction-release-rehearsal-"
 SHARED_COMPOSE_PROJECTS = frozenset({"lotus-core-app-local", "lotus-core-canonical-ui"})
 UNKNOWN_METADATA_VALUE = "unknown"
@@ -58,6 +59,7 @@ class ReleaseIdentity:
     """Supply-chain and runtime identity authorized by one release manifest."""
 
     service: str
+    runtime_service_name: str
     git_commit_sha: str
     digest_image_ref: str
     image_digest: str
@@ -143,6 +145,7 @@ def release_identity(manifest: Mapping[str, Any]) -> ReleaseIdentity:
         raise ReleaseEvidenceError("release runtime image version differs from manifest identity")
     return ReleaseIdentity(
         service=SERVICE_NAME,
+        runtime_service_name=RUNTIME_SERVICE_NAME,
         git_commit_sha=git_commit_sha,
         digest_image_ref=digest_image_ref,
         image_digest=image_digest,
@@ -200,7 +203,7 @@ def assert_runtime_matches_release(
     """Require `/version` evidence to match every release-resolved metadata value."""
 
     expected = {
-        "service_name": release.service,
+        "service_name": release.runtime_service_name,
         "git_commit_sha": release.runtime_env.get("LOTUS_GIT_COMMIT_SHA"),
         "git_branch": release.runtime_env.get("LOTUS_GIT_BRANCH"),
         "build_timestamp": release.runtime_env.get("LOTUS_BUILD_TIMESTAMP"),

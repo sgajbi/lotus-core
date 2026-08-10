@@ -70,6 +70,8 @@ class ReleaseRehearsalRuntime(Protocol):
 
     def run_canary(self, *, stage: str) -> CanaryResult: ...
 
+    def quiesce(self, *, stage: str) -> ConsumerGroupSnapshot: ...
+
     def cleanup(self) -> int: ...
 
 
@@ -237,11 +239,14 @@ def execute_release_rehearsal(
             result = runtime.run_canary(stage="candidate")
             _raise_for_effect_findings(stage="candidate", effects=result.effects)
             assert_offsets_monotonic(before=handoff_offsets, after=result.offsets)
-            candidate_offsets = result.offsets
+            candidate_offsets = runtime.quiesce(stage="candidate")
+            assert_offsets_monotonic(before=result.offsets, after=candidate_offsets)
+            assert_offsets_drained(candidate_offsets)
             invariants["candidate_canary_reconciled"] = True
             return {
                 "effects": asdict(result.effects),
-                "offsets": asdict(result.offsets),
+                "observed_offsets": asdict(result.offsets),
+                "drained_offsets": asdict(candidate_offsets),
                 "profile": dict(result.evidence),
             }
 
@@ -268,7 +273,13 @@ def execute_release_rehearsal(
             RehearsalPhase.ROLLBACK,
             RehearsalPhase.CLEANUP,
         }:
-            rollback_before = candidate_offsets or handoff_offsets
+            rollback_before = candidate_offsets
+            if rollback_before is None:
+                try:
+                    rollback_before = runtime.quiesce(stage="candidate_failure")
+                    assert_offsets_drained(rollback_before)
+                except Exception as quiesce_failure:
+                    failures.append(f"candidate quiesce: {quiesce_failure}")
             if rollback_before is not None:
                 try:
                     _run_rollback_phase(
@@ -327,12 +338,16 @@ def _run_rollback_phase(
         result = runtime.run_canary(stage="rollback")
         _raise_for_effect_findings(stage="rollback", effects=result.effects)
         assert_offsets_monotonic(before=before_offsets, after=result.offsets)
+        drained_offsets = runtime.quiesce(stage="rollback")
+        assert_offsets_monotonic(before=result.offsets, after=drained_offsets)
+        assert_offsets_drained(drained_offsets)
         invariants["rollback_canary_reconciled"] = True
         invariants["offsets_monotonic"] = True
         return {
             "runtime": dict(runtime_payload),
             "effects": asdict(result.effects),
-            "offsets": asdict(result.offsets),
+            "observed_offsets": asdict(result.offsets),
+            "drained_offsets": asdict(drained_offsets),
             "profile": dict(result.evidence),
         }
 

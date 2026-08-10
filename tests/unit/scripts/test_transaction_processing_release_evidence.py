@@ -91,6 +91,7 @@ def test_release_pair_requires_distinct_qualified_digests() -> None:
     candidate, rollback = _release_pair()
 
     assert candidate.git_commit_sha == CANDIDATE_SHA
+    assert candidate.runtime_service_name == "portfolio_transaction_processing_service_web"
     assert rollback.git_commit_sha == ROLLBACK_SHA
 
     with pytest.raises(ReleaseEvidenceError, match="different digests"):
@@ -103,7 +104,7 @@ def test_release_pair_requires_distinct_qualified_digests() -> None:
 def test_runtime_metadata_must_match_release_manifest_exactly() -> None:
     candidate, _ = _release_pair()
     runtime = {
-        "service_name": candidate.service,
+        "service_name": candidate.runtime_service_name,
         "git_commit_sha": CANDIDATE_SHA,
         "git_branch": "main",
         "build_timestamp": "2026-08-10T07:00:00Z",
@@ -125,6 +126,11 @@ def test_runtime_metadata_must_match_release_manifest_exactly() -> None:
         assert_runtime_matches_release(
             release=candidate,
             runtime_payload={**runtime, "git_branch": "unknown"},
+        )
+    with pytest.raises(ReleaseEvidenceError, match="service_name"):
+        assert_runtime_matches_release(
+            release=candidate,
+            runtime_payload={**runtime, "service_name": candidate.service},
         )
 
 
