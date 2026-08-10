@@ -117,15 +117,15 @@
       "tranche_id": "tranche-3-derived-state-certification-closure",
       "branch": "feat/derived-state-certification-closure",
       "base_sha": "6bc937bb173051e0bd4ee9a07ffebd54face0163",
-      "head_sha": "615e277723cbf8511ee9edc1e0dad727edd16d93",
+      "head_sha": "c220b33de672912b5c8d1ec264bc124f56c42ce6",
       "head_sha_role": "latest_evidence_head_before_campaign_manifest_update",
       "post_merge_main_sha": "pending",
       "required_predecessor_main_sha": "6bc937bb173051e0bd4ee9a07ffebd54face0163",
       "capability_boundary": "Combined derived-state runtime certification, bounded outbox capacity, deterministic workload evidence, stale-source and delayed-readiness suppression, and transaction hot-path round-trip reduction",
-      "commit_count": 72,
+      "commit_count": 73,
       "commit_count_scope": "origin/main_through_head_sha",
-      "tranche_decision": "Retain the combined deployable with separately attributable position and portfolio modules, the twelve-partition transaction ceiling, the atomic two-call readiness claim, and the exact-project controlled-release tooling. Keep PR #931 draft until daily, recovery, poison, duplicate/outbox, correction, restatement, qualified release, and downstream proofs pass.",
-      "issue_closure_decision": "close_only_after_merge_exact_main_and_wiki_publication",
+      "tranche_decision": "Deliver PR #931 as the coherent 73-commit deterministic-ordering, ownership-fencing, bounded-outbox-evidence, controlled-release-tooling, and retained hot-path-improvement tranche. Preserve the valid daily capacity failure and transfer the unchanged recovery, poison, correction, restatement, qualified-release, and downstream acceptance matrix to the next campaign tranche after exact-main validation. This delivery boundary closes no campaign issue and prevents signed work from crossing the governed 75-commit split threshold.",
+      "issue_closure_decision": "keep_campaign_issues_open",
       "acceptance_matrix": {
         "daily_capacity": {
           "status": "valid_capacity_failure",
@@ -215,7 +215,8 @@
         "Signed 3cea6a8bda9c644b5b03d279ec35b39d3600d193 combined ordinary first-BUY transaction economics and fee replacement with the retained opening-state aggregate; 38 focused tests, the 125-test transaction-processing contract, static and architecture gates, and live PostgreSQL rollback/concurrency proofs passed, and the direct path fell from eight statements to seven",
         "Exact candidate fan-ins 20260810T141804Z and 20260810T142323Z reconciled exactly with attempts 2/2, repeats 0, final outbox 0/0, and zero governed errors, but drained in 100.688 and 110.953 seconds and averaged 0.821858004 and 0.903795135 seconds per whole transaction versus retained parent 80.866 seconds and 0.595510 seconds",
         "Candidate artifact SHA-256 values are 4E46BFEBE13C1F7346B7642F862274E533FD9AE1A78C403B936CF08E35B4C75F and B794E1C5188940532C35A2CF5933A0D2F4D0EECF8FC74A15110A85ACAE06E260; drain regressed 24.51 and 37.21 percent and whole-transaction mean regressed 38.01 and 51.77 percent",
-        "Signed 615e277723cbf8511ee9edc1e0dad727edd16d93 reverts transaction-economics and fee aggregation forward and restores the retained tree; do not repeat it without fresh end-to-end evidence identifying those calls as controlling"
+        "Signed 615e277723cbf8511ee9edc1e0dad727edd16d93 reverts transaction-economics and fee aggregation forward and restores the retained tree; do not repeat it without fresh end-to-end evidence identifying those calls as controlling",
+        "PR #931 is capped at signed evidence head c220b33de672912b5c8d1ec264bc124f56c42ce6 with 73 commits; merge delivery closes no campaign issue, preserves the valid daily capacity failure, and transfers the unchanged pending certification matrix to the next tranche"
       ],
       "remote_evidence": [
         "PR #931 exact implementation head 6406033221b36d9c21fbcaee3bfa53ba975cc984 passed Remote Feature Lane 31338004146, PR Merge Gate 31338007004, and Quality Baseline 31338007006",
