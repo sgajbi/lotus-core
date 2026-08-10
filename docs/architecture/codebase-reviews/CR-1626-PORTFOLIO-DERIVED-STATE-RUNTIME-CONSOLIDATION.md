@@ -117,6 +117,13 @@ compatibility package.
 | DB/container workload resource evidence | none | peak connection, lock, CPU, and memory samples |
 | Certifying 1,000-position fan-in | none | exact outputs, clean reconciliation, no lock contention |
 
+This scorecard is a structural before/after comparison, not a same-workload throughput A/B between
+the retired split deployables and the combined runtime. No retained certifying receipt runs both
+topologies against an identical source workload. The topology decision therefore rests on removal
+of a redundant same-owner Kafka command hop and duplicate runtime shells, plus exact combined-runtime
+correctness, fan-in, recovery, and resource evidence. Capacity claims below are limited to their
+named combined-runtime receipts.
+
 The generator test count initially stayed stable because database-heavy consumer scenarios moved
 to application and infrastructure owners instead of being deleted; it now includes an additional
 first-position-day domain invariant. The aggregation count increased as source resolution and pure
@@ -159,8 +166,11 @@ schemas, and downstream responses remain compatible. The batch intentionally:
 6. replaced two health/metrics targets with one derived-state health/version/metrics surface while
    preserving separate position and aggregation workload attribution.
 
-No database migration is required: `position_timeseries`, `portfolio_timeseries`, and
-`portfolio_aggregation_jobs` retain their schemas and ownership semantics.
+The reversible migration
+`c111b2c3d4f0_feat_add_aggregation_job_leases.py` adds the nullable lease owner, token, and expiry
+columns plus the queue constraints and indexes required for fenced ownership and stale-lease
+recovery. It does not change `position_timeseries` or `portfolio_timeseries`, and it preserves the
+existing `portfolio_aggregation_jobs` table identity and domain ownership.
 
 Intentional fail-closed changes apply to:
 
@@ -312,8 +322,9 @@ remains useful for package closure but is not accepted as behavioral database ev
 README, repository context, this review, current architecture/runtime/port catalogs, schema usage
 catalog, feature docs, operations references, and authored wiki change because deployable and
 operator truth changed. The API route catalog is regenerated for one standard health surface.
-Public business OpenAPI, event schemas, database migrations, and downstream product contracts are
-explicit no-change decisions because this cutover changes internal runtime topology only.
+Public business OpenAPI, event schemas, and downstream product contracts are explicit no-change
+decisions because this cutover changes internal runtime topology only. Database truth changes only
+through the reversible internal queue-lease migration documented above.
 
 ## Remaining Work
 
