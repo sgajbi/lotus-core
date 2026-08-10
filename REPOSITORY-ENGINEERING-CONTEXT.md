@@ -2184,7 +2184,17 @@ Most relevant current governance:
      return to baseline, and no incremental DLQ event; ingestion-job backlog is not a transaction
      recovery proxy and a timeout is never a passing result. Registry publication, controlled
      cluster rollout, shutdown-under-load and pool-pressure evidence, and canonical QA remain
-     required before claiming production consolidation. The physical legacy transaction-calculator
+     required before claiming production consolidation. For image-level local proof, use
+     `make transaction-release-rehearsal-plan` before the explicit
+     `make transaction-release-rehearsal` execution. It must run from the exact clean candidate SHA
+     with distinct qualified candidate/rollback manifests, own only a generated
+     `lotus-integration-transaction-release-rehearsal-*` Compose project, preserve PostgreSQL/Kafka
+     across service-only digest replacement, reconcile fixed baseline/candidate/rollback canaries,
+     and prove zero exact-project cleanup residue. Its content-hashed receipt is local Compose
+     evidence with `cluster_certification=false`; do not substitute it for real orchestrator,
+     traffic, alerting, multi-replica, or rollback-RTO evidence. This stable-group image rehearsal is
+     separate from the retired-group offset handoff and must not call the legacy cutover writer.
+     The physical legacy transaction-calculator
      packages are removed locally and must not be restored. Kubernetes source
      must contain one
      digest-only `portfolio-transaction-processing` Deployment and one KEDA object with canonical

@@ -76,6 +76,15 @@ Before switching an environment, follow the
 [Transaction Processing Cutover Runbook](../docs/operations/Transaction-Processing-Cutover-Runbook.md).
 The Kafka offset command is dry-run by default and requires `--apply` to mutate target offsets.
 
+Image canary and rollback use a different, stable-group proof. Generate the immutable plan with
+`make transaction-release-rehearsal-plan`, then run `make transaction-release-rehearsal` only from
+the exact candidate SHA with qualified candidate and rollback release manifests. The runner owns a
+generated `lotus-integration-transaction-release-rehearsal-*` Compose project, recreates only
+`portfolio_transaction_processing_service`, preserves PostgreSQL/Kafka through rollback, runs fixed
+financial canaries, and fails unless its exact project has zero cleanup residue. Its receipt is
+local Compose evidence with `cluster_certification=false`; Kubernetes rollout, production canary,
+and rollback-RTO evidence remain environment-owned.
+
 ```bash
 python scripts/operations/transaction_processing_cutover_offsets.py --bootstrap-servers localhost:9092
 curl http://localhost:8090/health/ready
