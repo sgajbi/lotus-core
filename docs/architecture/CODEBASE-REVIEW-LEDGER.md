@@ -22,6 +22,12 @@ upgrade and downgrade paths under the unit coverage lane and asserts revision li
 order, immutable-ledger triggers, READY fail-closed invariants, and reversible teardown. This fixes
 the measurement gap without lowering thresholds, adding exclusions, or weakening the existing real
 PostgreSQL migration evidence.
+PR review then found two late-arrival reconciliation gaps: source-owned `ADJUSTMENT` records were
+loaded as evidence but did not trigger a new reconciliation, and a cash overlay selected the control
+family from the triggering child instead of the loaded group. The trigger vocabulary now includes
+adjustments, and reconciliation-family ownership is derived from the complete loaded group. Focused
+tests cover late unsupported adjustments and corrected cash-in-lieu overlays for quantity-transfer
+families so current findings cannot remain stale or be resolved under the wrong control family.
 
 CR-1630 delivery-tranche boundary addendum (2026-08-10): PR #931 reaches its governed delivery
 boundary with 73 signed commits at evidence head `c220b33de`. The retained implementation includes
