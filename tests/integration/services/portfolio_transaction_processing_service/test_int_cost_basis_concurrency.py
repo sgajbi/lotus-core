@@ -672,3 +672,64 @@ async def test_single_buy_cost_stage_avoids_duplicate_canonical_transaction_read
         if statement.startswith("SELECT lot_basis_transfer_receipts.id")
     ]
     assert len(basis_transfer_receipt_reads) == 1
+
+
+async def test_calculation_context_preserves_padded_history_lookup_and_exclusion(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    portfolio_id = "PORT-COST-PADDED-01"
+    security_id = "SEC-COST-PADDED-01"
+    prior_id = "BUY-COST-PADDED-PRIOR"
+    excluded_id = "BUY-COST-PADDED-CURRENT"
+    prior = booked_transaction_event(
+        transaction_id=prior_id,
+        portfolio_id=portfolio_id,
+        security_id=security_id,
+        transaction_date=datetime(2026, 7, 1, 10, 0, tzinfo=timezone.utc),
+        transaction_type="BUY",
+        quantity="10",
+        price="10",
+        gross_amount="100",
+    )
+    excluded = booked_transaction_event(
+        transaction_id=excluded_id,
+        portfolio_id=portfolio_id,
+        security_id=security_id,
+        transaction_date=datetime(2026, 7, 2, 10, 0, tzinfo=timezone.utc),
+        transaction_type="BUY",
+        quantity="5",
+        price="12",
+        gross_amount="60",
+    )
+    prior_row = canonical_transaction_record(prior)
+    excluded_row = canonical_transaction_record(excluded)
+    padded_portfolio_id = f" {portfolio_id} "
+    for row in (prior_row, excluded_row):
+        row.portfolio_id = padded_portfolio_id
+        row.security_id = f" {security_id} "
+    prior_row.transaction_id = f" {prior_id} "
+    excluded_row.transaction_id = f" {excluded_id} "
+    async_db_session.add_all(
+        [
+            portfolio_record(padded_portfolio_id),
+            prior_row,
+            excluded_row,
+        ]
+    )
+    await async_db_session.commit()
+
+    context = await SqlAlchemyCostBasisCalculationContextRepository(
+        async_db_session
+    ).load_cost_basis_calculation_context(
+        portfolio_id=portfolio_id,
+        security_id=security_id,
+        exclude_transaction_id=excluded_id,
+        include_initial_history=True,
+    )
+
+    assert context.checkpoint is None
+    assert context.transaction_history is not None
+    assert [transaction.transaction_id.strip() for transaction in context.transaction_history] == [
+        prior_id
+    ]
