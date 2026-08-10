@@ -1,5 +1,19 @@
 # Codebase Review Ledger
 
+CR-1683 post-main integration reconciliation addendum (2026-08-11): the 19 signed corporate-action
+commits from preserved head `885f71d48` were rebased without dropping or squashing a patch onto
+exact validated main `3b0df2609`. Both derived-state/DPM ledger truth and corporate-action review
+history were retained; the parent-graph review identity moved from the colliding CR-1679 to CR-1683.
+The corporate graph migration now follows main's readiness and valuation migrations as
+`c152b2c3d519` over `c151b2c3d518`, and both direct migration-path tests bind the corrected identity.
+Focused reconciliation proof passed: single-head migration smoke; 84 graph/domain/application/UoW
+unit tests; 13 real-PostgreSQL migration, constraint, concurrency, restart, correction, and bounded
+statement tests; complete architecture guards; and docs/wiki guards. #450 remains fixed locally
+until protected merge, exact-main validation, and wiki publication. #480 remains in progress because
+runtime parking, leased ordered release, and restart recovery are not activated. No public API,
+OpenAPI, Kafka, topology, pool, dependency, or supported-feature contract changed in this
+integration-only slice.
+
 CR-1630 delivery-tranche boundary addendum (2026-08-10): PR #931 reaches its governed delivery
 boundary with 73 signed commits at evidence head `c220b33de`. The retained implementation includes
 deterministic transaction ordering, twelve-way capacity, atomic readiness authority, valuation

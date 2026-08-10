@@ -18,7 +18,7 @@ MIGRATION = (
     Path(__file__).resolve().parents[2]
     / "alembic"
     / "versions"
-    / "c150b2c3d517_feat_add_corporate_action_event_graph.py"
+    / "c152b2c3d519_feat_add_corporate_action_event_graph.py"
 )
 TABLES = {
     "corporate_action_events",
