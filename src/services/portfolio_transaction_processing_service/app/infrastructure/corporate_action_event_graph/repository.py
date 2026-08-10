@@ -442,9 +442,7 @@ class SqlAlchemyCorporateActionEventGraphRepository:
             reusable_for_current_manifest = or_(
                 CorporateActionChildObservationRecord.observation_sequence
                 > current_manifest.opened_observation_sequence,
-                CorporateActionChildObservationRecord.transaction_id.in_(
-                    reusable_transaction_ids
-                ),
+                CorporateActionChildObservationRecord.transaction_id.in_(reusable_transaction_ids),
             )
         return await self._session.scalar(
             select(CorporateActionChildObservationRecord).where(
