@@ -846,6 +846,41 @@ does not publish this key policy; the operator-owned migration runbook is the du
   processing fell from about `0.8757s` to `0.644479942s` (26.41%). Exact project-scoped teardown
   left zero owned containers, networks, or volumes and did not touch the healthy shared stack.
   This passes the retain gate and authorizes one exact-head daily capacity rerun.
+- The authorized clean daily task
+  `eng-task-20260810-081125-lotus-core-certification-make-profile-derived-state-daily` at
+  `640603322` made all 100,000 source transactions durable but reached 89,742 valuation snapshots,
+  89,737 position-series rows, and 991 portfolio-series rows before the fixed drain deadline.
+  Attempts remained `2/2`, repeated processing remained zero, failed outbox remained zero, terminal
+  timestamps were advancing, and exact project-scoped teardown completed. This is valid remaining
+  transaction-capacity evidence, not an external-kill or harness verdict. Artifact
+  `20260810T001245Z-bank-day-load.json` has SHA-256
+  `DC33C7DE1E25E8A9EA38F86D26D111C11F7A93DF311BFF2DE246A19E8C92BD03`.
+- That daily artifact also exposed a measurement defect: its final outbox status total and
+  independently queried topic cohorts observed different READ COMMITTED instants while dispatch
+  was still advancing. Signed `d7504da92` loads exact totals, bounded recent-age evidence, and
+  topic cohorts in one SQL statement and one statement snapshot. The report contract and field
+  names are unchanged. Twenty-seven focused tests, the capacity guard, scoped static checks, and a
+  real PostgreSQL integration proof passed.
+- Signed `c207fc87f` introduces a typed post-lock cost-basis calculation context. After the existing
+  portfolio/security advisory lock, one statement loads the durable checkpoint and loads ordered
+  initial history only when no checkpoint exists. The ordinary first-position path falls from ten
+  PostgreSQL statements to nine; checkpoint-backed paths do not hydrate history. Lock order,
+  READ COMMITTED freshness, deterministic ordering, calculations, replay, and unit-of-work
+  atomicity are unchanged. Thirty-four focused unit tests and real PostgreSQL same-key concurrency
+  and query-shape proofs passed. Exact clean fan-in remains the retain gate before another daily
+  run.
+- Exact-head fan-in task
+  `eng-task-20260810-104948-lotus-core-certification-make-profile-derived-state-fan-in` completed
+  exact reconciliation at `c207fc87f` with attempts `2/2`, zero repeats, closed jobs/outbox, and no
+  governed log errors, but correctly failed its evidence guard because the required-operation list
+  still named the two replaced repository methods. Artifact
+  `20260810T025158Z-bank-day-load.json` has SHA-256
+  `4D152015C4EEA6863A9AB5A61CB2B586DEC77E4C03E039358DDFE3D8D032978D`. The combined context read
+  averaged `0.045831484s`, versus `0.049195006s` for the former checkpoint plus history reads in
+  retained parent fan-in `20260809T215625Z`, a direct 6.84% reduction. End-to-end drain was
+  `95.809s` versus `80.982s`; all major database stages were slower on that run, so no end-to-end
+  improvement is claimed. The required-operation contract now names the combined context method
+  and has an explicit regression test. A clean corrected-head fan-in rerun remains mandatory.
 
 Implementation commits include `23fc6faf3`, `d51adb739`, `ad1ad179d`, `57f8c60e2`,
 `4f05be9a5`, `c230d660a`, `f42f6eaa3`, `d56e14dbf`, `2d49fc8f1`, `70ae16f0f`,
@@ -970,3 +1005,10 @@ advisory-lock freshness boundary, event payloads, outbox authority, public APIs/
 schema, calculations, partition policy, runtime settings, and operator commands. This review and
 executable PostgreSQL tests are the durable truth; no migration, event-contract, runbook,
 calculation-methodology, or additional authored-wiki change is required.
+The atomic outbox evidence read changes only internal certification query shape and preserves the
+existing generated report contract, bounded age window, exact totals, operator command, and
+capacity threshold. The typed cost-basis calculation context changes only an internal application
+port and post-lock query shape. It preserves public APIs/OpenAPI, events, database schema,
+calculation and ordering rules, locks, runtime settings, and operator commands. This review and the
+existing bank-day runbook are sufficient durable truth; neither slice requires a migration,
+event-contract, calculation-methodology, repository-context, or additional authored-wiki change.
