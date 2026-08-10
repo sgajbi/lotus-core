@@ -27,8 +27,7 @@ def upgrade() -> None:
     op.create_check_constraint(
         "ck_portfolio_valuation_jobs_claim_token",
         "portfolio_valuation_jobs",
-        "valuation_claim_token IS NULL OR "
-        "valuation_claim_token ~ '^[0-9a-f]{32}$'",
+        "valuation_claim_token IS NULL OR valuation_claim_token ~ '^[0-9a-f]{32}$'",
     )
 
 

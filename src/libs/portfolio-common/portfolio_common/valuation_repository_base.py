@@ -435,8 +435,8 @@ class ValuationRepositoryBase:
                     else PortfolioValuationJob.failure_reason
                 ),
             ),
-            "valuation_claim_token": None,
         }
+        values_to_update.update(valuation_claim_token=None)
 
         normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
         normalized_security_id = normalize_lookup_identifier(security_id)

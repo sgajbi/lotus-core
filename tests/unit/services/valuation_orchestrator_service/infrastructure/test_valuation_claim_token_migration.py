@@ -32,9 +32,7 @@ def test_valuation_claim_token_is_constrained_reversible_and_linear(monkeypatch)
     monkeypatch.setattr(
         op,
         "drop_constraint",
-        lambda name, table, **kwargs: operations.append(
-            ("drop_constraint", name, table, kwargs)
-        ),
+        lambda name, table, **kwargs: operations.append(("drop_constraint", name, table, kwargs)),
     )
     monkeypatch.setattr(
         op,

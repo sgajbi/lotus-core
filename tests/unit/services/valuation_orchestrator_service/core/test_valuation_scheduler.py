@@ -23,7 +23,7 @@ from portfolio_common.scheduler_dispatch_recovery import (
     DISPATCH_PUBLISH_FAILURE_PHASE,
     SchedulerDispatchError,
 )
-from portfolio_common.valuation_job_contracts import VALUATION_CLAIM_TOKEN_HEADER
+from portfolio_common.valuation_job_contracts import VALUATION_CLAIM_HEADER
 from portfolio_common.valuation_job_repository import ValuationJobRepository
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -942,7 +942,7 @@ async def test_scheduler_dispatches_claimed_jobs(
         },
         headers=[
             ("correlation_id", b"corr-1"),
-            (VALUATION_CLAIM_TOKEN_HEADER, b"a" * 32),
+            (VALUATION_CLAIM_HEADER, b"a" * 32),
         ],
     )
     mock_kafka_producer.flush.assert_called_once_with(timeout=10)
@@ -985,7 +985,7 @@ async def test_job_dispatcher_dispatches_claimed_jobs_without_scheduler_loop(
         },
         headers=[
             ("correlation_id", b"corr-1"),
-            (VALUATION_CLAIM_TOKEN_HEADER, b"b" * 32),
+            (VALUATION_CLAIM_HEADER, b"b" * 32),
         ],
     )
     mock_kafka_producer.flush.assert_called_once_with(timeout=10)
@@ -1021,7 +1021,7 @@ async def test_scheduler_omits_empty_correlation_header(
             "valuation_date": "2025-08-12",
             "epoch": 3,
         },
-        headers=[(VALUATION_CLAIM_TOKEN_HEADER, b"c" * 32)],
+        headers=[(VALUATION_CLAIM_HEADER, b"c" * 32)],
     )
     mock_kafka_producer.flush.assert_called_once_with(timeout=10)
 
