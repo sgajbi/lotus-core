@@ -276,9 +276,9 @@ async def test_cost_basis_execution_rejects_linked_interest_before_calculation(
             lot_basis_transfers=AsyncMock(spec=CostBasisLotBasisTransferPort),
             lot_states=AsyncMock(spec=CostBasisLotStatePort),
             amortized_cost_profiles=AsyncMock(spec=LotAmortizedCostProfilePort),
-                income_offsets=AsyncMock(spec=AccruedIncomeOffsetStatePort),
-                initial_opening_state=AsyncMock(spec=InitialOpeningCostStatePort),
-                fx_rates=AsyncMock(spec=CostBasisFxRatePort),
+            income_offsets=AsyncMock(spec=AccruedIncomeOffsetStatePort),
+            initial_opening_state=AsyncMock(spec=InitialOpeningCostStatePort),
+            fx_rates=AsyncMock(spec=CostBasisFxRatePort),
             processing_state=processing_state,
         )
 
