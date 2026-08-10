@@ -302,6 +302,8 @@ async def test_valuation_message_skips_side_effects_after_losing_job_ownership(
         epoch: int,
         status: str,
         failure_reason: str | None = None,
+        *,
+        expected_claim_token: str | None = None,
     ) -> ValuationJobTransitionOutcome:
         async with session_factory() as session:
             await session.execute(
@@ -323,6 +325,7 @@ async def test_valuation_message_skips_side_effects_after_losing_job_ownership(
             epoch,
             status,
             failure_reason=failure_reason,
+            expected_claim_token=expected_claim_token,
         )
 
     consumer = valuation_consumer_module.ValuationConsumer(
