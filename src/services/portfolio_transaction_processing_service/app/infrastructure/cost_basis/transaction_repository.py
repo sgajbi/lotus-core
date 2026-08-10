@@ -27,10 +27,11 @@ from portfolio_common.infrastructure.persistence.transaction_identity_guard impo
     transaction_identity_update_allowed,
 )
 from portfolio_common.utils import async_timed
-from sqlalchemy import delete, func, select, true, update
+from sqlalchemy import Select, delete, func, select, true, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
+from sqlalchemy.sql.selectable import CTE
 
 from ...domain.cost_basis import CostBasisTransaction
 from ...domain.transaction import BookedTransaction
@@ -225,6 +226,80 @@ def _transaction_cost_rows(
     ]
 
 
+def transaction_economics_update_statement(
+    transaction_result: CostBasisTransaction,
+    *,
+    additional_ctes: tuple[CTE, ...] = (),
+) -> Select[tuple[DBTransaction]]:
+    """Build the canonical economics update and fee-reset statement.
+
+    Additional data-modifying CTEs let one aggregate adapter extend the same
+    transaction-row authority without duplicating economics or fee-reset SQL.
+    """
+
+    calculation_lineage = getattr(transaction_result, "calculation_lineage", None)
+    if not isinstance(calculation_lineage, CalculationLineage):
+        raise ValueError(
+            "Calculated transaction is missing governed calculation lineage: "
+            f"{transaction_result.transaction_id}"
+        )
+    update_values = {
+        "net_cost": transaction_result.net_cost,
+        "gross_cost": transaction_result.gross_cost,
+        "realized_gain_loss": transaction_result.realized_gain_loss,
+        "transaction_fx_rate": transaction_result.transaction_fx_rate,
+        "net_cost_local": transaction_result.net_cost_local,
+        "realized_gain_loss_local": transaction_result.realized_gain_loss_local,
+        "calculation_lineage": calculation_lineage.lineage_payload(),
+        **_transaction_metadata_update_values(transaction_result),
+    }
+    updated_transaction = (
+        update(DBTransaction)
+        .where(DBTransaction.transaction_id == transaction_result.transaction_id)
+        .values(**update_values)
+        .returning(DBTransaction)
+        .cte("updated_transaction")
+    )
+    updated_transaction_row = aliased(DBTransaction, updated_transaction)
+    deleted_costs = (
+        delete(TransactionCost)
+        .where(TransactionCost.transaction_id == updated_transaction.c.transaction_id)
+        .returning(TransactionCost.id)
+        .cte("deleted_transaction_costs")
+    )
+    statement = (
+        select(updated_transaction_row)
+        .select_from(updated_transaction_row)
+        .outerjoin(deleted_costs, true())
+        .limit(1)
+    )
+    if additional_ctes:
+        statement = statement.add_cte(*additional_ctes)
+    return statement
+
+
+def stage_transaction_cost_rows(
+    *,
+    session: AsyncSession,
+    transaction_result: CostBasisTransaction,
+    db_transaction: DBTransaction,
+) -> None:
+    """Stage the canonical positive fee-component rows for the caller's unit of work."""
+
+    session.add_all(
+        _transaction_cost_rows(
+            transaction_result=transaction_result,
+            db_txn=db_transaction,
+        )
+    )
+
+
+def persisted_booked_transaction_from_row(db_transaction: DBTransaction) -> BookedTransaction:
+    """Map a transaction row returned by a composite persistence statement."""
+
+    return _to_persisted_booked_transaction(db_transaction)
+
+
 class SqlAlchemyCostBasisTransactionRepository:
     """Persist canonical transaction economics and load cost-basis history."""
 
@@ -292,50 +367,14 @@ class SqlAlchemyCostBasisTransactionRepository:
     ) -> BookedTransaction | None:
         """Apply economics and replace fee components without rereading the canonical row."""
 
-        calculation_lineage = getattr(transaction_result, "calculation_lineage", None)
-        if not isinstance(calculation_lineage, CalculationLineage):
-            raise ValueError(
-                "Calculated transaction is missing governed calculation lineage: "
-                f"{transaction_result.transaction_id}"
-            )
-        update_values = {
-            "net_cost": transaction_result.net_cost,
-            "gross_cost": transaction_result.gross_cost,
-            "realized_gain_loss": transaction_result.realized_gain_loss,
-            "transaction_fx_rate": transaction_result.transaction_fx_rate,
-            "net_cost_local": transaction_result.net_cost_local,
-            "realized_gain_loss_local": transaction_result.realized_gain_loss_local,
-            "calculation_lineage": calculation_lineage.lineage_payload(),
-            **_transaction_metadata_update_values(transaction_result),
-        }
-        update_statement = (
-            update(DBTransaction)
-            .where(DBTransaction.transaction_id == transaction_result.transaction_id)
-            .values(**update_values)
-            .returning(DBTransaction)
-        )
-        updated_transaction = update_statement.cte("updated_transaction")
-        updated_transaction_row = aliased(DBTransaction, updated_transaction)
-        deleted_costs = (
-            delete(TransactionCost)
-            .where(TransactionCost.transaction_id == updated_transaction.c.transaction_id)
-            .returning(TransactionCost.id)
-            .cte("deleted_transaction_costs")
-        )
-        statement = (
-            select(updated_transaction_row)
-            .select_from(updated_transaction_row)
-            .outerjoin(deleted_costs, true())
-            .limit(1)
-        )
+        statement = transaction_economics_update_statement(transaction_result)
         db_transaction = (await self.db.execute(statement)).scalars().first()
         if db_transaction is None:
             return None
-        self.db.add_all(
-            _transaction_cost_rows(
-                transaction_result=transaction_result,
-                db_txn=db_transaction,
-            )
+        stage_transaction_cost_rows(
+            session=self.db,
+            transaction_result=transaction_result,
+            db_transaction=db_transaction,
         )
         return _to_persisted_booked_transaction(db_transaction)
 

@@ -3,6 +3,7 @@
 from typing import Protocol
 
 from ...domain.cost_basis import CostBasisProcessingCheckpoint, CostBasisTransaction
+from ...domain.transaction import BookedTransaction
 
 
 class InitialOpeningCostStatePort(Protocol):
@@ -13,4 +14,6 @@ class InitialOpeningCostStatePort(Protocol):
         *,
         transaction: CostBasisTransaction,
         checkpoint: CostBasisProcessingCheckpoint,
-    ) -> None: ...
+    ) -> BookedTransaction | None:
+        """Persist transaction economics and its first opening state atomically."""
+        ...
