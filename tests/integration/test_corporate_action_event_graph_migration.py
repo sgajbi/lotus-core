@@ -161,6 +161,20 @@ def _seed_book_scope(connection) -> None:
                 'USD',
                 TIMESTAMPTZ '2026-08-09 01:00:00+00',
                 0
+            ),
+            (
+                'CA-UNEXPECTED-DB-001',
+                'CA-PORT-DB-001',
+                'UNEXPECTED-SEC',
+                'UNEXPECTED-SEC',
+                'DEMERGER_IN',
+                1,
+                100,
+                100,
+                'USD',
+                'USD',
+                TIMESTAMPTZ '2026-08-09 01:00:00+00',
+                0
             )
             """
         )
@@ -658,6 +672,32 @@ def test_corporate_action_event_graph_apply_constraints_and_rollback(
             readiness | {"manifest_content_hash": "0" * 64},
             match="READY evidence does not match complete manifest",
         )
+        unexpected_observation_savepoint = connection.begin_nested()
+        unexpected_observation = target_observation | {
+            "observation_sequence": 3,
+            "transaction_id": "CA-UNEXPECTED-DB-001",
+            "delivery_event_id": "delivery-ca-db-unexpected",
+            "observed_content_hash": "4" * 64,
+            "observed_payload": '{"transaction_id":"CA-UNEXPECTED-DB-001"}',
+        }
+        connection.execute(observation_insert, unexpected_observation)
+        connection.execute(
+            text(
+                """
+                UPDATE corporate_action_events
+                SET last_observation_sequence = 3
+                WHERE id = :event_id
+                """
+            ),
+            {"event_id": event_id},
+        )
+        _expect_integrity_error(
+            connection,
+            readiness_insert,
+            readiness | {"through_observation_sequence": 3},
+            match="latest child observations",
+        )
+        unexpected_observation_savepoint.rollback()
         connection.execute(readiness_insert, readiness)
 
         awaiting_insert = text(

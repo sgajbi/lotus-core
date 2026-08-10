@@ -697,6 +697,7 @@ def upgrade() -> None:
                 invalid_edge_count integer;
                 observed_node_count integer;
                 mismatched_observation_count integer;
+                unexpected_observation_count integer;
                 event_observation_sequence integer;
                 event_state_version integer;
                 event_manifest_version integer;
@@ -832,15 +833,30 @@ def upgrade() -> None:
                         WHERE latest_observation.transaction_id IS NULL
                            OR latest_observation.observed_content_hash
                               <> node.child_content_hash
+                    ),
+                    (
+                        SELECT count(*)
+                        FROM latest_observation AS unexpected_observation
+                        WHERE NOT EXISTS (
+                            SELECT 1
+                            FROM corporate_action_manifest_nodes AS expected_node
+                            WHERE expected_node.manifest_id = NEW.manifest_id
+                              AND expected_node.transaction_id
+                                  = unexpected_observation.transaction_id
+                        )
                     )
-                INTO observed_node_count, mismatched_observation_count
+                INTO
+                    observed_node_count,
+                    mismatched_observation_count,
+                    unexpected_observation_count
                 FROM corporate_action_manifest_nodes AS node
                 LEFT JOIN latest_observation
                   ON latest_observation.transaction_id = node.transaction_id
                 WHERE node.manifest_id = NEW.manifest_id;
 
                 IF observed_node_count <> declared_node_count
-                   OR mismatched_observation_count <> 0 THEN
+                   OR mismatched_observation_count <> 0
+                   OR unexpected_observation_count <> 0 THEN
                     RAISE EXCEPTION
                         'corporate-action READY evidence does not match latest child observations'
                         USING ERRCODE = '23514';
