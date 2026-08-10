@@ -86,6 +86,19 @@ PostgreSQL proof covers manifest/plan hash parity, forged payloads, epoch regres
 conflict, and graph-order drift. The obsolete global semantic-retry uniqueness path was removed
 because it prevented required post-correction immutable evidence. No external contract or runtime
 topology changed.
+Two final P1 reviews found that READY authentication still trusted domain policy outside the
+database boundary: a self-consistent direct-SQL manifest could use an unsupported event family or
+invalid child type/role, and manifest hashing retained raw expected-child/dependency array order
+even though the domain serializer sorts both. PostgreSQL now normalizes both arrays before hashing
+and applies the complete closed cohort policy—supported event family, child vocabulary,
+source/target cardinality, roles, instrument linkage, and overlay dependencies—before READY can be
+authenticated. The domain-owned cohort registry is now the executable parity-test input, so a
+future supported family cannot be added without proving the matching PostgreSQL policy. Direct
+migration regressions prove every registered family, replay-stable hashes across reordered arrays,
+and fail-closed unsupported type, disallowed transaction type, and invalid role postures. This changes
+no public API, event, dependency, image, pool, Kafka, or topology contract; repository context was
+updated, while the existing Financial Reconciliation wiki requires no additional operator-facing
+change for this internal integrity boundary.
 
 CR-1630 delivery-tranche boundary addendum (2026-08-10): PR #931 reaches its governed delivery
 boundary with 73 signed commits at evidence head `c220b33de`. The retained implementation includes

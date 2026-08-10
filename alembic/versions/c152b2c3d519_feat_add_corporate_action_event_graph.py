@@ -270,6 +270,210 @@ def upgrade() -> None:
             END;
             $$;
 
+            CREATE FUNCTION assert_ca_manifest_semantics(payload jsonb)
+            RETURNS void
+            LANGUAGE plpgsql
+            IMMUTABLE
+            STRICT
+            AS $$
+            DECLARE
+                event_type text := payload ->> 'corporate_action_type';
+                source_transaction_type text;
+                source_role text;
+                target_transaction_type text;
+                source_transaction_id text;
+                source_instrument_id text;
+                target_transaction_ids jsonb;
+                target_instrument_by_id jsonb;
+                consideration_transaction_ids jsonb;
+                terminal_transaction_ids jsonb;
+            BEGIN
+                SELECT
+                    CASE event_type
+                        WHEN 'SPIN_OFF' THEN 'SPIN_OFF'
+                        WHEN 'DEMERGER' THEN 'DEMERGER_OUT'
+                        WHEN 'MERGER' THEN 'MERGER_OUT'
+                        WHEN 'MANDATORY_EXCHANGE' THEN 'EXCHANGE_OUT'
+                        WHEN 'SECURITY_REPLACEMENT' THEN 'REPLACEMENT_OUT'
+                    END,
+                    CASE event_type
+                        WHEN 'SPIN_OFF' THEN 'SOURCE_POSITION_REDUCE'
+                        WHEN 'DEMERGER' THEN 'SOURCE_POSITION_REDUCE'
+                        WHEN 'MERGER' THEN 'SOURCE_POSITION_CLOSE'
+                        WHEN 'MANDATORY_EXCHANGE' THEN 'SOURCE_POSITION_CLOSE'
+                        WHEN 'SECURITY_REPLACEMENT' THEN 'SOURCE_POSITION_CLOSE'
+                    END,
+                    CASE event_type
+                        WHEN 'SPIN_OFF' THEN 'SPIN_IN'
+                        WHEN 'DEMERGER' THEN 'DEMERGER_IN'
+                        WHEN 'MERGER' THEN 'MERGER_IN'
+                        WHEN 'MANDATORY_EXCHANGE' THEN 'EXCHANGE_IN'
+                        WHEN 'SECURITY_REPLACEMENT' THEN 'REPLACEMENT_IN'
+                    END
+                INTO source_transaction_type, source_role, target_transaction_type;
+
+                IF source_transaction_type IS NULL THEN
+                    RAISE EXCEPTION
+                        'corporate-action manifest type has no governed cohort policy'
+                        USING ERRCODE = '23514';
+                END IF;
+                IF EXISTS (
+                    SELECT 1
+                    FROM jsonb_array_elements(payload -> 'expected_children') AS expected(child)
+                    WHERE child ->> 'transaction_type' NOT IN (
+                        source_transaction_type,
+                        target_transaction_type,
+                        'CASH_CONSIDERATION',
+                        'CASH_IN_LIEU',
+                        'ADJUSTMENT',
+                        'FEE',
+                        'TAX'
+                    )
+                ) OR (
+                    SELECT count(*)
+                    FROM jsonb_array_elements(payload -> 'expected_children') AS expected(child)
+                    WHERE child ->> 'transaction_type' = source_transaction_type
+                ) <> 1 OR (
+                    SELECT count(*)
+                    FROM jsonb_array_elements(payload -> 'expected_children') AS expected(child)
+                    WHERE child ->> 'transaction_type' = target_transaction_type
+                ) < 1 THEN
+                    RAISE EXCEPTION
+                        'corporate-action manifest does not match governed cohort shape'
+                        USING ERRCODE = '23514';
+                END IF;
+
+                SELECT
+                    child ->> 'transaction_id',
+                    child ->> 'instrument_id'
+                INTO source_transaction_id, source_instrument_id
+                FROM jsonb_array_elements(payload -> 'expected_children') AS expected(child)
+                WHERE child ->> 'transaction_type' = source_transaction_type;
+                SELECT
+                    coalesce(jsonb_agg(child -> 'transaction_id'), '[]'::jsonb),
+                    coalesce(
+                        jsonb_object_agg(
+                            child ->> 'transaction_id',
+                            child -> 'instrument_id'
+                        ),
+                        '{}'::jsonb
+                    )
+                INTO target_transaction_ids, target_instrument_by_id
+                FROM jsonb_array_elements(payload -> 'expected_children') AS expected(child)
+                WHERE child ->> 'transaction_type' = target_transaction_type;
+                SELECT coalesce(jsonb_agg(child -> 'transaction_id'), '[]'::jsonb)
+                INTO consideration_transaction_ids
+                FROM jsonb_array_elements(payload -> 'expected_children') AS expected(child)
+                WHERE child ->> 'transaction_type' IN (
+                    'CASH_CONSIDERATION', 'CASH_IN_LIEU'
+                );
+                terminal_transaction_ids :=
+                    target_transaction_ids || consideration_transaction_ids;
+
+                IF EXISTS (
+                    SELECT 1
+                    FROM jsonb_array_elements(payload -> 'expected_children') AS expected(child)
+                    WHERE child ->> 'transaction_type' = source_transaction_type
+                      AND (
+                          child ->> 'child_role' <> source_role
+                          OR jsonb_typeof(child -> 'source_instrument_id') <> 'string'
+                          OR jsonb_typeof(child -> 'instrument_id') <> 'string'
+                          OR child ->> 'instrument_id'
+                              IS DISTINCT FROM child ->> 'source_instrument_id'
+                      )
+                ) THEN
+                    RAISE EXCEPTION
+                        'corporate-action manifest source child violates cohort policy'
+                        USING ERRCODE = '23514';
+                END IF;
+
+                IF EXISTS (
+                    SELECT 1
+                    FROM jsonb_array_elements(payload -> 'expected_children') AS expected(child)
+                    WHERE child ->> 'transaction_type' = target_transaction_type
+                      AND (
+                          child ->> 'child_role' <> 'TARGET_POSITION_ADD'
+                          OR jsonb_typeof(child -> 'source_instrument_id') <> 'string'
+                          OR jsonb_typeof(child -> 'target_instrument_id') <> 'string'
+                          OR jsonb_typeof(child -> 'instrument_id') <> 'string'
+                          OR child ->> 'target_instrument_id'
+                              IS NOT DISTINCT FROM child ->> 'source_instrument_id'
+                          OR child ->> 'instrument_id'
+                              IS DISTINCT FROM child ->> 'target_instrument_id'
+                          OR NOT (
+                              child -> 'dependency_transaction_ids'
+                              ? source_transaction_id
+                          )
+                          OR child ->> 'source_instrument_id'
+                              IS DISTINCT FROM source_instrument_id
+                      )
+                ) THEN
+                    RAISE EXCEPTION
+                        'corporate-action manifest target child violates cohort policy'
+                        USING ERRCODE = '23514';
+                END IF;
+
+                IF EXISTS (
+                    SELECT 1
+                    FROM jsonb_array_elements(payload -> 'expected_children') AS expected(child)
+                    WHERE child ->> 'transaction_type' IN (
+                        'CASH_CONSIDERATION', 'CASH_IN_LIEU', 'ADJUSTMENT', 'FEE', 'TAX'
+                    )
+                      AND (
+                          child ->> 'child_role' <> CASE child ->> 'transaction_type'
+                              WHEN 'CASH_CONSIDERATION' THEN 'CASH_CONSIDERATION'
+                              WHEN 'CASH_IN_LIEU' THEN 'CASH_IN_LIEU'
+                              WHEN 'ADJUSTMENT' THEN 'CASH_SETTLEMENT'
+                              WHEN 'FEE' THEN 'CHARGE'
+                              WHEN 'TAX' THEN 'TAX'
+                          END
+                          OR (
+                              child ->> 'transaction_type' = 'CASH_CONSIDERATION'
+                              AND NOT (
+                                  child -> 'dependency_transaction_ids'
+                                  @> target_transaction_ids
+                              )
+                          )
+                          OR (
+                              child ->> 'transaction_type' = 'CASH_IN_LIEU'
+                              AND NOT EXISTS (
+                                  SELECT 1
+                                  FROM jsonb_array_elements_text(
+                                      child -> 'dependency_transaction_ids'
+                                  ) AS dependency(transaction_id)
+                                  WHERE target_instrument_by_id
+                                        ->> dependency.transaction_id
+                                        = child ->> 'instrument_id'
+                              )
+                          )
+                          OR (
+                              child ->> 'transaction_type' = 'ADJUSTMENT'
+                              AND (
+                                  jsonb_array_length(
+                                      child -> 'dependency_transaction_ids'
+                                  ) <> 1
+                                  OR NOT (
+                                      child -> 'dependency_transaction_ids'
+                                      <@ consideration_transaction_ids
+                                  )
+                              )
+                          )
+                          OR (
+                              child ->> 'transaction_type' IN ('FEE', 'TAX')
+                              AND NOT (
+                                  child -> 'dependency_transaction_ids'
+                                  @> terminal_transaction_ids
+                              )
+                          )
+                      )
+                ) THEN
+                    RAISE EXCEPTION
+                        'corporate-action manifest overlay child violates cohort policy'
+                        USING ERRCODE = '23514';
+                END IF;
+            END;
+            $$;
+
             CREATE FUNCTION canonical_ca_manifest_payload_hash(payload jsonb)
             RETURNS text
             LANGUAGE plpgsql
@@ -279,6 +483,7 @@ def upgrade() -> None:
             DECLARE
                 payload_keys text[];
                 source_keys text[];
+                normalized_children jsonb;
                 normalized_payload jsonb;
             BEGIN
                 IF jsonb_typeof(payload) <> 'object' THEN
@@ -341,8 +546,39 @@ def upgrade() -> None:
                 END IF;
                 PERFORM canonical_ca_child_payload_hash(child)
                 FROM jsonb_array_elements(payload -> 'expected_children') AS expected(child);
+                PERFORM assert_ca_manifest_semantics(payload);
+                SELECT coalesce(
+                    jsonb_agg(
+                        jsonb_set(
+                            child,
+                            '{dependency_transaction_ids}',
+                            (
+                                SELECT coalesce(
+                                    jsonb_agg(
+                                        to_jsonb(dependency.transaction_id)
+                                        ORDER BY dependency.transaction_id COLLATE "C"
+                                    ),
+                                    '[]'::jsonb
+                                )
+                                FROM jsonb_array_elements_text(
+                                    child -> 'dependency_transaction_ids'
+                                ) AS dependency(transaction_id)
+                            ),
+                            false
+                        )
+                        ORDER BY child ->> 'transaction_id' COLLATE "C"
+                    ),
+                    '[]'::jsonb
+                )
+                INTO normalized_children
+                FROM jsonb_array_elements(payload -> 'expected_children') AS expected(child);
                 normalized_payload := jsonb_set(
-                    payload,
+                    jsonb_set(
+                        payload,
+                        '{expected_children}',
+                        normalized_children,
+                        false
+                    ),
                     '{source_reference,observed_at}',
                     jsonb_build_object(
                         'datetime', payload #> '{source_reference,observed_at}'
@@ -1481,6 +1717,7 @@ def downgrade() -> None:
     op.execute(sa.text("DROP FUNCTION enforce_ca_readiness_plan()"))
     op.execute(sa.text("DROP FUNCTION canonical_ca_execution_order(integer)"))
     op.execute(sa.text("DROP FUNCTION canonical_ca_manifest_payload_hash(jsonb)"))
+    op.execute(sa.text("DROP FUNCTION assert_ca_manifest_semantics(jsonb)"))
     op.execute(sa.text("DROP FUNCTION canonical_ca_child_payload_hash(jsonb)"))
     op.execute(sa.text("DROP FUNCTION canonical_ca_json_value(jsonb)"))
     op.execute(sa.text("DROP FUNCTION canonical_ca_json_string(text)"))

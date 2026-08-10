@@ -31,7 +31,7 @@ class CorporateActionCohortPolicy:
         )
 
 
-_POLICIES = (
+CORPORATE_ACTION_COHORT_POLICIES = (
     CorporateActionCohortPolicy("SPIN_OFF", "SPIN_OFF", "SOURCE_POSITION_REDUCE", "SPIN_IN"),
     CorporateActionCohortPolicy(
         "DEMERGER", "DEMERGER_OUT", "SOURCE_POSITION_REDUCE", "DEMERGER_IN"
@@ -50,7 +50,9 @@ _POLICIES = (
         "REPLACEMENT_IN",
     ),
 )
-_POLICY_BY_EVENT_TYPE = {policy.corporate_action_type: policy for policy in _POLICIES}
+_POLICY_BY_EVENT_TYPE = {
+    policy.corporate_action_type: policy for policy in CORPORATE_ACTION_COHORT_POLICIES
+}
 
 
 def corporate_action_cohort_policy(
