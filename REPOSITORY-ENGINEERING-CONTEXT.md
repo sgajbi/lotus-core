@@ -2222,8 +2222,10 @@ Most relevant current governance:
      when its ID is newer than that watermark. Preserve exact payload identity alongside aggregate
      identity, monotonic watermarks across outbox retention, and non-rearming compatibility for
      truly headerless legacy deliveries. A present malformed or nonpositive sequence fails closed
-     before idempotency; transport input may request work but must never initialize or advance the
-     claimed watermark. Do not replace this with timestamps: outbox
+     before idempotency. Kafka may carry duplicate header keys, so require at most one `outbox_id`
+     header and reject duplicates before idempotency regardless of value or ordering; transport
+     input may request work but must never initialize or advance the claimed watermark. Do not
+     replace this with timestamps: outbox
      creation time can precede commit and PostgreSQL `now()` is transaction-start time.
      `TransactionProcessingUnitOfWork.readiness` composes that application use case directly from
      the package-owned stage repository and event stager. Do not restore the ambiguous `pipeline`
@@ -2914,11 +2916,17 @@ Most relevant current governance:
      different mutation that arrives during `PROCESSING`; transport input must never initialize or
      advance that watermark. Preserve exact payload identity separately so redelivery of the same
      outbox event remains non-disruptive. Truly headerless compatibility events retain legacy
-     non-rearming behavior, while a present malformed or nonpositive sequence fails closed before
-     idempotency. Never infer mutation identity from Kafka offset, trace, correlation, or an
+     non-rearming behavior, while a present malformed, nonpositive, or duplicate sequence header
+     fails closed before idempotency. Never infer mutation identity from Kafka offset, trace,
+     correlation, or an
      independently hashed transport value. Claim, stale-reset, and
      dispatch-recovery paths must clear a consumed fence without discarding a newer source mutation,
      including at the normal retry limit.
+     Every active valuation claim also owns a durable opaque claim token. Rotate it on each claim,
+     carry it through the internal dispatch header, and require the exact token on every terminal
+     transition. Stale reset, supersede, terminal completion, and dispatch recovery must clear it.
+     A late worker that lost ownership may finish calculation locally but must not persist or
+     publish financial state for a later claim.
 192. Correlation ids are diagnostic lineage, not authorization to replay completed work. Valuation
      scheduler, recovery, duplicate delivery, and headerless readiness paths must leave an existing
      `COMPLETE` same-scope job unchanged even when their correlation differs. A source correction
@@ -2995,7 +3003,10 @@ Most relevant current governance:
      timeline contains exactly one initial opening transaction. Continue to write the AVCO pool
      checkpoint, and retain complete-snapshot reconstruction for existing, backdated, correction,
      reversal, restatement, and other rebuilt timelines. Keep this scope explicit in the application
-     port rather than inferring it inside the repository adapter.
+     port rather than inferring it inside the repository adapter. Apply the canonical transaction
+     control-code normalizer at both selection and the final BUY-only guard, and reject an atomic
+     initial-opening aggregate unless transaction and checkpoint portfolio, security, and latest
+     transaction identities match before SQL execution.
 200. A direct statement-count reduction is sufficient to retain a simpler hot-path ownership shape,
      but not to claim end-to-end throughput. Require an exact clean fan-in comparison before spending
      another two-hour daily run; if fan-in is neutral or slower, record the result and pause further

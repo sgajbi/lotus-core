@@ -136,6 +136,27 @@ rearmed and completed `525` times for one final portfolio-day row.
 26. The governed database catalog now records every live valuation-job lifecycle and diagnostic
     column, including the default-zero exact-scope claimed readiness watermark. This is a truth
     reconciliation only; the underlying schema is unchanged in this slice.
+27. Valuation jobs rotate a constrained opaque token on every claim. Internal dispatch carries the
+    token as an additive Kafka header, and completion, failure, missing-reference, and no-position
+    transitions require an exact match before snapshot/outbox side effects. Stale reset,
+    supersession, terminal transition, and dispatch recovery clear ownership. A two-session
+    PostgreSQL proof resets claim A, reclaims as B, rejects late A as `NOT_OWNED`, and permits B.
+    Migration `c151b2c3d518` adds the nullable rolling-compatibility column and check constraint;
+    the public event payload, schema version, topic, and partition key remain unchanged.
+
+## 2026-08-10 Certification Task Reconciliation
+
+- Task `eng-task-20260810-145143-lotus-core-certification-make-profile-derived-state-daily`
+  is diagnostic only because Agent 1 breached its observation fence. Its terminal artifact cannot
+  certify or reject capacity; exact owned resources were verified absent after teardown.
+- Clean rerun `eng-task-20260810-170501-lotus-core-certification-make-profile-derived-state-daily`
+  was deliberately stopped after adversarial review exposed the unresolved valuation ownership
+  defect owned by #487. The Platform ledger truth is `LOST`, not success or a capacity verdict.
+  Only its verified process tree and Compose project
+  `lotus-integration-derived-state-daily-workload-0f9e53a3` were stopped; verification found zero
+  owned processes, containers, networks, and volumes.
+- Certification must restart from the pushed corrected exact head after protected CI. Monitoring
+  remains limited to the Platform ledger, process liveness, and terminal artifact.
 
 ## Measured Result
 
