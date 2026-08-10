@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
-from dataclasses import fields
+from dataclasses import fields, replace
 
+from portfolio_common.database_models import Transaction as DBTransaction
+from portfolio_common.domain.calculation_lineage import calculation_lineage_from_payload
 from portfolio_common.events import GOVERNED_EVENT_ENVELOPE_FIELDS, TransactionEvent
 
 from ...domain import BookedTransaction
@@ -42,6 +44,16 @@ def to_booked_transaction(event: TransactionEvent) -> BookedTransaction:
         value = domain_values[field_name]
         domain_values[field_name] = tuple(value) if value is not None else None
     return BookedTransaction(**domain_values)
+
+
+def persisted_to_booked_transaction(transaction: DBTransaction) -> BookedTransaction:
+    """Rehydrate the internal calculation receipt excluded from the event contract."""
+
+    booked = to_booked_transaction(TransactionEvent.model_validate(transaction))
+    return replace(
+        booked,
+        calculation_lineage=calculation_lineage_from_payload(transaction.calculation_lineage),
+    )
 
 
 def with_booked_transaction_fields(
