@@ -1,5 +1,20 @@
 # Codebase Review Ledger
 
+CR-1630 transaction-economics aggregation experiment addendum (2026-08-10): signed `3cea6a8bd`
+combined the ordinary first-BUY canonical transaction update and fee replacement with the retained
+opening-lot, accrued-income-offset, and checkpoint aggregate. Thirty-eight focused tests passed,
+the full transaction-processing contract and live PostgreSQL rollback/concurrency evidence passed,
+and the dominant path fell from eight statements to seven. Two exact candidate fan-ins reconciled
+all 1,000 transactions and derived rows with attempts `2/2`, zero repeats, closed outbox, and zero
+governed errors. They nevertheless drained in `100.688s` and `110.953s` versus the retained
+`80.866s` parent, regressions of `24.51%` and `37.21%`; whole-transaction mean rose from
+`0.595510s` to `0.821858s` and `0.903795s`, regressions of `38.01%` and `51.77%`. Signed
+`615e27772` reverts the experiment forward and restores a tree identical to retained documentation
+head `3c245adbb`. Do not repeat transaction-economics/fee aggregation without new end-to-end
+evidence that identifies those calls as controlling. No API, OpenAPI, event, schema, migration,
+calculation, partition, runtime-setting, operator-command, repository-context, or authored-wiki
+contract changed.
+
 CR-1630 position reset/replay-window experiment addendum (2026-08-10): signed `86923a58e`
 combined the post-lock suffix delete and deterministic replay-window load into one PostgreSQL
 statement. Twenty-one focused unit tests and six live PostgreSQL rollback, atomicity, query-shape,

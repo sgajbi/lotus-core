@@ -1034,6 +1034,26 @@ does not publish this key policy; the operator-owned migration runbook is the du
   against retained parent `20260810T061507Z` (`80.866s`, `0.595510s`). The micro-optimization
   therefore failed the end-to-end retain gate. Signed `79457e0e4` reverts it forward; do not repeat
   post-lock delete/load coalescing without fresh workload evidence identifying it as material.
+- Signed `3cea6a8bd` then combined the ordinary first-BUY canonical transaction-economics update and
+  fee replacement with the retained opening-lot, accrued-income-offset, and checkpoint aggregate.
+  The bounded slice passed 38 focused tests, the 125-test transaction-processing contract, strict
+  MyPy, Ruff, the architecture guard, and live PostgreSQL idempotency, update, rollback, and
+  concurrency proofs. Direct live evidence reduced the dominant path from eight statements to
+  seven without changing its unit-of-work boundary.
+- Exact clean candidate fan-in `20260810T141804Z` reconciled all 1,000 transactions, snapshots,
+  position rows, and the portfolio row with attempts `2/2`, zero repeats, final outbox `0/0`, and
+  zero governed errors, but drained in `100.688s` and averaged `0.821858004s` per whole
+  transaction. Artifact SHA-256 is
+  `4E46BFEBE13C1F7346B7642F862274E533FD9AE1A78C403B936CF08E35B4C75F`.
+- Same-code repeat `20260810T142323Z` also reconciled exactly with attempts `2/2`, zero repeats,
+  final outbox `0/0`, and zero governed errors, but drained in `110.953s` and averaged
+  `0.903795135s` per whole transaction. Artifact SHA-256 is
+  `B794E1C5188940532C35A2CF5933A0D2F4D0EECF8FC74A15110A85ACAE06E260`. Against retained parent
+  `20260810T061507Z` (`80.866s`, `0.595510s`), the two candidates regressed drain by `24.51%` and
+  `37.21%` and whole-transaction mean by `38.01%` and `51.77%`. Signed `615e27772` reverts the
+  experiment forward; its tree is identical to retained documentation head `3c245adbb`. Do not
+  repeat transaction-economics/fee aggregation without fresh end-to-end evidence identifying it
+  as material.
 
 Implementation commits include `23fc6faf3`, `d51adb739`, `ad1ad179d`, `57f8c60e2`,
 `4f05be9a5`, `c230d660a`, `f42f6eaa3`, `d56e14dbf`, `2d49fc8f1`, `70ae16f0f`,
@@ -1190,3 +1210,10 @@ deterministic replay, correction/backdated semantics, calculations and lineage, 
 events, database schema, partitions, runtime settings, and operator commands. This review and the
 issue evidence are the durable no-repeat record; no migration, repository-context, runbook,
 methodology, or authored-wiki change is required.
+The rejected transaction-economics/fee aggregation experiment changed only an internal first-BUY
+PostgreSQL query shape and was reverted forward after two exact fan-ins failed the end-to-end
+retain gate. The restored persistence calls preserve transaction economics, fee replacement,
+lineage, missing-row failure, opening-state atomicity, rollback, APIs/OpenAPI, events, database
+schema, partitions, runtime settings, and operator commands. This review and the issue evidence are
+the durable no-repeat record; no migration, repository-context, runbook, methodology, or
+authored-wiki change is required.
