@@ -27,7 +27,6 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure.co
     CostBasisProcessingAdapter,
     SqlAlchemyAverageCostPoolRepository,
     SqlAlchemyCorporateActionReconciliationRepository,
-    SqlAlchemyCostBasisCalculationContextRepository,
     SqlAlchemyCostBasisFxRateRepository,
     SqlAlchemyCostBasisLotBasisTransferRepository,
     SqlAlchemyCostBasisLotDisposalRepository,
@@ -69,35 +68,28 @@ pytestmark = [
 ]
 
 
-class _HeldCalculationContextRepository(SqlAlchemyCostBasisCalculationContextRepository):
+class _HeldHistoryCostRepository(SqlAlchemyCostBasisTransactionRepository):
     def __init__(
         self,
         db: AsyncSession,
         *,
-        context_read: asyncio.Event,
-        release_context: asyncio.Event,
+        history_read: asyncio.Event,
+        release_history: asyncio.Event,
     ) -> None:
         super().__init__(db)
-        self._context_read = context_read
-        self._release_context = release_context
+        self._history_read = history_read
+        self._release_history = release_history
 
-    async def load_cost_basis_calculation_context(
+    async def get_transaction_history(
         self,
-        *,
         portfolio_id: str,
         security_id: str,
-        exclude_transaction_id: str,
-        include_initial_history: bool,
+        exclude_id: str | None = None,
     ):
-        context = await super().load_cost_basis_calculation_context(
-            portfolio_id=portfolio_id,
-            security_id=security_id,
-            exclude_transaction_id=exclude_transaction_id,
-            include_initial_history=include_initial_history,
-        )
-        self._context_read.set()
-        await self._release_context.wait()
-        return context
+        history = await super().get_transaction_history(portfolio_id, security_id, exclude_id)
+        self._history_read.set()
+        await self._release_history.wait()
+        return history
 
 
 class _ObservedProcessingStateRepository(SqlAlchemyCostBasisProcessingStateRepository):
@@ -180,14 +172,12 @@ async def _stage_cost_calculation(
     session_factory: async_sessionmaker[AsyncSession],
     event,
     repository_factory,
-    calculation_context_factory=SqlAlchemyCostBasisCalculationContextRepository,
     processing_state_factory=SqlAlchemyCostBasisProcessingStateRepository,
 ) -> None:
     async with session_factory() as session, session.begin():
         await CostBasisProcessingAdapter(
             processor=PreparedCostProcessingUseCase(),
             repository=repository_factory(session),
-            calculation_context=calculation_context_factory(session),
             average_cost_pools=SqlAlchemyAverageCostPoolRepository(session),
             lot_disposals=SqlAlchemyCostBasisLotDisposalRepository(session),
             lot_basis_transfers=SqlAlchemyCostBasisLotBasisTransferRepository(session),
@@ -258,11 +248,10 @@ async def test_same_key_buy_sell_and_replay_serialize_to_deterministic_fifo_lot_
         _stage_cost_calculation(
             session_factory=session_factory,
             event=buy,
-            repository_factory=SqlAlchemyCostBasisTransactionRepository,
-            calculation_context_factory=lambda session: _HeldCalculationContextRepository(
+            repository_factory=lambda session: _HeldHistoryCostRepository(
                 session,
-                context_read=buy_history_read,
-                release_context=release_buy_history,
+                history_read=buy_history_read,
+                release_history=release_buy_history,
             ),
         )
     )
@@ -629,15 +618,7 @@ async def test_single_buy_cost_stage_avoids_duplicate_canonical_transaction_read
     finally:
         sqlalchemy_event.remove(sync_engine, "before_cursor_execute", capture_statement)
 
-    assert len(statements) == 9
-    calculation_context_reads = [
-        statement
-        for statement in statements
-        if "cost_basis_context_seed" in statement
-        and "LEFT OUTER JOIN cost_basis_processing_state" in statement
-        and "LEFT OUTER JOIN transactions" in statement
-    ]
-    assert len(calculation_context_reads) == 1
+    assert len(statements) == 10
     canonical_transaction_writes = [
         statement
         for statement in statements

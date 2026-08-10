@@ -31,8 +31,6 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure.tr
 from src.services.portfolio_transaction_processing_service.app.ports import (
     AverageCostPoolCheckpointRecord,
     CostBasisAverageCostPoolPort,
-    CostBasisCalculationContext,
-    CostBasisCalculationContextPort,
     CostBasisCalculationObserver,
     CostBasisExecutionMode,
     CostBasisFxRatePort,
@@ -82,25 +80,12 @@ def _calculation_coordinator(
     lot_states: CostBasisLotStatePort,
     fx_rates: CostBasisFxRatePort,
     processing_state: CostBasisProcessingStatePort,
-    calculation_context: CostBasisCalculationContextPort | None = None,
     observer: CostBasisCalculationObserver | None = None,
 ) -> CostBasisCalculationCoordinator:
     """Build the application coordinator with isolated state ports."""
 
-    if calculation_context is None:
-        checkpoint = processing_state.get_cost_basis_processing_checkpoint.return_value
-        calculation_context = AsyncMock(spec=CostBasisCalculationContextPort)
-        calculation_context.load_cost_basis_calculation_context.return_value = (
-            CostBasisCalculationContext(
-                checkpoint=(
-                    checkpoint if isinstance(checkpoint, CostBasisProcessingCheckpoint) else None
-                ),
-                transaction_history=None,
-            )
-        )
     return CostBasisCalculationCoordinator(
         transactions=transactions,
-        calculation_context=calculation_context,
         average_cost_pools=average_cost_pools,
         lot_states=lot_states,
         fx_rates=fx_rates,
@@ -120,7 +105,6 @@ async def _calculate_cost_basis(
     lot_states: CostBasisLotStatePort,
     fx_rates: CostBasisFxRatePort,
     processing_state: CostBasisProcessingStatePort,
-    calculation_context: CostBasisCalculationContextPort | None = None,
     cost_basis_method: CostBasisMethod,
     observer: CostBasisCalculationObserver | None = None,
     preloaded_transaction_history: list[BookedTransaction] | None = None,
@@ -133,7 +117,6 @@ async def _calculate_cost_basis(
         lot_states=lot_states,
         fx_rates=fx_rates,
         processing_state=processing_state,
-        calculation_context=calculation_context,
         observer=observer,
     ).calculate(
         transaction=booked_transaction.to_booked_transaction(event),
@@ -499,10 +482,7 @@ async def test_initial_opening_transaction_uses_exact_opening_lot_scope() -> Non
     repo = AsyncMock(spec=CostBasisTransactionStatePort)
     processing_state = _processing_state_port()
     processing_state.get_cost_basis_processing_checkpoint.return_value = None
-    calculation_context = AsyncMock(spec=CostBasisCalculationContextPort)
-    calculation_context.load_cost_basis_calculation_context.return_value = (
-        CostBasisCalculationContext(checkpoint=None, transaction_history=())
-    )
+    repo.get_transaction_history.return_value = []
 
     calculation = await _calculate_cost_basis(
         event=_event(
@@ -519,7 +499,6 @@ async def test_initial_opening_transaction_uses_exact_opening_lot_scope() -> Non
         lot_states=_lot_state_port(),
         fx_rates=_fx_rate_port(),
         processing_state=processing_state,
-        calculation_context=calculation_context,
         cost_basis_method=CostBasisMethod.FIFO,
     )
 
@@ -527,13 +506,6 @@ async def test_initial_opening_transaction_uses_exact_opening_lot_scope() -> Non
     assert calculation.errored == []
     assert calculation.open_lot_persistence_scope is OpenLotPersistenceScope.INITIAL_OPENING_LOT
     assert set(calculation.open_lot_states) == {"BUY-INITIAL"}
-    calculation_context.load_cost_basis_calculation_context.assert_awaited_once_with(
-        portfolio_id="P1",
-        security_id="S1",
-        exclude_transaction_id="BUY-INITIAL",
-        include_initial_history=True,
-    )
-    repo.get_transaction_history.assert_not_awaited()
 
 
 async def test_full_rebuild_reuses_preloaded_history_without_second_query() -> None:
