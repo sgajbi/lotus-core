@@ -1054,6 +1054,13 @@ does not publish this key policy; the operator-owned migration runbook is the du
   experiment forward; its tree is identical to retained documentation head `3c245adbb`. Do not
   repeat transaction-economics/fee aggregation without fresh end-to-end evidence identifying it
   as material.
+- PR #931 is capped as a coherent delivery tranche at signed evidence head `c220b33de`, 73 commits
+  ahead of its governed base. It retains only improvements that passed their scoped correctness and
+  performance gates and retains forward reverts plus no-repeat evidence for the two rejected final
+  experiments. The valid daily capacity failure remains authoritative; recovery, poison,
+  correction, restatement, qualified-release, and downstream proof stay pending. Delivery of this
+  tranche therefore closes no campaign issue and grants no fixed-local status. The unchanged
+  acceptance matrix transfers to the next branch after exact-main validation and wiki publication.
 
 Implementation commits include `23fc6faf3`, `d51adb739`, `ad1ad179d`, `57f8c60e2`,
 `4f05be9a5`, `c230d660a`, `f42f6eaa3`, `d56e14dbf`, `2d49fc8f1`, `70ae16f0f`,
@@ -1217,3 +1224,7 @@ lineage, missing-row failure, opening-state atomicity, rollback, APIs/OpenAPI, e
 schema, partitions, runtime settings, and operator commands. This review and the issue evidence are
 the durable no-repeat record; no migration, repository-context, runbook, methodology, or
 authored-wiki change is required.
+The PR #931 tranche boundary changes only delivery packaging and campaign chronology. It does not
+change runtime behavior or any API/OpenAPI, event, schema, migration, calculation, partition,
+operator, repository-context, or authored-wiki contract. Existing authored wiki changes already
+owned by the PR remain subject to post-merge publication and strict parity verification.

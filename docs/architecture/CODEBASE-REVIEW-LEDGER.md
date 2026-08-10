@@ -1,5 +1,19 @@
 # Codebase Review Ledger
 
+CR-1630 delivery-tranche boundary addendum (2026-08-10): PR #931 reaches its governed delivery
+boundary with 73 signed commits at evidence head `c220b33de`. The retained implementation includes
+deterministic transaction ordering, twelve-way capacity, atomic readiness authority, valuation
+claim-generation fencing, bounded outbox evidence, controlled-release tooling, and the measured
+initial-opening persistence improvement. The exact daily receipt remains a valid capacity failure,
+so recovery, poison, correction, restatement, release-rehearsal, and downstream certification remain
+open and transfer unchanged to the next campaign tranche. Merging this coherent capability tranche
+must not close or relabel #487, #714, #794, or #795 as fixed locally. This boundary prevents proven
+signed work from being stranded beyond the 75-commit split threshold; it does not weaken any
+acceptance criterion. No API, OpenAPI, event, schema, migration, calculation, partition, runtime
+setting, operator command, repository context, or new authored-wiki truth changes in this
+packaging-only decision. Existing authored wiki changes in PR #931 still require publication and
+strict parity verification after merge.
+
 CR-1630 transaction-economics aggregation experiment addendum (2026-08-10): signed `3cea6a8bd`
 combined the ordinary first-BUY canonical transaction update and fee replacement with the retained
 opening-lot, accrued-income-offset, and checkpoint aggregate. Thirty-eight focused tests passed,
