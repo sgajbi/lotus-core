@@ -154,19 +154,7 @@ class SqlAlchemyCostBasisProcessingStateRepository:
         row = (await self._session.execute(statement)).scalars().first()
         if row is None:
             return None
-        return CostBasisProcessingCheckpoint(
-            portfolio_id=row.portfolio_id,
-            security_id=row.security_id,
-            cost_basis_method=row.cost_basis_method,
-            latest_transaction_date=row.latest_transaction_date,
-            latest_dependency_rank=row.latest_dependency_rank,
-            latest_cash_dependency_rank=row.latest_cash_dependency_rank,
-            latest_child_sequence=row.latest_child_sequence,
-            latest_target_instrument_id=row.latest_target_instrument_id,
-            latest_quantity=row.latest_quantity,
-            latest_transaction_id=row.latest_transaction_id,
-            calculation_state_version=row.engine_state_version,
-        )
+        return cost_basis_processing_checkpoint_from_row(row)
 
     @async_timed(
         repository="CostBasisProcessingStateRepository",
@@ -201,3 +189,23 @@ class SqlAlchemyCostBasisProcessingStateRepository:
                 },
             )
         )
+
+
+def cost_basis_processing_checkpoint_from_row(
+    row: CostBasisProcessingState,
+) -> CostBasisProcessingCheckpoint:
+    """Map the durable checkpoint row without exposing ORM state to the application."""
+
+    return CostBasisProcessingCheckpoint(
+        portfolio_id=row.portfolio_id,
+        security_id=row.security_id,
+        cost_basis_method=row.cost_basis_method,
+        latest_transaction_date=row.latest_transaction_date,
+        latest_dependency_rank=row.latest_dependency_rank,
+        latest_cash_dependency_rank=row.latest_cash_dependency_rank,
+        latest_child_sequence=row.latest_child_sequence,
+        latest_target_instrument_id=row.latest_target_instrument_id,
+        latest_quantity=row.latest_quantity,
+        latest_transaction_id=row.latest_transaction_id,
+        calculation_state_version=row.engine_state_version,
+    )

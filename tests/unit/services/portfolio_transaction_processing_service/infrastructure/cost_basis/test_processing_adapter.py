@@ -30,6 +30,7 @@ from src.services.portfolio_transaction_processing_service.app.ports import (
     AccruedIncomeOffsetStatePort,
     CorporateActionReconciliationRepository,
     CostBasisAverageCostPoolPort,
+    CostBasisCalculationContextPort,
     CostBasisFxRatePort,
     CostBasisInstrumentReference,
     CostBasisLotBasisTransferPort,
@@ -93,6 +94,7 @@ async def test_cost_adapter_maps_domain_and_returns_every_processed_leg() -> Non
     adapter = CostBasisProcessingAdapter(
         processor=processor,
         repository=repository,
+        calculation_context=AsyncMock(spec=CostBasisCalculationContextPort),
         average_cost_pools=average_cost_pools,
         lot_disposals=lot_disposals,
         lot_basis_transfers=lot_basis_transfers,
@@ -160,6 +162,7 @@ async def test_cost_adapter_maps_missing_reference_data_to_retryable_application
     adapter = CostBasisProcessingAdapter(
         processor=AsyncMock(spec=PreparedCostProcessingUseCase),
         repository=repository,
+        calculation_context=AsyncMock(spec=CostBasisCalculationContextPort),
         average_cost_pools=average_cost_pools,
         lot_disposals=lot_disposals,
         lot_basis_transfers=lot_basis_transfers,
@@ -230,6 +233,7 @@ async def test_cost_adapter_maps_settlement_rejection_to_non_retryable_error() -
     adapter = CostBasisProcessingAdapter(
         processor=processor,
         repository=repository,
+        calculation_context=AsyncMock(spec=CostBasisCalculationContextPort),
         average_cost_pools=average_cost_pools,
         lot_disposals=lot_disposals,
         lot_basis_transfers=lot_basis_transfers,
