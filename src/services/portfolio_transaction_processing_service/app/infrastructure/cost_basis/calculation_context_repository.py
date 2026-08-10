@@ -6,7 +6,7 @@ from portfolio_common.database_models import CostBasisProcessingState
 from portfolio_common.database_models import Transaction as DBTransaction
 from portfolio_common.identifiers import normalize_lookup_identifier
 from portfolio_common.utils import async_timed
-from sqlalchemy import and_, func, literal, select
+from sqlalchemy import and_, literal, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
@@ -56,9 +56,9 @@ class SqlAlchemyCostBasisCalculationContextRepository:
                 and_(
                     checkpoint.portfolio_id.is_(None),
                     literal(include_initial_history),
-                    func.trim(transaction.portfolio_id) == normalized_portfolio_id,
-                    func.trim(transaction.security_id) == normalized_security_id,
-                    func.trim(transaction.transaction_id) != normalized_excluded_id,
+                    transaction.portfolio_id == normalized_portfolio_id,
+                    transaction.security_id == normalized_security_id,
+                    transaction.transaction_id != normalized_excluded_id,
                 ),
             )
             .order_by(transaction.transaction_date.asc(), transaction.transaction_id.asc())
