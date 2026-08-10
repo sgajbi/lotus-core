@@ -34,6 +34,7 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure.co
     SqlAlchemyCostBasisProcessingStateRepository,
     SqlAlchemyCostBasisReferenceDataRepository,
     SqlAlchemyCostBasisTransactionRepository,
+    SqlAlchemyInitialOpeningCostStateRepository,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure.fixed_income_book_cost import (  # noqa: E501
     SqlAlchemyLotAmortizedCostProfileRepository,
@@ -184,6 +185,7 @@ async def _stage_cost_calculation(
             lot_states=SqlAlchemyCostBasisLotRepository(session),
             amortized_cost_profiles=SqlAlchemyLotAmortizedCostProfileRepository(session),
             income_offsets=SqlAlchemyAccruedIncomeOffsetRepository(session),
+            initial_opening_state=SqlAlchemyInitialOpeningCostStateRepository(session),
             reference_data=SqlAlchemyCostBasisReferenceDataRepository(session),
             fx_rates=SqlAlchemyCostBasisFxRateRepository(session),
             processing_state=processing_state_factory(session),

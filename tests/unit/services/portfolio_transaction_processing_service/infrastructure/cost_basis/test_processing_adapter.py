@@ -42,6 +42,7 @@ from src.services.portfolio_transaction_processing_service.app.ports import (
     CostBasisTransactionStatePort,
     CostProcessingEffectStagingPort,
     CostProcessingResult,
+    InitialOpeningCostStatePort,
     LotAmortizedCostProfilePort,
 )
 
@@ -99,6 +100,7 @@ async def test_cost_adapter_maps_domain_and_returns_every_processed_leg() -> Non
         lot_states=lot_states,
         amortized_cost_profiles=AsyncMock(spec=LotAmortizedCostProfilePort),
         income_offsets=income_offsets,
+        initial_opening_state=AsyncMock(spec=InitialOpeningCostStatePort),
         reference_data=reference_data,
         fx_rates=fx_rates,
         processing_state=processing_state,
@@ -166,6 +168,7 @@ async def test_cost_adapter_maps_missing_reference_data_to_retryable_application
         lot_states=lot_states,
         amortized_cost_profiles=AsyncMock(spec=LotAmortizedCostProfilePort),
         income_offsets=income_offsets,
+        initial_opening_state=AsyncMock(spec=InitialOpeningCostStatePort),
         reference_data=reference_data,
         fx_rates=fx_rates,
         processing_state=processing_state,
@@ -236,6 +239,7 @@ async def test_cost_adapter_maps_settlement_rejection_to_non_retryable_error() -
         lot_states=lot_states,
         amortized_cost_profiles=AsyncMock(spec=LotAmortizedCostProfilePort),
         income_offsets=income_offsets,
+        initial_opening_state=AsyncMock(spec=InitialOpeningCostStatePort),
         reference_data=reference_data,
         fx_rates=fx_rates,
         processing_state=processing_state,

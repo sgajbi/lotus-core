@@ -10,6 +10,7 @@ from src.services.portfolio_transaction_processing_service.app.application impor
     cost_basis_processing,
 )
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
+    CostBasisProcessingCheckpoint,
     CostBasisTransaction,
 )
 from src.services.portfolio_transaction_processing_service.app.domain.transaction import (
@@ -23,6 +24,7 @@ from src.services.portfolio_transaction_processing_service.app.ports import (
     CostBasisPersistenceStage,
     CostBasisPersistenceStatus,
     CostBasisTransactionStatePort,
+    InitialOpeningCostStatePort,
 )
 
 pytestmark = pytest.mark.asyncio
@@ -174,6 +176,55 @@ async def test_persistence_stops_before_child_writes_when_canonical_row_is_missi
             status=CostBasisPersistenceStatus.ATTEMPT,
         )
     )
+
+
+async def test_initial_buy_persists_lot_offset_and_checkpoint_through_one_aggregate() -> None:
+    transaction = _calculated_transaction("BUY-INITIAL-1", fee=Decimal("2.25"))
+    checkpoint = CostBasisProcessingCheckpoint.from_transaction(
+        transaction,
+        cost_basis_method="FIFO",
+    )
+    repository, lot_states, income_offsets, observer = _ports()
+    initial_opening_state = AsyncMock(spec=InitialOpeningCostStatePort)
+    repository.apply_transaction_costs_and_replace_breakdown.return_value = _booked_transaction(
+        transaction
+    )
+
+    persisted = await persist_cost_basis_transactions(
+        processed=[transaction],
+        incoming_transaction_ids={transaction.transaction_id},
+        transactions=repository,
+        lot_states=lot_states,
+        income_offsets=income_offsets,
+        initial_opening_state=initial_opening_state,
+        initial_opening_checkpoint=checkpoint,
+        observer=observer,
+    )
+
+    assert persisted[0].trade_fee == Decimal("2.25")
+    initial_opening_state.persist_initial_opening_cost_state.assert_awaited_once_with(
+        transaction=transaction,
+        checkpoint=checkpoint,
+    )
+    lot_states.upsert_buy_lot_state.assert_not_awaited()
+    income_offsets.upsert_accrued_income_offset.assert_not_awaited()
+    assert [
+        (observation.stage, observation.status)
+        for observation in (item.args[0] for item in observer.observe.call_args_list)
+    ] == [
+        (CostBasisPersistenceStage.TRANSACTION_COSTS, CostBasisPersistenceStatus.ATTEMPT),
+        (CostBasisPersistenceStage.TRANSACTION_COSTS, CostBasisPersistenceStatus.SUCCESS),
+        (CostBasisPersistenceStage.OPEN_LOT, CostBasisPersistenceStatus.ATTEMPT),
+        (
+            CostBasisPersistenceStage.ACCRUED_INCOME_OFFSET,
+            CostBasisPersistenceStatus.ATTEMPT,
+        ),
+        (CostBasisPersistenceStage.OPEN_LOT, CostBasisPersistenceStatus.SUCCESS),
+        (
+            CostBasisPersistenceStage.ACCRUED_INCOME_OFFSET,
+            CostBasisPersistenceStatus.SUCCESS,
+        ),
+    ]
 
 
 @pytest.mark.parametrize(

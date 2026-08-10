@@ -40,6 +40,7 @@ from src.services.portfolio_transaction_processing_service.app.ports import (
     CostBasisTransactionStatePort,
     CostProcessingEffectStagingPort,
     CostProcessingResult,
+    InitialOpeningCostStatePort,
     LotAmortizedCostProfilePort,
 )
 
@@ -95,6 +96,7 @@ def _dependencies() -> dict[str, object]:
         "lot_states": AsyncMock(spec=CostBasisLotStatePort),
         "amortized_cost_profiles": AsyncMock(spec=LotAmortizedCostProfilePort),
         "income_offsets": AsyncMock(spec=AccruedIncomeOffsetStatePort),
+        "initial_opening_state": AsyncMock(spec=InitialOpeningCostStatePort),
         "fx_rates": AsyncMock(spec=CostBasisFxRatePort),
         "processing_state": AsyncMock(spec=CostBasisProcessingStatePort),
         "reconciliation_repository": AsyncMock(spec=CorporateActionReconciliationRepository),
@@ -185,6 +187,7 @@ async def test_cost_basis_execution_acquires_key_lock_before_calculation(
         lot_states=AsyncMock(spec=CostBasisLotStatePort),
         amortized_cost_profiles=amortized_cost_profiles,
         income_offsets=AsyncMock(spec=AccruedIncomeOffsetStatePort),
+        initial_opening_state=AsyncMock(spec=InitialOpeningCostStatePort),
         fx_rates=AsyncMock(spec=CostBasisFxRatePort),
         processing_state=processing_state,
     )
@@ -273,8 +276,9 @@ async def test_cost_basis_execution_rejects_linked_interest_before_calculation(
             lot_basis_transfers=AsyncMock(spec=CostBasisLotBasisTransferPort),
             lot_states=AsyncMock(spec=CostBasisLotStatePort),
             amortized_cost_profiles=AsyncMock(spec=LotAmortizedCostProfilePort),
-            income_offsets=AsyncMock(spec=AccruedIncomeOffsetStatePort),
-            fx_rates=AsyncMock(spec=CostBasisFxRatePort),
+                income_offsets=AsyncMock(spec=AccruedIncomeOffsetStatePort),
+                initial_opening_state=AsyncMock(spec=InitialOpeningCostStatePort),
+                fx_rates=AsyncMock(spec=CostBasisFxRatePort),
             processing_state=processing_state,
         )
 

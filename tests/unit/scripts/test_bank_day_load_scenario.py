@@ -403,6 +403,18 @@ def test_required_cost_database_operations_track_current_hot_path() -> None:
         "CostBasisTransactionRepository",
         "get_transaction_history",
     ) in bank_day_load_scenario.REQUIRED_COST_DATABASE_OPERATION_EVIDENCE
+    assert (
+        "InitialOpeningCostStateRepository",
+        "persist_initial_opening_cost_state",
+    ) in bank_day_load_scenario.REQUIRED_COST_DATABASE_OPERATION_EVIDENCE
+    assert (
+        "CostBasisLotRepository",
+        "upsert_buy_lot_state",
+    ) not in bank_day_load_scenario.REQUIRED_COST_DATABASE_OPERATION_EVIDENCE
+    assert (
+        "CostBasisProcessingStateRepository",
+        "upsert_cost_basis_processing_checkpoint",
+    ) not in bank_day_load_scenario.REQUIRED_COST_DATABASE_OPERATION_EVIDENCE
     assert all(
         repository != "CostBasisCalculationContextRepository"
         for repository, _method in bank_day_load_scenario.REQUIRED_COST_DATABASE_OPERATION_EVIDENCE

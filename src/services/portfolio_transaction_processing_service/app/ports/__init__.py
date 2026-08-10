@@ -39,6 +39,7 @@ from .cost_basis import (
     CostBasisReferenceDataPort,
     CostBasisTransactionStatePort,
     CostProcessingEffectStagingPort,
+    InitialOpeningCostStatePort,
     OpenLotCheckpointRecord,
 )
 from .fixed_income_book_cost import (
@@ -109,6 +110,7 @@ __all__ = [
     "CostBasisExecutionMode",
     "CostBasisAverageCostPoolPort",
     "CostBasisFxRatePort",
+    "InitialOpeningCostStatePort",
     "CostBasisInstrumentReference",
     "CostBasisLotBasisTransferPort",
     "CostBasisLotDisposalPort",

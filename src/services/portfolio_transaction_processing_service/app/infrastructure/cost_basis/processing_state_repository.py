@@ -15,6 +15,7 @@ from portfolio_common.monitoring import (
 from portfolio_common.utils import async_timed
 from sqlalchemy import select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.dialects.postgresql.dml import Insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...domain.cost_basis import CostBasisProcessingCheckpoint
@@ -177,27 +178,33 @@ class SqlAlchemyCostBasisProcessingStateRepository:
     ) -> None:
         """Idempotently persist the latest deterministic ordering checkpoint."""
 
-        payload = {
-            "portfolio_id": checkpoint.portfolio_id,
-            "security_id": checkpoint.security_id,
-            "cost_basis_method": checkpoint.cost_basis_method,
-            "latest_transaction_date": checkpoint.latest_transaction_date,
-            "latest_dependency_rank": checkpoint.latest_dependency_rank,
-            "latest_cash_dependency_rank": checkpoint.latest_cash_dependency_rank,
-            "latest_child_sequence": checkpoint.latest_child_sequence,
-            "latest_target_instrument_id": checkpoint.latest_target_instrument_id,
-            "latest_quantity": checkpoint.latest_quantity,
-            "latest_transaction_id": checkpoint.latest_transaction_id,
-            "engine_state_version": checkpoint.calculation_state_version,
-        }
-        statement = pg_insert(CostBasisProcessingState).values(**payload)
-        await self._session.execute(
-            statement.on_conflict_do_update(
-                index_elements=["portfolio_id", "security_id"],
-                set_={
-                    field_name: getattr(statement.excluded, field_name)
-                    for field_name in payload
-                    if field_name not in {"portfolio_id", "security_id"}
-                },
-            )
-        )
+        await self._session.execute(cost_basis_processing_checkpoint_upsert_statement(checkpoint))
+
+
+def cost_basis_processing_checkpoint_upsert_statement(
+    checkpoint: CostBasisProcessingCheckpoint,
+) -> Insert:
+    """Build the canonical idempotent deterministic-checkpoint write."""
+
+    payload = {
+        "portfolio_id": checkpoint.portfolio_id,
+        "security_id": checkpoint.security_id,
+        "cost_basis_method": checkpoint.cost_basis_method,
+        "latest_transaction_date": checkpoint.latest_transaction_date,
+        "latest_dependency_rank": checkpoint.latest_dependency_rank,
+        "latest_cash_dependency_rank": checkpoint.latest_cash_dependency_rank,
+        "latest_child_sequence": checkpoint.latest_child_sequence,
+        "latest_target_instrument_id": checkpoint.latest_target_instrument_id,
+        "latest_quantity": checkpoint.latest_quantity,
+        "latest_transaction_id": checkpoint.latest_transaction_id,
+        "engine_state_version": checkpoint.calculation_state_version,
+    }
+    statement = pg_insert(CostBasisProcessingState).values(**payload)
+    return statement.on_conflict_do_update(
+        index_elements=["portfolio_id", "security_id"],
+        set_={
+            field_name: getattr(statement.excluded, field_name)
+            for field_name in payload
+            if field_name not in {"portfolio_id", "security_id"}
+        },
+    )

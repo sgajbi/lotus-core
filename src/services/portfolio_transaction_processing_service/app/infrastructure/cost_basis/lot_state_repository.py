@@ -14,6 +14,7 @@ from portfolio_common.identifiers import normalize_lookup_identifier
 from portfolio_common.utils import async_timed
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.dialects.postgresql.dml import Insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import Select
 
@@ -87,13 +88,7 @@ class SqlAlchemyCostBasisLotRepository:
     async def upsert_buy_lot_state(self, transaction: CostBasisTransaction) -> None:
         """Idempotently persist the lot opened by a purchase transaction."""
 
-        statement = pg_insert(PositionLotState).values(**buy_lot_state_payload(transaction))
-        await self._session.execute(
-            statement.on_conflict_do_update(
-                index_elements=["source_transaction_id"],
-                set_=mutable_lot_state_fields(statement),
-            )
-        )
+        await self._session.execute(buy_lot_state_upsert_statement(transaction))
 
     @async_timed(repository="CostBasisLotRepository", method="update_open_lot_states")
     async def update_open_lot_states(
@@ -230,6 +225,16 @@ class SqlAlchemyCostBasisLotRepository:
             cost_base=lot.lot_cost_base,
             amortized_cost=_amortized_cost_carry(lot),
         )
+
+
+def buy_lot_state_upsert_statement(transaction: CostBasisTransaction) -> Insert:
+    """Build the canonical idempotent opening-lot write."""
+
+    statement = pg_insert(PositionLotState).values(**buy_lot_state_payload(transaction))
+    return statement.on_conflict_do_update(
+        index_elements=["source_transaction_id"],
+        set_=mutable_lot_state_fields(statement),
+    )
 
 
 def _amortized_cost_carry(lot: PositionLotState) -> AmortizedCostCarryState | None:
