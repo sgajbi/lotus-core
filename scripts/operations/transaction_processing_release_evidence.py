@@ -265,7 +265,7 @@ def build_terminal_receipt(
     phases: Sequence[PhaseResult],
     invariants: Mapping[str, bool],
     failures: Sequence[str],
-    cleanup_owned_resource_count: int,
+    cleanup_owned_resource_count: int | None,
 ) -> dict[str, Any]:
     """Build, redact, and hash a terminal fail-closed rehearsal receipt."""
 
@@ -274,7 +274,7 @@ def build_terminal_receipt(
         raise ReleaseEvidenceError("source revision must be a full lowercase Git SHA")
     if source_tree_state not in {"clean", "dirty"}:
         raise ReleaseEvidenceError("source tree state must be clean or dirty")
-    if cleanup_owned_resource_count < 0:
+    if cleanup_owned_resource_count is not None and cleanup_owned_resource_count < 0:
         raise ReleaseEvidenceError("cleanup resource count cannot be negative")
     phase_order = tuple(item.phase for item in phases)
     failed_phases = tuple(item.phase.value for item in phases if item.status != "passed")
