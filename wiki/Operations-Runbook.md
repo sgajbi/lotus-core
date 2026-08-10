@@ -77,11 +77,15 @@ Before switching an environment, follow the
 The Kafka offset command is dry-run by default and requires `--apply` to mutate target offsets.
 
 Image canary and rollback use a different, stable-group proof. Generate the immutable plan with
-`make transaction-release-rehearsal-plan`, then run `make transaction-release-rehearsal` only from
-the exact candidate SHA with qualified candidate and rollback release manifests. The runner owns a
+`make transaction-release-rehearsal-plan`, then run `make transaction-release-rehearsal` only after
+merge, from the exact-main candidate SHA, with the Image Release candidate manifest and a qualified
+immutable previous-main rollback manifest. Do not create a pre-merge tag to manufacture release
+authority. The runner owns a
 generated `lotus-integration-transaction-release-rehearsal-*` Compose project, recreates only
 `portfolio_transaction_processing_service`, preserves PostgreSQL/Kafka through rollback, runs fixed
 financial canaries, and fails unless its exact project has zero cleanup residue. Its receipt is
+scoped to image replacement on the stable consumer group and governed twelve-partition topology;
+it does not claim a twelve-to-eight Kafka partition reduction. The receipt remains
 local Compose evidence with `cluster_certification=false`; Kubernetes rollout, production canary,
 and rollback-RTO evidence remain environment-owned.
 Qualified manifests may supply only six governed build-metadata values; database, port, Compose,

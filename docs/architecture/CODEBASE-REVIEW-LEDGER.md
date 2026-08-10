@@ -1,5 +1,17 @@
 # Codebase Review Ledger
 
+CR-1630 position reset/replay-window experiment addendum (2026-08-10): signed `86923a58e`
+combined the post-lock suffix delete and deterministic replay-window load into one PostgreSQL
+statement. Twenty-one focused unit tests and six live PostgreSQL rollback, atomicity, query-shape,
+same-key serialization, and different-key concurrency tests passed. Two exact candidate fan-ins
+reconciled all 1,000 transactions with attempts `2/2`, zero repeats, closed outbox, and zero
+governed errors, but the normal-tail repeat drained in `95.906s` versus the retained `80.866s`
+parent (`18.60%` slower) and whole-transaction mean rose from `0.595510s` to `0.798676s`
+(`34.12%` slower). Signed `79457e0e4` reverts the experiment forward. Do not repeat delete/load
+coalescing without new end-to-end evidence that identifies it as a controlling constraint. No API,
+OpenAPI, event, schema, migration, calculation, partition, runtime-setting, operator-command,
+repository-context, or authored-wiki contract changed.
+
 CR-1630 valuation-ownership addendum (2026-08-10): exact-head adversarial review proved that a
 timed-out valuation worker could complete a later `PROCESSING` claim because terminal ownership was
 only natural scope plus status. Valuation claims now rotate a durable opaque token, carry it in an

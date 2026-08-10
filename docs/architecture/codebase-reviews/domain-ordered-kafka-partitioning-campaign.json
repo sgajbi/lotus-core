@@ -117,21 +117,21 @@
       "tranche_id": "tranche-3-derived-state-certification-closure",
       "branch": "feat/derived-state-certification-closure",
       "base_sha": "6bc937bb173051e0bd4ee9a07ffebd54face0163",
-      "head_sha": "e0066e82df741da5a22c6a7fe5c403c5aaf60733",
+      "head_sha": "79457e0e4b580c285f168785986ff878e004af02",
       "head_sha_role": "latest_evidence_head_before_campaign_manifest_update",
       "post_merge_main_sha": "pending",
       "required_predecessor_main_sha": "6bc937bb173051e0bd4ee9a07ffebd54face0163",
       "capability_boundary": "Combined derived-state runtime certification, bounded outbox capacity, deterministic workload evidence, stale-source and delayed-readiness suppression, and transaction hot-path round-trip reduction",
-      "commit_count": 64,
+      "commit_count": 69,
       "commit_count_scope": "origin/main_through_head_sha",
       "tranche_decision": "Retain the combined deployable with separately attributable position and portfolio modules, the twelve-partition transaction ceiling, the atomic two-call readiness claim, and the exact-project controlled-release tooling. Keep PR #931 draft until daily, recovery, poison, duplicate/outbox, correction, restatement, qualified release, and downstream proofs pass.",
       "issue_closure_decision": "close_only_after_merge_exact_main_and_wiki_publication",
       "acceptance_matrix": {
         "daily_capacity": {
-          "status": "restart_required_after_review_fix",
-          "task_id": "eng-task-20260810-170501-lotus-core-certification-make-profile-derived-state-daily",
-          "source_sha": "f099360a2921f41742b94eff1fea0a3747113d60",
-          "receipt": "Platform ledger LOST; deliberately stopped after #487 valuation claim-fencing defect; exact project cleanup 0/0/0"
+          "status": "valid_capacity_failure",
+          "task_id": "eng-task-20260810-182408-lotus-core-certification-make-profile-derived-state-daily",
+          "source_sha": "3c46b699fe41f0bed6c7e3417e7f283ab782be2a",
+          "receipt": "output/task-runs/20260810T102534Z-bank-day-load.json; SHA-256 082C6C9FDDC8A086F128FEAECD33E69056F3D12C8A202A6F88588BB30F79C760; 100000 durable transactions, 74805 snapshots, 807/1000 complete portfolios, attempts 2/2, repeats 0, final pending/failed outbox 18/0, exact owned cleanup 0/0/0"
         },
         "recovery_outbox": {
           "status": "pending",
@@ -206,7 +206,12 @@
         "Signed documentation head d82ea9ac805afe9ea5fd08125c5071a182e78e39 removes stale hashed-transport readiness guidance and aligns repository context, CR-1626, CR-1630, the review ledger, and PR chronology without changing runtime behavior",
         "Daily task eng-task-20260810-145143-lotus-core-certification-make-profile-derived-state-daily is diagnostic only after an Agent 1 observation-fence breach; its exact project terminated with zero containers, networks, and volumes and its result cannot certify or reject capacity",
         "Daily task eng-task-20260810-170501-lotus-core-certification-make-profile-derived-state-daily is LOST/non-certifying after deliberate early stop for #487; exact process/project cleanup is zero and no capacity verdict is claimed",
-        "Signed e0066e82df741da5a22c6a7fe5c403c5aaf60733 adds valuation claim-generation fencing; 140 focused unit tests and one rebuilt two-session PostgreSQL stale-owner proof pass; migration c151b2c3d518 is the single head"
+        "Signed e0066e82df741da5a22c6a7fe5c403c5aaf60733 adds valuation claim-generation fencing; 140 focused unit tests and one rebuilt two-session PostgreSQL stale-owner proof pass; migration c151b2c3d518 is the single head",
+        "Exact-source daily task eng-task-20260810-182408-lotus-core-certification-make-profile-derived-state-daily at 3c46b699fe41f0bed6c7e3417e7f283ab782be2a reached the governed deadline with 100000 transactions durable but only 74805 snapshots and 807/1000 complete portfolios; attempts remained 2/2, repeats and failed outbox remained zero, so this is a valid remaining capacity failure",
+        "Daily artifact output/task-runs/20260810T102534Z-bank-day-load.json has SHA-256 082C6C9FDDC8A086F128FEAECD33E69056F3D12C8A202A6F88588BB30F79C760; peak database total/active/idle-in-transaction connections were 63/22/33, lock waiters/blocked sessions were 4/4, and exact scoped teardown left zero owned resources",
+        "Signed 86923a58ec0667dda73ea33ac26f13fca71e3840 combined the already post-lock current-epoch suffix delete and replay-window load; 21 focused unit tests and 6 live PostgreSQL query-shape, rollback, atomicity, and concurrency tests passed",
+        "Candidate fan-ins 20260810T132520Z and 20260810T133059Z reconciled exactly; the normal-tail repeat drained in 95.906 seconds and averaged 0.798675941 seconds per whole transaction versus retained parent 80.866 seconds and 0.595510 seconds, regressions of 18.60 and 34.12 percent despite one fewer statement",
+        "Signed 79457e0e4b580c285f168785986ff878e004af02 reverts position delete/load coalescing forward; do not repeat it without fresh end-to-end evidence identifying the round trip as controlling"
       ],
       "remote_evidence": [
         "PR #931 exact implementation head 6406033221b36d9c21fbcaee3bfa53ba975cc984 passed Remote Feature Lane 31338004146, PR Merge Gate 31338007004, and Quality Baseline 31338007006",

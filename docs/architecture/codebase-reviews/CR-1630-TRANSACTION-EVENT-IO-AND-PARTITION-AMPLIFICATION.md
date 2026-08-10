@@ -1010,6 +1010,30 @@ does not publish this key policy; the operator-owned migration runbook is the du
   run's downstream outlier. Artifact `20260810T061507Z-bank-day-load.json` has SHA-256
   `6A5285C17DADEBFB2FFDCBCCDA1E9FD7C402BBA5FB93A5FA7FFA11BAFA3AB1F2`; exact scoped cleanup is
   `DONE`. The repeat retain gate authorizes one exact-head daily run.
+- Exact-source daily task
+  `eng-task-20260810-182408-lotus-core-certification-make-profile-derived-state-daily` at clean
+  signed `3c46b699f` reached its governed two-hour deadline and wrote complete evidence. All 100,000
+  transactions were durable, but only 74,805 snapshots and 807 of 1,000 portfolio aggregates were
+  complete. Attempts remained `2/2`, repeated valuation jobs and failed outbox rows remained zero,
+  while 13 valuation jobs, 16 aggregation jobs, and 18 pending outbox rows remained. Peak database
+  total/active/idle-in-transaction connections were `63/22/33`; lock waiters/blocked sessions were
+  `4/4`. Artifact `20260810T102534Z-bank-day-load.json` has SHA-256
+  `082C6C9FDDC8A086F128FEAECD33E69056F3D12C8A202A6F88588BB30F79C760`. This is a valid capacity
+  failure, not an infrastructure-kill or correctness verdict, and it withholds the downstream
+  recovery, poison, correction, and restatement gates.
+- Signed `86923a58e` then combined the already post-lock current-epoch suffix delete and replay-window
+  load into one data-modifying CTE. The bounded slice passed 21 focused unit tests and six live
+  PostgreSQL query-shape, rollback, atomicity, same-key serialization, and different-key
+  concurrency tests. Candidate fan-in `20260810T132520Z` reconciled exactly in `146.083s` but
+  included a `55.045s` aggregation-tail outlier; SHA-256
+  `18FFA70174D751E08A0A27E845B9FE990E7D9BDD211AC26775DDEDDB016B03A7`.
+- Same-code repeat `20260810T133059Z` reconciled exactly with attempts `2/2`, zero repeats, final
+  outbox `0/0`, zero governed errors, normal `1.406s` aggregation tail, and `95.906s` drain; its
+  SHA-256 is `7B8530A723EEFC2D5115E5C635EA8B62D62E69A8EE7199B6EF4CB4729EAE3D88`. The combined statement
+  averaged `0.032928s`, but drain regressed `18.60%` and whole-transaction mean regressed `34.12%`
+  against retained parent `20260810T061507Z` (`80.866s`, `0.595510s`). The micro-optimization
+  therefore failed the end-to-end retain gate. Signed `79457e0e4` reverts it forward; do not repeat
+  post-lock delete/load coalescing without fresh workload evidence identifying it as material.
 
 Implementation commits include `23fc6faf3`, `d51adb739`, `ad1ad179d`, `57f8c60e2`,
 `4f05be9a5`, `c230d660a`, `f42f6eaa3`, `d56e14dbf`, `2d49fc8f1`, `70ae16f0f`,
@@ -1159,3 +1183,10 @@ bank-day evidence artifact now requires the aggregate operation instead of the t
 individual operations. This review, executable guards, and workload artifacts are sufficient
 durable truth; no additional repository context, methodology, runbook, or authored-wiki change is
 required.
+The rejected position reset/replay-window coalescing experiment changed only an internal
+post-lock PostgreSQL query shape and was reverted forward after repeated fan-in evidence failed the
+end-to-end retain gate. The restored separate delete and replay-window ports preserve lock order,
+deterministic replay, correction/backdated semantics, calculations and lineage, APIs/OpenAPI,
+events, database schema, partitions, runtime settings, and operator commands. This review and the
+issue evidence are the durable no-repeat record; no migration, repository-context, runbook,
+methodology, or authored-wiki change is required.
