@@ -881,6 +881,33 @@ does not publish this key policy; the operator-owned migration runbook is the du
   `95.809s` versus `80.982s`; all major database stages were slower on that run, so no end-to-end
   improvement is claimed. The required-operation contract now names the combined context method
   and has an explicit regression test. A clean corrected-head fan-in rerun remains mandatory.
+- Corrected-head fan-in task
+  `eng-task-20260810-105813-lotus-core-certification-make-profile-derived-state-fan-in` passed at
+  clean exact SHA `d3a911171` with exact 1,000 transaction, snapshot, position-series, and one
+  portfolio-series reconciliation; valuation attempts `2/2`; zero repeated processing; closed
+  valuation, aggregation, and outbox queues; complete required database-operation evidence; and no
+  governed log errors. Artifact `20260810T025932Z-bank-day-load.json` has SHA-256
+  `32152255C76AF4A5AA1C536F1520EE9A5EF18DD4F4EAA3D37347902CE4BFFA26`. Drain was `95.872s`,
+  effectively identical to the corrected-but-evidence-incomplete `95.809s` run. It remains slower
+  than the unusually fast `80.982s` parent while all major database stages were slower, so only
+  correctness, evidence completeness, and the direct combined-read reduction are claimed. Exact
+  project-scoped cleanup completed and this retain gate authorizes one clean exact-head daily run.
+- The authorized daily task
+  `eng-task-20260810-110402-lotus-core-certification-make-profile-derived-state-daily` was stopped
+  before certification after same-pattern review found that the combined context join no longer
+  trimmed persisted transaction portfolio, security, and excluded transaction identifiers. This
+  would have regressed CR-475 for padded historical rows even though the synthetic fan-in data was
+  normalized. Only the exact owned process tree and Compose project
+  `lotus-integration-derived-state-daily-workload-44fb3627` were stopped; verified remaining owned
+  processes, containers, networks, and volumes were all zero. The interrupted attempt is not
+  capacity evidence.
+- Signed `0859fb0c1` restores trim-normalized persisted history matching and exclusion inside the
+  combined statement. The unit query-shape proof requires all three `trim(...)` predicates, and a
+  live PostgreSQL test persists deliberately padded historical rows, retrieves the prior row from
+  normalized caller IDs, and excludes the padded in-flight transaction. Four focused unit tests,
+  scoped Ruff/format/MyPy, and the live PostgreSQL proof passed. Public contracts, stored source
+  values, case semantics, lock order, calculations, and database schema remain unchanged. A clean
+  exact-head fan-in and daily run are required again.
 
 Implementation commits include `23fc6faf3`, `d51adb739`, `ad1ad179d`, `57f8c60e2`,
 `4f05be9a5`, `c230d660a`, `f42f6eaa3`, `d56e14dbf`, `2d49fc8f1`, `70ae16f0f`,
@@ -1012,3 +1039,7 @@ port and post-lock query shape. It preserves public APIs/OpenAPI, events, databa
 calculation and ordering rules, locks, runtime settings, and operator commands. This review and the
 existing bank-day runbook are sufficient durable truth; neither slice requires a migration,
 event-contract, calculation-methodology, repository-context, or additional authored-wiki change.
+The cost-history normalization correction restores the established CR-475 repository-boundary
+contract for historical padded identifiers. It changes no API/OpenAPI, event, schema, migration,
+calculation, stored source value, case semantic, operator command, repository context, or authored
+wiki truth; this review and the existing CR-475 record are sufficient durable documentation.

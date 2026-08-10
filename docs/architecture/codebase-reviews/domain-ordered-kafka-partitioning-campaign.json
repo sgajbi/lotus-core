@@ -117,11 +117,11 @@
       "tranche_id": "tranche-3-derived-state-certification-closure",
       "branch": "feat/derived-state-certification-closure",
       "base_sha": "6bc937bb173051e0bd4ee9a07ffebd54face0163",
-      "head_sha": "c207fc87f88eb48d87a9a657e4b903c74eedefb4",
+      "head_sha": "0859fb0c13bfd7bdc1306a0f6591c587721cd652",
       "post_merge_main_sha": "pending",
       "required_predecessor_main_sha": "6bc937bb173051e0bd4ee9a07ffebd54face0163",
       "capability_boundary": "Combined derived-state runtime certification, bounded outbox capacity, deterministic workload evidence, stale-source and delayed-readiness suppression, and transaction hot-path round-trip reduction",
-      "commit_count": 37,
+      "commit_count": 40,
       "tranche_decision": "Retain the combined deployable with separately attributable position and portfolio modules, the twelve-partition transaction ceiling, and the atomic two-call readiness claim. Keep PR #931 draft until daily, recovery, poison, duplicate/outbox, correction, restatement, rollback, and downstream proofs pass.",
       "issue_closure_decision": "close_only_after_merge_exact_main_and_wiki_publication",
       "local_evidence": [
@@ -136,11 +136,14 @@
         "Signed c207fc87f88eb48d87a9a657e4b903c74eedefb4 loads the post-lock cost-basis checkpoint and conditional initial history in one statement, reducing the ordinary first-position path from ten PostgreSQL statements to nine without changing lock order, calculation, replay, or unit-of-work semantics",
         "Exact-head fan-in task eng-task-20260810-104948-lotus-core-certification-make-profile-derived-state-fan-in completed exact reconciliation at c207fc87f88eb48d87a9a657e4b903c74eedefb4 but correctly failed because required database-operation evidence still named the two replaced repository methods; artifact 20260810T025158Z-bank-day-load.json has SHA-256 4D152015C4EEA6863A9AB5A61CB2B586DEC77E4C03E039358DDFE3D8D032978D",
         "The combined cost context read averaged 0.045831484 seconds versus 0.049195006 seconds for the former checkpoint plus history reads, a direct 6.84 percent reduction; end-to-end drain regressed from 80.982 to 95.809 seconds while all major database stages were slower, so no end-to-end improvement is claimed and a corrected-head clean fan-in remains mandatory",
+        "Corrected-head fan-in task eng-task-20260810-105813-lotus-core-certification-make-profile-derived-state-fan-in passed at clean exact SHA d3a9111719a5406f7011bd0526bfa9bdcbbe2a9c with exact reconciliation, attempts 2/2, repeats 0, closed jobs/outbox, complete required database-operation evidence, zero governed log errors, 95.872-second drain, and cleanup DONE; artifact 20260810T025932Z-bank-day-load.json has SHA-256 32152255C76AF4A5AA1C536F1520EE9A5EF18DD4F4EAA3D37347902CE4BFFA26",
+        "Authorized daily task eng-task-20260810-110402-lotus-core-certification-make-profile-derived-state-daily was deliberately stopped before certification when same-pattern review found that the combined context join had not preserved CR-475 trim-normalized persisted transaction identifiers; exact owned process and Compose cleanup left zero processes, containers, networks, or volumes and the interrupted attempt is not capacity evidence",
+        "Signed 0859fb0c13bfd7bdc1306a0f6591c587721cd652 restores trim-normalized persisted portfolio, security, and excluded transaction matching in the combined context statement; four focused unit tests, scoped static checks, and a live PostgreSQL padded-history lookup/exclusion proof passed",
         "Focused readiness claim and query-plan proof passed 25 live PostgreSQL integration tests, 2 plan-helper unit tests, 11 atomic-claim unit/live cases, the 122-test transaction-processing contract, scoped MyPy/Ruff/format/diff checks, and docs/wiki/architecture guards"
       ],
       "remote_evidence": [
         "PR #931 exact implementation head 6406033221b36d9c21fbcaee3bfa53ba975cc984 passed Remote Feature Lane 31338004146, PR Merge Gate 31338007004, and Quality Baseline 31338007006",
-        "PR #931 remains draft; documentation head 484d7c0964437edce5029af465838b6011cf2130 has no failed checks and must complete its fresh protected lanes before readiness"
+        "PR #931 remains draft; normalized-history head 0859fb0c13bfd7bdc1306a0f6591c587721cd652 must complete fresh protected lanes and the remaining certification matrix before readiness"
       ]
     }
   ],
