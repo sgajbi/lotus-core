@@ -5,6 +5,8 @@ from datetime import date
 from enum import StrEnum
 from typing import Optional
 
+VALUATION_CLAIM_TOKEN_HEADER = "valuation_claim_token"
+
 
 class ValuationJobTransitionOutcome(StrEnum):
     """Classify the result of a processing-owned valuation-job transition."""

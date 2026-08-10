@@ -1548,6 +1548,58 @@ async def test_job_status_transition_distinguishes_terminal_owner_from_stale_del
     assert job.attempt_count == 2
 
 
+async def test_reclaimed_valuation_claim_rejects_late_prior_owner(
+    session_factory: async_sessionmaker,
+    clean_db,
+) -> None:
+    scope = {
+        "portfolio_id": "P-CLAIM-GENERATION",
+        "security_id": "S-CLAIM-GENERATION",
+        "valuation_date": date(2025, 8, 12),
+        "epoch": 2,
+    }
+    async with session_factory() as first_session:
+        first_session.add(PortfolioValuationJob(**scope, status="PENDING"))
+        await first_session.commit()
+        first_repo = ValuationRepository(first_session)
+        first_claim = (await first_repo.find_and_claim_eligible_jobs(1))[0]
+        first_token = first_claim.valuation_claim_token
+        assert first_token is not None
+        await first_session.commit()
+        await first_session.execute(
+            update(PortfolioValuationJob)
+            .where(PortfolioValuationJob.id == first_claim.id)
+            .values(updated_at=datetime(2000, 1, 1, tzinfo=timezone.utc))
+        )
+        await first_session.commit()
+
+        async with session_factory() as second_session:
+            second_repo = ValuationRepository(second_session)
+            assert await second_repo.find_and_reset_stale_jobs(1, max_attempts=3) == 1
+            await second_session.commit()
+            second_claim = (await second_repo.find_and_claim_eligible_jobs(1))[0]
+            second_token = second_claim.valuation_claim_token
+            assert second_token is not None
+            assert second_token != first_token
+            await second_session.commit()
+
+            stale_outcome = await first_repo.update_job_status(
+                **scope,
+                status="COMPLETE",
+                expected_claim_token=first_token,
+            )
+            await first_session.commit()
+            assert stale_outcome is ValuationJobTransitionOutcome.NOT_OWNED
+
+            applied_outcome = await second_repo.update_job_status(
+                **scope,
+                status="COMPLETE",
+                expected_claim_token=second_token,
+            )
+            await second_session.commit()
+            assert applied_outcome is ValuationJobTransitionOutcome.TERMINAL_APPLIED
+
+
 async def test_completed_job_requires_explicit_source_correction_rearm(
     async_db_session: AsyncSession,
     clean_db,

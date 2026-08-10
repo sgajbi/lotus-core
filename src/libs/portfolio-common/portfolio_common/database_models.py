@@ -3959,12 +3959,18 @@ class PortfolioValuationJob(Base):
     failure_reason = Column(Text, nullable=True)
     attempt_count = Column(Integer, nullable=False, default=0, server_default="0")
     claimed_readiness_outbox_id = Column(BigInteger, nullable=False, default=0, server_default="0")
+    valuation_claim_token = Column(String(32), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
     __table_args__ = (
+        CheckConstraint(
+            "valuation_claim_token IS NULL OR "
+            "valuation_claim_token ~ '^[0-9a-f]{32}$'",
+            name="ck_portfolio_valuation_jobs_claim_token",
+        ),
         UniqueConstraint(
             "portfolio_id",
             "security_id",

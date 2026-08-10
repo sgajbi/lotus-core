@@ -33,12 +33,16 @@ from portfolio_common.events import (
 from portfolio_common.idempotency_repository import IdempotencyRepository
 from portfolio_common.logging_utils import correlation_id_var
 from portfolio_common.outbox_repository import OutboxRepository
-from portfolio_common.valuation_job_contracts import ValuationJobTransitionOutcome
+from portfolio_common.valuation_job_contracts import (
+    VALUATION_CLAIM_TOKEN_HEADER,
+    ValuationJobTransitionOutcome,
+)
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.calculators.position_valuation_calculator.app.consumers.valuation_consumer import (  # noqa: E501
     ValuationConsumer,
+    _valuation_claim_token,
 )
 from src.services.calculators.position_valuation_calculator.app.ports import (
     ResolvedRuntimeValuationPolicy,
@@ -90,7 +94,10 @@ def mock_kafka_message(mock_event: PortfolioValuationRequiredEvent) -> MagicMock
     mock_msg.partition.return_value = 0
     mock_msg.offset.return_value = 1
     mock_msg.error.return_value = None
-    mock_msg.headers.return_value = [("correlation_id", b"test-corr-id-123")]
+    mock_msg.headers.return_value = [
+        ("correlation_id", b"test-corr-id-123"),
+        (VALUATION_CLAIM_TOKEN_HEADER, b"a" * 32),
+    ]
     return mock_msg
 
 
@@ -212,6 +219,7 @@ async def test_valuation_processor_executes_success_path_without_kafka_consumer(
             mock_event,
             "valuation.job.requested-0-91",
             "processor-corr-id",
+            claim_token="a" * 32,
         )
 
     mock_idempotency_repo.claim_event_processing.assert_awaited_once_with(
@@ -221,6 +229,10 @@ async def test_valuation_processor_executes_success_path_without_kafka_consumer(
         "processor-corr-id",
     )
     mock_valuation_repo.update_job_status.assert_awaited_once()
+    assert (
+        mock_valuation_repo.update_job_status.await_args.kwargs["expected_claim_token"]
+        == "a" * 32
+    )
     mock_outbox_repo.create_outbox_event.assert_awaited_once()
     assert mock_outbox_repo.create_outbox_event.call_args.kwargs["partition_key"].value == (
         f"{mock_event.portfolio_id}|{mock_event.security_id}"
@@ -232,6 +244,31 @@ async def test_valuation_processor_executes_success_path_without_kafka_consumer(
     mock_dependencies["market_price_source_fact_resolver"].resolve_many.assert_not_awaited()
     mock_dependencies["valuation_receipt_repo"].upsert.assert_awaited_once()
     authority_path_metric.labels.assert_called_once_with("legacy", "unscoped_portfolio")
+
+
+@pytest.mark.parametrize(
+    "headers",
+    [
+        [(VALUATION_CLAIM_TOKEN_HEADER, b"not-a-token")],
+        [
+            (VALUATION_CLAIM_TOKEN_HEADER, b"a" * 32),
+            (VALUATION_CLAIM_TOKEN_HEADER, b"b" * 32),
+        ],
+    ],
+)
+async def test_valuation_claim_token_rejects_malformed_or_duplicate_authority(headers) -> None:
+    message = MagicMock()
+    message.headers.return_value = headers
+
+    with pytest.raises(ValueError):
+        _valuation_claim_token(message)
+
+
+async def test_valuation_claim_token_preserves_legacy_headerless_dispatch() -> None:
+    message = MagicMock()
+    message.headers.return_value = [("correlation_id", b"legacy")]
+
+    assert _valuation_claim_token(message) is None
 
 
 @pytest.mark.parametrize(
@@ -458,6 +495,7 @@ async def test_scoped_portfolio_fails_closed_when_policy_authority_is_missing(
         mock_event.epoch,
         "FAILED",
         failure_reason="no exact authority",
+        expected_claim_token=None,
     )
     failed_snapshot = repo.upsert_daily_snapshot.await_args.args[0]
     assert failed_snapshot.valuation_status == "FAILED"
