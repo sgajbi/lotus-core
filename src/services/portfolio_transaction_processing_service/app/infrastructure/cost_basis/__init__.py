@@ -11,6 +11,7 @@ from .corporate_action_reconciliation_repository import (
 )
 from .effect_staging import TransactionalCostProcessingEffectStager
 from .fx_rate_repository import SqlAlchemyCostBasisFxRateRepository
+from .initial_opening_state_repository import SqlAlchemyInitialOpeningCostStateRepository
 from .lot_basis_transfer_repository import (
     ConflictingLotBasisTransferReceiptError,
     CorruptLotBasisTransferReceiptError,
@@ -47,6 +48,7 @@ __all__ = [
     "PROMETHEUS_CORPORATE_ACTION_RECONCILIATION_OBSERVER",
     "PrometheusCorporateActionReconciliationObserver",
     "SqlAlchemyCostBasisFxRateRepository",
+    "SqlAlchemyInitialOpeningCostStateRepository",
     "SqlAlchemyCostBasisLotRepository",
     "SqlAlchemyCostBasisLotBasisTransferRepository",
     "SqlAlchemyCostBasisLotDisposalRepository",

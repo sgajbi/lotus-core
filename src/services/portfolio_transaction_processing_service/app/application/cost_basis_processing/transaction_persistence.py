@@ -5,6 +5,7 @@ from decimal import Decimal
 
 from ...domain.cost_basis import (
     LOT_OPENING_BEHAVIORS,
+    CostBasisProcessingCheckpoint,
     CostBasisTransaction,
     transaction_lot_behavior,
 )
@@ -17,6 +18,7 @@ from ...ports import (
     CostBasisPersistenceStage,
     CostBasisPersistenceStatus,
     CostBasisTransactionStatePort,
+    InitialOpeningCostStatePort,
 )
 from .persistence_scope import affected_transaction_suffix
 
@@ -28,6 +30,8 @@ async def persist_cost_basis_transactions(
     transactions: CostBasisTransactionStatePort,
     lot_states: CostBasisLotStatePort,
     income_offsets: AccruedIncomeOffsetStatePort,
+    initial_opening_state: InitialOpeningCostStatePort | None = None,
+    initial_opening_checkpoint: CostBasisProcessingCheckpoint | None = None,
     observer: CostBasisPersistenceObserver | None = None,
 ) -> tuple[BookedTransaction, ...]:
     """Persist the affected timeline suffix and return newly processed transactions."""
@@ -44,6 +48,12 @@ async def persist_cost_basis_transactions(
             transactions=transactions,
             lot_states=lot_states,
             income_offsets=income_offsets,
+            initial_opening_state=initial_opening_state,
+            initial_opening_checkpoint=(
+                initial_opening_checkpoint
+                if transaction.transaction_id in incoming_transaction_ids
+                else None
+            ),
             observer=persistence_observer,
         )
         if transaction.transaction_id in incoming_transaction_ids:
@@ -57,6 +67,8 @@ async def _persist_cost_basis_transaction(
     transactions: CostBasisTransactionStatePort,
     lot_states: CostBasisLotStatePort,
     income_offsets: AccruedIncomeOffsetStatePort,
+    initial_opening_state: InitialOpeningCostStatePort | None,
+    initial_opening_checkpoint: CostBasisProcessingCheckpoint | None,
     observer: CostBasisPersistenceObserver,
 ) -> BookedTransaction:
     _observe(
@@ -78,7 +90,14 @@ async def _persist_cost_basis_transaction(
         status=CostBasisPersistenceStatus.SUCCESS,
     )
 
-    if transaction_lot_behavior(transaction.transaction_type) in LOT_OPENING_BEHAVIORS:
+    if initial_opening_checkpoint is not None:
+        await _persist_initial_opening_state(
+            transaction=transaction,
+            checkpoint=initial_opening_checkpoint,
+            state=_require_initial_opening_state(initial_opening_state),
+            observer=observer,
+        )
+    elif transaction_lot_behavior(transaction.transaction_type) in LOT_OPENING_BEHAVIORS:
         _observe(
             observer,
             transaction=transaction,
@@ -93,7 +112,7 @@ async def _persist_cost_basis_transaction(
             status=CostBasisPersistenceStatus.SUCCESS,
         )
 
-    if transaction.transaction_type == "BUY":
+    if transaction.transaction_type == "BUY" and initial_opening_checkpoint is None:
         _observe(
             observer,
             transaction=transaction,
@@ -114,6 +133,41 @@ async def _persist_cost_basis_transaction(
         else Decimal(0)
     )
     return replace(persisted, trade_fee=trade_fee)
+
+
+async def _persist_initial_opening_state(
+    *,
+    transaction: CostBasisTransaction,
+    checkpoint: CostBasisProcessingCheckpoint,
+    state: InitialOpeningCostStatePort,
+    observer: CostBasisPersistenceObserver,
+) -> None:
+    if transaction.transaction_type != "BUY":
+        raise ValueError("Initial opening cost state requires a BUY transaction")
+    for stage in (
+        CostBasisPersistenceStage.OPEN_LOT,
+        CostBasisPersistenceStage.ACCRUED_INCOME_OFFSET,
+    ):
+        _observe(
+            observer,
+            transaction=transaction,
+            stage=stage,
+            status=CostBasisPersistenceStatus.ATTEMPT,
+        )
+    await state.persist_initial_opening_cost_state(
+        transaction=transaction,
+        checkpoint=checkpoint,
+    )
+    for stage in (
+        CostBasisPersistenceStage.OPEN_LOT,
+        CostBasisPersistenceStage.ACCRUED_INCOME_OFFSET,
+    ):
+        _observe(
+            observer,
+            transaction=transaction,
+            stage=stage,
+            status=CostBasisPersistenceStatus.SUCCESS,
+        )
 
 
 def _observe(
@@ -137,3 +191,11 @@ class _NullCostBasisPersistenceObserver:
 
     def observe(self, observation: CostBasisPersistenceObservation) -> None:
         del observation
+
+
+def _require_initial_opening_state(
+    state: InitialOpeningCostStatePort | None,
+) -> InitialOpeningCostStatePort:
+    if state is None:
+        raise ValueError("Initial opening cost-state persistence port is required")
+    return state

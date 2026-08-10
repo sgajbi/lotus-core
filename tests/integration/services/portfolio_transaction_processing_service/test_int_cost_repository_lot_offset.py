@@ -1,9 +1,11 @@
+from dataclasses import replace
 from datetime import date, datetime
 from decimal import Decimal
 
 import pytest
 from portfolio_common.database_models import (
     AccruedIncomeOffsetState,
+    CostBasisProcessingState,
     Portfolio,
     PositionLotState,
     TransactionCost,
@@ -17,11 +19,12 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
-    CostBasisTransaction as EngineTransaction,
-)
-from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
+    CostBasisProcessingCheckpoint,
     Fees,
     OpenLotState,
+)
+from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
+    CostBasisTransaction as EngineTransaction,
 )
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis.state_lineage import (  # noqa: E501
     CostBasisStateTransitionEvidence,
@@ -29,6 +32,7 @@ from src.services.portfolio_transaction_processing_service.app.domain.cost_basis
 from src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis import (
     SqlAlchemyCostBasisLotRepository,
     SqlAlchemyCostBasisTransactionRepository,
+    SqlAlchemyInitialOpeningCostStateRepository,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure.income import (
     SqlAlchemyAccruedIncomeOffsetRepository,
@@ -253,6 +257,141 @@ async def test_cost_repository_persists_buy_lot_and_offset_state(
     assert offset.accrued_interest_paid_local == Decimal("125")
     assert offset.remaining_offset_local == Decimal("125")
     assert offset.linked_transaction_group_id == "LTG-2026-777"
+
+
+async def test_initial_opening_aggregate_is_idempotent_and_updates_all_source_state(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    portfolio_id, transaction_id = await _persist_cost_state_parent(
+        async_db_session,
+        suffix="ATOMIC_INITIAL",
+    )
+    transaction = EngineTransaction(
+        transaction_id=transaction_id,
+        portfolio_id=portfolio_id,
+        instrument_id="BOND_ATOMIC_INITIAL",
+        security_id="BOND_ATOMIC_INITIAL",
+        transaction_type="BUY",
+        transaction_date=datetime(2026, 4, 10, 10, 0),
+        quantity=Decimal("100"),
+        gross_transaction_amount=Decimal("9800"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+        net_cost_local=Decimal("9840"),
+        net_cost=Decimal("9840"),
+        accrued_interest=Decimal("125"),
+    )
+    repository = SqlAlchemyInitialOpeningCostStateRepository(async_db_session)
+    checkpoint = CostBasisProcessingCheckpoint.from_transaction(
+        transaction,
+        cost_basis_method="FIFO",
+    )
+
+    await repository.persist_initial_opening_cost_state(
+        transaction=transaction,
+        checkpoint=checkpoint,
+    )
+    await repository.persist_initial_opening_cost_state(
+        transaction=transaction,
+        checkpoint=checkpoint,
+    )
+    changed = replace(
+        transaction,
+        net_cost_local=Decimal("9850"),
+        net_cost=Decimal("9850"),
+        accrued_interest=Decimal("130"),
+    )
+    await repository.persist_initial_opening_cost_state(
+        transaction=changed,
+        checkpoint=checkpoint,
+    )
+    await async_db_session.commit()
+
+    lot = (
+        await async_db_session.execute(
+            select(PositionLotState).where(PositionLotState.source_transaction_id == transaction_id)
+        )
+    ).scalar_one()
+    offset = (
+        await async_db_session.execute(
+            select(AccruedIncomeOffsetState).where(
+                AccruedIncomeOffsetState.source_transaction_id == transaction_id
+            )
+        )
+    ).scalar_one()
+    processing_state = (
+        await async_db_session.execute(
+            select(CostBasisProcessingState).where(
+                CostBasisProcessingState.portfolio_id == portfolio_id,
+                CostBasisProcessingState.security_id == transaction.security_id,
+            )
+        )
+    ).scalar_one()
+    assert lot.lot_cost_local == Decimal("9850")
+    assert lot.accrued_interest_paid_local == Decimal("130")
+    assert offset.remaining_offset_local == Decimal("130")
+    assert processing_state.latest_transaction_id == transaction_id
+
+
+async def test_initial_opening_aggregate_rolls_back_without_partial_state(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    portfolio_id, transaction_id = await _persist_cost_state_parent(
+        async_db_session,
+        suffix="ATOMIC_ROLLBACK",
+    )
+    transaction = EngineTransaction(
+        transaction_id=transaction_id,
+        portfolio_id=portfolio_id,
+        instrument_id="BOND_ATOMIC_ROLLBACK",
+        security_id="BOND_ATOMIC_ROLLBACK",
+        transaction_type="BUY",
+        transaction_date=datetime(2026, 4, 10, 10, 0),
+        quantity=Decimal("10"),
+        gross_transaction_amount=Decimal("980"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+        net_cost_local=Decimal("984"),
+        net_cost=Decimal("984"),
+        accrued_interest=Decimal("12"),
+    )
+    await SqlAlchemyInitialOpeningCostStateRepository(
+        async_db_session
+    ).persist_initial_opening_cost_state(
+        transaction=transaction,
+        checkpoint=CostBasisProcessingCheckpoint.from_transaction(
+            transaction,
+            cost_basis_method="FIFO",
+        ),
+    )
+    await async_db_session.rollback()
+
+    assert (
+        await async_db_session.scalar(
+            select(PositionLotState.id).where(
+                PositionLotState.source_transaction_id == transaction_id
+            )
+        )
+        is None
+    )
+    assert (
+        await async_db_session.scalar(
+            select(AccruedIncomeOffsetState.id).where(
+                AccruedIncomeOffsetState.source_transaction_id == transaction_id
+            )
+        )
+        is None
+    )
+    assert (
+        await async_db_session.scalar(
+            select(CostBasisProcessingState.portfolio_id).where(
+                CostBasisProcessingState.portfolio_id == portfolio_id
+            )
+        )
+        is None
+    )
 
 
 async def test_cost_repository_updates_current_lot_quantity_and_cost_from_engine_state(

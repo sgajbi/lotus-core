@@ -42,6 +42,7 @@ from ..cost_basis import (
     SqlAlchemyCostBasisProcessingStateRepository,
     SqlAlchemyCostBasisReferenceDataRepository,
     SqlAlchemyCostBasisTransactionRepository,
+    SqlAlchemyInitialOpeningCostStateRepository,
     TransactionalCostProcessingEffectStager,
 )
 from ..fixed_income_book_cost import SqlAlchemyLotAmortizedCostProfileRepository
@@ -133,6 +134,7 @@ class SqlAlchemyTransactionProcessingUnitOfWork:
             lot_states=SqlAlchemyCostBasisLotRepository(session),
             amortized_cost_profiles=SqlAlchemyLotAmortizedCostProfileRepository(session),
             income_offsets=SqlAlchemyAccruedIncomeOffsetRepository(session),
+            initial_opening_state=SqlAlchemyInitialOpeningCostStateRepository(session),
             reference_data=SqlAlchemyCostBasisReferenceDataRepository(session),
             fx_rates=SqlAlchemyCostBasisFxRateRepository(session),
             processing_state=SqlAlchemyCostBasisProcessingStateRepository(session),

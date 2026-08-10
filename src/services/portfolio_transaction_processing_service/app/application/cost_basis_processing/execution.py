@@ -33,6 +33,7 @@ from ...ports import (
     CostBasisTransactionStatePort,
     CostProcessingEffectStagingPort,
     CostProcessingResult,
+    InitialOpeningCostStatePort,
     LotAmortizedCostProfilePort,
 )
 from ..foreign_exchange_processing import book_foreign_exchange_transaction
@@ -41,7 +42,7 @@ from .basis_transfer_persistence import persist_current_lot_basis_transfers
 from .calculation import CostBasisCalculationCoordinator
 from .disposal_persistence import persist_current_lot_disposals
 from .effect_coordination import coordinate_cost_processing_effects
-from .lot_state_persistence import persist_open_lot_state
+from .lot_state_persistence import OpenLotPersistenceScope, persist_open_lot_state
 from .preparation import CostProcessingRoute, PreparedCostTransaction
 from .transaction_persistence import persist_cost_basis_transactions
 
@@ -77,6 +78,7 @@ class PreparedCostProcessingUseCase:
         lot_states: CostBasisLotStatePort,
         amortized_cost_profiles: LotAmortizedCostProfilePort,
         income_offsets: AccruedIncomeOffsetStatePort,
+        initial_opening_state: InitialOpeningCostStatePort,
         fx_rates: CostBasisFxRatePort,
         processing_state: CostBasisProcessingStatePort,
         reconciliation_repository: CorporateActionReconciliationRepository,
@@ -103,6 +105,7 @@ class PreparedCostProcessingUseCase:
                 lot_states=lot_states,
                 amortized_cost_profiles=amortized_cost_profiles,
                 income_offsets=income_offsets,
+                initial_opening_state=initial_opening_state,
                 fx_rates=fx_rates,
                 processing_state=processing_state,
             )
@@ -150,6 +153,7 @@ class PreparedCostProcessingUseCase:
         lot_states: CostBasisLotStatePort,
         amortized_cost_profiles: LotAmortizedCostProfilePort,
         income_offsets: AccruedIncomeOffsetStatePort,
+        initial_opening_state: InitialOpeningCostStatePort,
         fx_rates: CostBasisFxRatePort,
         processing_state: CostBasisProcessingStatePort,
     ) -> tuple[BookedTransaction, ...]:
@@ -191,12 +195,22 @@ class PreparedCostProcessingUseCase:
                 cost_basis_method=prepared.cost_basis_method,
                 profiles=amortized_cost_profiles,
             )
+        initial_opening_checkpoint = (
+            _processing_checkpoint(
+                processed=calculation.processed,
+                cost_basis_method=prepared.cost_basis_method,
+            )
+            if calculation.open_lot_persistence_scope is OpenLotPersistenceScope.INITIAL_OPENING_LOT
+            else None
+        )
         persisted_transactions = await persist_cost_basis_transactions(
             processed=calculation.processed,
             incoming_transaction_ids={transaction.transaction_id},
             transactions=transaction_state,
             lot_states=lot_states,
             income_offsets=income_offsets,
+            initial_opening_state=initial_opening_state,
+            initial_opening_checkpoint=initial_opening_checkpoint,
             observer=self._persistence_observer,
         )
         await persist_current_lot_disposals(
@@ -225,11 +239,12 @@ class PreparedCostProcessingUseCase:
             average_cost_pool_transition=calculation.average_cost_pool_transition,
             processed=calculation.processed,
         )
-        await _persist_processing_checkpoint(
-            processed=calculation.processed,
-            cost_basis_method=prepared.cost_basis_method,
-            processing_state=processing_state,
-        )
+        if initial_opening_checkpoint is None:
+            await _persist_processing_checkpoint(
+                processed=calculation.processed,
+                cost_basis_method=prepared.cost_basis_method,
+                processing_state=processing_state,
+            )
         return tuple(persisted_transactions)
 
 
@@ -259,12 +274,20 @@ async def _persist_processing_checkpoint(
     cost_basis_method: CostBasisMethod,
     processing_state: CostBasisProcessingStatePort,
 ) -> None:
-    latest_transaction = max(processed, key=transaction_order_key)
     await processing_state.upsert_cost_basis_processing_checkpoint(
-        CostBasisProcessingCheckpoint.from_transaction(
-            latest_transaction,
-            cost_basis_method=cost_basis_method,
-        )
+        _processing_checkpoint(processed=processed, cost_basis_method=cost_basis_method)
+    )
+
+
+def _processing_checkpoint(
+    *,
+    processed: Sequence[CostBasisTransaction],
+    cost_basis_method: CostBasisMethod,
+) -> CostBasisProcessingCheckpoint:
+    latest_transaction = max(processed, key=transaction_order_key)
+    return CostBasisProcessingCheckpoint.from_transaction(
+        latest_transaction,
+        cost_basis_method=cost_basis_method,
     )
 
 
