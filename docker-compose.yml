@@ -338,6 +338,13 @@ services:
       <<: *shared_python_env
       KAFKA_BOOTSTRAP_SERVERS: kafka:9093
       DATABASE_URL: ${DATABASE_URL:-postgresql://user:password@postgres:5432/portfolio_db}
+      LOTUS_GIT_COMMIT_SHA: ${LOTUS_GIT_COMMIT_SHA:-unknown}
+      LOTUS_GIT_BRANCH: ${LOTUS_GIT_BRANCH:-unknown}
+      LOTUS_BUILD_TIMESTAMP: ${LOTUS_BUILD_TIMESTAMP:-unknown}
+      LOTUS_REPO_URL: ${LOTUS_REPO_URL:-unknown}
+      LOTUS_IMAGE_VERSION: ${LOTUS_IMAGE_VERSION:-unknown}
+      LOTUS_IMAGE_DIGEST: ${LOTUS_IMAGE_DIGEST:-unknown}
+      LOTUS_CI_RUN_ID: ${LOTUS_CI_RUN_ID:-unknown}
     depends_on:
       kafka-topic-creator:
         condition: service_completed_successfully

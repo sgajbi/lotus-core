@@ -223,3 +223,14 @@ def test_app_local_stack_uses_one_atomic_transaction_processing_runtime() -> Non
         "kafka-topic-creator": {"condition": "service_completed_successfully"},
         "migration-runner": {"condition": "service_completed_successfully"},
     }
+    expected_release_metadata = {
+        "LOTUS_GIT_COMMIT_SHA": "${LOTUS_GIT_COMMIT_SHA:-unknown}",
+        "LOTUS_GIT_BRANCH": "${LOTUS_GIT_BRANCH:-unknown}",
+        "LOTUS_BUILD_TIMESTAMP": "${LOTUS_BUILD_TIMESTAMP:-unknown}",
+        "LOTUS_REPO_URL": "${LOTUS_REPO_URL:-unknown}",
+        "LOTUS_IMAGE_VERSION": "${LOTUS_IMAGE_VERSION:-unknown}",
+        "LOTUS_IMAGE_DIGEST": "${LOTUS_IMAGE_DIGEST:-unknown}",
+        "LOTUS_CI_RUN_ID": "${LOTUS_CI_RUN_ID:-unknown}",
+    }
+    for env_name, expected_value in expected_release_metadata.items():
+        assert target["environment"][env_name] == expected_value

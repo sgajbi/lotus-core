@@ -42,6 +42,7 @@ from scripts.operations.transaction_processing_release_rehearsal import CanaryRe
 
 TRANSACTION_PROCESSING_GROUP = "portfolio_transaction_processing_group"
 TRANSACTION_IMAGE_ENV = "LOTUS_PORTFOLIO_TRANSACTION_PROCESSING_IMAGE"
+IMAGE_DIGEST_ENV = "LOTUS_IMAGE_DIGEST"
 COMPOSE_SERVICE = "portfolio_transaction_processing_service"
 
 
@@ -180,6 +181,11 @@ class LocalComposeReleaseRuntime:
         self._initialize_connections()
         runtime_payload = self._runtime_payload(release)
         baseline_canary = self._run_fixed_canary(stage="baseline")
+        baseline_findings = baseline_canary.effects.findings()
+        if baseline_findings:
+            raise ReleaseEvidenceError(
+                "baseline financial effects failed: " + "; ".join(baseline_findings)
+            )
         self._stop_transaction_service()
         offsets = self._wait_for_drained_offsets()
         return {
@@ -293,7 +299,10 @@ class LocalComposeReleaseRuntime:
         }
 
     def _set_release_image(self, release: ReleaseIdentity) -> None:
-        self._managed_run.runtime.values[TRANSACTION_IMAGE_ENV] = release.digest_image_ref
+        runtime_values = self._managed_run.runtime.values
+        runtime_values.update(release.runtime_env)
+        runtime_values[IMAGE_DIGEST_ENV] = release.image_digest
+        runtime_values[TRANSACTION_IMAGE_ENV] = release.digest_image_ref
 
     def _wait_for_migrations(self) -> None:
         from tests.test_support.docker_stack import wait_for_migration_runner

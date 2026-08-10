@@ -10,6 +10,7 @@ import pytest
 
 from scripts.operations.transaction_processing_release_compose_runtime import (
     COMPOSE_SERVICE,
+    IMAGE_DIGEST_ENV,
     TRANSACTION_IMAGE_ENV,
     LocalComposeReleaseConfig,
     LocalComposeReleaseRuntime,
@@ -276,7 +277,11 @@ def test_release_image_override_cannot_change_project_authority(tmp_path: Path) 
 
     runtime._set_release_image(_release())
 
-    assert managed.runtime.values == {TRANSACTION_IMAGE_ENV: DIGEST_REF}
+    assert managed.runtime.values == {
+        "LOTUS_GIT_COMMIT_SHA": "a" * 40,
+        IMAGE_DIGEST_ENV: DIGEST,
+        TRANSACTION_IMAGE_ENV: DIGEST_REF,
+    }
     assert managed.runtime.endpoints.compose_project_name == PROJECT
 
 
