@@ -53,6 +53,7 @@ class CorporateActionReconciliationFindingType(StrEnum):
     BASIS_MISMATCH = "ca_bundle_a_basis_mismatch"
     INSUFFICIENT_CASH_BASIS = "ca_bundle_a_insufficient_cash_basis"
     INSUFFICIENT_LEGS = "ca_bundle_a_insufficient_legs"
+    INVALID_BASIS_ALLOCATION = "ca_bundle_a_invalid_basis_allocation"
     MISSING_DEPENDENCY = "ca_bundle_a_missing_dependency"
     LEG_LINKAGE_MISMATCH = "ca_linked_leg_mismatch"
     UNSUPPORTED_ADJUSTMENT = "ca_bundle_a_unsupported_adjustment"
@@ -64,6 +65,7 @@ class CorporateActionReconciliationReasonCode(StrEnum):
     BASIS_MISMATCH = "CA_BUNDLE_A_BASIS_MISMATCH"
     INSUFFICIENT_CASH_BASIS = "CA_BUNDLE_A_INSUFFICIENT_CASH_BASIS"
     INSUFFICIENT_LEGS = "CA_BUNDLE_A_INSUFFICIENT_LEGS"
+    INVALID_BASIS_ALLOCATION = "CA_BUNDLE_A_INVALID_BASIS_ALLOCATION"
     MISSING_DEPENDENCY = "CA_BUNDLE_A_MISSING_DEPENDENCY"
     LEG_LINKAGE_MISMATCH = "CA_LINKED_LEG_MISMATCH"
     UNSUPPORTED_ADJUSTMENT = "CA_BUNDLE_A_UNSUPPORTED_BASIS_ADJUSTMENT"
@@ -78,6 +80,9 @@ _REPAIR_RECOMMENDATIONS = {
     ),
     CorporateActionReconciliationFindingType.INSUFFICIENT_LEGS: (
         "COMPLETE_CORPORATE_ACTION_LEG_LINKAGE"
+    ),
+    CorporateActionReconciliationFindingType.INVALID_BASIS_ALLOCATION: (
+        "REPAIR_FRACTIONAL_BASIS_ALLOCATION"
     ),
     CorporateActionReconciliationFindingType.MISSING_DEPENDENCY: (
         "RESTORE_CORPORATE_ACTION_DEPENDENCY"
@@ -524,6 +529,26 @@ def _findings(
                     "cash_consideration_count": reconciliation.cash_consideration_count,
                     "missing_cash_basis_count": reconciliation.missing_cash_basis_count,
                     "cash_basis_local": str(reconciliation.cash_basis_local),
+                },
+                reconciliation_type=reconciliation_type,
+            )
+        )
+    elif status is CorporateActionBasisReconciliationStatus.INVALID_BASIS_ALLOCATION:
+        findings.append(
+            _finding(
+                run_id=run_id,
+                evidence_signature=evidence_signature,
+                finding_type=CorporateActionReconciliationFindingType.INVALID_BASIS_ALLOCATION,
+                reason_code=CorporateActionReconciliationReasonCode.INVALID_BASIS_ALLOCATION,
+                processed_transaction=processed_transaction,
+                linked_transaction_group_id=linked_transaction_group_id,
+                parent_event_reference=parent_event_reference,
+                reconciliation=reconciliation,
+                expected_value={"target_basis_retained_local": ">= 0"},
+                observed_value={
+                    "target_basis_in_local": str(reconciliation.target_basis_in_local),
+                    "fractional_basis_local": str(reconciliation.fractional_basis_local),
+                    "target_basis_retained_local": str(reconciliation.target_basis_retained_local),
                 },
                 reconciliation_type=reconciliation_type,
             )

@@ -97,6 +97,8 @@ def test_parent_graph_migration_is_ordered_constrained_and_reversible(
         "corporate-action READY evidence does not match latest child observations",
         "unexpected_observation_count",
         "> manifest_opened_observation_sequence",
+        "predecessor_manifest_id",
+        "predecessor_node.manifest_id = predecessor_manifest_id",
     ):
         assert invariant in sql
 

@@ -28,6 +28,7 @@ class CorporateActionBasisReconciliationStatus(StrEnum):
     BASIS_MISMATCH = "basis_mismatch"
     INSUFFICIENT_CASH_BASIS = "insufficient_cash_basis"
     INSUFFICIENT_LEGS = "insufficient_legs"
+    INVALID_BASIS_ALLOCATION = "invalid_basis_allocation"
     UNSUPPORTED_ADJUSTMENT = "unsupported_adjustment"
 
 
@@ -108,7 +109,12 @@ def reconcile_corporate_action_basis(
         - totals.source_basis_out_local
     )
     return CorporateActionBasisReconciliation(
-        status=_status(totals, net_basis_delta_local, basis_tolerance),
+        status=_status(
+            totals,
+            target_basis_retained_local,
+            net_basis_delta_local,
+            basis_tolerance,
+        ),
         source_leg_count=totals.source_leg_count,
         target_leg_count=totals.target_leg_count,
         cash_consideration_count=totals.cash_consideration_count,
@@ -375,14 +381,15 @@ def _is_generated_cash_settlement_adjustment(transaction: BookedTransaction) -> 
         transaction.originating_transaction_type
     )
     adjustment_reason = str(transaction.adjustment_reason or "").strip().upper()
-    return originating_type in {"CASH_IN_LIEU", "CASH_CONSIDERATION"} and adjustment_reason in {
-        "CASH_IN_LIEU_SETTLEMENT",
-        "CASH_CONSIDERATION_SETTLEMENT",
+    return (originating_type, adjustment_reason) in {
+        ("CASH_IN_LIEU", "CASH_IN_LIEU_SETTLEMENT"),
+        ("CASH_CONSIDERATION", "CASH_CONSIDERATION_SETTLEMENT"),
     }
 
 
 def _status(
     totals: _BasisTotals,
+    target_basis_retained_local: Decimal,
     net_delta: Decimal,
     tolerance: Decimal,
 ) -> CorporateActionBasisReconciliationStatus:
@@ -390,6 +397,8 @@ def _status(
         return CorporateActionBasisReconciliationStatus.INSUFFICIENT_LEGS
     if totals.missing_cash_basis_count > 0:
         return CorporateActionBasisReconciliationStatus.INSUFFICIENT_CASH_BASIS
+    if target_basis_retained_local < 0:
+        return CorporateActionBasisReconciliationStatus.INVALID_BASIS_ALLOCATION
     if totals.unsupported_adjustment_count > 0:
         return CorporateActionBasisReconciliationStatus.UNSUPPORTED_ADJUSTMENT
     if abs(net_delta) <= tolerance:

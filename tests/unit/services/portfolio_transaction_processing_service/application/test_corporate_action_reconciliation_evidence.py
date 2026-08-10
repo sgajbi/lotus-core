@@ -185,6 +185,41 @@ def test_ambiguous_adjustment_emits_stable_unsupported_reason() -> None:
     )
 
 
+def test_negative_retained_target_basis_emits_stable_allocation_finding() -> None:
+    evidence = _evidence(
+        _transaction(
+            transaction_id="CA-OUT-01",
+            transaction_type="DEMERGER_OUT",
+            net_cost_local="-100",
+        ),
+        _transaction(
+            transaction_id="CA-IN-01",
+            transaction_type="DEMERGER_IN",
+            net_cost_local="100",
+        ),
+        _transaction(
+            transaction_id="CA-CIL-01",
+            transaction_type="CASH_IN_LIEU",
+            net_cost_local="-110",
+            allocated_cost_basis_local="110",
+        ),
+    )
+
+    assert evidence.run.summary["reconciliation_status"] == "invalid_basis_allocation"
+    assert evidence.run.summary["target_basis_retained_local"] == "-10"
+    assert len(evidence.findings) == 1
+    finding = evidence.findings[0]
+    assert finding.finding_type == "ca_bundle_a_invalid_basis_allocation"
+    assert finding.detail["reason_code"] == "CA_BUNDLE_A_INVALID_BASIS_ALLOCATION"
+    assert finding.expected_value == {"target_basis_retained_local": ">= 0"}
+    assert finding.observed_value == {
+        "target_basis_in_local": "100",
+        "fractional_basis_local": "110",
+        "target_basis_retained_local": "-10",
+    }
+    assert finding.repair_recommendation == "REPAIR_FRACTIONAL_BASIS_ALLOCATION"
+
+
 @pytest.mark.parametrize(
     ("transactions", "expected_status", "expected_type", "expected_reason"),
     [

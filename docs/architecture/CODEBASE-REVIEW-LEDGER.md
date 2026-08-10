@@ -38,6 +38,18 @@ be reused across manifest versions, while observations for removed or newly unex
 considered only when they occur after the active manifest opened. The existing real PostgreSQL
 corrected-manifest test proves a removed version-one child does not prevent version two reaching
 `READY`.
+Final review found three further fail-closed defects. A corrected manifest could reuse a historical
+observation for a child declared only by the new version; generated cash-settlement adjustment
+classification accepted crossed originating-type/reason combinations; and fractional basis above
+incoming target basis could produce negative retained basis while the net delta remained zero.
+Historical reuse is now restricted to the predecessor/current child intersection, with newly
+declared children requiring post-boundary delivery in both repository SQL and the database READY
+trigger. Settlement exclusion now recognizes only the two exact governed type/reason pairs. A
+negative retained target basis now emits the stable `ca_bundle_a_invalid_basis_allocation` finding
+and `CA_BUNDLE_A_INVALID_BASIS_ALLOCATION` reason with an explicit repair recommendation. Focused
+unit and real-PostgreSQL correction proofs bind all three review findings without adding a public
+API shape, OpenAPI schema, dependency, image, Kafka, or topology change. The additive stable finding
+and reason vocabulary is documented in repository context and the Financial Reconciliation wiki.
 
 CR-1630 delivery-tranche boundary addendum (2026-08-10): PR #931 reaches its governed delivery
 boundary with 73 signed commits at evidence head `c220b33de`. The retained implementation includes
