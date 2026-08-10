@@ -67,9 +67,12 @@ make transaction-release-rehearsal-plan \
 ```
 
 The plan requires two distinct, supply-chain-qualified digest manifests and a clean exact source
-revision. It records `mutates_runtime=false` and `cluster_certification=false`.
+revision. The candidate manifest must come from the Image Release workflow for the merged exact-main
+commit; the rollback manifest must identify a qualified immutable previous-main image. Do not mint a
+pre-merge tag to manufacture candidate authority. The plan records `mutates_runtime=false` and
+`cluster_certification=false`.
 
-Execute only from the exact candidate Git SHA after reviewing the plan:
+Execute only after merge, from the exact candidate main Git SHA, after reviewing the plan:
 
 ```bash
 make transaction-release-rehearsal \
@@ -90,6 +93,11 @@ image version, and CI run ID runtime metadata. The runner rejects database URLs,
 Compose controls, and any other environment override before it prepares Docker resources. DLQ
 growth is measured from durable consumer-DLQ rows scoped to the stable transaction group and source
 topic, not inferred from the readiness payload.
+
+The rehearsal keeps the governed twelve-partition topics and stable consumer group unchanged while
+it replaces and restores the service image. It does not prove or attempt an in-place partition-count
+reduction from twelve to eight; Kafka partition expansion and replacement-topic rollback remain
+owned by the Kafka partition migration runbook.
 
 The terminal receipt is redacted and content-hashed. A passing receipt also proves zero remaining
 containers, networks, or volumes with the exact generated project label. The adapter cannot target

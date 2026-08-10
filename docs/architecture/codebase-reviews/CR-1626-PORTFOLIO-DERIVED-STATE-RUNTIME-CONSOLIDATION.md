@@ -333,10 +333,14 @@ through the reversible internal queue-lease migration documented above.
    current-source certification. Compare both stage p50/p95/p99/max results against the configured
    lease duration and use the longest measured owned-job duration to finalize fixed expiry versus
    heartbeat renewal.
-2. Run remaining duplicate, poison, stale-lease, concurrency, load, release, and exact-main
-   validation before closing #714.
-3. Execute and retain the local digest-qualified proof with
-   `make transaction-release-rehearsal`; the exact-project adapter and fixed financial canaries are
-   implemented, but no passing candidate/rollback receipt exists yet. Separately require post-merge
-   registry, orchestrator, traffic, multi-replica, alert-routing, and rollback-RTO evidence where
-   the target environment owns those claims, followed by canonical cross-repo QA.
+2. Run remaining duplicate, poison, stale-lease, concurrency, and load validation before merge.
+   After merge, require exact-main validation before closing #714.
+3. Execute and retain `make transaction-release-rehearsal` only after the candidate image has been
+   published by the merged exact-main Image Release workflow. Use that immutable candidate manifest
+   and a qualified previous-main rollback manifest. The proof preserves the stable consumer group,
+   monotonic offsets, and the governed twelve-partition topology while replacing the service image;
+   it does not claim that Kafka partitions can be reduced from twelve to eight. The exact-project
+   adapter and fixed financial canaries are implemented, but no passing candidate/rollback receipt
+   exists yet. Separately require registry, orchestrator, traffic, multi-replica, alert-routing, and
+   rollback-RTO evidence where the target environment owns those claims, followed by canonical
+   cross-repo QA.
