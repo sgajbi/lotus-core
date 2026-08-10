@@ -1,3 +1,4 @@
+import re
 from datetime import date, datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -61,6 +62,7 @@ async def test_find_and_claim_eligible_jobs_emits_claim_metric(
     ) in compiled_query
     compact_query = compiled_query.replace(" ", "").replace("\n", "")
     assert "claimed_readiness_outbox_id=greatest(" in compact_query
+    assert re.search(r"valuation_claim_token='[0-9a-f]{32}'", compact_query)
     assert "coalesce((SELECTmax(outbox_events.id)" in compact_query
     assert "outbox_events.aggregate_type = 'ValuationReadiness'" in compiled_query
     assert "outbox_events.event_type = 'PortfolioDayReadyForValuation'" in compiled_query
@@ -475,6 +477,7 @@ async def test_update_job_status_trims_portfolio_and_security_ids(
         valuation_date=date(2026, 3, 27),
         epoch=42,
         status="COMPLETED",
+        expected_claim_token="a" * 32,
     )
 
     assert outcome is ValuationJobTransitionOutcome.TERMINAL_APPLIED
@@ -485,6 +488,11 @@ async def test_update_job_status_trims_portfolio_and_security_ids(
     assert "portfolio_valuation_jobs.valuation_date = '2026-03-27'" in compiled_query
     assert "portfolio_valuation_jobs.epoch = 42" in compiled_query
     assert "portfolio_valuation_jobs.status = 'PROCESSING'" in compiled_query
+    assert (
+        "portfolio_valuation_jobs.valuation_claim_token IS NOT DISTINCT FROM "
+        "'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'"
+    ) in compiled_query
+    assert "valuation_claim_token=NULL" in compiled_query.replace(" ", "")
     assert "portfolio_valuation_jobs.requeue_requested IS true" in compiled_query
     assert "RETURNING portfolio_valuation_jobs.status" in compiled_query
     assert stmt.get_execution_options()["synchronize_session"] is False

@@ -148,16 +148,25 @@ class ValuationJobProcessor:
         event: PortfolioValuationRequiredEvent,
         event_id: str,
         correlation_id: str,
+        *,
+        claim_token: str | None = None,
     ) -> None:
         async for db in self._session_provider():
             try:
-                await self._process_event_session(db, event, event_id, correlation_id)
+                await self._process_event_session(
+                    db,
+                    event,
+                    event_id,
+                    correlation_id,
+                    claim_token=claim_token,
+                )
             except DataNotFoundError as exc:
                 await self._mark_no_position_job_skipped(
                     db=db,
                     event=event,
                     event_id=event_id,
                     correlation_id=correlation_id,
+                    claim_token=claim_token,
                     error=exc,
                 )
 
@@ -167,6 +176,8 @@ class ValuationJobProcessor:
         event: PortfolioValuationRequiredEvent,
         event_id: str,
         correlation_id: str,
+        *,
+        claim_token: str | None,
     ) -> None:
         async with db.begin():
             dependencies = self._dependency_factory.from_session(db)
@@ -180,11 +191,20 @@ class ValuationJobProcessor:
                 logger.warning("Event %s already processed. Skipping.", event_id)
                 return
 
-            snapshot_result = await self._build_snapshot_for_event(dependencies, event)
+            snapshot_result = await self._build_snapshot_for_event(
+                dependencies,
+                event,
+                claim_token=claim_token,
+            )
             if snapshot_result is None:
                 return
 
-            if not await self._complete_valuation_job(dependencies.repo, event, snapshot_result):
+            if not await self._complete_valuation_job(
+                dependencies.repo,
+                event,
+                snapshot_result,
+                claim_token=claim_token,
+            ):
                 return
 
             await self._persist_and_publish_snapshot(
@@ -199,6 +219,8 @@ class ValuationJobProcessor:
         self,
         event: PortfolioValuationRequiredEvent,
         exc: Exception,
+        *,
+        claim_token: str | None = None,
     ) -> None:
         async for db in self._session_provider():
             async with db.begin():
@@ -210,6 +232,7 @@ class ValuationJobProcessor:
                     event.epoch,
                     status=VALUATION_FAILED,
                     failure_reason=str(exc),
+                    expected_claim_token=claim_token,
                 )
                 self._terminal_transition_applied(
                     outcome,
@@ -221,13 +244,20 @@ class ValuationJobProcessor:
         self,
         dependencies: ValuationProcessorDependencies,
         event: PortfolioValuationRequiredEvent,
+        *,
+        claim_token: str | None,
     ) -> ValuationSnapshotResult | None:
         repo = dependencies.repo
         position_state = await self._position_state_for_event(repo, event)
         reference_data = await self._reference_data_for_event(repo, event)
 
         if not reference_data.instrument or not reference_data.portfolio:
-            await self._mark_missing_reference_data(repo, event, reference_data)
+            await self._mark_missing_reference_data(
+                repo,
+                event,
+                reference_data,
+                claim_token=claim_token,
+            )
             return None
 
         snapshot = DailyPositionSnapshot(
@@ -300,6 +330,8 @@ class ValuationJobProcessor:
         repo: ValuationRepository,
         event: PortfolioValuationRequiredEvent,
         reference_data: ValuationReferenceData,
+        *,
+        claim_token: str | None,
     ) -> None:
         error_msg = self._missing_reference_data_message(event, reference_data)
         VALUATION_JOBS_FAILED_TOTAL.labels(
@@ -313,6 +345,7 @@ class ValuationJobProcessor:
             event.epoch,
             VALUATION_FAILED,
             failure_reason=error_msg,
+            expected_claim_token=claim_token,
         )
         self._terminal_transition_applied(
             outcome,
@@ -666,6 +699,8 @@ class ValuationJobProcessor:
         repo: ValuationRepository,
         event: PortfolioValuationRequiredEvent,
         snapshot_result: ValuationSnapshotResult,
+        *,
+        claim_token: str | None,
     ) -> bool:
         terminal_status = (
             VALUATION_FAILED
@@ -679,6 +714,7 @@ class ValuationJobProcessor:
             event.epoch,
             terminal_status,
             failure_reason=snapshot_result.job_failure_reason,
+            expected_claim_token=claim_token,
         )
         return self._terminal_transition_applied(
             outcome,
@@ -725,6 +761,7 @@ class ValuationJobProcessor:
         event: PortfolioValuationRequiredEvent,
         event_id: str,
         correlation_id: str,
+        claim_token: str | None,
         error: DataNotFoundError,
     ) -> None:
         VALUATION_JOBS_SKIPPED_TOTAL.labels(reason="no_position_history").inc()
@@ -746,6 +783,7 @@ class ValuationJobProcessor:
                 event.epoch,
                 status=VALUATION_JOB_SKIPPED_NO_POSITION,
                 failure_reason=str(error),
+                expected_claim_token=claim_token,
             )
             if not self._terminal_transition_applied(
                 outcome,

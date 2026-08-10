@@ -14,6 +14,7 @@ from portfolio_common.scheduler_dispatch_recovery import (
     SchedulerDispatchError,
     present_job_ids,
 )
+from portfolio_common.valuation_job_contracts import VALUATION_CLAIM_TOKEN_HEADER
 
 from .valuation_job_publisher import ValuationJobPublisher
 
@@ -38,9 +39,14 @@ class ValuationJobDispatcher:
 
     @staticmethod
     def _valuation_job_headers(job: PortfolioValuationJob) -> list[tuple[str, bytes]]:
-        if not job.correlation_id:
-            return []
-        return [("correlation_id", job.correlation_id.encode("utf-8"))]
+        headers: list[tuple[str, bytes]] = []
+        if job.correlation_id:
+            headers.append(("correlation_id", job.correlation_id.encode("utf-8")))
+        if job.valuation_claim_token:
+            headers.append(
+                (VALUATION_CLAIM_TOKEN_HEADER, job.valuation_claim_token.encode("ascii"))
+            )
+        return headers
 
     @staticmethod
     def _valuation_required_event(job: PortfolioValuationJob) -> dict[str, Any]:

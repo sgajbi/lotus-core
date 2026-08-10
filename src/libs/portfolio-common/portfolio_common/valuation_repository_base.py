@@ -1,4 +1,5 @@
 import logging
+import uuid
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
@@ -415,6 +416,7 @@ class ValuationRepositoryBase:
         epoch: int,
         status: str,
         failure_reason: Optional[str] = None,
+        expected_claim_token: str | None = None,
     ) -> ValuationJobTransitionOutcome:
         terminal_status = case(
             (PortfolioValuationJob.requeue_requested.is_(True), "PENDING"),
@@ -433,6 +435,7 @@ class ValuationRepositoryBase:
                     else PortfolioValuationJob.failure_reason
                 ),
             ),
+            "valuation_claim_token": None,
         }
 
         normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
@@ -445,6 +448,9 @@ class ValuationRepositoryBase:
                 PortfolioValuationJob.valuation_date == valuation_date,
                 PortfolioValuationJob.epoch == epoch,
                 PortfolioValuationJob.status == "PROCESSING",
+                PortfolioValuationJob.valuation_claim_token.is_not_distinct_from(
+                    expected_claim_token
+                ),
             )
             .values(**values_to_update)
             .returning(PortfolioValuationJob.status)
@@ -553,6 +559,7 @@ class ValuationRepositoryBase:
                     PortfolioValuationJob.claimed_readiness_outbox_id,
                     _latest_readiness_outbox_id_for_job(),
                 ),
+                valuation_claim_token=uuid.uuid4().hex,
                 updated_at=func.now(),
                 attempt_count=PortfolioValuationJob.attempt_count + 1,
             )
@@ -917,6 +924,7 @@ def _superseded_stale_jobs_update_stmt(
         .values(
             status="SKIPPED_SUPERSEDED",
             requeue_requested=False,
+            valuation_claim_token=None,
             failure_reason="Superseded by newer valuation epoch.",
             updated_at=func.now(),
         )
@@ -933,6 +941,7 @@ def _failed_stale_jobs_update_stmt(
         .values(
             status="FAILED",
             requeue_requested=False,
+            valuation_claim_token=None,
             failure_reason="Stale processing timeout exceeded max attempts",
             updated_at=func.now(),
         )
@@ -949,6 +958,7 @@ def _reset_stale_jobs_update_stmt(
         .values(
             status="PENDING",
             requeue_requested=False,
+            valuation_claim_token=None,
             updated_at=func.now(),
         )
         .returning(PortfolioValuationJob.id)
@@ -978,6 +988,7 @@ def _dispatch_failed_valuation_jobs_update_stmt(
         .values(
             status="FAILED",
             requeue_requested=False,
+            valuation_claim_token=None,
             failure_reason=failure_reason,
             updated_at=func.now(),
         )
@@ -1002,6 +1013,7 @@ def _dispatch_retryable_valuation_jobs_update_stmt(
         .values(
             status="PENDING",
             requeue_requested=False,
+            valuation_claim_token=None,
             failure_reason=failure_reason,
             updated_at=func.now(),
         )
