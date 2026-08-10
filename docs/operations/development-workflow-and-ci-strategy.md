@@ -120,6 +120,8 @@ remaining timeout budget.
 The DLQ baseline and terminal delta come from durable `consumer_dlq_events` rows filtered by the
 exact transaction consumer group and source topic. Do not default an absent readiness field to zero;
 the transaction readiness contract does not own DLQ-count evidence.
+The recovery driver no longer accepts `--ops-token`: it does not call an operations-authenticated
+health endpoint, and retaining an ignored credential would misrepresent the gate's evidence path.
 
 ## Merge and Hygiene Rules
 1. Merge only when required checks are green.

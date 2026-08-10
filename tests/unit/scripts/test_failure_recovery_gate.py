@@ -10,6 +10,7 @@ from scripts.operations.failure_recovery_gate import (
     RecoveryMode,
     RecoveryPollingEvidence,
     RecoveryResult,
+    _dlq_delta_evidence,
     _evaluate_recovery_result,
     _prepare_failure_recovery_managed_run,
     _resolve_runtime_connections,
@@ -36,6 +37,26 @@ def _complete_counts(records: int) -> TransactionProcessingCounts:
         cashflow_count=records,
         position_count=records,
         processing_claim_count=records,
+    )
+
+
+@pytest.mark.parametrize(
+    ("baseline", "current", "expected_delta", "expected_reason"),
+    [
+        (4, 4, 0, None),
+        (4, 6, 2, "DLQ events increased: baseline=4 current=6"),
+        (4, 3, 0, "DLQ evidence count moved backwards: baseline=4 current=3"),
+    ],
+)
+def test_dlq_delta_evidence_is_stable_incremental_and_fail_closed(
+    baseline: int,
+    current: int,
+    expected_delta: int,
+    expected_reason: str | None,
+) -> None:
+    assert _dlq_delta_evidence(baseline=baseline, current=current) == (
+        expected_delta,
+        expected_reason,
     )
 
 

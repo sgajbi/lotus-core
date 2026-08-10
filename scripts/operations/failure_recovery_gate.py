@@ -17,7 +17,7 @@ from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Protocol, cast
+from typing import TYPE_CHECKING, Callable, Protocol
 
 import requests  # type: ignore[import-untyped]
 from portfolio_common.config import (
@@ -275,18 +275,14 @@ def _wait_ready(
     raise TimeoutError("Services did not become ready before timeout.")
 
 
-def _get_health_snapshot(*, event_replay_base_url: str, ops_token: str) -> dict[str, Any]:
-    headers = {"X-Lotus-Ops-Token": ops_token}
-    error_budget = requests.get(
-        f"{event_replay_base_url}/ingestion/health/error-budget?lookback_minutes=60",
-        headers=headers,
-        timeout=20,
-    )
-    if error_budget.status_code != 200:
-        raise RuntimeError(
-            f"Health endpoint failed status={error_budget.status_code}: {error_budget.text[:200]}"
-        )
-    return cast(dict[str, Any], error_budget.json())
+def _dlq_delta_evidence(*, baseline: int, current: int) -> tuple[int, str | None]:
+    """Return a bounded DLQ delta and fail-closed evidence-integrity reason."""
+
+    if current < baseline:
+        return 0, f"DLQ evidence count moved backwards: baseline={baseline} current={current}"
+    if current > baseline:
+        return current - baseline, f"DLQ events increased: baseline={baseline} current={current}"
+    return 0, None
 
 
 def _wait_for_full_recovery(
@@ -519,7 +515,6 @@ def _build_parser() -> argparse.ArgumentParser:
         default=KAFKA_TRANSACTIONS_REPROCESSING_REQUESTED_TOPIC,
     )
     parser.add_argument("--replay-consumer-group", default=TRANSACTION_REPLAY_GROUP)
-    parser.add_argument("--ops-token", default="lotus-core-ops-local")
     parser.add_argument("--output-dir", default="output/task-runs")
     parser.add_argument("--build", action="store_true")
     parser.add_argument("--skip-compose", action="store_true")
@@ -676,9 +671,11 @@ def main() -> int:
                 consumer_group=args.consumer_group,
                 original_topic=args.transaction_topic,
             )
-            if current_dlq <= baseline_dlq:
-                return None
-            return f"DLQ events increased: baseline={baseline_dlq} current={current_dlq}"
+            _, terminal_reason = _dlq_delta_evidence(
+                baseline=baseline_dlq,
+                current=current_dlq,
+            )
+            return terminal_reason
 
         recovery_seconds, counts, lag_after_recovery, recovery_polling = _wait_for_full_recovery(
             store=offset_store,
@@ -697,7 +694,10 @@ def main() -> int:
             consumer_group=args.consumer_group,
             original_topic=args.transaction_topic,
         )
-        dlq_events_added = max(recovery_dlq - baseline_dlq, 0)
+        dlq_events_added, final_dlq_terminal_reason = _dlq_delta_evidence(
+            baseline=baseline_dlq,
+            current=recovery_dlq,
+        )
         replay_consumer_lag_after_recovery = _consumer_lag(
             store=offset_store,
             consumer_group=args.replay_consumer_group,
@@ -715,7 +715,9 @@ def main() -> int:
             max_recovery_seconds=args.max_recovery_seconds,
             counts=counts,
             dlq_events_added_during_recovery=dlq_events_added,
-            recovery_terminal_reason=recovery_polling.terminal_reason,
+            recovery_terminal_reason=(
+                recovery_polling.terminal_reason or final_dlq_terminal_reason
+            ),
         )
 
         ended_at = datetime.now(UTC)
