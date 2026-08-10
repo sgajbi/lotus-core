@@ -79,7 +79,15 @@ async def _persist_cost_basis_transaction(
         stage=CostBasisPersistenceStage.TRANSACTION_COSTS,
         status=CostBasisPersistenceStatus.ATTEMPT,
     )
-    persisted = await transactions.apply_transaction_costs_and_replace_breakdown(transaction)
+    if initial_opening_checkpoint is not None:
+        initial_state = _require_initial_opening_state(initial_opening_state)
+        _observe_initial_opening_attempts(observer, transaction=transaction)
+        persisted = await initial_state.persist_initial_opening_cost_state(
+            transaction=transaction,
+            checkpoint=initial_opening_checkpoint,
+        )
+    else:
+        persisted = await transactions.apply_transaction_costs_and_replace_breakdown(transaction)
     if persisted is None:
         raise ValueError(
             "Canonical transaction row was not found during cost persistence: "
@@ -93,12 +101,7 @@ async def _persist_cost_basis_transaction(
     )
 
     if initial_opening_checkpoint is not None:
-        await _persist_initial_opening_state(
-            transaction=transaction,
-            checkpoint=initial_opening_checkpoint,
-            state=_require_initial_opening_state(initial_opening_state),
-            observer=observer,
-        )
+        _observe_initial_opening_successes(observer, transaction=transaction)
     elif transaction_lot_behavior(transaction.transaction_type) in LOT_OPENING_BEHAVIORS:
         _observe(
             observer,
@@ -140,12 +143,10 @@ async def _persist_cost_basis_transaction(
     return replace(persisted, trade_fee=trade_fee)
 
 
-async def _persist_initial_opening_state(
+def _observe_initial_opening_attempts(
+    observer: CostBasisPersistenceObserver,
     *,
     transaction: CostBasisTransaction,
-    checkpoint: CostBasisProcessingCheckpoint,
-    state: InitialOpeningCostStatePort,
-    observer: CostBasisPersistenceObserver,
 ) -> None:
     if normalize_transaction_control_code(transaction.transaction_type) != "BUY":
         raise ValueError("Initial opening cost state requires a BUY transaction")
@@ -159,10 +160,13 @@ async def _persist_initial_opening_state(
             stage=stage,
             status=CostBasisPersistenceStatus.ATTEMPT,
         )
-    await state.persist_initial_opening_cost_state(
-        transaction=transaction,
-        checkpoint=checkpoint,
-    )
+
+
+def _observe_initial_opening_successes(
+    observer: CostBasisPersistenceObserver,
+    *,
+    transaction: CostBasisTransaction,
+) -> None:
     for stage in (
         CostBasisPersistenceStage.OPEN_LOT,
         CostBasisPersistenceStage.ACCRUED_INCOME_OFFSET,
