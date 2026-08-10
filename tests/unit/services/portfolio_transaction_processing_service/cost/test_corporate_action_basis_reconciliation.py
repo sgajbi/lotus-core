@@ -39,6 +39,40 @@ def _booked_transaction(
     )
 
 
+def _upstream_settlement_pair(
+    *,
+    transaction_id: str,
+    transaction_type: str,
+    gross_amount: str = "5",
+) -> tuple[BookedTransaction, BookedTransaction]:
+    cash_leg_id = f"{transaction_id}-SETTLEMENT"
+    adjustment_reason = f"{transaction_type}_SETTLEMENT"
+    origin = replace(
+        _booked_transaction(
+            transaction_id=transaction_id,
+            transaction_type=transaction_type,
+            gross_amount=gross_amount,
+        ),
+        allocated_cost_basis_local=Decimal(0),
+        cash_entry_mode="UPSTREAM_PROVIDED",
+        external_cash_transaction_id=cash_leg_id,
+        economic_event_id="EVENT_001",
+    )
+    cash_leg = replace(
+        _booked_transaction(
+            transaction_id=cash_leg_id,
+            transaction_type="ADJUSTMENT",
+            gross_amount=gross_amount,
+        ),
+        economic_event_id=origin.economic_event_id,
+        originating_transaction_id=origin.transaction_id,
+        originating_transaction_type=transaction_type,
+        adjustment_reason=adjustment_reason,
+        link_type=f"{transaction_type}_TO_CASH",
+    )
+    return origin, cash_leg
+
+
 def test_corporate_action_basis_reconciliation_balances_source_target_and_cash() -> None:
     transactions = (
         replace(
@@ -103,15 +137,22 @@ def test_corporate_action_basis_reconciliation_balances_multi_target_fractional_
         ),
         quantity=Decimal("0.1"),
         allocated_cost_basis_local=Decimal("10"),
+        cash_entry_mode="UPSTREAM_PROVIDED",
+        external_cash_transaction_id="CIL_01-SETTLEMENT",
+        economic_event_id="EVENT_001",
     )
     generated_cash = replace(
         _booked_transaction(
-            transaction_id="ADJ_CIL_01", transaction_type="ADJUSTMENT", gross_amount="12"
+            transaction_id="CIL_01-SETTLEMENT",
+            transaction_type="ADJUSTMENT",
+            gross_amount="12",
         ),
+        economic_event_id=fractional.economic_event_id,
         movement_direction="INFLOW",
+        originating_transaction_id=fractional.transaction_id,
         originating_transaction_type="CASH_IN_LIEU",
         adjustment_reason="CASH_IN_LIEU_SETTLEMENT",
-        net_cost_local=Decimal("12"),
+        link_type="CASH_IN_LIEU_TO_CASH",
     )
 
     result = reconcile_corporate_action_basis((source, *targets, fractional, generated_cash))
@@ -182,20 +223,211 @@ def test_corporate_action_basis_reconciliation_requires_exact_settlement_identit
         ),
         net_cost_local=Decimal("100"),
     )
+    originating_transaction, canonical_adjustment = _upstream_settlement_pair(
+        transaction_id="ORIGIN_01",
+        transaction_type=originating_transaction_type,
+    )
     adjustment = replace(
-        _booked_transaction(
-            transaction_id="ADJ_01", transaction_type="ADJUSTMENT", gross_amount="5"
-        ),
-        movement_direction="INFLOW",
-        originating_transaction_type=originating_transaction_type,
+        canonical_adjustment,
         adjustment_reason=adjustment_reason,
     )
 
-    result = reconcile_corporate_action_basis((source, target, adjustment))
+    result = reconcile_corporate_action_basis((source, target, originating_transaction, adjustment))
 
     assert result.status == ("balanced" if expected_excluded else "unsupported_adjustment")
     assert result.unsupported_adjustment_count == (0 if expected_excluded else 1)
     assert result.excluded_cash_settlement_adjustment_count == (1 if expected_excluded else 0)
+
+
+@pytest.mark.parametrize(
+    ("originating_transaction_id", "link_type", "origin_transaction_type"),
+    [
+        (None, "CASH_IN_LIEU_TO_CASH", "CASH_IN_LIEU"),
+        ("CIL_01", None, "CASH_IN_LIEU"),
+        ("CIL_01", "CASH_CONSIDERATION_TO_CASH", "CASH_IN_LIEU"),
+        ("OUTSIDE_COHORT", "CASH_IN_LIEU_TO_CASH", "CASH_IN_LIEU"),
+        ("CIL_01", "CASH_IN_LIEU_TO_CASH", "CASH_CONSIDERATION"),
+    ],
+)
+def test_corporate_action_basis_reconciliation_requires_reciprocal_cohort_linkage(
+    originating_transaction_id: str | None,
+    link_type: str | None,
+    origin_transaction_type: str,
+) -> None:
+    source = replace(
+        _booked_transaction(
+            transaction_id="SRC_01", transaction_type="SPIN_OFF", gross_amount="100"
+        ),
+        net_cost_local=Decimal("-100"),
+    )
+    target = replace(
+        _booked_transaction(
+            transaction_id="TGT_01", transaction_type="SPIN_IN", gross_amount="100"
+        ),
+        net_cost_local=Decimal("100"),
+    )
+    origin, canonical_adjustment = _upstream_settlement_pair(
+        transaction_id="CIL_01",
+        transaction_type="CASH_IN_LIEU",
+    )
+    origin = replace(origin, transaction_type=origin_transaction_type)
+    adjustment = replace(
+        canonical_adjustment,
+        originating_transaction_id=originating_transaction_id,
+        link_type=link_type,
+    )
+
+    result = reconcile_corporate_action_basis((source, target, origin, adjustment))
+
+    assert result.status == "unsupported_adjustment"
+    assert result.unsupported_adjustment_count == 1
+    assert result.excluded_cash_settlement_adjustment_count == 0
+
+
+def test_corporate_action_basis_reconciliation_rejects_ambiguous_origin_identity() -> None:
+    source = replace(
+        _booked_transaction(
+            transaction_id="SRC_01", transaction_type="SPIN_OFF", gross_amount="100"
+        ),
+        net_cost_local=Decimal("-100"),
+    )
+    target = replace(
+        _booked_transaction(
+            transaction_id="TGT_01", transaction_type="SPIN_IN", gross_amount="100"
+        ),
+        net_cost_local=Decimal("100"),
+    )
+    origin, adjustment = _upstream_settlement_pair(
+        transaction_id="CIL_01",
+        transaction_type="CASH_IN_LIEU",
+    )
+
+    result = reconcile_corporate_action_basis((source, target, origin, replace(origin), adjustment))
+
+    assert result.status == "unsupported_adjustment"
+    assert result.unsupported_adjustment_count == 1
+    assert result.excluded_cash_settlement_adjustment_count == 0
+
+
+@pytest.mark.parametrize(
+    ("adjustment_changes", "origin_changes"),
+    [
+        ({"transaction_id": "SOURCE_ADJUSTMENT_01"}, {}),
+        ({"portfolio_id": "OTHER_PORTFOLIO"}, {}),
+        ({"economic_event_id": "OTHER_EVENT"}, {}),
+        ({"linked_transaction_group_id": "OTHER_GROUP"}, {}),
+        ({}, {"cash_entry_mode": None}),
+        ({}, {"cash_entry_mode": "AUTO_GENERATE"}),
+        ({}, {"external_cash_transaction_id": None}),
+        ({}, {"external_cash_transaction_id": "OTHER_CASH_LEG"}),
+    ],
+)
+def test_corporate_action_basis_reconciliation_rejects_upstream_pair_masquerades(
+    adjustment_changes: dict[str, object],
+    origin_changes: dict[str, object],
+) -> None:
+    source = replace(
+        _booked_transaction(
+            transaction_id="SRC_01", transaction_type="SPIN_OFF", gross_amount="100"
+        ),
+        net_cost_local=Decimal("-100"),
+    )
+    target = replace(
+        _booked_transaction(
+            transaction_id="TGT_01", transaction_type="SPIN_IN", gross_amount="100"
+        ),
+        net_cost_local=Decimal("100"),
+    )
+    origin, adjustment = _upstream_settlement_pair(
+        transaction_id="CIL_01",
+        transaction_type="CASH_IN_LIEU",
+    )
+
+    result = reconcile_corporate_action_basis(
+        (
+            source,
+            target,
+            replace(origin, **origin_changes),
+            replace(adjustment, **adjustment_changes),
+        )
+    )
+
+    assert result.status == "unsupported_adjustment"
+    assert result.unsupported_adjustment_count == 1
+    assert result.excluded_cash_settlement_adjustment_count == 0
+
+
+def test_corporate_action_basis_reconciliation_accepts_governed_upstream_cash_pair() -> None:
+    source = replace(
+        _booked_transaction(
+            transaction_id="SRC_01", transaction_type="SPIN_OFF", gross_amount="100"
+        ),
+        net_cost_local=Decimal("-100"),
+    )
+    target = replace(
+        _booked_transaction(
+            transaction_id="TGT_01", transaction_type="SPIN_IN", gross_amount="100"
+        ),
+        net_cost_local=Decimal("100"),
+    )
+    origin, cash_leg = _upstream_settlement_pair(
+        transaction_id="CIL_01",
+        transaction_type="CASH_IN_LIEU",
+    )
+
+    result = reconcile_corporate_action_basis((source, target, origin, cash_leg))
+
+    assert result.status == "balanced"
+    assert result.excluded_cash_settlement_adjustment_count == 1
+    assert result.unsupported_adjustment_count == 0
+
+
+def test_corporate_action_basis_reconciliation_indexes_large_cohort_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
+        corporate_action_reconciliation as reconciliation_module,
+    )
+
+    normalization_calls = 0
+    canonical_normalizer = reconciliation_module.normalize_corporate_action_transaction_type
+
+    def counting_normalizer(value: str | None) -> str:
+        nonlocal normalization_calls
+        normalization_calls += 1
+        return canonical_normalizer(value)
+
+    monkeypatch.setattr(
+        reconciliation_module,
+        "normalize_corporate_action_transaction_type",
+        counting_normalizer,
+    )
+    source = replace(
+        _booked_transaction(
+            transaction_id="SRC_SCALE", transaction_type="SPIN_OFF", gross_amount="100"
+        ),
+        net_cost_local=Decimal("-100"),
+    )
+    target = replace(
+        _booked_transaction(
+            transaction_id="TGT_SCALE", transaction_type="SPIN_IN", gross_amount="100"
+        ),
+        net_cost_local=Decimal("100"),
+    )
+    unrelated = tuple(
+        _booked_transaction(
+            transaction_id=f"UNRELATED_{index:04d}",
+            transaction_type="BUY",
+            gross_amount="0",
+        )
+        for index in range(1_000)
+    )
+    cohort = (source, target, *unrelated)
+
+    result = reconcile_corporate_action_basis(iter(cohort))
+
+    assert result.status == "balanced"
+    assert normalization_calls == len(cohort)
 
 
 def test_corporate_action_basis_reconciliation_rejects_negative_retained_target_basis() -> None:

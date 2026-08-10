@@ -118,12 +118,19 @@ Check this service when:
 For Bundle A issues, list reconciliation runs with `reconciliation_type=corporate_action_bundle_a`
 and inspect both the immutable run `summary` and the run's current findings. The summary identifies
 the policy/version, source basis, incoming and retained target basis, fractional basis,
-cash-consideration basis, governed adjustment posture, net delta, excluded generated settlements,
+cash-consideration basis, governed adjustment posture, net delta, excluded governed upstream
+settlement adjustments,
 unsupported adjustments, and canonical per-child input lineage. Retained target basis is incoming
 target basis less basis consumed by an explicit cash-in-lieu leg; do not add fractional basis to
 incoming target basis a second time. A fractional allocation greater than incoming target basis is
-invalid even when the resulting conservation delta is zero. Generated settlement adjustments are
-excluded only when their originating type and reason form the exact governed pair.
+invalid even when the resulting conservation delta is zero. Governed upstream settlement
+adjustments are excluded only when their originating type and reason form the exact governed pair,
+their link type matches that originating type, and their originating transaction resolves
+unambiguously to a matching-type transaction in the current reconciliation cohort. The shared
+upstream cash-pair policy must also prove reciprocal identity and matching portfolio,
+economic-event, and linked-group scope. Missing, external, duplicate, type-mismatched, or
+scope-mismatched origins remain unsupported
+adjustments.
 
 Stable finding types are
 `ca_bundle_a_basis_mismatch`, `ca_bundle_a_insufficient_cash_basis`,
