@@ -121,11 +121,15 @@ the policy/version, source basis, incoming and retained target basis, fractional
 cash-consideration basis, governed adjustment posture, net delta, excluded generated settlements,
 unsupported adjustments, and canonical per-child input lineage. Retained target basis is incoming
 target basis less basis consumed by an explicit cash-in-lieu leg; do not add fractional basis to
-incoming target basis a second time.
+incoming target basis a second time. A fractional allocation greater than incoming target basis is
+invalid even when the resulting conservation delta is zero. Generated settlement adjustments are
+excluded only when their originating type and reason form the exact governed pair.
 
 Stable finding types are
-`ca_bundle_a_basis_mismatch`, `ca_bundle_a_insufficient_legs`, and
-`ca_bundle_a_missing_dependency`; each row includes the portfolio, triggering transaction,
+`ca_bundle_a_basis_mismatch`, `ca_bundle_a_insufficient_cash_basis`,
+`ca_bundle_a_insufficient_legs`, `ca_bundle_a_invalid_basis_allocation`,
+`ca_bundle_a_unsupported_adjustment`, `ca_bundle_a_missing_dependency`, and
+`ca_linked_leg_mismatch`; each row includes the portfolio, triggering transaction,
 business date, correlation id through the run, linked transaction group, parent event reference,
 reason code, and source-safe observed values for triage.
 

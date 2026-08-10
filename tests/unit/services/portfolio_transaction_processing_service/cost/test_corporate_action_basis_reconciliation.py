@@ -156,6 +156,75 @@ def test_corporate_action_basis_reconciliation_fails_closed_for_ambiguous_adjust
     assert result.excluded_cash_settlement_adjustment_count == 0
 
 
+@pytest.mark.parametrize(
+    ("originating_transaction_type", "adjustment_reason", "expected_excluded"),
+    [
+        ("CASH_IN_LIEU", "CASH_IN_LIEU_SETTLEMENT", True),
+        ("CASH_CONSIDERATION", "CASH_CONSIDERATION_SETTLEMENT", True),
+        ("CASH_IN_LIEU", "CASH_CONSIDERATION_SETTLEMENT", False),
+        ("CASH_CONSIDERATION", "CASH_IN_LIEU_SETTLEMENT", False),
+    ],
+)
+def test_corporate_action_basis_reconciliation_requires_exact_settlement_identity(
+    originating_transaction_type: str,
+    adjustment_reason: str,
+    expected_excluded: bool,
+) -> None:
+    source = replace(
+        _booked_transaction(
+            transaction_id="SRC_01", transaction_type="SPIN_OFF", gross_amount="100"
+        ),
+        net_cost_local=Decimal("-100"),
+    )
+    target = replace(
+        _booked_transaction(
+            transaction_id="TGT_01", transaction_type="SPIN_IN", gross_amount="100"
+        ),
+        net_cost_local=Decimal("100"),
+    )
+    adjustment = replace(
+        _booked_transaction(
+            transaction_id="ADJ_01", transaction_type="ADJUSTMENT", gross_amount="5"
+        ),
+        movement_direction="INFLOW",
+        originating_transaction_type=originating_transaction_type,
+        adjustment_reason=adjustment_reason,
+    )
+
+    result = reconcile_corporate_action_basis((source, target, adjustment))
+
+    assert result.status == ("balanced" if expected_excluded else "unsupported_adjustment")
+    assert result.unsupported_adjustment_count == (0 if expected_excluded else 1)
+    assert result.excluded_cash_settlement_adjustment_count == (1 if expected_excluded else 0)
+
+
+def test_corporate_action_basis_reconciliation_rejects_negative_retained_target_basis() -> None:
+    source = replace(
+        _booked_transaction(
+            transaction_id="SRC_01", transaction_type="DEMERGER_OUT", gross_amount="100"
+        ),
+        net_cost_local=Decimal("-100"),
+    )
+    target = replace(
+        _booked_transaction(
+            transaction_id="TGT_01", transaction_type="DEMERGER_IN", gross_amount="100"
+        ),
+        net_cost_local=Decimal("100"),
+    )
+    fractional = replace(
+        _booked_transaction(
+            transaction_id="CIL_01", transaction_type="CASH_IN_LIEU", gross_amount="110"
+        ),
+        allocated_cost_basis_local=Decimal("110"),
+    )
+
+    result = reconcile_corporate_action_basis((source, target, fractional))
+
+    assert result.status == "invalid_basis_allocation"
+    assert result.target_basis_retained_local == Decimal("-10")
+    assert result.net_basis_delta_local == Decimal(0)
+
+
 def test_corporate_action_basis_reconciliation_distinguishes_incomplete_evidence() -> None:
     source = replace(
         _booked_transaction(

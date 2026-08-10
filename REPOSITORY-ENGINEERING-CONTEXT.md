@@ -2686,11 +2686,14 @@ Most relevant current governance:
      `CORPORATE_ACTION_BASIS_CONSERVATION@1.0.0`: retained target basis equals incoming target basis
      less explicit fractional basis, and retained target plus fractional, cash-consideration, and
      governed adjustment basis must equal source basis out. Bind canonical per-child input lineage,
-     exclude only recognized generated cash-settlement adjustments, and fail closed on every other
-     adjustment. Expose this evidence through the existing reconciliation-run summary rather than a
-     duplicate endpoint. Issues #480 and #481 retain the broader parent-event graph and lot-lineage
-     closure. The #480 persistence foundation uses a mutable, book-scoped event pointer plus
-     immutable manifest-version, node, edge, child-observation, and readiness-evaluation ledgers.
+     reject negative retained target basis even when net conservation is zero, exclude only exact
+     generated settlement pairs (`CASH_IN_LIEU`/`CASH_IN_LIEU_SETTLEMENT` and
+     `CASH_CONSIDERATION`/`CASH_CONSIDERATION_SETTLEMENT`), and fail closed on every other
+     adjustment identity. Expose this evidence through the existing reconciliation-run summary
+     rather than a duplicate endpoint. Issues #480 and #481 retain the broader parent-event graph
+     and lot-lineage closure. The #480 persistence foundation uses a mutable, book-scoped event
+     pointer plus immutable manifest-version, node, edge, child-observation, and
+     readiness-evaluation ledgers.
      A READY row must match the event's current manifest/state/observation pointers, the manifest
      content hash, every declared node's latest observed content hash, deterministic node order,
      and the declared forward-only edge graph. Retain correction-safe multiple READY evaluations
@@ -2708,8 +2711,10 @@ Most relevant current governance:
      after restart. Canonical payloads carry an independent serializer version; canonicalize
      timezone-aware source timestamps to UTC in stored JSON so equivalent instants do not become
      false integrity conflicts. Version 1 evaluates observations from sequence zero so a rogue child
-     received before source authority cannot be forgiven; later manifest corrections retain prior
-     expected children while admitting all observations after the correction boundary. Child
+     received before source authority cannot be forgiven. Later manifest corrections reuse a
+     historical observation only when its child is declared by both the predecessor and current
+     manifest; a newly declared child must be observed after the correction opening boundary, while
+     every post-boundary observation remains eligible for fail-closed evaluation. Child
      observation append uses the same ordered dual locks and a conflict-neutral savepoint, rejects
      cross-portfolio transaction identity, preserves exact-delivery evidence, treats matching
      semantic redelivery as neutral, requires monotonically increasing correction epochs for changed

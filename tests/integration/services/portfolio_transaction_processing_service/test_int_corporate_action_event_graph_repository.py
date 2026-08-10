@@ -558,6 +558,59 @@ async def test_corrected_manifest_reuses_expected_epochs_and_ignores_removed_old
     ]
 
 
+async def test_corrected_manifest_requires_newly_declared_child_after_opening_boundary(
+    clean_db,
+    db_engine: Engine,
+    async_db_session: AsyncSession,
+) -> None:
+    _apply_migration(db_engine)
+    await _seed_portfolio(async_db_session)
+    first = _manifest()
+    extra_target = replace(
+        next(
+            child for child in first.expected_children if child.child_role == "TARGET_POSITION_ADD"
+        ),
+        transaction_id="CA-TARGET-002",
+        instrument_id="TARGET-SEC-002",
+        target_instrument_id="TARGET-SEC-002",
+    )
+    second = replace(
+        first,
+        version=2,
+        expected_children=first.expected_children + (extra_target,),
+        source_reference=replace(
+            first.source_reference,
+            source_revision="2",
+            source_content_hash="b" * 64,
+        ),
+    )
+    await _seed_transactions(async_db_session, second.expected_children)
+    repository = SqlAlchemyCorporateActionEventGraphRepository(async_db_session)
+
+    for sequence, child in enumerate(second.expected_children, start=1):
+        await repository.observe_child(
+            _observation(first, child, delivery_event_id=f"pre-correction-{sequence}")
+        )
+    assert await repository.append_manifest(first) is CorporateActionManifestAppendOutcome.APPENDED
+    assert await repository.append_manifest(second) is CorporateActionManifestAppendOutcome.APPENDED
+
+    event = await async_db_session.scalar(select(CorporateActionEventRecord))
+    assert event is not None
+    assert event.current_manifest_version == 2
+    assert event.readiness_status == "AWAITING_CHILDREN"
+
+    decision = await repository.observe_child(
+        _observation(
+            second,
+            extra_target,
+            delivery_event_id="post-correction-extra-target",
+            transaction_epoch=2,
+        )
+    )
+    assert decision.readiness_status == "READY"
+    await async_db_session.commit()
+
+
 async def test_concurrent_last_child_has_one_state_winner_and_neutral_retry(
     clean_db,
     db_engine: Engine,

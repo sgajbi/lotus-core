@@ -705,6 +705,7 @@ def upgrade() -> None:
                 declared_manifest_content_hash text;
                 completion_declared boolean;
                 manifest_opened_observation_sequence integer;
+                predecessor_manifest_id integer;
             BEGIN
                 IF NEW.readiness_status <> 'READY' THEN
                     RETURN NEW;
@@ -722,7 +723,8 @@ def upgrade() -> None:
                     min(node.resolved_execution_ordinal),
                     max(node.resolved_execution_ordinal),
                     manifest.expected_node_count,
-                    manifest.opened_observation_sequence
+                    manifest.opened_observation_sequence,
+                    manifest.previous_manifest_id
                 INTO
                     expected_order,
                     expected_count,
@@ -730,7 +732,8 @@ def upgrade() -> None:
                     minimum_ordinal,
                     maximum_ordinal,
                     declared_node_count,
-                    manifest_opened_observation_sequence
+                    manifest_opened_observation_sequence,
+                    predecessor_manifest_id
                 FROM corporate_action_manifest_versions AS manifest
                 LEFT JOIN corporate_action_manifest_nodes AS node
                   ON node.manifest_id = manifest.id
@@ -738,7 +741,8 @@ def upgrade() -> None:
                   AND manifest.event_id = NEW.event_id
                 GROUP BY
                     manifest.expected_node_count,
-                    manifest.opened_observation_sequence;
+                    manifest.opened_observation_sequence,
+                    manifest.previous_manifest_id;
 
                 IF expected_count IS NULL
                    OR expected_count = 0
@@ -830,12 +834,21 @@ def upgrade() -> None:
                       AND (
                           observation.observation_sequence
                               > manifest_opened_observation_sequence
-                          OR EXISTS (
-                              SELECT 1
-                              FROM corporate_action_manifest_nodes AS expected_node
-                              WHERE expected_node.manifest_id = NEW.manifest_id
-                                AND expected_node.transaction_id
-                                    = observation.transaction_id
+                          OR (
+                              EXISTS (
+                                  SELECT 1
+                                  FROM corporate_action_manifest_nodes AS expected_node
+                                  WHERE expected_node.manifest_id = NEW.manifest_id
+                                    AND expected_node.transaction_id
+                                        = observation.transaction_id
+                              )
+                              AND EXISTS (
+                                  SELECT 1
+                                  FROM corporate_action_manifest_nodes AS predecessor_node
+                                  WHERE predecessor_node.manifest_id = predecessor_manifest_id
+                                    AND predecessor_node.transaction_id
+                                        = observation.transaction_id
+                              )
                           )
                       )
                     ORDER BY
