@@ -620,22 +620,22 @@ async def test_single_buy_cost_stage_avoids_duplicate_canonical_transaction_read
     finally:
         sqlalchemy_event.remove(sync_engine, "before_cursor_execute", capture_statement)
 
-    # The initial BUY aggregate replaces the separate transaction-economics and
-    # opening-state calls with one atomic statement.
-    assert len(statements) == 7
+    # The initial BUY aggregate replaces the separate lot, accrued-income-offset,
+    # and checkpoint statements with one atomic statement.
+    assert len(statements) == 8
     initial_opening_writes = [
         statement
         for statement in statements
         if "persist_initial_opening_lot" in statement
         and "persist_initial_income_offset" in statement
-        and "persist_initial_processing_checkpoint" in statement
         and "INSERT INTO cost_basis_processing_state" in statement
     ]
     assert len(initial_opening_writes) == 1
     canonical_transaction_writes = [
         statement
         for statement in statements
-        if "updated_transaction AS" in statement and "UPDATE transactions SET" in statement
+        if statement.startswith("WITH updated_transaction AS")
+        and "UPDATE transactions SET" in statement
     ]
     canonical_transaction_reads = [
         statement

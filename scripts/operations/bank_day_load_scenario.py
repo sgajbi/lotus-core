@@ -98,6 +98,7 @@ REQUIRED_COST_DATABASE_OPERATION_EVIDENCE = (
     ("CostBasisProcessingStateRepository", "acquire_cost_basis_processing_lock"),
     ("CostBasisProcessingStateRepository", "get_cost_basis_processing_checkpoint"),
     ("CostBasisTransactionRepository", "get_transaction_history"),
+    ("CostBasisTransactionRepository", "apply_transaction_costs_and_replace_breakdown"),
     ("InitialOpeningCostStateRepository", "persist_initial_opening_cost_state"),
     ("CostProcessingEffectStager", "stage_processed_transactions"),
 )

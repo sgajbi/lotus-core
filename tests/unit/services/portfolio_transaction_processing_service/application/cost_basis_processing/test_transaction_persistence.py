@@ -186,7 +186,7 @@ async def test_initial_buy_persists_lot_offset_and_checkpoint_through_one_aggreg
     )
     repository, lot_states, income_offsets, observer = _ports()
     initial_opening_state = AsyncMock(spec=InitialOpeningCostStatePort)
-    initial_opening_state.persist_initial_opening_cost_state.return_value = _booked_transaction(
+    repository.apply_transaction_costs_and_replace_breakdown.return_value = _booked_transaction(
         transaction
     )
 
@@ -206,7 +206,6 @@ async def test_initial_buy_persists_lot_offset_and_checkpoint_through_one_aggreg
         transaction=transaction,
         checkpoint=checkpoint,
     )
-    repository.apply_transaction_costs_and_replace_breakdown.assert_not_awaited()
     lot_states.upsert_buy_lot_state.assert_not_awaited()
     income_offsets.upsert_accrued_income_offset.assert_not_awaited()
     assert [
@@ -214,59 +213,16 @@ async def test_initial_buy_persists_lot_offset_and_checkpoint_through_one_aggreg
         for observation in (item.args[0] for item in observer.observe.call_args_list)
     ] == [
         (CostBasisPersistenceStage.TRANSACTION_COSTS, CostBasisPersistenceStatus.ATTEMPT),
+        (CostBasisPersistenceStage.TRANSACTION_COSTS, CostBasisPersistenceStatus.SUCCESS),
         (CostBasisPersistenceStage.OPEN_LOT, CostBasisPersistenceStatus.ATTEMPT),
         (
             CostBasisPersistenceStage.ACCRUED_INCOME_OFFSET,
             CostBasisPersistenceStatus.ATTEMPT,
         ),
-        (CostBasisPersistenceStage.TRANSACTION_COSTS, CostBasisPersistenceStatus.SUCCESS),
         (CostBasisPersistenceStage.OPEN_LOT, CostBasisPersistenceStatus.SUCCESS),
         (
             CostBasisPersistenceStage.ACCRUED_INCOME_OFFSET,
             CostBasisPersistenceStatus.SUCCESS,
-        ),
-    ]
-
-
-async def test_initial_buy_stops_when_combined_aggregate_cannot_update_transaction() -> None:
-    transaction = _calculated_transaction("BUY-INITIAL-MISSING")
-    checkpoint = CostBasisProcessingCheckpoint.from_transaction(
-        transaction,
-        cost_basis_method="FIFO",
-    )
-    repository, lot_states, income_offsets, observer = _ports()
-    initial_opening_state = AsyncMock(spec=InitialOpeningCostStatePort)
-    initial_opening_state.persist_initial_opening_cost_state.return_value = None
-
-    with pytest.raises(
-        ValueError,
-        match=(
-            "Canonical transaction row was not found during cost persistence: BUY-INITIAL-MISSING"
-        ),
-    ):
-        await persist_cost_basis_transactions(
-            processed=[transaction],
-            incoming_transaction_ids={transaction.transaction_id},
-            transactions=repository,
-            lot_states=lot_states,
-            income_offsets=income_offsets,
-            initial_opening_state=initial_opening_state,
-            initial_opening_checkpoint=checkpoint,
-            observer=observer,
-        )
-
-    repository.apply_transaction_costs_and_replace_breakdown.assert_not_awaited()
-    lot_states.upsert_buy_lot_state.assert_not_awaited()
-    income_offsets.upsert_accrued_income_offset.assert_not_awaited()
-    assert [
-        (observation.stage, observation.status)
-        for observation in (item.args[0] for item in observer.observe.call_args_list)
-    ] == [
-        (CostBasisPersistenceStage.TRANSACTION_COSTS, CostBasisPersistenceStatus.ATTEMPT),
-        (CostBasisPersistenceStage.OPEN_LOT, CostBasisPersistenceStatus.ATTEMPT),
-        (
-            CostBasisPersistenceStage.ACCRUED_INCOME_OFFSET,
-            CostBasisPersistenceStatus.ATTEMPT,
         ),
     ]
 
@@ -279,7 +235,7 @@ async def test_normalized_initial_buy_uses_buy_only_aggregate_and_offset_policy(
     )
     repository, lot_states, income_offsets, observer = _ports()
     initial_opening_state = AsyncMock(spec=InitialOpeningCostStatePort)
-    initial_opening_state.persist_initial_opening_cost_state.return_value = _booked_transaction(
+    repository.apply_transaction_costs_and_replace_breakdown.return_value = _booked_transaction(
         transaction
     )
 
@@ -298,7 +254,6 @@ async def test_normalized_initial_buy_uses_buy_only_aggregate_and_offset_policy(
         transaction=transaction,
         checkpoint=checkpoint,
     )
-    repository.apply_transaction_costs_and_replace_breakdown.assert_not_awaited()
     lot_states.upsert_buy_lot_state.assert_not_awaited()
     income_offsets.upsert_accrued_income_offset.assert_not_awaited()
 
