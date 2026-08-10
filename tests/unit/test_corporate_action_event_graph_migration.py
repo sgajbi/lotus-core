@@ -95,6 +95,7 @@ def test_parent_graph_migration_is_ordered_constrained_and_reversible(
         "corporate-action READY evidence does not match complete manifest",
         "corporate-action READY evidence is stale against event state",
         "corporate-action READY evidence does not match latest child observations",
+        "unexpected_observation_count",
     ):
         assert invariant in sql
 

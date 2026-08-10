@@ -28,6 +28,10 @@ family from the triggering child instead of the loaded group. The trigger vocabu
 adjustments, and reconciliation-family ownership is derived from the complete loaded group. Focused
 tests cover late unsupported adjustments and corrected cash-in-lieu overlays for quantity-transfer
 families so current findings cannot remain stale or be resolved under the wrong control family.
+The same review round found that direct SQL could claim `READY` with an unexpected observed child
+even though the domain evaluator rejects that cohort. The database READY trigger now counts latest
+observations outside the active manifest and rejects the claim. Executable migration coverage and a
+real PostgreSQL savepoint proof bind the database invariant to the domain's fail-closed posture.
 
 CR-1630 delivery-tranche boundary addendum (2026-08-10): PR #931 reaches its governed delivery
 boundary with 73 signed commits at evidence head `c220b33de`. The retained implementation includes
