@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import json
+import sys
 from datetime import UTC, datetime, timedelta
 from typing import Any
+
+import pytest
 
 from scripts.operations.transaction_processing_cutover_offsets import (
     ConsumerGroupSnapshot,
@@ -16,7 +20,10 @@ from scripts.operations.transaction_processing_release_evidence import (
 from scripts.operations.transaction_processing_release_rehearsal import (
     CanaryResult,
     RehearsalContext,
+    build_rehearsal_plan,
     execute_release_rehearsal,
+    main,
+    plan_content_hash,
 )
 from scripts.release.write_image_release_manifest import build_release_manifest
 
@@ -176,6 +183,86 @@ def _context() -> RehearsalContext:
         source_tree_state="clean",
         compose_project=COMPOSE_PROJECT_PREFIX + "20260810-070000-a1b2c3d4",
     )
+
+
+def test_rehearsal_plan_is_non_mutating_redacted_and_hashed() -> None:
+    plan = build_rehearsal_plan(
+        context=_context(),
+        candidate_manifest=_manifest(sha=CANDIDATE_SHA, digest=CANDIDATE_DIGEST),
+        rollback_manifest=_manifest(sha=ROLLBACK_SHA, digest=ROLLBACK_DIGEST),
+        generated_at=datetime(2026, 8, 10, 7, 0, tzinfo=UTC),
+    )
+
+    assert plan["mode"] == "plan"
+    assert plan["mutates_runtime"] is False
+    assert plan["cluster_certification"] is False
+    assert plan["required_phases"] == [
+        "preflight",
+        "baseline",
+        "offset_handoff",
+        "candidate_deploy",
+        "canary",
+        "rollback",
+        "cleanup",
+    ]
+    assert plan["plan_content_hash"] == plan_content_hash(plan)
+
+
+def test_rehearsal_plan_rejects_dirty_source() -> None:
+    dirty = RehearsalContext(
+        receipt_id=_context().receipt_id,
+        source_revision=CANDIDATE_SHA,
+        source_tree_state="dirty",
+        compose_project=_context().compose_project,
+    )
+
+    with pytest.raises(ValueError, match="clean source tree"):
+        build_rehearsal_plan(
+            context=dirty,
+            candidate_manifest=_manifest(sha=CANDIDATE_SHA, digest=CANDIDATE_DIGEST),
+            rollback_manifest=_manifest(sha=ROLLBACK_SHA, digest=ROLLBACK_DIGEST),
+            generated_at=datetime(2026, 8, 10, 7, 0, tzinfo=UTC),
+        )
+
+
+def test_planning_cli_writes_atomic_plan_without_runtime_commands(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    candidate_path = tmp_path / "candidate.json"
+    rollback_path = tmp_path / "rollback.json"
+    output_path = tmp_path / "plan.json"
+    candidate_path.write_text(
+        json.dumps(_manifest(sha=CANDIDATE_SHA, digest=CANDIDATE_DIGEST)),
+        encoding="utf-8",
+    )
+    rollback_path.write_text(
+        json.dumps(_manifest(sha=ROLLBACK_SHA, digest=ROLLBACK_DIGEST)),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "scripts.operations.transaction_processing_release_rehearsal._git_output",
+        lambda _root, *arguments: CANDIDATE_SHA if arguments[-1] == "HEAD" else "",
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "transaction_processing_release_rehearsal.py",
+            "--candidate-release-manifest",
+            str(candidate_path),
+            "--rollback-release-manifest",
+            str(rollback_path),
+            "--output",
+            str(output_path),
+            "--repo-root",
+            str(tmp_path),
+        ],
+    )
+
+    assert main() == 0
+    assert json.loads(output_path.read_text(encoding="utf-8"))["mutates_runtime"] is False
+    assert list(tmp_path.glob(".*.tmp")) == []
 
 
 def test_release_rehearsal_executes_candidate_and_rollback_in_order() -> None:
