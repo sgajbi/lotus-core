@@ -16,6 +16,12 @@ integration-only slice. PR #932's Quality Baseline then exposed rank-F complexit
 semantic validator. The same review slice separated cohort shape, source-child, target-child, and
 non-position dependency policies into small pure helpers without changing finding order or
 fail-closed behavior; Xenon, Ruff, strict MyPy, and all 84 focused tests pass.
+The authoritative PR coverage lane then identified the new migration as an unmeasured changed
+critical database source. A repository-native executable migration contract now runs the complete
+upgrade and downgrade paths under the unit coverage lane and asserts revision lineage, dependency
+order, immutable-ledger triggers, READY fail-closed invariants, and reversible teardown. This fixes
+the measurement gap without lowering thresholds, adding exclusions, or weakening the existing real
+PostgreSQL migration evidence.
 
 CR-1630 delivery-tranche boundary addendum (2026-08-10): PR #931 reaches its governed delivery
 boundary with 73 signed commits at evidence head `c220b33de`. The retained implementation includes
