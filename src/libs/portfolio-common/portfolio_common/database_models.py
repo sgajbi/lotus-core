@@ -3967,8 +3967,7 @@ class PortfolioValuationJob(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "valuation_claim_token IS NULL OR "
-            "valuation_claim_token ~ '^[0-9a-f]{32}$'",
+            "valuation_claim_token IS NULL OR valuation_claim_token ~ '^[0-9a-f]{32}$'",
             name="ck_portfolio_valuation_jobs_claim_token",
         ),
         UniqueConstraint(

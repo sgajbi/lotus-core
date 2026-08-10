@@ -34,7 +34,7 @@ from portfolio_common.idempotency_repository import IdempotencyRepository
 from portfolio_common.logging_utils import correlation_id_var
 from portfolio_common.outbox_repository import OutboxRepository
 from portfolio_common.valuation_job_contracts import (
-    VALUATION_CLAIM_TOKEN_HEADER,
+    VALUATION_CLAIM_HEADER,
     ValuationJobTransitionOutcome,
 )
 from pydantic import ValidationError
@@ -96,7 +96,7 @@ def mock_kafka_message(mock_event: PortfolioValuationRequiredEvent) -> MagicMock
     mock_msg.error.return_value = None
     mock_msg.headers.return_value = [
         ("correlation_id", b"test-corr-id-123"),
-        (VALUATION_CLAIM_TOKEN_HEADER, b"a" * 32),
+        (VALUATION_CLAIM_HEADER, b"a" * 32),
     ]
     return mock_msg
 
@@ -230,8 +230,7 @@ async def test_valuation_processor_executes_success_path_without_kafka_consumer(
     )
     mock_valuation_repo.update_job_status.assert_awaited_once()
     assert (
-        mock_valuation_repo.update_job_status.await_args.kwargs["expected_claim_token"]
-        == "a" * 32
+        mock_valuation_repo.update_job_status.await_args.kwargs["expected_claim_token"] == "a" * 32
     )
     mock_outbox_repo.create_outbox_event.assert_awaited_once()
     assert mock_outbox_repo.create_outbox_event.call_args.kwargs["partition_key"].value == (
@@ -249,10 +248,10 @@ async def test_valuation_processor_executes_success_path_without_kafka_consumer(
 @pytest.mark.parametrize(
     "headers",
     [
-        [(VALUATION_CLAIM_TOKEN_HEADER, b"not-a-token")],
+        [(VALUATION_CLAIM_HEADER, b"not-a-token")],
         [
-            (VALUATION_CLAIM_TOKEN_HEADER, b"a" * 32),
-            (VALUATION_CLAIM_TOKEN_HEADER, b"b" * 32),
+            (VALUATION_CLAIM_HEADER, b"a" * 32),
+            (VALUATION_CLAIM_HEADER, b"b" * 32),
         ],
     ],
 )

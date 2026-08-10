@@ -7,7 +7,7 @@ from confluent_kafka import Message
 from portfolio_common.event_mapping import EventContractValidationError
 from portfolio_common.events import PortfolioValuationRequiredEvent
 from portfolio_common.kafka_consumer import BaseConsumer
-from portfolio_common.valuation_job_contracts import VALUATION_CLAIM_TOKEN_HEADER
+from portfolio_common.valuation_job_contracts import VALUATION_CLAIM_HEADER
 from pydantic import ValidationError
 from sqlalchemy.exc import DBAPIError, OperationalError
 from tenacity import before_log, retry, retry_if_exception_type, stop_after_attempt, wait_fixed
@@ -28,7 +28,7 @@ def _valuation_claim_token(msg: Message) -> str | None:
         raise EventContractValidationError(
             "Valuation claim headers could not be inspected"
         ) from exc
-    raw_values = [value for name, value in headers if name == VALUATION_CLAIM_TOKEN_HEADER]
+    raw_values = [value for name, value in headers if name == VALUATION_CLAIM_HEADER]
     if not raw_values:
         return None
     if len(raw_values) != 1:
