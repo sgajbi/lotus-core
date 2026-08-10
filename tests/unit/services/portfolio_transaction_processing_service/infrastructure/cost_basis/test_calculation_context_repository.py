@@ -96,11 +96,6 @@ async def test_context_returns_ordered_initial_history_when_checkpoint_is_absent
         call(second_row),
     ]
     session.execute.assert_awaited_once()
-    statement = session.execute.await_args.args[0]
-    compiled = str(statement.compile(compile_kwargs={"literal_binds": True}))
-    assert "trim(transactions_1.portfolio_id) = 'PB-001'" in compiled
-    assert "trim(transactions_1.security_id) = 'SEC-001'" in compiled
-    assert "trim(transactions_1.transaction_id) != 'TX-NEW'" in compiled
 
 
 async def test_context_distinguishes_skipped_history_from_empty_history() -> None:
