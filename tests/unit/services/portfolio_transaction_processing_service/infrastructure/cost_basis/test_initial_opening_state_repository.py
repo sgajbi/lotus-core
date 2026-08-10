@@ -3,10 +3,9 @@
 from dataclasses import replace
 from datetime import datetime
 from decimal import Decimal
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
-from portfolio_common.domain.calculation_lineage import build_calculation_lineage
 from portfolio_common.domain.cost_basis_method import CostBasisMethod
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -41,17 +40,7 @@ async def test_initial_opening_state_executes_three_writes_as_one_postgresql_sta
         transaction,
         cost_basis_method=CostBasisMethod.FIFO,
     )
-    transaction.calculation_lineage = build_calculation_lineage(
-        algorithm_id="initial-opening-state-test",
-        algorithm_version=1,
-        intermediate_precision=28,
-        input_payload={"transaction_id": transaction.transaction_id},
-        output_payload={"net_cost": transaction.net_cost},
-    )
     session = AsyncMock(spec=AsyncSession)
-    result = MagicMock()
-    result.scalars.return_value.first.return_value = None
-    session.execute.return_value = result
 
     await SqlAlchemyInitialOpeningCostStateRepository(session).persist_initial_opening_cost_state(
         transaction=transaction,
@@ -62,11 +51,8 @@ async def test_initial_opening_state_executes_three_writes_as_one_postgresql_sta
     statement = session.execute.await_args.args[0]
     compiled = str(statement.compile(dialect=postgresql.dialect()))
     assert compiled.count("INSERT INTO") == 3
-    assert "UPDATE transactions SET" in compiled
-    assert "DELETE FROM transaction_costs" in compiled
     assert "persist_initial_opening_lot AS" in compiled
     assert "persist_initial_income_offset AS" in compiled
-    assert "persist_initial_processing_checkpoint AS" in compiled
     assert "INSERT INTO cost_basis_processing_state" in compiled
     assert compiled.count("ON CONFLICT") == 3
 

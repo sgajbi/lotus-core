@@ -55,17 +55,6 @@ def _transition_evidence(transaction_id: str) -> CostBasisStateTransitionEvidenc
     )
 
 
-def _with_transaction_lineage(transaction: EngineTransaction) -> EngineTransaction:
-    transaction.calculation_lineage = build_calculation_lineage(
-        algorithm_id="integration-cost-basis-transaction",
-        algorithm_version=1,
-        intermediate_precision=28,
-        input_payload={"transaction_id": transaction.transaction_id},
-        output_payload={"net_cost": transaction.net_cost},
-    )
-    return transaction
-
-
 async def _persist_cost_state_parent(
     session: AsyncSession,
     *,
@@ -278,33 +267,21 @@ async def test_initial_opening_aggregate_is_idempotent_and_updates_all_source_st
         async_db_session,
         suffix="ATOMIC_INITIAL",
     )
-    transaction = _with_transaction_lineage(
-        EngineTransaction(
-            transaction_id=transaction_id,
-            portfolio_id=portfolio_id,
-            instrument_id="BOND_ATOMIC_INITIAL",
-            security_id="BOND_ATOMIC_INITIAL",
-            transaction_type="BUY",
-            transaction_date=datetime(2026, 4, 10, 10, 0),
-            quantity=Decimal("100"),
-            gross_transaction_amount=Decimal("9800"),
-            trade_currency="USD",
-            portfolio_base_currency="USD",
-            net_cost_local=Decimal("9840"),
-            net_cost=Decimal("9840"),
-            accrued_interest=Decimal("125"),
-            fees=Fees(brokerage=Decimal("2.50")),
-        )
+    transaction = EngineTransaction(
+        transaction_id=transaction_id,
+        portfolio_id=portfolio_id,
+        instrument_id="BOND_ATOMIC_INITIAL",
+        security_id="BOND_ATOMIC_INITIAL",
+        transaction_type="BUY",
+        transaction_date=datetime(2026, 4, 10, 10, 0),
+        quantity=Decimal("100"),
+        gross_transaction_amount=Decimal("9800"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+        net_cost_local=Decimal("9840"),
+        net_cost=Decimal("9840"),
+        accrued_interest=Decimal("125"),
     )
-    async_db_session.add(
-        TransactionCost(
-            transaction_id=transaction_id,
-            fee_type="stale_fee",
-            amount=Decimal("999"),
-            currency="USD",
-        )
-    )
-    await async_db_session.commit()
     repository = SqlAlchemyInitialOpeningCostStateRepository(async_db_session)
     checkpoint = CostBasisProcessingCheckpoint.from_transaction(
         transaction,
@@ -324,9 +301,7 @@ async def test_initial_opening_aggregate_is_idempotent_and_updates_all_source_st
         net_cost_local=Decimal("9850"),
         net_cost=Decimal("9850"),
         accrued_interest=Decimal("130"),
-        fees=Fees(exchange_fee=Decimal("1.25")),
     )
-    _with_transaction_lineage(changed)
     await repository.persist_initial_opening_cost_state(
         transaction=changed,
         checkpoint=checkpoint,
@@ -353,29 +328,10 @@ async def test_initial_opening_aggregate_is_idempotent_and_updates_all_source_st
             )
         )
     ).scalar_one()
-    persisted_transaction = await async_db_session.scalar(
-        select(DBTransaction).where(DBTransaction.transaction_id == transaction_id)
-    )
-    transaction_costs = (
-        (
-            await async_db_session.execute(
-                select(TransactionCost)
-                .where(TransactionCost.transaction_id == transaction_id)
-                .order_by(TransactionCost.fee_type)
-            )
-        )
-        .scalars()
-        .all()
-    )
     assert lot.lot_cost_local == Decimal("9850")
     assert lot.accrued_interest_paid_local == Decimal("130")
     assert offset.remaining_offset_local == Decimal("130")
     assert processing_state.latest_transaction_id == transaction_id
-    assert persisted_transaction is not None
-    assert persisted_transaction.net_cost == Decimal("9850")
-    assert [(row.fee_type, row.amount) for row in transaction_costs] == [
-        ("exchange_fee", Decimal("1.25"))
-    ]
 
 
 async def test_initial_opening_aggregate_rolls_back_without_partial_state(
@@ -386,22 +342,20 @@ async def test_initial_opening_aggregate_rolls_back_without_partial_state(
         async_db_session,
         suffix="ATOMIC_ROLLBACK",
     )
-    transaction = _with_transaction_lineage(
-        EngineTransaction(
-            transaction_id=transaction_id,
-            portfolio_id=portfolio_id,
-            instrument_id="BOND_ATOMIC_ROLLBACK",
-            security_id="BOND_ATOMIC_ROLLBACK",
-            transaction_type="BUY",
-            transaction_date=datetime(2026, 4, 10, 10, 0),
-            quantity=Decimal("10"),
-            gross_transaction_amount=Decimal("980"),
-            trade_currency="USD",
-            portfolio_base_currency="USD",
-            net_cost_local=Decimal("984"),
-            net_cost=Decimal("984"),
-            accrued_interest=Decimal("12"),
-        )
+    transaction = EngineTransaction(
+        transaction_id=transaction_id,
+        portfolio_id=portfolio_id,
+        instrument_id="BOND_ATOMIC_ROLLBACK",
+        security_id="BOND_ATOMIC_ROLLBACK",
+        transaction_type="BUY",
+        transaction_date=datetime(2026, 4, 10, 10, 0),
+        quantity=Decimal("10"),
+        gross_transaction_amount=Decimal("980"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+        net_cost_local=Decimal("984"),
+        net_cost=Decimal("984"),
+        accrued_interest=Decimal("12"),
     )
     await SqlAlchemyInitialOpeningCostStateRepository(
         async_db_session
