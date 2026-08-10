@@ -1,7 +1,7 @@
 """Persist book-scoped corporate-action parent graphs and readiness evidence.
 
-Revision ID: c150b2c3d517
-Revises: c149b2c3d516
+Revision ID: c152b2c3d519
+Revises: c151b2c3d518
 Create Date: 2026-08-09
 """
 
@@ -12,8 +12,8 @@ from sqlalchemy.dialects import postgresql
 
 from alembic import op
 
-revision: str = "c150b2c3d517"
-down_revision: str | Sequence[str] | None = "c149b2c3d516"
+revision: str = "c152b2c3d519"
+down_revision: str | Sequence[str] | None = "c151b2c3d518"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
