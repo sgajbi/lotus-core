@@ -2,12 +2,20 @@
 
 from __future__ import annotations
 
+import argparse
+import json
+import os
+import subprocess
+import uuid
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
-from typing import Any, Callable, Mapping, Protocol
+from pathlib import Path
+from typing import Any, Callable, Mapping, Protocol, cast
 
 from scripts.operations.transaction_processing_cutover_offsets import ConsumerGroupSnapshot
 from scripts.operations.transaction_processing_release_evidence import (
+    COMPOSE_PROJECT_PREFIX,
+    REQUIRED_PHASE_ORDER,
     FinancialEffectEvidence,
     PhaseResult,
     RehearsalPhase,
@@ -17,8 +25,14 @@ from scripts.operations.transaction_processing_release_evidence import (
     assert_offsets_monotonic,
     assert_runtime_matches_release,
     build_terminal_receipt,
+    canonical_content_hash,
+    redact_sensitive_values,
     validate_compose_project_name,
+    validate_release_pair,
+    validate_source_identity,
 )
+
+PLAN_SCHEMA = "lotus-core.transaction-processing-release-rehearsal-plan.v1"
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,6 +88,51 @@ class _PhaseFailure(RuntimeError):
         super().__init__(str(cause))
         self.phase = phase
         self.cause = cause
+
+
+def build_rehearsal_plan(
+    *,
+    context: RehearsalContext,
+    candidate_manifest: Mapping[str, Any],
+    rollback_manifest: Mapping[str, Any],
+    generated_at: datetime,
+) -> dict[str, Any]:
+    """Build a deterministic, non-mutating plan from qualified release evidence."""
+
+    validate_compose_project_name(context.compose_project)
+    validate_source_identity(
+        source_revision=context.source_revision,
+        source_tree_state=context.source_tree_state,
+    )
+    if context.source_tree_state != "clean":
+        raise ReleaseEvidenceError("release rehearsal requires a clean source tree")
+    candidate, rollback = validate_release_pair(
+        candidate_manifest=candidate_manifest,
+        rollback_manifest=rollback_manifest,
+    )
+    plan: dict[str, Any] = {
+        "schema": PLAN_SCHEMA,
+        "receipt_id": context.receipt_id,
+        "generated_at": _timestamp(generated_at),
+        "mode": "plan",
+        "mutates_runtime": False,
+        "cluster_certification": False,
+        "source_revision": context.source_revision,
+        "source_tree_state": context.source_tree_state,
+        "compose_project": context.compose_project,
+        "candidate_release": asdict(candidate),
+        "rollback_release": asdict(rollback),
+        "required_phases": [phase.value for phase in REQUIRED_PHASE_ORDER],
+    }
+    redacted = cast(dict[str, Any], redact_sensitive_values(plan))
+    redacted["plan_content_hash"] = plan_content_hash(redacted)
+    return redacted
+
+
+def plan_content_hash(plan: Mapping[str, Any]) -> str:
+    """Return the deterministic plan digest without its self-referential field."""
+
+    return canonical_content_hash(plan, excluded_fields={"plan_content_hash"})
 
 
 def execute_release_rehearsal(
@@ -349,3 +408,71 @@ def _timestamp(value: datetime) -> str:
     if value.tzinfo is None or value.utcoffset() is None:
         raise ReleaseEvidenceError("rehearsal clock must return timezone-aware timestamps")
     return value.astimezone(UTC).isoformat().replace("+00:00", "Z")
+
+
+def build_parser() -> argparse.ArgumentParser:
+    """Build the non-mutating release-rehearsal planning CLI."""
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--candidate-release-manifest", required=True, type=Path)
+    parser.add_argument("--rollback-release-manifest", required=True, type=Path)
+    parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--repo-root", default=Path("."), type=Path)
+    return parser
+
+
+def main() -> int:
+    """Validate release inputs and write one immutable, non-mutating rehearsal plan."""
+
+    args = build_parser().parse_args()
+    repo_root = args.repo_root.resolve()
+    now = datetime.now(UTC)
+    run_identity = now.strftime("%Y%m%d-%H%M%S") + "-" + uuid.uuid4().hex[:8]
+    context = RehearsalContext(
+        receipt_id=f"transaction-release-rehearsal-{run_identity}",
+        source_revision=_git_output(repo_root, "rev-parse", "HEAD"),
+        source_tree_state=("dirty" if _git_output(repo_root, "status", "--porcelain") else "clean"),
+        compose_project=COMPOSE_PROJECT_PREFIX + run_identity,
+    )
+    candidate_manifest = _read_json_object(args.candidate_release_manifest)
+    rollback_manifest = _read_json_object(args.rollback_release_manifest)
+    plan = build_rehearsal_plan(
+        context=context,
+        candidate_manifest=candidate_manifest,
+        rollback_manifest=rollback_manifest,
+        generated_at=now,
+    )
+    _write_json_atomic(args.output, plan)
+    print(json.dumps(plan, separators=(",", ":")))
+    return 0
+
+
+def _git_output(repo_root: Path, *arguments: str) -> str:
+    completed = subprocess.run(
+        ["git", "-C", str(repo_root), *arguments],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return completed.stdout.strip()
+
+
+def _read_json_object(path: Path) -> dict[str, Any]:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ReleaseEvidenceError(f"release manifest must be a JSON object: {path}")
+    return cast(dict[str, Any], payload)
+
+
+def _write_json_atomic(path: Path, payload: Mapping[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
+    try:
+        temporary.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

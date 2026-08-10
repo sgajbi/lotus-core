@@ -183,6 +183,15 @@ def validate_compose_project_name(project_name: str) -> None:
         )
 
 
+def validate_source_identity(*, source_revision: str, source_tree_state: str) -> None:
+    """Require one exact clean Git source identity before rehearsal mutation."""
+
+    if not re.fullmatch(r"[0-9a-f]{40}", source_revision):
+        raise ReleaseEvidenceError("source revision must be a full lowercase Git SHA")
+    if source_tree_state not in {"clean", "dirty"}:
+        raise ReleaseEvidenceError("source tree state must be clean or dirty")
+
+
 def assert_runtime_matches_release(
     *,
     release: ReleaseIdentity,
@@ -270,10 +279,10 @@ def build_terminal_receipt(
     """Build, redact, and hash a terminal fail-closed rehearsal receipt."""
 
     validate_compose_project_name(compose_project)
-    if not re.fullmatch(r"[0-9a-f]{40}", source_revision):
-        raise ReleaseEvidenceError("source revision must be a full lowercase Git SHA")
-    if source_tree_state not in {"clean", "dirty"}:
-        raise ReleaseEvidenceError("source tree state must be clean or dirty")
+    validate_source_identity(
+        source_revision=source_revision,
+        source_tree_state=source_tree_state,
+    )
     if cleanup_owned_resource_count is not None and cleanup_owned_resource_count < 0:
         raise ReleaseEvidenceError("cleanup resource count cannot be negative")
     phase_order = tuple(item.phase for item in phases)
@@ -328,9 +337,23 @@ def build_terminal_receipt(
 def receipt_content_hash(receipt: Mapping[str, Any]) -> str:
     """Return a deterministic digest excluding the self-referential hash field."""
 
-    payload = dict(receipt)
-    payload.pop("receipt_content_hash", None)
-    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    return canonical_content_hash(receipt, excluded_fields={"receipt_content_hash"})
+
+
+def canonical_content_hash(
+    payload: Mapping[str, Any],
+    *,
+    excluded_fields: set[str] | frozenset[str] = frozenset(),
+) -> str:
+    """Return a deterministic SHA-256 digest for a JSON object."""
+
+    canonical_payload = {key: value for key, value in payload.items() if key not in excluded_fields}
+    canonical = json.dumps(
+        canonical_payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+    )
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
