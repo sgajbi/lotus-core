@@ -396,17 +396,17 @@ def test_required_cost_database_operation_evidence_fails_closed_on_missing_sampl
 
 def test_required_cost_database_operations_track_current_hot_path() -> None:
     assert (
-        "CostBasisCalculationContextRepository",
-        "load_cost_basis_calculation_context",
-    ) in bank_day_load_scenario.REQUIRED_COST_DATABASE_OPERATION_EVIDENCE
-    assert (
         "CostBasisProcessingStateRepository",
         "get_cost_basis_processing_checkpoint",
-    ) not in bank_day_load_scenario.REQUIRED_COST_DATABASE_OPERATION_EVIDENCE
+    ) in bank_day_load_scenario.REQUIRED_COST_DATABASE_OPERATION_EVIDENCE
     assert (
         "CostBasisTransactionRepository",
         "get_transaction_history",
-    ) not in bank_day_load_scenario.REQUIRED_COST_DATABASE_OPERATION_EVIDENCE
+    ) in bank_day_load_scenario.REQUIRED_COST_DATABASE_OPERATION_EVIDENCE
+    assert all(
+        repository != "CostBasisCalculationContextRepository"
+        for repository, _method in bank_day_load_scenario.REQUIRED_COST_DATABASE_OPERATION_EVIDENCE
+    )
 
 
 def test_build_instrument_specs_cycles_currencies_and_prices() -> None:

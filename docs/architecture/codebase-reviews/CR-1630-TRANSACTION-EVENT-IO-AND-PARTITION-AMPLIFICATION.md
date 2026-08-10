@@ -908,6 +908,34 @@ does not publish this key policy; the operator-owned migration runbook is the du
   scoped Ruff/format/MyPy, and the live PostgreSQL proof passed. Public contracts, stored source
   values, case semantics, lock order, calculations, and database schema remain unchanged. A clean
   exact-head fan-in and daily run are required again.
+- Exact-head fan-in task
+  `eng-task-20260810-111503-lotus-core-certification-make-profile-derived-state-fan-in` passed at
+  clean signed SHA `178f51764` with exact 1,000 transaction, snapshot, position-series, and one
+  portfolio-series reconciliation; attempts `2/2`; zero repeated processing; closed jobs/outbox;
+  zero governed log errors; and `85.748s` drain. Artifact
+  `20260810T031659Z-bank-day-load.json` has SHA-256
+  `21CEBD54D30A2858D2231EAF723B5228E4767590DFDA5D3B9F99BC34176FB31C`. The combined context read
+  averaged `41.819565ms`, but drain remained 5.89% slower than the retained `80.982s` parent.
+- Exact-head daily task
+  `eng-task-20260810-112042-lotus-core-certification-make-profile-derived-state-daily` then reached
+  a valid capacity failure at the same clean signed SHA. All 100,000 transactions were durable, but
+  only 81,957 snapshots, 81,938 position-series rows, and 907 portfolio-series rows completed by
+  the fixed deadline. Attempts stayed `2/2`, repeated processing and governed log errors stayed
+  zero, failed outbox stayed zero, and terminal timestamps were still advancing. Peak database
+  total/active/idle-in-transaction connections were `63/30/32`, with `5/5` lock waiters/blocked
+  sessions. Exact scoped teardown left zero owned containers, networks, and volumes. Artifact
+  `20260810T032203Z-bank-day-load.json` has SHA-256
+  `FA1CC560B9768028B9CF6C2533D1AC4D509AD49A4BE3637B6A21914AAEC30F9B`; its Markdown receipt has
+  SHA-256 `552570ACA1B2968045857EB074EE645DC583C74C391E0E13F90CEC2ADBC3223D`.
+- The daily result is 7,785 fewer snapshots (`-8.67%`) than retained exact daily
+  `20260810T001245Z`, while average whole-transaction duration rose from `805.132ms` to
+  `885.184ms`. Three exact fan-ins at or after the combined context change were also slower than
+  the parent. Although the combined read itself reduced direct query time, it did not improve the
+  end-to-end workload and added a new port, repository, join, mapping surface, and evidence name.
+  Signed `4775aef83` and `33874e340` therefore revert the normalization follow-up and combined
+  context experiment forward. The established trim-normalized history repository contract remains
+  authoritative, and certifying evidence again requires the separate checkpoint and history
+  operations. Do not repeat the combined context experiment without new end-to-end evidence.
 
 Implementation commits include `23fc6faf3`, `d51adb739`, `ad1ad179d`, `57f8c60e2`,
 `4f05be9a5`, `c230d660a`, `f42f6eaa3`, `d56e14dbf`, `2d49fc8f1`, `70ae16f0f`,
@@ -1043,3 +1071,9 @@ The cost-history normalization correction restores the established CR-475 reposi
 contract for historical padded identifiers. It changes no API/OpenAPI, event, schema, migration,
 calculation, stored source value, case semantic, operator command, repository context, or authored
 wiki truth; this review and the existing CR-475 record are sufficient durable documentation.
+The combined cost-context experiment and its normalization follow-up are reverted forward after
+repeat fan-in and exact daily evidence failed the retain gate. The restored separate checkpoint and
+trim-normalized history reads preserve the pre-experiment API/OpenAPI, event, schema, migration,
+calculation, lock, ordering, runtime-setting, and operator contracts. The certifying operation guard
+is restored in the same slice; no additional runbook, repository-context, or authored-wiki change
+is required beyond this durable rejected-experiment evidence.

@@ -96,8 +96,9 @@ LOG_SERVICE_NAMES = (
 REQUIRED_COST_DATABASE_OPERATION_EVIDENCE = (
     ("CostBasisReferenceDataRepository", "get_cost_basis_reference_data"),
     ("CostBasisProcessingStateRepository", "acquire_cost_basis_processing_lock"),
-    ("CostBasisCalculationContextRepository", "load_cost_basis_calculation_context"),
+    ("CostBasisProcessingStateRepository", "get_cost_basis_processing_checkpoint"),
     ("CostBasisProcessingStateRepository", "upsert_cost_basis_processing_checkpoint"),
+    ("CostBasisTransactionRepository", "get_transaction_history"),
     ("CostBasisTransactionRepository", "apply_transaction_costs_and_replace_breakdown"),
     ("CostBasisLotRepository", "upsert_buy_lot_state"),
     ("CostProcessingEffectStager", "stage_processed_transactions"),

@@ -117,11 +117,11 @@
       "tranche_id": "tranche-3-derived-state-certification-closure",
       "branch": "feat/derived-state-certification-closure",
       "base_sha": "6bc937bb173051e0bd4ee9a07ffebd54face0163",
-      "head_sha": "0859fb0c13bfd7bdc1306a0f6591c587721cd652",
+      "head_sha": "33874e3408ea826b62685ecdd8c0e5a953f15603",
       "post_merge_main_sha": "pending",
       "required_predecessor_main_sha": "6bc937bb173051e0bd4ee9a07ffebd54face0163",
       "capability_boundary": "Combined derived-state runtime certification, bounded outbox capacity, deterministic workload evidence, stale-source and delayed-readiness suppression, and transaction hot-path round-trip reduction",
-      "commit_count": 40,
+      "commit_count": 43,
       "tranche_decision": "Retain the combined deployable with separately attributable position and portfolio modules, the twelve-partition transaction ceiling, and the atomic two-call readiness claim. Keep PR #931 draft until daily, recovery, poison, duplicate/outbox, correction, restatement, rollback, and downstream proofs pass.",
       "issue_closure_decision": "close_only_after_merge_exact_main_and_wiki_publication",
       "local_evidence": [
@@ -139,6 +139,10 @@
         "Corrected-head fan-in task eng-task-20260810-105813-lotus-core-certification-make-profile-derived-state-fan-in passed at clean exact SHA d3a9111719a5406f7011bd0526bfa9bdcbbe2a9c with exact reconciliation, attempts 2/2, repeats 0, closed jobs/outbox, complete required database-operation evidence, zero governed log errors, 95.872-second drain, and cleanup DONE; artifact 20260810T025932Z-bank-day-load.json has SHA-256 32152255C76AF4A5AA1C536F1520EE9A5EF18DD4F4EAA3D37347902CE4BFFA26",
         "Authorized daily task eng-task-20260810-110402-lotus-core-certification-make-profile-derived-state-daily was deliberately stopped before certification when same-pattern review found that the combined context join had not preserved CR-475 trim-normalized persisted transaction identifiers; exact owned process and Compose cleanup left zero processes, containers, networks, or volumes and the interrupted attempt is not capacity evidence",
         "Signed 0859fb0c13bfd7bdc1306a0f6591c587721cd652 restores trim-normalized persisted portfolio, security, and excluded transaction matching in the combined context statement; four focused unit tests, scoped static checks, and a live PostgreSQL padded-history lookup/exclusion proof passed",
+        "Exact-head fan-in task eng-task-20260810-111503-lotus-core-certification-make-profile-derived-state-fan-in at 178f51764c88c5d0fa94728f9cef6fc0881559ae passed exact reconciliation with attempts 2/2, repeats 0, closed jobs/outbox, zero governed errors, 85.748-second drain, and artifact SHA-256 21CEBD54D30A2858D2231EAF723B5228E4767590DFDA5D3B9F99BC34176FB31C",
+        "Exact-head daily task eng-task-20260810-112042-lotus-core-certification-make-profile-derived-state-daily reached a valid capacity failure with all 100000 transactions durable but only 81957 snapshots by the fixed deadline; attempts remained 2/2, repeats and governed errors remained zero, failed outbox remained zero, timestamps advanced, and exact scoped teardown left zero owned resources",
+        "Daily artifact 20260810T032203Z-bank-day-load.json has SHA-256 FA1CC560B9768028B9CF6C2533D1AC4D509AD49A4BE3637B6A21914AAEC30F9B and its Markdown receipt has SHA-256 552570ACA1B2968045857EB074EE645DC583C74C391E0E13F90CEC2ADBC3223D",
+        "The combined context daily produced 7785 fewer snapshots than retained parent daily 20260810T001245Z while average whole-transaction time rose from 805.132ms to 885.184ms; signed 4775aef830c1099ee2f8e9e5d99b4a2f05fe0e53 and 33874e3408ea826b62685ecdd8c0e5a953f15603 revert the normalization follow-up and combined context experiment forward",
         "Focused readiness claim and query-plan proof passed 25 live PostgreSQL integration tests, 2 plan-helper unit tests, 11 atomic-claim unit/live cases, the 122-test transaction-processing contract, scoped MyPy/Ruff/format/diff checks, and docs/wiki/architecture guards"
       ],
       "remote_evidence": [
