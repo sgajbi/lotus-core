@@ -335,5 +335,8 @@ through the reversible internal queue-lease migration documented above.
    heartbeat renewal.
 2. Run remaining duplicate, poison, stale-lease, concurrency, load, release, and exact-main
    validation before closing #714.
-3. Execute controlled offset/deployment rollback proof and canonical cross-repo QA after CI can
-   build and run the combined image against PostgreSQL and Kafka.
+3. Execute and retain the local digest-qualified proof with
+   `make transaction-release-rehearsal`; the exact-project adapter and fixed financial canaries are
+   implemented, but no passing candidate/rollback receipt exists yet. Separately require post-merge
+   registry, orchestrator, traffic, multi-replica, alert-routing, and rollback-RTO evidence where
+   the target environment owns those claims, followed by canonical cross-repo QA.

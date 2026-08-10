@@ -88,10 +88,14 @@ rearmed and completed `525` times for one final portfolio-day row.
     for that partition. Terminal recovery separately retries DLQ publication and the post-DLQ
     commit without rerunning business processing or republishing an already confirmed DLQ record.
 18. Transaction valuation readiness treats each durable outbox event as a distinct source mutation.
-    The consumer hashes the existing `outbox_id` Kafka header to rearm a completed natural-key job or
-    request requeue when a different mutation arrives during processing. Same-outbox redelivery is
-    non-disruptive; headerless compatibility records keep the prior non-rearming behavior. The
-    readiness payload, schema version, topic, partition key, and consumer group remain unchanged.
+    A positive `outbox_id` header requests processing, but only the maximum committed positive ID
+    observed by the exact-scope valuation claim advances the durable watermark. A newer ID may rearm
+    a completed natural-key job or request requeue when a different mutation arrives during
+    processing; transport input cannot initialize or advance claimed authority. Exact payload
+    identity keeps same-outbox redelivery non-disruptive. Truly headerless compatibility records
+    keep the prior non-rearming behavior, while malformed or nonpositive present sequences fail
+    closed before idempotency. The readiness payload, schema version, topic, partition key, and
+    consumer group remain unchanged.
 19. Canonical clean bootstrap persists FX and market-price histories before activating the governed
     business-date horizon and fails closed until each required source window is query visible.
     Price and FX observations received before any horizon are bootstrap facts rather than late

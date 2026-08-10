@@ -2907,11 +2907,16 @@ Most relevant current governance:
      source observation/content identity and make the stale owner skip snapshot/outbox side
      effects. Never compare transport `correlation_id` as correction identity: distinct accepted
      source observations may share correlation, and one source observation may be redelivered under
-     a different trace. Each outbox-backed transaction-readiness event is also a source mutation:
-     hash its durable `outbox_id` header to rearm `COMPLETE` work or fence a different mutation that
-     arrives during `PROCESSING`. Redelivery of the same outbox event must remain non-disruptive,
-     while headerless compatibility events retain the legacy non-rearming behavior. Never infer
-     mutation identity from Kafka offset, trace, or correlation. Claim, stale-reset, and
+     a different trace. Each outbox-backed transaction-readiness event is also a source mutation.
+     Treat its positive `outbox_id` header as a processing request, then let the valuation claim
+     snapshot the maximum committed positive ID for the exact portfolio/security/date/epoch scope.
+     Only an ID newer than the durable claimed watermark may rearm `COMPLETE` work or fence a
+     different mutation that arrives during `PROCESSING`; transport input must never initialize or
+     advance that watermark. Preserve exact payload identity separately so redelivery of the same
+     outbox event remains non-disruptive. Truly headerless compatibility events retain legacy
+     non-rearming behavior, while a present malformed or nonpositive sequence fails closed before
+     idempotency. Never infer mutation identity from Kafka offset, trace, correlation, or an
+     independently hashed transport value. Claim, stale-reset, and
      dispatch-recovery paths must clear a consumed fence without discarding a newer source mutation,
      including at the normal retry limit.
 192. Correlation ids are diagnostic lineage, not authorization to replay completed work. Valuation
