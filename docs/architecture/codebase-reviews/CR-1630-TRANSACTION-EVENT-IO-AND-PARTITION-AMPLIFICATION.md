@@ -936,6 +936,35 @@ does not publish this key policy; the operator-owned migration runbook is the du
   context experiment forward. The established trim-normalized history repository contract remains
   authoritative, and certifying evidence again requires the separate checkpoint and history
   operations. Do not repeat the combined context experiment without new end-to-end evidence.
+- Signed `9babe76fa` introduces a dedicated initial-opening cost-state application port and one
+  PostgreSQL statement that persists the ordinary first BUY's opening lot, accrued-income offset,
+  and deterministic processing checkpoint as data-modifying CTEs. The existing lot, offset, and
+  checkpoint statement builders remain the single payload and conflict-policy truth. Corrections,
+  replay suffixes, disposals, transfers, AVCO, calculation lineage, lock order, and unit-of-work
+  rollback retain their specialized paths. This removes two database round trips from the dominant
+  daily transaction path without changing economics or external contracts. The slice passed 249
+  focused unit tests, four live PostgreSQL/end-to-end replay-update/rollback/BUY-SELL proofs,
+  strict MyPy, repository-pinned Ruff, and the complete architecture guard.
+- Exact-head fan-in task
+  `eng-task-20260810-140612-lotus-core-certification-make-profile-derived-state-fan-in` at clean
+  signed `9babe76fa` reconciled exactly with attempts `2/2`, zero repeats, closed jobs/outbox, and
+  zero governed errors, but drained in `136.278s`. Cost-stage aggregate time fell from `294.247s`
+  to `221.240s` and whole-transaction time fell from `725.861s` to `595.510s`; the new aggregate
+  write averaged `34.255ms` versus `55.980ms` for the former instrumented lot-plus-checkpoint
+  writes. The total drain outlier was isolated to `63.057s` position-to-portfolio aggregation
+  latency and lower downstream outbox throughput. Artifact `20260810T060812Z-bank-day-load.json`
+  has SHA-256 `5D4ED65591CFD402CA817E706B4DDBB68FB469F984443C93B692C7C4EEA13085`.
+- Same-code repeat fan-in task
+  `eng-task-20260810-141344-lotus-core-certification-make-profile-derived-state-fan-in` at clean
+  signed formatting head `28a475c9d` passed exact reconciliation with attempts `2/2`, zero
+  repeats, closed jobs/outbox, zero governed errors, and `80.866s` drain. This is 11.11% faster
+  than the restored-path `90.979s` run and 0.14% faster than the retained `80.982s` best. Cost
+  stage remained 16.09% lower than the restored path; the aggregate write averaged `37.434ms`, at
+  least 33.13% below the former two instrumented writes, while the removed accrued-offset write
+  had not been timed. Position-to-portfolio latency returned to `0.972s`, confirming the first
+  run's downstream outlier. Artifact `20260810T061507Z-bank-day-load.json` has SHA-256
+  `6A5285C17DADEBFB2FFDCBCCDA1E9FD7C402BBA5FB93A5FA7FFA11BAFA3AB1F2`; exact scoped cleanup is
+  `DONE`. The repeat retain gate authorizes one exact-head daily run.
 
 Implementation commits include `23fc6faf3`, `d51adb739`, `ad1ad179d`, `57f8c60e2`,
 `4f05be9a5`, `c230d660a`, `f42f6eaa3`, `d56e14dbf`, `2d49fc8f1`, `70ae16f0f`,
@@ -1077,3 +1106,11 @@ trim-normalized history reads preserve the pre-experiment API/OpenAPI, event, sc
 calculation, lock, ordering, runtime-setting, and operator contracts. The certifying operation guard
 is restored in the same slice; no additional runbook, repository-context, or authored-wiki change
 is required beyond this durable rejected-experiment evidence.
+The atomic initial-opening cost-state statement changes only internal PostgreSQL query shape and
+application-port composition inside the existing transaction-processing unit of work. It preserves
+calculation economics and lineage, deterministic ordering, lock scope, rollback, APIs/OpenAPI,
+events, database schema, migrations, runtime settings, and operator commands. The existing
+bank-day evidence artifact now requires the aggregate operation instead of the two superseded
+individual operations. This review, executable guards, and workload artifacts are sufficient
+durable truth; no additional repository context, methodology, runbook, or authored-wiki change is
+required.

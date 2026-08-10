@@ -1,5 +1,15 @@
 # Codebase Review Ledger
 
+CR-1630 initial-opening cost-state addendum (2026-08-10): signed `9babe76fa` replaces the
+ordinary first BUY's separate opening-lot, accrued-income-offset, and processing-checkpoint writes
+with one dedicated aggregate statement, removing two database round trips while preserving the
+specialized correction/replay/AVCO paths and all external contracts. The first exact fan-in exposed
+a downstream 63.057-second portfolio-aggregation outlier despite materially faster cost and whole
+transaction stages. Same-code repeat at signed `28a475c9d` reconciled exactly in `80.866s`, 11.11%
+faster than the restored-path comparison, with attempts `2/2`, zero repeats, closed jobs/outbox,
+zero governed errors, and cleanup `DONE`. CR-1630 retains both artifacts and authorizes one
+exact-head daily capacity run.
+
 CR-1682 delayed-readiness sequencing addendum (2026-08-10): exact fan-in evidence at signed
 `f4ab7ecfc` reconciled all 1,000 financial results but exposed 30 scheduler-backfill valuation
 repeats and 1,007 snapshot publications. Core now snapshots the maximum committed exact-scope

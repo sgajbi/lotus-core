@@ -117,11 +117,11 @@
       "tranche_id": "tranche-3-derived-state-certification-closure",
       "branch": "feat/derived-state-certification-closure",
       "base_sha": "6bc937bb173051e0bd4ee9a07ffebd54face0163",
-      "head_sha": "33874e3408ea826b62685ecdd8c0e5a953f15603",
+      "head_sha": "28a475c9d0ccca95ad95017b5a8a86ab30bb48be",
       "post_merge_main_sha": "pending",
       "required_predecessor_main_sha": "6bc937bb173051e0bd4ee9a07ffebd54face0163",
       "capability_boundary": "Combined derived-state runtime certification, bounded outbox capacity, deterministic workload evidence, stale-source and delayed-readiness suppression, and transaction hot-path round-trip reduction",
-      "commit_count": 43,
+      "commit_count": 46,
       "tranche_decision": "Retain the combined deployable with separately attributable position and portfolio modules, the twelve-partition transaction ceiling, and the atomic two-call readiness claim. Keep PR #931 draft until daily, recovery, poison, duplicate/outbox, correction, restatement, rollback, and downstream proofs pass.",
       "issue_closure_decision": "close_only_after_merge_exact_main_and_wiki_publication",
       "local_evidence": [
@@ -143,6 +143,9 @@
         "Exact-head daily task eng-task-20260810-112042-lotus-core-certification-make-profile-derived-state-daily reached a valid capacity failure with all 100000 transactions durable but only 81957 snapshots by the fixed deadline; attempts remained 2/2, repeats and governed errors remained zero, failed outbox remained zero, timestamps advanced, and exact scoped teardown left zero owned resources",
         "Daily artifact 20260810T032203Z-bank-day-load.json has SHA-256 FA1CC560B9768028B9CF6C2533D1AC4D509AD49A4BE3637B6A21914AAEC30F9B and its Markdown receipt has SHA-256 552570ACA1B2968045857EB074EE645DC583C74C391E0E13F90CEC2ADBC3223D",
         "The combined context daily produced 7785 fewer snapshots than retained parent daily 20260810T001245Z while average whole-transaction time rose from 805.132ms to 885.184ms; signed 4775aef830c1099ee2f8e9e5d99b4a2f05fe0e53 and 33874e3408ea826b62685ecdd8c0e5a953f15603 revert the normalization follow-up and combined context experiment forward",
+        "Signed 9babe76fa2d3e21151c3515d24bfeb2837edb00b persists the ordinary initial BUY opening lot, accrued-income offset, and deterministic processing checkpoint through one dedicated cost-state aggregate statement, removing two database round trips while preserving specialized correction, replay, disposal, transfer, and AVCO paths",
+        "Exact fan-in task eng-task-20260810-140612-lotus-core-certification-make-profile-derived-state-fan-in passed exact reconciliation at 9babe76fa2d3e21151c3515d24bfeb2837edb00b but drained in 136.278 seconds because position-to-portfolio aggregation latency was a 63.057-second downstream outlier; cost-stage time still fell 24.81 percent and whole-transaction time fell 17.96 percent; artifact SHA-256 5D4ED65591CFD402CA817E706B4DDBB68FB469F984443C93B692C7C4EEA13085",
+        "Same-code repeat fan-in task eng-task-20260810-141344-lotus-core-certification-make-profile-derived-state-fan-in at 28a475c9d0ccca95ad95017b5a8a86ab30bb48be passed exact reconciliation with attempts 2/2, repeats 0, closed jobs/outbox, zero governed errors, 80.866-second drain, and cleanup DONE; this improves the restored-path 90.979-second drain by 11.11 percent and authorizes one exact-head daily run; artifact SHA-256 6A5285C17DADEBFB2FFDCBCCDA1E9FD7C402BBA5FB93A5FA7FFA11BAFA3AB1F2",
         "Focused readiness claim and query-plan proof passed 25 live PostgreSQL integration tests, 2 plan-helper unit tests, 11 atomic-claim unit/live cases, the 122-test transaction-processing contract, scoped MyPy/Ruff/format/diff checks, and docs/wiki/architecture guards"
       ],
       "remote_evidence": [
