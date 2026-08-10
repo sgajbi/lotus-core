@@ -2548,13 +2548,6 @@ class CorporateActionChildObservationRecord(Base):
             "delivery_event_id",
             name="uq_ca_observation_delivery",
         ),
-        UniqueConstraint(
-            "event_id",
-            "transaction_id",
-            "transaction_epoch",
-            "observed_content_hash",
-            name="uq_ca_observation_semantic_retry",
-        ),
         CheckConstraint(
             "observation_sequence >= 1 AND transaction_epoch >= 0",
             name="ck_ca_observation_counters",

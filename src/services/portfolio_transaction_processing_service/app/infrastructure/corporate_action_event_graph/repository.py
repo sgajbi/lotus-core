@@ -23,7 +23,7 @@ from portfolio_common.domain.calculation_lineage import (
     FinancialSourceReference,
     canonical_content_hash,
 )
-from sqlalchemy import and_, func, insert, or_, select, text, update
+from sqlalchemy import and_, insert, or_, select, text, true, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
@@ -161,16 +161,22 @@ class SqlAlchemyCorporateActionEventGraphRepository:
                 event,
                 CorporateActionObservationAppendOutcome.UNCHANGED,
             )
-        semantic_retry = await self._observation_by_semantic_identity(event.id, observation)
+        semantic_retry = await self._observation_by_semantic_identity(event, observation)
         if semantic_retry is not None:
             return await self._current_readiness_decision(
                 event,
                 CorporateActionObservationAppendOutcome.UNCHANGED,
             )
-        latest_epoch = await self._latest_transaction_epoch(
+        latest_observation = await self._latest_transaction_observation(
             event.id, observation.child.transaction_id
         )
-        if latest_epoch is not None and observation.transaction_epoch <= latest_epoch:
+        if latest_observation is not None and (
+            observation.transaction_epoch < latest_observation.transaction_epoch
+            or (
+                observation.transaction_epoch == latest_observation.transaction_epoch
+                and observation.child.content_hash != latest_observation.observed_content_hash
+            )
+        ):
             raise ConflictingCorporateActionObservationError(
                 "corporate-action child correction epoch must increase monotonically"
             )
@@ -414,34 +420,61 @@ class SqlAlchemyCorporateActionEventGraphRepository:
 
     async def _observation_by_semantic_identity(
         self,
-        event_id: int,
+        event: CorporateActionEventRecord,
         observation: CorporateActionChildObservation,
     ) -> CorporateActionChildObservationRecord | None:
+        current_manifest = await self._current_manifest(event)
+        reusable_for_current_manifest = true()
+        if current_manifest is not None:
+            current_node = aliased(CorporateActionManifestNodeRecord)
+            predecessor_node = aliased(CorporateActionManifestNodeRecord)
+            reusable_transaction_ids = (
+                select(current_node.transaction_id)
+                .join(
+                    predecessor_node,
+                    predecessor_node.transaction_id == current_node.transaction_id,
+                )
+                .where(
+                    current_node.manifest_id == current_manifest.id,
+                    predecessor_node.manifest_id == current_manifest.previous_manifest_id,
+                )
+            )
+            reusable_for_current_manifest = or_(
+                CorporateActionChildObservationRecord.observation_sequence
+                > current_manifest.opened_observation_sequence,
+                CorporateActionChildObservationRecord.transaction_id.in_(
+                    reusable_transaction_ids
+                ),
+            )
         return await self._session.scalar(
             select(CorporateActionChildObservationRecord).where(
-                CorporateActionChildObservationRecord.event_id == event_id,
+                CorporateActionChildObservationRecord.event_id == event.id,
                 CorporateActionChildObservationRecord.transaction_id
                 == observation.child.transaction_id,
                 CorporateActionChildObservationRecord.transaction_epoch
                 == observation.transaction_epoch,
                 CorporateActionChildObservationRecord.observed_content_hash
                 == observation.child.content_hash,
+                reusable_for_current_manifest,
             )
         )
 
-    async def _latest_transaction_epoch(
+    async def _latest_transaction_observation(
         self,
         event_id: int,
         transaction_id: str,
-    ) -> int | None:
-        return cast(
-            int | None,
-            await self._session.scalar(
-                select(func.max(CorporateActionChildObservationRecord.transaction_epoch)).where(
-                    CorporateActionChildObservationRecord.event_id == event_id,
-                    CorporateActionChildObservationRecord.transaction_id == transaction_id,
-                )
-            ),
+    ) -> CorporateActionChildObservationRecord | None:
+        return await self._session.scalar(
+            select(CorporateActionChildObservationRecord)
+            .where(
+                CorporateActionChildObservationRecord.event_id == event_id,
+                CorporateActionChildObservationRecord.transaction_id == transaction_id,
+            )
+            .order_by(
+                CorporateActionChildObservationRecord.transaction_epoch.desc(),
+                CorporateActionChildObservationRecord.observation_sequence.desc(),
+            )
+            .limit(1)
         )
 
     async def _insert_observation(

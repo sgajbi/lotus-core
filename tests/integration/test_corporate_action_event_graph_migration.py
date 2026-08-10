@@ -4,12 +4,17 @@ from __future__ import annotations
 
 import json
 import runpy
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
+from portfolio_common.domain.calculation_lineage import (
+    FinancialSourceReference,
+    canonical_content_hash,
+)
 from sqlalchemy import inspect, text
 from sqlalchemy.exc import IntegrityError
 
@@ -79,6 +84,54 @@ def _child_payload_and_hash(
         target_instrument_id=target_instrument_id,
     )
     return json.dumps(child.lineage_payload()), child.content_hash
+
+
+def _manifest_payload_and_hash() -> tuple[str, str, str]:
+    source = corporate_action.CorporateActionEventChild(
+        transaction_id="CA-SOURCE-DB-001",
+        transaction_type="DEMERGER_OUT",
+        child_role="SOURCE_POSITION_REDUCE",
+        instrument_id="SOURCE-SEC",
+        source_instrument_id="SOURCE-SEC",
+    )
+    target = corporate_action.CorporateActionEventChild(
+        transaction_id="CA-TARGET-DB-001",
+        transaction_type="DEMERGER_IN",
+        child_role="TARGET_POSITION_ADD",
+        dependency_transaction_ids=(source.transaction_id,),
+        instrument_id="TARGET-SEC",
+        source_instrument_id="SOURCE-SEC",
+        target_instrument_id="TARGET-SEC",
+    )
+    manifest = corporate_action.CorporateActionParentManifest(
+        corporate_action_event_id="CA-EVENT-DB-001",
+        portfolio_id="CA-PORT-DB-001",
+        linked_transaction_group_id="CA-GROUP-DB-001",
+        parent_event_reference="CA-PARENT-DB-001",
+        corporate_action_type="DEMERGER",
+        version=1,
+        completion_declared=True,
+        expected_children=(source, target),
+        source_reference=FinancialSourceReference(
+            source_system="custodian-ca",
+            source_record_id="CA-SOURCE-RECORD-001",
+            source_revision="revision-1",
+            source_content_hash="a" * 64,
+            observed_at=datetime(2026, 8, 9, 1, tzinfo=UTC),
+        ),
+    )
+    payload = manifest.lineage_payload()
+    source_payload = dict(cast(dict[str, object], payload["source_reference"]))
+    source_payload["observed_at"] = datetime(2026, 8, 9, 1, tzinfo=UTC).isoformat()
+    payload["source_reference"] = source_payload
+    execution_plan_hash = canonical_content_hash(
+        {
+            "canonical_payload_version": 1,
+            "manifest_content_hash": manifest.content_hash,
+            "ordered_transaction_ids": [source.transaction_id, target.transaction_id],
+        }
+    )
+    return json.dumps(payload), manifest.content_hash, execution_plan_hash
 
 
 def _seed_book_scope(connection) -> None:
@@ -316,6 +369,22 @@ def test_corporate_action_event_graph_apply_constraints_and_rollback(
             match="event identity is immutable",
         )
 
+        manifest_payload, manifest_content_hash, execution_plan_content_hash = (
+            _manifest_payload_and_hash()
+        )
+        assert (
+            connection.scalar(
+                text("SELECT canonical_ca_manifest_payload_hash(CAST(:payload AS jsonb))"),
+                {"payload": manifest_payload},
+            )
+            == manifest_content_hash
+        )
+        forged_manifest_payload = json.loads(manifest_payload)
+        forged_manifest_payload["corporate_action_type"] = "SPIN_OFF"
+        assert connection.scalar(
+            text("SELECT canonical_ca_manifest_payload_hash(CAST(:payload AS jsonb))"),
+            {"payload": json.dumps(forged_manifest_payload)},
+        ) != manifest_content_hash
         manifest_insert = text(
             """
             INSERT INTO corporate_action_manifest_versions (
@@ -363,10 +432,10 @@ def test_corporate_action_event_graph_apply_constraints_and_rollback(
                 "manifest_version": 1,
                 "source_revision": "revision-1",
                 "source_content_hash": "a" * 64,
-                "manifest_content_hash": "b" * 64,
+                "manifest_content_hash": manifest_content_hash,
                 "previous_manifest_id": None,
                 "previous_manifest_content_hash": None,
-                "manifest_payload": '{"version":1}',
+                "manifest_payload": manifest_payload,
             },
         ).scalar_one()
         _expect_integrity_error(
@@ -407,7 +476,7 @@ def test_corporate_action_event_graph_apply_constraints_and_rollback(
                 "source_content_hash": "c" * 64,
                 "manifest_content_hash": "d" * 64,
                 "previous_manifest_id": manifest_id,
-                "previous_manifest_content_hash": "b" * 64,
+                "previous_manifest_content_hash": manifest_content_hash,
                 "manifest_payload": '{"version":3}',
             },
         )
@@ -420,7 +489,7 @@ def test_corporate_action_event_graph_apply_constraints_and_rollback(
                 "source_content_hash": "c" * 64,
                 "manifest_content_hash": "d" * 64,
                 "previous_manifest_id": manifest_id,
-                "previous_manifest_content_hash": "b" * 64,
+                "previous_manifest_content_hash": manifest_content_hash,
                 "manifest_payload": '{"version":2}',
             },
         )
@@ -434,7 +503,7 @@ def test_corporate_action_event_graph_apply_constraints_and_rollback(
                 "source_content_hash": "5" * 64,
                 "manifest_content_hash": "6" * 64,
                 "previous_manifest_id": manifest_id,
-                "previous_manifest_content_hash": "b" * 64,
+                "previous_manifest_content_hash": manifest_content_hash,
                 "manifest_payload": '{"version":2,"candidate":"loser"}',
             },
         )
@@ -586,8 +655,8 @@ def test_corporate_action_event_graph_apply_constraints_and_rollback(
             "state_version": 2,
             "manifest_id": manifest_id,
             "through_observation_sequence": 1,
-            "manifest_content_hash": "b" * 64,
-            "execution_plan_content_hash": "3" * 64,
+            "manifest_content_hash": manifest_content_hash,
+            "execution_plan_content_hash": execution_plan_content_hash,
             "ordered_transaction_ids": '["CA-SOURCE-DB-001","CA-TARGET-DB-001"]',
         }
         _expect_integrity_error(
@@ -626,7 +695,7 @@ def test_corporate_action_event_graph_apply_constraints_and_rollback(
             connection,
             readiness_insert,
             readiness,
-            match="READY plan does not match manifest edges",
+            match="manifest graph has no canonical execution order",
         )
         reversed_edge.rollback()
 
@@ -765,6 +834,12 @@ def test_corporate_action_event_graph_apply_constraints_and_rollback(
         _expect_integrity_error(
             connection,
             readiness_insert,
+            readiness | {"execution_plan_content_hash": "0" * 64},
+            match="execution-plan hash is not canonical",
+        )
+        _expect_integrity_error(
+            connection,
+            readiness_insert,
             readiness | {"manifest_content_hash": "0" * 64},
             match="READY evidence does not match complete manifest",
         )
@@ -841,7 +916,7 @@ def test_corporate_action_event_graph_apply_constraints_and_rollback(
                 "state_version": 3,
                 "manifest_id": manifest_id,
                 "through_observation_sequence": 2,
-                "manifest_content_hash": "b" * 64,
+                "manifest_content_hash": manifest_content_hash,
             },
         )
         corrected_observation = target_observation | {
@@ -850,6 +925,27 @@ def test_corporate_action_event_graph_apply_constraints_and_rollback(
             "delivery_event_id": "delivery-ca-db-003",
         }
         connection.execute(observation_insert, corrected_observation)
+        _expect_integrity_error(
+            connection,
+            observation_insert,
+            corrected_observation
+            | {
+                "observation_sequence": 4,
+                "delivery_event_id": "delivery-ca-db-same-epoch-conflict",
+                "observed_content_hash": source_content_hash,
+            },
+            match="correction epoch must increase monotonically",
+        )
+        _expect_integrity_error(
+            connection,
+            observation_insert,
+            target_observation
+            | {
+                "observation_sequence": 4,
+                "delivery_event_id": "delivery-ca-db-lower-epoch",
+            },
+            match="correction epoch must increase monotonically",
+        )
         connection.execute(
             text(
                 """
