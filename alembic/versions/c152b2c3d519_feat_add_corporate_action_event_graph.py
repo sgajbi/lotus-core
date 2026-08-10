@@ -839,7 +839,25 @@ def upgrade() -> None:
             DECLARE
                 predecessor_version integer;
                 predecessor_hash varchar(64);
+                event_observation_sequence integer;
             BEGIN
+                SELECT last_observation_sequence
+                INTO event_observation_sequence
+                FROM corporate_action_events
+                WHERE id = NEW.event_id
+                FOR UPDATE;
+
+                IF event_observation_sequence IS NULL
+                   OR NEW.opened_observation_sequence
+                       <> (CASE
+                           WHEN NEW.manifest_version = 1 THEN 0
+                           ELSE event_observation_sequence
+                       END) THEN
+                    RAISE EXCEPTION
+                        'corporate-action manifest opening boundary does not match event state'
+                        USING ERRCODE = '23514';
+                END IF;
+
                 IF NEW.manifest_version = 1 THEN
                     RETURN NEW;
                 END IF;
@@ -1329,6 +1347,58 @@ def upgrade() -> None:
             END;
             $$;
 
+            CREATE FUNCTION ca_observation_is_authorized(
+                target_manifest_id integer,
+                target_transaction_id text,
+                target_observation_sequence integer
+            )
+            RETURNS boolean
+            LANGUAGE sql
+            STABLE
+            STRICT
+            AS $$
+                WITH RECURSIVE retained_manifest_chain AS (
+                    SELECT
+                        manifest.id,
+                        manifest.previous_manifest_id,
+                        manifest.opened_observation_sequence,
+                        0 AS distance_from_current
+                    FROM corporate_action_manifest_versions AS manifest
+                    JOIN corporate_action_manifest_nodes AS node
+                      ON node.manifest_id = manifest.id
+                     AND node.transaction_id = target_transaction_id
+                    WHERE manifest.id = target_manifest_id
+
+                    UNION ALL
+
+                    SELECT
+                        predecessor.id,
+                        predecessor.previous_manifest_id,
+                        predecessor.opened_observation_sequence,
+                        current.distance_from_current + 1
+                    FROM retained_manifest_chain AS current
+                    JOIN corporate_action_manifest_versions AS predecessor
+                      ON predecessor.id = current.previous_manifest_id
+                    JOIN corporate_action_manifest_nodes AS predecessor_node
+                      ON predecessor_node.manifest_id = predecessor.id
+                     AND predecessor_node.transaction_id = target_transaction_id
+                )
+                SELECT coalesce(
+                    target_observation_sequence > (
+                        SELECT retained.opened_observation_sequence
+                        FROM retained_manifest_chain AS retained
+                        ORDER BY retained.distance_from_current DESC
+                        LIMIT 1
+                    ),
+                    target_observation_sequence > (
+                        SELECT manifest.opened_observation_sequence
+                        FROM corporate_action_manifest_versions AS manifest
+                        WHERE manifest.id = target_manifest_id
+                    ),
+                    false
+                );
+            $$;
+
             CREATE FUNCTION enforce_ca_readiness_plan()
             RETURNS trigger
             LANGUAGE plpgsql
@@ -1361,8 +1431,6 @@ def upgrade() -> None:
                 payload_edge_count integer;
                 payload_edge_mismatch_count integer;
                 completion_declared boolean;
-                manifest_opened_observation_sequence integer;
-                predecessor_manifest_id integer;
             BEGIN
                 IF NEW.readiness_status <> 'READY' THEN
                     RETURN NEW;
@@ -1379,27 +1447,21 @@ def upgrade() -> None:
                     count(node.resolved_execution_ordinal),
                     min(node.resolved_execution_ordinal),
                     max(node.resolved_execution_ordinal),
-                    manifest.expected_node_count,
-                    manifest.opened_observation_sequence,
-                    manifest.previous_manifest_id
+                    manifest.expected_node_count
                 INTO
                     expected_order,
                     expected_count,
                     resolved_count,
                     minimum_ordinal,
                     maximum_ordinal,
-                    declared_node_count,
-                    manifest_opened_observation_sequence,
-                    predecessor_manifest_id
+                    declared_node_count
                 FROM corporate_action_manifest_versions AS manifest
                 LEFT JOIN corporate_action_manifest_nodes AS node
                   ON node.manifest_id = manifest.id
                 WHERE manifest.id = NEW.manifest_id
                   AND manifest.event_id = NEW.event_id
                 GROUP BY
-                    manifest.expected_node_count,
-                    manifest.opened_observation_sequence,
-                    manifest.previous_manifest_id;
+                    manifest.expected_node_count;
 
                 IF expected_count IS NULL
                    OR expected_count = 0
@@ -1636,25 +1698,10 @@ def upgrade() -> None:
                     WHERE observation.event_id = NEW.event_id
                       AND observation.observation_sequence
                           <= NEW.through_observation_sequence
-                      AND (
+                      AND ca_observation_is_authorized(
+                          NEW.manifest_id,
+                          observation.transaction_id,
                           observation.observation_sequence
-                              > manifest_opened_observation_sequence
-                          OR (
-                              EXISTS (
-                                  SELECT 1
-                                  FROM corporate_action_manifest_nodes AS expected_node
-                                  WHERE expected_node.manifest_id = NEW.manifest_id
-                                    AND expected_node.transaction_id
-                                        = observation.transaction_id
-                              )
-                              AND EXISTS (
-                                  SELECT 1
-                                  FROM corporate_action_manifest_nodes AS predecessor_node
-                                  WHERE predecessor_node.manifest_id = predecessor_manifest_id
-                                    AND predecessor_node.transaction_id
-                                        = observation.transaction_id
-                              )
-                          )
                       )
                     ORDER BY
                         observation.transaction_id,
@@ -1715,6 +1762,7 @@ def downgrade() -> None:
 
     op.drop_table("corporate_action_readiness_evaluations")
     op.execute(sa.text("DROP FUNCTION enforce_ca_readiness_plan()"))
+    op.execute(sa.text("DROP FUNCTION ca_observation_is_authorized(integer, text, integer)"))
     op.execute(sa.text("DROP FUNCTION canonical_ca_execution_order(integer)"))
     op.execute(sa.text("DROP FUNCTION canonical_ca_manifest_payload_hash(jsonb)"))
     op.execute(sa.text("DROP FUNCTION assert_ca_manifest_semantics(jsonb)"))

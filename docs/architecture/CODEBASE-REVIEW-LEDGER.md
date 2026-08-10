@@ -99,6 +99,18 @@ and fail-closed unsupported type, disallowed transaction type, and invalid role 
 no public API, event, dependency, image, pool, Kafka, or topology contract; repository context was
 updated, while the existing Financial Reconciliation wiki requires no additional operator-facing
 change for this internal integrity boundary.
+Two subsequent P1 reviews found that predecessor/current intersection was insufficient across three
+or more manifest versions: a rogue observation from before a child was first declared could become
+reusable when two later versions both retained that child, and a direct writer could forge the
+persisted opening sequence. One PostgreSQL-owned authorization function now walks the complete
+contiguous retained-child manifest chain and derives the first authoritative boundary; both the
+repository and READY trigger call that invariant. The manifest trigger serializes on the event row
+and requires boundary zero for version 1 or the event's exact current observation sequence for a
+correction. Real PostgreSQL regressions prove a forged boundary fails and pre-declaration evidence
+stays ineligible through version 3 until redelivery. Post-boundary unexpected evidence remains
+fail-closed. No public API, OpenAPI, event, dependency, image, pool, Kafka, topology, or operator
+workflow changed; the existing wiki needs no additional publication change for this internal
+integrity hardening.
 
 CR-1630 delivery-tranche boundary addendum (2026-08-10): PR #931 reaches its governed delivery
 boundary with 73 signed commits at evidence head `c220b33de`. The retained implementation includes

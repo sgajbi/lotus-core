@@ -2730,9 +2730,13 @@ Most relevant current governance:
      timezone-aware source timestamps to UTC in stored JSON so equivalent instants do not become
      false integrity conflicts. Version 1 evaluates observations from sequence zero so a rogue child
      received before source authority cannot be forgiven. Later manifest corrections reuse a
-     historical observation only when its child is declared by both the predecessor and current
-     manifest; a newly declared child must be observed after the correction opening boundary, while
-     every post-boundary observation remains eligible for fail-closed evaluation. Child
+     historical observation only when it remains authorized through the complete contiguous
+     predecessor chain in which that child is declared. A newly declared child must be observed
+     after the opening boundary of the version that first declared it; merely retaining that child
+     in a later correction must not reauthorize older rogue evidence. Persisted opening boundaries
+     are database-bound to sequence zero for version 1 and the event's current observation sequence
+     for every correction, while every post-boundary observation remains eligible for fail-closed
+     evaluation. Child
      observation append uses the same ordered dual locks and a conflict-neutral savepoint, rejects
      cross-portfolio transaction identity, preserves exact-delivery evidence, treats matching
      semantic redelivery as neutral, requires monotonically increasing correction epochs for changed

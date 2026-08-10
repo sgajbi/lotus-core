@@ -558,7 +558,7 @@ def test_corporate_action_event_graph_apply_constraints_and_rollback(
                 "manifest_payload": '{"version":3}',
             },
         )
-        connection.execute(
+        second_manifest_id = connection.execute(
             manifest_insert,
             {
                 "event_id": event_id,
@@ -570,7 +570,7 @@ def test_corporate_action_event_graph_apply_constraints_and_rollback(
                 "previous_manifest_content_hash": manifest_content_hash,
                 "manifest_payload": '{"version":2}',
             },
-        )
+        ).scalar_one()
         _expect_integrity_error(
             connection,
             manifest_insert,
@@ -873,6 +873,21 @@ def test_corporate_action_event_graph_apply_constraints_and_rollback(
                 """
             ),
             {"event_id": event_id},
+        )
+        _expect_integrity_error(
+            connection,
+            manifest_insert,
+            {
+                "event_id": event_id,
+                "manifest_version": 3,
+                "source_revision": "revision-forged-boundary",
+                "source_content_hash": "7" * 64,
+                "manifest_content_hash": "8" * 64,
+                "previous_manifest_id": second_manifest_id,
+                "previous_manifest_content_hash": "d" * 64,
+                "manifest_payload": '{"version":3}',
+            },
+            match="opening boundary does not match event state",
         )
         readiness["through_observation_sequence"] = 2
         forged_payload_savepoint = connection.begin_nested()

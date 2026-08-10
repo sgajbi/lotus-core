@@ -89,6 +89,7 @@ def test_parent_graph_migration_is_ordered_constrained_and_reversible(
         "corporate-action ledger rows are immutable",
         "corporate-action event identity is immutable",
         "corporate-action manifest predecessor does not continue the event chain",
+        "corporate-action manifest opening boundary does not match event state",
         "corporate-action observation transaction is outside event portfolio",
         "corporate-action READY plan does not match manifest node order",
         "corporate-action READY plan does not match manifest edges",
@@ -96,9 +97,8 @@ def test_parent_graph_migration_is_ordered_constrained_and_reversible(
         "corporate-action READY evidence is stale against event state",
         "corporate-action READY evidence does not match latest child observations",
         "unexpected_observation_count",
-        "> manifest_opened_observation_sequence",
-        "predecessor_manifest_id",
-        "predecessor_node.manifest_id = predecessor_manifest_id",
+        "ca_observation_is_authorized",
+        "retained_manifest_chain",
     ):
         assert invariant in sql
 

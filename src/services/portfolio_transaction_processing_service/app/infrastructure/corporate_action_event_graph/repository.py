@@ -23,10 +23,9 @@ from portfolio_common.domain.calculation_lineage import (
     FinancialSourceReference,
     canonical_content_hash,
 )
-from sqlalchemy import and_, insert, or_, select, text, true, update
+from sqlalchemy import and_, func, insert, or_, select, text, true, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import aliased
 
 from ...domain.transaction.corporate_action import (
     CorporateActionEventChild,
@@ -112,8 +111,6 @@ class SqlAlchemyCorporateActionEventGraphRepository:
             observed_children=await self._latest_observed_children(
                 event.id,
                 manifest_id=manifest_record_id,
-                predecessor_manifest_id=predecessor.id if predecessor is not None else None,
-                opened_observation_sequence=opened_observation_sequence,
             ),
         )
         next_state_version = event.state_version + 1
@@ -355,31 +352,17 @@ class SqlAlchemyCorporateActionEventGraphRepository:
         event_id: int,
         *,
         manifest_id: int,
-        predecessor_manifest_id: int | None,
-        opened_observation_sequence: int,
     ) -> tuple[CorporateActionEventChild, ...]:
         observation = CorporateActionChildObservationRecord
-        current_node = aliased(CorporateActionManifestNodeRecord)
-        predecessor_node = aliased(CorporateActionManifestNodeRecord)
-        reusable_transaction_ids = (
-            select(current_node.transaction_id)
-            .join(
-                predecessor_node,
-                predecessor_node.transaction_id == current_node.transaction_id,
-            )
-            .where(
-                current_node.manifest_id == manifest_id,
-                predecessor_node.manifest_id == predecessor_manifest_id,
-            )
-        )
         records = (
             await self._session.scalars(
                 select(observation)
                 .where(
                     observation.event_id == event_id,
-                    or_(
-                        observation.observation_sequence > opened_observation_sequence,
-                        observation.transaction_id.in_(reusable_transaction_ids),
+                    func.ca_observation_is_authorized(
+                        manifest_id,
+                        observation.transaction_id,
+                        observation.observation_sequence,
                     ),
                 )
                 .distinct(observation.transaction_id)
@@ -426,23 +409,10 @@ class SqlAlchemyCorporateActionEventGraphRepository:
         current_manifest = await self._current_manifest(event)
         reusable_for_current_manifest = true()
         if current_manifest is not None:
-            current_node = aliased(CorporateActionManifestNodeRecord)
-            predecessor_node = aliased(CorporateActionManifestNodeRecord)
-            reusable_transaction_ids = (
-                select(current_node.transaction_id)
-                .join(
-                    predecessor_node,
-                    predecessor_node.transaction_id == current_node.transaction_id,
-                )
-                .where(
-                    current_node.manifest_id == current_manifest.id,
-                    predecessor_node.manifest_id == current_manifest.previous_manifest_id,
-                )
-            )
-            reusable_for_current_manifest = or_(
-                CorporateActionChildObservationRecord.observation_sequence
-                > current_manifest.opened_observation_sequence,
-                CorporateActionChildObservationRecord.transaction_id.in_(reusable_transaction_ids),
+            reusable_for_current_manifest = func.ca_observation_is_authorized(
+                current_manifest.id,
+                CorporateActionChildObservationRecord.transaction_id,
+                CorporateActionChildObservationRecord.observation_sequence,
             )
         return await self._session.scalar(
             select(CorporateActionChildObservationRecord).where(
@@ -716,8 +686,6 @@ class SqlAlchemyCorporateActionEventGraphRepository:
         observed_children = await self._latest_observed_children(
             event.id,
             manifest_id=manifest_record.id,
-            predecessor_manifest_id=manifest_record.previous_manifest_id,
-            opened_observation_sequence=manifest_record.opened_observation_sequence,
         )
         return (
             evaluate_corporate_action_manifest_readiness(
