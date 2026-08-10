@@ -265,6 +265,117 @@ def test_planning_cli_writes_atomic_plan_without_runtime_commands(
     assert list(tmp_path.glob(".*.tmp")) == []
 
 
+def test_execution_cli_runs_only_after_exact_source_validation(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    candidate, rollback = _releases()
+    runtime = FakeRuntime(candidate=candidate, rollback=rollback)
+    candidate_path = tmp_path / "candidate.json"
+    rollback_path = tmp_path / "rollback.json"
+    output_path = tmp_path / "receipt.json"
+    candidate_path.write_text(
+        json.dumps(_manifest(sha=CANDIDATE_SHA, digest=CANDIDATE_DIGEST)),
+        encoding="utf-8",
+    )
+    rollback_path.write_text(
+        json.dumps(_manifest(sha=ROLLBACK_SHA, digest=ROLLBACK_DIGEST)),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "scripts.operations.transaction_processing_release_rehearsal._git_output",
+        lambda _root, *arguments: CANDIDATE_SHA if arguments[-1] == "HEAD" else "",
+    )
+    monkeypatch.setattr(
+        "scripts.operations.transaction_processing_release_rehearsal._prepare_local_compose_runtime",
+        lambda **_kwargs: runtime,
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "transaction_processing_release_rehearsal.py",
+            "--candidate-release-manifest",
+            str(candidate_path),
+            "--rollback-release-manifest",
+            str(rollback_path),
+            "--output",
+            str(output_path),
+            "--repo-root",
+            str(tmp_path),
+            "--execute",
+        ],
+    )
+
+    assert main() == 0
+
+    receipt = json.loads(output_path.read_text(encoding="utf-8"))
+    assert receipt["terminal_status"] == "passed"
+    assert receipt["cluster_certification"] is False
+    assert runtime.calls[-1] == "cleanup"
+
+
+def test_execution_cli_rejects_candidate_from_different_source_revision(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    candidate_path = tmp_path / "candidate.json"
+    rollback_path = tmp_path / "rollback.json"
+    candidate_path.write_text(
+        json.dumps(_manifest(sha=CANDIDATE_SHA, digest=CANDIDATE_DIGEST)),
+        encoding="utf-8",
+    )
+    rollback_path.write_text(
+        json.dumps(_manifest(sha=ROLLBACK_SHA, digest=ROLLBACK_DIGEST)),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "scripts.operations.transaction_processing_release_rehearsal._git_output",
+        lambda _root, *arguments: "f" * 40 if arguments[-1] == "HEAD" else "",
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "transaction_processing_release_rehearsal.py",
+            "--candidate-release-manifest",
+            str(candidate_path),
+            "--rollback-release-manifest",
+            str(rollback_path),
+            "--output",
+            str(tmp_path / "receipt.json"),
+            "--repo-root",
+            str(tmp_path),
+            "--execute",
+        ],
+    )
+
+    with pytest.raises(ValueError, match="must match the exact rehearsal source"):
+        main()
+
+
+def test_pull_images_is_rejected_for_non_mutating_plan(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "transaction_processing_release_rehearsal.py",
+            "--candidate-release-manifest",
+            "candidate.json",
+            "--rollback-release-manifest",
+            "rollback.json",
+            "--output",
+            "plan.json",
+            "--pull-images",
+        ],
+    )
+
+    with pytest.raises(SystemExit, match="2"):
+        main()
+
+
 def test_release_rehearsal_executes_candidate_and_rollback_in_order() -> None:
     candidate, rollback = _releases()
     runtime = FakeRuntime(candidate=candidate, rollback=rollback)
