@@ -43,39 +43,29 @@ _DATABASE_RESOURCE_QUERY = text(
 
 _OUTBOX_RESOURCE_QUERY = text(
     """
-    SELECT
-      count(*) FILTER (WHERE status = 'PENDING') AS pending_events,
-      count(*) FILTER (WHERE status = 'PROCESSED') AS processed_events,
-      count(*) FILTER (WHERE status = 'FAILED') AS failed_events,
-      count(*) FILTER (
-        WHERE status = 'PENDING'
-          AND (next_attempt_at IS NULL OR next_attempt_at <= clock_timestamp())
-      ) AS retry_eligible_pending_events,
-      count(*) FILTER (
-        WHERE status = 'PENDING' AND next_attempt_at > clock_timestamp()
-      ) AS retry_waiting_pending_events,
-      coalesce(
-        extract(
-          epoch FROM clock_timestamp() - (
-            min(created_at) FILTER (WHERE status = 'PENDING')
-          )
-        ),
-        0
-      ) AS oldest_pending_age_seconds
-    FROM outbox_events
-    """
-)
-
-_OUTBOX_RECENT_PUBLICATION_AGE_QUERY = text(
-    """
-    SELECT
-      coalesce(percentile_cont(0.50) WITHIN GROUP (ORDER BY publication_age_seconds), 0)
-        AS recent_publication_age_p50_seconds,
-      coalesce(percentile_cont(0.95) WITHIN GROUP (ORDER BY publication_age_seconds), 0)
-        AS recent_publication_age_p95_seconds,
-      coalesce(percentile_cont(0.99) WITHIN GROUP (ORDER BY publication_age_seconds), 0)
-        AS recent_publication_age_p99_seconds
-    FROM (
+    WITH outbox_totals AS (
+      SELECT
+        count(*) FILTER (WHERE status = 'PENDING') AS pending_events,
+        count(*) FILTER (WHERE status = 'PROCESSED') AS processed_events,
+        count(*) FILTER (WHERE status = 'FAILED') AS failed_events,
+        count(*) FILTER (
+          WHERE status = 'PENDING'
+            AND (next_attempt_at IS NULL OR next_attempt_at <= clock_timestamp())
+        ) AS retry_eligible_pending_events,
+        count(*) FILTER (
+          WHERE status = 'PENDING' AND next_attempt_at > clock_timestamp()
+        ) AS retry_waiting_pending_events,
+        coalesce(
+          extract(
+            epoch FROM clock_timestamp() - (
+              min(created_at) FILTER (WHERE status = 'PENDING')
+            )
+          ),
+          0
+        ) AS oldest_pending_age_seconds
+      FROM outbox_events
+    ),
+    recent_outbox_events AS (
       SELECT greatest(
         extract(epoch FROM coalesce(processed_at, clock_timestamp()) - created_at),
         0
@@ -83,20 +73,37 @@ _OUTBOX_RECENT_PUBLICATION_AGE_QUERY = text(
       FROM outbox_events
       ORDER BY id DESC
       LIMIT 10000
-    ) recent_outbox_events
-    """
-)
-
-_OUTBOX_TOPIC_QUERY = text(
-    """
+    ),
+    publication_age AS (
+      SELECT
+        coalesce(percentile_cont(0.50) WITHIN GROUP (ORDER BY publication_age_seconds), 0)
+          AS recent_publication_age_p50_seconds,
+        coalesce(percentile_cont(0.95) WITHIN GROUP (ORDER BY publication_age_seconds), 0)
+          AS recent_publication_age_p95_seconds,
+        coalesce(percentile_cont(0.99) WITHIN GROUP (ORDER BY publication_age_seconds), 0)
+          AS recent_publication_age_p99_seconds
+      FROM recent_outbox_events
+    ),
+    topic_cohorts AS (
+      SELECT
+        aggregate_type,
+        topic,
+        count(*) AS created_events,
+        count(*) FILTER (WHERE status = 'PENDING') AS pending_events
+      FROM outbox_events
+      GROUP BY aggregate_type, topic
+    )
     SELECT
-      aggregate_type,
-      topic,
-      count(*) AS created_events,
-      count(*) FILTER (WHERE status = 'PENDING') AS pending_events
-    FROM outbox_events
-    GROUP BY aggregate_type, topic
-    ORDER BY aggregate_type, topic
+      outbox_totals.*,
+      publication_age.*,
+      topic_cohorts.aggregate_type,
+      topic_cohorts.topic,
+      topic_cohorts.created_events AS cohort_created_events,
+      topic_cohorts.pending_events AS cohort_pending_events
+    FROM outbox_totals
+    CROSS JOIN publication_age
+    LEFT JOIN topic_cohorts ON true
+    ORDER BY topic_cohorts.aggregate_type, topic_cohorts.topic
     """
 )
 
@@ -305,12 +312,14 @@ def _outbox_topic_totals(
 
 
 def read_outbox_resource_usage(*, engine: Engine) -> OutboxResourceUsage:
-    """Read durable publication backlog, retry posture, age, and topic cohorts."""
+    """Read backlog, age, and cohorts from one consistent statement snapshot."""
 
     with engine.connect() as connection:
-        totals = connection.execute(_OUTBOX_RESOURCE_QUERY).mappings().one()
-        publication_age = connection.execute(_OUTBOX_RECENT_PUBLICATION_AGE_QUERY).mappings().one()
-        topic_rows = connection.execute(_OUTBOX_TOPIC_QUERY).mappings().all()
+        rows = connection.execute(_OUTBOX_RESOURCE_QUERY).mappings().all()
+    if not rows:
+        raise RuntimeError("Outbox resource query returned no aggregate row")
+    totals = rows[0]
+    topic_rows = tuple(row for row in rows if row["topic"] is not None)
     return OutboxResourceUsage(
         pending_events=int(totals["pending_events"]),
         processed_events=int(totals["processed_events"]),
@@ -319,32 +328,32 @@ def read_outbox_resource_usage(*, engine: Engine) -> OutboxResourceUsage:
         retry_waiting_pending_events=int(totals["retry_waiting_pending_events"]),
         oldest_pending_age_seconds=round(float(totals["oldest_pending_age_seconds"]), 6),
         recent_publication_age_p50_seconds=round(
-            float(publication_age["recent_publication_age_p50_seconds"]), 6
+            float(totals["recent_publication_age_p50_seconds"]), 6
         ),
         recent_publication_age_p95_seconds=round(
-            float(publication_age["recent_publication_age_p95_seconds"]), 6
+            float(totals["recent_publication_age_p95_seconds"]), 6
         ),
         recent_publication_age_p99_seconds=round(
-            float(publication_age["recent_publication_age_p99_seconds"]), 6
+            float(totals["recent_publication_age_p99_seconds"]), 6
         ),
         pending_events_by_topic=_outbox_topic_totals(
             topic_rows,
-            count_field="pending_events",
+            count_field="cohort_pending_events",
             omit_zero=True,
         ),
         created_events_by_topic=_outbox_topic_totals(
             topic_rows,
-            count_field="created_events",
+            count_field="cohort_created_events",
         ),
         pending_events_by_producer_cohort=tuple(
             sorted(
                 (
                     str(row["aggregate_type"]),
                     str(row["topic"]),
-                    int(row["pending_events"]),
+                    int(row["cohort_pending_events"]),
                 )
                 for row in topic_rows
-                if int(row["pending_events"]) > 0
+                if int(row["cohort_pending_events"]) > 0
             )
         ),
         created_events_by_producer_cohort=tuple(
@@ -352,7 +361,7 @@ def read_outbox_resource_usage(*, engine: Engine) -> OutboxResourceUsage:
                 (
                     str(row["aggregate_type"]),
                     str(row["topic"]),
-                    int(row["created_events"]),
+                    int(row["cohort_created_events"]),
                 )
                 for row in topic_rows
             )

@@ -163,48 +163,53 @@ def test_read_outbox_resource_usage_preserves_backlog_and_topic_cohorts() -> Non
 
         def execute(self, _query: object) -> Result:
             self._call_count += 1
-            if self._call_count == 1:
-                return Result(
-                    [
-                        {
-                            "pending_events": 120,
-                            "processed_events": 880,
-                            "failed_events": 2,
-                            "retry_eligible_pending_events": 115,
-                            "retry_waiting_pending_events": 5,
-                            "oldest_pending_age_seconds": 42.1256789,
-                        }
-                    ]
-                )
-            if self._call_count == 2:
-                return Result(
-                    [
-                        {
-                            "recent_publication_age_p50_seconds": 2.25,
-                            "recent_publication_age_p95_seconds": 8.5,
-                            "recent_publication_age_p99_seconds": 12.75,
-                        }
-                    ]
-                )
+            assert self._call_count == 1
             return Result(
                 [
                     {
+                        "pending_events": 120,
+                        "processed_events": 880,
+                        "failed_events": 2,
+                        "retry_eligible_pending_events": 115,
+                        "retry_waiting_pending_events": 5,
+                        "oldest_pending_age_seconds": 42.1256789,
+                        "recent_publication_age_p50_seconds": 2.25,
+                        "recent_publication_age_p95_seconds": 8.5,
+                        "recent_publication_age_p99_seconds": 12.75,
                         "aggregate_type": "RawTransaction",
                         "topic": "transactions.persisted",
-                        "created_events": 700,
-                        "pending_events": 100,
+                        "cohort_created_events": 700,
+                        "cohort_pending_events": 100,
                     },
                     {
+                        "pending_events": 120,
+                        "processed_events": 880,
+                        "failed_events": 2,
+                        "retry_eligible_pending_events": 115,
+                        "retry_waiting_pending_events": 5,
+                        "oldest_pending_age_seconds": 42.1256789,
+                        "recent_publication_age_p50_seconds": 2.25,
+                        "recent_publication_age_p95_seconds": 8.5,
+                        "recent_publication_age_p99_seconds": 12.75,
                         "aggregate_type": "DailyPositionSnapshot",
                         "topic": "valuation.snapshot.persisted",
-                        "created_events": 300,
-                        "pending_events": 0,
+                        "cohort_created_events": 300,
+                        "cohort_pending_events": 0,
                     },
                     {
+                        "pending_events": 120,
+                        "processed_events": 880,
+                        "failed_events": 2,
+                        "retry_eligible_pending_events": 115,
+                        "retry_waiting_pending_events": 5,
+                        "oldest_pending_age_seconds": 42.1256789,
+                        "recent_publication_age_p50_seconds": 2.25,
+                        "recent_publication_age_p95_seconds": 8.5,
+                        "recent_publication_age_p99_seconds": 12.75,
                         "aggregate_type": "TransactionReplay",
                         "topic": "transactions.persisted",
-                        "created_events": 50,
-                        "pending_events": 5,
+                        "cohort_created_events": 50,
+                        "cohort_pending_events": 5,
                     },
                 ]
             )
@@ -238,6 +243,51 @@ def test_read_outbox_resource_usage_preserves_backlog_and_topic_cohorts() -> Non
         ("RawTransaction", "transactions.persisted", 700),
         ("TransactionReplay", "transactions.persisted", 50),
     )
+
+
+def test_read_outbox_resource_usage_preserves_totals_when_no_cohorts_exist() -> None:
+    class Result:
+        def mappings(self) -> Result:
+            return self
+
+        def all(self) -> list[dict[str, object]]:
+            return [
+                {
+                    "pending_events": 0,
+                    "processed_events": 0,
+                    "failed_events": 0,
+                    "retry_eligible_pending_events": 0,
+                    "retry_waiting_pending_events": 0,
+                    "oldest_pending_age_seconds": 0,
+                    "recent_publication_age_p50_seconds": 0,
+                    "recent_publication_age_p95_seconds": 0,
+                    "recent_publication_age_p99_seconds": 0,
+                    "aggregate_type": None,
+                    "topic": None,
+                    "cohort_created_events": None,
+                    "cohort_pending_events": None,
+                }
+            ]
+
+    class Connection:
+        def __enter__(self) -> Connection:
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def execute(self, _query: object) -> Result:
+            return Result()
+
+    class Engine:
+        def connect(self) -> Connection:
+            return Connection()
+
+    usage = read_outbox_resource_usage(engine=Engine())  # type: ignore[arg-type]
+
+    assert usage.pending_events == 0
+    assert usage.created_events_by_topic == ()
+    assert usage.pending_events_by_producer_cohort == ()
 
 
 def test_summarize_resource_samples_reports_peak_capacity_pressure() -> None:
