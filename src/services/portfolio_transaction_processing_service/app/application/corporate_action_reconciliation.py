@@ -149,7 +149,7 @@ class CorporateActionReconciliationCoordinator:
             reconciliation=reconciliation,
             missing_dependency_reference_ids=missing_dependencies,
             linkage_findings=linkage_findings,
-            reconciliation_type=_reconciliation_type(processed_transaction),
+            reconciliation_type=_reconciliation_type(group_transactions),
             correlation_id=correlation_id,
             completed_at=self._clock(),
         )
@@ -185,12 +185,15 @@ def _reconciliation_key(
     )
 
 
-def _reconciliation_type(transaction: BookedTransaction) -> str:
-    transaction_type = normalize_corporate_action_transaction_type(transaction.transaction_type)
+def _reconciliation_type(transactions: Sequence[BookedTransaction]) -> str:
+    transaction_types = {
+        normalize_corporate_action_transaction_type(transaction.transaction_type)
+        for transaction in transactions
+    }
     return (
         CORPORATE_ACTION_QUANTITY_TRANSFER_RECONCILIATION_TYPE
-        if transaction_type
-        in SOURCE_QUANTITY_TRANSFER_TRANSACTION_TYPES | TARGET_QUANTITY_TRANSFER_TRANSACTION_TYPES
+        if transaction_types
+        & (SOURCE_QUANTITY_TRANSFER_TRANSACTION_TYPES | TARGET_QUANTITY_TRANSFER_TRANSACTION_TYPES)
         else CORPORATE_ACTION_BUNDLE_A_RECONCILIATION_TYPE
     )
 

@@ -238,6 +238,93 @@ async def test_quantity_transfer_group_emits_reciprocal_linkage_evidence() -> No
     assert observer.observations[0].linkage_finding_count == 2
 
 
+async def test_late_source_adjustment_triggers_unsupported_adjustment_evidence() -> None:
+    source = _transaction(
+        transaction_id="CA-OUT-01",
+        transaction_type="DEMERGER_OUT",
+        net_cost_local="-100",
+    )
+    target = _transaction(
+        transaction_id="CA-IN-01",
+        transaction_type="DEMERGER_IN",
+        net_cost_local="100",
+    )
+    adjustment = replace(
+        _transaction(
+            transaction_id="CA-ADJUSTMENT-01",
+            transaction_type="ADJUSTMENT",
+            net_cost_local="5",
+        ),
+        adjustment_reason="MANUAL_BASIS_OVERRIDE",
+        movement_direction="INFLOW",
+    )
+    repository = _Repository((source, target, adjustment))
+
+    evidence = await CorporateActionReconciliationCoordinator(repository).reconcile(
+        adjustment,
+        correlation_id="corr-late-adjustment-01",
+    )
+
+    assert evidence is not None
+    assert evidence.run.reconciliation_type == "corporate_action_bundle_a"
+    assert evidence.run.summary["reconciliation_status"] == "unsupported_adjustment"
+    assert evidence.run.summary["unsupported_adjustment_count"] == 1
+    assert [finding.finding_type for finding in evidence.findings] == [
+        "ca_bundle_a_unsupported_adjustment"
+    ]
+    assert repository.loaded_keys == [
+        CorporateActionReconciliationKey(
+            portfolio_id="PORT_CA_01",
+            linked_transaction_group_id="LTG-CA-01",
+            parent_event_reference="CA-PARENT-01",
+        )
+    ]
+
+
+@pytest.mark.parametrize(
+    ("overlay_type", "target_basis", "summary_count"),
+    [
+        ("CASH_IN_LIEU", "100", "fractional_cash_leg_count"),
+        ("CASH_CONSIDERATION", "90", "cash_consideration_count"),
+    ],
+)
+async def test_cash_overlay_uses_loaded_quantity_transfer_family(
+    overlay_type: str,
+    target_basis: str,
+    summary_count: str,
+) -> None:
+    source = _transaction(
+        transaction_id="MERGER-OUT-01",
+        transaction_type="MERGER_OUT",
+        net_cost_local="-100",
+    )
+    target = _transaction(
+        transaction_id="MERGER-IN-01",
+        transaction_type="MERGER_IN",
+        net_cost_local=target_basis,
+    )
+    corrected_cash = replace(
+        _transaction(
+            transaction_id="MERGER-CIL-01",
+            transaction_type=overlay_type,
+            net_cost_local="-10",
+        ),
+        allocated_cost_basis_local=Decimal("10"),
+        epoch=10,
+    )
+    repository = _Repository((source, target, corrected_cash))
+
+    evidence = await CorporateActionReconciliationCoordinator(repository).reconcile(
+        corrected_cash,
+        correlation_id="corr-corrected-cash-01",
+    )
+
+    assert evidence is not None
+    assert evidence.run.reconciliation_type == "corporate_action_quantity_transfer"
+    assert evidence.run.summary["reconciliation_status"] == "balanced"
+    assert evidence.run.summary[summary_count] == 1
+
+
 async def test_failed_persistence_is_not_observed_or_deduplicated() -> None:
     source = _transaction(
         transaction_id="CA-OUT-01",
