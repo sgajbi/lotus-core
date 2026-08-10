@@ -8,20 +8,27 @@ from typing import Any, Literal
 
 import pytest
 
+from scripts.operations.transaction_processing_cutover_offsets import (
+    ConsumerGroupSnapshot,
+    PartitionOffset,
+)
 from scripts.operations.transaction_processing_release_compose_runtime import (
     COMPOSE_SERVICE,
     IMAGE_DIGEST_ENV,
     TRANSACTION_IMAGE_ENV,
     LocalComposeReleaseConfig,
     LocalComposeReleaseRuntime,
+    count_unresolved_canary_work,
     owned_compose_resource_count,
     transaction_service_recreate_command,
 )
 from scripts.operations.transaction_processing_release_evidence import (
     COMPOSE_PROJECT_PREFIX,
+    FinancialEffectEvidence,
     ReleaseEvidenceError,
     ReleaseIdentity,
 )
+from scripts.operations.transaction_processing_release_rehearsal import CanaryResult
 
 PROJECT = COMPOSE_PROJECT_PREFIX + "20260810-160000-a1b2c3d4"
 DIGEST = "sha256:" + "c" * 64
@@ -102,6 +109,36 @@ class RecordingRunner:
         return subprocess.CompletedProcess(command, 0, stdout=stdout, stderr="")
 
 
+class ScalarResult:
+    def scalar_one(self) -> int:
+        return 3
+
+
+class RecordingConnection:
+    def __init__(self) -> None:
+        self.statement = None
+        self.parameters = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, _exc_type, _exc, _traceback) -> None:
+        return None
+
+    def execute(self, statement, parameters) -> ScalarResult:
+        self.statement = statement
+        self.parameters = parameters
+        return ScalarResult()
+
+
+class RecordingEngine:
+    def __init__(self) -> None:
+        self.connection = RecordingConnection()
+
+    def connect(self) -> RecordingConnection:
+        return self.connection
+
+
 def _release(
     *,
     digest: str = DIGEST,
@@ -111,6 +148,7 @@ def _release(
     git_sha = sha_character * 40
     return ReleaseIdentity(
         service=COMPOSE_SERVICE,
+        runtime_service_name=f"{COMPOSE_SERVICE}_web",
         git_commit_sha=git_sha,
         digest_image_ref=digest_ref,
         image_digest=digest,
@@ -128,6 +166,21 @@ def _config(tmp_path: Path, *, pull_images: bool = False) -> LocalComposeRelease
         receipt_id="transaction-release-rehearsal-20260810-160000-a1b2c3d4",
         repo_root=tmp_path,
         pull_images=pull_images,
+    )
+
+
+def _offsets() -> ConsumerGroupSnapshot:
+    return ConsumerGroupSnapshot(
+        group_id="portfolio_transaction_processing_group",
+        active_member_count=1,
+        partitions=(
+            PartitionOffset(
+                topic="transactions.persisted",
+                partition=0,
+                committed_offset=20,
+                high_watermark=20,
+            ),
+        ),
     )
 
 
@@ -285,6 +338,69 @@ def test_release_image_override_cannot_change_project_authority(tmp_path: Path) 
     assert managed.runtime.endpoints.compose_project_name == PROJECT
 
 
+def test_consumer_dlq_evidence_is_database_owned_and_group_topic_scoped(
+    tmp_path: Path,
+) -> None:
+    engine = RecordingEngine()
+    runtime = LocalComposeReleaseRuntime(
+        managed_run=FakeManagedRun(),
+        config=_config(tmp_path),
+        runner=RecordingRunner(),
+    )
+    runtime._engine = engine  # type: ignore[assignment]
+
+    assert runtime._consumer_dlq_count() == 3
+
+    assert "FROM consumer_dlq_events" in str(engine.connection.statement)
+    assert engine.connection.parameters == {
+        "consumer_group": "portfolio_transaction_processing_group",
+        "original_topic": "transactions.persisted",
+    }
+
+
+def test_baseline_financial_findings_fail_before_offset_handoff(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    managed = FakeManagedRun()
+    runner = RecordingRunner()
+    runtime = LocalComposeReleaseRuntime(
+        managed_run=managed,
+        config=_config(tmp_path),
+        runner=runner,
+    )
+    failed_effects = FinancialEffectEvidence(
+        expected_transactions=20,
+        persisted_transactions=20,
+        expected_positions=20,
+        persisted_positions=20,
+        pending_outbox=0,
+        failed_outbox=1,
+        dlq_count=0,
+        duplicate_financial_effects=0,
+        reconciliation_findings=0,
+        unresolved_work=0,
+    )
+    monkeypatch.setattr(runtime, "_wait_for_migrations", lambda: None)
+    monkeypatch.setattr(runtime, "_initialize_connections", lambda: None)
+    monkeypatch.setattr(runtime, "_runtime_payload", lambda _release: {})
+    monkeypatch.setattr(
+        runtime,
+        "_run_fixed_canary",
+        lambda **_kwargs: CanaryResult(
+            effects=failed_effects,
+            offsets=_offsets(),
+            evidence={"profile": "fixed_transaction_release_canary_v1"},
+        ),
+    )
+
+    with pytest.raises(ReleaseEvidenceError, match="baseline financial effects failed"):
+        runtime.start_baseline(release=_release())
+
+    assert runtime.cleanup() == 0
+    assert managed.exited == 1
+
+
 @pytest.mark.parametrize("count", [0, 101])
 def test_canary_size_is_bounded(tmp_path: Path, count: int) -> None:
     with pytest.raises(ReleaseEvidenceError, match="between 1 and 100"):
@@ -293,3 +409,16 @@ def test_canary_size_is_bounded(tmp_path: Path, count: int) -> None:
             repo_root=tmp_path,
             canary_transaction_count=count,
         )
+
+
+def test_canary_unresolved_work_rejects_claim_overproduction() -> None:
+    assert (
+        count_unresolved_canary_work(
+            expected=20,
+            cost_count=20,
+            cashflow_count=20,
+            position_count=20,
+            processing_claim_count=21,
+        )
+        == 1
+    )
