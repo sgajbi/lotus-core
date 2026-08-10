@@ -35,7 +35,6 @@ from ..cost_basis import (
     CostBasisProcessingAdapter,
     SqlAlchemyAverageCostPoolRepository,
     SqlAlchemyCorporateActionReconciliationRepository,
-    SqlAlchemyCostBasisCalculationContextRepository,
     SqlAlchemyCostBasisFxRateRepository,
     SqlAlchemyCostBasisLotBasisTransferRepository,
     SqlAlchemyCostBasisLotDisposalRepository,
@@ -128,7 +127,6 @@ class SqlAlchemyTransactionProcessingUnitOfWork:
         self._cost = CostBasisProcessingAdapter(
             processor=self._cost_processor,
             repository=SqlAlchemyCostBasisTransactionRepository(session),
-            calculation_context=SqlAlchemyCostBasisCalculationContextRepository(session),
             average_cost_pools=SqlAlchemyAverageCostPoolRepository(session),
             lot_disposals=SqlAlchemyCostBasisLotDisposalRepository(session),
             lot_basis_transfers=SqlAlchemyCostBasisLotBasisTransferRepository(session),

@@ -25,7 +25,6 @@ from ...domain.transaction.redemption import is_generated_redemption_accrued_int
 from ...ports.cost_basis import (
     AverageCostPoolCheckpointRecord,
     CostBasisAverageCostPoolPort,
-    CostBasisCalculationContextPort,
     CostBasisCalculationObserver,
     CostBasisExecutionMode,
     CostBasisFxRatePort,
@@ -47,7 +46,6 @@ class CostBasisCalculationCoordinator:
         self,
         *,
         transactions: CostBasisTransactionStatePort,
-        calculation_context: CostBasisCalculationContextPort,
         average_cost_pools: CostBasisAverageCostPoolPort,
         lot_states: CostBasisLotStatePort,
         fx_rates: CostBasisFxRatePort,
@@ -57,7 +55,6 @@ class CostBasisCalculationCoordinator:
         """Bind the framework-neutral state and observation ports used by the calculation."""
 
         self._transactions = transactions
-        self._calculation_context = calculation_context
         self._average_cost_pools = average_cost_pools
         self._lot_states = lot_states
         self._fx_rates = fx_rates
@@ -76,15 +73,10 @@ class CostBasisCalculationCoordinator:
     ) -> CostBasisCalculationResult:
         """Use an ordered append when checkpoints permit it, otherwise rebuild deterministically."""
 
-        context = await self._calculation_context.load_cost_basis_calculation_context(
+        checkpoint = await self._processing_state.get_cost_basis_processing_checkpoint(
             portfolio_id=transaction.portfolio_id,
             security_id=transaction.security_id,
-            exclude_transaction_id=transaction.transaction_id,
-            include_initial_history=preloaded_transaction_history is None,
         )
-        checkpoint = context.checkpoint
-        if preloaded_transaction_history is None:
-            preloaded_transaction_history = context.transaction_history
         lot_behavior = transaction_lot_behavior(transaction_type)
         requires_full_source_history = (
             cost_basis_method is CostBasisMethod.AVCO and lot_behavior == "consume_lot"

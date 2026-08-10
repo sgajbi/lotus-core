@@ -1,6 +1,6 @@
 """SQLAlchemy persistence for transaction cost-basis processing."""
 
-from dataclasses import fields
+from dataclasses import fields, replace
 from decimal import Decimal
 from typing import Any
 
@@ -10,6 +10,7 @@ from portfolio_common.database_models import (
 from portfolio_common.database_models import TransactionCost
 from portfolio_common.domain.calculation_lineage import (
     CalculationLineage,
+    calculation_lineage_from_payload,
 )
 from portfolio_common.domain.currency import normalize_currency_code
 from portfolio_common.domain.transaction import (
@@ -19,6 +20,7 @@ from portfolio_common.domain.transaction import (
     transaction_identity_ownership,
 )
 from portfolio_common.domain.transaction_control_codes import normalize_transaction_control_code
+from portfolio_common.events import TransactionEvent
 from portfolio_common.identifiers import normalize_lookup_identifier
 from portfolio_common.infrastructure.persistence.transaction_identity_guard import (
     GeneratedTransactionIdentityCollisionError,
@@ -36,7 +38,7 @@ from ...domain.transaction.redemption import (
     REDEMPTION_CORRECTION_OWNED_OPTIONAL_FIELDS,
     REDEMPTION_TRANSACTION_TYPES,
 )
-from ..transaction_mapping.booked_transaction import persisted_to_booked_transaction
+from ..transaction_mapping.booked_transaction import to_booked_transaction
 
 TRANSACTION_METADATA_FIELDS = (
     "economic_event_id",
@@ -158,6 +160,16 @@ def _booked_transaction_payload(
     return payload
 
 
+def _to_persisted_booked_transaction(transaction: DBTransaction) -> BookedTransaction:
+    """Rehydrate the internal calculation receipt excluded from the public event contract."""
+
+    booked = to_booked_transaction(TransactionEvent.model_validate(transaction))
+    return replace(
+        booked,
+        calculation_lineage=calculation_lineage_from_payload(transaction.calculation_lineage),
+    )
+
+
 FEE_COMPONENT_FIELDS = (
     "brokerage",
     "stamp_duty",
@@ -244,7 +256,7 @@ class SqlAlchemyCostBasisTransactionRepository:
         )
 
         result = await self.db.execute(stmt)
-        return [persisted_to_booked_transaction(row) for row in result.scalars().all()]
+        return [_to_persisted_booked_transaction(row) for row in result.scalars().all()]
 
     @async_timed(repository="CostBasisTransactionRepository", method="get_linked_transaction_group")
     async def get_linked_transaction_group(
@@ -269,7 +281,7 @@ class SqlAlchemyCostBasisTransactionRepository:
             DBTransaction.transaction_id.asc(),
         )
         result = await self.db.execute(stmt)
-        return [persisted_to_booked_transaction(row) for row in result.scalars().all()]
+        return [_to_persisted_booked_transaction(row) for row in result.scalars().all()]
 
     @async_timed(
         repository="CostBasisTransactionRepository",
@@ -325,7 +337,7 @@ class SqlAlchemyCostBasisTransactionRepository:
                 db_txn=db_transaction,
             )
         )
-        return persisted_to_booked_transaction(db_transaction)
+        return _to_persisted_booked_transaction(db_transaction)
 
     @async_timed(repository="CostBasisTransactionRepository", method="get_booked_transaction")
     async def get_booked_transaction(
@@ -340,7 +352,7 @@ class SqlAlchemyCostBasisTransactionRepository:
         transaction = result.scalars().first()
         if transaction is None:
             return None
-        return persisted_to_booked_transaction(transaction)
+        return _to_persisted_booked_transaction(transaction)
 
     @async_timed(repository="CostBasisTransactionRepository", method="upsert_booked_transaction")
     async def upsert_booked_transaction(
@@ -416,4 +428,4 @@ class SqlAlchemyCostBasisTransactionRepository:
         )
         if persisted is None:
             raise GeneratedTransactionIdentityCollisionError(transaction.transaction_id)
-        return persisted_to_booked_transaction(persisted)
+        return _to_persisted_booked_transaction(persisted)
