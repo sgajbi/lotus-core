@@ -200,7 +200,11 @@ class PreparedCostProcessingUseCase:
                 processed=calculation.processed,
                 cost_basis_method=prepared.cost_basis_method,
             )
-            if calculation.open_lot_persistence_scope is OpenLotPersistenceScope.INITIAL_OPENING_LOT
+            if (
+                prepared.transaction_type == "BUY"
+                and calculation.open_lot_persistence_scope
+                is OpenLotPersistenceScope.INITIAL_OPENING_LOT
+            )
             else None
         )
         persisted_transactions = await persist_cost_basis_transactions(
