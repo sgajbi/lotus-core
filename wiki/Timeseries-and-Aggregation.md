@@ -127,7 +127,10 @@ processed-event throughput. Publication-age sampling is bounded to the newest 10
 rows; exact pending/retry/failed totals and topic cohorts remain unbounded truth. The same report
 retains bounded producer-aggregate/topic cohorts and fails closed when their counts diverge from
 topic or final status totals. At most 25 synthetic repeated-job lineage samples support trigger
-diagnosis; this bound must not become an unbounded business-identifier export. Development, CI,
+diagnosis; this bound must not become an unbounded business-identifier export.
+The monitor obtains the exact totals, bounded age sample, and topic cohorts from one PostgreSQL
+statement snapshot, preventing live dispatcher progress from mixing different evidence instants.
+Development, CI,
 and production dispatcher values are bound through the single
 `docs/standards/outbox-capacity-profile.v1.json` contract and
 `make outbox-capacity-profile-guard`; its `1s/1000` profile remains a candidate until exact-source

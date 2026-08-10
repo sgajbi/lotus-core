@@ -76,6 +76,9 @@ failure-mode nodes and its managed dispatcher-restart gate without reconstructin
 Certifying evidence also requires monotonic recent publication-age p50/p95/p99, an observed
 processed-event throughput window, exact pending/retry/failed/topic totals, and count-reconciled
 producer cohorts; the newest 10,000 rows bound only the publication-age percentile sample.
+The monitor reads those totals, the bounded age sample, and topic cohorts in one PostgreSQL
+statement snapshot so live dispatcher progress cannot produce internally contradictory terminal
+evidence.
 
 The managed profile is the sole database and resource sampler during a certifying run. Monitor a
 background execution through its governed task status, owned-container liveness, and terminal
