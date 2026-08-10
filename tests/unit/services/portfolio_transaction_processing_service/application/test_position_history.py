@@ -93,7 +93,7 @@ def _ports() -> tuple[
         latest_completed_snapshot_date=None,
     )
     repository.contains_transaction.return_value = False
-    repository.load_replay_window.return_value = PositionReplayWindow(
+    repository.reset_and_load_replay_window.return_value = PositionReplayWindow(
         anchor=None,
         transactions=(),
     )
@@ -128,7 +128,7 @@ async def test_processor_discards_stale_epoch_from_single_loaded_position_state(
 async def test_processor_materializes_current_history_and_rearms_downstream_generation() -> None:
     repository, state_store, observer, processor = _ports()
     transaction = _transaction()
-    repository.load_replay_window.return_value = PositionReplayWindow(
+    repository.reset_and_load_replay_window.return_value = PositionReplayWindow(
         anchor=None,
         transactions=(transaction,),
     )
@@ -141,7 +141,7 @@ async def test_processor_materializes_current_history_and_rearms_downstream_gene
     repository.acquire_replay_lock.assert_awaited_once_with(
         portfolio_id="PB-001", security_id="SEC-001", epoch=3
     )
-    repository.delete_records_from.assert_awaited_once_with(
+    repository.reset_and_load_replay_window.assert_awaited_once_with(
         portfolio_id="PB-001",
         security_id="SEC-001",
         position_date=date(2026, 4, 10),
@@ -178,10 +178,10 @@ async def test_processor_materializes_current_history_and_rearms_downstream_gene
 
 
 @pytest.mark.asyncio
-async def test_processor_acquires_key_lock_before_deleting_current_history() -> None:
+async def test_processor_acquires_key_lock_before_resetting_current_history() -> None:
     repository, _, _, processor = _ports()
     transaction = _transaction()
-    repository.load_replay_window.return_value = PositionReplayWindow(
+    repository.reset_and_load_replay_window.return_value = PositionReplayWindow(
         anchor=None,
         transactions=(transaction,),
     )
@@ -190,21 +190,16 @@ async def test_processor_acquires_key_lock_before_deleting_current_history() -> 
     async def acquire_lock(**_: object) -> None:
         call_order.append("lock")
 
-    async def delete_records(**_: object) -> int:
-        call_order.append("delete")
-        return 0
-
-    async def load_replay_window(**_: object) -> PositionReplayWindow:
-        call_order.append("load-window")
+    async def reset_and_load_replay_window(**_: object) -> PositionReplayWindow:
+        call_order.append("reset-and-load-window")
         return PositionReplayWindow(anchor=None, transactions=(transaction,))
 
     repository.acquire_replay_lock.side_effect = acquire_lock
-    repository.delete_records_from.side_effect = delete_records
-    repository.load_replay_window.side_effect = load_replay_window
+    repository.reset_and_load_replay_window.side_effect = reset_and_load_replay_window
 
     await processor.process(transaction)
 
-    assert call_order[:3] == ["lock", "delete", "load-window"]
+    assert call_order[:2] == ["lock", "reset-and-load-window"]
 
 
 @pytest.mark.asyncio
@@ -225,7 +220,7 @@ async def test_processor_does_not_rearm_generation_when_no_history_is_materializ
 async def test_processor_does_not_expose_epoch_without_state_row_update_lock() -> None:
     repository, state_store, observer, processor = _ports()
     transaction = _transaction()
-    repository.load_replay_window.return_value = PositionReplayWindow(
+    repository.reset_and_load_replay_window.return_value = PositionReplayWindow(
         anchor=None,
         transactions=(transaction,),
     )
