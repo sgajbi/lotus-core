@@ -249,6 +249,10 @@ def upgrade() -> None:
             LANGUAGE plpgsql
             AS $$
             BEGIN
+                IF TG_OP = 'DELETE' THEN
+                    RAISE EXCEPTION 'corporate-action execution releases cannot be deleted'
+                        USING ERRCODE = '23514';
+                END IF;
                 IF ROW(
                     NEW.readiness_evaluation_id,
                     NEW.structural_plan_content_hash,
@@ -280,7 +284,7 @@ def upgrade() -> None:
             $$;
 
             CREATE TRIGGER trg_ca_execution_release_identity
-            BEFORE UPDATE ON corporate_action_execution_releases
+            BEFORE UPDATE OR DELETE ON corporate_action_execution_releases
             FOR EACH ROW
             EXECUTE FUNCTION enforce_ca_execution_release_identity();
 
@@ -289,6 +293,10 @@ def upgrade() -> None:
             LANGUAGE plpgsql
             AS $$
             BEGIN
+                IF TG_OP = 'DELETE' THEN
+                    RAISE EXCEPTION 'corporate-action execution members cannot be deleted'
+                        USING ERRCODE = '23514';
+                END IF;
                 IF ROW(
                     NEW.release_id,
                     NEW.execution_ordinal,
@@ -320,9 +328,282 @@ def upgrade() -> None:
             $$;
 
             CREATE TRIGGER trg_ca_execution_member_identity
-            BEFORE UPDATE ON corporate_action_execution_members
+            BEFORE UPDATE OR DELETE ON corporate_action_execution_members
             FOR EACH ROW
             EXECUTE FUNCTION enforce_ca_execution_member_identity();
+
+            CREATE FUNCTION enforce_ca_execution_release_ready_insert()
+            RETURNS trigger
+            LANGUAGE plpgsql
+            AS $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1
+                    FROM corporate_action_readiness_evaluations AS readiness
+                    JOIN corporate_action_events AS event
+                      ON event.id = readiness.event_id
+                    WHERE readiness.id = NEW.readiness_evaluation_id
+                      AND readiness.readiness_status = 'READY'
+                      AND jsonb_array_length(readiness.findings) = 0
+                      AND readiness.execution_plan_content_hash
+                          = NEW.structural_plan_content_hash
+                      AND jsonb_array_length(readiness.ordered_transaction_ids)
+                          = NEW.member_count
+                      AND event.readiness_status = 'READY'
+                      AND event.state_version = readiness.state_version
+                      AND event.last_observation_sequence
+                          = readiness.through_observation_sequence
+                ) THEN
+                    RAISE EXCEPTION
+                        'corporate-action execution release lacks current READY authority'
+                        USING ERRCODE = '23514';
+                END IF;
+                RETURN NEW;
+            END;
+            $$;
+
+            CREATE TRIGGER trg_ca_execution_release_ready_insert
+            BEFORE INSERT ON corporate_action_execution_releases
+            FOR EACH ROW
+            EXECUTE FUNCTION enforce_ca_execution_release_ready_insert();
+
+            CREATE FUNCTION enforce_ca_execution_member_authority()
+            RETURNS trigger
+            LANGUAGE plpgsql
+            AS $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1
+                    FROM corporate_action_execution_releases AS release
+                    JOIN corporate_action_readiness_evaluations AS readiness
+                      ON readiness.id = release.readiness_evaluation_id
+                    JOIN corporate_action_child_observations AS observation
+                      ON observation.id = NEW.observation_id
+                     AND observation.event_id = readiness.event_id
+                     AND observation.transaction_id = NEW.transaction_id
+                     AND observation.transaction_epoch = NEW.transaction_epoch
+                     AND observation.observed_content_hash
+                         = NEW.observed_child_content_hash
+                     AND observation.transaction_payload_fingerprint
+                         = NEW.transaction_payload_fingerprint
+                     AND observation.observation_sequence
+                         <= readiness.through_observation_sequence
+                    WHERE release.id = NEW.release_id
+                      AND readiness.readiness_status = 'READY'
+                      AND NEW.execution_ordinal >= 0
+                      AND NEW.execution_ordinal < release.member_count
+                      AND readiness.ordered_transaction_ids ->> NEW.execution_ordinal
+                          = NEW.transaction_id
+                      AND NOT EXISTS (
+                          SELECT 1
+                          FROM corporate_action_child_observations AS later
+                          WHERE later.event_id = observation.event_id
+                            AND later.transaction_id = observation.transaction_id
+                            AND later.observation_sequence
+                                <= readiness.through_observation_sequence
+                            AND ROW(
+                                later.transaction_epoch,
+                                later.observation_sequence
+                            ) > ROW(
+                                observation.transaction_epoch,
+                                observation.observation_sequence
+                            )
+                      )
+                ) THEN
+                    RAISE EXCEPTION
+                        'corporate-action execution member lacks exact observation authority'
+                        USING ERRCODE = '23514';
+                END IF;
+                RETURN NEW;
+            END;
+            $$;
+
+            CREATE TRIGGER trg_ca_execution_member_authority
+            BEFORE INSERT OR UPDATE ON corporate_action_execution_members
+            FOR EACH ROW
+            EXECUTE FUNCTION enforce_ca_execution_member_authority();
+
+            CREATE FUNCTION validate_ca_execution_release(target_release_id bigint)
+            RETURNS void
+            LANGUAGE plpgsql
+            AS $$
+            DECLARE
+                release_member_count integer;
+                release_next_ordinal integer;
+                release_structural_hash text;
+                release_authority_hash text;
+                readiness_manifest_hash text;
+                readiness_structural_hash text;
+                readiness_state_version integer;
+                readiness_observation_sequence integer;
+                readiness_order jsonb;
+                event_identity text;
+                event_portfolio_id text;
+                event_group_id text;
+                event_parent_reference text;
+                actual_member_count integer;
+                completed_member_count integer;
+                members_payload jsonb;
+                release_boundary_hash text;
+                expected_release_hash text;
+            BEGIN
+                SELECT
+                    release.member_count,
+                    release.next_execution_ordinal,
+                    release.structural_plan_content_hash,
+                    release.release_authority_hash,
+                    readiness.manifest_content_hash,
+                    readiness.execution_plan_content_hash,
+                    readiness.state_version,
+                    readiness.through_observation_sequence,
+                    readiness.ordered_transaction_ids,
+                    event.corporate_action_event_id,
+                    event.portfolio_id,
+                    event.linked_transaction_group_id,
+                    event.parent_event_reference
+                INTO
+                    release_member_count,
+                    release_next_ordinal,
+                    release_structural_hash,
+                    release_authority_hash,
+                    readiness_manifest_hash,
+                    readiness_structural_hash,
+                    readiness_state_version,
+                    readiness_observation_sequence,
+                    readiness_order,
+                    event_identity,
+                    event_portfolio_id,
+                    event_group_id,
+                    event_parent_reference
+                FROM corporate_action_execution_releases AS release
+                JOIN corporate_action_readiness_evaluations AS readiness
+                  ON readiness.id = release.readiness_evaluation_id
+                JOIN corporate_action_events AS event ON event.id = readiness.event_id
+                WHERE release.id = target_release_id;
+
+                IF release_member_count IS NULL
+                   OR readiness_structural_hash <> release_structural_hash
+                   OR jsonb_array_length(readiness_order) <> release_member_count THEN
+                    RAISE EXCEPTION
+                        'corporate-action execution release differs from READY evidence'
+                        USING ERRCODE = '23514';
+                END IF;
+
+                SELECT
+                    count(*)::integer,
+                    count(*) FILTER (WHERE member.status = 'COMPLETE')::integer,
+                    jsonb_agg(
+                        jsonb_build_object(
+                            'execution_ordinal', member.execution_ordinal,
+                            'observation_id', member.observation_id,
+                            'observed_child_content_hash',
+                                member.observed_child_content_hash,
+                            'transaction_epoch', member.transaction_epoch,
+                            'transaction_id', member.transaction_id,
+                            'transaction_payload_fingerprint',
+                                member.transaction_payload_fingerprint
+                        ) ORDER BY member.execution_ordinal
+                    )
+                INTO actual_member_count, completed_member_count, members_payload
+                FROM corporate_action_execution_members AS member
+                WHERE member.release_id = target_release_id;
+
+                IF actual_member_count <> release_member_count
+                   OR completed_member_count <> release_next_ordinal
+                   OR EXISTS (
+                       SELECT 1
+                       FROM corporate_action_execution_members AS member
+                       WHERE member.release_id = target_release_id
+                         AND (
+                             (member.execution_ordinal < release_next_ordinal
+                              AND member.status <> 'COMPLETE')
+                             OR (member.execution_ordinal >= release_next_ordinal
+                                 AND member.status <> 'PENDING')
+                         )
+                   ) THEN
+                    RAISE EXCEPTION
+                        'corporate-action execution member progress is not a complete prefix'
+                        USING ERRCODE = '23514';
+                END IF;
+
+                release_boundary_hash := encode(
+                    sha256(
+                        convert_to(
+                            canonical_ca_json_value(
+                                jsonb_build_object(
+                                    'canonical_payload_version', 1,
+                                    'corporate_action_event_id', event_identity,
+                                    'linked_transaction_group_id', event_group_id,
+                                    'manifest_content_hash', readiness_manifest_hash,
+                                    'ordered_transaction_ids', readiness_order,
+                                    'parent_event_reference', event_parent_reference,
+                                    'portfolio_id', event_portfolio_id,
+                                    'readiness_state_version', readiness_state_version,
+                                    'structural_plan_content_hash',
+                                        readiness_structural_hash,
+                                    'through_observation_sequence',
+                                        readiness_observation_sequence
+                                )
+                            ),
+                            'UTF8'
+                        )
+                    ),
+                    'hex'
+                );
+                expected_release_hash := encode(
+                    sha256(
+                        convert_to(
+                            canonical_ca_json_value(
+                                jsonb_build_object(
+                                    'canonical_payload_version', 1,
+                                    'members', members_payload,
+                                    'release_boundary_hash', release_boundary_hash
+                                )
+                            ),
+                            'UTF8'
+                        )
+                    ),
+                    'hex'
+                );
+                IF expected_release_hash <> release_authority_hash THEN
+                    RAISE EXCEPTION
+                        'corporate-action execution release hash is not canonical'
+                        USING ERRCODE = '23514';
+                END IF;
+            END;
+            $$;
+
+            CREATE FUNCTION enforce_ca_execution_release_authority()
+            RETURNS trigger
+            LANGUAGE plpgsql
+            AS $$
+            BEGIN
+                PERFORM validate_ca_execution_release(NEW.id);
+                RETURN NEW;
+            END;
+            $$;
+
+            CREATE FUNCTION enforce_ca_execution_member_progress()
+            RETURNS trigger
+            LANGUAGE plpgsql
+            AS $$
+            BEGIN
+                PERFORM validate_ca_execution_release(NEW.release_id);
+                RETURN NEW;
+            END;
+            $$;
+
+            CREATE CONSTRAINT TRIGGER trg_ca_execution_release_authority
+            AFTER INSERT OR UPDATE ON corporate_action_execution_releases
+            DEFERRABLE INITIALLY DEFERRED
+            FOR EACH ROW
+            EXECUTE FUNCTION enforce_ca_execution_release_authority();
+
+            CREATE CONSTRAINT TRIGGER trg_ca_execution_member_progress
+            AFTER UPDATE ON corporate_action_execution_members
+            DEFERRABLE INITIALLY DEFERRED
+            FOR EACH ROW
+            EXECUTE FUNCTION enforce_ca_execution_member_progress();
             """
         )
     )
@@ -331,6 +612,11 @@ def upgrade() -> None:
 def downgrade() -> None:
     """Remove corporate-action execution release persistence."""
 
+    op.execute(sa.text("DROP FUNCTION enforce_ca_execution_member_progress() CASCADE"))
+    op.execute(sa.text("DROP FUNCTION enforce_ca_execution_release_authority() CASCADE"))
+    op.execute(sa.text("DROP FUNCTION validate_ca_execution_release(bigint) CASCADE"))
+    op.execute(sa.text("DROP FUNCTION enforce_ca_execution_member_authority() CASCADE"))
+    op.execute(sa.text("DROP FUNCTION enforce_ca_execution_release_ready_insert() CASCADE"))
     op.execute(sa.text("DROP FUNCTION enforce_ca_execution_member_identity() CASCADE"))
     op.execute(sa.text("DROP FUNCTION enforce_ca_execution_release_identity() CASCADE"))
     op.drop_table("corporate_action_execution_members")

@@ -124,10 +124,33 @@ def test_execution_release_migration_is_fenced_ordered_and_reversible(
         "corporate-action execution terminal state is immutable",
         "corporate-action execution member authority is immutable",
         "corporate-action execution member completion is immutable",
+        "corporate-action execution release lacks current READY authority",
+        "corporate-action execution member lacks exact observation authority",
+        "corporate-action execution member progress is not a complete prefix",
+        "corporate-action execution release hash is not canonical",
     ):
         assert invariant in sql
-    assert "BEFORE UPDATE ON corporate_action_execution_releases" in sql
-    assert "BEFORE UPDATE ON corporate_action_execution_members" in sql
+    assert "BEFORE UPDATE OR DELETE ON corporate_action_execution_releases" in sql
+    assert "BEFORE UPDATE OR DELETE ON corporate_action_execution_members" in sql
+    assert "DEFERRABLE INITIALLY DEFERRED" in sql
+    assert "AFTER UPDATE ON corporate_action_execution_members" in sql
+    assert (
+        "AFTER INSERT OR UPDATE ON corporate_action_execution_releases\n"
+        "            DEFERRABLE INITIALLY DEFERRED\n"
+        "            FOR EACH ROW\n"
+        "            EXECUTE FUNCTION enforce_ca_execution_release_authority()"
+    ) in sql
+    assert (
+        "AFTER UPDATE ON corporate_action_execution_members\n"
+        "            DEFERRABLE INITIALLY DEFERRED\n"
+        "            FOR EACH ROW\n"
+        "            EXECUTE FUNCTION enforce_ca_execution_member_progress()"
+    ) in sql
+    assert "DROP FUNCTION enforce_ca_execution_release_authority() CASCADE" in sql
+    assert "DROP FUNCTION enforce_ca_execution_member_progress() CASCADE" in sql
+    assert "DROP FUNCTION validate_ca_execution_release(bigint) CASCADE" in sql
+    assert "DROP FUNCTION enforce_ca_execution_member_authority() CASCADE" in sql
+    assert "DROP FUNCTION enforce_ca_execution_release_ready_insert() CASCADE" in sql
     assert "DROP FUNCTION enforce_ca_execution_member_identity() CASCADE" in sql
     assert "DROP FUNCTION enforce_ca_execution_release_identity() CASCADE" in sql
     assert (
