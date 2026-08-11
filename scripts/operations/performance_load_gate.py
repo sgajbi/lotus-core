@@ -22,7 +22,8 @@ from pathlib import Path
 from typing import Any, TypedDict
 
 import requests  # type: ignore[import-untyped]
-from sqlalchemy import create_engine, text
+from portfolio_common.db import create_sync_database_engine
+from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -571,7 +572,9 @@ def main(
     _validate_governed_load_identity()
     portfolio_id = GOVERNED_LOAD_PORTFOLIO_ID
     security_prefix = GOVERNED_LOAD_SECURITY_PREFIX
-    engine = create_engine(args.host_database_url, pool_pre_ping=True)
+    engine = create_sync_database_engine(
+        runtime_identity="performance-load-gate", database_url=args.host_database_url
+    )
     transaction_timestamp_value = _next_transaction_timestamp(
         engine=engine,
         default_timestamp=run_started_at.replace(hour=9, minute=0, second=0, microsecond=0),

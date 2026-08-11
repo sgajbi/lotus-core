@@ -24,7 +24,8 @@ from portfolio_common.config import (
     KAFKA_TRANSACTIONS_PERSISTED_TOPIC,
     KAFKA_TRANSACTIONS_REPROCESSING_REQUESTED_TOPIC,
 )
-from sqlalchemy import Engine, create_engine
+from portfolio_common.db import create_sync_database_engine
+from sqlalchemy import Engine
 
 if TYPE_CHECKING:
     from tests.test_support.managed_compose_run import ManagedComposeRun
@@ -573,7 +574,9 @@ def main() -> int:
             requested_kafka_bootstrap_servers=args.kafka_bootstrap_servers,
             endpoints=endpoints,
         )
-        engine = create_engine(host_database_url, pool_pre_ping=True)
+        engine = create_sync_database_engine(
+            runtime_identity="failure-recovery-gate", database_url=host_database_url
+        )
         lifecycle.callback(engine.dispose)
         offset_store = KafkaOffsetStore(
             bootstrap_servers=kafka_bootstrap_servers,

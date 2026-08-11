@@ -80,6 +80,7 @@ _DATABASE_RESOURCE_QUERY = text(
         sum(total_connections)::integer AS total_connections,
         sum(active_connections)::integer AS active_connections,
         sum(idle_in_transaction_connections)::integer AS idle_in_transaction_connections,
+        sum(open_transactions)::integer AS open_transactions,
         sum(lock_waiters)::integer AS lock_waiters,
         sum(blocked_sessions)::integer AS blocked_sessions
       FROM bounded_cohorts
@@ -112,6 +113,7 @@ _DATABASE_RESOURCE_QUERY = text(
       totals.total_connections,
       totals.active_connections,
       totals.idle_in_transaction_connections,
+      totals.open_transactions,
       totals.lock_waiters,
       totals.blocked_sessions
     """
@@ -220,6 +222,7 @@ class DatabaseResourceUsage:
     total_connections: int
     active_connections: int
     idle_in_transaction_connections: int
+    open_transactions: int
     lock_waiters: int
     blocked_sessions: int
     max_connections: int
@@ -276,6 +279,7 @@ class DerivedStateResourceEvidence:
     peak_database_total_connections: int | None
     peak_database_active_connections: int | None
     peak_database_idle_in_transaction_connections: int | None
+    peak_database_open_transactions: int | None
     peak_database_lock_waiters: int | None
     peak_database_blocked_sessions: int | None
     peak_database_connection_utilization_percent: float | None
@@ -420,11 +424,17 @@ def read_database_resource_usage(*, engine: Engine) -> DatabaseResourceUsage:
     total_connections = int(row["total_connections"])
     active_connections = int(row["active_connections"])
     idle_in_transaction_connections = int(row["idle_in_transaction_connections"])
+    open_transactions = int(row["open_transactions"])
+    lock_waiters = int(row["lock_waiters"])
+    blocked_sessions = int(row["blocked_sessions"])
     application_cohorts = _database_application_cohorts(row["application_cohorts"])
     reconciled_counts = {
         "total_connections": total_connections,
         "active_connections": active_connections,
         "idle_in_transaction_connections": idle_in_transaction_connections,
+        "open_transactions": open_transactions,
+        "lock_waiters": lock_waiters,
+        "blocked_sessions": blocked_sessions,
     }
     for field_name, aggregate_count in reconciled_counts.items():
         cohort_count = sum(getattr(cohort, field_name) for cohort in application_cohorts)
@@ -441,8 +451,9 @@ def read_database_resource_usage(*, engine: Engine) -> DatabaseResourceUsage:
         total_connections=total_connections,
         active_connections=active_connections,
         idle_in_transaction_connections=idle_in_transaction_connections,
-        lock_waiters=int(row["lock_waiters"]),
-        blocked_sessions=int(row["blocked_sessions"]),
+        open_transactions=open_transactions,
+        lock_waiters=lock_waiters,
+        blocked_sessions=blocked_sessions,
         max_connections=max_connections,
         connection_utilization_percent=utilization,
         application_cohorts=application_cohorts,
@@ -677,6 +688,9 @@ def _database_cohorts_reconcile(database: DatabaseResourceUsage) -> bool:
                 "idle_in_transaction_connections",
                 database.idle_in_transaction_connections,
             ),
+            ("open_transactions", database.open_transactions),
+            ("lock_waiters", database.lock_waiters),
+            ("blocked_sessions", database.blocked_sessions),
         )
     )
 
@@ -705,6 +719,9 @@ def summarize_resource_samples(
         peak_database_idle_in_transaction_connections=_maximum(
             sample_values,
             lambda sample: sample.database.idle_in_transaction_connections,
+        ),
+        peak_database_open_transactions=_maximum(
+            sample_values, lambda sample: sample.database.open_transactions
         ),
         peak_database_lock_waiters=_maximum(
             sample_values, lambda sample: sample.database.lock_waiters

@@ -18,7 +18,8 @@ from typing import Any, Callable, Literal, Mapping, Protocol, Self, cast
 
 import requests  # type: ignore[import-untyped]
 from portfolio_common.config import KAFKA_TRANSACTIONS_PERSISTED_TOPIC
-from sqlalchemy import Engine, create_engine, text
+from portfolio_common.db import create_sync_database_engine
+from sqlalchemy import Engine, text
 
 from scripts.operations.transaction_processing_cutover_offsets import (
     ConsumerGroupSnapshot,
@@ -95,6 +96,12 @@ Runner = Callable[..., subprocess.CompletedProcess[Any]]
 HttpGet = Callable[..., requests.Response]
 
 
+def _create_release_database_engine(database_url: str) -> Engine:
+    return create_sync_database_engine(
+        runtime_identity="transaction-release-runtime", database_url=database_url
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class LocalComposeReleaseConfig:
     """Fixed, bounded configuration for one local release rehearsal."""
@@ -125,7 +132,7 @@ class LocalComposeReleaseRuntime:
         config: LocalComposeReleaseConfig,
         runner: Runner = subprocess.run,
         http_get: HttpGet = requests.get,
-        engine_factory: Callable[[str], Engine] = create_engine,
+        engine_factory: Callable[[str], Engine] = _create_release_database_engine,
         offset_store_factory: Callable[[str, float], OffsetStore] | None = None,
         sleeper: Callable[[float], None] = time.sleep,
     ) -> None:

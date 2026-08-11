@@ -8,9 +8,18 @@ from portfolio_common.runtime_settings import (
     env_bool,
     env_int,
     env_json_map,
+    env_optional_str,
     production_security_profile_enabled,
     strict_config_validation_enabled,
 )
+
+
+def test_optional_string_preserves_missing_and_blank_values(monkeypatch) -> None:
+    monkeypatch.delenv("LOTUS_TEST_OPTIONAL", raising=False)
+    assert env_optional_str("LOTUS_TEST_OPTIONAL") is None
+
+    monkeypatch.setenv("LOTUS_TEST_OPTIONAL", "")
+    assert env_optional_str("LOTUS_TEST_OPTIONAL") == ""
 
 
 def test_runtime_settings_default_to_local_fallback(monkeypatch, caplog) -> None:

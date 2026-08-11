@@ -13,6 +13,7 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 from portfolio_common.db import get_async_db_session
+from portfolio_common.database_runtime_identity import database_runtime_identity_scope
 from portfolio_common.kafka_utils import get_kafka_producer
 from portfolio_common.logging_utils import (
     correlation_id_var,
@@ -53,12 +54,13 @@ async def main(transaction_ids: List[str]):
     kafka_producer = get_kafka_producer()
 
     try:
-        async for db_session in get_async_db_session():
-            async with db_session.begin():
-                repo = ReprocessingRepository(db=db_session, kafka_producer=kafka_producer)
-                reprocessed_count = await repo.reprocess_transactions_by_ids(
-                    transaction_ids=transaction_ids
-                )
+        with database_runtime_identity_scope("reprocess-transactions"):
+            async for db_session in get_async_db_session():
+                async with db_session.begin():
+                    repo = ReprocessingRepository(db=db_session, kafka_producer=kafka_producer)
+                    reprocessed_count = await repo.reprocess_transactions_by_ids(
+                        transaction_ids=transaction_ids
+                    )
     except Exception:
         try:
             _flush_or_raise(kafka_producer, context="after reprocessing failure")

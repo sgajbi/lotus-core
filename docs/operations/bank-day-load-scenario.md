@@ -205,8 +205,9 @@ The report records:
    still have no matching position-timeseries row,
 9. valuation-to-position and position-to-portfolio materialization latency summaries from durable
    facts, including p50, p95, p99, maximum, and sample count for each stage,
-10. peak PostgreSQL connection utilization, active and idle-in-transaction connections, lock
-    waiters, and blocked sessions sampled during the workload,
+10. peak PostgreSQL connection utilization, active, idle-in-transaction, and open-transaction
+    connections, lock waiters, and blocked sessions sampled during the workload, both in aggregate
+    and across a fixed allowlist of service and operator-tool `application_name` cohorts,
 11. peak CPU and memory utilization for the exact `portfolio_derived_state_service` Compose
     container,
 12. sampled positions, transaction-window, and support-overview API latencies,
@@ -239,7 +240,17 @@ differences to zero. The scenario fails when the first-stage sample count differ
 position count or the second-stage sample count differs from the generated portfolio count.
 The scenario also fails when it cannot complete at least one time-aligned database-and-container
 resource sample. Sampling diagnostics retain bounded exception types only; they do not persist
-command output or connection details.
+command output or connection details. Certifying evidence fails when any sample attempt errors, when
+any aggregate total, active, idle-in-transaction, open-transaction, lock-waiter, or blocked-session
+count does not equal the sum of its bounded cohorts, or when an unattributed, ungoverned, or
+local/test client identity is observed. PostgreSQL non-client workers are reported separately as
+`postgres-background`; they are not attributed to an application service.
+
+Standalone maintenance, audit, recovery, capacity, and release-rehearsal processes use fixed
+process identities from the same bounded inventory. They must create engines through
+`portfolio_common.db` or establish the validated tool identity before a shared lazy engine is
+created. Request, worker, pod, portfolio, security, transaction, correlation, and claim identifiers
+must never become PostgreSQL application names.
 
 Before the managed stack is torn down, the scenario also scrapes the combined transaction-runtime
 metrics endpoint once and records one bounded entry per `stage` and `outcome`. Each entry contains

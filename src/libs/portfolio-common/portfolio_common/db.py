@@ -1,8 +1,14 @@
 # libs/portfolio-common/portfolio_common/db.py
 import os
+from typing import Any
 
-from sqlalchemy import create_engine
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy import Engine, create_engine
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 from sqlalchemy.orm import sessionmaker
 
 from .config import POSTGRES_DB, POSTGRES_HOST, POSTGRES_PASSWORD, POSTGRES_PORT, POSTGRES_USER
@@ -74,6 +80,22 @@ def get_engine():
     return _engine
 
 
+def create_sync_database_engine(
+    *,
+    runtime_identity: str,
+    database_url: str | None = None,
+    **engine_options: Any,
+) -> Engine:
+    """Create a standalone synchronous engine with governed connection attribution."""
+
+    return create_engine(
+        _normalize_database_url_scheme(database_url or get_sync_database_url(), async_mode=False),
+        pool_pre_ping=True,
+        connect_args=sync_database_connect_args(explicit_identity=runtime_identity),
+        **engine_options,
+    )
+
+
 def get_session_factory():
     global _session_factory
     if _session_factory is None:
@@ -119,6 +141,22 @@ def get_async_engine():
             connect_args=async_database_connect_args(),
         )
     return _async_engine
+
+
+def create_async_database_engine(
+    *,
+    runtime_identity: str,
+    database_url: str | None = None,
+    **engine_options: Any,
+) -> AsyncEngine:
+    """Create a standalone asynchronous engine with governed connection attribution."""
+
+    return create_async_engine(
+        _normalize_database_url_scheme(database_url or get_async_database_url(), async_mode=True),
+        pool_pre_ping=True,
+        connect_args=async_database_connect_args(explicit_identity=runtime_identity),
+        **engine_options,
+    )
 
 
 def get_async_session_factory():

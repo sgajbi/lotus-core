@@ -16,6 +16,9 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 for source_root in (REPO_ROOT, REPO_ROOT / "src" / "libs" / "portfolio-common"):
     sys.path.insert(0, str(source_root))
 
+from portfolio_common.database_runtime_identity import (  # noqa: E402
+    database_runtime_identity_scope,
+)
 from portfolio_common.db import get_async_engine  # noqa: E402
 
 from src.services.portfolio_transaction_processing_service.app.application import (  # noqa: E402
@@ -89,23 +92,24 @@ def parse_args() -> argparse.Namespace:
 
 
 async def run(args: argparse.Namespace) -> dict[str, Any]:
-    try:
-        after = (
-            AverageCostPoolKey(args.after_portfolio_id, args.after_security_id)
-            if args.after_portfolio_id
-            else None
-        )
-        result = await build_reconcile_average_cost_pools_use_case().execute(
-            ReconcileAverageCostPoolsCommand(
-                apply=args.apply,
-                limit=args.limit,
-                portfolio_id=args.portfolio_id,
-                after=after,
+    with database_runtime_identity_scope("average-cost-reconciliation"):
+        try:
+            after = (
+                AverageCostPoolKey(args.after_portfolio_id, args.after_security_id)
+                if args.after_portfolio_id
+                else None
             )
-        )
-        return build_report(result)
-    finally:
-        await get_async_engine().dispose()
+            result = await build_reconcile_average_cost_pools_use_case().execute(
+                ReconcileAverageCostPoolsCommand(
+                    apply=args.apply,
+                    limit=args.limit,
+                    portfolio_id=args.portfolio_id,
+                    after=after,
+                )
+            )
+            return build_report(result)
+        finally:
+            await get_async_engine().dispose()
 
 
 def main() -> int:

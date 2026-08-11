@@ -1,4 +1,6 @@
+import ast
 import importlib
+from pathlib import Path
 
 import pytest
 import sqlalchemy
@@ -7,6 +9,7 @@ from portfolio_common.database_runtime_identity import (
     DATABASE_APPLICATION_NAME_MAX_LENGTH,
     DATABASE_RUNTIME_IDENTITIES,
     database_runtime_identity,
+    database_runtime_identity_scope,
 )
 from portfolio_common.db import get_async_database_url, get_sync_database_url
 from portfolio_common.runtime_settings import RuntimeConfigurationError
@@ -155,6 +158,82 @@ def test_database_runtime_identity_accepts_only_allowlisted_service(monkeypatch)
     assert database_runtime_identity() == "portfolio-transaction-processing"
 
 
+def test_explicit_database_runtime_identity_ignores_invalid_ambient_identity(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("SERVICE_NAME", "untrusted-ambient-identity")
+
+    assert (
+        database_runtime_identity(explicit_identity="derived-state-resource-monitor")
+        == "derived-state-resource-monitor"
+    )
+
+
+def test_scoped_database_runtime_identity_is_restored(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("SERVICE_NAME", "query-service")
+
+    with database_runtime_identity_scope("reprocess-transactions"):
+        assert database_runtime_identity() == "reprocess-transactions"
+
+    assert database_runtime_identity() == "query-service"
+
+
+def test_standalone_sync_engine_uses_explicit_identity(monkeypatch):
+    sync_calls = []
+
+    import portfolio_common.db as db_module
+
+    monkeypatch.setattr(
+        db_module,
+        "create_engine",
+        lambda *args, **kwargs: sync_calls.append((args, kwargs)) or object(),
+    )
+
+    db_module.create_sync_database_engine(
+        runtime_identity="offline-integrity-auditor",
+        database_url="postgresql+asyncpg://user:pass@host:5432/dbname",
+    )
+
+    assert sync_calls == [
+        (
+            ("postgresql://user:pass@host:5432/dbname",),
+            {
+                "pool_pre_ping": True,
+                "connect_args": {"application_name": "offline-integrity-auditor"},
+            },
+        )
+    ]
+
+
+def test_standalone_async_engine_uses_explicit_identity(monkeypatch):
+    async_calls = []
+
+    import portfolio_common.db as db_module
+
+    monkeypatch.setattr(
+        db_module,
+        "create_async_engine",
+        lambda *args, **kwargs: async_calls.append((args, kwargs)) or object(),
+    )
+
+    db_module.create_async_database_engine(
+        runtime_identity="average-cost-reconciliation",
+        database_url="postgresql://user:pass@host:5432/dbname",
+    )
+
+    assert async_calls == [
+        (
+            ("postgresql+asyncpg://user:pass@host:5432/dbname",),
+            {
+                "pool_pre_ping": True,
+                "connect_args": {
+                    "server_settings": {"application_name": "average-cost-reconciliation"}
+                },
+            },
+        )
+    ]
+
+
 def test_database_runtime_identity_uses_bounded_local_fallback(monkeypatch):
     monkeypatch.delenv("SERVICE_NAME", raising=False)
     monkeypatch.setenv("ENVIRONMENT", "local")
@@ -230,8 +309,38 @@ def test_database_runtime_identity_is_required_in_governed_environment(monkeypat
 
 
 def test_database_runtime_identity_inventory_is_bounded_and_postgres_safe():
-    assert len(DATABASE_RUNTIME_IDENTITIES) == 15
+    assert len(DATABASE_RUNTIME_IDENTITIES) == 26
     assert all(
         0 < len(identity) <= DATABASE_APPLICATION_NAME_MAX_LENGTH
         for identity in DATABASE_RUNTIME_IDENTITIES
+    )
+
+
+def test_production_database_engines_use_governed_factory():
+    repo_root = Path(__file__).resolve().parents[4]
+    allowed_factory = Path("src/libs/portfolio-common/portfolio_common/db.py")
+    violations: list[str] = []
+
+    for source_root in ("src", "scripts", "tools"):
+        for path in (repo_root / source_root).rglob("*.py"):
+            relative_path = path.relative_to(repo_root)
+            if relative_path == allowed_factory:
+                continue
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(relative_path))
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Call):
+                    continue
+                function_name = (
+                    node.func.id
+                    if isinstance(node.func, ast.Name)
+                    else node.func.attr
+                    if isinstance(node.func, ast.Attribute)
+                    else ""
+                )
+                if function_name in {"create_engine", "create_async_engine"}:
+                    violations.append(f"{relative_path.as_posix()}:{node.lineno}")
+
+    assert violations == [], (
+        "Production database engines must use portfolio_common.db governed factories: "
+        + ", ".join(violations)
     )

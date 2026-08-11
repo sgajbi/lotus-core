@@ -7,7 +7,6 @@ import pytest
 
 from scripts.operations import bank_day_load_scenario
 from scripts.operations.bank_day_load_scenario import (
-    DERIVED_STATE_RESOURCE_MONITOR_DATABASE_IDENTITY,
     LOG_SERVICE_NAMES,
     ApiProbeResult,
     DatabaseTieOut,
@@ -19,7 +18,6 @@ from scripts.operations.bank_day_load_scenario import (
     _build_fx_rates_payload,
     _build_instrument_specs,
     _build_instruments_payload,
-    _derived_state_resource_monitor_connect_args,
     _evaluate_report,
     _finalize_report,
     _wait_for_cycle_completion,
@@ -42,20 +40,6 @@ from scripts.operations.transaction_processing_load_support import (
 def test_log_evidence_uses_the_combined_transaction_processing_runtime() -> None:
     assert "portfolio_transaction_processing_service" in LOG_SERVICE_NAMES
     assert not any("calculator_service" in name for name in LOG_SERVICE_NAMES)
-
-
-def test_resource_monitor_database_identity_is_process_local(monkeypatch) -> None:
-    source_args = {"application_name": "lotus-core-test"}
-    monkeypatch.setattr(
-        bank_day_load_scenario,
-        "sync_database_connect_args",
-        lambda: source_args.copy(),
-    )
-
-    connect_args = _derived_state_resource_monitor_connect_args()
-
-    assert connect_args == {"application_name": DERIVED_STATE_RESOURCE_MONITOR_DATABASE_IDENTITY}
-    assert source_args == {"application_name": "lotus-core-test"}
 
 
 def test_initial_source_facts_drain_before_business_horizon_activation(monkeypatch) -> None:
@@ -927,6 +911,7 @@ def test_finalize_report_marks_aborted_runs_as_failed_and_preserves_partial_evid
             peak_database_total_connections=12,
             peak_database_active_connections=5,
             peak_database_idle_in_transaction_connections=0,
+            peak_database_open_transactions=0,
             peak_database_lock_waiters=0,
             peak_database_blocked_sessions=0,
             peak_database_connection_utilization_percent=12.0,
@@ -1169,6 +1154,7 @@ def test_evaluate_report_rejects_baseline_valuation_reprocessing() -> None:
             peak_database_total_connections=1,
             peak_database_active_connections=0,
             peak_database_idle_in_transaction_connections=0,
+            peak_database_open_transactions=0,
             peak_database_lock_waiters=0,
             peak_database_blocked_sessions=0,
             peak_database_connection_utilization_percent=1.0,
@@ -1232,6 +1218,18 @@ def test_evaluate_report_rejects_baseline_valuation_reprocessing() -> None:
     assert "valuation_snapshot_event_count 1 != expected 0" in failures
     assert "outbox publication-age percentiles are incomplete" in failures
     assert "outbox processed-throughput evidence is incomplete" in failures
+
+    sampling_error_failures = _evaluate_report(
+        replace(
+            report,
+            derived_state_resource_evidence=replace(
+                resource_evidence,
+                sampling_error_count=1,
+                sampling_error_types=("RuntimeError",),
+            ),
+        )
+    )
+    assert "derived-state resource sampling errors were observed: 1" in sampling_error_failures
 
     unreconciled_database_failures = _evaluate_report(
         replace(

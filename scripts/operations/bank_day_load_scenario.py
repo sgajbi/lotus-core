@@ -26,10 +26,9 @@ from typing import Any, Iterable, Mapping
 import requests
 from portfolio_common.database_runtime_identity import (
     NON_CERTIFYING_DATABASE_RUNTIME_IDENTITIES,
-    sync_database_connect_args,
 )
-from portfolio_common.db import get_sync_database_url
-from sqlalchemy import create_engine, text
+from portfolio_common.db import create_sync_database_engine
+from sqlalchemy import text
 from sqlalchemy.engine import make_url
 
 from scripts.operations.performance.derived_state_resource_monitor import (
@@ -108,14 +107,6 @@ REQUIRED_COST_DATABASE_OPERATION_EVIDENCE = (
     ("InitialOpeningCostStateRepository", "persist_initial_opening_cost_state"),
     ("CostProcessingEffectStager", "stage_processed_transactions"),
 )
-
-
-def _derived_state_resource_monitor_connect_args() -> dict[str, str]:
-    """Resolve governed driver settings with a process-local monitor identity."""
-
-    connect_args: dict[str, str] = sync_database_connect_args()
-    connect_args["application_name"] = DERIVED_STATE_RESOURCE_MONITOR_DATABASE_IDENTITY
-    return connect_args
 
 
 @dataclass(frozen=True)
@@ -1916,6 +1907,11 @@ def _evaluate_report(report: ScenarioReport) -> list[str]:
                 f"{outbox_evidence.final_outbox_failed_events} != expected 0"
             )
         if report.config.get("evidence_classification") == "certifying":
+            if outbox_evidence.sampling_error_count != 0:
+                failures.append(
+                    "derived-state resource sampling errors were observed: "
+                    f"{outbox_evidence.sampling_error_count}"
+                )
             if (
                 outbox_evidence.database_cohort_reconciled_sample_count
                 != outbox_evidence.sample_count
@@ -2684,10 +2680,9 @@ def main() -> int:
     run_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     started_at = _utc_now()
     os.environ["HOST_DATABASE_URL"] = args.host_database_url
-    engine = create_engine(
-        get_sync_database_url(),
-        future=True,
-        connect_args=_derived_state_resource_monitor_connect_args(),
+    engine = create_sync_database_engine(
+        runtime_identity=DERIVED_STATE_RESOURCE_MONITOR_DATABASE_IDENTITY,
+        database_url=args.host_database_url,
     )
     resolved_trade_date = _resolve_trade_date(
         engine=engine,
