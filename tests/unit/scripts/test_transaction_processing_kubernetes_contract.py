@@ -81,6 +81,7 @@ def test_transaction_processing_deployment_uses_external_runtime_configuration()
     container = deployment["spec"]["template"]["spec"]["containers"][0]
     environment = {item["name"]: item for item in container["env"]}
 
+    assert environment["SERVICE_NAME"]["value"] == "portfolio-transaction-processing"
     assert environment["DATABASE_URL"]["valueFrom"]["secretKeyRef"] == {
         "name": "lotus-core-database",
         "key": "database-url",

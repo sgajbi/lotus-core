@@ -86,6 +86,7 @@ def test_portfolio_derived_state_deployment_uses_external_runtime_configuration(
     container = deployment["spec"]["template"]["spec"]["containers"][0]
     environment = {item["name"]: item for item in container["env"]}
 
+    assert environment["SERVICE_NAME"]["value"] == "portfolio-derived-state"
     assert environment["DATABASE_URL"]["valueFrom"]["secretKeyRef"] == {
         "name": "lotus-core-database",
         "key": "database-url",

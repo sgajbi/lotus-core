@@ -66,6 +66,8 @@ spec:
               containerPort: 8085
               protocol: TCP
           env:
+            - name: SERVICE_NAME
+              value: portfolio-transaction-processing
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:

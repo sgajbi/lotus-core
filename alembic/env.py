@@ -36,6 +36,7 @@ if config.config_file_name:
 # Import the models module so SQLAlchemy model classes register with Base.metadata for Alembic.
 database_models = importlib.import_module("portfolio_common.database_models")
 alembic_numeric = importlib.import_module("portfolio_common.alembic_numeric")
+database_runtime_identity = importlib.import_module("portfolio_common.database_runtime_identity")
 
 target_metadata = database_models.Base.metadata
 render_financial_numeric = alembic_numeric.render_financial_numeric
@@ -83,6 +84,7 @@ def run_migrations_online() -> None:
         engine_config,
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
+        connect_args=database_runtime_identity.sync_database_connect_args(),
     )
 
     with connectable.connect() as connection:
