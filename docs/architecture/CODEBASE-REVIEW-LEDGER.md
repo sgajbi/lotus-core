@@ -1,5 +1,18 @@
 # Codebase Review Ledger
 
+CR-1683 manifest-arrival discriminator addendum (2026-08-11): exact-main E2E run `31484915013`
+proved that an upstream-provided `ADJUSTMENT` cash settlement carrying ordinary economic-event and
+linked-transaction-group references was misclassified as a partially identified corporate-action
+manifest child, rejected terminally, and sent to the DLQ. Manifest parking now opts in only when
+the manifest-specific `parent_event_reference` or `child_role` is populated; after opt-in, the
+complete event/group/parent/role quartet remains mandatory and fail-closed. The same-pattern guard
+covers ordinary `ADJUSTMENT`, `FEE`, and `TAX` linkage, and the application test proves that shared
+settlement linkage bypasses graph persistence. The correction is an O(1) pure domain predicate on
+the existing Python/FastAPI/PostgreSQL/Kafka stack; it adds no dependency, schema, I/O, timeout, or
+topology. Validation: 22 focused tests, scoped Ruff, MyPy across 318 sources, and the architecture
+guard. Repository context changed; OpenAPI, migrations, API contracts, and capability wiki truth
+did not change, so no wiki source update is required.
+
 CR-1683 protected-review reconciliation addendum (2026-08-11): PR #935 review identified four
 production-significant authority gaps. The branch had edited already-applied migration `c152`,
 legacy child observations could retain a null transaction-payload fingerprint, the minimum

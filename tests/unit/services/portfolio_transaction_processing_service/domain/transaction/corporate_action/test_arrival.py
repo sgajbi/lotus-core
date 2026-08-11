@@ -87,21 +87,37 @@ def test_non_corporate_action_type_remains_on_ordinary_processing_path(
 
 
 @pytest.mark.parametrize("transaction_type", ("ADJUSTMENT", "FEE", "TAX"))
-def test_ordinary_charge_or_adjustment_without_graph_identity_is_not_parked(
+def test_ordinary_charge_or_adjustment_with_shared_linkage_is_not_parked(
     transaction_type: str,
 ) -> None:
     assert (
         corporate_action_manifest_child(
             _transaction(
                 transaction_type=transaction_type,
-                economic_event_id=None,
-                linked_transaction_group_id=None,
                 parent_event_reference=None,
                 child_role=None,
             )
         )
         is None
     )
+
+
+@pytest.mark.parametrize("manifest_field", ("parent_event_reference", "child_role"))
+def test_manifest_specific_identity_still_requires_complete_authority(
+    manifest_field: str,
+) -> None:
+    identity = {
+        "parent_event_reference": None,
+        "child_role": None,
+    }
+    identity[manifest_field] = "MANIFEST-IDENTITY"
+    transaction = replace(
+        _transaction(),
+        **identity,
+    )
+
+    with pytest.raises(IncompleteCorporateActionManifestIdentityError, match="fully populated"):
+        corporate_action_manifest_child(transaction)
 
 
 def test_non_domain_value_is_rejected() -> None:
