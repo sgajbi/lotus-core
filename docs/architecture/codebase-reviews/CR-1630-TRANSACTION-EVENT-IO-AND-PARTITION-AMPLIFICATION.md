@@ -1299,6 +1299,20 @@ image, or topology changes. Focused proof now passes 78 unit/deployment tests an
 PostgreSQL tests. The daily run must be repeated at the corrected exact head; the prior receipt is
 not a certifying pass and must not be presented as one.
 
+Corrected exact-source daily artifact `20260811T161351Z` at clean signed SHA
+`cbd15f7a00748c3f7e1fcb73145aef3f33c22fe2` is a valid certifying-shape capacity failure, not an
+attribution failure or external interruption. It made all `100,000` transactions durable but
+reached `95,873` snapshots, `95,865` position-timeseries rows, and all `1,000` portfolio-timeseries
+rows before the fixed drain deadline. Attempts remained exactly `2/2`, repeated valuation
+processing remained zero, final outbox pending/failed was `0/0`, and the terminal queue retained
+`26` valuation jobs (`12` pending, `14` processing) plus one aggregation job. All `1,031/1,031`
+database samples reconciled and the unattributed-client peak was zero; aggregate peaks were `62`
+connections, `22` active sessions, `33` idle-in-transaction sessions, seven lock waiters, and seven
+blocked sessions. This receipt validates the attribution/classification slice but does not certify
+the current capacity profile. Issues #794 and #795 remain open, no tuning beyond 12 transaction
+partitions is authorized, and final-head daily/recovery/correction/restatement proof remains
+required after the valuation lease-fencing change.
+
 The PR #931 tranche boundary changes only delivery packaging and campaign chronology. It does not
 change runtime behavior or any API/OpenAPI, event, schema, migration, calculation, partition,
 operator, repository-context, or authored-wiki contract. Existing authored wiki changes already

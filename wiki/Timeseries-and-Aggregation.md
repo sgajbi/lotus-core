@@ -6,6 +6,18 @@
 valuation. It is one deployable with separate position-timeseries and portfolio-timeseries
 application/domain modules, not one mixed calculation module.
 
+## Current State And Evidence
+
+| Reader decision | Current truth | Evidence path |
+| --- | --- | --- |
+| What is supported? | Durable, correction-aware position and portfolio time-series materialization with deterministic database-queue ordering and lease-fenced terminal writes. | `docs/features/portfolio-derived-state/runtime-contract.md` and the implementation flow below |
+| How is stale work prevented? | Claims carry owner, token, expiry, target epoch, and material-source revision; terminal writes recheck source identity and PostgreSQL statement-current lease expiry. | `docs/standards/aggregation-scheduler-boundary-standard.md` |
+| What is operationally proven? | Focused unit and real-PostgreSQL migration, ownership, expiry, recovery, and concurrency suites cover the current implementation. | `docs/features/portfolio-derived-state/developer-guide.md` |
+| What is not yet certified? | The current 100,000-transaction daily profile remains a valid capacity failure; production capacity, HA/DR, and release certification stay issue-owned. | `docs/operations/bank-day-load-scenario.md` and GitHub issues `#794`, `#795`, and `#707` |
+
+This page describes implemented Core behavior. It does not by itself certify production capacity,
+cluster topology, disaster recovery, or downstream front-office readiness.
+
 ## Runtime flow
 
 1. `position_valuation_calculator` persists a daily position snapshot and emits
