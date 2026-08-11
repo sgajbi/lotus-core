@@ -8,7 +8,7 @@ from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from time import perf_counter
-from typing import Any
+from typing import Any, cast
 from unittest.mock import AsyncMock
 
 import pytest
@@ -25,7 +25,10 @@ from portfolio_common.database_models import (
     CorporateActionReadinessEvaluationRecord,
 )
 from portfolio_common.database_models import Transaction as TransactionRecord
-from portfolio_common.domain.calculation_lineage import FinancialSourceReference
+from portfolio_common.domain.calculation_lineage import (
+    FinancialSourceReference,
+    canonical_content_hash,
+)
 from portfolio_common.events import TransactionEvent
 from sqlalchemy import Engine, func, insert, inspect, select, text, update
 from sqlalchemy import event as sqlalchemy_event
@@ -208,6 +211,7 @@ async def test_manifest_append_retry_conflict_chain_and_reconstruction(
             "DISABLE TRIGGER trg_ca_manifest_version_immutable"
         )
     )
+
     await async_db_session.execute(
         text(
             "ALTER TABLE corporate_action_manifest_versions "
@@ -311,6 +315,57 @@ async def test_manifest_append_retry_conflict_chain_and_reconstruction(
             )
         )
     await async_db_session.commit()
+
+
+async def test_legacy_manifest_reconstruction_preserves_durable_hash_authority(
+    clean_db,
+    db_engine: Engine,
+    async_db_session: AsyncSession,
+) -> None:
+    _apply_migration(db_engine)
+    await _seed_portfolio(async_db_session)
+    manifest = _manifest()
+    repository = SqlAlchemyCorporateActionEventGraphRepository(async_db_session)
+    assert (
+        await repository.append_manifest(manifest) is CorporateActionManifestAppendOutcome.APPENDED
+    )
+    await async_db_session.flush()
+    record = await async_db_session.scalar(select(CorporateActionManifestVersionRecord))
+    assert record is not None
+    legacy_payload, legacy_hash = _legacy_manifest_authority(manifest)
+    await async_db_session.execute(
+        text(
+            "ALTER TABLE corporate_action_manifest_versions "
+            "DISABLE TRIGGER trg_ca_manifest_version_immutable"
+        )
+    )
+    record.manifest_payload = legacy_payload
+    record.manifest_content_hash = legacy_hash
+    await async_db_session.flush()
+    await async_db_session.execute(
+        text(
+            "ALTER TABLE corporate_action_manifest_versions "
+            "ENABLE TRIGGER trg_ca_manifest_version_immutable"
+        )
+    )
+    await async_db_session.commit()
+
+    bind = async_db_session.bind
+    assert bind is not None
+    async with AsyncSession(bind=bind, expire_on_commit=False) as restarted_session:
+        restarted_repository = SqlAlchemyCorporateActionEventGraphRepository(restarted_session)
+        reconstructed = await restarted_repository.load_current_manifest(
+            portfolio_id=manifest.portfolio_id,
+            corporate_action_event_id=manifest.corporate_action_event_id,
+        )
+        readiness = await restarted_repository.load_current_readiness(
+            portfolio_id=manifest.portfolio_id,
+            corporate_action_event_id=manifest.corporate_action_event_id,
+        )
+
+    assert reconstructed is not None
+    assert reconstructed.lineage_payload() == manifest.lineage_payload()
+    assert readiness.manifest_content_hash == legacy_hash
 
 
 async def test_incomplete_empty_manifest_is_a_durable_awaiting_snapshot(
@@ -1707,6 +1762,21 @@ def _manifest() -> corporate_action.CorporateActionParentManifest:
             ),
         ),
     )
+
+
+def _legacy_manifest_authority(
+    manifest: corporate_action.CorporateActionParentManifest,
+) -> tuple[dict[str, object], str]:
+    payload = cast(dict[str, object], manifest.lineage_payload())
+    payload.pop("tenant_id")
+    payload.pop("legal_book_id")
+    content_hash = canonical_content_hash(payload)
+    source = dict(cast(dict[str, object], payload["source_reference"]))
+    source["observed_at"] = manifest.source_reference.observed_at.astimezone(
+        timezone.utc
+    ).isoformat()
+    payload["source_reference"] = source
+    return payload, content_hash
 
 
 def _observation(
