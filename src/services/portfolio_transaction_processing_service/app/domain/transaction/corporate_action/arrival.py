@@ -7,6 +7,10 @@ from .classification import is_manifest_governed_corporate_action
 from .event_graph import CorporateActionEventChild
 
 
+class IncompleteCorporateActionManifestIdentityError(ValueError):
+    """Raised when a governed child partially claims parent-manifest identity."""
+
+
 def corporate_action_manifest_child(
     transaction: BookedTransaction,
 ) -> CorporateActionEventChild | None:
@@ -20,16 +24,19 @@ def corporate_action_manifest_child(
         raise TypeError("transaction must be a BookedTransaction")
     if not is_manifest_governed_corporate_action(transaction.transaction_type):
         return None
-    if not all(
-        _present(value)
-        for value in (
-            transaction.economic_event_id,
-            transaction.linked_transaction_group_id,
-            transaction.parent_event_reference,
-            transaction.child_role,
-        )
-    ):
+    identity_values = (
+        transaction.economic_event_id,
+        transaction.linked_transaction_group_id,
+        transaction.parent_event_reference,
+        transaction.child_role,
+    )
+    populated_identity_count = sum(_present(value) for value in identity_values)
+    if populated_identity_count == 0:
         return None
+    if populated_identity_count != len(identity_values):
+        raise IncompleteCorporateActionManifestIdentityError(
+            "manifest-governed corporate-action identity must be fully populated"
+        )
     return CorporateActionEventChild(
         transaction_id=transaction.transaction_id,
         transaction_type=transaction.transaction_type,

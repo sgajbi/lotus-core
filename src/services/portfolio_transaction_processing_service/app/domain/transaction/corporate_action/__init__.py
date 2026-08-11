@@ -1,6 +1,9 @@
 """Expose corporate-action transaction validation policy."""
 
-from .arrival import corporate_action_manifest_child
+from .arrival import (
+    IncompleteCorporateActionManifestIdentityError,
+    corporate_action_manifest_child,
+)
 from .classification import (
     BASIS_TRANSFER_CORPORATE_ACTION_TYPES,
     CASH_CONSIDERATION_TRANSACTION_TYPE,
@@ -55,6 +58,7 @@ __all__ = [
     "CORPORATE_ACTION_COHORT_POLICIES",
     "CORPORATE_ACTION_RECONCILIATION_INPUT_TYPES",
     "FRACTIONAL_CASH_BASIS_TRANSACTION_TYPES",
+    "IncompleteCorporateActionManifestIdentityError",
     "CorporateActionEventChild",
     "CorporateActionEventGraph",
     "CorporateActionEventGraphFinding",
