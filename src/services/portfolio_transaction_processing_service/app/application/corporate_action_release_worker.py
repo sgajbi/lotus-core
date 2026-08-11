@@ -174,7 +174,7 @@ class ProcessNextCorporateActionReleaseUseCase:
         lease: CorporateActionExecutionLeaseRequest,
         stop: asyncio.Event,
     ) -> None:
-        interval_seconds = max(1.0, lease.duration_seconds / 3)
+        interval_seconds = _lease_renewal_interval_seconds(lease.duration_seconds)
         while True:
             try:
                 await asyncio.wait_for(stop.wait(), timeout=interval_seconds)
@@ -264,6 +264,12 @@ class ProcessNextCorporateActionReleaseUseCase:
                     retryable=True,
                 )
             await unit_of_work.commit()
+
+
+def _lease_renewal_interval_seconds(lease_duration_seconds: int) -> float:
+    """Renew every lease strictly before its shortest supported expiry."""
+
+    return max(0.1, lease_duration_seconds / 3)
 
 
 def _worker_result(

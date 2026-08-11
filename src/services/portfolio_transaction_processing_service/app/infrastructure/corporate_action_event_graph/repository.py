@@ -171,7 +171,11 @@ class SqlAlchemyCorporateActionEventGraphRepository:
             observation.transaction_epoch < latest_observation.transaction_epoch
             or (
                 observation.transaction_epoch == latest_observation.transaction_epoch
-                and observation.child.content_hash != latest_observation.observed_content_hash
+                and (
+                    observation.child.content_hash != latest_observation.observed_content_hash
+                    or observation.transaction_payload_fingerprint
+                    != latest_observation.transaction_payload_fingerprint
+                )
             )
         ):
             raise ConflictingCorporateActionObservationError(
