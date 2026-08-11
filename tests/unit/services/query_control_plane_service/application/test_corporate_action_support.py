@@ -152,9 +152,7 @@ async def test_service_fails_closed_for_unsupported_status_and_page_size() -> No
 @pytest.mark.asyncio
 async def test_service_uses_non_enumerating_not_found_for_empty_scope() -> None:
     service = CorporateActionSupportService(
-        reader=_Reader(
-            CorporateActionEventEvidencePage(total=0, items=(), scope_exists=False)
-        ),
+        reader=_Reader(CorporateActionEventEvidencePage(total=0, items=(), scope_exists=False)),
         clock=lambda: NOW,
     )
 
