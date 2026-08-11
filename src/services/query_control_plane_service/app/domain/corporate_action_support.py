@@ -69,3 +69,4 @@ class CorporateActionEventEvidence:
 class CorporateActionEventEvidencePage:
     total: int
     items: tuple[CorporateActionEventEvidence, ...]
+    scope_exists: bool = True

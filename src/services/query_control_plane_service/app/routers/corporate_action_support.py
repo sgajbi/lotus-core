@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, Depends, Header, Path, Query, status
 
-from ..application.corporate_action_support import CorporateActionSupportService
+from ..application.corporate_action_support import MAX_SUPPORT_SKIP, CorporateActionSupportService
 from ..contracts.corporate_action_support import CorporateActionEventSupportListResponse
 from ..dependencies import get_corporate_action_support_service
 from .response_helpers import problem_example, problem_response, raise_problem
@@ -92,6 +92,7 @@ async def list_corporate_action_event_support(
     skip: int = Query(
         0,
         ge=0,
+        le=MAX_SUPPORT_SKIP,
         description="Zero-based offset within the deterministic current-event ordering.",
     ),
     limit: int = Query(
