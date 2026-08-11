@@ -22,6 +22,7 @@ from ..application.ingestion_publish_outcome import (
     INGESTION_PUBLISH_RETRY_AFTER_SECONDS,
     build_ingestion_publish_failure_detail,
 )
+from ..DTOs.corporate_action_manifest_dto import CorporateActionManifestIngestionRequest
 from ..DTOs.fixed_income_book_cost_authority_dto import (
     FixedIncomeBookCostAuthorityIngestionRequest,
 )
@@ -164,6 +165,11 @@ class IngestionPublishCommandHandler:
             command,
             self.publish_fixed_income_book_cost_authorities,
         )
+
+    async def ingest_corporate_action_manifests(
+        self, command: BatchPublishIngestionCommand
+    ) -> IngestionCommandResult:
+        return await self.ingest_batch(command, self.publish_corporate_action_manifests)
 
     async def ingest_reprocessing_requests(
         self, command: BatchPublishIngestionCommand
@@ -357,6 +363,17 @@ class IngestionPublishCommandHandler:
             authorities=list(records),
         )
         await self.ingestion_service.publish_fixed_income_book_cost_authorities(
+            request,
+            idempotency_key=idempotency_key,
+        )
+
+    async def publish_corporate_action_manifests(
+        self,
+        records: Sequence[Any],
+        idempotency_key: str | None,
+    ) -> None:
+        request = CorporateActionManifestIngestionRequest(manifests=list(records))
+        await self.ingestion_service.publish_corporate_action_manifests(
             request,
             idempotency_key=idempotency_key,
         )
