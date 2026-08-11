@@ -979,6 +979,7 @@ def _readiness_decision(
     return CorporateActionReadinessDecision(
         observation_outcome=observation_outcome,
         readiness_status=readiness.status,
+        manifest_content_hash=readiness.manifest_content_hash,
         ordered_transaction_ids=tuple(child.transaction_id for child in readiness.ordered_children),
         findings=readiness.findings,
         state_version=state_version,

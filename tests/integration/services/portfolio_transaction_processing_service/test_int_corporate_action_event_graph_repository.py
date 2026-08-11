@@ -367,6 +367,7 @@ async def test_child_observations_before_manifest_restore_ready_state(
     )
     assert retry.observation_outcome is CorporateActionObservationAppendOutcome.UNCHANGED
     assert retry.readiness_status == "READY"
+    assert retry.manifest_content_hash == manifest.content_hash
     with pytest.raises(ConflictingCorporateActionObservationError, match="different evidence"):
         await repository.observe_child(
             replace(

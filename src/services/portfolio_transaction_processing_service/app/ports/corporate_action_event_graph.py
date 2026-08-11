@@ -51,6 +51,7 @@ class CorporateActionReadinessDecision:
 
     observation_outcome: CorporateActionObservationAppendOutcome
     readiness_status: CorporateActionManifestReadinessStatus
+    manifest_content_hash: str | None
     ordered_transaction_ids: tuple[str, ...]
     findings: tuple[CorporateActionManifestFinding, ...]
     state_version: int
