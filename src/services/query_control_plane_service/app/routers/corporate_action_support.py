@@ -56,15 +56,56 @@ INVALID = problem_example(
     ),
 )
 async def list_corporate_action_event_support(
-    portfolio_id: str = Path(..., min_length=1, examples=["PB_SG_GLOBAL_BAL_001"]),
-    tenant_id: str = Query(..., min_length=1, examples=["TENANT-SG"]),
-    legal_book_id: str = Query(..., min_length=1, examples=["PB-SG-01"]),
-    corporate_action_event_id: str | None = Query(None, min_length=1),
-    readiness_status: str | None = Query(None, min_length=1),
-    execution_status: str | None = Query(None, min_length=1),
-    skip: int = Query(0, ge=0),
-    limit: int = Query(50, ge=1, le=100),
-    x_tenant_id: str = Header(..., min_length=1, alias="X-Tenant-Id"),
+    portfolio_id: str = Path(
+        ...,
+        min_length=1,
+        examples=["PB_SG_GLOBAL_BAL_001"],
+        description="Portfolio identifier within the governed tenant and legal-book scope.",
+    ),
+    tenant_id: str = Query(
+        ...,
+        min_length=1,
+        examples=["TENANT-SG"],
+        description="Tenant identifier; must equal the authenticated X-Tenant-Id header.",
+    ),
+    legal_book_id: str = Query(
+        ...,
+        min_length=1,
+        examples=["PB-SG-01"],
+        description="Legal-book identifier used to prevent cross-book evidence disclosure.",
+    ),
+    corporate_action_event_id: str | None = Query(
+        None,
+        min_length=1,
+        description="Optional exact corporate-action event identifier filter.",
+    ),
+    readiness_status: str | None = Query(
+        None,
+        min_length=1,
+        description="Optional readiness status filter; values are validated fail-closed.",
+    ),
+    execution_status: str | None = Query(
+        None,
+        min_length=1,
+        description="Optional execution-release status filter; values are validated fail-closed.",
+    ),
+    skip: int = Query(
+        0,
+        ge=0,
+        description="Zero-based offset within the deterministic current-event ordering.",
+    ),
+    limit: int = Query(
+        50,
+        ge=1,
+        le=100,
+        description="Maximum current-event records to return; capped at 100.",
+    ),
+    x_tenant_id: str = Header(
+        ...,
+        min_length=1,
+        alias="X-Tenant-Id",
+        description="Authenticated tenant scope enforced against the tenant_id query parameter.",
+    ),
     service: CorporateActionSupportService = Depends(get_corporate_action_support_service),
 ) -> CorporateActionEventSupportListResponse:
     normalized_tenant_id = tenant_id.strip()
