@@ -136,12 +136,25 @@ async def test_service_fails_closed_for_unsupported_status_and_page_size() -> No
             skip=0,
             limit=101,
         )
+    with pytest.raises(ValueError, match="paging"):
+        await service.list_current(
+            tenant_id="TENANT-SG",
+            legal_book_id="PB-SG-01",
+            portfolio_id="PORT-001",
+            corporate_action_event_id=None,
+            readiness_status=None,
+            execution_status=None,
+            skip=10_001,
+            limit=50,
+        )
 
 
 @pytest.mark.asyncio
 async def test_service_uses_non_enumerating_not_found_for_empty_scope() -> None:
     service = CorporateActionSupportService(
-        reader=_Reader(CorporateActionEventEvidencePage(total=0, items=())),
+        reader=_Reader(
+            CorporateActionEventEvidencePage(total=0, items=(), scope_exists=False)
+        ),
         clock=lambda: NOW,
     )
 
@@ -156,3 +169,25 @@ async def test_service_uses_non_enumerating_not_found_for_empty_scope() -> None:
             skip=0,
             limit=50,
         )
+
+
+@pytest.mark.asyncio
+async def test_service_returns_empty_page_for_valid_scope_without_matching_events() -> None:
+    service = CorporateActionSupportService(
+        reader=_Reader(CorporateActionEventEvidencePage(total=0, items=())),
+        clock=lambda: NOW,
+    )
+
+    response = await service.list_current(
+        tenant_id="TENANT-SG",
+        legal_book_id="PB-SG-01",
+        portfolio_id="PORT-001",
+        corporate_action_event_id=None,
+        readiness_status=None,
+        execution_status="FAILED",
+        skip=0,
+        limit=50,
+    )
+
+    assert response.total == 0
+    assert response.items == []

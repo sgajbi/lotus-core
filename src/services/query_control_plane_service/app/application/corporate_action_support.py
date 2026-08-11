@@ -25,6 +25,7 @@ READINESS_STATUSES = frozenset(
     }
 )
 EXECUTION_STATUSES = frozenset({"PENDING", "PROCESSING", "COMPLETE", "FAILED", "SUPERSEDED"})
+MAX_SUPPORT_SKIP = 10_000
 
 
 class CorporateActionSupportService:
@@ -63,7 +64,7 @@ class CorporateActionSupportService:
         execution_status = _optional_status(
             execution_status, "execution_status", EXECUTION_STATUSES
         )
-        if skip < 0 or not 1 <= limit <= 100:
+        if not 0 <= skip <= MAX_SUPPORT_SKIP or not 1 <= limit <= 100:
             raise ValueError("corporate-action support paging is outside the governed bound")
         page = await self._reader.list_current(
             tenant_id=tenant_id,
@@ -75,7 +76,7 @@ class CorporateActionSupportService:
             skip=skip,
             limit=limit,
         )
-        if page.total == 0:
+        if not page.scope_exists:
             raise LookupError("corporate-action support scope was not found")
         return CorporateActionEventSupportListResponse(
             tenant_id=tenant_id,

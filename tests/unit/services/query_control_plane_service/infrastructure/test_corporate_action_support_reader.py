@@ -30,4 +30,9 @@ def test_projection_is_exact_scope_bounded_and_never_scans_members() -> None:
     assert "corporate_action_events.readiness_status = 'READY'" in sql
     assert "corporate_action_execution_releases.status = 'PROCESSING'" in sql
     assert "corporate_action_execution_members" not in sql
+    assert "manifest_payload" not in sql
+    assert "ordered_transaction_ids AS" not in sql
+    assert "findings AS" not in sql
+    assert "jsonb_array_length" in sql
+    assert "jsonb_path_query_array" in sql
     assert "CURRENT_TIMESTAMP" in sql or "now()" in sql
