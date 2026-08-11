@@ -101,9 +101,9 @@ def test_parent_graph_migration_is_ordered_constrained_and_reversible(
         "retained_manifest_chain",
     ):
         assert invariant in sql
-    assert "'tenant_id', 'version'" in sql
-    assert "manifest.manifest_payload ->> 'tenant_id' = event.tenant_id" in sql
-    assert "manifest.manifest_payload ->> 'legal_book_id' = event.legal_book_id" in sql
+    assert "'parent_event_reference', 'portfolio_id', 'source_reference', 'version'" in sql
+    assert "manifest.manifest_payload ->> 'tenant_id' = event.tenant_id" not in sql
+    assert "manifest.manifest_payload ->> 'legal_book_id' = event.legal_book_id" not in sql
 
     immutable_ledgers = {
         "corporate_action_manifest_versions": "manifest_version",

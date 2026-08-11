@@ -2541,7 +2541,7 @@ class CorporateActionChildObservationRecord(Base):
     delivery_event_id = Column(String, nullable=False)
     correlation_id = Column(String, nullable=True)
     observed_content_hash = Column(String(64), nullable=False)
-    transaction_payload_fingerprint = Column(String(71), nullable=True)
+    transaction_payload_fingerprint = Column(String(71), nullable=False)
     observed_payload = Column(JSONB(none_as_null=True), nullable=False)
     observed_at = Column(DateTime(timezone=True), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
@@ -2571,7 +2571,6 @@ class CorporateActionChildObservationRecord(Base):
             name="ck_ca_observation_hash",
         ),
         CheckConstraint(
-            "transaction_payload_fingerprint IS NULL OR "
             "transaction_payload_fingerprint ~ '^sha256:[0-9a-f]{64}$'",
             name="ck_ca_observation_transaction_fingerprint",
         ),

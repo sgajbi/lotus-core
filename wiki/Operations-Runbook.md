@@ -151,6 +151,16 @@ Aggregate worker alerts use `lotus_core_corporate_action_release_cycles_total`,
 Do not add tenant, book, portfolio, event, release, transaction, token, or reason labels; drill down
 through the support API and correlated structured logs.
 
+During an upgrade across the corporate-action authority migrations, preserve applied migration
+history: `c152` is immutable and `c155` carries the forward manifest-authority change. Migration
+`c153` backfills legacy observation fingerprints only from the exact durable
+transaction-processing semantic fence and then makes the field non-null. If any legacy observation
+lacks valid source authority, the migration deliberately fails and rolls back; repair the missing
+source evidence through the governed recovery path before retrying. Never synthesize a fingerprint,
+edit the immutable ledgers, or mark the Alembic revision manually. Historical unscoped manifest
+hashes remain replay-compatible, while newly scoped manifests must match the parent tenant and
+legal book.
+
 ## Preferred diagnostic sequence
 
 When a portfolio or load scenario looks wrong, check in this order:

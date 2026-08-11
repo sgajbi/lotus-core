@@ -60,6 +60,11 @@ def test_execution_release_migration_is_fenced_ordered_and_reversible(
     )
     monkeypatch.setattr(
         op,
+        "alter_column",
+        lambda table, column, **kwargs: operations.append(("alter_column", table, column, kwargs)),
+    )
+    monkeypatch.setattr(
+        op,
         "drop_column",
         lambda table, column: operations.append(("drop_column", table, column)),
     )
@@ -86,6 +91,22 @@ def test_execution_release_migration_is_fenced_ordered_and_reversible(
         "transaction_payload_fingerprint IS NULL OR "
         "transaction_payload_fingerprint ~ '^sha256:[0-9a-f]{64}$'",
     ) in operations
+    assert (
+        "create_check_constraint",
+        "ck_ca_observation_transaction_fingerprint",
+        "corporate_action_child_observations",
+        "transaction_payload_fingerprint ~ '^sha256:[0-9a-f]{64}$'",
+    ) in operations
+    assert any(
+        operation[0:3]
+        == (
+            "alter_column",
+            "corporate_action_child_observations",
+            "transaction_payload_fingerprint",
+        )
+        and operation[3]["nullable"] is False
+        for operation in operations
+    )
     assert [operation[1] for operation in operations if operation[0] == "create_table"] == [
         "corporate_action_execution_releases",
         "corporate_action_execution_members",
@@ -116,6 +137,23 @@ def test_execution_release_migration_is_fenced_ordered_and_reversible(
     }
 
     sql = "\n".join(str(operation[1]) for operation in operations if operation[0] == "execute")
+    assert "portfolio-transaction-processing" in sql
+    assert "transaction-processing:v1:" in sql
+    assert "legacy corporate-action observation lacks deterministic transaction" in sql
+    assert (
+        sql.count(
+            "ALTER TABLE corporate_action_child_observations\n"
+            "            DISABLE TRIGGER trg_ca_child_observation_immutable"
+        )
+        == 1
+    )
+    assert (
+        sql.count(
+            "ALTER TABLE corporate_action_child_observations\n"
+            "            ENABLE TRIGGER trg_ca_child_observation_immutable"
+        )
+        == 1
+    )
     for invariant in (
         "corporate-action execution release authority is immutable",
         "corporate-action execution release progress is monotonic",

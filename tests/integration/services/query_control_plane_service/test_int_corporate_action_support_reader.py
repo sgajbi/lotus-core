@@ -10,7 +10,7 @@ from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from portfolio_common.database_models import Portfolio
 from portfolio_common.domain.calculation_lineage import FinancialSourceReference
-from sqlalchemy import Engine, inspect
+from sqlalchemy import Engine, inspect, text
 from sqlalchemy import event as sqlalchemy_event
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -32,6 +32,7 @@ MIGRATIONS = (
     MIGRATION_DIRECTORY / "c152b2c3d519_feat_add_corporate_action_event_graph.py",
     MIGRATION_DIRECTORY / "c153b2c3d520_feat_add_corporate_action_execution_releases.py",
     MIGRATION_DIRECTORY / "c154b2c3d521_perf_index_corporate_action_support.py",
+    MIGRATION_DIRECTORY / "c155b2c3d522_fix_forward_corporate_action_authority.py",
 )
 
 
@@ -50,6 +51,14 @@ def _apply_support_migrations(db_engine: Engine) -> None:
             if path.name.startswith("c154") and any(
                 index["name"] == "ix_ca_event_book_scope_updated"
                 for index in inspector.get_indexes("corporate_action_events")
+            ):
+                continue
+            if (
+                path.name.startswith("c155")
+                and connection.scalar(
+                    text("SELECT to_regprocedure('enforce_ca_manifest_payload_book_scope()')")
+                )
+                is not None
             ):
                 continue
             migration["upgrade"].__globals__["op"] = operations
