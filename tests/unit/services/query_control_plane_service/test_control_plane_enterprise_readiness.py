@@ -12,10 +12,16 @@ from portfolio_common.enterprise_readiness import (
 from portfolio_common.logging_utils import correlation_id_var
 
 from src.services.query_control_plane_service.app.enterprise_readiness import (
+    _required_capability,
     authorize_request,
+    authorize_write_request,
     build_enterprise_audit_middleware,
     emit_audit_event,
+    enterprise_policy_version,
+    is_feature_enabled,
     load_capability_rules,
+    load_feature_flags,
+    redact_sensitive,
     validate_enterprise_runtime_config,
 )
 
@@ -278,6 +284,32 @@ def test_control_plane_capability_rules_include_corporate_action_support_read() 
         load_capability_rules()["GET /support/portfolios/{portfolio_id}/corporate-action-events"]
         == "core.support.read"
     )
+
+
+def test_control_plane_runtime_wrappers_preserve_policy_flags_and_redaction(monkeypatch) -> None:
+    monkeypatch.setenv("ENTERPRISE_POLICY_VERSION", "policy-2026-08")
+    monkeypatch.setenv(
+        "ENTERPRISE_FEATURE_FLAGS_JSON",
+        json.dumps({"corporate_actions.support": {"tenant-1": {"ops": True}}}),
+    )
+
+    assert enterprise_policy_version() == "policy-2026-08"
+    assert load_feature_flags() == {"corporate_actions.support": {"tenant-1": {"ops": True}}}
+    assert is_feature_enabled("corporate_actions.support", "tenant-1", "ops") is True
+    assert redact_sensitive({"authorization": "Bearer secret", "safe": "value"}) == {
+        "authorization": "***REDACTED***",
+        "safe": "value",
+    }
+
+
+def test_control_plane_runtime_wrappers_resolve_support_capability_and_non_write_posture(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("ENTERPRISE_ENFORCE_AUTHZ", "true")
+    path = "/support/portfolios/PB_SG_GLOBAL_BAL_001/corporate-action-events"
+
+    assert _required_capability("GET", path) == "core.support.read"
+    assert authorize_write_request("GET", path, {}) == (True, None)
 
 
 def test_control_plane_authorize_request_enforces_corporate_action_support_read(monkeypatch):
