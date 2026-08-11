@@ -14,7 +14,9 @@ from .commands import ProcessTransactionCommand, TransactionEventMetadata
 from .corporate_action_release import (
     ClaimedCorporateActionExecutionRelease,
     CorporateActionExecutionLeaseRequest,
+    CorporateActionExecutionPayloadAuthorityError,
     CorporateActionReleaseProgressOutcome,
+    LostCorporateActionExecutionLeaseError,
 )
 from .errors import TransactionProcessingError
 from .process_transaction import ProcessTransactionUseCase
@@ -39,6 +41,7 @@ class CorporateActionReleaseWorkerResult:
     execution_ordinal: int | None = None
     transaction_id: str | None = None
     transaction_status: TransactionProcessingStatus | None = None
+    processed_member_count: int = 0
 
 
 class ProcessNextCorporateActionReleaseUseCase:
@@ -68,48 +71,57 @@ class ProcessNextCorporateActionReleaseUseCase:
         claim = await self._claim(lease)
         if claim is None:
             return CorporateActionReleaseWorkerResult(CorporateActionReleaseWorkerStatus.IDLE)
-        transaction = await self._load_owned_transaction(claim)
-        try:
-            processing = await self._process_with_heartbeat(
-                claim,
-                lease,
-                ProcessTransactionCommand(
-                    transaction=transaction,
-                    metadata=TransactionEventMetadata(
-                        event_id=(
-                            "corporate-action-release:"
-                            f"{claim.release_authority_hash}:"
-                            f"{claim.next_member.execution_ordinal}"
+        processed_member_count = 0
+        while True:
+            try:
+                transaction = await self._load_owned_transaction(claim)
+            except LostCorporateActionExecutionLeaseError as exc:
+                raise _lease_lost(claim) from exc
+            except CorporateActionExecutionPayloadAuthorityError:
+                await self._fail(claim, "payload_authority_conflict")
+                return _worker_result(
+                    CorporateActionReleaseWorkerStatus.FAILED,
+                    claim,
+                    processed_member_count=processed_member_count,
+                )
+            try:
+                processing = await self._process_with_heartbeat(
+                    claim,
+                    lease,
+                    ProcessTransactionCommand(
+                        transaction=transaction,
+                        metadata=TransactionEventMetadata(
+                            event_id=(
+                                "corporate-action-release:"
+                                f"{claim.release_authority_hash}:"
+                                f"{claim.next_member.execution_ordinal}"
+                            ),
+                            event_type="corporate_action.release.member",
+                            schema_version="1.0.0",
                         ),
-                        event_type="corporate_action.release.member",
-                        schema_version="1.0.0",
                     ),
-                ),
-            )
-        except TransactionProcessingError as exc:
-            if exc.retryable:
-                raise
-            await self._fail(claim, exc.reason_code)
-            return _worker_result(
-                CorporateActionReleaseWorkerStatus.FAILED,
-                claim,
-            )
-        progress = await self._advance(claim)
-        if progress is CorporateActionReleaseProgressOutcome.LOST_OWNERSHIP:
-            raise TransactionProcessingError(
-                reason_code="corporate_action_release_lease_lost",
-                detail={"release_id": claim.release_id},
-                retryable=True,
-            )
-        return _worker_result(
-            (
-                CorporateActionReleaseWorkerStatus.COMPLETE
-                if progress is CorporateActionReleaseProgressOutcome.COMPLETE
-                else CorporateActionReleaseWorkerStatus.ADVANCED
-            ),
-            claim,
-            transaction_status=processing.status,
-        )
+                )
+            except TransactionProcessingError as exc:
+                if exc.retryable:
+                    raise
+                await self._fail(claim, exc.reason_code)
+                return _worker_result(
+                    CorporateActionReleaseWorkerStatus.FAILED,
+                    claim,
+                    processed_member_count=processed_member_count,
+                )
+            progress = await self._advance(claim)
+            if progress is CorporateActionReleaseProgressOutcome.LOST_OWNERSHIP:
+                raise _lease_lost(claim)
+            processed_member_count += 1
+            if progress is CorporateActionReleaseProgressOutcome.COMPLETE:
+                return _worker_result(
+                    CorporateActionReleaseWorkerStatus.COMPLETE,
+                    claim,
+                    transaction_status=processing.status,
+                    processed_member_count=processed_member_count,
+                )
+            claim = await self._load_owned_next(claim)
 
     async def _process_with_heartbeat(
         self,
@@ -187,6 +199,21 @@ class ProcessNextCorporateActionReleaseUseCase:
             await unit_of_work.commit()
         return outcome
 
+    async def _load_owned_next(
+        self,
+        claim: ClaimedCorporateActionExecutionRelease,
+    ) -> ClaimedCorporateActionExecutionRelease:
+        async with self._unit_of_work_factory() as unit_of_work:
+            next_claim = await unit_of_work.releases.load_owned_next(
+                release_id=claim.release_id,
+                lease_token=claim.lease_token,
+                fence_token=claim.fence_token,
+            )
+            await unit_of_work.commit()
+        if next_claim is None:
+            raise _lease_lost(claim)
+        return next_claim
+
     async def _fail(
         self,
         claim: ClaimedCorporateActionExecutionRelease,
@@ -214,6 +241,7 @@ def _worker_result(
     claim: ClaimedCorporateActionExecutionRelease,
     *,
     transaction_status: TransactionProcessingStatus | None = None,
+    processed_member_count: int = 0,
 ) -> CorporateActionReleaseWorkerResult:
     return CorporateActionReleaseWorkerResult(
         status=status,
@@ -221,4 +249,15 @@ def _worker_result(
         execution_ordinal=claim.next_member.execution_ordinal,
         transaction_id=claim.next_member.transaction_id,
         transaction_status=transaction_status,
+        processed_member_count=processed_member_count,
+    )
+
+
+def _lease_lost(
+    claim: ClaimedCorporateActionExecutionRelease,
+) -> TransactionProcessingError:
+    return TransactionProcessingError(
+        reason_code="corporate_action_release_lease_lost",
+        detail={"release_id": claim.release_id},
+        retryable=True,
     )

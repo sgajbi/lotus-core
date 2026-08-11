@@ -24,10 +24,12 @@ from ...application.corporate_action_release import (
     ConflictingCorporateActionExecutionReleaseError,
     CorporateActionExecutionLeaseRequest,
     CorporateActionExecutionMemberAuthority,
+    CorporateActionExecutionPayloadAuthorityError,
     CorporateActionExecutionReleaseAuthority,
     CorporateActionReleaseMaterialization,
     CorporateActionReleaseMaterializationOutcome,
     CorporateActionReleaseProgressOutcome,
+    LostCorporateActionExecutionLeaseError,
     StaleCorporateActionExecutionPlanError,
     build_corporate_action_execution_member_authority,
 )
@@ -190,7 +192,7 @@ class SqlAlchemyCorporateActionExecutionReleaseRepository:
             )
         )
         if owned is None:
-            raise ConflictingCorporateActionExecutionReleaseError(
+            raise LostCorporateActionExecutionLeaseError(
                 "corporate-action release lease ownership was lost before payload load"
             )
         persisted = await self._session.scalar(
@@ -199,7 +201,7 @@ class SqlAlchemyCorporateActionExecutionReleaseRepository:
             )
         )
         if persisted is None:
-            raise ConflictingCorporateActionExecutionReleaseError(
+            raise CorporateActionExecutionPayloadAuthorityError(
                 "corporate-action release transaction payload is unavailable"
             )
         transaction = replace(
@@ -208,7 +210,7 @@ class SqlAlchemyCorporateActionExecutionReleaseRepository:
         )
         identity = build_transaction_semantic_identity(transaction)
         if identity.payload_fingerprint != claim.next_member.transaction_payload_fingerprint:
-            raise ConflictingCorporateActionExecutionReleaseError(
+            raise CorporateActionExecutionPayloadAuthorityError(
                 "corporate-action release transaction payload changed after materialization"
             )
         return transaction

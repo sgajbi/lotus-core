@@ -38,6 +38,16 @@ class ConflictingCorporateActionExecutionReleaseError(ValueError):
     """Raised when persisted release evidence differs from deterministic authority."""
 
 
+class LostCorporateActionExecutionLeaseError(ConflictingCorporateActionExecutionReleaseError):
+    """Raised when a worker no longer owns the release fence it presented."""
+
+
+class CorporateActionExecutionPayloadAuthorityError(
+    ConflictingCorporateActionExecutionReleaseError
+):
+    """Raised when frozen member authority cannot be reconstructed exactly."""
+
+
 class CorporateActionReleaseProgressOutcome(StrEnum):
     """Classify a fenced member-progress write."""
 

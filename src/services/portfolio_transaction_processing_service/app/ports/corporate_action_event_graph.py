@@ -128,6 +128,14 @@ class CorporateActionExecutionReleasePort(Protocol):
         claim: ClaimedCorporateActionExecutionRelease,
     ) -> BookedTransaction: ...
 
+    async def load_owned_next(
+        self,
+        *,
+        release_id: int,
+        lease_token: str,
+        fence_token: int,
+    ) -> ClaimedCorporateActionExecutionRelease | None: ...
+
     async def advance_member(
         self,
         *,
