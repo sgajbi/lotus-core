@@ -496,8 +496,9 @@ def upgrade() -> None:
                 IF payload_keys IS DISTINCT FROM ARRAY[
                     'canonical_payload_version', 'completion_declared',
                     'corporate_action_event_id', 'corporate_action_type',
-                    'expected_children', 'linked_transaction_group_id',
-                    'parent_event_reference', 'portfolio_id', 'source_reference', 'version'
+                    'expected_children', 'legal_book_id', 'linked_transaction_group_id',
+                    'parent_event_reference', 'portfolio_id', 'source_reference',
+                    'tenant_id', 'version'
                 ]::text[]
                    OR payload ->> 'canonical_payload_version' <> '1'
                    OR jsonb_typeof(payload -> 'completion_declared') <> 'boolean'
@@ -512,7 +513,8 @@ def upgrade() -> None:
                     SELECT 1
                     FROM unnest(ARRAY[
                         'corporate_action_event_id', 'corporate_action_type',
-                        'linked_transaction_group_id', 'parent_event_reference', 'portfolio_id'
+                        'legal_book_id', 'linked_transaction_group_id',
+                        'parent_event_reference', 'portfolio_id', 'tenant_id'
                     ]) AS required_key
                     WHERE jsonb_typeof(payload -> required_key) <> 'string'
                        OR payload ->> required_key <> btrim(payload ->> required_key)
@@ -1528,6 +1530,8 @@ def upgrade() -> None:
                 SELECT
                     manifest.manifest_payload ->> 'corporate_action_event_id'
                         = event.corporate_action_event_id
+                    AND manifest.manifest_payload ->> 'tenant_id' = event.tenant_id
+                    AND manifest.manifest_payload ->> 'legal_book_id' = event.legal_book_id
                     AND manifest.manifest_payload ->> 'portfolio_id' = event.portfolio_id
                     AND manifest.manifest_payload ->> 'linked_transaction_group_id'
                         = event.linked_transaction_group_id
