@@ -37,6 +37,7 @@ def _observation() -> CorporateActionChildObservation:
             target_instrument_id="SEC-TARGET-001",
         ),
         transaction_epoch=1,
+        transaction_payload_fingerprint="sha256:" + "a" * 64,
         delivery_event_id="transactions.persisted-0-1",
         correlation_id="corr-ca-001",
         observed_at=datetime(2026, 8, 11, 10, 0, tzinfo=UTC),

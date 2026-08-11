@@ -20,6 +20,17 @@ depends_on: str | Sequence[str] | None = None
 def upgrade() -> None:
     """Persist frozen release authority and ordered member progress."""
 
+    op.add_column(
+        "corporate_action_child_observations",
+        sa.Column("transaction_payload_fingerprint", sa.String(length=71), nullable=True),
+    )
+    op.create_check_constraint(
+        "ck_ca_observation_transaction_fingerprint",
+        "corporate_action_child_observations",
+        "transaction_payload_fingerprint IS NULL OR "
+        "transaction_payload_fingerprint ~ '^sha256:[0-9a-f]{64}$'",
+    )
+
     op.create_table(
         "corporate_action_execution_releases",
         sa.Column("id", sa.BigInteger(), autoincrement=True, nullable=False),
@@ -324,3 +335,12 @@ def downgrade() -> None:
     op.execute(sa.text("DROP FUNCTION enforce_ca_execution_release_identity() CASCADE"))
     op.drop_table("corporate_action_execution_members")
     op.drop_table("corporate_action_execution_releases")
+    op.drop_constraint(
+        "ck_ca_observation_transaction_fingerprint",
+        "corporate_action_child_observations",
+        type_="check",
+    )
+    op.drop_column(
+        "corporate_action_child_observations",
+        "transaction_payload_fingerprint",
+    )

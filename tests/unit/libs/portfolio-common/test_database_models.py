@@ -12,6 +12,7 @@ from portfolio_common.database_models import (
     ClientRestrictionProfile,
     ClientTaxProfile,
     ClientTaxRuleSet,
+    CorporateActionChildObservationRecord,
     CorporateActionExecutionMemberRecord,
     CorporateActionExecutionReleaseRecord,
     DailyPositionSnapshot,
@@ -83,10 +84,16 @@ def test_database_identifier_names_fit_postgresql_limit():
 def test_corporate_action_execution_release_declares_fenced_state_contract() -> None:
     release = CorporateActionExecutionReleaseRecord.__table__
     member = CorporateActionExecutionMemberRecord.__table__
+    observation = CorporateActionChildObservationRecord.__table__
     release_constraints = {constraint.name for constraint in release.constraints}
     member_constraints = {constraint.name for constraint in member.constraints}
     release_indexes = {index.name: index for index in release.indexes}
     member_indexes = {index.name: index for index in member.indexes}
+    observation_constraints = {constraint.name for constraint in observation.constraints}
+
+    assert observation.columns["transaction_payload_fingerprint"].type.length == 71
+    assert observation.columns["transaction_payload_fingerprint"].nullable is True
+    assert "ck_ca_observation_transaction_fingerprint" in observation_constraints
 
     assert release.columns["structural_plan_content_hash"].type.length == 64
     assert release.columns["release_authority_hash"].type.length == 64
