@@ -1830,8 +1830,8 @@ Most relevant current governance:
      metrics, bounded instrument trigger claiming, durable `RESET_WATERMARKS` replay-job creation,
      trigger correlation propagation, and trigger consume logging. Keep publisher/Kafka flush
      logic, backfill planning, watermark policy, and instrument trigger coordination out of
-     `ValuationScheduler`. `ValuationStaleJobResetter` owns stale valuation job reset invocation
-     with scheduler-configured timeout and maximum-attempt policy. `ValuationDispatchCoordinator`
+     `ValuationScheduler`. `ValuationStaleJobResetter` owns expired valuation-claim recovery with
+     the scheduler-configured maximum-attempt policy. `ValuationDispatchCoordinator`
      owns claimed-job polling rounds, poll-budget enforcement, eligible-job claiming, dispatch
      callback orchestration, dispatch failure observation, and recovery repository calls through an
      explicit session provider and repository factory. Durable valuation claims must also respect
@@ -1839,6 +1839,12 @@ Most relevant current governance:
      with a PostgreSQL transaction-scoped advisory lock so concurrent schedulers cannot turn broker
      backlog into unbounded `PROCESSING` rows that later fail the stale-worker policy. Keep this
      control separate from per-poll batch, round, and time budgets.
+     Every claim persists the stable scheduler-instance owner, a rotated opaque token, and a
+     database-clock expiry using `VALUATION_SCHEDULER_CLAIM_LEASE_SECONDS`. Dispatch recovery and
+     terminal writes must match the exact job/token pair while the lease is unexpired; expired
+     recovery must recheck database-clock expiry on the write. Do not restore mutable `updated_at`
+     age as ownership authority. The fixed `900s` lease has no renewal path in this slice: changing
+     it requires measured dispatch-plus-calculation evidence and the slow-worker/reclaim race suite.
      `ValuationSchedulerRepositoryFactory` owns
      repository construction for scheduler DB steps, and the scheduler accepts an explicit session
      provider so the loop can be tested without real repositories or Kafka. Keep the scheduler as a
@@ -3016,11 +3022,14 @@ Most relevant current governance:
      independently hashed transport value. Claim, stale-reset, and
      dispatch-recovery paths must clear a consumed fence without discarding a newer source mutation,
      including at the normal retry limit.
-     Every active valuation claim also owns a durable opaque claim token. Rotate it on each claim,
-     carry it through the internal dispatch header, and require the exact token on every terminal
-     transition. Stale reset, supersede, terminal completion, and dispatch recovery must clear it.
-     A late worker that lost ownership may finish calculation locally but must not persist or
-     publish financial state for a later claim.
+     Every active valuation claim also owns a durable scheduler-instance owner, a rotated opaque
+     claim token, and a finite PostgreSQL-clock expiry. Carry the token through the internal
+     dispatch header, require the exact token and an unexpired lease on every terminal transition,
+     and recover dispatch failures only for the exact job/token pair. Expiry recovery, supersede,
+     terminal completion, and dispatch recovery must clear all three lease fields. A late worker
+     that lost ownership or whose lease expired may finish calculation locally but must not persist
+     or publish financial state for a later claim. `updated_at` remains diagnostic metadata, never
+     claim authority.
 192. Correlation ids are diagnostic lineage, not authorization to replay completed work. Valuation
      scheduler, recovery, duplicate delivery, and headerless readiness paths must leave an existing
      `COMPLETE` same-scope job unchanged even when their correlation differs. A source correction

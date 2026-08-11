@@ -182,6 +182,15 @@ portfolio-keyed partitions and eight serial position-valuation workers; differen
 run concurrently while each portfolio retains ordered valuation processing. Worker count must not
 exceed the available valuation-job partitions.
 
+Each dispatched valuation job also carries a durable scheduler owner, rotated opaque token, and
+finite PostgreSQL-clock expiry. Completion and dispatch recovery require the exact token while the
+lease remains unexpired; expired work is reclaimed only after rechecking database time, and every
+release clears the complete lease. This prevents a slow worker from persisting or publishing after
+a later owner has reclaimed the job. The fixed lease defaults to `900s` and intentionally has no
+heartbeat renewal; changes require measured dispatch-plus-calculation headroom plus slow-worker and
+reclaim certification. Operators can track bounded outcomes through
+`valuation_job_lease_transitions_total{stage,outcome}`.
+
 The local exact-source fan-in certification `20260715T100128Z` proved one portfolio with 1,000
 positions: all 1,000 source transactions, snapshots, and position rows tied to one portfolio row;
 valuation-to-position p95 was `5.6004667s`, portfolio aggregation completed in `1.723829s`, all
