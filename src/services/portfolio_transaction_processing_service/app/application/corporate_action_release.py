@@ -3,12 +3,38 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import cast
 
 from portfolio_common.domain.calculation_lineage import canonical_content_hash
 
 from ..domain import BookedTransaction, build_transaction_semantic_identity
 from .corporate_action_execution import CorporateActionExecutionPlan
+
+
+class CorporateActionReleaseMaterializationOutcome(StrEnum):
+    """Classify an atomic release-ledger materialization attempt."""
+
+    APPENDED = "APPENDED"
+    UNCHANGED = "UNCHANGED"
+
+
+@dataclass(frozen=True, slots=True)
+class CorporateActionReleaseMaterialization:
+    """Return durable identity for a materialized release generation."""
+
+    outcome: CorporateActionReleaseMaterializationOutcome
+    release_id: int
+    release_authority_hash: str
+    member_count: int
+
+
+class StaleCorporateActionExecutionPlanError(ValueError):
+    """Raised when READY authority is absent, stale, or inconsistent."""
+
+
+class ConflictingCorporateActionExecutionReleaseError(ValueError):
+    """Raised when persisted release evidence differs from deterministic authority."""
 
 
 @dataclass(frozen=True, slots=True)

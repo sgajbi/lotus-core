@@ -29,8 +29,12 @@ from .corporate_action_reconciliation import (
     build_corporate_action_reconciliation_evidence,
 )
 from .corporate_action_release import (
+    ConflictingCorporateActionExecutionReleaseError,
     CorporateActionExecutionMemberAuthority,
     CorporateActionExecutionReleaseAuthority,
+    CorporateActionReleaseMaterialization,
+    CorporateActionReleaseMaterializationOutcome,
+    StaleCorporateActionExecutionPlanError,
     build_corporate_action_execution_member_authority,
 )
 from .cost_basis_processing.average_cost_pool_reconciliation import (
@@ -82,6 +86,10 @@ __all__ = [
     "CorporateActionExecutionPlan",
     "CorporateActionExecutionMemberAuthority",
     "CorporateActionExecutionReleaseAuthority",
+    "CorporateActionReleaseMaterialization",
+    "CorporateActionReleaseMaterializationOutcome",
+    "ConflictingCorporateActionExecutionReleaseError",
+    "StaleCorporateActionExecutionPlanError",
     "ProcessTransactionCommand",
     "ProcessTransactionCashflowUseCase",
     "ProcessTransactionResult",

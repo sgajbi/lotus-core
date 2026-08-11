@@ -15,22 +15,40 @@ from alembic.operations import Operations
 from portfolio_common.database_models import (
     CorporateActionChildObservationRecord,
     CorporateActionEventRecord,
+    CorporateActionExecutionMemberRecord,
+    CorporateActionExecutionReleaseRecord,
     CorporateActionManifestEdgeRecord,
     CorporateActionManifestNodeRecord,
     CorporateActionManifestVersionRecord,
     CorporateActionReadinessEvaluationRecord,
 )
+from portfolio_common.database_models import Transaction as TransactionRecord
 from portfolio_common.domain.calculation_lineage import FinancialSourceReference
-from sqlalchemy import Engine, func, insert, inspect, select, text
+from portfolio_common.events import TransactionEvent
+from sqlalchemy import Engine, func, insert, inspect, select, text, update
 from sqlalchemy import event as sqlalchemy_event
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from src.services.portfolio_transaction_processing_service.app.application import (
+    CorporateActionExecutionPlan,
+    CorporateActionReleaseMaterializationOutcome,
+    StaleCorporateActionExecutionPlanError,
+)
+from src.services.portfolio_transaction_processing_service.app.domain import (
+    build_transaction_semantic_identity,
+)
 from src.services.portfolio_transaction_processing_service.app.domain.transaction import (
     corporate_action,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure.corporate_action_event_graph import (  # noqa: E501
     SqlAlchemyCorporateActionEventGraphRepository,
+)
+from src.services.portfolio_transaction_processing_service.app.infrastructure.corporate_action_execution import (  # noqa: E501
+    SqlAlchemyCorporateActionExecutionReleaseRepository,
+)
+from src.services.portfolio_transaction_processing_service.app.infrastructure.transaction_mapping.booked_transaction import (  # noqa: E501
+    to_booked_transaction,
 )
 from src.services.portfolio_transaction_processing_service.app.ports import (
     ConflictingCorporateActionManifestError,
@@ -53,6 +71,7 @@ MIGRATION = (
     / "versions"
     / "c152b2c3d519_feat_add_corporate_action_event_graph.py"
 )
+
 RELEASE_MIGRATION = (
     Path(__file__).resolve().parents[4]
     / "alembic"
@@ -458,6 +477,113 @@ async def test_first_manifest_rejects_rogue_pre_manifest_child(
     assert any(
         finding["reason"] == "CA_MANIFEST_UNEXPECTED_CHILD" for finding in evaluation.findings
     )
+
+
+async def test_ready_release_materialization_freezes_payload_authority_and_replays_neutrally(
+    clean_db,
+    db_engine: Engine,
+    async_db_session: AsyncSession,
+) -> None:
+    _apply_migration(db_engine)
+    await _seed_portfolio(async_db_session)
+    manifest = _manifest()
+    await _seed_transactions(async_db_session, manifest.expected_children)
+    await async_db_session.execute(
+        text(
+            """
+            UPDATE transactions
+            SET economic_event_id = :event_id,
+                linked_transaction_group_id = :group_id,
+                parent_event_reference = :parent_reference
+            WHERE portfolio_id = :portfolio_id
+            """
+        ),
+        {
+            "event_id": manifest.corporate_action_event_id,
+            "group_id": manifest.linked_transaction_group_id,
+            "parent_reference": manifest.parent_event_reference,
+            "portfolio_id": manifest.portfolio_id,
+        },
+    )
+    graph = SqlAlchemyCorporateActionEventGraphRepository(async_db_session)
+    assert (
+        await graph.append_manifest(manifest)
+        is CorporateActionManifestAppendOutcome.APPENDED
+    )
+    decision = None
+    for sequence, child in enumerate(manifest.expected_children, start=1):
+        persisted = await async_db_session.scalar(
+            select(TransactionRecord).where(
+                TransactionRecord.transaction_id == child.transaction_id
+            )
+        )
+        assert persisted is not None
+        booked = replace(
+            to_booked_transaction(TransactionEvent.model_validate(persisted)),
+            epoch=1,
+        )
+        observation = replace(
+            _observation(
+                manifest,
+                child,
+                delivery_event_id=f"release-materialization-{sequence}",
+            ),
+            transaction_payload_fingerprint=(
+                build_transaction_semantic_identity(booked).payload_fingerprint
+            ),
+        )
+        decision = await graph.observe_child(observation)
+    assert decision is not None
+    assert decision.readiness_status == "READY"
+    assert decision.manifest_content_hash is not None
+    assert decision.structural_plan_content_hash is not None
+    plan = CorporateActionExecutionPlan(
+        corporate_action_event_id=manifest.corporate_action_event_id,
+        portfolio_id=manifest.portfolio_id,
+        linked_transaction_group_id=manifest.linked_transaction_group_id,
+        parent_event_reference=manifest.parent_event_reference,
+        manifest_content_hash=decision.manifest_content_hash,
+        structural_plan_content_hash=decision.structural_plan_content_hash,
+        readiness_state_version=decision.state_version,
+        through_observation_sequence=decision.through_observation_sequence,
+        ordered_transaction_ids=decision.ordered_transaction_ids,
+    )
+    releases = SqlAlchemyCorporateActionExecutionReleaseRepository(async_db_session)
+
+    first = await releases.materialize(plan)
+    replay = await releases.materialize(plan)
+    await async_db_session.commit()
+
+    assert first.outcome is CorporateActionReleaseMaterializationOutcome.APPENDED
+    assert replay.outcome is CorporateActionReleaseMaterializationOutcome.UNCHANGED
+    assert replay.release_id == first.release_id
+    assert replay.release_authority_hash == first.release_authority_hash
+    assert replay.member_count == len(manifest.expected_children)
+    with pytest.raises(StaleCorporateActionExecutionPlanError, match="current READY authority"):
+        await releases.materialize(
+            replace(plan, readiness_state_version=plan.readiness_state_version + 1)
+        )
+    await async_db_session.execute(
+        update(TransactionRecord)
+        .where(TransactionRecord.transaction_id == decision.ordered_transaction_ids[0])
+        .values(quantity=2)
+    )
+    with pytest.raises(StaleCorporateActionExecutionPlanError, match="payload differs"):
+        await releases.materialize(plan)
+    release = await async_db_session.get(
+        CorporateActionExecutionReleaseRecord,
+        first.release_id,
+    )
+    assert release is not None
+    members = tuple(
+        await async_db_session.scalars(
+            select(CorporateActionExecutionMemberRecord)
+            .where(CorporateActionExecutionMemberRecord.release_id == first.release_id)
+            .order_by(CorporateActionExecutionMemberRecord.execution_ordinal)
+        )
+    )
+    assert tuple(member.transaction_id for member in members) == decision.ordered_transaction_ids
+    assert all(member.transaction_payload_fingerprint.startswith("sha256:") for member in members)
 
 
 async def test_child_correction_epochs_are_monotonic_and_retries_are_neutral(
