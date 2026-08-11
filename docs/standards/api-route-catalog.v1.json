@@ -2602,6 +2602,58 @@
     {
       "service_app": "ingestion_service",
       "method": "POST",
+      "path": "/ingest/corporate-action-manifests",
+      "route_key": "POST /ingest/corporate-action-manifests",
+      "operation_id": "ingest_corporate_action_manifests_ingest_corporate_action_manifests_post",
+      "summary": "Ingest corporate-action parent manifests",
+      "tags": [
+        "Corporate Actions"
+      ],
+      "route_family": "Unclassified",
+      "api_version": "unversioned-current",
+      "api_status": "active",
+      "owner": "ingestion_service",
+      "auth_requirement": "not-declared-in-openapi",
+      "audit_requirement": "mutation-audit-required",
+      "request_schema": "CorporateActionManifestIngestionRequest",
+      "response_schemas": [
+        {
+          "status_code": "202",
+          "schema": "BatchIngestionAcceptedResponse",
+          "description": "Successful Response"
+        }
+      ],
+      "error_models": [
+        {
+          "status_code": "409",
+          "schema": "none",
+          "description": "The idempotency key conflicts with another payload, or the matching request has not reached a replay-safe state."
+        },
+        {
+          "status_code": "422",
+          "schema": "HTTPValidationError",
+          "description": "Validation Error"
+        },
+        {
+          "status_code": "503",
+          "schema": "none",
+          "description": "Ingestion is unavailable because operating mode blocks writes or Kafka publish failed."
+        }
+      ],
+      "pagination": [],
+      "filtering": [],
+      "sorting": [],
+      "idempotency_behavior": "not-declared",
+      "downstream_consumers": [],
+      "deprecated_alias_metadata": {
+        "is_deprecated": false,
+        "sunset": null,
+        "compatibility": "not_applicable"
+      }
+    },
+    {
+      "service_app": "ingestion_service",
+      "method": "POST",
       "path": "/ingest/fixed-income-book-cost-authorities",
       "route_key": "POST /ingest/fixed-income-book-cost-authorities",
       "operation_id": "ingest_fixed_income_book_cost_authorities_ingest_fixed_income_book_cost_authorities_post",

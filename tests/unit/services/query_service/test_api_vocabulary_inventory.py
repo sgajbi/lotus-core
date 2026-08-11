@@ -31,6 +31,16 @@ def test_composed_exact_decimal_schema_prefers_lexical_contract() -> None:
     assert _fallback_example("contract_rate", schema) == "1.2345"
 
 
+def test_literal_and_source_authority_examples_are_contractual() -> None:
+    assert _fallback_example("event_type", {"const": "corporate_action.manifest.received"}) == (
+        "corporate_action.manifest.received"
+    )
+    assert _fallback_example("source_content_hash", {"type": "string"}) == "a" * 64
+    assert _fallback_example("source_revision", {"type": "string"}) == "revision-1"
+    assert _fallback_example("tenant_id", {"type": "string"}) == "TENANT_SG"
+    assert _fallback_example("corporate_action_type", {"type": "string"}) == "SPIN_OFF"
+
+
 def _minimal_inventory() -> dict[str, Any]:
     return {
         "generatedAt": "2026-07-23T00:00:00+00:00",

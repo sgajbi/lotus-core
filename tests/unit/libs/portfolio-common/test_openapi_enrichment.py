@@ -7,6 +7,14 @@ from portfolio_common.openapi_examples import build_schema_example, infer_descri
 
 
 def test_infer_example_preserves_ordered_fallback_policy() -> None:
+    assert infer_example("tenantId", {"type": "string", "examples": ["TENANT_SG"]}) == (
+        "TENANT_SG"
+    )
+    assert infer_example("eventType", {"type": "string", "const": "event.received"}) == (
+        "event.received"
+    )
+    assert infer_example("sourceContentHash", {"type": "string"}) == "a" * 64
+    assert infer_example("sourceRevision", {"type": "string"}) == "revision-1"
     assert infer_example("portfolioId", {"type": "string"}) == "DEMO_DPM_EUR_001"
     assert infer_example("status", {"enum": ["BLOCKED", "ACTIVE"]}) == "ACTIVE"
     assert infer_example("reviewStatus", {"enum": ["BLOCKED", "ACTIVE"]}) == "BLOCKED"
