@@ -871,8 +871,7 @@ def _same_event_identity(
     if not identity_matches or not isinstance(identity, CorporateActionParentManifest):
         return identity_matches
     return bool(
-        event.tenant_id == identity.tenant_id
-        and event.legal_book_id == identity.legal_book_id
+        event.tenant_id == identity.tenant_id and event.legal_book_id == identity.legal_book_id
     )
 
 
@@ -941,11 +940,9 @@ def _require_same_observation(
         record.transaction_id != observation.child.transaction_id
         or record.transaction_epoch != observation.transaction_epoch
         or record.observed_content_hash != observation.child.content_hash
-        or record.transaction_payload_fingerprint
-        != observation.transaction_payload_fingerprint
+        or record.transaction_payload_fingerprint != observation.transaction_payload_fingerprint
         or record.observed_payload != observation.child.lineage_payload()
         or record.correlation_id != observation.correlation_id
-        or record.observed_at.astimezone(UTC) != observation.observed_at.astimezone(UTC)
     ):
         raise ConflictingCorporateActionObservationError(
             "corporate-action child delivery identity already exists with different evidence"

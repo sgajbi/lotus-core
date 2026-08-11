@@ -390,7 +390,14 @@ async def test_child_observations_before_manifest_restore_ready_state(
         await repository.append_manifest(manifest) is CorporateActionManifestAppendOutcome.APPENDED
     )
     retry = await repository.observe_child(
-        _observation(manifest, manifest.expected_children[0], delivery_event_id="delivery-1")
+        replace(
+            _observation(
+                manifest,
+                manifest.expected_children[0],
+                delivery_event_id="delivery-1",
+            ),
+            observed_at=manifest.source_reference.observed_at + timedelta(seconds=1),
+        )
     )
     assert retry.observation_outcome is CorporateActionObservationAppendOutcome.UNCHANGED
     assert retry.readiness_status == "READY"
