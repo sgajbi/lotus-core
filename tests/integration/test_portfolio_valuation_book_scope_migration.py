@@ -118,9 +118,18 @@ def _downgrade_dependent_schema(connection) -> list[dict[str, Any]]:
         (
             CORPORATE_ACTION_DEPENDENT_MIGRATIONS[0],
             connection.scalar(
-                text("SELECT to_regprocedure('enforce_ca_manifest_payload_book_scope()')")
-            )
-            is not None,
+                text(
+                    """
+                    SELECT EXISTS (
+                        SELECT 1
+                        FROM pg_trigger
+                        WHERE tgname = 'trg_ca_manifest_payload_book_scope'
+                          AND tgrelid = to_regclass('corporate_action_manifest_versions')
+                          AND NOT tgisinternal
+                    )
+                    """
+                )
+            ),
         ),
         (
             CORPORATE_ACTION_DEPENDENT_MIGRATIONS[1],

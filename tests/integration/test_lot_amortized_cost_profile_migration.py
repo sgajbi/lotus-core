@@ -191,9 +191,18 @@ def _downgrade_later_revisions(connection) -> list[dict[str, Any]]:
         (
             CORPORATE_ACTION_DEPENDENT_MIGRATIONS[0],
             connection.scalar(
-                text("SELECT to_regprocedure('enforce_ca_manifest_payload_book_scope()')")
-            )
-            is not None,
+                text(
+                    """
+                    SELECT EXISTS (
+                        SELECT 1
+                        FROM pg_trigger
+                        WHERE tgname = 'trg_ca_manifest_payload_book_scope'
+                          AND tgrelid = to_regclass('corporate_action_manifest_versions')
+                          AND NOT tgisinternal
+                    )
+                    """
+                )
+            ),
         ),
         (
             CORPORATE_ACTION_DEPENDENT_MIGRATIONS[1],
@@ -233,6 +242,48 @@ def _downgrade_later_revisions(connection) -> list[dict[str, Any]]:
         later_migration["downgrade"]()
         later_migrations.append(later_migration)
     return later_migrations
+
+
+def test_historical_normalization_does_not_infer_c155_from_an_orphaned_function(
+    db_engine,
+    clean_db,
+) -> None:
+    connection = db_engine.connect()
+    transaction = connection.begin()
+    try:
+        connection.execute(
+            text(
+                """
+                CREATE OR REPLACE FUNCTION enforce_ca_manifest_payload_book_scope()
+                RETURNS trigger
+                LANGUAGE plpgsql
+                AS $$
+                BEGIN
+                    RETURN NEW;
+                END;
+                $$
+                """
+            )
+        )
+        connection.execute(
+            text(
+                "DROP TRIGGER IF EXISTS trg_ca_manifest_payload_book_scope "
+                "ON corporate_action_manifest_versions"
+            )
+        )
+        assert (
+            connection.scalar(
+                text("SELECT to_regprocedure('enforce_ca_manifest_payload_book_scope()')")
+            )
+            is not None
+        )
+
+        downgraded = _downgrade_later_revisions(connection)
+
+        assert "c155b2c3d522" not in {migration["revision"] for migration in downgraded}
+    finally:
+        transaction.rollback()
+        connection.close()
 
 
 def _seed_source_lot(connection) -> None:
