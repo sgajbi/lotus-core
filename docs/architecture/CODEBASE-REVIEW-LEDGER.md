@@ -10,7 +10,7 @@ sample and now retains bounded per-service peaks for connections, open transacti
 and transaction ages. Aggregate total/active/idle counts reconcile exactly in every sample;
 unattributed, ungoverned, or local/test cohorts fail certifying runs. No PID, SQL text, raw
 sample, Prometheus application label, or business identifier is retained. Focused validation passes
-77 unit/deployment tests, five real-PostgreSQL psycopg/asyncpg/cohort tests, scoped Ruff, and focused
+78 unit/deployment tests, five real-PostgreSQL psycopg/asyncpg/cohort tests, scoped Ruff, and focused
 MyPy. This uses only established PostgreSQL connection metadata, SQLAlchemy driver settings, and the
 existing monitor: no dependency, agent, sidecar, datastore, image, pool, timeout, recycle,
 concurrency, partition, API/OpenAPI, event, migration, calculation, or topology changed. Wider
@@ -22,6 +22,17 @@ connections/active/idle-in-transaction `51/7/24`. The largest idle-in-transactio
 owned by transaction processing (`9`), derived state (`7`), position valuation (`7`), persistence
 (`5`), and valuation orchestration (`4`). This passes the non-regression retain gate and authorizes
 the exact daily profile without pre-authorizing capacity changes; #502 and #795 remain open.
+Exact clean daily artifact `20260811T135845Z` then completed all 100,000 transactions, snapshots,
+and position rows plus all 1,000 portfolio rows in `7159.351s`, with attempts `2/2`, zero repeats,
+closed jobs/outbox, and `1017/1017` reconciled samples. It did not certify because three blank
+sessions triggered the new fail-closed client-identity gate. Their bounded shape—up to three open
+transactions, no idle-in-transaction sessions, and oldest age `16.85s`—is consistent with database
+background work and exposed a monitor defect: the query did not distinguish non-client PostgreSQL
+workers from blank client applications. It now uses stable `pg_stat_activity.backend_type`, retains
+non-client workers in totals under fixed `postgres-background`, and keeps `__unattributed__`
+exclusive to blank client backends. Any remaining blank client still fails. This is an
+evidence-classification correction, not a capacity, timeout, pool, concurrency, or partition
+change; the exact daily profile must rerun before certification.
 
 CR-1683 manifest-arrival discriminator addendum (2026-08-11): exact-main E2E run `31484915013`
 proved that an upstream-provided `ADJUSTMENT` cash settlement carrying ordinary economic-event and

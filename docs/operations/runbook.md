@@ -119,6 +119,9 @@ counts, and certifying profiles fail when any connection is unattributed, outsid
 inventory, or using a local/test fallback. Investigate the owning service and unit-of-work
 lifetime before changing pool size, worker count, timeout, or recycle policy. Do not use pod names,
 PIDs, worker numbers, or business identifiers as application names.
+The fixed `postgres-background` cohort retains non-client PostgreSQL backends such as autovacuum in
+the totals without treating them as missing Core client identity. Review that cohort as database
+maintenance pressure; `__unattributed__` remains reserved for blank client application identity.
 
 The app-local `Lotus Core Transaction Processing` Grafana dashboard correlates separate live and
 replay partition lag with stage p95 duration, failed/rejected outcomes, async pool state, and outbox
