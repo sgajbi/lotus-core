@@ -612,6 +612,7 @@ def _owned_claim_update(*, job_id: int, lease_token: str):
         PortfolioAggregationJob.id == job_id,
         PortfolioAggregationJob.status == "PROCESSING",
         PortfolioAggregationJob.lease_token == lease_token,
+        PortfolioAggregationJob.lease_expires_at > func.now(),
     )
 
 
