@@ -7,6 +7,9 @@ from src.services.ingestion_service.app.application import (
     TransactionReprocessingTargetNotFound,
 )
 from src.services.ingestion_service.app.domain import TransactionReprocessingTarget
+from src.services.ingestion_service.app.DTOs.corporate_action_manifest_dto import (
+    CorporateActionManifestIngestionRequest,
+)
 from src.services.ingestion_service.app.DTOs.fixed_income_book_cost_authority_dto import (
     FixedIncomeBookCostAuthorityIngestionRequest,
 )
@@ -114,6 +117,34 @@ def _fixed_income_request() -> FixedIncomeBookCostAuthorityIngestionRequest:
     )
 
 
+def _corporate_action_manifest_request() -> CorporateActionManifestIngestionRequest:
+    return CorporateActionManifestIngestionRequest.model_validate(
+        {
+            "manifests": [
+                {
+                    "corporate_action_event_id": "EVENT_001",
+                    "tenant_id": "TENANT_SG",
+                    "legal_book_id": "BOOK_SG_PB",
+                    "portfolio_id": "PORTFOLIO_001",
+                    "linked_transaction_group_id": "GROUP_001",
+                    "parent_event_reference": "PARENT_001",
+                    "corporate_action_type": "SPIN_OFF",
+                    "version": 1,
+                    "completion_declared": False,
+                    "expected_children": [],
+                    "source": {
+                        "source_system": "corporate-actions-master",
+                        "source_record_id": "EVENT_001",
+                        "source_revision": "revision-1",
+                        "source_content_hash": "a" * 64,
+                        "observed_at": "2026-08-11T02:15:00Z",
+                    },
+                }
+            ]
+        }
+    )
+
+
 @pytest.mark.asyncio
 async def test_batch_publish_command_creates_job_publishes_and_marks_queued() -> None:
     handler = _handler()
@@ -167,6 +198,31 @@ async def test_fixed_income_authority_command_rebuilds_typed_batch_for_publicati
         == "book-cost-001"
     )
     assert result.entity_type == "fixed_income_book_cost_authority"
+    assert result.accepted_count == 1
+
+
+@pytest.mark.asyncio
+async def test_manifest_command_rebuilds_typed_batch_for_publication() -> None:
+    handler = _handler()
+    handler.ingestion_service.publish_corporate_action_manifests = AsyncMock()
+    request = _corporate_action_manifest_request()
+
+    result = await handler.ingest_corporate_action_manifests(
+        BatchPublishIngestionCommand(
+            endpoint="/ingest/corporate-action-manifests",
+            entity_type="corporate_action_manifest",
+            records=request.manifests,
+            idempotency_key="manifest-001",
+            request_payload=request.model_dump(mode="json"),
+            accepted_message="Accepted.",
+        )
+    )
+
+    publish_call = handler.ingestion_service.publish_corporate_action_manifests.await_args
+    published_request = publish_call.args[0]
+    assert isinstance(published_request, CorporateActionManifestIngestionRequest)
+    assert published_request == request
+    assert result.entity_type == "corporate_action_manifest"
     assert result.accepted_count == 1
 
 

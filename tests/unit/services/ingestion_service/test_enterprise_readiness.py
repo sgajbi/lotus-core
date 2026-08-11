@@ -127,6 +127,13 @@ def test_fixed_income_book_cost_authority_requires_dedicated_capability() -> Non
     )
 
 
+def test_corporate_action_manifest_requires_dedicated_capability() -> None:
+    assert (
+        _required_capability("POST", "/ingest/corporate-action-manifests")
+        == "ingestion.corporate_actions.manifest.write"
+    )
+
+
 def test_validate_ingestion_runtime_accepts_default_capability_rules(monkeypatch) -> None:
     monkeypatch.setenv("ENTERPRISE_ENFORCE_AUTHZ", "true")
     monkeypatch.setenv("ENTERPRISE_REQUIRE_CAPABILITY_RULES", "true")
