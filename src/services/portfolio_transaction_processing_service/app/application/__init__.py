@@ -28,6 +28,11 @@ from .corporate_action_reconciliation import (
     CorporateActionReconciliationReasonCode,
     build_corporate_action_reconciliation_evidence,
 )
+from .corporate_action_release import (
+    CorporateActionExecutionMemberAuthority,
+    CorporateActionExecutionReleaseAuthority,
+    build_corporate_action_execution_member_authority,
+)
 from .cost_basis_processing.average_cost_pool_reconciliation import (
     ReconcileAverageCostPoolsCommand,
     ReconcileAverageCostPoolsResult,
@@ -75,11 +80,14 @@ __all__ = [
     "CorporateActionExecutionDisposition",
     "CorporateActionExecutionGate",
     "CorporateActionExecutionPlan",
+    "CorporateActionExecutionMemberAuthority",
+    "CorporateActionExecutionReleaseAuthority",
     "ProcessTransactionCommand",
     "ProcessTransactionCashflowUseCase",
     "ProcessTransactionResult",
     "ProcessTransactionUseCase",
     "resolve_corporate_action_execution_gate",
+    "build_corporate_action_execution_member_authority",
     "PositionHistoryProcessingResult",
     "PositionHistoryProcessor",
     "LotAmortizedCostMaterializationResult",

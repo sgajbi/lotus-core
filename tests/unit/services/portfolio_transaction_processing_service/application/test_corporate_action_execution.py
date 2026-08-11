@@ -47,6 +47,7 @@ def _decision(
     status: CorporateActionManifestReadinessStatus,
     *,
     manifest_content_hash: str | None = None,
+    structural_plan_content_hash: str | None = None,
     ordered_transaction_ids: tuple[str, ...] = (),
     findings: tuple[CorporateActionManifestFinding, ...] = (),
 ) -> CorporateActionReadinessDecision:
@@ -54,6 +55,7 @@ def _decision(
         observation_outcome=CorporateActionObservationAppendOutcome.APPENDED,
         readiness_status=status,
         manifest_content_hash=manifest_content_hash,
+        structural_plan_content_hash=structural_plan_content_hash,
         ordered_transaction_ids=ordered_transaction_ids,
         findings=findings,
         state_version=7,
@@ -104,9 +106,17 @@ def test_invalid_readiness_is_not_reclassified_as_parked() -> None:
 
 def test_ready_decision_builds_stable_source_bound_execution_plan() -> None:
     manifest_hash = canonical_content_hash({"manifest": "CA-EVENT-001", "version": 2})
+    structural_plan_hash = canonical_content_hash(
+        {
+            "canonical_payload_version": 1,
+            "manifest_content_hash": manifest_hash,
+            "ordered_transaction_ids": ["CA-SOURCE-001", "CA-TARGET-001"],
+        }
+    )
     decision = _decision(
         CorporateActionManifestReadinessStatus.READY,
         manifest_content_hash=manifest_hash,
+        structural_plan_content_hash=structural_plan_hash,
         ordered_transaction_ids=("CA-SOURCE-001", "CA-TARGET-001"),
     )
 
@@ -118,8 +128,9 @@ def test_ready_decision_builds_stable_source_bound_execution_plan() -> None:
     assert replayed.plan is not None
     assert first.plan.manifest_content_hash == manifest_hash
     assert first.plan.ordered_transaction_ids == ("CA-SOURCE-001", "CA-TARGET-001")
-    assert first.plan.execution_plan_hash == replayed.plan.execution_plan_hash
-    assert len(first.plan.execution_plan_hash) == 64
+    assert first.plan.structural_plan_content_hash == structural_plan_hash
+    assert first.plan.release_boundary_hash == replayed.plan.release_boundary_hash
+    assert len(first.plan.release_boundary_hash) == 64
 
 
 @pytest.mark.parametrize(
@@ -133,6 +144,11 @@ def test_ready_decision_builds_stable_source_bound_execution_plan() -> None:
             CorporateActionManifestReadinessStatus.READY,
             manifest_content_hash=canonical_content_hash({"manifest": "CA-EVENT-001"}),
             ordered_transaction_ids=("CA-SOURCE-001", "CA-SOURCE-001"),
+        ),
+        _decision(
+            CorporateActionManifestReadinessStatus.READY,
+            manifest_content_hash=canonical_content_hash({"manifest": "CA-EVENT-001"}),
+            ordered_transaction_ids=("CA-SOURCE-001", "CA-TARGET-001"),
         ),
         _decision(
             CorporateActionManifestReadinessStatus.AWAITING_CHILDREN,
