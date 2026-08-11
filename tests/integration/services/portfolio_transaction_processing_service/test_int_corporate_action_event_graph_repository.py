@@ -943,6 +943,84 @@ async def test_real_postgres_worker_drains_release_without_lease_expiry_wait(
     assert persisted_release.next_execution_ordinal == len(manifest.expected_children)
 
 
+async def test_release_progress_fence_uses_statement_time_after_transaction_ages(
+    clean_db,
+    db_engine: Engine,
+    async_db_session: AsyncSession,
+) -> None:
+    """Reject progress after expiry even when the worker transaction began beforehand."""
+
+    _apply_migration(db_engine)
+    await _seed_portfolio(async_db_session)
+    manifest = _manifest()
+    await _seed_transactions(async_db_session, manifest.expected_children)
+    await async_db_session.execute(
+        update(TransactionRecord)
+        .where(TransactionRecord.portfolio_id == manifest.portfolio_id)
+        .values(
+            economic_event_id=manifest.corporate_action_event_id,
+            linked_transaction_group_id=manifest.linked_transaction_group_id,
+            parent_event_reference=manifest.parent_event_reference,
+        )
+    )
+    graph = SqlAlchemyCorporateActionEventGraphRepository(async_db_session)
+    assert await graph.append_manifest(manifest) is CorporateActionManifestAppendOutcome.APPENDED
+    for sequence, child in enumerate(manifest.expected_children, start=1):
+        await graph.observe_child(
+            await _persisted_observation(
+                async_db_session,
+                manifest,
+                child,
+                delivery_event_id=f"aged-transaction-{sequence}",
+            )
+        )
+    decision = await graph.load_current_readiness(
+        portfolio_id=manifest.portfolio_id,
+        corporate_action_event_id=manifest.corporate_action_event_id,
+    )
+    materialized = await SqlAlchemyCorporateActionExecutionReleaseRepository(
+        async_db_session
+    ).materialize(_execution_plan(manifest, decision))
+    await async_db_session.commit()
+
+    bind = async_db_session.bind
+    assert bind is not None
+    session_factory = async_sessionmaker(bind, expire_on_commit=False)
+    async with session_factory() as worker_session:
+        releases = SqlAlchemyCorporateActionExecutionReleaseRepository(worker_session)
+        claim = await releases.claim_next(
+            CorporateActionExecutionLeaseRequest(
+                owner="aged-transaction-worker",
+                token="e" * 64,
+                duration_seconds=300,
+            )
+        )
+        assert claim is not None
+        assert claim.release_id == materialized.release_id
+        await worker_session.commit()
+
+        # Hold a transaction-start timestamp from before the control session shortens the lease.
+        await worker_session.execute(select(func.now()))
+        async with session_factory() as control_session:
+            await control_session.execute(
+                update(CorporateActionExecutionReleaseRecord)
+                .where(CorporateActionExecutionReleaseRecord.id == claim.release_id)
+                .values(lease_expires_at=func.clock_timestamp() + text("INTERVAL '1 second'"))
+            )
+            await control_session.commit()
+        await worker_session.execute(select(func.pg_sleep(1.25)))
+
+        outcome = await releases.advance_member(
+            release_id=claim.release_id,
+            expected_ordinal=claim.next_member.execution_ordinal,
+            lease_token=claim.lease_token,
+            fence_token=claim.fence_token,
+        )
+        await worker_session.commit()
+
+        assert outcome is CorporateActionReleaseProgressOutcome.LOST_OWNERSHIP
+
+
 async def test_ready_observation_rolls_back_when_release_authority_cannot_materialize(
     clean_db,
     db_engine: Engine,

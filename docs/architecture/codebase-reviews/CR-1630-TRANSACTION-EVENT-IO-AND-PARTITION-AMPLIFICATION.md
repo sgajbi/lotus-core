@@ -150,7 +150,13 @@ rearmed and completed `525` times for one final portfolio-day row.
     writes now reject an expired otherwise-correct token. Dedicated bounded metrics distinguish
     acquired, reclaimed, lost-completion, requeued, and failed recovery outcomes. Migration
     `c156b2c3d523` safely requeues token-only `PROCESSING` rows because upgrade cannot fabricate
-    expiry authority. The fixed `900s` valuation lease intentionally has no heartbeat in this
+    expiry authority. Adversarial pre-merge review found that PostgreSQL transaction-start `now()`
+    could let a calculation transaction terminalize after real lease expiry; every authoritative
+    valuation/aggregation lease boundary now uses statement-current `clock_timestamp()` and the
+    real-PostgreSQL suite ages an open transaction past expiry. Because `c156b2c3d523` is a hard
+    binary/schema boundary, the runbook requires stop-all-writers, migrate, deploy-all-writers,
+    resume order and the inverse stop-first rollback, with no mixed-version overlap. The fixed
+    `900s` valuation lease intentionally has no heartbeat in this
     slice; changing it requires measured dispatch-plus-calculation headroom and slow-worker/reclaim
     proof. This is an internal schema and recovery-policy change: public API/OpenAPI, Kafka event
     payload, topic, partition key, calculation, and downstream contracts remain unchanged.

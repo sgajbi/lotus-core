@@ -43,7 +43,9 @@ The valuation scheduler applies the same durable ownership invariant to
 `portfolio_valuation_jobs`: one stable scheduler-instance owner, one rotated claim token, and one
 finite database-clock expiry are persisted atomically with `PROCESSING`. Every terminal transition
 and dispatch-recovery write must match the token and require an unexpired lease; expiry recovery
-must recheck expiry and clear all lease fields. Mutable `updated_at` age is diagnostic only and must
+must recheck expiry and clear all lease fields. Authoritative expiry creation and comparisons use
+PostgreSQL statement-current `clock_timestamp()`, not transaction-start `now()`, so an aged
+calculation transaction cannot retain expired authority. Mutable `updated_at` age is diagnostic only and must
 not become claim authority. The valuation scheduler currently uses a fixed bounded lease without
 heartbeat renewal, so lease changes require measured dispatch-plus-calculation headroom and
 slow-worker/reclaim proof before release.

@@ -1,5 +1,13 @@
 # Codebase Review Ledger
 
+CR-1630 corporate-action lease-clock addendum (2026-08-12): same-pattern review from #487 found
+that issue #939's corporate-action release claim, ownership, progress, failure, and renewal fences
+used PostgreSQL transaction-start `now()`. Lock waits or aged transactions could therefore retain
+expired authority. Those boundaries now use statement-current `clock_timestamp()`, with a real
+PostgreSQL aged-transaction progress regression. Owner/token/fence semantics, schemas, public APIs,
+events, calculations, and bounded metrics are unchanged; existing transaction-processing wiki and
+repository context are updated without adding a duplicate document.
+
 CR-1630 valuation lease-expiry addendum (2026-08-12): issue #487's remaining ownership gap is
 implemented locally with database certification pending. Valuation claims now persist scheduler
 owner, rotated token, and finite
@@ -7,7 +15,11 @@ PostgreSQL-clock expiry; terminal and token-qualified dispatch-recovery writes r
 remain unexpired; stale recovery rechecks expiry rather than mutable `updated_at`; aggregation
 terminal writes reject expired tokens; and bounded metrics report acquisition, reclaim,
 lost-completion, requeue, and failure outcomes. Migration `c156b2c3d523` requeues legacy token-only
-processing rows rather than fabricating authority. The fixed `900s` lease has no renewal path and
+processing rows rather than fabricating authority. Pre-merge review then caught transaction-start
+`now()` as an invalid expiry fence; statement-current `clock_timestamp()` now owns lease creation
+and predicates, with aged-transaction PostgreSQL regression proof. The migration is governed as a
+quiesced hard cutover with stop/migrate/deploy/resume and inverse stop-first rollback order; mixed
+old/new valuation-job writers are prohibited. The fixed `900s` lease has no renewal path and
 still requires exact PostgreSQL race, daily workload, protected CI, merge, and exact-main proof
 before #487 may close. Focused proof currently passes `311` model/settings/repository/scheduler/
 control-plane/OpenAPI tests plus scoped Ruff and diff hygiene. Public API/OpenAPI response shape,

@@ -128,7 +128,8 @@ class SqlAlchemyCorporateActionExecutionReleaseRepository:
             .where(
                 or_(
                     release.status == "PENDING",
-                    (release.status == "PROCESSING") & (release.lease_expires_at <= func.now()),
+                    (release.status == "PROCESSING")
+                    & (release.lease_expires_at <= func.clock_timestamp()),
                 ),
                 ~same_event_is_processing,
             )
@@ -138,7 +139,9 @@ class SqlAlchemyCorporateActionExecutionReleaseRepository:
         )
         if candidate is None:
             return None
-        lease_expiry = func.now() + literal(lease.duration_seconds) * text("INTERVAL '1 second'")
+        lease_expiry = func.clock_timestamp() + literal(lease.duration_seconds) * text(
+            "INTERVAL '1 second'"
+        )
         claimed = await self._session.scalar(
             update(release)
             .where(release.id == candidate.id)
@@ -188,7 +191,7 @@ class SqlAlchemyCorporateActionExecutionReleaseRepository:
                 CorporateActionExecutionReleaseRecord.lease_owner == claim.lease_owner,
                 CorporateActionExecutionReleaseRecord.lease_token == claim.lease_token,
                 CorporateActionExecutionReleaseRecord.fence_token == claim.fence_token,
-                CorporateActionExecutionReleaseRecord.lease_expires_at > func.now(),
+                CorporateActionExecutionReleaseRecord.lease_expires_at > func.clock_timestamp(),
             )
         )
         if owned is None:
@@ -238,7 +241,7 @@ class SqlAlchemyCorporateActionExecutionReleaseRepository:
                 release.next_execution_ordinal == expected_ordinal,
                 release.lease_token == lease_token,
                 release.fence_token == fence_token,
-                release.lease_expires_at > func.now(),
+                release.lease_expires_at > func.clock_timestamp(),
             )
             .with_for_update()
         )
@@ -319,7 +322,7 @@ class SqlAlchemyCorporateActionExecutionReleaseRepository:
                 CorporateActionExecutionReleaseRecord.next_execution_ordinal == expected_ordinal,
                 CorporateActionExecutionReleaseRecord.lease_token == lease_token,
                 CorporateActionExecutionReleaseRecord.fence_token == fence_token,
-                CorporateActionExecutionReleaseRecord.lease_expires_at > func.now(),
+                CorporateActionExecutionReleaseRecord.lease_expires_at > func.clock_timestamp(),
             )
             .values(
                 status="FAILED",
@@ -350,7 +353,7 @@ class SqlAlchemyCorporateActionExecutionReleaseRepository:
                 CorporateActionExecutionReleaseRecord.status == "PROCESSING",
                 CorporateActionExecutionReleaseRecord.lease_token == lease_token,
                 CorporateActionExecutionReleaseRecord.fence_token == fence_token,
-                CorporateActionExecutionReleaseRecord.lease_expires_at > func.now(),
+                CorporateActionExecutionReleaseRecord.lease_expires_at > func.clock_timestamp(),
             )
         )
         if release is None:
@@ -382,7 +385,9 @@ class SqlAlchemyCorporateActionExecutionReleaseRepository:
         if not isinstance(lease, CorporateActionExecutionLeaseRequest):
             raise TypeError("lease must be a CorporateActionExecutionLeaseRequest")
         _require_positive_integer(fence_token, "fence_token")
-        lease_expiry = func.now() + literal(lease.duration_seconds) * text("INTERVAL '1 second'")
+        lease_expiry = func.clock_timestamp() + literal(lease.duration_seconds) * text(
+            "INTERVAL '1 second'"
+        )
         result = await self._session.execute(
             update(CorporateActionExecutionReleaseRecord)
             .where(
@@ -391,7 +396,7 @@ class SqlAlchemyCorporateActionExecutionReleaseRepository:
                 CorporateActionExecutionReleaseRecord.lease_owner == lease.owner,
                 CorporateActionExecutionReleaseRecord.lease_token == lease.token,
                 CorporateActionExecutionReleaseRecord.fence_token == fence_token,
-                CorporateActionExecutionReleaseRecord.lease_expires_at > func.now(),
+                CorporateActionExecutionReleaseRecord.lease_expires_at > func.clock_timestamp(),
             )
             .values(lease_expires_at=lease_expiry, updated_at=func.now())
         )

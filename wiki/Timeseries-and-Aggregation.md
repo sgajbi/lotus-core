@@ -191,6 +191,13 @@ heartbeat renewal; changes require measured dispatch-plus-calculation headroom p
 reclaim certification. Operators can track bounded outcomes through
 `valuation_job_lease_transitions_total{stage,outcome}`.
 
+Lease authority uses PostgreSQL statement-current `clock_timestamp()`, not transaction-start
+`now()`, so a calculation transaction that outlives its lease cannot terminalize. Migration
+`c156b2c3d523` requires a quiesced writer cutover: stop every valuation scheduler, calculator, and
+maintenance writer; migrate; deploy the complete new writer set; then resume. Rollback reverses
+that order and likewise prohibits mixed old/new writers. The operations runbook owns the exact
+forward and rollback sequence.
+
 The local exact-source fan-in certification `20260715T100128Z` proved one portfolio with 1,000
 positions: all 1,000 source transactions, snapshots, and position rows tied to one portfolio row;
 valuation-to-position p95 was `5.6004667s`, portfolio aggregation completed in `1.723829s`, all

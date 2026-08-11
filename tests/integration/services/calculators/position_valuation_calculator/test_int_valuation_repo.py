@@ -18,7 +18,7 @@ from portfolio_common.database_models import (
 )
 from portfolio_common.valuation_job_contracts import ValuationJobTransitionOutcome
 from portfolio_common.valuation_job_repository import ValuationJobRepository, ValuationJobUpsert
-from sqlalchemy import func, select, update
+from sqlalchemy import func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import Session
 
@@ -1648,6 +1648,54 @@ async def test_expired_valuation_claim_rejects_same_token_terminal_write(
     assert outcome is ValuationJobTransitionOutcome.NOT_OWNED
     assert claim.status == "PROCESSING"
     assert claim.valuation_claim_token == claim_token
+
+
+async def test_valuation_terminal_fence_uses_statement_time_after_transaction_ages(
+    session_factory: async_sessionmaker,
+    clean_db,
+) -> None:
+    """Reject expiry even when the worker transaction began while its lease was valid."""
+
+    scope = {
+        "portfolio_id": "P-AGED-TRANSACTION-CLAIM",
+        "security_id": "S-AGED-TRANSACTION-CLAIM",
+        "valuation_date": date(2025, 8, 12),
+        "epoch": 1,
+    }
+    async with session_factory() as worker_session:
+        worker_session.add(PortfolioValuationJob(**scope, status="PENDING"))
+        await worker_session.commit()
+        repository = ValuationRepository(worker_session)
+        claim = (await repository.find_and_claim_eligible_jobs(1))[0]
+        claim_token = claim.valuation_claim_token
+        assert claim_token is not None
+        await worker_session.commit()
+
+        # PostgreSQL now() remains fixed from this statement until commit. The lease is then
+        # shortened by another session so a transaction-time fence would incorrectly accept it.
+        await worker_session.execute(select(func.now()))
+        async with session_factory() as control_session:
+            await control_session.execute(
+                update(PortfolioValuationJob)
+                .where(PortfolioValuationJob.id == claim.id)
+                .values(
+                    valuation_lease_expires_at=func.clock_timestamp() + text("INTERVAL '1 second'")
+                )
+            )
+            await control_session.commit()
+        await worker_session.execute(select(func.pg_sleep(1.25)))
+
+        outcome = await repository.update_job_status(
+            **scope,
+            status="COMPLETE",
+            expected_claim_token=claim_token,
+        )
+        await worker_session.commit()
+        await worker_session.refresh(claim)
+
+        assert outcome is ValuationJobTransitionOutcome.NOT_OWNED
+        assert claim.status == "PROCESSING"
+        assert claim.valuation_claim_token == claim_token
 
 
 async def test_dispatch_recovery_cannot_release_a_reclaimed_valuation_job(

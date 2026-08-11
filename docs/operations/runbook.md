@@ -483,6 +483,26 @@ Operational knobs:
 | `VALUATION_SCHEDULER_CLAIM_LEASE_SECONDS` | `900` | Database-clock lifetime for one valuation claim. Terminal writes and dispatch recovery require the opaque token and an unexpired lease; expired claims are requeued or failed under the existing attempt ceiling. Size above the measured dispatch-plus-calculation bound and certify changes with reclaim race tests and the daily workload. |
 | `POSITION_VALUATION_WORKER_COUNT` | `1` (`8` in app-local Compose) | Number of serial Kafka valuation consumers in one position-valuation process. Do not configure more active workers than `valuation.job.requested` partitions. |
 
+### Valuation lease schema cutover
+
+Migration `c156b2c3d523` is an intentional quiesced cutover, not a mixed-version rolling migration.
+The old binary cannot populate lease owner/expiry, while the new binary requires those columns.
+For forward rollout:
+
+1. stop valuation schedulers, position-valuation consumers, and every maintenance/backfill process
+   capable of writing `portfolio_valuation_jobs`;
+2. verify those writers are stopped and retain queue/outbox counts for reconciliation;
+3. apply the migration once; it requeues token-only `PROCESSING` rows instead of fabricating expiry
+   authority;
+4. deploy the valuation orchestrator and position-valuation calculator as one compatibility set,
+   then resume scheduling/consumption and verify pending work drains without stale completion;
+5. reject any rollout that overlaps old and new writers.
+
+For rollback, stop every new writer first, downgrade the schema, deploy the complete old writer set,
+and only then resume work. Never downgrade beneath a running new binary or start an old binary while
+the new constraints are active. Certify forward and rollback against seeded prior-schema
+`PENDING`, `PROCESSING`, and terminal rows in real PostgreSQL before production release.
+
 The guard is static contract evidence. Environment-level ingress, IAM, WAF, network policy, and
 penetration-test evidence remain separate higher-lane proof.
 

@@ -460,7 +460,7 @@ class ValuationRepositoryBase:
                 PortfolioValuationJob.valuation_claim_token.is_not_distinct_from(
                     expected_claim_token
                 ),
-                PortfolioValuationJob.valuation_lease_expires_at > func.now(),
+                PortfolioValuationJob.valuation_lease_expires_at > func.clock_timestamp(),
             )
             .values(**values_to_update)
             .returning(PortfolioValuationJob.status)
@@ -584,7 +584,7 @@ class ValuationRepositoryBase:
                 ),
                 valuation_lease_owner=resolved_lease_owner,
                 valuation_claim_token=uuid.uuid4().hex,
-                valuation_lease_expires_at=func.now()
+                valuation_lease_expires_at=func.clock_timestamp()
                 + func.make_interval(0, 0, 0, 0, 0, 0, lease_duration_seconds),
                 updated_at=func.now(),
                 attempt_count=PortfolioValuationJob.attempt_count + 1,
@@ -927,7 +927,7 @@ def _stale_valuation_jobs_stmt(repository: ValuationRepositoryBase):
         repository._newer_epoch_exists(PortfolioValuationJob, newer_epoch).label("has_newer_epoch"),
     ).where(
         PortfolioValuationJob.status == "PROCESSING",
-        PortfolioValuationJob.valuation_lease_expires_at <= func.now(),
+        PortfolioValuationJob.valuation_lease_expires_at <= func.clock_timestamp(),
     )
 
 
@@ -988,7 +988,7 @@ def _stale_jobs_update_stmt(job_ids: list[int]):
     return update(PortfolioValuationJob).where(
         PortfolioValuationJob.id.in_(job_ids),
         PortfolioValuationJob.status == "PROCESSING",
-        PortfolioValuationJob.valuation_lease_expires_at <= func.now(),
+        PortfolioValuationJob.valuation_lease_expires_at <= func.clock_timestamp(),
     )
 
 
@@ -1050,5 +1050,5 @@ def _dispatch_recovery_valuation_jobs_update_stmt(job_claims: list[tuple[int, st
             job_claims
         ),
         PortfolioValuationJob.status == "PROCESSING",
-        PortfolioValuationJob.valuation_lease_expires_at > func.now(),
+        PortfolioValuationJob.valuation_lease_expires_at > func.clock_timestamp(),
     )

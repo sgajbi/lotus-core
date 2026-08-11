@@ -353,7 +353,7 @@ async def test_complete_or_requeue_job_requeues_late_material_input(
     assert "status='PENDING'" in compiled
     assert "portfolio_aggregation_jobs.failure_reason = 'REPROCESS_REQUESTED'" in compiled
     assert "portfolio_aggregation_jobs.lease_token = 'lease-token-1'" in compiled
-    assert "portfolio_aggregation_jobs.lease_expires_at > now()" in compiled
+    assert "portfolio_aggregation_jobs.lease_expires_at > clock_timestamp()" in compiled
 
 
 async def test_complete_or_requeue_job_completes_owned_job(
@@ -597,7 +597,7 @@ async def test_complete_or_requeue_claim_reports_lost_ownership_after_reclaim(
             )
         )
         assert "portfolio_aggregation_jobs.lease_token = 'expired-lease-token'" in compiled
-        assert "portfolio_aggregation_jobs.lease_expires_at > now()" in compiled
+        assert "portfolio_aggregation_jobs.lease_expires_at > clock_timestamp()" in compiled
 
 
 async def test_fail_current_claim_fences_terminal_write_and_clears_lease(
@@ -624,7 +624,7 @@ async def test_fail_current_claim_fences_terminal_write_and_clears_lease(
     )
     assert "portfolio_aggregation_jobs.id = 7" in compiled
     assert "portfolio_aggregation_jobs.lease_token = 'lease-token-1'" in compiled
-    assert "portfolio_aggregation_jobs.lease_expires_at > now()" in compiled
+    assert "portfolio_aggregation_jobs.lease_expires_at > clock_timestamp()" in compiled
     assert "lease_owner=NULL" in compiled
     assert "lease_token=NULL" in compiled
     assert "lease_expires_at=NULL" in compiled

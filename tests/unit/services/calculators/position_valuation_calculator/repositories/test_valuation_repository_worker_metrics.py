@@ -64,7 +64,7 @@ async def test_find_and_claim_eligible_jobs_emits_claim_metric(
     assert "claimed_readiness_outbox_id=greatest(" in compact_query
     assert re.search(r"valuation_claim_token='[0-9a-f]{32}'", compact_query)
     assert "valuation_lease_owner='valuation-repository-" in compact_query
-    assert "valuation_lease_expires_at=(now()+make_interval(" in compact_query
+    assert "valuation_lease_expires_at=(clock_timestamp()+make_interval(" in compact_query
     assert "coalesce((SELECTmax(outbox_events.id)" in compact_query
     assert "outbox_events.aggregate_type = 'ValuationReadiness'" in compiled_query
     assert "outbox_events.event_type = 'PortfolioDayReadyForValuation'" in compiled_query
@@ -184,7 +184,9 @@ async def test_find_and_reset_stale_jobs_rechecks_processing_state_before_reset(
     update_stmt = mock_db_session.execute.await_args_list[1].args[0]
     compiled_query = str(update_stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "portfolio_valuation_jobs.status = 'PROCESSING'" in compiled_query
-    assert "portfolio_valuation_jobs.valuation_lease_expires_at <= now()" in compiled_query
+    assert (
+        "portfolio_valuation_jobs.valuation_lease_expires_at <= clock_timestamp()" in compiled_query
+    )
 
 
 async def test_recover_dispatch_failed_jobs_requeues_retryable_and_fails_exhausted_rows(
@@ -214,7 +216,7 @@ async def test_recover_dispatch_failed_jobs_requeues_retryable_and_fails_exhaust
     assert "SET status='FAILED'" in failed_sql
     assert "failure_reason='Scheduler dispatch publish failed" in failed_sql
     assert "portfolio_valuation_jobs.status = 'PROCESSING'" in failed_sql
-    assert "portfolio_valuation_jobs.valuation_lease_expires_at > now()" in failed_sql
+    assert "portfolio_valuation_jobs.valuation_lease_expires_at > clock_timestamp()" in failed_sql
     assert "portfolio_valuation_jobs.valuation_claim_token" in failed_sql
     assert "portfolio_valuation_jobs.attempt_count >= 3" in failed_sql
     assert "portfolio_valuation_jobs.requeue_requested IS false" in failed_sql
