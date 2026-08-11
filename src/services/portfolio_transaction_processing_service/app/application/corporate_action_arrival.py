@@ -8,14 +8,17 @@ from datetime import UTC, datetime
 from enum import StrEnum
 
 from ..domain import build_transaction_semantic_identity, corporate_action_manifest_child
-from ..ports.corporate_action_event_graph import CorporateActionChildObservation
+from ..ports.corporate_action_event_graph import (
+    CorporateActionChildObservation,
+    CorporateActionEventGraphUnitOfWorkFactory,
+)
 from .commands import ProcessTransactionCommand
-from .corporate_action_event_graph import RegisterCorporateActionChildObservationUseCase
 from .corporate_action_execution import (
     CorporateActionExecutionDisposition,
     CorporateActionExecutionPlan,
     resolve_corporate_action_execution_gate,
 )
+from .corporate_action_release import CorporateActionReleaseMaterialization
 
 
 class CorporateActionArrivalDisposition(StrEnum):
@@ -33,6 +36,7 @@ class CorporateActionArrivalResult:
 
     disposition: CorporateActionArrivalDisposition
     plan: CorporateActionExecutionPlan | None = None
+    release: CorporateActionReleaseMaterialization | None = None
 
 
 class RouteCorporateActionChildArrivalUseCase:
@@ -40,11 +44,11 @@ class RouteCorporateActionChildArrivalUseCase:
 
     def __init__(
         self,
-        register_observation: RegisterCorporateActionChildObservationUseCase,
+        unit_of_work_factory: CorporateActionEventGraphUnitOfWorkFactory,
         *,
         clock: Callable[[], datetime] | None = None,
     ) -> None:
-        self._register_observation = register_observation
+        self._unit_of_work_factory = unit_of_work_factory
         self._clock = clock or (lambda: datetime.now(UTC))
 
     async def execute(self, command: ProcessTransactionCommand) -> CorporateActionArrivalResult:
@@ -72,15 +76,20 @@ class RouteCorporateActionChildArrivalUseCase:
             correlation_id=command.metadata.correlation_id,
             observed_at=observed_at,
         )
-        decision = await self._register_observation.execute(observation)
-        gate = resolve_corporate_action_execution_gate(observation, decision)
-        if gate.disposition is CorporateActionExecutionDisposition.READY:
-            if gate.plan is None:
-                raise ValueError("ready corporate-action gate is missing its execution plan")
+        async with self._unit_of_work_factory() as unit_of_work:
+            decision = await unit_of_work.event_graph.observe_child(observation)
+            gate = resolve_corporate_action_execution_gate(observation, decision)
+            if gate.disposition is CorporateActionExecutionDisposition.READY:
+                if gate.plan is None:
+                    raise ValueError("ready corporate-action gate is missing its execution plan")
+                release = await unit_of_work.releases.materialize(gate.plan)
+                await unit_of_work.commit()
+                return CorporateActionArrivalResult(
+                    CorporateActionArrivalDisposition.RELEASE_READY,
+                    plan=gate.plan,
+                    release=release,
+                )
+            await unit_of_work.commit()
             return CorporateActionArrivalResult(
-                CorporateActionArrivalDisposition.RELEASE_READY,
-                plan=gate.plan,
+                CorporateActionArrivalDisposition(gate.disposition.value)
             )
-        return CorporateActionArrivalResult(
-            CorporateActionArrivalDisposition(gate.disposition.value)
-        )

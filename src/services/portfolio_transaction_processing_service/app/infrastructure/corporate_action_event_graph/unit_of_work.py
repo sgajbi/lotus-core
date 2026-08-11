@@ -7,7 +7,11 @@ from types import TracebackType
 
 from sqlalchemy.ext.asyncio import AsyncSession, AsyncSessionTransaction
 
-from ...ports.corporate_action_event_graph import CorporateActionEventGraphPort
+from ...ports.corporate_action_event_graph import (
+    CorporateActionEventGraphPort,
+    CorporateActionExecutionReleasePort,
+)
+from ..corporate_action_execution import SqlAlchemyCorporateActionExecutionReleaseRepository
 from .repository import SqlAlchemyCorporateActionEventGraphRepository
 
 
@@ -19,6 +23,7 @@ class SqlAlchemyCorporateActionEventGraphUnitOfWork:
         self._session: AsyncSession | None = None
         self._transaction: AsyncSessionTransaction | None = None
         self._event_graph: CorporateActionEventGraphPort | None = None
+        self._releases: CorporateActionExecutionReleasePort | None = None
         self._committed = False
 
     @property
@@ -26,6 +31,12 @@ class SqlAlchemyCorporateActionEventGraphUnitOfWork:
         if self._event_graph is None:
             raise RuntimeError("Corporate-action event-graph repository is not initialized")
         return self._event_graph
+
+    @property
+    def releases(self) -> CorporateActionExecutionReleasePort:
+        if self._releases is None:
+            raise RuntimeError("Corporate-action release repository is not initialized")
+        return self._releases
 
     async def __aenter__(self) -> SqlAlchemyCorporateActionEventGraphUnitOfWork:
         if self._session is not None:
@@ -37,6 +48,7 @@ class SqlAlchemyCorporateActionEventGraphUnitOfWork:
             await transaction.start()
             self._transaction = transaction
             self._event_graph = SqlAlchemyCorporateActionEventGraphRepository(session)
+            self._releases = SqlAlchemyCorporateActionExecutionReleaseRepository(session)
         except BaseException:
             if self._transaction is not None:
                 await self._transaction.rollback()
