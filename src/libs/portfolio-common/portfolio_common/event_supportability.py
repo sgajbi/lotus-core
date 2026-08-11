@@ -442,6 +442,17 @@ DIRECT_KAFKA_TOPIC_DEFINITIONS: tuple[DirectKafkaTopicDefinition, ...] = (
         supportability_evidence=(INGESTION_EVIDENCE_BUNDLE,),
     ),
     DirectKafkaTopicDefinition(
+        name="CorporateActionManifestReceived",
+        topic="corporate_action.manifest.received",
+        semantic_type="source_ingestion_fact",
+        producer_service="ingestion_service",
+        consumer_services=("portfolio_transaction_processing_service",),
+        payload_contract="CorporateActionManifestReceivedEvent",
+        idempotency_header_supported=True,
+        correlation_header_supported=True,
+        supportability_evidence=(INGESTION_EVIDENCE_BUNDLE,),
+    ),
+    DirectKafkaTopicDefinition(
         name="TransactionReprocessingRequested",
         topic="transactions.reprocessing.requested",
         semantic_type="supportability_recovery_command",

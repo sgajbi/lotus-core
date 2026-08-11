@@ -422,6 +422,7 @@ def test_canonical_topic_defaults_match_rfc_runtime_names(monkeypatch):
     monkeypatch.delenv("KAFKA_VALUATION_JOB_REQUESTED_TOPIC", raising=False)
     monkeypatch.delenv("KAFKA_TRANSACTIONS_PERSISTED_TOPIC", raising=False)
     monkeypatch.delenv("KAFKA_FIXED_INCOME_BOOK_COST_AUTHORITY_RECEIVED_TOPIC", raising=False)
+    monkeypatch.delenv("KAFKA_CORPORATE_ACTION_MANIFEST_RECEIVED_TOPIC", raising=False)
     monkeypatch.delenv(
         "KAFKA_FIXED_INCOME_BOOK_COST_DISPOSAL_REPLAY_REQUESTED_TOPIC",
         raising=False,
@@ -440,6 +441,10 @@ def test_canonical_topic_defaults_match_rfc_runtime_names(monkeypatch):
     assert (
         reloaded.KAFKA_FIXED_INCOME_BOOK_COST_DISPOSAL_REPLAY_REQUESTED_TOPIC
         == "fixed_income.book_cost.disposal_replay.requested"
+    )
+    assert (
+        reloaded.KAFKA_CORPORATE_ACTION_MANIFEST_RECEIVED_TOPIC
+        == "corporate_action.manifest.received"
     )
 
 
@@ -477,6 +482,7 @@ def test_active_topic_registry_has_explicit_source_owned_partition_counts():
         config_module.KAFKA_TOPIC_PARTITION_COUNTS["fixed_income.book_cost.authority.received"]
         == 12
     )
+    assert config_module.KAFKA_TOPIC_PARTITION_COUNTS["corporate_action.manifest.received"] == 12
     replay_topic = next(
         topic
         for topic in config_module.KAFKA_TOPIC_DEFINITIONS

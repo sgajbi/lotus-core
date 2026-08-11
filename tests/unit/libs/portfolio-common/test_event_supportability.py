@@ -327,6 +327,19 @@ def test_fixed_income_book_cost_authority_runtime_is_active_and_owned() -> None:
     assert definition.runtime_active is True
 
 
+def test_corporate_action_manifest_runtime_is_active_and_domain_owned() -> None:
+    definitions = {definition.name: definition for definition in DIRECT_KAFKA_TOPIC_DEFINITIONS}
+    definition = definitions["CorporateActionManifestReceived"]
+
+    assert definition.payload_contract == "CorporateActionManifestReceivedEvent"
+    assert definition.topic == "corporate_action.manifest.received"
+    assert definition.producer_service == "ingestion_service"
+    assert definition.consumer_services == ("portfolio_transaction_processing_service",)
+    assert definition.idempotency_header_supported is True
+    assert definition.correlation_header_supported is True
+    assert definition.runtime_active is True
+
+
 def test_retired_internal_position_replay_event_is_not_an_active_contract() -> None:
     with pytest.raises(KeyError, match="Unknown event family definition"):
         get_event_family_definition("ReprocessTransactionReplay")
