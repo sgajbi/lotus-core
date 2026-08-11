@@ -25,6 +25,7 @@ from .corporate_action_execution import (
     CorporateActionExecutionGate,
     CorporateActionExecutionPlan,
     resolve_corporate_action_execution_gate,
+    resolve_corporate_action_manifest_execution_gate,
 )
 from .corporate_action_reconciliation import (
     CORPORATE_ACTION_RECONCILIATION_TYPE,
@@ -109,6 +110,7 @@ __all__ = [
     "ProcessTransactionResult",
     "ProcessTransactionUseCase",
     "resolve_corporate_action_execution_gate",
+    "resolve_corporate_action_manifest_execution_gate",
     "build_corporate_action_execution_member_authority",
     "PositionHistoryProcessingResult",
     "PositionHistoryProcessor",

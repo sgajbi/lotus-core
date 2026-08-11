@@ -1,16 +1,20 @@
 """Verify transport-to-domain corporate-action manifest mapping."""
 
-from unittest.mock import AsyncMock
-
 import pytest
+from portfolio_common.domain.calculation_lineage import canonical_content_hash
 from portfolio_common.event_contracts import CorporateActionManifestReceivedEvent
 
 from src.services.portfolio_transaction_processing_service.app.application.corporate_action_manifest_ingestion import (  # noqa: E501
     HandleCorporateActionManifestEventUseCase,
     map_corporate_action_manifest_event,
 )
-from src.services.portfolio_transaction_processing_service.app.ports.corporate_action_event_graph import (  # noqa: E501
+from src.services.portfolio_transaction_processing_service.app.domain.transaction import (
+    corporate_action,
+)
+from src.services.portfolio_transaction_processing_service.app.ports import (
     CorporateActionManifestAppendOutcome,
+    CorporateActionObservationAppendOutcome,
+    CorporateActionReadinessDecision,
 )
 
 
@@ -76,15 +80,88 @@ def test_mapping_preserves_complete_domain_and_source_authority() -> None:
     assert manifest.source_reference.observed_at == event.source.observed_at
 
 
+class _EventGraph:
+    def __init__(self, decision: CorporateActionReadinessDecision) -> None:
+        self.decision = decision
+        self.manifests = []
+
+    async def append_manifest(self, manifest):
+        self.manifests.append(manifest)
+        return CorporateActionManifestAppendOutcome.APPENDED
+
+    async def load_current_readiness(self, **_identity):
+        return self.decision
+
+
+class _Releases:
+    def __init__(self) -> None:
+        self.plans = []
+
+    async def materialize(self, plan):
+        self.plans.append(plan)
+
+
+class _UnitOfWork:
+    def __init__(self, decision: CorporateActionReadinessDecision) -> None:
+        self.event_graph = _EventGraph(decision)
+        self.releases = _Releases()
+        self.committed = False
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *_args):
+        return None
+
+    async def commit(self) -> None:
+        self.committed = True
+
+
+def _decision(*, ready: bool) -> CorporateActionReadinessDecision:
+    return CorporateActionReadinessDecision(
+        observation_outcome=CorporateActionObservationAppendOutcome.UNCHANGED,
+        readiness_status=(
+            corporate_action.CorporateActionManifestReadinessStatus.READY
+            if ready
+            else corporate_action.CorporateActionManifestReadinessStatus.AWAITING_CHILDREN
+        ),
+        manifest_content_hash=canonical_content_hash({"manifest": 1}) if ready else None,
+        structural_plan_content_hash=(canonical_content_hash({"plan": 1}) if ready else None),
+        ordered_transaction_ids=("TX_SOURCE", "TX_TARGET") if ready else (),
+        findings=(),
+        state_version=3,
+        through_observation_sequence=2,
+    )
+
+
 @pytest.mark.asyncio
-async def test_handler_registers_exact_mapped_manifest() -> None:
-    register_manifest = AsyncMock()
-    register_manifest.execute.return_value = CorporateActionManifestAppendOutcome.APPENDED
-    handler = HandleCorporateActionManifestEventUseCase(register_manifest)
+async def test_handler_registers_exact_mapped_manifest_atomically() -> None:
+    unit_of_work = _UnitOfWork(_decision(ready=False))
+    handler = HandleCorporateActionManifestEventUseCase(  # type: ignore[arg-type]
+        lambda: unit_of_work
+    )
 
     result = await handler.execute(_event())
 
     assert result is CorporateActionManifestAppendOutcome.APPENDED
-    registered = register_manifest.execute.await_args.args[0]
+    registered = unit_of_work.event_graph.manifests[0]
     assert registered.content_hash == map_corporate_action_manifest_event(_event()).content_hash
-    register_manifest.execute.assert_awaited_once()
+    assert unit_of_work.releases.plans == []
+    assert unit_of_work.committed
+
+
+@pytest.mark.asyncio
+async def test_handler_materializes_children_before_manifest_ready_generation() -> None:
+    unit_of_work = _UnitOfWork(_decision(ready=True))
+    handler = HandleCorporateActionManifestEventUseCase(  # type: ignore[arg-type]
+        lambda: unit_of_work
+    )
+
+    await handler.execute(_event())
+
+    assert len(unit_of_work.releases.plans) == 1
+    assert unit_of_work.releases.plans[0].ordered_transaction_ids == (
+        "TX_SOURCE",
+        "TX_TARGET",
+    )
+    assert unit_of_work.committed
