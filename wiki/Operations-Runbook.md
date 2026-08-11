@@ -130,11 +130,20 @@ Use APIs before going directly to the database where possible:
   `GET /support/portfolios/{portfolio_id}/reprocessing-jobs`
 - reconciliation run inspection:
   `GET /support/portfolios/{portfolio_id}/reconciliation-runs`
+- corporate-action cohort/release inspection:
+  `GET /support/portfolios/{portfolio_id}/corporate-action-events?tenant_id={tenant_id}&legal_book_id={legal_book_id}`
 - institutional load progress:
   `GET /support/load-runs/{run_id}?business_date=YYYY-MM-DD`
 
 For event-publication drift, inspect outbox backlog and dispatcher health before assuming downstream
 consumer faults.
+
+For corporate-action cohorts, use `readiness_status` to locate missing/invalid source evidence and
+`execution_status` to locate pending, processing, failed, superseded, or complete releases. Supply
+the same tenant in `X-Tenant-Id` and the query, plus `core.support.read`. This is privileged
+tenant-wide operator authority narrowed by legal book. Empty/filter-empty pages are healthy 200
+responses; 404 is reserved for an absent exact portfolio scope. Use returned hashes, reason codes,
+fence, attempt, and member-progress counts. Never repair the immutable graph/release tables by hand.
 
 ## Preferred diagnostic sequence
 

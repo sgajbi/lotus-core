@@ -161,6 +161,7 @@ Support and lineage:
 ```text
 GET /support/portfolios/{portfolio_id}/overview
 GET /support/portfolios/{portfolio_id}/readiness?as_of_date=2026-03-28
+GET /support/portfolios/{portfolio_id}/corporate-action-events?tenant_id=TENANT-SG&legal_book_id=PB-SG-01
 GET /support/portfolios/{portfolio_id}/reprocessing-jobs?status_filter=PROCESSING
 GET /lineage/portfolios/{portfolio_id}/keys
 ```
@@ -170,6 +171,10 @@ GET /lineage/portfolios/{portfolio_id}/keys
 posture aggregation. The same posture is observable through the
 `lotus_core_portfolio_supportability_total` Prometheus counter, whose label contract is limited to
 `state`, `reason`, and `freshness_bucket`.
+
+Corporate-action event support requires `core.support.read` and matching authenticated/query tenant
+scope. It publishes bounded current manifest/readiness/release evidence and stable reason codes,
+not raw payloads, member ledgers, lease secrets, or calculation-grade portfolio analytics.
 
 Write ingress:
 

@@ -3706,6 +3706,22 @@ Most relevant current governance:
      timing comparison baseline. A failed or timed-out observed run is diagnostic and requires an
      unobserved rerun before it can support a capacity verdict.
 
+239. Corporate-action operational evidence is a Query Control Plane concern, not a public
+     calculation/read-plane projection and not a reason to grow the legacy operations service.
+     Use `GET /support/portfolios/{portfolio_id}/corporate-action-events` with the tenant-wide
+     privileged `core.support.read` capability plus exact authenticated tenant, legal-book, and
+     portfolio predicates. The legal-book query value narrows the evidence; the signed tenant and
+     privileged capability provide authority. Return non-enumerating 404 only when that exact
+     portfolio scope does not exist; a valid scope with no events or no matching failure status is
+     a truthful empty page. Keep reads to one scope/count statement plus one deterministic page,
+     cap `limit` at 100 and `skip` at 10,000, and use
+     `ix_ca_event_book_scope_updated`. Project scalars, PostgreSQL-side counts, database-clock
+     lease state, and stable distinct top-level/nested reason codes. Never fetch or publish raw
+     manifest/finding/transaction payloads, complete child-ID arrays, release members, lease
+     owners, or lease tokens. Preserve the established FastAPI, Pydantic, SQLAlchemy, PostgreSQL,
+     Alembic, Kafka, and Prometheus stack; a new framework, datastore, deployable, or image requires
+     measured capacity, isolation, security, or operability evidence.
+
 ## Context Maintenance Rule
 
 Update this document when:

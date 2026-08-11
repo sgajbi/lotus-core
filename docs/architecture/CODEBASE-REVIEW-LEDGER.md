@@ -1,5 +1,22 @@
 # Codebase Review Ledger
 
+CR-1683 supportability and bounded-read addendum (2026-08-11): signed implementation through
+`62c64821b` adds a Core-owned Query Control Plane projection for current corporate-action
+manifest, readiness, and fenced release evidence. `core.support.read` is deliberately a
+tenant-wide privileged operator capability; every request still requires an exact authenticated
+tenant, legal-book, and portfolio scope. The two-statement PostgreSQL reader uses the new
+book-scope/current-order index and an explicit scalar projection: it does not deserialize manifest
+payloads, complete finding documents, transaction payloads, member ledgers, child-ID arrays, or
+lease secrets. PostgreSQL derives array counts, database-clock lease state, and stable distinct
+top-level/nested reason codes. Valid scopes with no events or no matching failure state return an
+empty page; absent or wrong scopes remain non-enumerating 404 responses. Page size is capped at 100
+and offset at 10,000. Real-PostgreSQL proof passed in 55.40 seconds with two exact read statements,
+state filtering, canonical `PB_SG_GLOBAL_BAL_001`, and cross-tenant/cross-book denial. Focused QCP
+tests passed 19 cases; MyPy, Ruff, OpenAPI, API vocabulary, route-family, and problem-details guards
+passed. The route and index are additive. No package, framework, datastore, deployable, image, or
+experimental technology was introduced; the implementation remains on FastAPI, Pydantic,
+SQLAlchemy, PostgreSQL, Alembic, Kafka, and the existing Prometheus runtime.
+
 CR-1683 ordered-runtime addendum (2026-08-11): signed implementation through `681cdd588`
 activates governed manifest ingestion, fail-closed child parking, atomic READY release
 materialization, and a fenced ordered worker in the existing transaction-processing deployable.
