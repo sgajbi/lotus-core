@@ -92,6 +92,18 @@ RELEASE_MIGRATION = (
     / "versions"
     / "c153b2c3d520_feat_add_corporate_action_execution_releases.py"
 )
+SUPPORT_INDEX_MIGRATION = (
+    Path(__file__).resolve().parents[4]
+    / "alembic"
+    / "versions"
+    / "c154b2c3d521_perf_index_corporate_action_support.py"
+)
+AUTHORITY_FIX_FORWARD_MIGRATION = (
+    Path(__file__).resolve().parents[4]
+    / "alembic"
+    / "versions"
+    / "c155b2c3d522_fix_forward_corporate_action_authority.py"
+)
 
 
 async def test_manifest_append_retry_conflict_chain_and_reconstruction(
@@ -1081,6 +1093,18 @@ async def test_child_correction_epochs_are_monotonic_and_retries_are_neutral(
             _observation(manifest, child, delivery_event_id=f"initial-{sequence}")
         )
 
+    with pytest.raises(ConflictingCorporateActionObservationError, match="increase monotonically"):
+        await repository.observe_child(
+            replace(
+                _observation(
+                    manifest,
+                    manifest.expected_children[0],
+                    delivery_event_id="same-epoch-different-payload",
+                ),
+                transaction_payload_fingerprint=f"sha256:{'f' * 64}",
+            )
+        )
+
     corrected_child = replace(manifest.expected_children[0], child_sequence_hint=99)
     corrected = await repository.observe_child(
         _observation(
@@ -1988,6 +2012,10 @@ async def _seed_other_portfolio_and_transaction(session: AsyncSession) -> None:
 def _apply_migration(db_engine: Engine) -> None:
     migration: dict[str, Any] = runpy.run_path(str(MIGRATION))
     release_migration: dict[str, Any] = runpy.run_path(str(RELEASE_MIGRATION))
+    support_index_migration: dict[str, Any] = runpy.run_path(str(SUPPORT_INDEX_MIGRATION))
+    authority_fix_forward_migration: dict[str, Any] = runpy.run_path(
+        str(AUTHORITY_FIX_FORWARD_MIGRATION)
+    )
     with db_engine.begin() as connection:
         operations = Operations(MigrationContext.configure(connection))
         inspector = inspect(connection)
@@ -2002,3 +2030,17 @@ def _apply_migration(db_engine: Engine) -> None:
         if "transaction_payload_fingerprint" not in observation_columns:
             release_migration["upgrade"].__globals__["op"] = operations
             release_migration["upgrade"]()
+            inspector = inspect(connection)
+        if "ix_ca_event_book_scope_updated" not in {
+            index["name"] for index in inspector.get_indexes("corporate_action_events")
+        }:
+            support_index_migration["upgrade"].__globals__["op"] = operations
+            support_index_migration["upgrade"]()
+        if (
+            connection.scalar(
+                text("SELECT to_regprocedure('enforce_ca_manifest_payload_book_scope()')")
+            )
+            is None
+        ):
+            authority_fix_forward_migration["upgrade"].__globals__["op"] = operations
+            authority_fix_forward_migration["upgrade"]()

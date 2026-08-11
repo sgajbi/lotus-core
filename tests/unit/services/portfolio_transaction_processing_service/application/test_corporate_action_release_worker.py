@@ -19,6 +19,9 @@ from src.services.portfolio_transaction_processing_service.app.application impor
     TransactionProcessingError,
     TransactionProcessingStatus,
 )
+from src.services.portfolio_transaction_processing_service.app.application import (
+    corporate_action_release_worker as release_worker,
+)
 from src.services.portfolio_transaction_processing_service.app.domain import BookedTransaction
 
 NOW = datetime(2026, 8, 11, 4, 0, tzinfo=UTC)
@@ -339,3 +342,10 @@ async def test_heartbeat_lease_loss_cancels_slow_processing_before_progress() ->
     assert releases.fail_calls == []
     observer.observe_lease_renewal.assert_called_once()
     assert observer.observe_lease_renewal.call_args.args[0].value == "lost"
+
+
+def test_shortest_supported_lease_renews_strictly_before_expiry() -> None:
+    interval_seconds = release_worker._lease_renewal_interval_seconds(1)
+
+    assert interval_seconds == pytest.approx(1 / 3)
+    assert interval_seconds < 1
