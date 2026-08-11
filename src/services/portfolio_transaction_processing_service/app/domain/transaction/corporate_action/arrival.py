@@ -24,11 +24,16 @@ def corporate_action_manifest_child(
         raise TypeError("transaction must be a BookedTransaction")
     if not is_manifest_governed_corporate_action(transaction.transaction_type):
         return None
+    manifest_identity_values = (
+        transaction.parent_event_reference,
+        transaction.child_role,
+    )
+    if not any(_present(value) for value in manifest_identity_values):
+        return None
     identity_values = (
         transaction.economic_event_id,
         transaction.linked_transaction_group_id,
-        transaction.parent_event_reference,
-        transaction.child_role,
+        *manifest_identity_values,
     )
     populated_identity_count = sum(_present(value) for value in identity_values)
     if populated_identity_count == 0:

@@ -1,5 +1,6 @@
 """Specify live child parking before corporate-action financial execution."""
 
+from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal
 
@@ -135,6 +136,28 @@ async def test_ordinary_transaction_bypasses_graph_persistence() -> None:
     )
 
     result = await use_case.execute(_command(transaction_type="BUY"))
+
+    assert result.disposition is CorporateActionArrivalDisposition.ORDINARY
+    assert unit_of_work.event_graph.observations == []
+    assert not unit_of_work.committed
+
+
+@pytest.mark.asyncio
+async def test_shared_settlement_linkage_bypasses_manifest_graph_persistence() -> None:
+    use_case, unit_of_work = _use_case(
+        _decision(corporate_action.CorporateActionManifestReadinessStatus.AWAITING_MANIFEST)
+    )
+    command = _command(transaction_type="ADJUSTMENT")
+    command = replace(
+        command,
+        transaction=replace(
+            command.transaction,
+            parent_event_reference=None,
+            child_role=None,
+        ),
+    )
+
+    result = await use_case.execute(command)
 
     assert result.disposition is CorporateActionArrivalDisposition.ORDINARY
     assert unit_of_work.event_graph.observations == []

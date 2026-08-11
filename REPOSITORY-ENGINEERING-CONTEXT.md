@@ -2762,8 +2762,10 @@ Most relevant current governance:
      transaction epoch, and full transaction-payload fingerprint; claims use PostgreSQL-clock
      leases and monotonic fences so expired workers can be recovered without permitting stale
      progress. Live transaction intake requires transaction type plus complete
-     event/group/parent/role identity before manifest parking: absent identity preserves the
-     ordinary compatibility path, while partial identity fails closed. READY observation or
+     event/group/parent/role identity before manifest parking. Manifest-specific
+     `parent_event_reference` or `child_role` opts a transaction into that path; shared
+     `economic_event_id` and `linked_transaction_group_id` alone remain ordinary settlement or
+     fee/tax linkage. Once opted in, partial identity fails closed. READY observation or
      manifest transitions materialize the immutable release in the same lightweight UoW. The
      existing transaction-processing deployable uses short claim/load/progress transactions,
      revalidates the frozen payload fingerprint, processes outside the lease transaction under a
