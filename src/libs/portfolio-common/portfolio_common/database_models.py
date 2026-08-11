@@ -2279,6 +2279,14 @@ class CorporateActionEventRecord(Base):
             "readiness_status",
             updated_at.desc(),
         ),
+        Index(
+            "ix_ca_event_book_scope_updated",
+            "tenant_id",
+            "legal_book_id",
+            "portfolio_id",
+            updated_at.desc(),
+            id.desc(),
+        ),
     )
 
 
