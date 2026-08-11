@@ -291,6 +291,17 @@ def build_corporate_action_reconciliation_evidence(
         }
     )
     run_id = f"recon-{reconciliation_type}-{evidence_signature}"
+    findings = _findings(
+        run_id=run_id,
+        evidence_signature=evidence_signature,
+        processed_transaction=evidence_transaction,
+        linked_transaction_group_id=linked_transaction_group_id,
+        parent_event_reference=parent_event_reference,
+        reconciliation=reconciliation,
+        missing_dependencies=missing_dependencies,
+        linkage_findings=canonical_linkage_findings,
+        reconciliation_type=reconciliation_type,
+    )
     run = CorporateActionReconciliationRunEvidence(
         run_id=run_id,
         reconciliation_type=reconciliation_type,
@@ -303,7 +314,12 @@ def build_corporate_action_reconciliation_evidence(
         correlation_id=correlation_id,
         tolerance=reconciliation.basis_tolerance,
         summary={
-            **_summary(reconciliation, missing_dependencies, canonical_linkage_findings),
+            **_summary(
+                reconciliation,
+                missing_dependencies,
+                canonical_linkage_findings,
+                findings,
+            ),
             "linked_transaction_group_id": linked_transaction_group_id,
             "parent_event_reference": parent_event_reference,
             "reconciliation_policy_id": CORPORATE_ACTION_RECONCILIATION_POLICY_ID,
@@ -315,17 +331,7 @@ def build_corporate_action_reconciliation_evidence(
     )
     return CorporateActionReconciliationEvidence(
         run=run,
-        findings=_findings(
-            run_id=run_id,
-            evidence_signature=evidence_signature,
-            processed_transaction=evidence_transaction,
-            linked_transaction_group_id=linked_transaction_group_id,
-            parent_event_reference=parent_event_reference,
-            reconciliation=reconciliation,
-            missing_dependencies=missing_dependencies,
-            linkage_findings=canonical_linkage_findings,
-            reconciliation_type=reconciliation_type,
-        ),
+        findings=findings,
     )
 
 
@@ -416,12 +422,9 @@ def _summary(
     reconciliation: CorporateActionBasisReconciliation,
     missing_dependencies: tuple[str, ...],
     linkage_findings: Sequence[CorporateActionLegLinkageFinding],
+    findings: Sequence[CorporateActionReconciliationFindingEvidence],
 ) -> dict[str, object]:
-    finding_count = (
-        int(reconciliation.status is not CorporateActionBasisReconciliationStatus.BALANCED)
-        + int(bool(missing_dependencies))
-        + len(linkage_findings)
-    )
+    finding_count = len(findings)
     return {
         "examined_count": (
             reconciliation.source_leg_count
@@ -513,26 +516,6 @@ def _findings(
                 reconciliation_type=reconciliation_type,
             )
         )
-    elif status is CorporateActionBasisReconciliationStatus.INSUFFICIENT_CASH_BASIS:
-        findings.append(
-            _finding(
-                run_id=run_id,
-                evidence_signature=evidence_signature,
-                finding_type=CorporateActionReconciliationFindingType.INSUFFICIENT_CASH_BASIS,
-                reason_code=CorporateActionReconciliationReasonCode.INSUFFICIENT_CASH_BASIS,
-                processed_transaction=processed_transaction,
-                linked_transaction_group_id=linked_transaction_group_id,
-                parent_event_reference=parent_event_reference,
-                reconciliation=reconciliation,
-                expected_value={"missing_cash_basis_count": 0},
-                observed_value={
-                    "cash_consideration_count": reconciliation.cash_consideration_count,
-                    "missing_cash_basis_count": reconciliation.missing_cash_basis_count,
-                    "cash_basis_local": str(reconciliation.cash_basis_local),
-                },
-                reconciliation_type=reconciliation_type,
-            )
-        )
     elif status is CorporateActionBasisReconciliationStatus.INVALID_BASIS_ALLOCATION:
         findings.append(
             _finding(
@@ -553,7 +536,27 @@ def _findings(
                 reconciliation_type=reconciliation_type,
             )
         )
-    elif status is CorporateActionBasisReconciliationStatus.UNSUPPORTED_ADJUSTMENT:
+    if reconciliation.missing_cash_basis_count > 0:
+        findings.append(
+            _finding(
+                run_id=run_id,
+                evidence_signature=evidence_signature,
+                finding_type=CorporateActionReconciliationFindingType.INSUFFICIENT_CASH_BASIS,
+                reason_code=CorporateActionReconciliationReasonCode.INSUFFICIENT_CASH_BASIS,
+                processed_transaction=processed_transaction,
+                linked_transaction_group_id=linked_transaction_group_id,
+                parent_event_reference=parent_event_reference,
+                reconciliation=reconciliation,
+                expected_value={"missing_cash_basis_count": 0},
+                observed_value={
+                    "cash_consideration_count": reconciliation.cash_consideration_count,
+                    "missing_cash_basis_count": reconciliation.missing_cash_basis_count,
+                    "cash_basis_local": str(reconciliation.cash_basis_local),
+                },
+                reconciliation_type=reconciliation_type,
+            )
+        )
+    if reconciliation.unsupported_adjustment_count > 0:
         findings.append(
             _finding(
                 run_id=run_id,

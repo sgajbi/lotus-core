@@ -185,6 +185,140 @@ def test_ambiguous_adjustment_emits_stable_unsupported_reason() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    ("transactions", "expected_status", "expected_finding_types"),
+    [
+        (
+            (
+                _transaction(
+                    transaction_id="CA-OUT-01",
+                    transaction_type="SPIN_OFF",
+                    net_cost_local="-100",
+                ),
+                replace(
+                    _transaction(
+                        transaction_id="CA-ADJ-01",
+                        transaction_type="ADJUSTMENT",
+                        net_cost_local="5",
+                    ),
+                    adjustment_reason="MANUAL_BASIS_OVERRIDE",
+                    movement_direction="INFLOW",
+                ),
+            ),
+            CorporateActionBasisReconciliationStatus.INSUFFICIENT_LEGS,
+            (
+                CorporateActionReconciliationFindingType.INSUFFICIENT_LEGS,
+                CorporateActionReconciliationFindingType.UNSUPPORTED_ADJUSTMENT,
+            ),
+        ),
+        (
+            (
+                _transaction(
+                    transaction_id="CA-OUT-01",
+                    transaction_type="SPIN_OFF",
+                    net_cost_local="-100",
+                ),
+                _transaction(
+                    transaction_id="CA-IN-01",
+                    transaction_type="SPIN_IN",
+                    net_cost_local="100",
+                ),
+                _transaction(
+                    transaction_id="CA-CASH-01",
+                    transaction_type="CASH_CONSIDERATION",
+                    net_cost_local="0",
+                ),
+                replace(
+                    _transaction(
+                        transaction_id="CA-ADJ-01",
+                        transaction_type="ADJUSTMENT",
+                        net_cost_local="5",
+                    ),
+                    adjustment_reason="MANUAL_BASIS_OVERRIDE",
+                    movement_direction="INFLOW",
+                ),
+            ),
+            CorporateActionBasisReconciliationStatus.INSUFFICIENT_CASH_BASIS,
+            (
+                CorporateActionReconciliationFindingType.INSUFFICIENT_CASH_BASIS,
+                CorporateActionReconciliationFindingType.UNSUPPORTED_ADJUSTMENT,
+            ),
+        ),
+        (
+            (
+                _transaction(
+                    transaction_id="CA-OUT-01",
+                    transaction_type="SPIN_OFF",
+                    net_cost_local="-100",
+                ),
+                _transaction(
+                    transaction_id="CA-IN-01",
+                    transaction_type="SPIN_IN",
+                    net_cost_local="100",
+                ),
+                _transaction(
+                    transaction_id="CA-CIL-01",
+                    transaction_type="CASH_IN_LIEU",
+                    net_cost_local="-110",
+                    allocated_cost_basis_local="110",
+                ),
+                replace(
+                    _transaction(
+                        transaction_id="CA-ADJ-01",
+                        transaction_type="ADJUSTMENT",
+                        net_cost_local="5",
+                    ),
+                    adjustment_reason="MANUAL_BASIS_OVERRIDE",
+                    movement_direction="INFLOW",
+                ),
+            ),
+            CorporateActionBasisReconciliationStatus.INVALID_BASIS_ALLOCATION,
+            (
+                CorporateActionReconciliationFindingType.INVALID_BASIS_ALLOCATION,
+                CorporateActionReconciliationFindingType.UNSUPPORTED_ADJUSTMENT,
+            ),
+        ),
+        (
+            (
+                _transaction(
+                    transaction_id="CA-OUT-01",
+                    transaction_type="SPIN_OFF",
+                    net_cost_local="-100",
+                ),
+                _transaction(
+                    transaction_id="CA-CASH-01",
+                    transaction_type="CASH_CONSIDERATION",
+                    net_cost_local="0",
+                ),
+            ),
+            CorporateActionBasisReconciliationStatus.INSUFFICIENT_LEGS,
+            (
+                CorporateActionReconciliationFindingType.INSUFFICIENT_LEGS,
+                CorporateActionReconciliationFindingType.INSUFFICIENT_CASH_BASIS,
+            ),
+        ),
+    ],
+)
+def test_independently_counted_defects_emit_additive_deterministic_findings(
+    transactions: tuple[BookedTransaction, ...],
+    expected_status: CorporateActionBasisReconciliationStatus,
+    expected_finding_types: tuple[CorporateActionReconciliationFindingType, ...],
+) -> None:
+    evidence = _evidence(*transactions)
+    replayed = _evidence(*reversed(transactions))
+
+    assert evidence.run.summary["reconciliation_status"] == expected_status
+    assert tuple(finding.finding_type for finding in evidence.findings) == (expected_finding_types)
+    assert evidence.run.summary["finding_count"] == len(evidence.findings)
+    assert evidence.run.summary["error_count"] == len(evidence.findings)
+    assert evidence.run.summary["passed"] is False
+    assert len({finding.finding_id for finding in evidence.findings}) == len(evidence.findings)
+    assert replayed.run.run_id == evidence.run.run_id
+    assert tuple(finding.finding_id for finding in replayed.findings) == tuple(
+        finding.finding_id for finding in evidence.findings
+    )
+
+
 def test_negative_retained_target_basis_emits_stable_allocation_finding() -> None:
     evidence = _evidence(
         _transaction(
