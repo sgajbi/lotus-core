@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.orm import sessionmaker
 
 from .config import POSTGRES_DB, POSTGRES_HOST, POSTGRES_PASSWORD, POSTGRES_PORT, POSTGRES_USER
+from .database_runtime_identity import async_database_connect_args, sync_database_connect_args
 
 _LEGACY_POSTGRES_SCHEME = "postgres://"
 _SYNC_POSTGRES_SCHEME = "postgresql://"
@@ -65,7 +66,11 @@ _async_session_factory = None
 def get_engine():
     global _engine
     if _engine is None:
-        _engine = create_engine(get_sync_database_url(), pool_pre_ping=True)
+        _engine = create_engine(
+            get_sync_database_url(),
+            pool_pre_ping=True,
+            connect_args=sync_database_connect_args(),
+        )
     return _engine
 
 
@@ -111,6 +116,7 @@ def get_async_engine():
         _async_engine = create_async_engine(
             get_async_database_url(),
             pool_pre_ping=True,
+            connect_args=async_database_connect_args(),
         )
     return _async_engine
 

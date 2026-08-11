@@ -121,6 +121,9 @@ def test_alembic_environment_wires_renderer_for_online_migrations(
 
     engine_config = engine_from_config.call_args.args[0]
     assert engine_config["sqlalchemy.url"] == "postgresql://lotus:secret@postgres/lotus"
+    assert engine_from_config.call_args.kwargs["connect_args"] == {
+        "application_name": "lotus-core-local"
+    }
     configure.assert_called_once_with(
         connection=connection,
         target_metadata=configure.call_args.kwargs["target_metadata"],

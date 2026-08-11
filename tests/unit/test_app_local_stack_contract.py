@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import yaml
+from portfolio_common.database_runtime_identity import DATABASE_RUNTIME_IDENTITIES
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -46,6 +47,34 @@ def test_app_local_compose_keeps_local_overlay_services_available() -> None:
         "demo_data_loader",
     ]:
         assert service_name in services
+
+
+def test_database_capable_services_declare_stable_runtime_identities() -> None:
+    compose = _read_yaml(ROOT / "docker-compose.yml")
+    expected_identities = {
+        "migration-runner": "migration-runner",
+        "ingestion_service": "ingestion-service",
+        "query_service": "query-service",
+        "query_control_plane_service": "query-control-plane-service",
+        "event_replay_service": "event-replay-service",
+        "financial_reconciliation_service": "financial-reconciliation-service",
+        "persistence_service": "persistence-service",
+        "portfolio_transaction_processing_service": "portfolio-transaction-processing",
+        "valuation_orchestrator_service": "valuation-orchestrator",
+        "position_valuation_calculator": "position-valuation-calculator",
+        "portfolio_derived_state_service": "portfolio-derived-state",
+    }
+
+    actual_identities = {
+        service: compose["services"][service]["environment"]["SERVICE_NAME"]
+        for service in expected_identities
+    }
+
+    assert actual_identities == expected_identities
+    assert set(actual_identities.values()) <= DATABASE_RUNTIME_IDENTITIES
+    postgres_healthcheck_identity = compose["services"]["postgres"]["environment"]["PGAPPNAME"]
+    assert postgres_healthcheck_identity == "postgres-healthcheck"
+    assert postgres_healthcheck_identity in DATABASE_RUNTIME_IDENTITIES
 
 
 def test_app_local_stack_declares_measured_outbox_capacity_profile() -> None:

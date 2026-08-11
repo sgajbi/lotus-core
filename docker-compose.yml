@@ -100,6 +100,7 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-portfolio_db}
       POSTGRES_USER: ${POSTGRES_USER:-user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      PGAPPNAME: postgres-healthcheck
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -117,6 +118,7 @@ services:
     image: lotus-core/migration-runner:local
     hostname: migration-runner
     environment:
+      SERVICE_NAME: migration-runner
       DATABASE_URL: ${DATABASE_URL:-postgresql://user:password@postgres:5432/portfolio_db}
     depends_on:
       postgres:
@@ -136,6 +138,7 @@ services:
       - "${LOTUS_INGESTION_HOST_PORT:-8200}:8000"
     environment:
       <<: *shared_python_env
+      SERVICE_NAME: ingestion-service
       KAFKA_BOOTSTRAP_SERVERS: kafka:9093
       LOTUS_CORE_INGEST_RATE_LIMIT_WINDOW_SECONDS: ${LOTUS_CORE_INGEST_RATE_LIMIT_WINDOW_SECONDS:-60}
       LOTUS_CORE_INGEST_RATE_LIMIT_MAX_REQUESTS: ${LOTUS_CORE_INGEST_RATE_LIMIT_MAX_REQUESTS:-500}
@@ -176,6 +179,7 @@ services:
       - "${LOTUS_QUERY_HOST_PORT:-8201}:8001"
     environment:
       <<: *shared_python_env
+      SERVICE_NAME: query-service
       DATABASE_URL: ${QUERY_DATABASE_URL:-postgresql://user:password@postgres:5432/portfolio_db}
     depends_on:
       migration-runner:
@@ -204,6 +208,7 @@ services:
       - "${LOTUS_QUERY_CONTROL_PLANE_HOST_PORT:-8202}:8002"
     environment:
       <<: *shared_python_env
+      SERVICE_NAME: query-control-plane-service
       DATABASE_URL: ${QUERY_DATABASE_URL:-postgresql://user:password@postgres:5432/portfolio_db}
     depends_on:
       migration-runner:
@@ -232,6 +237,7 @@ services:
       - "${LOTUS_EVENT_REPLAY_HOST_PORT:-8209}:8009"
     environment:
       <<: *shared_python_env
+      SERVICE_NAME: event-replay-service
       KAFKA_BOOTSTRAP_SERVERS: kafka:9093
       DATABASE_URL: ${DATABASE_URL:-postgresql://user:password@postgres:5432/portfolio_db}
     depends_on:
@@ -264,6 +270,7 @@ services:
       - "${LOTUS_FINANCIAL_RECONCILIATION_HOST_PORT:-8210}:8010"
     environment:
       <<: *shared_python_env
+      SERVICE_NAME: financial-reconciliation-service
       KAFKA_BOOTSTRAP_SERVERS: kafka:9093
       DATABASE_URL: ${DATABASE_URL:-postgresql://user:password@postgres:5432/portfolio_db}
     depends_on:
@@ -296,6 +303,7 @@ services:
       - "${LOTUS_PERSISTENCE_HOST_PORT:-8080}:8080"
     environment:
       <<: *shared_python_env
+      SERVICE_NAME: persistence-service
       KAFKA_BOOTSTRAP_SERVERS: kafka:9093
       DATABASE_URL: ${DATABASE_URL:-postgresql://user:password@postgres:5432/portfolio_db}
     depends_on:
@@ -336,6 +344,7 @@ services:
       - "${LOTUS_TRANSACTION_PROCESSING_HOST_PORT:-8090}:8085"
     environment:
       <<: *shared_python_env
+      SERVICE_NAME: portfolio-transaction-processing
       KAFKA_BOOTSTRAP_SERVERS: kafka:9093
       DATABASE_URL: ${DATABASE_URL:-postgresql://user:password@postgres:5432/portfolio_db}
       LOTUS_GIT_COMMIT_SHA: ${LOTUS_GIT_COMMIT_SHA:-unknown}
@@ -372,6 +381,7 @@ services:
       - "${LOTUS_VALUATION_ORCHESTRATOR_HOST_PORT:-8087}:8087"
     environment:
       <<: *shared_python_env
+      SERVICE_NAME: valuation-orchestrator
       KAFKA_BOOTSTRAP_SERVERS: kafka:9093
       DATABASE_URL: ${DATABASE_URL:-postgresql://user:password@postgres:5432/portfolio_db}
       VALUATION_SCHEDULER_POLL_INTERVAL: ${VALUATION_SCHEDULER_POLL_INTERVAL:-2}
@@ -409,6 +419,7 @@ services:
       - "${LOTUS_POSITION_VALUATION_HOST_PORT:-8084}:8084"
     environment:
       <<: *shared_python_env
+      SERVICE_NAME: position-valuation-calculator
       KAFKA_BOOTSTRAP_SERVERS: kafka:9093
       DATABASE_URL: ${DATABASE_URL:-postgresql://user:password@postgres:5432/portfolio_db}
       POSITION_VALUATION_WORKER_COUNT: ${POSITION_VALUATION_WORKER_COUNT:-8}
@@ -444,6 +455,7 @@ services:
       - "${LOTUS_PORTFOLIO_DERIVED_STATE_HOST_PORT:-8085}:8085"
     environment:
       <<: *shared_python_env
+      SERVICE_NAME: portfolio-derived-state
       KAFKA_BOOTSTRAP_SERVERS: kafka:9093
       DATABASE_URL: ${DATABASE_URL:-postgresql://user:password@postgres:5432/portfolio_db}
       PORTFOLIO_AGGREGATION_WORKER_COUNT: ${PORTFOLIO_AGGREGATION_WORKER_COUNT:-4}

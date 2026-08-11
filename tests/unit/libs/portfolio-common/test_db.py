@@ -3,7 +3,13 @@ import importlib
 import pytest
 import sqlalchemy
 import sqlalchemy.ext.asyncio as sa_async
+from portfolio_common.database_runtime_identity import (
+    DATABASE_APPLICATION_NAME_MAX_LENGTH,
+    DATABASE_RUNTIME_IDENTITIES,
+    database_runtime_identity,
+)
 from portfolio_common.db import get_async_database_url, get_sync_database_url
+from portfolio_common.runtime_settings import RuntimeConfigurationError
 
 
 class _FakeSyncSession:
@@ -71,7 +77,15 @@ def test_sessionlocal_creates_sync_engine_lazily(monkeypatch):
     session = reloaded.SessionLocal()
 
     assert isinstance(session, _FakeSyncSession)
-    assert len(sync_calls) == 1
+    assert sync_calls == [
+        (
+            (reloaded.get_sync_database_url(),),
+            {
+                "pool_pre_ping": True,
+                "connect_args": {"application_name": "lotus-core-local"},
+            },
+        )
+    ]
 
 
 def test_sync_database_url_normalizes_postgres_scheme(monkeypatch):
@@ -124,4 +138,100 @@ async def test_asyncsessionlocal_creates_async_engine_lazily(monkeypatch):
     async with reloaded.AsyncSessionLocal() as session:
         assert isinstance(session, _FakeAsyncSession)
 
-    assert len(async_calls) == 1
+    assert async_calls == [
+        (
+            (reloaded.get_async_database_url(),),
+            {
+                "pool_pre_ping": True,
+                "connect_args": {"server_settings": {"application_name": "lotus-core-local"}},
+            },
+        )
+    ]
+
+
+def test_database_runtime_identity_accepts_only_allowlisted_service(monkeypatch):
+    monkeypatch.setenv("SERVICE_NAME", "portfolio-transaction-processing")
+
+    assert database_runtime_identity() == "portfolio-transaction-processing"
+
+
+def test_database_runtime_identity_uses_bounded_local_fallback(monkeypatch):
+    monkeypatch.delenv("SERVICE_NAME", raising=False)
+    monkeypatch.setenv("ENVIRONMENT", "local")
+
+    assert database_runtime_identity() == "lotus-core-local"
+
+
+@pytest.mark.parametrize("service_name", ["", "unknown-service"])
+def test_database_runtime_identity_rejects_blank_or_unknown_values(monkeypatch, service_name):
+    monkeypatch.setenv("SERVICE_NAME", service_name)
+    monkeypatch.setenv("ENVIRONMENT", "local")
+
+    with pytest.raises(RuntimeConfigurationError, match="Invalid database runtime identity"):
+        database_runtime_identity()
+
+
+def test_database_runtime_identity_rejects_overlong_values(monkeypatch):
+    monkeypatch.setenv("SERVICE_NAME", "x" * (DATABASE_APPLICATION_NAME_MAX_LENGTH + 1))
+
+    with pytest.raises(RuntimeConfigurationError, match="63-byte limit"):
+        database_runtime_identity()
+
+
+def test_governed_identity_overrides_database_url_application_name(monkeypatch):
+    sync_calls = []
+
+    def _fake_create_engine(*args, **kwargs):
+        sync_calls.append((args, kwargs))
+        return object()
+
+    monkeypatch.setattr(sqlalchemy, "create_engine", _fake_create_engine)
+    monkeypatch.setenv("SERVICE_NAME", "query-service")
+    monkeypatch.setenv(
+        "DATABASE_URL",
+        "postgresql://user:pass@host:5432/dbname?application_name=untrusted",
+    )
+    monkeypatch.delenv("HOST_DATABASE_URL", raising=False)
+
+    import portfolio_common.db as db_module
+
+    reloaded = importlib.reload(db_module)
+    reloaded.get_engine()
+
+    assert sync_calls[0][0][0].endswith("?application_name=untrusted")
+    assert sync_calls[0][1]["connect_args"] == {"application_name": "query-service"}
+
+
+def test_governed_environment_fails_before_engine_creation_without_identity(monkeypatch):
+    sync_calls = []
+    monkeypatch.setattr(
+        sqlalchemy,
+        "create_engine",
+        lambda *args, **kwargs: sync_calls.append((args, kwargs)),
+    )
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.delenv("SERVICE_NAME", raising=False)
+
+    import portfolio_common.db as db_module
+
+    reloaded = importlib.reload(db_module)
+    with pytest.raises(RuntimeConfigurationError, match="SERVICE_NAME is required"):
+        reloaded.get_engine()
+
+    assert sync_calls == []
+
+
+def test_database_runtime_identity_is_required_in_governed_environment(monkeypatch):
+    monkeypatch.delenv("SERVICE_NAME", raising=False)
+    monkeypatch.setenv("ENVIRONMENT", "production")
+
+    with pytest.raises(RuntimeConfigurationError, match="SERVICE_NAME is required"):
+        database_runtime_identity()
+
+
+def test_database_runtime_identity_inventory_is_bounded_and_postgres_safe():
+    assert len(DATABASE_RUNTIME_IDENTITIES) == 15
+    assert all(
+        0 < len(identity) <= DATABASE_APPLICATION_NAME_MAX_LENGTH
+        for identity in DATABASE_RUNTIME_IDENTITIES
+    )
