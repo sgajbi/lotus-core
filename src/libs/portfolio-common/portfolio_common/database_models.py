@@ -2662,6 +2662,197 @@ class CorporateActionReadinessEvaluationRecord(Base):
     )
 
 
+class CorporateActionExecutionReleaseRecord(Base):
+    """Durable, lease-fenced release of one immutable READY evaluation."""
+
+    __tablename__ = "corporate_action_execution_releases"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    readiness_evaluation_id = Column(
+        Integer,
+        ForeignKey("corporate_action_readiness_evaluations.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    structural_plan_content_hash = Column(String(64), nullable=False)
+    release_authority_hash = Column(String(64), nullable=False)
+    status = Column(String, nullable=False, server_default="PENDING")
+    next_execution_ordinal = Column(Integer, nullable=False, server_default="0")
+    member_count = Column(Integer, nullable=False)
+    attempt_count = Column(Integer, nullable=False, server_default="0")
+    fence_token = Column(BigInteger, nullable=False, server_default="0")
+    lease_owner = Column(String(128), nullable=True)
+    lease_token = Column(String(64), nullable=True)
+    lease_expires_at = Column(DateTime(timezone=True), nullable=True)
+    failure_reason = Column(Text, nullable=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "readiness_evaluation_id",
+            name="uq_ca_execution_release_readiness",
+        ),
+        UniqueConstraint(
+            "release_authority_hash",
+            name="uq_ca_execution_release_authority",
+        ),
+        CheckConstraint(
+            "structural_plan_content_hash ~ '^[0-9a-f]{64}$' "
+            "AND release_authority_hash ~ '^[0-9a-f]{64}$'",
+            name="ck_ca_execution_release_hashes",
+        ),
+        CheckConstraint(
+            "status IN ('PENDING', 'PROCESSING', 'COMPLETE', 'FAILED')",
+            name="ck_ca_execution_release_status",
+        ),
+        CheckConstraint(
+            "member_count > 0 AND next_execution_ordinal >= 0 "
+            "AND next_execution_ordinal <= member_count "
+            "AND attempt_count >= 0 AND fence_token >= 0",
+            name="ck_ca_execution_release_counters",
+        ),
+        CheckConstraint(
+            "(lease_owner IS NULL AND lease_token IS NULL AND lease_expires_at IS NULL) OR "
+            "(lease_owner IS NOT NULL AND lease_token IS NOT NULL "
+            "AND lease_expires_at IS NOT NULL)",
+            name="ck_ca_execution_release_lease_complete",
+        ),
+        CheckConstraint(
+            "lease_owner IS NULL OR "
+            "(lease_owner = btrim(lease_owner) AND lease_owner <> '')",
+            name="ck_ca_execution_release_owner_normalized",
+        ),
+        CheckConstraint(
+            "lease_token IS NULL OR lease_token ~ '^[0-9a-f]{64}$'",
+            name="ck_ca_execution_release_lease_token",
+        ),
+        CheckConstraint(
+            "lease_expires_at IS NULL OR "
+            "lease_expires_at NOT IN ('infinity'::timestamptz, '-infinity'::timestamptz)",
+            name="ck_ca_execution_release_lease_expiry_finite",
+        ),
+        CheckConstraint(
+            "(status = 'PROCESSING' AND lease_owner IS NOT NULL "
+            "AND completed_at IS NULL AND failure_reason IS NULL) OR "
+            "(status = 'PENDING' AND lease_owner IS NULL "
+            "AND completed_at IS NULL AND failure_reason IS NULL) OR "
+            "(status = 'COMPLETE' AND lease_owner IS NULL "
+            "AND next_execution_ordinal = member_count "
+            "AND completed_at IS NOT NULL AND failure_reason IS NULL) OR "
+            "(status = 'FAILED' AND lease_owner IS NULL "
+            "AND completed_at IS NULL AND failure_reason IS NOT NULL)",
+            name="ck_ca_execution_release_state_shape",
+        ),
+        CheckConstraint(
+            "completed_at IS NULL OR "
+            "completed_at NOT IN ('infinity'::timestamptz, '-infinity'::timestamptz)",
+            name="ck_ca_execution_release_completed_finite",
+        ),
+        Index(
+            "ix_ca_execution_release_claim",
+            "status",
+            "lease_expires_at",
+            "id",
+        ),
+        Index(
+            "ix_ca_execution_release_authority",
+            "release_authority_hash",
+        ),
+    )
+
+
+class CorporateActionExecutionMemberRecord(Base):
+    """Ordered member progress for a corporate-action execution release."""
+
+    __tablename__ = "corporate_action_execution_members"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    release_id = Column(
+        BigInteger,
+        ForeignKey("corporate_action_execution_releases.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    execution_ordinal = Column(Integer, nullable=False)
+    transaction_id = Column(
+        String,
+        ForeignKey("transactions.transaction_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    observation_id = Column(
+        Integer,
+        ForeignKey("corporate_action_child_observations.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    transaction_epoch = Column(Integer, nullable=False)
+    observed_child_content_hash = Column(String(64), nullable=False)
+    transaction_payload_fingerprint = Column(String(71), nullable=False)
+    status = Column(String, nullable=False, server_default="PENDING")
+    completed_fence_token = Column(BigInteger, nullable=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "release_id",
+            "execution_ordinal",
+            name="uq_ca_execution_member_ordinal",
+        ),
+        UniqueConstraint(
+            "release_id",
+            "transaction_id",
+            name="uq_ca_execution_member_transaction",
+        ),
+        UniqueConstraint(
+            "release_id",
+            "observation_id",
+            name="uq_ca_execution_member_observation",
+        ),
+        CheckConstraint(
+            "execution_ordinal >= 0",
+            name="ck_ca_execution_member_ordinal",
+        ),
+        CheckConstraint(
+            "transaction_id = btrim(transaction_id) AND transaction_id <> ''",
+            name="ck_ca_execution_member_transaction_normalized",
+        ),
+        CheckConstraint(
+            "transaction_epoch >= 0",
+            name="ck_ca_execution_member_epoch",
+        ),
+        CheckConstraint(
+            "observed_child_content_hash ~ '^[0-9a-f]{64}$' "
+            "AND transaction_payload_fingerprint ~ '^sha256:[0-9a-f]{64}$'",
+            name="ck_ca_execution_member_hashes",
+        ),
+        CheckConstraint(
+            "status IN ('PENDING', 'COMPLETE')",
+            name="ck_ca_execution_member_status",
+        ),
+        CheckConstraint(
+            "(status = 'PENDING' AND completed_fence_token IS NULL "
+            "AND completed_at IS NULL) OR "
+            "(status = 'COMPLETE' AND completed_fence_token > 0 "
+            "AND completed_at IS NOT NULL)",
+            name="ck_ca_execution_member_state_shape",
+        ),
+        CheckConstraint(
+            "completed_at IS NULL OR "
+            "completed_at NOT IN ('infinity'::timestamptz, '-infinity'::timestamptz)",
+            name="ck_ca_execution_member_completed_finite",
+        ),
+        Index(
+            "ix_ca_execution_member_pending",
+            "release_id",
+            "status",
+            "execution_ordinal",
+        ),
+        Index("ix_ca_execution_member_transaction", "transaction_id"),
+    )
+
+
 class TransactionCost(Base):
     __tablename__ = "transaction_costs"
 

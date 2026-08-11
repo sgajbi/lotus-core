@@ -12,6 +12,8 @@ from portfolio_common.database_models import (
     ClientRestrictionProfile,
     ClientTaxProfile,
     ClientTaxRuleSet,
+    CorporateActionExecutionMemberRecord,
+    CorporateActionExecutionReleaseRecord,
     DailyPositionSnapshot,
     DailyPositionValuationReceiptRecord,
     FinancialReconciliationFinding,
@@ -76,6 +78,63 @@ def test_database_identifier_names_fit_postgresql_limit():
     too_long = sorted(name for name in names if len(name) > 63)
 
     assert too_long == []
+
+
+def test_corporate_action_execution_release_declares_fenced_state_contract() -> None:
+    release = CorporateActionExecutionReleaseRecord.__table__
+    member = CorporateActionExecutionMemberRecord.__table__
+    release_constraints = {constraint.name for constraint in release.constraints}
+    member_constraints = {constraint.name for constraint in member.constraints}
+    release_indexes = {index.name: index for index in release.indexes}
+    member_indexes = {index.name: index for index in member.indexes}
+
+    assert release.columns["structural_plan_content_hash"].type.length == 64
+    assert release.columns["release_authority_hash"].type.length == 64
+    assert release.columns["lease_owner"].type.length == 128
+    assert release.columns["lease_token"].type.length == 64
+    assert release.columns["lease_expires_at"].type.timezone is True
+    assert {
+        "uq_ca_execution_release_readiness",
+        "uq_ca_execution_release_authority",
+        "ck_ca_execution_release_hashes",
+        "ck_ca_execution_release_status",
+        "ck_ca_execution_release_counters",
+        "ck_ca_execution_release_lease_complete",
+        "ck_ca_execution_release_owner_normalized",
+        "ck_ca_execution_release_lease_token",
+        "ck_ca_execution_release_lease_expiry_finite",
+        "ck_ca_execution_release_state_shape",
+        "ck_ca_execution_release_completed_finite",
+    } <= release_constraints
+    assert [
+        column.name for column in release_indexes["ix_ca_execution_release_claim"].columns
+    ] == ["status", "lease_expires_at", "id"]
+    assert [
+        column.name
+        for column in release_indexes["ix_ca_execution_release_authority"].columns
+    ] == ["release_authority_hash"]
+
+    assert member.columns["observed_child_content_hash"].type.length == 64
+    assert member.columns["transaction_payload_fingerprint"].type.length == 71
+    assert {
+        "uq_ca_execution_member_ordinal",
+        "uq_ca_execution_member_transaction",
+        "uq_ca_execution_member_observation",
+        "ck_ca_execution_member_ordinal",
+        "ck_ca_execution_member_transaction_normalized",
+        "ck_ca_execution_member_epoch",
+        "ck_ca_execution_member_hashes",
+        "ck_ca_execution_member_status",
+        "ck_ca_execution_member_state_shape",
+        "ck_ca_execution_member_completed_finite",
+    } <= member_constraints
+    assert [
+        column.name for column in member_indexes["ix_ca_execution_member_pending"].columns
+    ] == ["release_id", "status", "execution_ordinal"]
+    assert [
+        column.name
+        for column in member_indexes["ix_ca_execution_member_transaction"].columns
+    ] == ["transaction_id"]
 
 
 def test_transaction_precision_policy_covers_every_numeric_ledger_column() -> None:
