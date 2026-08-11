@@ -53,11 +53,14 @@ PUBLISH_FAILED_EXAMPLE = ingestion_publish_failed_example(
     tags=["Corporate Actions"],
     summary="Ingest corporate-action parent manifests",
     description=(
-        "Accept source-owned, versioned corporate-action parent manifests with exact expected "
+        "What: Accept source-owned, versioned corporate-action parent manifests with exact "
+        "expected "
         "child membership, dependency edges, completion posture, tenant/legal-book scope, and "
-        "immutable source evidence. Core publishes each parent stream in monotonic version order "
-        "on the governed portfolio transaction-group key. Child financial effects remain parked "
-        "until the current persisted manifest is complete and READY."
+        "immutable source evidence. How: Core publishes each parent stream in monotonic version "
+        "order on the governed portfolio transaction-group key and validates authenticated tenant "
+        "scope before acceptance. When: Use this boundary before sending governed child "
+        "transactions; child financial effects remain parked until the current persisted manifest "
+        "is complete and READY."
     ),
 )
 async def ingest_corporate_action_manifests(

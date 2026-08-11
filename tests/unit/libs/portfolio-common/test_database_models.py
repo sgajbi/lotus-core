@@ -113,9 +113,11 @@ def test_corporate_action_execution_release_declares_fenced_state_contract() -> 
         "ck_ca_execution_release_state_shape",
         "ck_ca_execution_release_completed_finite",
     } <= release_constraints
-    assert [
-        column.name for column in release_indexes["ix_ca_execution_release_claim"].columns
-    ] == ["status", "lease_expires_at", "id"]
+    assert [column.name for column in release_indexes["ix_ca_execution_release_claim"].columns] == [
+        "status",
+        "lease_expires_at",
+        "id",
+    ]
     assert member.columns["observed_child_content_hash"].type.length == 64
     assert member.columns["transaction_payload_fingerprint"].type.length == 71
     assert {
@@ -130,12 +132,13 @@ def test_corporate_action_execution_release_declares_fenced_state_contract() -> 
         "ck_ca_execution_member_state_shape",
         "ck_ca_execution_member_completed_finite",
     } <= member_constraints
+    assert [column.name for column in member_indexes["ix_ca_execution_member_pending"].columns] == [
+        "release_id",
+        "status",
+        "execution_ordinal",
+    ]
     assert [
-        column.name for column in member_indexes["ix_ca_execution_member_pending"].columns
-    ] == ["release_id", "status", "execution_ordinal"]
-    assert [
-        column.name
-        for column in member_indexes["ix_ca_execution_member_transaction"].columns
+        column.name for column in member_indexes["ix_ca_execution_member_transaction"].columns
     ] == ["transaction_id"]
 
 

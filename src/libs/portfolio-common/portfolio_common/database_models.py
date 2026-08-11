@@ -2727,8 +2727,7 @@ class CorporateActionExecutionReleaseRecord(Base):
             name="ck_ca_execution_release_lease_complete",
         ),
         CheckConstraint(
-            "lease_owner IS NULL OR "
-            "(lease_owner = btrim(lease_owner) AND lease_owner <> '')",
+            "lease_owner IS NULL OR (lease_owner = btrim(lease_owner) AND lease_owner <> '')",
             name="ck_ca_execution_release_owner_normalized",
         ),
         CheckConstraint(

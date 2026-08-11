@@ -194,9 +194,7 @@ def build_corporate_action_execution_member_authority(
         raise ValueError("observation epoch does not match the persisted transaction epoch")
     identity = build_transaction_semantic_identity(transaction)
     if identity.payload_fingerprint != observed_transaction_payload_fingerprint:
-        raise ValueError(
-            "persisted transaction payload does not match observed source authority"
-        )
+        raise ValueError("persisted transaction payload does not match observed source authority")
     return CorporateActionExecutionMemberAuthority(
         execution_ordinal=execution_ordinal,
         transaction_id=transaction.transaction_id,
