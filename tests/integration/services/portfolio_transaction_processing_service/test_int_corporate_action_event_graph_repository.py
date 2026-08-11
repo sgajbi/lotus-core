@@ -53,6 +53,12 @@ MIGRATION = (
     / "versions"
     / "c152b2c3d519_feat_add_corporate_action_event_graph.py"
 )
+RELEASE_MIGRATION = (
+    Path(__file__).resolve().parents[4]
+    / "alembic"
+    / "versions"
+    / "c153b2c3d520_feat_add_corporate_action_execution_releases.py"
+)
 
 
 async def test_manifest_append_retry_conflict_chain_and_reconstruction(
@@ -368,6 +374,7 @@ async def test_child_observations_before_manifest_restore_ready_state(
     assert retry.observation_outcome is CorporateActionObservationAppendOutcome.UNCHANGED
     assert retry.readiness_status == "READY"
     assert retry.manifest_content_hash == manifest.content_hash
+    assert retry.structural_plan_content_hash is not None
     with pytest.raises(ConflictingCorporateActionObservationError, match="different evidence"):
         await repository.observe_child(
             replace(
@@ -388,6 +395,16 @@ async def test_child_observations_before_manifest_restore_ready_state(
     assert event.readiness_status == "READY"
     assert event.last_observation_sequence == 2
     assert event.state_version == 3
+    observed_fingerprints = tuple(
+        await async_db_session.scalars(
+            select(CorporateActionChildObservationRecord.transaction_payload_fingerprint).order_by(
+                CorporateActionChildObservationRecord.observation_sequence
+            )
+        )
+    )
+    assert observed_fingerprints == tuple(
+        f"sha256:{child.content_hash}" for child in manifest.expected_children
+    )
     assert (
         await async_db_session.scalar(
             select(func.count()).select_from(CorporateActionReadinessEvaluationRecord)
@@ -1077,6 +1094,7 @@ def _observation(
         parent_event_reference=manifest.parent_event_reference,
         child=child,
         transaction_epoch=transaction_epoch,
+        transaction_payload_fingerprint=f"sha256:{child.content_hash}",
         delivery_event_id=delivery_event_id,
         correlation_id="correlation-001",
         observed_at=manifest.source_reference.observed_at,
@@ -1302,8 +1320,18 @@ async def _seed_other_portfolio_and_transaction(session: AsyncSession) -> None:
 
 def _apply_migration(db_engine: Engine) -> None:
     migration: dict[str, Any] = runpy.run_path(str(MIGRATION))
+    release_migration: dict[str, Any] = runpy.run_path(str(RELEASE_MIGRATION))
     with db_engine.begin() as connection:
-        if "corporate_action_events" in inspect(connection).get_table_names():
-            return
-        migration["upgrade"].__globals__["op"] = Operations(MigrationContext.configure(connection))
-        migration["upgrade"]()
+        operations = Operations(MigrationContext.configure(connection))
+        inspector = inspect(connection)
+        if "corporate_action_events" not in inspector.get_table_names():
+            migration["upgrade"].__globals__["op"] = operations
+            migration["upgrade"]()
+            inspector = inspect(connection)
+        observation_columns = {
+            column["name"]
+            for column in inspector.get_columns("corporate_action_child_observations")
+        }
+        if "transaction_payload_fingerprint" not in observation_columns:
+            release_migration["upgrade"].__globals__["op"] = operations
+            release_migration["upgrade"]()

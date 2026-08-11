@@ -40,6 +40,7 @@ class CorporateActionChildObservation:
     parent_event_reference: str
     child: CorporateActionEventChild
     transaction_epoch: int
+    transaction_payload_fingerprint: str
     delivery_event_id: str
     correlation_id: str | None
     observed_at: datetime

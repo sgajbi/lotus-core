@@ -12,7 +12,10 @@ from src.services.portfolio_transaction_processing_service.app.application impor
     CorporateActionExecutionReleaseAuthority,
     build_corporate_action_execution_member_authority,
 )
-from src.services.portfolio_transaction_processing_service.app.domain import BookedTransaction
+from src.services.portfolio_transaction_processing_service.app.domain import (
+    BookedTransaction,
+    build_transaction_semantic_identity,
+)
 
 
 def _transaction(transaction_id: str, *, epoch: int, quantity: str) -> BookedTransaction:
@@ -62,6 +65,9 @@ def _release(*, target_quantity: str = "10") -> CorporateActionExecutionReleaseA
                 {"child": transaction.transaction_id, "epoch": transaction.epoch}
             ),
             transaction_epoch=transaction.epoch or 0,
+            observed_transaction_payload_fingerprint=(
+                build_transaction_semantic_identity(transaction).payload_fingerprint
+            ),
             transaction=transaction,
         )
         for ordinal, transaction in enumerate(transactions)
@@ -96,6 +102,7 @@ def test_release_authority_rejects_order_or_observation_epoch_drift() -> None:
             observation_id=101,
             observed_child_content_hash=canonical_content_hash({"child": "CA-OUT"}),
             transaction_epoch=3,
+            observed_transaction_payload_fingerprint="sha256:" + "b" * 64,
             transaction=transaction,
         )
 

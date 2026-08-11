@@ -423,6 +423,8 @@ class SqlAlchemyCorporateActionEventGraphRepository:
                 == observation.transaction_epoch,
                 CorporateActionChildObservationRecord.observed_content_hash
                 == observation.child.content_hash,
+                CorporateActionChildObservationRecord.transaction_payload_fingerprint
+                == observation.transaction_payload_fingerprint,
                 reusable_for_current_manifest,
             )
         )
@@ -460,6 +462,7 @@ class SqlAlchemyCorporateActionEventGraphRepository:
                 delivery_event_id=observation.delivery_event_id,
                 correlation_id=observation.correlation_id,
                 observed_content_hash=observation.child.content_hash,
+                transaction_payload_fingerprint=observation.transaction_payload_fingerprint,
                 observed_payload=observation.child.lineage_payload(),
                 observed_at=observation.observed_at,
             )
@@ -895,6 +898,7 @@ def _validate_child_observation(observation: CorporateActionChildObservation) ->
     if not isinstance(observation.child, CorporateActionEventChild):
         raise TypeError("child must be a CorporateActionEventChild")
     _require_nonnegative_integer(observation.transaction_epoch, "transaction_epoch")
+    _require_transaction_payload_fingerprint(observation.transaction_payload_fingerprint)
     if observation.correlation_id is not None:
         _require_canonical_text(observation.correlation_id, "correlation_id")
     if (
@@ -922,6 +926,8 @@ def _require_same_observation(
         record.transaction_id != observation.child.transaction_id
         or record.transaction_epoch != observation.transaction_epoch
         or record.observed_content_hash != observation.child.content_hash
+        or record.transaction_payload_fingerprint
+        != observation.transaction_payload_fingerprint
         or record.observed_payload != observation.child.lineage_payload()
         or record.correlation_id != observation.correlation_id
         or record.observed_at.astimezone(UTC) != observation.observed_at.astimezone(UTC)
@@ -929,6 +935,24 @@ def _require_same_observation(
         raise ConflictingCorporateActionObservationError(
             "corporate-action child delivery identity already exists with different evidence"
         )
+
+
+def _require_transaction_payload_fingerprint(value: object) -> None:
+    normalized = _require_canonical_text_value(value, "transaction_payload_fingerprint")
+    prefix, separator, digest = normalized.partition(":")
+    if prefix != "sha256" or separator != ":" or len(digest) != 64 or digest != digest.lower():
+        raise ValueError("transaction_payload_fingerprint must be canonical sha256 authority")
+    try:
+        int(digest, 16)
+    except ValueError as exc:
+        raise ValueError(
+            "transaction_payload_fingerprint must be canonical sha256 authority"
+        ) from exc
+
+
+def _require_canonical_text_value(value: object, field_name: str) -> str:
+    _require_canonical_text(value, field_name)
+    return cast(str, value)
 
 
 def _execution_plan_content_hash(

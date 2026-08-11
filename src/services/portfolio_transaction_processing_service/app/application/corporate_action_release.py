@@ -97,6 +97,7 @@ def build_corporate_action_execution_member_authority(
     observation_id: int,
     observed_child_content_hash: str,
     transaction_epoch: int,
+    observed_transaction_payload_fingerprint: str,
     transaction: BookedTransaction,
 ) -> CorporateActionExecutionMemberAuthority:
     """Freeze one persisted transaction and reject observation/version drift."""
@@ -107,13 +108,17 @@ def build_corporate_action_execution_member_authority(
     if transaction_epoch != persisted_epoch:
         raise ValueError("observation epoch does not match the persisted transaction epoch")
     identity = build_transaction_semantic_identity(transaction)
+    if identity.payload_fingerprint != observed_transaction_payload_fingerprint:
+        raise ValueError(
+            "persisted transaction payload does not match observed source authority"
+        )
     return CorporateActionExecutionMemberAuthority(
         execution_ordinal=execution_ordinal,
         transaction_id=transaction.transaction_id,
         observation_id=observation_id,
         transaction_epoch=transaction_epoch,
         observed_child_content_hash=observed_child_content_hash,
-        transaction_payload_fingerprint=identity.payload_fingerprint,
+        transaction_payload_fingerprint=observed_transaction_payload_fingerprint,
     )
 
 
