@@ -83,12 +83,21 @@ def latest_valuation_job_lateral(position_state_security_id, as_of):
     )
 
 
-def support_job_priority(status_column, updated_at_column, stale_threshold: datetime):
+def support_job_priority(
+    status_column,
+    updated_at_column,
+    stale_threshold: datetime,
+    *,
+    inclusive: bool = False,
+):
     governed_status = status_column
+    stale_predicate = (
+        updated_at_column <= stale_threshold if inclusive else updated_at_column < stale_threshold
+    )
     return case(
         (governed_status == "FAILED", 0),
         (
-            and_(governed_status == "PROCESSING", updated_at_column < stale_threshold),
+            and_(governed_status == "PROCESSING", stale_predicate),
             1,
         ),
         (governed_status == "PROCESSING", 2),

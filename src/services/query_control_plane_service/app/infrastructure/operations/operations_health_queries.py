@@ -21,8 +21,18 @@ def seconds_or_none(raw) -> float | None:
     return float_type(raw)
 
 
-def support_job_health_aggregate(base_subq, open_date_column, stale_threshold, failed_since):
+def support_job_health_aggregate(
+    base_subq,
+    open_date_column,
+    stale_threshold,
+    failed_since,
+    *,
+    stale_at_column=None,
+):
     open_statuses = ("PENDING", "PROCESSING")
+    effective_stale_at_column = (
+        stale_at_column if stale_at_column is not None else base_subq.c.updated_at
+    )
     return (
         select(
             func.count().filter(base_subq.c.status.in_(open_statuses)).label("pending_jobs"),
@@ -30,7 +40,7 @@ def support_job_health_aggregate(base_subq, open_date_column, stale_threshold, f
             func.count()
             .filter(
                 base_subq.c.status == "PROCESSING",
-                base_subq.c.updated_at < stale_threshold,
+                effective_stale_at_column <= stale_threshold,
             )
             .label("stale_processing_jobs"),
             func.count().filter(base_subq.c.status == "FAILED").label("failed_jobs"),

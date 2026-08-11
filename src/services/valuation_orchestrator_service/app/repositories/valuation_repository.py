@@ -4,6 +4,7 @@ from portfolio_common.database_models import (
     InstrumentReprocessingState,
 )
 from portfolio_common.monitoring import (
+    observe_valuation_job_lease_transition,
     observe_valuation_worker_jobs_claimed,
     observe_valuation_worker_stale_resets,
 )
@@ -20,6 +21,9 @@ class ValuationRepository(ValuationRepositoryBase):
 
     def _observe_stale_resets(self, reset_count: int) -> None:
         observe_valuation_worker_stale_resets(reset_count)
+
+    def _observe_lease_transition(self, stage: str, outcome: str, count: int) -> None:
+        observe_valuation_job_lease_transition(stage, outcome, count)
 
     @async_timed(
         repository="ValuationRepository", method="get_instrument_reprocessing_triggers_count"

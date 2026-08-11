@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -16,7 +16,10 @@ from portfolio_common.database_models import (
     Transaction,
 )
 from portfolio_common.events import PortfolioValuationRequiredEvent
-from portfolio_common.valuation_job_contracts import ValuationJobTransitionOutcome
+from portfolio_common.valuation_job_contracts import (
+    VALUATION_CLAIM_HEADER,
+    ValuationJobTransitionOutcome,
+)
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -31,6 +34,14 @@ from src.services.calculators.position_valuation_calculator.app.repositories imp
 )
 
 pytestmark = pytest.mark.asyncio
+
+
+def _valuation_lease(token: str) -> dict[str, object]:
+    return {
+        "valuation_lease_owner": "valuation-consumer-integration-test",
+        "valuation_claim_token": token,
+        "valuation_lease_expires_at": datetime.now(timezone.utc) + timedelta(hours=1),
+    }
 
 
 @pytest.mark.lifecycle
@@ -86,6 +97,7 @@ async def test_valuation_message_persists_snapshot_outbox_and_idempotency(
                 # Direct consumer invocation should model an already-claimed worker job.
                 status="PROCESSING",
                 correlation_id="corr-val-int-01",
+                **_valuation_lease("a" * 32),
             ),
         ]
     )
@@ -116,7 +128,10 @@ async def test_valuation_message_persists_snapshot_outbox_and_idempotency(
     msg.topic.return_value = "valuation.job.requested"
     msg.partition.return_value = 0
     msg.offset.return_value = 7
-    msg.headers.return_value = [("correlation_id", b"corr-val-int-01")]
+    msg.headers.return_value = [
+        ("correlation_id", b"corr-val-int-01"),
+        (VALUATION_CLAIM_HEADER, ("a" * 32).encode("ascii")),
+    ]
 
     async def override_session():
         yield async_db_session
@@ -255,6 +270,7 @@ async def test_valuation_message_skips_side_effects_after_losing_job_ownership(
                 epoch=0,
                 status="PROCESSING",
                 correlation_id="corr-val-int-02",
+                **_valuation_lease("b" * 32),
             ),
         ]
     )
@@ -285,7 +301,10 @@ async def test_valuation_message_skips_side_effects_after_losing_job_ownership(
     msg.topic.return_value = "valuation.job.requested"
     msg.partition.return_value = 0
     msg.offset.return_value = 8
-    msg.headers.return_value = [("correlation_id", b"corr-val-int-02")]
+    msg.headers.return_value = [
+        ("correlation_id", b"corr-val-int-02"),
+        (VALUATION_CLAIM_HEADER, ("b" * 32).encode("ascii")),
+    ]
 
     session_factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
 
@@ -470,6 +489,7 @@ async def test_valuation_message_allows_rearmed_same_scope_delivery_to_refresh_s
                 epoch=0,
                 status="PROCESSING",
                 correlation_id="corr-val-int-03",
+                **_valuation_lease("c" * 32),
             ),
             ProcessedEvent(
                 event_id="valuation.job.requested-0-9",
@@ -506,7 +526,10 @@ async def test_valuation_message_allows_rearmed_same_scope_delivery_to_refresh_s
     msg.topic.return_value = "valuation.job.requested"
     msg.partition.return_value = 0
     msg.offset.return_value = 10
-    msg.headers.return_value = [("correlation_id", b"corr-val-int-03")]
+    msg.headers.return_value = [
+        ("correlation_id", b"corr-val-int-03"),
+        (VALUATION_CLAIM_HEADER, ("c" * 32).encode("ascii")),
+    ]
 
     async def override_session():
         yield async_db_session

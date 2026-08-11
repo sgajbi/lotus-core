@@ -2,6 +2,7 @@
 import asyncio
 import logging
 import time
+import uuid
 from collections.abc import AsyncIterator
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, List, cast
@@ -78,7 +79,8 @@ class ValuationScheduler:
         self._backfill_upsert_chunk_size = (
             runtime_settings.valuation_scheduler_backfill_upsert_chunk_size
         )
-        self._stale_timeout_minutes = runtime_settings.valuation_scheduler_stale_timeout_minutes
+        self._claim_lease_seconds = runtime_settings.valuation_scheduler_claim_lease_seconds
+        self._lease_owner = f"valuation-orchestrator-{uuid.uuid4().hex}"
         self._max_attempts = runtime_settings.valuation_scheduler_max_attempts
         self._running = True
         self._stop_event = asyncio.Event()
@@ -123,7 +125,6 @@ class ValuationScheduler:
             valuation_stale_job_resetter
             if valuation_stale_job_resetter is not None
             else ValuationStaleJobResetter(
-                stale_timeout_minutes=self._stale_timeout_minutes,
                 max_attempts=self._max_attempts,
             )
         )
@@ -136,6 +137,8 @@ class ValuationScheduler:
                 dispatch_rounds_per_poll=self._dispatch_rounds_per_poll,
                 poll_budget_seconds=self._poll_budget_seconds,
                 max_attempts=self._max_attempts,
+                lease_owner=self._lease_owner,
+                lease_duration_seconds=self._claim_lease_seconds,
                 session_provider=self._open_session,
                 repository_factory=ValuationDispatchRepositoryFactory(
                     valuation_repository_factory=self._repository_factory.valuation_repository

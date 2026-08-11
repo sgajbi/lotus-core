@@ -624,6 +624,12 @@ VALUATION_WORKER_STALE_RESETS_TOTAL = Counter(
     "Total number of stale valuation jobs reset from PROCESSING to PENDING.",
 )
 
+VALUATION_JOB_LEASE_TRANSITIONS_TOTAL = Counter(
+    "valuation_job_lease_transitions_total",
+    "Valuation job lease transitions by bounded lifecycle action and outcome.",
+    labelnames=("stage", "outcome"),
+)
+
 CASHFLOWS_CREATED_TOTAL = Counter(
     "cashflows_created_total",
     "Total number of cashflows created, by classification and timing.",
@@ -803,6 +809,10 @@ def observe_valuation_worker_jobs_claimed(count: int = 1) -> None:
 
 def observe_valuation_worker_stale_resets(count: int = 1) -> None:
     VALUATION_WORKER_STALE_RESETS_TOTAL.inc(count)
+
+
+def observe_valuation_job_lease_transition(stage: str, outcome: str, count: int = 1) -> None:
+    VALUATION_JOB_LEASE_TRANSITIONS_TOTAL.labels(stage, outcome).inc(count)
 
 
 def observe_cashflow_rule_cache_event(outcome: str, reason: str, count: int = 1) -> None:

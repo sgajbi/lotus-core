@@ -31,10 +31,16 @@ def is_support_job_stale(
     updated_at: datetime | None,
     now: datetime | None = None,
     stale_threshold_minutes: int = DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
+    *,
+    stale_deadline: datetime | None = None,
 ) -> bool:
-    if normalize_support_job_status(status) != "PROCESSING" or updated_at is None:
+    if normalize_support_job_status(status) != "PROCESSING":
         return False
     reference_now = now or datetime.now(timezone.utc)
+    if stale_deadline is not None:
+        return stale_deadline <= reference_now
+    if updated_at is None:
+        return False
     return updated_at < reference_now - timedelta(minutes=stale_threshold_minutes)
 
 
@@ -52,13 +58,21 @@ def get_support_job_operational_state(
     updated_at: datetime | None,
     now: datetime | None = None,
     stale_threshold_minutes: int = DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
+    *,
+    stale_deadline: datetime | None = None,
 ) -> str:
     normalized_status = normalize_support_job_status(status) or ""
     if normalized_status == "FAILED":
         return "FAILED"
     if normalized_status.startswith("SKIPPED"):
         return "SKIPPED"
-    if is_support_job_stale(normalized_status, updated_at, now, stale_threshold_minutes):
+    if is_support_job_stale(
+        normalized_status,
+        updated_at,
+        now,
+        stale_threshold_minutes,
+        stale_deadline=stale_deadline,
+    ):
         return "STALE_PROCESSING"
     if normalized_status == "PROCESSING":
         return "PROCESSING"
@@ -84,6 +98,7 @@ def build_support_job_record(
     to_currency: str | None = None,
     reference_now: datetime | None = None,
     stale_threshold_minutes: int = DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
+    stale_deadline: datetime | None = None,
 ) -> SupportJobRecord:
     return SupportJobRecord(
         job_id=job_id,
@@ -104,6 +119,7 @@ def build_support_job_record(
             updated_at,
             reference_now,
             stale_threshold_minutes,
+            stale_deadline=stale_deadline,
         ),
         failure_reason=failure_reason,
         is_terminal_failure=is_terminal_failure_status(status),
@@ -112,5 +128,6 @@ def build_support_job_record(
             updated_at,
             reference_now,
             stale_threshold_minutes,
+            stale_deadline=stale_deadline,
         ),
     )

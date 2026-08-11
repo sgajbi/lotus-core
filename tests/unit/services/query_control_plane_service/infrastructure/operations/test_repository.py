@@ -197,7 +197,7 @@ async def test_get_valuation_job_health_summary(
     assert "portfolio_valuation_jobs.updated_at <= '2025-08-31 12:00:00+00:00'" in compiled
     assert "status = 'FAILED'" in compiled
     assert "trim(portfolio_valuation_jobs.security_id) AS security_id" in compiled
-    assert "updated_at < '2025-08-31 11:45:00+00:00'" in compiled
+    assert "lease_expires_at <= '2025-08-31 12:00:00+00:00'" in compiled
     assert "updated_at >= '2025-08-30 12:00:00+00:00'" in compiled
     assert "portfolio_valuation_jobs_1.epoch > portfolio_valuation_jobs.epoch" in compiled
     assert "order by" in compiled.lower()
@@ -250,7 +250,7 @@ async def test_get_aggregation_job_health_summary(
     assert "portfolio_aggregation_jobs.updated_at <= '2025-08-31 12:00:00+00:00'" in compiled
     assert "portfolio_aggregation_jobs.aggregation_date <= '2025-08-20'" in compiled
     assert "status = 'FAILED'" in compiled
-    assert "updated_at < '2025-08-31 11:45:00+00:00'" in compiled
+    assert "lease_expires_at <= '2025-08-31 12:00:00+00:00'" in compiled
     assert "updated_at >= '2025-08-30 12:00:00+00:00'" in compiled
     assert "order by" in compiled.lower()
     assert "aggregation_date asc" in compiled.lower()
@@ -1132,7 +1132,10 @@ async def test_get_valuation_jobs_query(
     assert "CASE WHEN (portfolio_valuation_jobs.status = 'FAILED')" in compiled
     assert "upper(trim(portfolio_valuation_jobs.status))" not in compiled
     assert "portfolio_valuation_jobs.updated_at <= '2025-08-31 12:00:00+00:00'" in compiled
-    assert "portfolio_valuation_jobs.updated_at < '2025-08-31 11:45:00+00:00'" in compiled
+    assert (
+        "portfolio_valuation_jobs.valuation_lease_expires_at <= "
+        "'2025-08-31 12:00:00+00:00'" in compiled
+    )
     assert "portfolio_valuation_jobs.valuation_date ASC" in compiled
     assert "LIMIT 20 OFFSET 0" in compiled
     assert "portfolio_valuation_jobs_1.epoch > portfolio_valuation_jobs.epoch" in compiled
@@ -1196,7 +1199,7 @@ async def test_get_aggregation_jobs_query(
     assert "CASE WHEN (portfolio_aggregation_jobs.status = 'FAILED')" in compiled
     assert "upper(trim(portfolio_aggregation_jobs.status))" not in compiled
     assert "portfolio_aggregation_jobs.updated_at <= '2025-08-31 12:00:00+00:00'" in compiled
-    assert "portfolio_aggregation_jobs.updated_at < '2025-08-31 11:45:00+00:00'" in compiled
+    assert "portfolio_aggregation_jobs.lease_expires_at <= '2025-08-31 12:00:00+00:00'" in compiled
     assert "portfolio_aggregation_jobs.aggregation_date ASC" in compiled
     assert "LIMIT 5 OFFSET 2" in compiled
 

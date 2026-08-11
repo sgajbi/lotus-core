@@ -1,7 +1,7 @@
 import logging
 import uuid
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy import and_, case, func, or_, select, tuple_, update
@@ -34,6 +34,7 @@ from .valuation_snapshot_contiguity import (
 logger = logging.getLogger(__name__)
 
 _VALUATION_JOB_CLAIM_LOCK_ID = 7_611_901
+_VALUATION_LEASE_OWNER_MAX_LENGTH = 128
 
 
 def _latest_readiness_outbox_id_for_job():
@@ -70,6 +71,7 @@ class ValuationRepositoryBase:
 
     def __init__(self, db: AsyncSession):
         self.db = db
+        self._default_lease_owner = f"valuation-repository-{uuid.uuid4().hex}"
 
     @staticmethod
     def _normalize_currency_code(currency_code: str) -> str:
@@ -80,6 +82,9 @@ class ValuationRepositoryBase:
 
     def _observe_stale_resets(self, reset_count: int) -> None:
         """Hook for service-local metrics."""
+
+    def _observe_lease_transition(self, stage: str, outcome: str, count: int) -> None:
+        """Hook for bounded service-local lease lifecycle metrics."""
 
     @staticmethod
     def _newer_epoch_exists(current_job, newer_job):
@@ -436,7 +441,11 @@ class ValuationRepositoryBase:
                 ),
             ),
         }
-        values_to_update.update(valuation_claim_token=None)
+        values_to_update.update(
+            valuation_lease_owner=None,
+            valuation_claim_token=None,
+            valuation_lease_expires_at=None,
+        )
 
         normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
         normalized_security_id = normalize_lookup_identifier(security_id)
@@ -451,6 +460,7 @@ class ValuationRepositoryBase:
                 PortfolioValuationJob.valuation_claim_token.is_not_distinct_from(
                     expected_claim_token
                 ),
+                PortfolioValuationJob.valuation_lease_expires_at > func.now(),
             )
             .values(**values_to_update)
             .returning(PortfolioValuationJob.status)
@@ -459,6 +469,7 @@ class ValuationRepositoryBase:
         result = await self.db.execute(stmt)
         applied_status = result.scalar_one_or_none()
         if applied_status is None:
+            self._observe_lease_transition("completion", "lost", 1)
             return ValuationJobTransitionOutcome.NOT_OWNED
         if applied_status == status:
             return ValuationJobTransitionOutcome.TERMINAL_APPLIED
@@ -472,24 +483,24 @@ class ValuationRepositoryBase:
     @async_timed(repository="ValuationRepository", method="recover_dispatch_failed_jobs")
     async def recover_dispatch_failed_jobs(
         self,
-        job_ids: list[int],
+        job_claims: list[tuple[int, str]],
         *,
         max_attempts: int,
         failure_reason: str,
     ) -> dict[str, int]:
-        if not job_ids:
+        if not job_claims:
             return {"pending_count": 0, "failed_count": 0}
 
         failed_result = await self.db.execute(
             _dispatch_failed_valuation_jobs_update_stmt(
-                job_ids=job_ids,
+                job_claims=job_claims,
                 max_attempts=max_attempts,
                 failure_reason=failure_reason,
             )
         )
         pending_result = await self.db.execute(
             _dispatch_retryable_valuation_jobs_update_stmt(
-                job_ids=job_ids,
+                job_claims=job_claims,
                 max_attempts=max_attempts,
                 failure_reason=failure_reason,
             )
@@ -500,12 +511,14 @@ class ValuationRepositoryBase:
             logger.warning(
                 "Recovered valuation scheduler dispatch failure.",
                 extra={
-                    "job_ids": job_ids,
+                    "job_count": len(job_claims),
                     "pending_count": pending_count,
                     "failed_count": failed_count,
                     "max_attempts": max_attempts,
                 },
             )
+        self._observe_lease_transition("dispatch_recovery", "failed", failed_count)
+        self._observe_lease_transition("dispatch_recovery", "requeued", pending_count)
         return {"pending_count": pending_count, "failed_count": failed_count}
 
     @async_timed(repository="ValuationRepository", method="find_and_claim_eligible_jobs")
@@ -514,7 +527,17 @@ class ValuationRepositoryBase:
         batch_size: int,
         *,
         max_in_flight_jobs: int | None = None,
+        lease_owner: str | None = None,
+        lease_duration_seconds: int = 900,
     ) -> List[PortfolioValuationJob]:
+        resolved_lease_owner = (lease_owner or self._default_lease_owner).strip()
+        if (
+            not resolved_lease_owner
+            or len(resolved_lease_owner) > _VALUATION_LEASE_OWNER_MAX_LENGTH
+        ):
+            raise ValueError("valuation lease owner must contain 1 to 128 characters")
+        if lease_duration_seconds < 1:
+            raise ValueError("valuation lease duration must be positive")
         effective_batch_size = batch_size
         if max_in_flight_jobs is not None:
             await self.db.execute(select(func.pg_advisory_xact_lock(_VALUATION_JOB_CLAIM_LOCK_ID)))
@@ -559,7 +582,10 @@ class ValuationRepositoryBase:
                     PortfolioValuationJob.claimed_readiness_outbox_id,
                     _latest_readiness_outbox_id_for_job(),
                 ),
+                valuation_lease_owner=resolved_lease_owner,
                 valuation_claim_token=uuid.uuid4().hex,
+                valuation_lease_expires_at=func.now()
+                + func.make_interval(0, 0, 0, 0, 0, 0, lease_duration_seconds),
                 updated_at=func.now(),
                 attempt_count=PortfolioValuationJob.attempt_count + 1,
             )
@@ -571,6 +597,7 @@ class ValuationRepositoryBase:
         if claimed_models:
             logger.info("Found and claimed %s eligible valuation jobs.", len(claimed_models))
             self._observe_jobs_claimed(len(claimed_models))
+            self._observe_lease_transition("claim", "acquired", len(claimed_models))
         claimed_models.sort(
             key=lambda job: (job.portfolio_id, job.security_id, job.valuation_date, -job.epoch)
         )
@@ -703,43 +730,34 @@ class ValuationRepositoryBase:
             raise
 
     @async_timed(repository="ValuationRepository", method="find_and_reset_stale_jobs")
-    async def find_and_reset_stale_jobs(
-        self, timeout_minutes: int = 15, max_attempts: int = 3
-    ) -> int:
-        stale_threshold = datetime.now(timezone.utc) - timedelta(minutes=timeout_minutes)
-        stale_rows = await self._find_stale_job_rows(stale_threshold)
+    async def find_and_reset_stale_jobs(self, max_attempts: int = 3) -> int:
+        stale_rows = await self._find_stale_job_rows()
         if not stale_rows:
             return 0
 
         stale_job_groups = _classify_stale_valuation_jobs(stale_rows, max_attempts)
         await self._mark_superseded_stale_jobs(
             stale_job_groups.superseded_job_ids,
-            stale_threshold,
         )
         await self._mark_over_limit_stale_jobs_failed(
             stale_job_groups.failed_job_ids,
-            stale_threshold,
             max_attempts,
         )
         return await self._reset_retryable_stale_jobs(
             stale_job_groups.reset_job_ids,
-            stale_threshold,
         )
 
-    async def _find_stale_job_rows(self, stale_threshold: datetime) -> list[Any]:
-        result = await self.db.execute(_stale_valuation_jobs_stmt(stale_threshold, self))
+    async def _find_stale_job_rows(self) -> list[Any]:
+        result = await self.db.execute(_stale_valuation_jobs_stmt(self))
         return result.all()
 
     async def _mark_superseded_stale_jobs(
         self,
         superseded_job_ids: list[int],
-        stale_threshold: datetime,
     ) -> None:
         if not superseded_job_ids:
             return
-        await self.db.execute(
-            _superseded_stale_jobs_update_stmt(superseded_job_ids, stale_threshold)
-        )
+        await self.db.execute(_superseded_stale_jobs_update_stmt(superseded_job_ids))
         logger.warning(
             "Marked stale superseded valuation jobs as SKIPPED_SUPERSEDED.",
             extra={"job_ids": superseded_job_ids},
@@ -748,12 +766,11 @@ class ValuationRepositoryBase:
     async def _mark_over_limit_stale_jobs_failed(
         self,
         failed_job_ids: list[int],
-        stale_threshold: datetime,
         max_attempts: int,
     ) -> None:
         if not failed_job_ids:
             return
-        await self.db.execute(_failed_stale_jobs_update_stmt(failed_job_ids, stale_threshold))
+        await self.db.execute(_failed_stale_jobs_update_stmt(failed_job_ids))
         logger.warning(
             "Marked stale valuation jobs as FAILED after max attempts.",
             extra={"job_ids": failed_job_ids, "max_attempts": max_attempts},
@@ -762,13 +779,10 @@ class ValuationRepositoryBase:
     async def _reset_retryable_stale_jobs(
         self,
         reset_job_ids: list[int],
-        stale_threshold: datetime,
     ) -> int:
         if not reset_job_ids:
             return 0
-        result = await self.db.execute(
-            _reset_stale_jobs_update_stmt(reset_job_ids, stale_threshold)
-        )
+        result = await self.db.execute(_reset_stale_jobs_update_stmt(reset_job_ids))
         reset_ids = result.fetchall()
         reset_count = len(reset_ids)
         if reset_count > 0:
@@ -777,6 +791,7 @@ class ValuationRepositoryBase:
                 reset_count,
             )
             self._observe_stale_resets(reset_count)
+            self._observe_lease_transition("recovery", "reclaimed", reset_count)
 
         return reset_count
 
@@ -902,29 +917,31 @@ def _requeue_requested(stale_row: Any) -> bool:
     return getattr(stale_row, "requeue_requested", False) is True
 
 
-def _stale_valuation_jobs_stmt(stale_threshold: datetime, repository: ValuationRepositoryBase):
+def _stale_valuation_jobs_stmt(repository: ValuationRepositoryBase):
     newer_epoch = aliased(PortfolioValuationJob)
     return select(
         PortfolioValuationJob.id,
         PortfolioValuationJob.attempt_count,
         PortfolioValuationJob.requeue_requested,
+        PortfolioValuationJob.valuation_claim_token,
         repository._newer_epoch_exists(PortfolioValuationJob, newer_epoch).label("has_newer_epoch"),
     ).where(
         PortfolioValuationJob.status == "PROCESSING",
-        PortfolioValuationJob.updated_at < stale_threshold,
+        PortfolioValuationJob.valuation_lease_expires_at <= func.now(),
     )
 
 
 def _superseded_stale_jobs_update_stmt(
     superseded_job_ids: list[int],
-    stale_threshold: datetime,
 ):
     return (
-        _stale_jobs_update_stmt(superseded_job_ids, stale_threshold)
+        _stale_jobs_update_stmt(superseded_job_ids)
         .values(
             status="SKIPPED_SUPERSEDED",
             requeue_requested=False,
+            valuation_lease_owner=None,
             valuation_claim_token=None,
+            valuation_lease_expires_at=None,
             failure_reason="Superseded by newer valuation epoch.",
             updated_at=func.now(),
         )
@@ -934,15 +951,16 @@ def _superseded_stale_jobs_update_stmt(
 
 def _failed_stale_jobs_update_stmt(
     failed_job_ids: list[int],
-    stale_threshold: datetime,
 ):
     return (
-        _stale_jobs_update_stmt(failed_job_ids, stale_threshold)
+        _stale_jobs_update_stmt(failed_job_ids)
         .values(
             status="FAILED",
             requeue_requested=False,
+            valuation_lease_owner=None,
             valuation_claim_token=None,
-            failure_reason="Stale processing timeout exceeded max attempts",
+            valuation_lease_expires_at=None,
+            failure_reason="Expired valuation claim lease exceeded max attempts",
             updated_at=func.now(),
         )
         .execution_options(synchronize_session=False)
@@ -951,36 +969,37 @@ def _failed_stale_jobs_update_stmt(
 
 def _reset_stale_jobs_update_stmt(
     reset_job_ids: list[int],
-    stale_threshold: datetime,
 ):
     return (
-        _stale_jobs_update_stmt(reset_job_ids, stale_threshold)
+        _stale_jobs_update_stmt(reset_job_ids)
         .values(
             status="PENDING",
             requeue_requested=False,
+            valuation_lease_owner=None,
             valuation_claim_token=None,
+            valuation_lease_expires_at=None,
             updated_at=func.now(),
         )
         .returning(PortfolioValuationJob.id)
     )
 
 
-def _stale_jobs_update_stmt(job_ids: list[int], stale_threshold: datetime):
+def _stale_jobs_update_stmt(job_ids: list[int]):
     return update(PortfolioValuationJob).where(
         PortfolioValuationJob.id.in_(job_ids),
         PortfolioValuationJob.status == "PROCESSING",
-        PortfolioValuationJob.updated_at < stale_threshold,
+        PortfolioValuationJob.valuation_lease_expires_at <= func.now(),
     )
 
 
 def _dispatch_failed_valuation_jobs_update_stmt(
     *,
-    job_ids: list[int],
+    job_claims: list[tuple[int, str]],
     max_attempts: int,
     failure_reason: str,
 ):
     return (
-        _dispatch_recovery_valuation_jobs_update_stmt(job_ids)
+        _dispatch_recovery_valuation_jobs_update_stmt(job_claims)
         .where(
             PortfolioValuationJob.attempt_count >= max_attempts,
             PortfolioValuationJob.requeue_requested.is_(False),
@@ -988,7 +1007,9 @@ def _dispatch_failed_valuation_jobs_update_stmt(
         .values(
             status="FAILED",
             requeue_requested=False,
+            valuation_lease_owner=None,
             valuation_claim_token=None,
+            valuation_lease_expires_at=None,
             failure_reason=failure_reason,
             updated_at=func.now(),
         )
@@ -998,12 +1019,12 @@ def _dispatch_failed_valuation_jobs_update_stmt(
 
 def _dispatch_retryable_valuation_jobs_update_stmt(
     *,
-    job_ids: list[int],
+    job_claims: list[tuple[int, str]],
     max_attempts: int,
     failure_reason: str,
 ):
     return (
-        _dispatch_recovery_valuation_jobs_update_stmt(job_ids)
+        _dispatch_recovery_valuation_jobs_update_stmt(job_claims)
         .where(
             or_(
                 PortfolioValuationJob.attempt_count < max_attempts,
@@ -1013,7 +1034,9 @@ def _dispatch_retryable_valuation_jobs_update_stmt(
         .values(
             status="PENDING",
             requeue_requested=False,
+            valuation_lease_owner=None,
             valuation_claim_token=None,
+            valuation_lease_expires_at=None,
             failure_reason=failure_reason,
             updated_at=func.now(),
         )
@@ -1021,8 +1044,11 @@ def _dispatch_retryable_valuation_jobs_update_stmt(
     )
 
 
-def _dispatch_recovery_valuation_jobs_update_stmt(job_ids: list[int]):
+def _dispatch_recovery_valuation_jobs_update_stmt(job_claims: list[tuple[int, str]]):
     return update(PortfolioValuationJob).where(
-        PortfolioValuationJob.id.in_(job_ids),
+        tuple_(PortfolioValuationJob.id, PortfolioValuationJob.valuation_claim_token).in_(
+            job_claims
+        ),
         PortfolioValuationJob.status == "PROCESSING",
+        PortfolioValuationJob.valuation_lease_expires_at > func.now(),
     )

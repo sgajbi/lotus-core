@@ -429,6 +429,7 @@ class OperationsService:
         to_currency: str | None = None,
         reference_now: datetime | None = None,
         stale_threshold_minutes: int = DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
+        stale_deadline: datetime | None = None,
     ) -> SupportJobRecord:
         return build_support_job_record(
             job_id=job_id,
@@ -446,6 +447,7 @@ class OperationsService:
             to_currency=to_currency,
             reference_now=reference_now,
             stale_threshold_minutes=stale_threshold_minutes,
+            stale_deadline=stale_deadline,
         )
 
     async def _ensure_portfolio_exists(self, portfolio_id: str) -> None:
@@ -967,6 +969,7 @@ class OperationsService:
                     failure_reason=job.failure_reason,
                     reference_now=generated_at_utc,
                     stale_threshold_minutes=stale_threshold_minutes,
+                    stale_deadline=job.valuation_lease_expires_at,
                 )
                 for job in jobs
             ],
@@ -1031,6 +1034,7 @@ class OperationsService:
                     failure_reason=job.failure_reason,
                     reference_now=generated_at_utc,
                     stale_threshold_minutes=stale_threshold_minutes,
+                    stale_deadline=job.lease_expires_at,
                 )
                 for job in jobs
             ],

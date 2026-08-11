@@ -5,7 +5,6 @@ from decimal import Decimal
 
 import pytest
 import pytest_asyncio
-from portfolio_common import valuation_repository_base as valuation_repository_base_module
 from portfolio_common.database_models import (
     BusinessDate,
     DailyPositionSnapshot,
@@ -19,7 +18,7 @@ from portfolio_common.database_models import (
 )
 from portfolio_common.valuation_job_contracts import ValuationJobTransitionOutcome
 from portfolio_common.valuation_job_repository import ValuationJobRepository, ValuationJobUpsert
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import Session
 
@@ -29,15 +28,17 @@ from src.services.calculators.position_valuation_calculator.app.repositories.val
 
 pytestmark = pytest.mark.asyncio
 
-FIXED_STALE_NOW = datetime(2025, 8, 30, 12, 0, tzinfo=timezone.utc)
 
-
-class _FixedDateTime(datetime):
-    @classmethod
-    def now(cls, tz=None):
-        if tz is None:
-            return FIXED_STALE_NOW.replace(tzinfo=None)
-        return FIXED_STALE_NOW.astimezone(tz)
+def _valuation_lease(
+    token: str = "a" * 32,
+    *,
+    expires_at: datetime | None = None,
+) -> dict[str, object]:
+    return {
+        "valuation_lease_owner": "valuation-integration-test",
+        "valuation_claim_token": token,
+        "valuation_lease_expires_at": expires_at or datetime.now(timezone.utc) + timedelta(hours=1),
+    }
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -50,7 +51,7 @@ async def setup_stale_job_data(clean_db, session_factory: async_sessionmaker):
     - One stale 'COMPLETE' job (should not be reset).
     """
     async with session_factory() as session:
-        now = FIXED_STALE_NOW
+        now = datetime.now(timezone.utc)
         stale_time = now - timedelta(minutes=30)
 
         jobs = [
@@ -60,6 +61,7 @@ async def setup_stale_job_data(clean_db, session_factory: async_sessionmaker):
                 valuation_date=date(2025, 8, 1),
                 status="PROCESSING",
                 updated_at=stale_time,
+                **_valuation_lease(expires_at=stale_time),
             ),
             PortfolioValuationJob(
                 portfolio_id="P2",
@@ -67,6 +69,7 @@ async def setup_stale_job_data(clean_db, session_factory: async_sessionmaker):
                 valuation_date=date(2025, 8, 1),
                 status="PROCESSING",
                 updated_at=now,
+                **_valuation_lease("b" * 32, expires_at=now + timedelta(hours=1)),
             ),
             PortfolioValuationJob(
                 portfolio_id="P3",
@@ -742,9 +745,7 @@ async def test_find_and_reset_stale_jobs(
 
     async with session_factory() as session:
         repo = ValuationRepository(session)
-        with pytest.MonkeyPatch.context() as mp:
-            mp.setattr(valuation_repository_base_module, "datetime", _FixedDateTime)
-            reset_count = await repo.find_and_reset_stale_jobs(timeout_minutes=15, max_attempts=3)
+        reset_count = await repo.find_and_reset_stale_jobs(max_attempts=3)
         await session.commit()
     assert reset_count == 1
 
@@ -781,9 +782,7 @@ async def test_find_and_reset_stale_jobs_marks_over_limit_rows_failed(
 ):
     async with session_factory() as session:
         repo = ValuationRepository(session)
-        with pytest.MonkeyPatch.context() as mp:
-            mp.setattr(valuation_repository_base_module, "datetime", _FixedDateTime)
-            reset_count = await repo.find_and_reset_stale_jobs(timeout_minutes=15, max_attempts=0)
+        reset_count = await repo.find_and_reset_stale_jobs(max_attempts=0)
         await session.commit()
 
     assert reset_count == 0
@@ -795,14 +794,14 @@ async def test_find_and_reset_stale_jobs_marks_over_limit_rows_failed(
             )
         ).scalar_one()
         assert job1.status == "FAILED"
-        assert job1.failure_reason == "Stale processing timeout exceeded max attempts"
+        assert job1.failure_reason == "Expired valuation claim lease exceeded max attempts"
 
 
 @pytest.mark.lifecycle
 async def test_find_and_reset_stale_jobs_skips_superseded_stale_processing_rows(
     clean_db, async_db_session: AsyncSession
 ):
-    stale_time = FIXED_STALE_NOW - timedelta(minutes=30)
+    stale_time = datetime.now(timezone.utc) - timedelta(minutes=30)
     async_db_session.add_all(
         [
             PortfolioValuationJob(
@@ -813,6 +812,7 @@ async def test_find_and_reset_stale_jobs_skips_superseded_stale_processing_rows(
                 status="PROCESSING",
                 updated_at=stale_time,
                 correlation_id="corr-old",
+                **_valuation_lease(expires_at=stale_time),
             ),
             PortfolioValuationJob(
                 portfolio_id="P-SUPERSEDE-STALE",
@@ -820,7 +820,7 @@ async def test_find_and_reset_stale_jobs_skips_superseded_stale_processing_rows(
                 valuation_date=date(2025, 8, 11),
                 epoch=2,
                 status="COMPLETE",
-                updated_at=FIXED_STALE_NOW,
+                updated_at=datetime.now(timezone.utc),
                 correlation_id="corr-new",
             ),
         ]
@@ -828,9 +828,7 @@ async def test_find_and_reset_stale_jobs_skips_superseded_stale_processing_rows(
     await async_db_session.commit()
 
     repo = ValuationRepository(async_db_session)
-    with pytest.MonkeyPatch.context() as mp:
-        mp.setattr(valuation_repository_base_module, "datetime", _FixedDateTime)
-        reset_count = await repo.find_and_reset_stale_jobs(timeout_minutes=15, max_attempts=3)
+    reset_count = await repo.find_and_reset_stale_jobs(max_attempts=3)
     await async_db_session.commit()
 
     assert reset_count == 0
@@ -887,15 +885,19 @@ async def test_find_and_reset_stale_jobs_does_not_overwrite_completed_rows(
                     await concurrent_session.execute(
                         update(PortfolioValuationJob)
                         .where(PortfolioValuationJob.id == job_id)
-                        .values(status="COMPLETE", updated_at=FIXED_STALE_NOW)
+                        .values(
+                            status="COMPLETE",
+                            valuation_lease_owner=None,
+                            valuation_claim_token=None,
+                            valuation_lease_expires_at=None,
+                            updated_at=func.now(),
+                        )
                     )
                     await concurrent_session.commit()
             return await original_execute(*args, **kwargs)
 
         session.execute = execute_with_concurrent_completion
-        with pytest.MonkeyPatch.context() as mp:
-            mp.setattr(valuation_repository_base_module, "datetime", _FixedDateTime)
-            reset_count = await repo.find_and_reset_stale_jobs(timeout_minutes=15, max_attempts=3)
+        reset_count = await repo.find_and_reset_stale_jobs(max_attempts=3)
         await session.commit()
 
     assert reset_count == 0
@@ -1403,6 +1405,7 @@ async def test_upsert_job_does_not_rearm_processing_job_with_same_source_correct
             correlation_id="corr-active",
             source_correction_id="sha256:" + ("a" * 64),
             attempt_count=1,
+            **_valuation_lease("c" * 32),
         )
     )
     await async_db_session.commit()
@@ -1456,6 +1459,7 @@ async def test_source_correction_defers_in_flight_claim_and_requeues_after_compl
             correlation_id="shared-transport-correlation",
             source_correction_id="sha256:" + ("b" * 64),
             attempt_count=1,
+            **_valuation_lease("d" * 32),
         )
     )
     await async_db_session.commit()
@@ -1498,6 +1502,7 @@ async def test_source_correction_defers_in_flight_claim_and_requeues_after_compl
         valuation_date=job.valuation_date,
         epoch=job.epoch,
         status="COMPLETE",
+        expected_claim_token="d" * 32,
     )
     await async_db_session.commit()
     await async_db_session.refresh(job)
@@ -1521,6 +1526,7 @@ async def test_job_status_transition_distinguishes_terminal_owner_from_stale_del
         epoch=2,
         status="PROCESSING",
         attempt_count=1,
+        **_valuation_lease("e" * 32),
     )
     async_db_session.add(job)
     await async_db_session.commit()
@@ -1531,6 +1537,7 @@ async def test_job_status_transition_distinguishes_terminal_owner_from_stale_del
         valuation_date=job.valuation_date,
         epoch=job.epoch,
         status="COMPLETE",
+        expected_claim_token="e" * 32,
     )
     stale_delivery = await repo.update_job_status(
         portfolio_id=job.portfolio_id,
@@ -1569,13 +1576,13 @@ async def test_reclaimed_valuation_claim_rejects_late_prior_owner(
         await first_session.execute(
             update(PortfolioValuationJob)
             .where(PortfolioValuationJob.id == first_claim.id)
-            .values(updated_at=datetime(2000, 1, 1, tzinfo=timezone.utc))
+            .values(valuation_lease_expires_at=func.now() - timedelta(seconds=1))
         )
         await first_session.commit()
 
         async with session_factory() as second_session:
             second_repo = ValuationRepository(second_session)
-            assert await second_repo.find_and_reset_stale_jobs(1, max_attempts=3) == 1
+            assert await second_repo.find_and_reset_stale_jobs(max_attempts=3) == 1
             await second_session.commit()
             second_claim = (await second_repo.find_and_claim_eligible_jobs(1))[0]
             second_token = second_claim.valuation_claim_token
@@ -1598,6 +1605,94 @@ async def test_reclaimed_valuation_claim_rejects_late_prior_owner(
             )
             await second_session.commit()
             assert applied_outcome is ValuationJobTransitionOutcome.TERMINAL_APPLIED
+
+
+async def test_expired_valuation_claim_rejects_same_token_terminal_write(
+    async_db_session: AsyncSession,
+    clean_db,
+) -> None:
+    scope = {
+        "portfolio_id": "P-EXPIRED-CLAIM",
+        "security_id": "S-EXPIRED-CLAIM",
+        "valuation_date": date(2025, 8, 12),
+        "epoch": 1,
+    }
+    async_db_session.add(PortfolioValuationJob(**scope, status="PENDING"))
+    await async_db_session.commit()
+    repo = ValuationRepository(async_db_session)
+    claim = (
+        await repo.find_and_claim_eligible_jobs(
+            1,
+            lease_owner="valuation-expiry-integration-test",
+            lease_duration_seconds=60,
+        )
+    )[0]
+    claim_token = claim.valuation_claim_token
+    assert claim_token is not None
+    await async_db_session.commit()
+    await async_db_session.execute(
+        update(PortfolioValuationJob)
+        .where(PortfolioValuationJob.id == claim.id)
+        .values(valuation_lease_expires_at=func.now() - timedelta(seconds=1))
+    )
+    await async_db_session.commit()
+
+    outcome = await repo.update_job_status(
+        **scope,
+        status="COMPLETE",
+        expected_claim_token=claim_token,
+    )
+    await async_db_session.commit()
+    await async_db_session.refresh(claim)
+
+    assert outcome is ValuationJobTransitionOutcome.NOT_OWNED
+    assert claim.status == "PROCESSING"
+    assert claim.valuation_claim_token == claim_token
+
+
+async def test_dispatch_recovery_cannot_release_a_reclaimed_valuation_job(
+    async_db_session: AsyncSession,
+    clean_db,
+) -> None:
+    async_db_session.add(
+        PortfolioValuationJob(
+            portfolio_id="P-DISPATCH-FENCE",
+            security_id="S-DISPATCH-FENCE",
+            valuation_date=date(2025, 8, 12),
+            epoch=1,
+            status="PENDING",
+        )
+    )
+    await async_db_session.commit()
+    repo = ValuationRepository(async_db_session)
+    first_claim = (await repo.find_and_claim_eligible_jobs(1))[0]
+    first_token = first_claim.valuation_claim_token
+    assert first_token is not None
+    await async_db_session.commit()
+    await async_db_session.execute(
+        update(PortfolioValuationJob)
+        .where(PortfolioValuationJob.id == first_claim.id)
+        .values(valuation_lease_expires_at=func.now() - timedelta(seconds=1))
+    )
+    await async_db_session.commit()
+    assert await repo.find_and_reset_stale_jobs(max_attempts=3) == 1
+    await async_db_session.commit()
+    second_claim = (await repo.find_and_claim_eligible_jobs(1))[0]
+    second_token = second_claim.valuation_claim_token
+    assert second_token is not None and second_token != first_token
+    await async_db_session.commit()
+
+    recovery = await repo.recover_dispatch_failed_jobs(
+        [(first_claim.id, first_token)],
+        max_attempts=3,
+        failure_reason="late first-owner dispatch recovery",
+    )
+    await async_db_session.commit()
+    await async_db_session.refresh(second_claim)
+
+    assert recovery == {"pending_count": 0, "failed_count": 0}
+    assert second_claim.status == "PROCESSING"
+    assert second_claim.valuation_claim_token == second_token
 
 
 async def test_completed_job_requires_explicit_source_correction_rearm(
@@ -1766,6 +1861,7 @@ async def test_find_and_claim_eligible_jobs_enforces_in_flight_limit(
                 epoch=1,
                 status="PROCESSING" if index < 3 else "PENDING",
                 correlation_id=f"corr-val-cap-{index}",
+                **(_valuation_lease(f"{index + 1:032x}") if index < 3 else {}),
             )
             for index in range(5)
         ]
@@ -2045,6 +2141,7 @@ async def test_get_latest_business_date_prefers_calendar_over_future_processing_
                 valuation_date=date(2026, 6, 17),
                 epoch=0,
                 status="PROCESSING",
+                **_valuation_lease("f" * 32),
             ),
             DailyPositionSnapshot(
                 portfolio_id="P-CALENDAR-BOUND-1",
