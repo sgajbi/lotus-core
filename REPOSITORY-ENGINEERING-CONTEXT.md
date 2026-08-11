@@ -3720,7 +3720,9 @@ Most relevant current governance:
      manifest/finding/transaction payloads, complete child-ID arrays, release members, lease
      owners, or lease tokens. Preserve the established FastAPI, Pydantic, SQLAlchemy, PostgreSQL,
      Alembic, Kafka, and Prometheus stack; a new framework, datastore, deployable, or image requires
-     measured capacity, isolation, security, or operability evidence.
+     measured capacity, isolation, security, or operability evidence. Release telemetry uses only
+     the bounded `outcome` label on cycle count/duration and lease-renewal count; identifiers and
+     stable reason detail belong in the support API and structured logs.
 
 ## Context Maintenance Rule
 

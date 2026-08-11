@@ -147,6 +147,8 @@ progress without raw manifest/finding/transaction payloads, child-ID arrays, mem
 owner, or lease token. It requires `core.support.read`, authenticated tenant equality, and an exact
 legal-book scope. The capability is intentionally tenant-wide privileged operator authority; the
 book parameter narrows the result. A valid empty or filter-empty scope returns `200 total=0`.
+Release cycle, duration, and lease-renewal metrics use only a bounded `outcome` label; use this API,
+not metric identifiers, for portfolio/event drill-through.
 
 ## Copy-paste examples
 

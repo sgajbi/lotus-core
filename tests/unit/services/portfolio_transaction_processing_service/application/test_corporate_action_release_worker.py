@@ -4,7 +4,7 @@ import asyncio
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -133,6 +133,7 @@ def _worker(
     process: AsyncMock,
     *,
     lease_duration_seconds: int = 60,
+    observer=None,
 ):
     units = []
 
@@ -148,6 +149,7 @@ def _worker(
             lease_owner="worker-1",
             lease_duration_seconds=lease_duration_seconds,
             token_factory=lambda: "d" * 64,
+            **({"observer": observer} if observer is not None else {}),
         ),
         units,
     )
@@ -319,7 +321,13 @@ async def test_heartbeat_lease_loss_cancels_slow_processing_before_progress() ->
 
     process.execute.side_effect = slow_processing
     releases = _Releases(claim=_claim(), renew_result=False)
-    worker, _units = _worker(releases, process, lease_duration_seconds=1)
+    observer = MagicMock()
+    worker, _units = _worker(
+        releases,
+        process,
+        lease_duration_seconds=1,
+        observer=observer,
+    )
 
     with pytest.raises(TransactionProcessingError) as raised:
         await asyncio.wait_for(worker.execute(), timeout=2)
@@ -329,3 +337,5 @@ async def test_heartbeat_lease_loss_cancels_slow_processing_before_progress() ->
     assert processing_cancelled.is_set()
     assert releases.advance_calls == []
     assert releases.fail_calls == []
+    observer.observe_lease_renewal.assert_called_once()
+    assert observer.observe_lease_renewal.call_args.args[0].value == "lost"

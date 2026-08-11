@@ -38,6 +38,9 @@ from ..infrastructure.cashflow import CashflowRuleCache
 from ..infrastructure.corporate_action_event_graph import (
     SqlAlchemyCorporateActionEventGraphUnitOfWork,
 )
+from ..infrastructure.corporate_action_release_observability import (
+    PROMETHEUS_CORPORATE_ACTION_RELEASE_OBSERVER,
+)
 from ..infrastructure.cost_basis import (
     PROMETHEUS_CORPORATE_ACTION_RECONCILIATION_OBSERVER,
     PROMETHEUS_COST_BASIS_CALCULATION_OBSERVER,
@@ -222,4 +225,5 @@ def build_corporate_action_release_worker_use_case(
             else build_process_transaction_use_case(session_factory=resolved_session_factory)
         ),
         lease_owner=lease_owner or f"{socket.gethostname()}:{os.getpid()}",
+        observer=PROMETHEUS_CORPORATE_ACTION_RELEASE_OBSERVER,
     )

@@ -16,6 +16,9 @@ from portfolio_common.kafka_utils import create_kafka_producer
 from portfolio_common.outbox_dispatcher import OutboxDispatcher
 from portfolio_common.worker_runtime import run_kafka_worker_runtime
 
+from ..infrastructure.corporate_action_release_observability import (
+    PROMETHEUS_CORPORATE_ACTION_RELEASE_OBSERVER,
+)
 from ..web import WORKER_READINESS_SERVICE_NAME
 from ..web import app as web_app
 from .consumer_composition import build_transaction_processing_consumers
@@ -44,7 +47,10 @@ class ConsumerManager:
         self.release_worker = (
             release_worker
             if release_worker is not None
-            else CorporateActionReleaseWorker(build_corporate_action_release_worker_use_case())
+            else CorporateActionReleaseWorker(
+                build_corporate_action_release_worker_use_case(),
+                observer=PROMETHEUS_CORPORATE_ACTION_RELEASE_OBSERVER,
+            )
         )
         self.tasks: list[asyncio.Task[Any]] = []
         self._shutdown_event = asyncio.Event()
