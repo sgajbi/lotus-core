@@ -40,8 +40,11 @@ from src.services.portfolio_transaction_processing_service.app.application impor
     CorporateActionReleaseProgressOutcome,
     CorporateActionReleaseWorkerStatus,
     ProcessNextCorporateActionReleaseUseCase,
+    ProcessTransactionCommand,
     ProcessTransactionResult,
+    RouteCorporateActionChildArrivalUseCase,
     StaleCorporateActionExecutionPlanError,
+    TransactionEventMetadata,
     TransactionProcessingStatus,
 )
 from src.services.portfolio_transaction_processing_service.app.domain import (
@@ -584,6 +587,11 @@ async def test_ready_release_materialization_freezes_payload_authority_and_repla
     assert claimed.fence_token == 1
     assert claimed.attempt_count == 1
     assert claimed.next_member.execution_ordinal == 0
+    assert await releases.renew_lease(
+        release_id=claimed.release_id,
+        lease=first_lease,
+        fence_token=claimed.fence_token,
+    )
     loaded = await releases.load_owned_transaction(claimed)
     assert loaded.transaction_id == claimed.next_member.transaction_id
     assert (
@@ -596,6 +604,11 @@ async def test_ready_release_materialization_freezes_payload_authority_and_repla
         owner="corporate-action-worker-02",
         token="b" * 64,
         duration_seconds=300,
+    )
+    assert not await releases.renew_lease(
+        release_id=claimed.release_id,
+        lease=contender_lease,
+        fence_token=claimed.fence_token,
     )
     assert await releases.claim_next(contender_lease) is None
     await async_db_session.execute(
@@ -861,6 +874,92 @@ async def test_real_postgres_worker_drains_release_without_lease_expiry_wait(
     assert persisted_release.status == "COMPLETE"
     assert persisted_release.attempt_count == 1
     assert persisted_release.next_execution_ordinal == len(manifest.expected_children)
+
+
+async def test_ready_observation_rolls_back_when_release_authority_cannot_materialize(
+    clean_db,
+    db_engine: Engine,
+    async_db_session: AsyncSession,
+) -> None:
+    """Never commit READY graph state without its immutable execution release."""
+
+    _apply_migration(db_engine)
+    await _seed_portfolio(async_db_session)
+    manifest = _manifest()
+    await _seed_transactions(async_db_session, manifest.expected_children)
+    await async_db_session.execute(
+        update(TransactionRecord)
+        .where(TransactionRecord.portfolio_id == manifest.portfolio_id)
+        .values(
+            economic_event_id=manifest.corporate_action_event_id,
+            linked_transaction_group_id=manifest.linked_transaction_group_id,
+            parent_event_reference=manifest.parent_event_reference,
+        )
+    )
+    graph = SqlAlchemyCorporateActionEventGraphRepository(async_db_session)
+    assert await graph.append_manifest(manifest) is CorporateActionManifestAppendOutcome.APPENDED
+    first_child, final_child = manifest.expected_children
+    await graph.observe_child(
+        await _persisted_observation(
+            async_db_session,
+            manifest,
+            first_child,
+            delivery_event_id="atomic-ready-first",
+        )
+    )
+    await async_db_session.commit()
+
+    persisted = await async_db_session.scalar(
+        select(TransactionRecord).where(
+            TransactionRecord.transaction_id == final_child.transaction_id
+        )
+    )
+    assert persisted is not None
+    source_transaction = replace(
+        to_booked_transaction(TransactionEvent.model_validate(persisted)),
+        epoch=1,
+    )
+    drifted_arrival = replace(
+        source_transaction,
+        quantity=source_transaction.quantity + 1,
+        child_role=final_child.child_role,
+        child_sequence_hint=final_child.child_sequence_hint,
+        dependency_reference_ids=final_child.dependency_transaction_ids,
+        source_instrument_id=final_child.source_instrument_id,
+        target_instrument_id=final_child.target_instrument_id,
+    )
+    bind = async_db_session.bind
+    assert bind is not None
+    session_factory = async_sessionmaker(bind, expire_on_commit=False)
+    route_arrival = RouteCorporateActionChildArrivalUseCase(
+        lambda: SqlAlchemyCorporateActionEventGraphUnitOfWork(session_factory)
+    )
+
+    with pytest.raises(StaleCorporateActionExecutionPlanError, match="payload differs"):
+        await route_arrival.execute(
+            ProcessTransactionCommand(
+                transaction=drifted_arrival,
+                metadata=TransactionEventMetadata(event_id="atomic-ready-final"),
+            )
+        )
+
+    async_db_session.expire_all()
+    event = await async_db_session.scalar(select(CorporateActionEventRecord))
+    assert event is not None
+    assert event.readiness_status == "AWAITING_CHILDREN"
+    assert event.last_observation_sequence == 1
+    assert (
+        await async_db_session.scalar(
+            select(func.count()).select_from(CorporateActionChildObservationRecord)
+        )
+        == 1
+    )
+    assert (
+        await async_db_session.scalar(
+            select(func.count()).select_from(CorporateActionExecutionReleaseRecord)
+        )
+        == 0
+    )
 
 
 async def test_thousand_member_release_drains_with_bounded_progress_validation(
