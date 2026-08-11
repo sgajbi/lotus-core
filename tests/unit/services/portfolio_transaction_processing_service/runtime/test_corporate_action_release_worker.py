@@ -7,6 +7,7 @@ import pytest
 from asyncpg import (
     CannotConnectNowError,
     ConnectionDoesNotExistError,
+    QueryCanceledError,
     UniqueViolationError,
 )
 from sqlalchemy.exc import SQLAlchemyError
@@ -100,12 +101,22 @@ async def test_database_failure_retries_without_terminating_runtime(
 
 
 @pytest.mark.asyncio
-async def test_non_transient_driver_error_terminates_worker() -> None:
+@pytest.mark.parametrize(
+    "database_error",
+    [
+        UniqueViolationError("constraint violation"),
+        QueryCanceledError("statement cancelled"),
+    ],
+    ids=("integrity-error", "query-cancelled"),
+)
+async def test_non_transient_driver_error_terminates_worker(
+    database_error: Exception,
+) -> None:
     use_case = AsyncMock()
-    use_case.execute.side_effect = UniqueViolationError("constraint violation")
+    use_case.execute.side_effect = database_error
     worker = CorporateActionReleaseWorker(use_case)
 
-    with pytest.raises(UniqueViolationError, match="constraint violation"):
+    with pytest.raises(type(database_error), match=str(database_error)):
         await worker.run()
 
 

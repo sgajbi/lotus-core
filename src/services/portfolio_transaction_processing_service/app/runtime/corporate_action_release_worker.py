@@ -7,7 +7,13 @@ import logging
 from collections.abc import Callable
 from time import monotonic
 
-from asyncpg import OperatorInterventionError, PostgresConnectionError, TooManyConnectionsError
+from asyncpg import (
+    AdminShutdownError,
+    CannotConnectNowError,
+    CrashShutdownError,
+    PostgresConnectionError,
+    TooManyConnectionsError,
+)
 from sqlalchemy.exc import SQLAlchemyError
 
 from ..application import (
@@ -26,7 +32,9 @@ logger = logging.getLogger(__name__)
 _RETRYABLE_DATABASE_ERRORS = (
     SQLAlchemyError,
     PostgresConnectionError,
-    OperatorInterventionError,
+    CannotConnectNowError,
+    AdminShutdownError,
+    CrashShutdownError,
     TooManyConnectionsError,
 )
 
