@@ -7,6 +7,7 @@ import logging
 from collections.abc import Callable
 from time import monotonic
 
+from asyncpg import OperatorInterventionError, PostgresConnectionError, TooManyConnectionsError
 from sqlalchemy.exc import SQLAlchemyError
 
 from ..application import (
@@ -21,6 +22,13 @@ from ..ports.corporate_action_release_observability import (
 )
 
 logger = logging.getLogger(__name__)
+
+_RETRYABLE_DATABASE_ERRORS = (
+    SQLAlchemyError,
+    PostgresConnectionError,
+    OperatorInterventionError,
+    TooManyConnectionsError,
+)
 
 
 class CorporateActionReleaseWorker:
@@ -62,7 +70,7 @@ class CorporateActionReleaseWorker:
                 )
                 await self._wait(self._retry_backoff_seconds)
                 continue
-            except SQLAlchemyError:
+            except _RETRYABLE_DATABASE_ERRORS:
                 self._observe_cycle(
                     CorporateActionReleaseCycleOutcome.DATABASE_ERROR,
                     started_at,
