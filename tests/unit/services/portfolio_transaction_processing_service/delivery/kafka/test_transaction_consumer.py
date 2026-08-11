@@ -14,6 +14,8 @@ from portfolio_common.kafka_consumer_execution import KafkaConsumerExecutionProf
 from sqlalchemy.exc import IntegrityError
 
 from src.services.portfolio_transaction_processing_service.app.application import (
+    CorporateActionArrivalDisposition,
+    CorporateActionArrivalResult,
     ProcessTransactionResult,
     TransactionProcessingError,
     TransactionProcessingIntent,
@@ -58,12 +60,25 @@ def json_bytes(payload: dict[str, str]) -> bytes:
     return json.dumps(payload).encode("utf-8")
 
 
-def _consumer(use_case: AsyncMock) -> TransactionProcessingConsumer:
+def _ordinary_arrival() -> AsyncMock:
+    route = AsyncMock()
+    route.execute.return_value = CorporateActionArrivalResult(
+        CorporateActionArrivalDisposition.ORDINARY
+    )
+    return route
+
+
+def _consumer(
+    use_case: AsyncMock,
+    *,
+    route_corporate_action_child: AsyncMock | None = None,
+) -> TransactionProcessingConsumer:
     return TransactionProcessingConsumer(
         bootstrap_servers="mock_server",
         topic="transactions.persisted",
         group_id="portfolio_transaction_processing_group",
         use_case=use_case,
+        route_corporate_action_child=route_corporate_action_child or _ordinary_arrival(),
     )
 
 
@@ -88,6 +103,19 @@ async def test_consumer_maps_source_lineage_and_invokes_combined_use_case_once()
     )
     assert command.metadata.processing_intent is TransactionProcessingIntent.STANDARD
     use_case.execute.assert_awaited_once()
+
+
+async def test_consumer_acknowledges_parked_child_without_financial_mutation() -> None:
+    use_case = AsyncMock()
+    route = AsyncMock()
+    route.execute.return_value = CorporateActionArrivalResult(
+        CorporateActionArrivalDisposition.PARKED
+    )
+
+    await _consumer(use_case, route_corporate_action_child=route).process_message(_message())
+
+    route.execute.assert_awaited_once()
+    use_case.execute.assert_not_awaited()
 
 
 async def test_consumer_maps_canonical_repair_header_to_application_intent() -> None:
@@ -196,6 +224,7 @@ async def test_consumer_exhausts_owned_dependency_budget_without_runtime_restart
         group_id="portfolio_transaction_processing_group",
         dlq_topic="dlq.persistence_service",
         use_case=use_case,
+        route_corporate_action_child=_ordinary_arrival(),
         execution_profile=KafkaConsumerExecutionProfile(retryable_failure_backoff_seconds=0.001),
         retryable_failure_max_attempts=2,
     )

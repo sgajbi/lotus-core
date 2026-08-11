@@ -43,9 +43,11 @@ def test_composition_builds_transaction_replay_authority_and_correction_consumer
     replay_use_case = MagicMock()
     authority_use_case = MagicMock()
     manifest_use_case = MagicMock()
+    arrival_use_case = MagicMock()
 
     consumers = consumer_composition.build_transaction_processing_consumers(
         process_transaction=process_use_case,
+        route_corporate_action_child=arrival_use_case,
         replay_booked_transaction=replay_use_case,
         handle_fixed_income_book_cost_authority=authority_use_case,
         handle_corporate_action_manifest=manifest_use_case,
@@ -71,6 +73,7 @@ def test_composition_builds_transaction_replay_authority_and_correction_consumer
     assert live["group_id"] == "portfolio_transaction_processing_group"
     assert live["service_prefix"] == "TXNPROC"
     assert live["use_case"] is process_use_case
+    assert live["route_corporate_action_child"] is arrival_use_case
     assert live["retryable_failure_max_elapsed_seconds"] == 30
     replay = calls[1][1]
     assert replay["topic"] == "transactions.reprocessing.requested"
@@ -109,6 +112,8 @@ def test_composition_builds_each_application_use_case_once(monkeypatch) -> None:
     authority_builder = MagicMock(return_value=authority_use_case)
     manifest_use_case = MagicMock()
     manifest_builder = MagicMock(return_value=manifest_use_case)
+    arrival_use_case = MagicMock()
+    arrival_builder = MagicMock(return_value=arrival_use_case)
     monkeypatch.setattr(
         consumer_composition,
         "build_process_transaction_use_case",
@@ -129,6 +134,11 @@ def test_composition_builds_each_application_use_case_once(monkeypatch) -> None:
         "build_corporate_action_manifest_use_case",
         manifest_builder,
     )
+    monkeypatch.setattr(
+        consumer_composition,
+        "build_corporate_action_child_arrival_use_case",
+        arrival_builder,
+    )
 
     consumer_composition.build_transaction_processing_consumers(
         transaction_consumer_factory=_recording_factory("live", calls),
@@ -144,7 +154,9 @@ def test_composition_builds_each_application_use_case_once(monkeypatch) -> None:
     replay_builder.assert_called_once_with()
     authority_builder.assert_called_once_with(correction_replay_enabled=True)
     manifest_builder.assert_called_once_with()
+    arrival_builder.assert_called_once_with()
     assert calls[0][1]["use_case"] is process_use_case
+    assert calls[0][1]["route_corporate_action_child"] is arrival_use_case
     assert calls[1][1]["use_case"] is replay_use_case
     assert calls[2][1]["use_case"] is authority_use_case
     assert calls[3][1]["use_case"] is replay_use_case
@@ -170,6 +182,7 @@ def test_composition_loads_independent_live_and_replay_execution_profiles() -> N
 
     consumer_composition.build_transaction_processing_consumers(
         process_transaction=MagicMock(),
+        route_corporate_action_child=MagicMock(),
         replay_booked_transaction=MagicMock(),
         handle_fixed_income_book_cost_authority=MagicMock(),
         handle_corporate_action_manifest=MagicMock(),

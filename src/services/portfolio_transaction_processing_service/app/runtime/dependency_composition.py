@@ -15,6 +15,7 @@ from ..application import (
     ProcessTransactionUseCase,
     ReconcileAverageCostPoolsUseCase,
     ReplayBookedTransactionUseCase,
+    RouteCorporateActionChildArrivalUseCase,
 )
 from ..application.corporate_action_event_graph import RegisterCorporateActionManifestUseCase
 from ..application.corporate_action_manifest_ingestion import (
@@ -186,3 +187,16 @@ def build_corporate_action_manifest_use_case(
         )
     )
     return HandleCorporateActionManifestEventUseCase(register_manifest)
+
+
+def build_corporate_action_child_arrival_use_case(
+    *,
+    session_factory: Callable[[], AsyncSession] | None = None,
+) -> RouteCorporateActionChildArrivalUseCase:
+    """Compose atomic child parking and READY release materialization."""
+
+    return RouteCorporateActionChildArrivalUseCase(
+        SqlAlchemyCorporateActionEventGraphUnitOfWorkFactory(
+            session_factory=session_factory or get_async_session_factory()
+        )
+    )

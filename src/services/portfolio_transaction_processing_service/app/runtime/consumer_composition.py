@@ -17,7 +17,11 @@ from portfolio_common.kafka_consumer_execution import (
     load_kafka_consumer_execution_profile,
 )
 
-from ..application import ProcessTransactionUseCase, ReplayBookedTransactionUseCase
+from ..application import (
+    ProcessTransactionUseCase,
+    ReplayBookedTransactionUseCase,
+    RouteCorporateActionChildArrivalUseCase,
+)
 from ..application.corporate_action_manifest_ingestion import (
     HandleCorporateActionManifestEventUseCase,
 )
@@ -32,6 +36,7 @@ from ..delivery.kafka import (
     TransactionProcessingConsumer,
 )
 from .dependency_composition import (
+    build_corporate_action_child_arrival_use_case,
     build_corporate_action_manifest_use_case,
     build_fixed_income_book_cost_authority_use_case,
     build_process_transaction_use_case,
@@ -57,6 +62,7 @@ ExecutionProfileLoader = Callable[[str], KafkaConsumerExecutionProfile]
 def build_transaction_processing_consumers(
     *,
     process_transaction: ProcessTransactionUseCase | None = None,
+    route_corporate_action_child: RouteCorporateActionChildArrivalUseCase | None = None,
     replay_booked_transaction: ReplayBookedTransactionUseCase | None = None,
     handle_fixed_income_book_cost_authority: (
         HandleFixedIncomeBookCostAuthorityEventUseCase | None
@@ -89,6 +95,11 @@ def build_transaction_processing_consumers(
         if handle_fixed_income_book_cost_authority is not None
         else build_fixed_income_book_cost_authority_use_case(correction_replay_enabled=True)
     )
+    corporate_action_arrival = (
+        route_corporate_action_child
+        if route_corporate_action_child is not None
+        else build_corporate_action_child_arrival_use_case()
+    )
     manifest_use_case = (
         handle_corporate_action_manifest
         if handle_corporate_action_manifest is not None
@@ -102,9 +113,7 @@ def build_transaction_processing_consumers(
     correction_replay_execution_profile = execution_profile_loader(
         FIXED_INCOME_BOOK_COST_CORRECTION_REPLAY_CONSUMER_GROUP
     )
-    manifest_execution_profile = execution_profile_loader(
-        CORPORATE_ACTION_MANIFEST_CONSUMER_GROUP
-    )
+    manifest_execution_profile = execution_profile_loader(CORPORATE_ACTION_MANIFEST_CONSUMER_GROUP)
     live_consumer = transaction_consumer_factory(
         bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
         dlq_topic=KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC,
@@ -112,6 +121,7 @@ def build_transaction_processing_consumers(
         group_id=TRANSACTION_PROCESSING_CONSUMER_GROUP,
         service_prefix="TXNPROC",
         use_case=process_use_case,
+        route_corporate_action_child=corporate_action_arrival,
         execution_profile=live_execution_profile,
         retryable_failure_max_elapsed_seconds=(TRANSACTION_DEPENDENCY_RETRY_MAX_ELAPSED_SECONDS),
     )
