@@ -1252,8 +1252,19 @@ timeout, recycle, concurrency, or partition change. API/OpenAPI, events, schemas
 calculations, ordering, and downstream contracts are unchanged. Repository context, operations
 guidance, and the existing Timeseries and Aggregation wiki are updated in place; no new standalone
 document or central Platform skill/context change is needed. Issues #502 and #795 remain open until
-non-regressing fan-in and exact daily evidence support a further capacity decision. Technology
-governance and vulnerability-release gaps remain explicitly owned by #720, #926, #927, and #928.
+exact daily evidence supports a further capacity decision. Exact clean diagnostic artifact
+`20260811T135023Z` completed 10 transactions in `10.062s` with `5/5` reconciled samples and zero
+unattributed sessions. Exact clean certifying fan-in artifact `20260811T135244Z` then reconciled all
+1,000 transactions, snapshots, and position rows plus one portfolio row in `80.814s` versus the
+retained `80.866s`; attempts stayed `2/2`, repeats stayed zero, jobs/outbox closed, and all `24/24`
+database samples reconciled with zero unattributed or ungoverned sessions. Peak aggregate
+connections/active/idle-in-transaction were `51/7/24`, with the largest idle-in-transaction peaks
+attributed to transaction processing (`9`), derived state (`7`), position valuation (`7`),
+persistence (`5`), and valuation orchestration (`4`); derived state owned the `1/1` lock/blocked
+peak. The slice therefore passes its non-regression retain gate and authorizes the exact daily
+profile without pre-authorizing pool, timeout, recycle, worker, concurrency, or partition changes.
+Technology governance and vulnerability-release gaps remain explicitly owned by #720, #926, #927,
+and #928.
 
 The PR #931 tranche boundary changes only delivery packaging and campaign chronology. It does not
 change runtime behavior or any API/OpenAPI, event, schema, migration, calculation, partition,
