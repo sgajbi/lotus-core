@@ -111,7 +111,7 @@ def _event_contract(evidence: CorporateActionEventEvidence) -> CorporateActionEv
             manifest_content_hash=readiness.manifest_content_hash,
             execution_plan_content_hash=readiness.execution_plan_content_hash,
             ordered_member_count=readiness.ordered_member_count,
-            finding_count=len(readiness.finding_reason_codes),
+            finding_count=readiness.finding_count,
             finding_reason_codes=list(readiness.finding_reason_codes),
             correlation_id=readiness.correlation_id,
             evaluated_at=readiness.evaluated_at,

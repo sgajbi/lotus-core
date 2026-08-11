@@ -144,6 +144,7 @@
         "GET /support/portfolios/{portfolio_id}/analytics-export-jobs",
         "GET /support/portfolios/{portfolio_id}/calculator-slos",
         "GET /support/portfolios/{portfolio_id}/control-stages",
+        "GET /support/portfolios/{portfolio_id}/corporate-action-events",
         "GET /support/load-runs/{run_id}",
         "GET /support/portfolios/{portfolio_id}/overview",
         "GET /support/portfolios/{portfolio_id}/readiness",

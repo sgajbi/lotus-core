@@ -15,6 +15,7 @@ from src.services.query_control_plane_service.app.enterprise_readiness import (
     authorize_request,
     build_enterprise_audit_middleware,
     emit_audit_event,
+    load_capability_rules,
     validate_enterprise_runtime_config,
 )
 
@@ -270,3 +271,27 @@ def test_control_plane_runtime_config_accepts_source_data_default_rules(monkeypa
 
     assert "missing_capability_rules" not in issues
     assert "missing_primary_key_id" not in issues
+
+
+def test_control_plane_capability_rules_include_corporate_action_support_read() -> None:
+    assert load_capability_rules()[
+        "GET /support/portfolios/{portfolio_id}/corporate-action-events"
+    ] == "core.support.read"
+
+
+def test_control_plane_authorize_request_enforces_corporate_action_support_read(monkeypatch):
+    monkeypatch.setenv("ENTERPRISE_ENFORCE_READ_AUTHZ", "true")
+    _configure_auth_context_env(monkeypatch)
+    path = "/support/portfolios/PB_SG_GLOBAL_BAL_001/corporate-action-events"
+
+    denied, denied_reason = authorize_request(
+        "GET", path, _signed_enterprise_headers("positions.read")
+    )
+    assert denied is False
+    assert denied_reason == "missing_capability:core.support.read"
+
+    allowed, allowed_reason = authorize_request(
+        "GET", path, _signed_enterprise_headers("core.support.read")
+    )
+    assert allowed is True
+    assert allowed_reason is None

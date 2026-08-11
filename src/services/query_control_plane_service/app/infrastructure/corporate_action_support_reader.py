@@ -165,6 +165,7 @@ def _readiness_evidence(record: Any) -> CorporateActionReadinessEvidence:
         manifest_content_hash=record.manifest_content_hash,
         execution_plan_content_hash=record.execution_plan_content_hash,
         ordered_member_count=len(record.ordered_transaction_ids),
+        finding_count=len(record.findings),
         finding_reason_codes=reason_codes,
         correlation_id=record.correlation_id,
         evaluated_at=record.created_at,

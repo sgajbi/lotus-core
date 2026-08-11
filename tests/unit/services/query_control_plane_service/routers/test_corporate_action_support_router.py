@@ -57,3 +57,30 @@ async def test_router_maps_absent_and_wrong_scope_to_same_not_found_problem() ->
     assert raised.value.status_code == 404
     assert raised.value.detail == "Requested corporate-action support scope was not found."
     assert "internal" not in raised.value.detail
+
+
+@pytest.mark.asyncio
+async def test_router_maps_validation_failures_to_bounded_problem_detail() -> None:
+    service = AsyncMock()
+    service.list_current.side_effect = ValueError("internal filter implementation detail")
+
+    with pytest.raises(QueryControlPlaneProblem) as raised:
+        await list_corporate_action_event_support(
+            portfolio_id="PORT-001",
+            tenant_id="TENANT-SG",
+            legal_book_id="PB-SG-01",
+            corporate_action_event_id=None,
+            readiness_status="UNKNOWN",
+            execution_status=None,
+            skip=0,
+            limit=50,
+            x_tenant_id="TENANT-SG",
+            service=service,
+        )
+
+    assert raised.value.status_code == 422
+    assert raised.value.error_code == "QCP_CORPORATE_ACTION_SUPPORT_INVALID"
+    assert raised.value.detail == (
+        "Requested corporate-action support filters or paging are invalid."
+    )
+    assert "internal" not in raised.value.detail
