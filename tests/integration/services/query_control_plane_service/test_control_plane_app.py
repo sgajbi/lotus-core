@@ -307,7 +307,7 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     corporate_action_parameters = {
         parameter["name"]: parameter for parameter in corporate_actions["parameters"]
     }
-    assert corporate_action_parameters["X-Tenant-Id"]["in"] == "header"
+    assert corporate_action_parameters["x-tenant-id"]["in"] == "header"
     assert corporate_action_parameters["tenant_id"]["required"] is True
     assert corporate_action_parameters["legal_book_id"]["required"] is True
     assert corporate_action_parameters["limit"]["schema"]["maximum"] == 100
