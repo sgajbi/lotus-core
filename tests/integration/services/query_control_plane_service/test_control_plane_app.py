@@ -190,6 +190,7 @@ async def test_openapi_contains_control_plane_endpoints(async_test_client):
     assert "/integration/portfolios/{portfolio_id}/core-snapshot" in paths
     assert "/support/portfolios/{portfolio_id}/overview" in paths
     assert "/support/portfolios/{portfolio_id}/readiness" in paths
+    assert "/support/portfolios/{portfolio_id}/corporate-action-events" in paths
     assert "/simulation-sessions/{session_id}" in paths
     assert "/integration/advisory/proposals/simulate-execution" in paths
     analytics_input_routes = {
@@ -252,6 +253,9 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
 
     overview = schema["paths"]["/support/portfolios/{portfolio_id}/overview"]["get"]
     readiness = schema["paths"]["/support/portfolios/{portfolio_id}/readiness"]["get"]
+    corporate_actions = schema["paths"][
+        "/support/portfolios/{portfolio_id}/corporate-action-events"
+    ]["get"]
     calculator_slos = schema["paths"]["/support/portfolios/{portfolio_id}/calculator-slos"]["get"]
     load_run_progress = schema["paths"]["/support/load-runs/{run_id}"]["get"]
     lineage = schema["paths"]["/lineage/portfolios/{portfolio_id}/securities/{security_id}"]["get"]
@@ -299,6 +303,22 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert "instead of inferring readiness from row counts" in readiness["description"]
     assert "supportability and readiness posture" in readiness["description"]
     assert "not calculation-grade portfolio analytics" in readiness["description"]
+
+    corporate_action_parameters = {
+        parameter["name"]: parameter for parameter in corporate_actions["parameters"]
+    }
+    assert corporate_action_parameters["X-Tenant-Id"]["in"] == "header"
+    assert corporate_action_parameters["tenant_id"]["required"] is True
+    assert corporate_action_parameters["legal_book_id"]["required"] is True
+    assert corporate_action_parameters["limit"]["schema"]["maximum"] == 100
+    assert "What:" in corporate_actions["description"]
+    assert "How:" in corporate_actions["description"]
+    assert "When:" in corporate_actions["description"]
+    assert {"200", "403", "404", "422"} <= set(corporate_actions["responses"])
+    invalid_support_request = corporate_actions["responses"]["422"]["content"][
+        "application/problem+json"
+    ]["example"]
+    assert invalid_support_request["error_code"] == "QCP_CORPORATE_ACTION_SUPPORT_INVALID"
 
     stale_threshold = next(
         parameter
