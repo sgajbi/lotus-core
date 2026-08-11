@@ -54,6 +54,26 @@ TRANSACTION_TYPES_WITHOUT_CASHFLOW_RULE = {
 }
 BUNDLE_A_OUT_TYPES = set(corporate_action.SOURCE_BASIS_TRANSFER_TRANSACTION_TYPES)
 BUNDLE_A_IN_TYPES = set(corporate_action.TARGET_BASIS_TRANSFER_TRANSACTION_TYPES)
+BUNDLE_A_TYPES = set(corporate_action.BASIS_TRANSFER_CORPORATE_ACTION_TYPES)
+BUNDLE_A_CHILD_ROLES = {
+    "SPIN_OFF": "SOURCE_POSITION_REDUCE",
+    "SPIN_IN": "TARGET_POSITION_ADD",
+    "DEMERGER_OUT": "SOURCE_POSITION_REDUCE",
+    "DEMERGER_IN": "TARGET_POSITION_ADD",
+    "CASH_CONSIDERATION": "CASH_CONSIDERATION",
+}
+BUNDLE_A_COHORTS = {
+    "SPIN_OFF": "SPIN",
+    "SPIN_IN": "SPIN",
+    "CASH_CONSIDERATION": "SPIN",
+    "DEMERGER_OUT": "DEMERGER",
+    "DEMERGER_IN": "DEMERGER",
+}
+REDEMPTION_TYPES = {
+    code
+    for code, definition in TRANSACTION_TYPE_REGISTRY.items()
+    if definition.production_booking_allowed and definition.lifecycle_family == "redemption"
+}
 MIN_E2E_CASHFLOW_DISTINCT_TYPES = 5
 
 
@@ -62,7 +82,11 @@ def iso_z(ts: datetime) -> str:
 
 
 def build_transaction_payloads(
-    portfolio_id: str, *, security_id: str, cash_security_id: str
+    portfolio_id: str,
+    *,
+    security_id: str,
+    cash_security_id: str,
+    redemption_security_ids: dict[str, str],
 ) -> list[dict]:
     """
     Generate one canonical payload per supported transaction type.
@@ -78,7 +102,13 @@ def build_transaction_payloads(
     for idx, tx_type in enumerate(sorted(SUPPORTED_TRANSACTION_TYPES)):
         ts = base_ts + timedelta(minutes=idx)
         tx_id = transaction_ids[tx_type]
-        resolved_security_id = cash_security_id if tx_type in CASH_INSTRUMENT_TYPES else security_id
+        resolved_security_id = (
+            cash_security_id
+            if tx_type in CASH_INSTRUMENT_TYPES
+            else redemption_security_ids[tx_type]
+            if tx_type in REDEMPTION_TYPES
+            else security_id
+        )
         quantity = Decimal("1")
         price = Decimal("10")
         gross = Decimal("100")
@@ -108,12 +138,21 @@ def build_transaction_payloads(
             "gross_transaction_amount": str(gross),
             "trade_currency": "USD",
             "currency": "USD",
-            "parent_event_reference": f"PARENT_{portfolio_id}",
-            "linked_parent_event_id": f"CA-EVT-{portfolio_id}",
             "economic_event_id": f"EVT-{portfolio_id}",
             "linked_transaction_group_id": f"LTG-{portfolio_id}",
             "trade_fee": str(trade_fee),
         }
+        if tx_type in BUNDLE_A_TYPES:
+            cohort = BUNDLE_A_COHORTS[tx_type]
+            event.update(
+                {
+                    "parent_event_reference": f"PARENT_{portfolio_id}_{cohort}",
+                    "linked_parent_event_id": f"CA-EVT-{portfolio_id}-{cohort}",
+                    "economic_event_id": f"EVT-{portfolio_id}-{cohort}",
+                    "linked_transaction_group_id": f"LTG-{portfolio_id}-{cohort}",
+                    "child_role": BUNDLE_A_CHILD_ROLES[tx_type],
+                }
+            )
         if tx_type in {"FX_FORWARD", "FX_SPOT", "FX_SWAP"}:
             event.update(
                 {
@@ -149,8 +188,22 @@ def build_transaction_payloads(
                 event["swap_event_id"] = f"{tx_id}-SWAP"
                 event["near_leg_group_id"] = f"{tx_id}-NEAR"
                 event["far_leg_group_id"] = f"{tx_id}-FAR"
-        if TRANSACTION_TYPE_REGISTRY[tx_type].lifecycle_family == "redemption":
-            event["settlement_date"] = iso_z(ts)
+        if tx_type in REDEMPTION_TYPES:
+            redeemed_quantity = "40" if tx_type == "PARTIAL_REDEMPTION" else "100"
+            event.update(
+                {
+                    "settlement_date": iso_z(ts),
+                    "settlement_cash_account_id": cash_security_id,
+                    "settlement_cash_instrument_id": cash_security_id,
+                    "quantity": redeemed_quantity,
+                    "price": "1",
+                    "gross_transaction_amount": redeemed_quantity,
+                    "redemption_price_type": "PAR",
+                    "principal_proceeds_local": redeemed_quantity,
+                }
+            )
+            if tx_type == "PARTIAL_REDEMPTION":
+                event.update({"old_factor": "1", "new_factor": "0.6"})
         if tx_type == "ADJUSTMENT":
             event["movement_direction"] = "INFLOW"
             event["adjustment_reason"] = "TEST_COVERAGE"
@@ -179,6 +232,29 @@ def build_transaction_payloads(
         payloads.append(event)
 
     return payloads
+
+
+def build_redemption_acquisition_payload(
+    portfolio_id: str, *, transaction_type: str, redemption_security_id: str
+) -> dict:
+    """Seed sufficient bond inventory before exercising each redemption lifecycle."""
+
+    return {
+        "transaction_id": f"{portfolio_id}_{transaction_type}_ACQUISITION",
+        "portfolio_id": portfolio_id,
+        "instrument_id": redemption_security_id,
+        "security_id": redemption_security_id,
+        "transaction_date": "2026-02-02T09:00:00Z",
+        "transaction_type": "BUY",
+        "quantity": "100",
+        "price": "0.97",
+        "gross_transaction_amount": "97",
+        "trade_currency": "USD",
+        "currency": "USD",
+        "economic_event_id": f"EVT-{portfolio_id}-{transaction_type}-ACQUISITION",
+        "linked_transaction_group_id": f"LTG-{portfolio_id}-{transaction_type}-ACQUISITION",
+        "trade_fee": "0",
+    }
 
 
 def expected_cashflow_sign(payload: dict, classification: str) -> int:
@@ -215,6 +291,9 @@ def setup_transaction_type_coverage_data(clean_db_module, e2e_api_client: E2EApi
     portfolio_id = f"E2E_TX_COVER_{suffix}"
     security_id = f"SEC_COVER_{suffix}"
     cash_security_id = f"CASH_USD_COVER_{suffix}"
+    redemption_security_ids = {
+        tx_type: f"BOND_{tx_type}_{suffix}" for tx_type in sorted(REDEMPTION_TYPES)
+    }
 
     e2e_api_client.ingest(
         "/ingest/portfolios",
@@ -254,19 +333,46 @@ def setup_transaction_type_coverage_data(clean_db_module, e2e_api_client: E2EApi
                     "productType": "Cash",
                     "assetClass": "Cash",
                 },
+                *[
+                    {
+                        "securityId": redemption_security_ids[tx_type],
+                        "name": f"Coverage {tx_type.replace('_', ' ').title()} Bond",
+                        "isin": f"COVER_{tx_type}_{suffix}",
+                        "instrumentCurrency": "USD",
+                        "productType": "Bond",
+                        "assetClass": "Fixed Income",
+                    }
+                    for tx_type in sorted(REDEMPTION_TYPES)
+                ],
             ]
         },
     )
 
     payloads = build_transaction_payloads(
-        portfolio_id, security_id=security_id, cash_security_id=cash_security_id
+        portfolio_id,
+        security_id=security_id,
+        cash_security_id=cash_security_id,
+        redemption_security_ids=redemption_security_ids,
     )
-    e2e_api_client.ingest("/ingest/transactions", {"transactions": payloads})
+    redemption_acquisitions = [
+        build_redemption_acquisition_payload(
+            portfolio_id,
+            transaction_type=tx_type,
+            redemption_security_id=redemption_security_ids[tx_type],
+        )
+        for tx_type in sorted(REDEMPTION_TYPES)
+    ]
+    e2e_api_client.ingest(
+        "/ingest/transactions", {"transactions": [*redemption_acquisitions, *payloads]}
+    )
 
     query_url = f"/portfolios/{portfolio_id}/transactions"
     e2e_api_client.poll_for_data(
         query_url,
-        lambda data: data.get("transactions") and len(data["transactions"]) >= len(payloads),
+        lambda data: (
+            data.get("transactions")
+            and len(data["transactions"]) >= len(payloads) + len(redemption_acquisitions)
+        ),
         timeout=120,
         fail_message="Transaction type coverage transactions were not fully queryable in time.",
     )
@@ -276,6 +382,8 @@ def setup_transaction_type_coverage_data(clean_db_module, e2e_api_client: E2EApi
         "payloads": payloads,
         "security_id": security_id,
         "cash_security_id": cash_security_id,
+        "redemption_security_ids": redemption_security_ids,
+        "redemption_acquisitions": redemption_acquisitions,
     }
 
 
