@@ -134,11 +134,19 @@ Drill deeper with:
 - `GET /support/portfolios/{portfolio_id}/aggregation-jobs`
 - `GET /support/portfolios/{portfolio_id}/analytics-export-jobs`
 - `GET /support/portfolios/{portfolio_id}/reconciliation-runs`
+- `GET /support/portfolios/{portfolio_id}/corporate-action-events`
 - `GET /lineage/portfolios/{portfolio_id}/keys`
 - `GET /portfolios/{portfolio_id}/transactions/{transaction_id}/lot-disposal-receipt`
 
 Use these routes before going directly to the database unless rollout mismatch or schema doubt makes
 API evidence insufficient.
+
+Corporate-action event support is a compact current-generation projection. It returns manifest
+identity and hashes, readiness status and stable top-level/nested reason codes, and fenced release
+progress without raw manifest/finding/transaction payloads, child-ID arrays, member rows, lease
+owner, or lease token. It requires `core.support.read`, authenticated tenant equality, and an exact
+legal-book scope. The capability is intentionally tenant-wide privileged operator authority; the
+book parameter narrows the result. A valid empty or filter-empty scope returns `200 total=0`.
 
 ## Copy-paste examples
 
