@@ -25,7 +25,6 @@ from typing import Any, Iterable, Mapping
 
 import requests
 from portfolio_common.database_runtime_identity import (
-    DATABASE_RUNTIME_IDENTITIES,
     NON_CERTIFYING_DATABASE_RUNTIME_IDENTITIES,
     sync_database_connect_args,
 )
@@ -34,6 +33,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
 
 from scripts.operations.performance.derived_state_resource_monitor import (
+    GOVERNED_DATABASE_APPLICATION_COHORTS,
     DerivedStateResourceEvidence,
     DerivedStateResourceMonitor,
     capture_resource_sample,
@@ -1950,7 +1950,8 @@ def _evaluate_report(report: ScenarioReport) -> list[str]:
                     application_name
                     for application_name in database_cohorts
                     if application_name
-                    not in DATABASE_RUNTIME_IDENTITIES | {"__unattributed__", "__ungoverned__"}
+                    not in GOVERNED_DATABASE_APPLICATION_COHORTS
+                    | {"__unattributed__", "__ungoverned__"}
                 )
                 if unknown_applications:
                     failures.append(

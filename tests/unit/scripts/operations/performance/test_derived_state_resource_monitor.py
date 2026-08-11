@@ -9,6 +9,7 @@ import pytest
 from portfolio_common.database_runtime_identity import DATABASE_RUNTIME_IDENTITIES
 
 from scripts.operations.performance.derived_state_resource_monitor import (
+    GOVERNED_DATABASE_APPLICATION_COHORTS,
     DatabaseApplicationResourceUsage,
     DatabaseResourceUsage,
     DerivedStateResourceSample,
@@ -124,6 +125,7 @@ def test_read_database_resource_usage_calculates_connection_capacity() -> None:
     assert usage.application_cohorts[1].oldest_open_transaction_seconds == 12.5
     assert captured["params"] == {"governed_application_names": sorted(DATABASE_RUNTIME_IDENTITIES)}
     assert "FROM pg_stat_activity" in str(captured["query"])
+    assert "backend_type <> 'client backend'" in str(captured["query"])
     assert "jsonb_agg" in str(captured["query"])
     assert "NOT waiting_lock.granted" in str(captured["query"])
 
@@ -187,7 +189,7 @@ def test_database_application_peak_summary_is_bounded_to_governed_inventory() ->
             oldest_open_transaction_seconds=float(index),
             oldest_idle_in_transaction_seconds=0.0,
         )
-        for index, application_name in enumerate(sorted(DATABASE_RUNTIME_IDENTITIES))
+        for index, application_name in enumerate(sorted(GOVERNED_DATABASE_APPLICATION_COHORTS))
     ) + (
         DatabaseApplicationResourceUsage(
             application_name="__unattributed__",
@@ -204,8 +206,8 @@ def test_database_application_peak_summary_is_bounded_to_governed_inventory() ->
 
     peaks = _bounded_peak_database_application_usage(cohorts)
 
-    assert len(peaks) == len(DATABASE_RUNTIME_IDENTITIES) + 1
-    assert DATABASE_RUNTIME_IDENTITIES <= {peak.application_name for peak in peaks}
+    assert len(peaks) == len(GOVERNED_DATABASE_APPLICATION_COHORTS) + 1
+    assert GOVERNED_DATABASE_APPLICATION_COHORTS <= {peak.application_name for peak in peaks}
     assert "__unattributed__" in {peak.application_name for peak in peaks}
 
 

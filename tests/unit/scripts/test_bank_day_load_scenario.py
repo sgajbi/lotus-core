@@ -1341,6 +1341,23 @@ def test_evaluate_report_rejects_baseline_valuation_reprocessing() -> None:
         for failure in local_database_identity_failures
     )
 
+    postgres_background_failures = _evaluate_report(
+        replace(
+            report,
+            derived_state_resource_evidence=replace(
+                resource_evidence,
+                peak_database_usage_by_application=(
+                    *resource_evidence.peak_database_usage_by_application,
+                    replace(
+                        resource_evidence.peak_database_usage_by_application[1],
+                        application_name="postgres-background",
+                    ),
+                ),
+            ),
+        )
+    )
+    assert not any("database application" in failure for failure in postgres_background_failures)
+
     missing_cohort_failures = _evaluate_report(
         replace(
             report,
