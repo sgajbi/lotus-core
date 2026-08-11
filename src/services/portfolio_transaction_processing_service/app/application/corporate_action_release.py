@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from enum import StrEnum
 from typing import cast
 
@@ -35,6 +36,64 @@ class StaleCorporateActionExecutionPlanError(ValueError):
 
 class ConflictingCorporateActionExecutionReleaseError(ValueError):
     """Raised when persisted release evidence differs from deterministic authority."""
+
+
+class CorporateActionReleaseProgressOutcome(StrEnum):
+    """Classify a fenced member-progress write."""
+
+    ADVANCED = "ADVANCED"
+    COMPLETE = "COMPLETE"
+    LOST_OWNERSHIP = "LOST_OWNERSHIP"
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class CorporateActionExecutionLeaseRequest:
+    """Request database-clock lease ownership for one release worker."""
+
+    owner: str
+    token: str
+    duration_seconds: int
+
+    def __post_init__(self) -> None:
+        owner = _required_text(self.owner, "owner")
+        if len(owner) > 128:
+            raise ValueError("owner cannot exceed 128 characters")
+        _require_sha256_digest(self.token, "token")
+        if (
+            isinstance(self.duration_seconds, bool)
+            or not isinstance(self.duration_seconds, int)
+            or not 1 <= self.duration_seconds <= 3600
+        ):
+            raise ValueError("duration_seconds must be between 1 and 3600")
+        object.__setattr__(self, "owner", owner)
+
+
+@dataclass(frozen=True, slots=True)
+class ClaimedCorporateActionExecutionRelease:
+    """Return the exact next member under monotonic fenced lease ownership."""
+
+    release_id: int
+    release_authority_hash: str
+    member_count: int
+    next_member: CorporateActionExecutionMemberAuthority
+    attempt_count: int
+    fence_token: int
+    lease_owner: str
+    lease_token: str
+    lease_expires_at: datetime
+
+    def __post_init__(self) -> None:
+        _require_positive_integer(self.release_id, "release_id")
+        _require_sha256_digest(self.release_authority_hash, "release_authority_hash")
+        _require_positive_integer(self.member_count, "member_count")
+        _require_positive_integer(self.attempt_count, "attempt_count")
+        _require_positive_integer(self.fence_token, "fence_token")
+        _required_text(self.lease_owner, "lease_owner")
+        _require_sha256_digest(self.lease_token, "lease_token")
+        if self.lease_expires_at.tzinfo is None or self.lease_expires_at.utcoffset() is None:
+            raise ValueError("lease_expires_at must be timezone-aware")
+        if self.next_member.execution_ordinal >= self.member_count:
+            raise ValueError("next member ordinal must be within the release")
 
 
 @dataclass(frozen=True, slots=True)

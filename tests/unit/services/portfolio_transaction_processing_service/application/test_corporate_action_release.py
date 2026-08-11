@@ -8,6 +8,7 @@ import pytest
 from portfolio_common.domain.calculation_lineage import canonical_content_hash
 
 from src.services.portfolio_transaction_processing_service.app.application import (
+    CorporateActionExecutionLeaseRequest,
     CorporateActionExecutionPlan,
     CorporateActionExecutionReleaseAuthority,
     build_corporate_action_execution_member_authority,
@@ -124,4 +125,27 @@ def test_release_authority_rejects_noncontiguous_ordinals_and_duplicate_observat
         CorporateActionExecutionReleaseAuthority(
             plan=release.plan,
             members=(release.members[0], duplicate_observation),
+        )
+
+
+def test_execution_lease_request_requires_bounded_canonical_authority() -> None:
+    lease = CorporateActionExecutionLeaseRequest(
+        owner="transaction-worker-01",
+        token="a" * 64,
+        duration_seconds=300,
+    )
+
+    assert lease.owner == "transaction-worker-01"
+    assert lease.duration_seconds == 300
+    with pytest.raises(ValueError, match="between 1 and 3600"):
+        CorporateActionExecutionLeaseRequest(
+            owner="transaction-worker-01",
+            token="a" * 64,
+            duration_seconds=0,
+        )
+    with pytest.raises(ValueError, match="canonical sha256"):
+        CorporateActionExecutionLeaseRequest(
+            owner="transaction-worker-01",
+            token="not-a-token",
+            duration_seconds=300,
         )

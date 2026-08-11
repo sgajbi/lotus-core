@@ -31,8 +31,10 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.services.portfolio_transaction_processing_service.app.application import (
+    CorporateActionExecutionLeaseRequest,
     CorporateActionExecutionPlan,
     CorporateActionReleaseMaterializationOutcome,
+    CorporateActionReleaseProgressOutcome,
     StaleCorporateActionExecutionPlanError,
 )
 from src.services.portfolio_transaction_processing_service.app.domain import (
@@ -559,6 +561,72 @@ async def test_ready_release_materialization_freezes_payload_authority_and_repla
     assert replay.release_id == first.release_id
     assert replay.release_authority_hash == first.release_authority_hash
     assert replay.member_count == len(manifest.expected_children)
+    first_lease = CorporateActionExecutionLeaseRequest(
+        owner="corporate-action-worker-01",
+        token="a" * 64,
+        duration_seconds=300,
+    )
+    claimed = await releases.claim_next(first_lease)
+    assert claimed is not None
+    assert claimed.fence_token == 1
+    assert claimed.attempt_count == 1
+    assert claimed.next_member.execution_ordinal == 0
+    await async_db_session.commit()
+
+    contender_lease = CorporateActionExecutionLeaseRequest(
+        owner="corporate-action-worker-02",
+        token="b" * 64,
+        duration_seconds=300,
+    )
+    assert await releases.claim_next(contender_lease) is None
+    await async_db_session.execute(
+        update(CorporateActionExecutionReleaseRecord)
+        .where(CorporateActionExecutionReleaseRecord.id == first.release_id)
+        .values(lease_expires_at=func.now() - text("INTERVAL '1 second'"))
+    )
+    await async_db_session.commit()
+    reclaimed = await releases.claim_next(contender_lease)
+    assert reclaimed is not None
+    assert reclaimed.release_id == claimed.release_id
+    assert reclaimed.fence_token == 2
+    assert reclaimed.attempt_count == 2
+    assert (
+        await releases.advance_member(
+            release_id=claimed.release_id,
+            expected_ordinal=claimed.next_member.execution_ordinal,
+            lease_token=claimed.lease_token,
+            fence_token=claimed.fence_token,
+        )
+        is CorporateActionReleaseProgressOutcome.LOST_OWNERSHIP
+    )
+    assert (
+        await releases.advance_member(
+            release_id=reclaimed.release_id,
+            expected_ordinal=reclaimed.next_member.execution_ordinal,
+            lease_token=reclaimed.lease_token,
+            fence_token=reclaimed.fence_token,
+        )
+        is CorporateActionReleaseProgressOutcome.ADVANCED
+    )
+    await async_db_session.commit()
+    next_member = await releases.load_owned_next(
+        release_id=reclaimed.release_id,
+        lease_token=reclaimed.lease_token,
+        fence_token=reclaimed.fence_token,
+    )
+    assert next_member is not None
+    assert next_member.next_member.execution_ordinal == 1
+    assert (
+        await releases.advance_member(
+            release_id=next_member.release_id,
+            expected_ordinal=next_member.next_member.execution_ordinal,
+            lease_token=next_member.lease_token,
+            fence_token=next_member.fence_token,
+        )
+        is CorporateActionReleaseProgressOutcome.COMPLETE
+    )
+    await async_db_session.commit()
+    assert await releases.claim_next(contender_lease) is None
     with pytest.raises(StaleCorporateActionExecutionPlanError, match="current READY authority"):
         await releases.materialize(
             replace(plan, readiness_state_version=plan.readiness_state_version + 1)
