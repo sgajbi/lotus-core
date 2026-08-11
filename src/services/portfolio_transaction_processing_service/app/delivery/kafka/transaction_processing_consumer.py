@@ -21,7 +21,9 @@ from portfolio_common.reprocessing_replay import (
 from sqlalchemy.exc import DBAPIError, IntegrityError
 
 from ...application import (
+    CorporateActionArrivalDisposition,
     ProcessTransactionUseCase,
+    RouteCorporateActionChildArrivalUseCase,
     TransactionProcessingError,
     TransactionProcessingIntent,
     TransactionProcessingRejected,
@@ -49,6 +51,7 @@ class TransactionProcessingConsumer(BaseConsumer):
         retryable_failure_max_elapsed_seconds: int | None = None,
         *,
         use_case: ProcessTransactionUseCase,
+        route_corporate_action_child: RouteCorporateActionChildArrivalUseCase,
     ) -> None:
         super().__init__(
             bootstrap_servers=bootstrap_servers,
@@ -62,6 +65,7 @@ class TransactionProcessingConsumer(BaseConsumer):
             retryable_failure_max_elapsed_seconds=(retryable_failure_max_elapsed_seconds),
         )
         self._use_case = use_case
+        self._route_corporate_action_child = route_corporate_action_child
 
     async def process_message(self, msg: Message) -> None:
         event_id = _message_event_id(msg)
@@ -84,6 +88,21 @@ class TransactionProcessingConsumer(BaseConsumer):
                 ),
             )
             try:
+                arrival = await self._route_corporate_action_child.execute(command)
+                if arrival.disposition is not CorporateActionArrivalDisposition.ORDINARY:
+                    logger.debug(
+                        "Corporate-action child intake completed without financial mutation.",
+                        extra={
+                            "event_id": event_id,
+                            "portfolio_id": event.portfolio_id,
+                            "transaction_id": event.transaction_id,
+                            "arrival_disposition": arrival.disposition.value,
+                            "release_id": (
+                                arrival.release.release_id if arrival.release is not None else None
+                            ),
+                        },
+                    )
+                    return
                 result = await self._use_case.execute(command)
             except TransactionProcessingRejected as exc:
                 if exc.reason_code in _ACKNOWLEDGED_REJECTION_REASONS:
