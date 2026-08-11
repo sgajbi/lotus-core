@@ -1266,6 +1266,22 @@ profile without pre-authorizing pool, timeout, recycle, worker, concurrency, or 
 Technology governance and vulnerability-release gaps remain explicitly owned by #720, #926, #927,
 and #928.
 
+Exact clean daily artifact `20260811T135845Z` completed the full business shape before the fixed
+deadline: 100,000 transactions, snapshots, and position rows; 1,000 portfolio rows; attempts `2/2`;
+zero repeats; closed jobs and outbox; and `1017/1017` reconciled resource samples. Drain was
+`7159.351s`. The run nevertheless failed certification because the new gate observed a peak of
+three blank application names. The bounded cohort shape—three open transactions, no
+idle-in-transaction sessions, and oldest age `16.85s`—is consistent with database background work
+and revealed that the query could not distinguish PostgreSQL non-client workers from Core client
+sessions. The correction uses stable `pg_stat_activity.backend_type`, retains database-owned work
+in aggregate totals under one fixed `postgres-background` cohort, and reserves `__unattributed__`
+for blank `client backend` sessions; any remaining blank client still fails.
+It changes evidence classification only: no application session identity, query cadence, workload,
+pool, timeout, recycle, worker, concurrency, partition, API, event, schema, calculation, dependency,
+image, or topology changes. Focused proof now passes 78 unit/deployment tests and five real
+PostgreSQL tests. The daily run must be repeated at the corrected exact head; the prior receipt is
+not a certifying pass and must not be presented as one.
+
 The PR #931 tranche boundary changes only delivery packaging and campaign chronology. It does not
 change runtime behavior or any API/OpenAPI, event, schema, migration, calculation, partition,
 operator, repository-context, or authored-wiki contract. Existing authored wiki changes already

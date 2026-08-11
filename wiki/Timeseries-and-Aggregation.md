@@ -93,6 +93,9 @@ or business identifier. Cohort totals must reconcile to aggregate totals in ever
 certifying profile fails when an unattributed, ungoverned, or local/test connection is
 present. Use this evidence to locate the owning unit of work before changing pool or worker
 capacity.
+Non-client PostgreSQL backends, including autovacuum, remain visible in the fixed
+`postgres-background` cohort. Blank client identities remain `__unattributed__` and fail
+certification; database-maintenance workers are not application-identity failures.
 
 Each workload artifact also records the emitting checkout's `source_revision` and a non-sensitive
 `source_tree_state` (`clean`, `dirty`, or `unavailable`). This makes retained evidence reproducible

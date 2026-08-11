@@ -3757,6 +3757,10 @@ Most relevant current governance:
      dependency for this attribution.
      Measure this evidence before changing pool size, acquisition timeout, recycle policy, worker
      concurrency, or Kafka partition capacity.
+     Preserve non-client PostgreSQL backends in aggregate totals under the fixed
+     `postgres-background` cohort by using `pg_stat_activity.backend_type`; never classify
+     autovacuum or another database-owned worker as a blank Core client identity. Only a `client
+     backend` with blank `application_name` belongs in `__unattributed__`.
 
 ## Context Maintenance Rule
 

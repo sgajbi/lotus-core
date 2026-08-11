@@ -82,6 +82,9 @@ The database identity control uses PostgreSQL connection metadata and SQLAlchemy
 already present in the runtime. It adds no query to business processing, metric label, agent,
 sidecar, datastore, or dependency. This preserves a mature, widely operated technology path while
 making horizontally scaled connection and unit-of-work pressure attributable.
+PostgreSQL non-client backends such as autovacuum remain in aggregate resource totals and are
+reported under the fixed `postgres-background` cohort. They are not client sessions and must not be
+misclassified as an application that failed to publish `SERVICE_NAME`.
 
 ## Current Gaps
 
