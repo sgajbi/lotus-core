@@ -56,6 +56,14 @@ CORPORATE_ACTION_GRAPH_MIGRATION = (
     / "versions"
     / "c152b2c3d519_feat_add_corporate_action_event_graph.py"
 )
+CORPORATE_ACTION_DEPENDENT_MIGRATIONS = tuple(
+    Path(__file__).resolve().parents[2] / "alembic" / "versions" / filename
+    for filename in (
+        "c155b2c3d522_fix_forward_corporate_action_authority.py",
+        "c154b2c3d521_perf_index_corporate_action_support.py",
+        "c153b2c3d520_feat_add_corporate_action_execution_releases.py",
+    )
+)
 
 PROFILE_INSERT = text(
     """
@@ -179,6 +187,12 @@ def _downgrade_later_revisions(connection) -> list[dict[str, Any]]:
     """Remove dependent revisions newest-first before exercising the profile schema."""
 
     later_migrations: list[dict[str, Any]] = []
+    if inspect(connection).has_table("corporate_action_execution_releases"):
+        for migration_path in CORPORATE_ACTION_DEPENDENT_MIGRATIONS:
+            later_migration = runpy.run_path(str(migration_path))
+            _bind_operations(later_migration, connection)
+            later_migration["downgrade"]()
+            later_migrations.append(later_migration)
     for table_name, marker_column, migration_path in (
         ("corporate_action_events", None, CORPORATE_ACTION_GRAPH_MIGRATION),
         ("lot_basis_transfer_allocations", None, BASIS_TRANSFER_MIGRATION),

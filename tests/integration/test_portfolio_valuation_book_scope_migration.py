@@ -62,6 +62,14 @@ CORPORATE_ACTION_GRAPH_MIGRATION = (
     / "versions"
     / "c152b2c3d519_feat_add_corporate_action_event_graph.py"
 )
+CORPORATE_ACTION_DEPENDENT_MIGRATIONS = tuple(
+    Path(__file__).resolve().parents[2] / "alembic" / "versions" / filename
+    for filename in (
+        "c155b2c3d522_fix_forward_corporate_action_authority.py",
+        "c154b2c3d521_perf_index_corporate_action_support.py",
+        "c153b2c3d520_feat_add_corporate_action_execution_releases.py",
+    )
+)
 
 PORTFOLIO_INSERT = text(
     """
@@ -107,6 +115,13 @@ def _downgrade_dependent_schema(connection) -> list[dict[str, Any]]:
 
     dependent_migrations: list[dict[str, Any]] = []
     inspector = inspect(connection)
+    if inspector.has_table("corporate_action_execution_releases"):
+        for migration_path in CORPORATE_ACTION_DEPENDENT_MIGRATIONS:
+            dependent_migration = runpy.run_path(str(migration_path))
+            _bind_operations(dependent_migration, connection)
+            dependent_migration["downgrade"]()
+            dependent_migrations.append(dependent_migration)
+        inspector = inspect(connection)
     if inspector.has_table("corporate_action_events"):
         corporate_action_graph_migration: dict[str, Any] = runpy.run_path(
             str(CORPORATE_ACTION_GRAPH_MIGRATION)
