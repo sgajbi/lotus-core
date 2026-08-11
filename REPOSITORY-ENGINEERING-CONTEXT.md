@@ -2752,6 +2752,20 @@ Most relevant current governance:
      observation/readiness activation use caller-owned atomic UoWs. Financial mutation remains
      parked until the current event reaches persisted READY and must release in persisted dependency
      order; repository-level readiness proof alone does not prove runtime integration.
+     Source manifests enter through the strict `CorporateActionManifestReceivedEvent:v1` contract
+     on `corporate_action.manifest.received`, keyed by
+     `portfolio_id|transaction-group|linked_transaction_group_id`. Keep the topic and its consumer
+     at the governed 12-partition transaction-group capacity; validate immutable source record,
+     revision, content hash, and timezone-qualified observation time before database work. The
+     transaction-processing service owns mapping and persistence through its lightweight graph UoW.
+     READY release/member ledgers must freeze the manifest, observation boundary, child definition,
+     transaction epoch, and full transaction-payload fingerprint; claims use PostgreSQL-clock
+     leases and monotonic fences so expired workers can be recovered without permitting stale
+     progress. This is internal design and runtime integration on the established Kafka,
+     PostgreSQL, Pydantic, SQLAlchemy, and Alembic stack. Do not introduce a new datastore,
+     framework, container image, or deployable service unless measured workload, failure-isolation,
+     ownership, security, or operability evidence demonstrates that the existing stateless worker
+     and indexed relational ledgers cannot meet the requirement.
 176. Transaction and product lifecycle publication is governed by
      `contracts/transaction-processing/transaction-capability-catalog.v1.json`, refreshed with
      `python scripts/transaction_processing/generate_capability_catalog.py`, and blocked by
