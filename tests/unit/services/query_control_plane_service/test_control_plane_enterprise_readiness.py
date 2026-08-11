@@ -274,9 +274,10 @@ def test_control_plane_runtime_config_accepts_source_data_default_rules(monkeypa
 
 
 def test_control_plane_capability_rules_include_corporate_action_support_read() -> None:
-    assert load_capability_rules()[
-        "GET /support/portfolios/{portfolio_id}/corporate-action-events"
-    ] == "core.support.read"
+    assert (
+        load_capability_rules()["GET /support/portfolios/{portfolio_id}/corporate-action-events"]
+        == "core.support.read"
+    )
 
 
 def test_control_plane_authorize_request_enforces_corporate_action_support_read(monkeypatch):

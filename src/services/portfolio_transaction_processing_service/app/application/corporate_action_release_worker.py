@@ -188,17 +188,13 @@ class ProcessNextCorporateActionReleaseUseCase:
                     fence_token=claim.fence_token,
                 )
                 if not renewed:
-                    self._observer.observe_lease_renewal(
-                        CorporateActionLeaseRenewalOutcome.LOST
-                    )
+                    self._observer.observe_lease_renewal(CorporateActionLeaseRenewalOutcome.LOST)
                     raise TransactionProcessingError(
                         reason_code="corporate_action_release_lease_lost",
                         detail={"release_id": claim.release_id},
                         retryable=True,
                     )
-                self._observer.observe_lease_renewal(
-                    CorporateActionLeaseRenewalOutcome.RENEWED
-                )
+                self._observer.observe_lease_renewal(CorporateActionLeaseRenewalOutcome.RENEWED)
                 await unit_of_work.commit()
 
     async def _claim(

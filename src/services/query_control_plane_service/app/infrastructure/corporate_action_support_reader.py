@@ -48,9 +48,7 @@ class SqlAlchemyCorporateActionSupportReader:
             readiness_status=readiness_status,
             execution_status=execution_status,
         )
-        scope_count = (
-            await self._db.execute(_scope_and_count(**query_arguments))
-        ).one()
+        scope_count = (await self._db.execute(_scope_and_count(**query_arguments))).one()
         total = int(scope_count.event_count or 0)
         scope_exists = bool(scope_count.scope_exists)
         if total == 0:
@@ -93,15 +91,19 @@ def _scope_and_count(
             Portfolio.portfolio_id == portfolio_id,
         )
     ).label("scope_exists")
-    event_count = _current_projection(
-        tenant_id=tenant_id,
-        legal_book_id=legal_book_id,
-        portfolio_id=portfolio_id,
-        corporate_action_event_id=corporate_action_event_id,
-        readiness_status=readiness_status,
-        execution_status=execution_status,
-        count=True,
-    ).scalar_subquery().label("event_count")
+    event_count = (
+        _current_projection(
+            tenant_id=tenant_id,
+            legal_book_id=legal_book_id,
+            portfolio_id=portfolio_id,
+            corporate_action_event_id=corporate_action_event_id,
+            readiness_status=readiness_status,
+            execution_status=execution_status,
+            count=True,
+        )
+        .scalar_subquery()
+        .label("event_count")
+    )
     return select(scope_exists, event_count)
 
 
