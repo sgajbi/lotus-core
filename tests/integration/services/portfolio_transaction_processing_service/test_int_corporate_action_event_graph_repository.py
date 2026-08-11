@@ -8,6 +8,7 @@ from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
+from unittest.mock import AsyncMock
 
 import pytest
 from alembic.migration import MigrationContext
@@ -36,7 +37,11 @@ from src.services.portfolio_transaction_processing_service.app.application impor
     CorporateActionExecutionPlan,
     CorporateActionReleaseMaterializationOutcome,
     CorporateActionReleaseProgressOutcome,
+    CorporateActionReleaseWorkerStatus,
+    ProcessNextCorporateActionReleaseUseCase,
+    ProcessTransactionResult,
     StaleCorporateActionExecutionPlanError,
+    TransactionProcessingStatus,
 )
 from src.services.portfolio_transaction_processing_service.app.domain import (
     build_transaction_semantic_identity,
@@ -46,6 +51,7 @@ from src.services.portfolio_transaction_processing_service.app.domain.transactio
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure.corporate_action_event_graph import (  # noqa: E501
     SqlAlchemyCorporateActionEventGraphRepository,
+    SqlAlchemyCorporateActionEventGraphUnitOfWork,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure.corporate_action_execution import (  # noqa: E501
     SqlAlchemyCorporateActionExecutionReleaseRepository,
@@ -778,6 +784,82 @@ async def test_corrected_generation_waits_for_owned_prior_generation(
     second_claim = await releases.claim_next(contender)
     assert second_claim is not None
     assert second_claim.release_id == second_release.release_id
+
+
+async def test_real_postgres_worker_drains_release_without_lease_expiry_wait(
+    clean_db,
+    db_engine: Engine,
+    async_db_session: AsyncSession,
+) -> None:
+    """The deployable use case must process every member under its current lease."""
+
+    _apply_migration(db_engine)
+    await _seed_portfolio(async_db_session)
+    manifest = _manifest()
+    await _seed_transactions(async_db_session, manifest.expected_children)
+    await async_db_session.execute(
+        update(TransactionRecord)
+        .where(TransactionRecord.portfolio_id == manifest.portfolio_id)
+        .values(
+            economic_event_id=manifest.corporate_action_event_id,
+            linked_transaction_group_id=manifest.linked_transaction_group_id,
+            parent_event_reference=manifest.parent_event_reference,
+        )
+    )
+    graph = SqlAlchemyCorporateActionEventGraphRepository(async_db_session)
+    assert await graph.append_manifest(manifest) is CorporateActionManifestAppendOutcome.APPENDED
+    for sequence, child in enumerate(manifest.expected_children, start=1):
+        await graph.observe_child(
+            await _persisted_observation(
+                async_db_session,
+                manifest,
+                child,
+                delivery_event_id=f"worker-drain-{sequence}",
+            )
+        )
+    decision = await graph.load_current_readiness(
+        portfolio_id=manifest.portfolio_id,
+        corporate_action_event_id=manifest.corporate_action_event_id,
+    )
+    release = await SqlAlchemyCorporateActionExecutionReleaseRepository(
+        async_db_session
+    ).materialize(_execution_plan(manifest, decision))
+    await async_db_session.commit()
+
+    bind = async_db_session.bind
+    assert bind is not None
+    session_factory = async_sessionmaker(bind, expire_on_commit=False)
+    process = AsyncMock()
+    process.execute.return_value = ProcessTransactionResult(
+        status=TransactionProcessingStatus.PROCESSED,
+        input_transaction_id="corporate-action-member",
+    )
+    worker = ProcessNextCorporateActionReleaseUseCase(  # type: ignore[arg-type]
+        unit_of_work_factory=lambda: SqlAlchemyCorporateActionEventGraphUnitOfWork(session_factory),
+        process_transaction=process,
+        lease_owner="real-postgres-worker",
+        lease_duration_seconds=300,
+        token_factory=lambda: "f" * 64,
+    )
+
+    result = await worker.execute()
+
+    assert result.status is CorporateActionReleaseWorkerStatus.COMPLETE
+    assert result.processed_member_count == len(manifest.expected_children)
+    assert process.execute.await_count == len(manifest.expected_children)
+    assert [call.args[0].metadata.event_id for call in process.execute.await_args_list] == [
+        f"corporate-action-release:{release.release_authority_hash}:{ordinal}"
+        for ordinal in range(len(manifest.expected_children))
+    ]
+    async_db_session.expire_all()
+    persisted_release = await async_db_session.get(
+        CorporateActionExecutionReleaseRecord,
+        release.release_id,
+    )
+    assert persisted_release is not None
+    assert persisted_release.status == "COMPLETE"
+    assert persisted_release.attempt_count == 1
+    assert persisted_release.next_execution_ordinal == len(manifest.expected_children)
 
 
 async def test_child_correction_epochs_are_monotonic_and_retries_are_neutral(
