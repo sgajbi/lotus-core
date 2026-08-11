@@ -17,12 +17,17 @@ from sqlalchemy import Engine, text
 
 _UNATTRIBUTED_APPLICATION = "__unattributed__"
 _UNGOVERNED_APPLICATION = "__ungoverned__"
+_POSTGRES_BACKGROUND_APPLICATION = "postgres-background"
+GOVERNED_DATABASE_APPLICATION_COHORTS = DATABASE_RUNTIME_IDENTITIES | {
+    _POSTGRES_BACKGROUND_APPLICATION
+}
 
 _DATABASE_RESOURCE_QUERY = text(
     """
     WITH activity AS (
       SELECT
         CASE
+          WHEN backend_type <> 'client backend' THEN 'postgres-background'
           WHEN nullif(btrim(application_name), '') IS NULL THEN '__unattributed__'
           WHEN application_name = ANY(:governed_application_names) THEN application_name
           ELSE '__ungoverned__'
@@ -389,7 +394,7 @@ def _database_application_cohorts(
     )
     if len(cohorts) != len(decoded):
         raise RuntimeError("Database resource query returned malformed application cohorts")
-    allowed_cohorts = DATABASE_RUNTIME_IDENTITIES | {
+    allowed_cohorts = GOVERNED_DATABASE_APPLICATION_COHORTS | {
         _UNATTRIBUTED_APPLICATION,
         _UNGOVERNED_APPLICATION,
     }
@@ -635,7 +640,7 @@ def _bounded_peak_database_application_usage(
     """Retain deterministic peaks without allowing application cardinality to grow unbounded."""
 
     cohorts = tuple(cohort_values)
-    allowed_cohorts = DATABASE_RUNTIME_IDENTITIES | {
+    allowed_cohorts = GOVERNED_DATABASE_APPLICATION_COHORTS | {
         _UNATTRIBUTED_APPLICATION,
         _UNGOVERNED_APPLICATION,
     }
