@@ -102,8 +102,7 @@ async def test_parent_versions_publish_monotonically_per_stream(
     )
 
     assert [
-        call.kwargs["value"]["version"]
-        for call in kafka_producer.publish_message.call_args_list
+        call.kwargs["value"]["version"] for call in kafka_producer.publish_message.call_args_list
     ] == [1, 2]
 
 

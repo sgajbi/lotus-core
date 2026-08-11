@@ -49,9 +49,7 @@ def _message(*, payload: object | None = None, key: bytes | None = None) -> Magi
     message = MagicMock()
     message.value.return_value = json.dumps(_payload() if payload is None else payload).encode()
     message.key.return_value = (
-        key
-        if key is not None
-        else b"PORTFOLIO_001|transaction-group|GROUP_001"
+        key if key is not None else b"PORTFOLIO_001|transaction-group|GROUP_001"
     )
     message.headers.return_value = [("correlation_id", b"corr-manifest-001")]
     return message

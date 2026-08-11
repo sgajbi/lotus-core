@@ -56,9 +56,7 @@ def test_execution_release_migration_is_fenced_ordered_and_reversible(
     monkeypatch.setattr(
         op,
         "drop_constraint",
-        lambda name, table, **kwargs: operations.append(
-            ("drop_constraint", name, table, kwargs)
-        ),
+        lambda name, table, **kwargs: operations.append(("drop_constraint", name, table, kwargs)),
     )
     monkeypatch.setattr(
         op,

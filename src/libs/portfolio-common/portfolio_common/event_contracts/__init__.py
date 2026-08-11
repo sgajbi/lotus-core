@@ -7,7 +7,6 @@ from .corporate_action_manifest import (
     CorporateActionManifestReceivedEvent,
     CorporateActionManifestSourceContract,
 )
-
 from .fixed_income_book_cost import (
     FIXED_INCOME_BOOK_COST_AUTHORITY_EVENT_TYPE,
     FIXED_INCOME_BOOK_COST_AUTHORITY_SCHEMA_VERSION,

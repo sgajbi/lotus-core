@@ -31,9 +31,9 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.services.portfolio_transaction_processing_service.app.application import (
+    ConflictingCorporateActionExecutionReleaseError,
     CorporateActionExecutionLeaseRequest,
     CorporateActionExecutionPlan,
-    ConflictingCorporateActionExecutionReleaseError,
     CorporateActionReleaseMaterializationOutcome,
     CorporateActionReleaseProgressOutcome,
     StaleCorporateActionExecutionPlanError,
@@ -516,10 +516,7 @@ async def test_ready_release_materialization_freezes_payload_authority_and_repla
         },
     )
     graph = SqlAlchemyCorporateActionEventGraphRepository(async_db_session)
-    assert (
-        await graph.append_manifest(manifest)
-        is CorporateActionManifestAppendOutcome.APPENDED
-    )
+    assert await graph.append_manifest(manifest) is CorporateActionManifestAppendOutcome.APPENDED
     decision = None
     for sequence, child in enumerate(manifest.expected_children, start=1):
         persisted = await async_db_session.scalar(
