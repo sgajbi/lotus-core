@@ -104,7 +104,6 @@ async def list_corporate_action_event_support(
     x_tenant_id: str = Header(
         ...,
         min_length=1,
-        alias="X-Tenant-Id",
         description="Authenticated tenant scope enforced against the tenant_id query parameter.",
     ),
     service: CorporateActionSupportService = Depends(get_corporate_action_support_service),
