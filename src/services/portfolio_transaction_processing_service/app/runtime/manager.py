@@ -19,6 +19,8 @@ from portfolio_common.worker_runtime import run_kafka_worker_runtime
 from ..web import WORKER_READINESS_SERVICE_NAME
 from ..web import app as web_app
 from .consumer_composition import build_transaction_processing_consumers
+from .corporate_action_release_worker import CorporateActionReleaseWorker
+from .dependency_composition import build_corporate_action_release_worker_use_case
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +31,7 @@ class ConsumerManager:
         *,
         consumers: Sequence[Any] | None = None,
         dispatcher: Any | None = None,
+        release_worker: Any | None = None,
     ) -> None:
         self.consumers = list(
             consumers if consumers is not None else build_transaction_processing_consumers()
@@ -37,6 +40,11 @@ class ConsumerManager:
             dispatcher
             if dispatcher is not None
             else OutboxDispatcher(kafka_producer=create_kafka_producer())
+        )
+        self.release_worker = (
+            release_worker
+            if release_worker is not None
+            else CorporateActionReleaseWorker(build_corporate_action_release_worker_use_case())
         )
         self.tasks: list[asyncio.Task[Any]] = []
         self._shutdown_event = asyncio.Event()
@@ -67,4 +75,5 @@ class ConsumerManager:
             signal_module=signal,
             server_config_factory=uvicorn.Config,
             server_factory=uvicorn.Server,
+            background_components=(self.release_worker,),
         )
