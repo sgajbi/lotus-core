@@ -35,4 +35,4 @@ def test_projection_is_exact_scope_bounded_and_never_scans_members() -> None:
     assert "findings AS" not in sql
     assert "jsonb_array_length" in sql
     assert "jsonb_path_query_array" in sql
-    assert "CURRENT_TIMESTAMP" in sql or "now()" in sql
+    assert "clock_timestamp()" in sql

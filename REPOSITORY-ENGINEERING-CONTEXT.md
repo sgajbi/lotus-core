@@ -1842,8 +1842,13 @@ Most relevant current governance:
      Every claim persists the stable scheduler-instance owner, a rotated opaque token, and a
      database-clock expiry using `VALUATION_SCHEDULER_CLAIM_LEASE_SECONDS`. Dispatch recovery and
      terminal writes must match the exact job/token pair while the lease is unexpired; expired
-     recovery must recheck database-clock expiry on the write. Do not restore mutable `updated_at`
-     age as ownership authority. The fixed `900s` lease has no renewal path in this slice: changing
+     recovery must recheck database-clock expiry on the write. Authoritative lease creation and
+     predicates use PostgreSQL statement-current `clock_timestamp()`, never transaction-start
+     `now()`, because calculation transactions may outlive their lease. Do not restore mutable
+     `updated_at` age as ownership authority. Migration `c156b2c3d523` is an explicitly quiesced
+     binary/schema cutover: stop every valuation-job writer before migration and prohibit mixed
+     old/new binaries; use the operations runbook for forward and rollback order. The fixed `900s`
+     lease has no renewal path in this slice: changing
      it requires measured dispatch-plus-calculation evidence and the slow-worker/reclaim race suite.
      `ValuationSchedulerRepositoryFactory` owns
      repository construction for scheduler DB steps, and the scheduler accepts an explicit session
@@ -3748,7 +3753,10 @@ Most relevant current governance:
      manifest as the new scoped form. Corporate-action
      replay monotonicity compares both child-content and transaction-payload fingerprints at the
      same epoch. Lease renewal must be scheduled strictly before the shortest supported lease
-     expires. These controls remain on the established PostgreSQL, Alembic, SQLAlchemy, Kafka,
+     expires. Claim, ownership, progress, failure, and renewal expiry authority must use
+     PostgreSQL statement-current `clock_timestamp()`, never transaction-start `now()`, because
+     lock waits and aged transactions must not extend a stale worker's authority. These controls
+     remain on the established PostgreSQL, Alembic, SQLAlchemy, Kafka,
      FastAPI, Pydantic, and Prometheus stack; a technology or topology change requires measured
      scalability, security, recovery, operability, and lifecycle evidence plus governed
      vulnerability and immutable-artifact posture.

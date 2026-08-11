@@ -183,6 +183,13 @@ economics only when Core supplies them through the explicit position-history reb
 
 ## Shared-Library Boundary
 
+Corporate-action execution releases use owner, token, monotonic fence, and database-clock expiry
+as one durable authority. Claim, payload load, member progress, terminal failure, next-member load,
+and renewal compare expiry against PostgreSQL statement-current `clock_timestamp()`. Transaction-
+start `now()` is not lease authority because row-lock waits or an aged transaction must not let an
+expired worker advance financial state. The public transaction/event contracts and calculation
+economics are unchanged by this persistence fence.
+
 `portfolio_common.transaction_domain` is retired. Ordinary settlement, corporate-action, FX, and
 effective-processing policies are owned by the unified transaction-processing domain. Shared
 libraries retain only owner-neutral event contracts, controlled vocabularies, normalization, and

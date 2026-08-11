@@ -168,7 +168,7 @@ def _current_projection(
             release.fence_token,
             case(
                 (release.lease_expires_at.is_(None), "NONE"),
-                (release.lease_expires_at <= func.now(), "EXPIRED"),
+                (release.lease_expires_at <= func.clock_timestamp(), "EXPIRED"),
                 else_="ACTIVE",
             ).label("lease_state"),
             release.lease_expires_at,

@@ -12,7 +12,7 @@ from portfolio_common.database_models import (
     PortfolioAggregationJob,
     PositionTimeseries,
 )
-from sqlalchemy import func, select, update
+from sqlalchemy import func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import Session
 
@@ -714,6 +714,59 @@ async def test_claimed_target_is_fenced_when_source_advances_between_claim_state
         )[0]
         assert second_claim.target_epoch == 1
         assert second_claim.source_revision == 2
+
+
+@pytest.mark.lifecycle
+async def test_aggregation_terminal_fence_uses_statement_time_after_transaction_ages(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    """Reject expiry even when the materialization transaction began with a valid lease."""
+
+    portfolio_id = "P-AGG-AGED-TRANSACTION"
+    aggregation_date = date(2026, 3, 8)
+    await _seed_aggregation_fence_scope(
+        async_db_session,
+        portfolio_id=portfolio_id,
+        security_id="SEC-AGG-AGED-TRANSACTION",
+        aggregation_date=aggregation_date,
+    )
+    await async_db_session.commit()
+    repository = PortfolioAggregationRepository(async_db_session)
+    claim = (
+        await repository.claim_eligible_jobs(
+            batch_size=1,
+            lease=AggregationJobLease(
+                owner="aggregation-runtime-aged-transaction",
+                token="lease-token-aged-transaction",
+                expires_at=datetime.now(UTC) + timedelta(minutes=5),
+            ),
+        )
+    )[0]
+    await async_db_session.commit()
+
+    # Start the worker transaction before another session shortens the lease. A now()-based
+    # terminal predicate would keep observing this transaction's earlier timestamp.
+    await async_db_session.execute(select(func.now()))
+    session_factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
+    async with session_factory() as control_session:
+        await control_session.execute(
+            update(PortfolioAggregationJob)
+            .where(PortfolioAggregationJob.id == claim.id)
+            .values(lease_expires_at=func.clock_timestamp() + text("INTERVAL '1 second'"))
+        )
+        await control_session.commit()
+    await async_db_session.execute(select(func.pg_sleep(1.25)))
+
+    disposition = await repository.complete_or_requeue_job(
+        job_id=claim.id,
+        lease_token=claim.lease.token,
+        target_epoch=claim.target_epoch,
+        source_revision=claim.source_revision,
+    )
+    await async_db_session.commit()
+
+    assert disposition is AggregationJobCompletionDisposition.LOST_OWNERSHIP
 
 
 @pytest.mark.lifecycle
