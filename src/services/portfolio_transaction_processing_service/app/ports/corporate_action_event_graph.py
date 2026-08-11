@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 from types import TracebackType
-from typing import Callable, Protocol, Self
+from typing import TYPE_CHECKING, Callable, Protocol, Self
 
 from ..domain.transaction.corporate_action import (
     CorporateActionEventChild,
@@ -14,6 +14,10 @@ from ..domain.transaction.corporate_action import (
     CorporateActionManifestReadinessStatus,
     CorporateActionParentManifest,
 )
+
+if TYPE_CHECKING:
+    from ..application.corporate_action_execution import CorporateActionExecutionPlan
+    from ..application.corporate_action_release import CorporateActionReleaseMaterialization
 
 
 class CorporateActionManifestAppendOutcome(StrEnum):
@@ -93,11 +97,23 @@ class CorporateActionEventGraphPort(Protocol):
     ) -> CorporateActionReadinessDecision: ...
 
 
+class CorporateActionExecutionReleasePort(Protocol):
+    """Materialize immutable ordered execution authority in the caller's transaction."""
+
+    async def materialize(
+        self,
+        plan: CorporateActionExecutionPlan,
+    ) -> CorporateActionReleaseMaterialization: ...
+
+
 class CorporateActionEventGraphUnitOfWork(Protocol):
     """Own one lightweight parent-graph transaction."""
 
     @property
     def event_graph(self) -> CorporateActionEventGraphPort: ...
+
+    @property
+    def releases(self) -> CorporateActionExecutionReleasePort: ...
 
     async def __aenter__(self) -> Self: ...
 

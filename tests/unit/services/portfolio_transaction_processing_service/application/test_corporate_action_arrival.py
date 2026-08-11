@@ -8,6 +8,8 @@ from portfolio_common.domain.calculation_lineage import canonical_content_hash
 
 from src.services.portfolio_transaction_processing_service.app.application import (
     CorporateActionArrivalDisposition,
+    CorporateActionReleaseMaterialization,
+    CorporateActionReleaseMaterializationOutcome,
     ProcessTransactionCommand,
     RouteCorporateActionChildArrivalUseCase,
     TransactionEventMetadata,
@@ -77,50 +79,91 @@ def _decision(
     )
 
 
-class _Registrar:
+class _EventGraph:
     def __init__(self, decision: CorporateActionReadinessDecision) -> None:
         self.decision = decision
         self.observations = []
 
-    async def execute(self, observation):
+    async def observe_child(self, observation):
         self.observations.append(observation)
         return self.decision
 
 
+class _Releases:
+    def __init__(self) -> None:
+        self.plans = []
+
+    async def materialize(self, plan):
+        self.plans.append(plan)
+        return CorporateActionReleaseMaterialization(
+            outcome=CorporateActionReleaseMaterializationOutcome.APPENDED,
+            release_id=41,
+            release_authority_hash="a" * 64,
+            member_count=len(plan.ordered_transaction_ids),
+        )
+
+
+class _UnitOfWork:
+    def __init__(self, decision: CorporateActionReadinessDecision) -> None:
+        self.event_graph = _EventGraph(decision)
+        self.releases = _Releases()
+        self.committed = False
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *_args):
+        return None
+
+    async def commit(self) -> None:
+        self.committed = True
+
+
+def _use_case(decision: CorporateActionReadinessDecision):
+    unit_of_work = _UnitOfWork(decision)
+    use_case = RouteCorporateActionChildArrivalUseCase(  # type: ignore[arg-type]
+        lambda: unit_of_work,
+        clock=lambda: NOW,
+    )
+    return use_case, unit_of_work
+
+
 @pytest.mark.asyncio
 async def test_ordinary_transaction_bypasses_graph_persistence() -> None:
-    registrar = _Registrar(
+    use_case, unit_of_work = _use_case(
         _decision(corporate_action.CorporateActionManifestReadinessStatus.AWAITING_MANIFEST)
     )
-    use_case = RouteCorporateActionChildArrivalUseCase(registrar, clock=lambda: NOW)  # type: ignore[arg-type]
 
     result = await use_case.execute(_command(transaction_type="BUY"))
 
     assert result.disposition is CorporateActionArrivalDisposition.ORDINARY
-    assert registrar.observations == []
+    assert unit_of_work.event_graph.observations == []
+    assert not unit_of_work.committed
 
 
 @pytest.mark.asyncio
 async def test_governed_child_is_parked_with_full_transaction_authority() -> None:
-    registrar = _Registrar(
+    use_case, unit_of_work = _use_case(
         _decision(corporate_action.CorporateActionManifestReadinessStatus.AWAITING_MANIFEST)
     )
-    use_case = RouteCorporateActionChildArrivalUseCase(registrar, clock=lambda: NOW)  # type: ignore[arg-type]
 
     result = await use_case.execute(_command())
 
     assert result.disposition is CorporateActionArrivalDisposition.PARKED
-    observation = registrar.observations[0]
+    observation = unit_of_work.event_graph.observations[0]
     assert observation.delivery_event_id == "transactions.persisted-4-91"
     assert observation.transaction_epoch == 3
     assert observation.transaction_payload_fingerprint.startswith("sha256:")
     assert observation.observed_at == NOW
+    assert unit_of_work.releases.plans == []
+    assert unit_of_work.committed
 
 
 @pytest.mark.asyncio
 async def test_ready_child_returns_exact_release_plan_without_financial_execution() -> None:
-    registrar = _Registrar(_decision(corporate_action.CorporateActionManifestReadinessStatus.READY))
-    use_case = RouteCorporateActionChildArrivalUseCase(registrar, clock=lambda: NOW)  # type: ignore[arg-type]
+    use_case, unit_of_work = _use_case(
+        _decision(corporate_action.CorporateActionManifestReadinessStatus.READY)
+    )
 
     result = await use_case.execute(_command())
 
@@ -128,28 +171,32 @@ async def test_ready_child_returns_exact_release_plan_without_financial_executio
     assert result.plan is not None
     assert result.plan.ordered_transaction_ids == ("CA-OUT-001",)
     assert result.plan.through_observation_sequence == 1
+    assert result.release is not None
+    assert result.release.release_id == 41
+    assert unit_of_work.releases.plans == [result.plan]
+    assert unit_of_work.committed
 
 
 @pytest.mark.asyncio
 async def test_invalid_cohort_is_acknowledged_without_release_authority() -> None:
-    registrar = _Registrar(
+    use_case, unit_of_work = _use_case(
         _decision(corporate_action.CorporateActionManifestReadinessStatus.INVALID)
     )
-    use_case = RouteCorporateActionChildArrivalUseCase(registrar, clock=lambda: NOW)  # type: ignore[arg-type]
 
     result = await use_case.execute(_command())
 
     assert result.disposition is CorporateActionArrivalDisposition.INVALID
     assert result.plan is None
+    assert unit_of_work.releases.plans == []
 
 
 @pytest.mark.asyncio
 async def test_naive_arrival_clock_is_rejected() -> None:
-    registrar = _Registrar(
+    _unused, unit_of_work = _use_case(
         _decision(corporate_action.CorporateActionManifestReadinessStatus.AWAITING_MANIFEST)
     )
     use_case = RouteCorporateActionChildArrivalUseCase(  # type: ignore[arg-type]
-        registrar,
+        lambda: unit_of_work,
         clock=lambda: datetime(2026, 8, 11, 3, 30),
     )
 
