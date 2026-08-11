@@ -1,5 +1,17 @@
 # Codebase Review Ledger
 
+CR-1683 multi-defect reconciliation addendum (2026-08-11): late PR #932 review issue #933 exposed
+that aggregate status precedence could suppress independently counted unsupported-adjustment
+evidence; same-pattern review found missing cash basis had the same defect. The application now
+emits primary-status, missing-cash, unsupported-adjustment, missing-dependency, and canonical
+linkage findings in fixed order, constructs that tuple once, and derives summary counts from its
+actual cardinality. Four multi-defect unit cases prove exact order, unique/stable finding IDs,
+child-order replay stability, and count parity. A real-PostgreSQL save/replay case proves one
+durable run, the exact two additive rows, and duplicate neutrality. This intentionally preserves
+status precedence, calculation/reason vocabulary, routes, schema, Kafka, dependencies, images,
+pools, and topology. #933 is fixed locally within the broader #480/#481/#476 batch pending its
+protected PR and exact-main lifecycle.
+
 CR-1683 post-main integration reconciliation addendum (2026-08-11): the 19 signed corporate-action
 commits from preserved head `885f71d48` were rebased without dropping or squashing a patch onto
 exact validated main `3b0df2609`. Both derived-state/DPM ledger truth and corporate-action review
