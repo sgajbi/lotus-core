@@ -202,6 +202,9 @@ def test_all_supported_transaction_types_are_queryable_and_baseline_cashflows_co
             ),
             {"portfolio_id": portfolio_id},
         ).fetchall()
+    # Redemption processing also persists generated cash-leg transactions. This
+    # catalog verifies only its submitted source transactions and acquisitions.
+    rows = [row for row in rows if row[0] in expected_ids]
 
     produced_types = {row[1] for row in rows}
     assert len(produced_types) >= MIN_E2E_CASHFLOW_DISTINCT_TYPES
