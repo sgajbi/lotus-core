@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -32,6 +34,7 @@ _manifest_json_payload = repository_module._manifest_json_payload
 _child_from_observation = repository_module._child_from_observation
 _require_valid_manifest_chain = repository_module._require_valid_manifest_chain
 ConflictingCorporateActionManifestError = port_module.ConflictingCorporateActionManifestError
+CorporateActionBookScopeError = port_module.CorporateActionBookScopeError
 CorporateActionManifestAppendOutcome = port_module.CorporateActionManifestAppendOutcome
 
 pytestmark = pytest.mark.unit
@@ -65,6 +68,8 @@ def _manifest(*, version: int = 1, source_revision: str = "1") -> CorporateActio
     )
     return CorporateActionParentManifest(
         corporate_action_event_id="CA-EVENT-001",
+        tenant_id="TENANT-SG",
+        legal_book_id="PB-SG-01",
         portfolio_id="CA-PORT-001",
         linked_transaction_group_id="CA-GROUP-001",
         parent_event_reference="CA-PARENT-001",
@@ -85,6 +90,8 @@ def _manifest(*, version: int = 1, source_revision: str = "1") -> CorporateActio
 def _event_record(*, current_manifest_version: int | None) -> MagicMock:
     event = MagicMock(spec=CorporateActionEventRecord)
     event.id = 41
+    event.tenant_id = "TENANT-SG"
+    event.legal_book_id = "PB-SG-01"
     event.portfolio_id = "CA-PORT-001"
     event.corporate_action_event_id = "CA-EVENT-001"
     event.linked_transaction_group_id = "CA-GROUP-001"
@@ -111,6 +118,36 @@ async def test_event_lock_uses_stable_portfolio_and_parent_identity() -> None:
         str(call.args[0]) == "SELECT pg_advisory_xact_lock(hashtextextended(:lock_identity, 0))"
         for call in session.execute.await_args_list
     )
+
+
+@pytest.mark.asyncio
+async def test_new_manifest_source_scope_must_match_governed_portfolio_book() -> None:
+    session = _session_mock()
+    scope_result = MagicMock()
+    scope_result.one_or_none.return_value = SimpleNamespace(
+        tenant_id="TENANT-SG",
+        legal_book_id="PB-SG-01",
+    )
+    session.execute.return_value = scope_result
+    repository = SqlAlchemyCorporateActionEventGraphRepository(session)
+
+    with pytest.raises(CorporateActionBookScopeError, match="does not match"):
+        await repository._create_event(replace(_manifest(), tenant_id="TENANT-OTHER"))
+
+
+@pytest.mark.asyncio
+async def test_existing_event_source_scope_cannot_be_rebound() -> None:
+    session = _session_mock()
+    repository = SqlAlchemyCorporateActionEventGraphRepository(session)
+    repository._event_candidates = AsyncMock(  # type: ignore[method-assign]
+        return_value=(_event_record(current_manifest_version=None),)
+    )
+
+    with pytest.raises(ConflictingCorporateActionManifestError, match="bound differently"):
+        await repository._resolve_event(
+            replace(_manifest(), legal_book_id="PB-OTHER-01"),
+            conflict_error=ConflictingCorporateActionManifestError,
+        )
 
 
 @pytest.mark.asyncio

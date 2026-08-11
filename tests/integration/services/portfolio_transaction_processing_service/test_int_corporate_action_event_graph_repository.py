@@ -1251,6 +1251,8 @@ def _manifest() -> corporate_action.CorporateActionParentManifest:
     )
     return corporate_action.CorporateActionParentManifest(
         corporate_action_event_id="CA-EVENT-001",
+        tenant_id="TENANT-SG",
+        legal_book_id="PB-SG-01",
         portfolio_id="CA-PORT-001",
         linked_transaction_group_id="CA-GROUP-001",
         parent_event_reference="CA-PARENT-001",
@@ -1323,6 +1325,8 @@ def _large_manifest(
     )
     return corporate_action.CorporateActionParentManifest(
         corporate_action_event_id=f"CA-EVENT-{suffix}",
+        tenant_id="TENANT-SG",
+        legal_book_id="PB-SG-01",
         portfolio_id="CA-PORT-001",
         linked_transaction_group_id=f"CA-GROUP-{suffix}",
         parent_event_reference=f"CA-PARENT-{suffix}",

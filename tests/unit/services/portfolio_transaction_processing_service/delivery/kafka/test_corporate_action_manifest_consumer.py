@@ -26,6 +26,8 @@ def _payload() -> dict[str, object]:
         "event_type": "corporate_action.manifest.received",
         "schema_version": "1.0.0",
         "corporate_action_event_id": "EVENT_001",
+        "tenant_id": "TENANT_SG",
+        "legal_book_id": "BOOK_SG_PB",
         "portfolio_id": "PORTFOLIO_001",
         "linked_transaction_group_id": "GROUP_001",
         "parent_event_reference": "PARENT_001",

@@ -333,6 +333,13 @@ class SqlAlchemyCorporateActionEventGraphRepository:
             raise CorporateActionBookScopeError(
                 "corporate-action manifest portfolio has no complete governed book scope"
             )
+        if isinstance(identity, CorporateActionParentManifest) and (
+            book_scope.tenant_id != identity.tenant_id
+            or book_scope.legal_book_id != identity.legal_book_id
+        ):
+            raise CorporateActionBookScopeError(
+                "corporate-action manifest source scope does not match governed portfolio book"
+            )
         inserted = await self._session.execute(
             insert(CorporateActionEventRecord)
             .values(
@@ -781,6 +788,8 @@ class SqlAlchemyCorporateActionEventGraphRepository:
             )
         manifest = CorporateActionParentManifest(
             corporate_action_event_id=event.corporate_action_event_id,
+            tenant_id=event.tenant_id,
+            legal_book_id=event.legal_book_id,
             portfolio_id=portfolio_id,
             linked_transaction_group_id=event.linked_transaction_group_id,
             parent_event_reference=event.parent_event_reference,
@@ -854,10 +863,16 @@ def _same_event_identity(
     event: CorporateActionEventRecord,
     identity: CorporateActionParentManifest | CorporateActionChildObservation,
 ) -> bool:
-    return bool(
+    identity_matches = bool(
         event.corporate_action_event_id == identity.corporate_action_event_id
         and event.linked_transaction_group_id == identity.linked_transaction_group_id
         and event.parent_event_reference == identity.parent_event_reference
+    )
+    if not identity_matches or not isinstance(identity, CorporateActionParentManifest):
+        return identity_matches
+    return bool(
+        event.tenant_id == identity.tenant_id
+        and event.legal_book_id == identity.legal_book_id
     )
 
 
