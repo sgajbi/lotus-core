@@ -2609,12 +2609,12 @@
       "tags": [
         "Corporate Actions"
       ],
-      "route_family": "Unclassified",
+      "route_family": "Write Ingress",
       "api_version": "unversioned-current",
       "api_status": "active",
       "owner": "ingestion_service",
-      "auth_requirement": "not-declared-in-openapi",
-      "audit_requirement": "mutation-audit-required",
+      "auth_requirement": "governed-enterprise-readiness",
+      "audit_requirement": "audit-required",
       "request_schema": "CorporateActionManifestIngestionRequest",
       "response_schemas": [
         {
@@ -2643,8 +2643,11 @@
       "pagination": [],
       "filtering": [],
       "sorting": [],
-      "idempotency_behavior": "not-declared",
-      "downstream_consumers": [],
+      "idempotency_behavior": "ingestion-job-idempotency-supported-where-header-present",
+      "downstream_consumers": [
+        "source-adapters",
+        "operations"
+      ],
       "deprecated_alias_metadata": {
         "is_deprecated": false,
         "sunset": null,
