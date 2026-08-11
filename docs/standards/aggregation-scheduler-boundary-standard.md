@@ -39,6 +39,15 @@ count in the claim transaction. Completion, requeue, and failure writes must mat
 token and clear all lease fields. Expiry recovery must recheck `lease_expires_at` on the write so a
 renewed or reclaimed job cannot be overwritten by stale work.
 
+The valuation scheduler applies the same durable ownership invariant to
+`portfolio_valuation_jobs`: one stable scheduler-instance owner, one rotated claim token, and one
+finite database-clock expiry are persisted atomically with `PROCESSING`. Every terminal transition
+and dispatch-recovery write must match the token and require an unexpired lease; expiry recovery
+must recheck expiry and clear all lease fields. Mutable `updated_at` age is diagnostic only and must
+not become claim authority. The valuation scheduler currently uses a fixed bounded lease without
+heartbeat renewal, so lease changes require measured dispatch-plus-calculation headroom and
+slow-worker/reclaim proof before release.
+
 One poll may claim only the configured batch size. Processing concurrency must remain bounded by
 `PORTFOLIO_AGGREGATION_WORKER_COUNT`; it must not create an unbounded in-memory backlog.
 

@@ -143,6 +143,17 @@ rearmed and completed `525` times for one final portfolio-day row.
     PostgreSQL proof resets claim A, reclaims as B, rejects late A as `NOT_OWNED`, and permits B.
     Migration `c151b2c3d518` adds the nullable rolling-compatibility column and check constraint;
     the public event payload, schema version, topic, and partition key remain unchanged.
+28. Valuation claims now persist a stable scheduler-instance owner and finite PostgreSQL-clock
+    expiry alongside the rotated token. Terminal writes require the exact token and an unexpired
+    lease; dispatch recovery carries exact job/token pairs; expiry recovery rechecks database time
+    instead of mutable `updated_at`; and every release clears all lease fields. Aggregation terminal
+    writes now reject an expired otherwise-correct token. Dedicated bounded metrics distinguish
+    acquired, reclaimed, lost-completion, requeued, and failed recovery outcomes. Migration
+    `c156b2c3d523` safely requeues token-only `PROCESSING` rows because upgrade cannot fabricate
+    expiry authority. The fixed `900s` valuation lease intentionally has no heartbeat in this
+    slice; changing it requires measured dispatch-plus-calculation headroom and slow-worker/reclaim
+    proof. This is an internal schema and recovery-policy change: public API/OpenAPI, Kafka event
+    payload, topic, partition key, calculation, and downstream contracts remain unchanged.
 
 ## 2026-08-10 Certification Task Reconciliation
 

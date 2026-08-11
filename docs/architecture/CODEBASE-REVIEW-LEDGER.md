@@ -1,5 +1,19 @@
 # Codebase Review Ledger
 
+CR-1630 valuation lease-expiry addendum (2026-08-12): issue #487's remaining ownership gap is
+implemented locally with database certification pending. Valuation claims now persist scheduler
+owner, rotated token, and finite
+PostgreSQL-clock expiry; terminal and token-qualified dispatch-recovery writes require the lease to
+remain unexpired; stale recovery rechecks expiry rather than mutable `updated_at`; aggregation
+terminal writes reject expired tokens; and bounded metrics report acquisition, reclaim,
+lost-completion, requeue, and failure outcomes. Migration `c156b2c3d523` requeues legacy token-only
+processing rows rather than fabricating authority. The fixed `900s` lease has no renewal path and
+still requires exact PostgreSQL race, daily workload, protected CI, merge, and exact-main proof
+before #487 may close. Focused proof currently passes `311` model/settings/repository/scheduler/
+control-plane/OpenAPI tests plus scoped Ruff and diff hygiene. Public API/OpenAPI response shape,
+Kafka event payload, topic, partition key, calculation, and downstream contracts are unchanged.
+Authored wiki truth is updated and must be published with strict parity after merge.
+
 CR-1630 service-attributed database evidence addendum (2026-08-11): issue #502's attribution-first
 slice gives every Core SQLAlchemy engine, Alembic migration, governed bank-day monitor, deployed
 Compose service, Kubernetes transaction/derived-state runtime, and recurring PostgreSQL health probe
