@@ -17,7 +17,13 @@ from ..domain.transaction.corporate_action import (
 
 if TYPE_CHECKING:
     from ..application.corporate_action_execution import CorporateActionExecutionPlan
-    from ..application.corporate_action_release import CorporateActionReleaseMaterialization
+    from ..application.corporate_action_release import (
+        ClaimedCorporateActionExecutionRelease,
+        CorporateActionExecutionLeaseRequest,
+        CorporateActionReleaseMaterialization,
+        CorporateActionReleaseProgressOutcome,
+    )
+    from ..domain import BookedTransaction
 
 
 class CorporateActionManifestAppendOutcome(StrEnum):
@@ -111,6 +117,43 @@ class CorporateActionExecutionReleasePort(Protocol):
         self,
         plan: CorporateActionExecutionPlan,
     ) -> CorporateActionReleaseMaterialization: ...
+
+    async def claim_next(
+        self,
+        lease: CorporateActionExecutionLeaseRequest,
+    ) -> ClaimedCorporateActionExecutionRelease | None: ...
+
+    async def load_owned_transaction(
+        self,
+        claim: ClaimedCorporateActionExecutionRelease,
+    ) -> BookedTransaction: ...
+
+    async def advance_member(
+        self,
+        *,
+        release_id: int,
+        expected_ordinal: int,
+        lease_token: str,
+        fence_token: int,
+    ) -> CorporateActionReleaseProgressOutcome: ...
+
+    async def renew_lease(
+        self,
+        *,
+        release_id: int,
+        lease: CorporateActionExecutionLeaseRequest,
+        fence_token: int,
+    ) -> bool: ...
+
+    async def fail_release(
+        self,
+        *,
+        release_id: int,
+        expected_ordinal: int,
+        lease_token: str,
+        fence_token: int,
+        terminal_reason: str,
+    ) -> bool: ...
 
 
 class CorporateActionEventGraphUnitOfWork(Protocol):
