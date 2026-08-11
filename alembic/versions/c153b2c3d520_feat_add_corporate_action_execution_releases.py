@@ -272,6 +272,7 @@ def upgrade() -> None:
                         USING ERRCODE = '23514';
                 END IF;
                 IF NEW.next_execution_ordinal < OLD.next_execution_ordinal
+                   OR NEW.next_execution_ordinal > OLD.next_execution_ordinal + 1
                    OR NEW.attempt_count < OLD.attempt_count
                    OR NEW.fence_token < OLD.fence_token THEN
                     RAISE EXCEPTION 'corporate-action execution release progress is monotonic'
@@ -324,6 +325,20 @@ def upgrade() -> None:
                 END IF;
                 IF OLD.status = 'COMPLETE' AND NEW IS DISTINCT FROM OLD THEN
                     RAISE EXCEPTION 'corporate-action execution member completion is immutable'
+                        USING ERRCODE = '23514';
+                END IF;
+                IF OLD.status = 'PENDING'
+                   AND NEW.status = 'COMPLETE'
+                   AND NOT EXISTS (
+                       SELECT 1
+                       FROM corporate_action_execution_releases AS release
+                       WHERE release.id = NEW.release_id
+                         AND release.status = 'PROCESSING'
+                         AND release.next_execution_ordinal = NEW.execution_ordinal
+                         AND release.fence_token = NEW.completed_fence_token
+                   ) THEN
+                    RAISE EXCEPTION
+                        'corporate-action execution member completion lacks current fence'
                         USING ERRCODE = '23514';
                 END IF;
                 RETURN NEW;
@@ -591,16 +606,65 @@ def upgrade() -> None:
             LANGUAGE plpgsql
             AS $$
             BEGIN
-                PERFORM validate_ca_execution_release(NEW.release_id);
+                IF NEW.status <> 'COMPLETE'
+                   OR NOT EXISTS (
+                       SELECT 1
+                       FROM corporate_action_execution_releases AS release
+                       WHERE release.id = NEW.release_id
+                         AND release.next_execution_ordinal > NEW.execution_ordinal
+                   ) THEN
+                    RAISE EXCEPTION
+                        'corporate-action execution member completion lacks release progress'
+                        USING ERRCODE = '23514';
+                END IF;
+                RETURN NEW;
+            END;
+            $$;
+
+            CREATE FUNCTION enforce_ca_execution_release_progress()
+            RETURNS trigger
+            LANGUAGE plpgsql
+            AS $$
+            BEGIN
+                IF NEW.next_execution_ordinal > 0
+                   AND NOT EXISTS (
+                       SELECT 1
+                       FROM corporate_action_execution_members AS member
+                       WHERE member.release_id = NEW.id
+                         AND member.execution_ordinal = NEW.next_execution_ordinal - 1
+                         AND member.status = 'COMPLETE'
+                   ) THEN
+                    RAISE EXCEPTION
+                        'corporate-action execution release lacks completed predecessor'
+                        USING ERRCODE = '23514';
+                END IF;
+                IF NEW.next_execution_ordinal < NEW.member_count
+                   AND NOT EXISTS (
+                       SELECT 1
+                       FROM corporate_action_execution_members AS member
+                       WHERE member.release_id = NEW.id
+                         AND member.execution_ordinal = NEW.next_execution_ordinal
+                         AND member.status = 'PENDING'
+                   ) THEN
+                    RAISE EXCEPTION
+                        'corporate-action execution release lacks pending successor'
+                        USING ERRCODE = '23514';
+                END IF;
                 RETURN NEW;
             END;
             $$;
 
             CREATE CONSTRAINT TRIGGER trg_ca_execution_release_authority
-            AFTER INSERT OR UPDATE ON corporate_action_execution_releases
+            AFTER INSERT ON corporate_action_execution_releases
             DEFERRABLE INITIALLY DEFERRED
             FOR EACH ROW
             EXECUTE FUNCTION enforce_ca_execution_release_authority();
+
+            CREATE CONSTRAINT TRIGGER trg_ca_execution_release_progress
+            AFTER UPDATE ON corporate_action_execution_releases
+            DEFERRABLE INITIALLY DEFERRED
+            FOR EACH ROW
+            EXECUTE FUNCTION enforce_ca_execution_release_progress();
 
             CREATE CONSTRAINT TRIGGER trg_ca_execution_member_progress
             AFTER UPDATE ON corporate_action_execution_members
@@ -616,6 +680,7 @@ def downgrade() -> None:
     """Remove corporate-action execution release persistence."""
 
     op.execute(sa.text("DROP FUNCTION enforce_ca_execution_member_progress() CASCADE"))
+    op.execute(sa.text("DROP FUNCTION enforce_ca_execution_release_progress() CASCADE"))
     op.execute(sa.text("DROP FUNCTION enforce_ca_execution_release_authority() CASCADE"))
     op.execute(sa.text("DROP FUNCTION validate_ca_execution_release(bigint) CASCADE"))
     op.execute(sa.text("DROP FUNCTION enforce_ca_execution_member_authority() CASCADE"))

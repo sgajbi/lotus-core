@@ -124,6 +124,10 @@ def test_execution_release_migration_is_fenced_ordered_and_reversible(
         "corporate-action execution member completion is immutable",
         "corporate-action execution release lacks current READY authority",
         "corporate-action execution member lacks exact observation authority",
+        "corporate-action execution member completion lacks current fence",
+        "corporate-action execution member completion lacks release progress",
+        "corporate-action execution release lacks completed predecessor",
+        "corporate-action execution release lacks pending successor",
         "corporate-action execution member progress is not a complete prefix",
         "corporate-action execution release hash is not canonical",
     ):
@@ -132,11 +136,20 @@ def test_execution_release_migration_is_fenced_ordered_and_reversible(
     assert "BEFORE UPDATE OR DELETE ON corporate_action_execution_members" in sql
     assert "DEFERRABLE INITIALLY DEFERRED" in sql
     assert "AFTER UPDATE ON corporate_action_execution_members" in sql
+    assert "NEW.next_execution_ordinal > OLD.next_execution_ordinal + 1" in sql
+    assert "release.next_execution_ordinal > NEW.execution_ordinal" in sql
+    assert sql.count("PERFORM validate_ca_execution_release(NEW.id);") == 1
     assert (
-        "AFTER INSERT OR UPDATE ON corporate_action_execution_releases\n"
+        "AFTER INSERT ON corporate_action_execution_releases\n"
         "            DEFERRABLE INITIALLY DEFERRED\n"
         "            FOR EACH ROW\n"
         "            EXECUTE FUNCTION enforce_ca_execution_release_authority()"
+    ) in sql
+    assert (
+        "AFTER UPDATE ON corporate_action_execution_releases\n"
+        "            DEFERRABLE INITIALLY DEFERRED\n"
+        "            FOR EACH ROW\n"
+        "            EXECUTE FUNCTION enforce_ca_execution_release_progress()"
     ) in sql
     assert (
         "AFTER UPDATE ON corporate_action_execution_members\n"
@@ -146,6 +159,7 @@ def test_execution_release_migration_is_fenced_ordered_and_reversible(
     ) in sql
     assert "DROP FUNCTION enforce_ca_execution_release_authority() CASCADE" in sql
     assert "DROP FUNCTION enforce_ca_execution_member_progress() CASCADE" in sql
+    assert "DROP FUNCTION enforce_ca_execution_release_progress() CASCADE" in sql
     assert "DROP FUNCTION validate_ca_execution_release(bigint) CASCADE" in sql
     assert "DROP FUNCTION enforce_ca_execution_member_authority() CASCADE" in sql
     assert "DROP FUNCTION enforce_ca_execution_release_ready_insert() CASCADE" in sql
