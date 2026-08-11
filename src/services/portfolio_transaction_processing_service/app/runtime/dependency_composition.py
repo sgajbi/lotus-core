@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import socket
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import cast
@@ -12,6 +14,7 @@ from portfolio_common.reprocessing_repository import ReprocessingRepository
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..application import (
+    ProcessNextCorporateActionReleaseUseCase,
     ProcessTransactionUseCase,
     ReconcileAverageCostPoolsUseCase,
     ReplayBookedTransactionUseCase,
@@ -197,4 +200,26 @@ def build_corporate_action_child_arrival_use_case(
         SqlAlchemyCorporateActionEventGraphUnitOfWorkFactory(
             session_factory=session_factory or get_async_session_factory()
         )
+    )
+
+
+def build_corporate_action_release_worker_use_case(
+    *,
+    session_factory: Callable[[], AsyncSession] | None = None,
+    process_transaction: ProcessTransactionUseCase | None = None,
+    lease_owner: str | None = None,
+) -> ProcessNextCorporateActionReleaseUseCase:
+    """Compose the fenced worker over the same mature PostgreSQL boundary."""
+
+    resolved_session_factory = session_factory or get_async_session_factory()
+    return ProcessNextCorporateActionReleaseUseCase(
+        unit_of_work_factory=SqlAlchemyCorporateActionEventGraphUnitOfWorkFactory(
+            session_factory=resolved_session_factory
+        ),
+        process_transaction=(
+            process_transaction
+            if process_transaction is not None
+            else build_process_transaction_use_case(session_factory=resolved_session_factory)
+        ),
+        lease_owner=lease_owner or f"{socket.gethostname()}:{os.getpid()}",
     )

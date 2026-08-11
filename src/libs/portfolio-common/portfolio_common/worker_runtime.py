@@ -17,14 +17,14 @@ from portfolio_common.runtime_supervision import (
 )
 
 
-def _has_metrics_route(web_app) -> bool:
+def _has_metrics_route(web_app: Any) -> bool:
     return any(
         getattr(route, "path", None) == "/metrics" for route in getattr(web_app, "routes", ())
     )
 
 
 def _ensure_worker_metrics(
-    web_app,
+    web_app: Any,
     logger: logging.Logger,
     *,
     metrics_access_token: str | None = None,
@@ -50,8 +50,8 @@ async def run_instrumented_worker_service(
     *,
     service_name: str,
     logger: logging.Logger,
-    manager,
-    web_app,
+    manager: Any,
+    web_app: Any,
     metrics_access_token: str | None = None,
 ) -> None:
     """
@@ -89,8 +89,9 @@ async def run_kafka_worker_runtime(
     signal_module: Any,
     server_config_factory: Callable[..., Any],
     server_factory: Callable[[Any], Any],
+    background_components: Sequence[Any] = (),
 ) -> None:
-    """Run Kafka consumers, one outbox dispatcher, and the worker health server."""
+    """Run Kafka consumers, durable background components, dispatcher, and health server."""
     validate_runtime_shutdown_budget(
         consumers=consumers,
         shutdown_timeout_seconds=dispatcher.shutdown_timeout_seconds,
@@ -133,6 +134,10 @@ async def run_kafka_worker_runtime(
         for index, consumer in enumerate(consumers)
     )
     tasks.append(asyncio.create_task(dispatcher.run(), name="outbox-dispatcher"))
+    tasks.extend(
+        asyncio.create_task(component.run(), name=f"background-component:{index}")
+        for index, component in enumerate(background_components)
+    )
     tasks.append(asyncio.create_task(server.serve(), name="health-server"))
 
     runtime_error = await wait_for_shutdown_or_task_failure(
@@ -145,7 +150,7 @@ async def run_kafka_worker_runtime(
     await shutdown_runtime_components(
         tasks=tasks,
         consumers=consumers,
-        stop_callbacks=[dispatcher.stop],
+        stop_callbacks=[dispatcher.stop, *(component.stop for component in background_components)],
         server=server,
         shutdown_timeout_seconds=dispatcher.shutdown_timeout_seconds,
         logger=logger,
