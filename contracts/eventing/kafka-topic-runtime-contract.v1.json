@@ -131,6 +131,18 @@
       "replay_contract": "one earliest affected booked-transaction anchor per source-lot correction; command_id remains stable across Kafka redelivery"
     },
     {
+      "topic": "corporate_action.manifest.received",
+      "partitions": 12,
+      "producer_services": ["ingestion_service"],
+      "current_key": "portfolio_id|transaction-group|linked_transaction_group_id",
+      "ordering_scope": "portfolio_transaction_group",
+      "consumer_groups": ["corporate_action_manifest_group"],
+      "consumer_max_in_flight": 12,
+      "state_owner": "portfolio_transaction_processing_service.corporate_action_event_graph",
+      "duplicate_policy": "source_revision_content_fence_then_manifest_readiness_evaluation",
+      "replay_contract": "replay_preserves_exact_portfolio_transaction_group_key_and_source_revision"
+    },
+    {
       "topic": "transactions.persisted",
       "partitions": 12,
       "producer_services": ["persistence_service", "event_replay_service"],
