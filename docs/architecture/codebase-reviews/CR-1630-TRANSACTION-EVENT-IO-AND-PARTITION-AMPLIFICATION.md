@@ -1224,6 +1224,37 @@ lineage, missing-row failure, opening-state atomicity, rollback, APIs/OpenAPI, e
 schema, partitions, runtime settings, and operator commands. This review and the issue evidence are
 the durable no-repeat record; no migration, repository-context, runbook, methodology, or
 authored-wiki change is required.
+## Service-attributed database evidence addendum (2026-08-11)
+
+Issue #502's attribution-first slice adds a fixed Core runtime inventory and publishes its stable
+`SERVICE_NAME` through PostgreSQL `application_name` for shared sync/async engines, Alembic, the
+bank-day monitor, Compose, and the two deployed Kubernetes runtimes. The identity is shared by
+replicas and never derived from pod, host, PID, worker, request, transaction, portfolio, account, or
+security identity. Production-like engines fail before construction when identity is missing or
+invalid. Local/test fallbacks remain available for developer and test execution but fail a
+certifying profile if observed. The recurring PostgreSQL health probe has its own fixed identity so
+sampling alignment cannot create a false unattributed-session failure.
+
+The existing database-resource statement now returns bounded per-application connection, active,
+idle-in-transaction, open-transaction, lock-waiter, blocked-session, and oldest-transaction-age
+cohorts. It remains one statement at the existing cadence. Every sample reconciles cohort totals to
+the aggregate total/active/idle counts, and certifying evidence rejects missing reconciliation,
+unattributed sessions, ungoverned identities, and local/test identity. Retained reports
+contain only bounded peaks, never PIDs, SQL text, transaction IDs, raw samples, or business keys.
+The existing Prometheus pool labels are unchanged.
+
+Focused local proof passes 77 unit/deployment tests and five real-PostgreSQL tests covering psycopg,
+asyncpg, concurrent named sessions, exact reconciliation, and redaction of ungoverned identity,
+plus scoped Ruff and focused MyPy.
+The slice uses mature PostgreSQL connection metadata and existing SQLAlchemy/Prometheus runtime
+capabilities; it adds no dependency, agent, sidecar, datastore, image, deployable, topology, pool,
+timeout, recycle, concurrency, or partition change. API/OpenAPI, events, schemas, migrations,
+calculations, ordering, and downstream contracts are unchanged. Repository context, operations
+guidance, and the existing Timeseries and Aggregation wiki are updated in place; no new standalone
+document or central Platform skill/context change is needed. Issues #502 and #795 remain open until
+non-regressing fan-in and exact daily evidence support a further capacity decision. Technology
+governance and vulnerability-release gaps remain explicitly owned by #720, #926, #927, and #928.
+
 The PR #931 tranche boundary changes only delivery packaging and campaign chronology. It does not
 change runtime behavior or any API/OpenAPI, event, schema, migration, calculation, partition,
 operator, repository-context, or authored-wiki contract. Existing authored wiki changes already

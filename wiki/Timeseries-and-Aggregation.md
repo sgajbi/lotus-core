@@ -86,6 +86,14 @@ idle-in-transaction connections, lock waiters, blocked sessions, and CPU/memory 
 one complete database-and-runtime sample. Sampling failures retain only bounded error types in the
 artifact, not command output or connection details.
 
+Database evidence is also grouped by the stable Core `SERVICE_NAME` published as PostgreSQL
+`application_name`. The retained artifact contains bounded per-service peaks for connection,
+open-transaction, lock, and transaction-age pressure; it contains no PID, SQL text, transaction ID,
+or business identifier. Cohort totals must reconcile to aggregate totals in every sample, and a
+certifying profile fails when an unattributed, ungoverned, or local/test connection is
+present. Use this evidence to locate the owning unit of work before changing pool or worker
+capacity.
+
 Each workload artifact also records the emitting checkout's `source_revision` and a non-sensitive
 `source_tree_state` (`clean`, `dirty`, or `unavailable`). This makes retained evidence reproducible
 without persisting filenames or Git command output; it does not elevate local workload evidence to

@@ -12,32 +12,103 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, TypeVar
 
+from portfolio_common.database_runtime_identity import DATABASE_RUNTIME_IDENTITIES
 from sqlalchemy import Engine, text
+
+_UNATTRIBUTED_APPLICATION = "__unattributed__"
+_UNGOVERNED_APPLICATION = "__ungoverned__"
 
 _DATABASE_RESOURCE_QUERY = text(
     """
+    WITH activity AS (
+      SELECT
+        CASE
+          WHEN nullif(btrim(application_name), '') IS NULL THEN '__unattributed__'
+          WHEN application_name = ANY(:governed_application_names) THEN application_name
+          ELSE '__ungoverned__'
+        END AS application_name,
+        state,
+        xact_start,
+        cardinality(pg_blocking_pids(pid)) > 0 AS is_blocked,
+        EXISTS (
+          SELECT 1
+          FROM pg_locks waiting_lock
+          WHERE waiting_lock.pid = pg_stat_activity.pid
+            AND NOT waiting_lock.granted
+        ) AS is_lock_waiter
+      FROM pg_stat_activity
+      WHERE datname = current_database()
+    ),
+    application_cohorts AS (
+      SELECT
+        application_name,
+        count(*)::integer AS total_connections,
+        count(*) FILTER (WHERE state = 'active')::integer AS active_connections,
+        count(*) FILTER (WHERE state = 'idle in transaction')::integer
+          AS idle_in_transaction_connections,
+        count(*) FILTER (WHERE xact_start IS NOT NULL)::integer AS open_transactions,
+        count(*) FILTER (WHERE is_lock_waiter)::integer AS lock_waiters,
+        count(*) FILTER (WHERE is_blocked)::integer AS blocked_sessions,
+        coalesce(
+          max(extract(epoch FROM clock_timestamp() - xact_start))
+            FILTER (WHERE xact_start IS NOT NULL),
+          0
+        ) AS oldest_open_transaction_seconds,
+        coalesce(
+          max(extract(epoch FROM clock_timestamp() - xact_start))
+            FILTER (WHERE state = 'idle in transaction' AND xact_start IS NOT NULL),
+          0
+        ) AS oldest_idle_in_transaction_seconds
+      FROM activity
+      GROUP BY application_name
+    ),
+    bounded_cohorts AS (
+      SELECT * FROM application_cohorts
+      UNION ALL
+      SELECT '__unattributed__', 0, 0, 0, 0, 0, 0, 0, 0
+      WHERE NOT EXISTS (
+        SELECT 1 FROM application_cohorts WHERE application_name = '__unattributed__'
+      )
+    ),
+    totals AS (
+      SELECT
+        sum(total_connections)::integer AS total_connections,
+        sum(active_connections)::integer AS active_connections,
+        sum(idle_in_transaction_connections)::integer AS idle_in_transaction_connections,
+        sum(lock_waiters)::integer AS lock_waiters,
+        sum(blocked_sessions)::integer AS blocked_sessions
+      FROM bounded_cohorts
+    )
     SELECT
-      count(*) FILTER (WHERE datname = current_database()) AS total_connections,
-      count(*) FILTER (
-        WHERE datname = current_database() AND state = 'active'
-      ) AS active_connections,
-      count(*) FILTER (
-        WHERE datname = current_database() AND state = 'idle in transaction'
-      ) AS idle_in_transaction_connections,
-      (
-        SELECT count(*)
-        FROM pg_locks waiting_lock
-        JOIN pg_stat_activity waiting_activity
-          ON waiting_activity.pid = waiting_lock.pid
-        WHERE waiting_activity.datname = current_database()
-          AND NOT waiting_lock.granted
-      ) AS lock_waiters,
-      count(*) FILTER (
-        WHERE datname = current_database()
-          AND cardinality(pg_blocking_pids(pid)) > 0
-      ) AS blocked_sessions,
-      current_setting('max_connections')::integer AS max_connections
-    FROM pg_stat_activity
+      totals.*,
+      current_setting('max_connections')::integer AS max_connections,
+      coalesce(
+        jsonb_agg(
+          jsonb_build_object(
+            'application_name', bounded_cohorts.application_name,
+            'total_connections', bounded_cohorts.total_connections,
+            'active_connections', bounded_cohorts.active_connections,
+            'idle_in_transaction_connections',
+              bounded_cohorts.idle_in_transaction_connections,
+            'open_transactions', bounded_cohorts.open_transactions,
+            'lock_waiters', bounded_cohorts.lock_waiters,
+            'blocked_sessions', bounded_cohorts.blocked_sessions,
+            'oldest_open_transaction_seconds',
+              bounded_cohorts.oldest_open_transaction_seconds,
+            'oldest_idle_in_transaction_seconds',
+              bounded_cohorts.oldest_idle_in_transaction_seconds
+          ) ORDER BY bounded_cohorts.application_name
+        ),
+        '[]'::jsonb
+      ) AS application_cohorts
+    FROM totals
+    CROSS JOIN bounded_cohorts
+    GROUP BY
+      totals.total_connections,
+      totals.active_connections,
+      totals.idle_in_transaction_connections,
+      totals.lock_waiters,
+      totals.blocked_sessions
     """
 )
 
@@ -123,6 +194,21 @@ _ResourceValue = TypeVar("_ResourceValue", int, float)
 
 
 @dataclass(frozen=True, slots=True)
+class DatabaseApplicationResourceUsage:
+    """Bounded PostgreSQL pressure evidence attributed to one application cohort."""
+
+    application_name: str
+    total_connections: int
+    active_connections: int
+    idle_in_transaction_connections: int
+    open_transactions: int
+    lock_waiters: int
+    blocked_sessions: int
+    oldest_open_transaction_seconds: float
+    oldest_idle_in_transaction_seconds: float
+
+
+@dataclass(frozen=True, slots=True)
 class DatabaseResourceUsage:
     """One PostgreSQL capacity and lock-pressure observation."""
 
@@ -133,6 +219,7 @@ class DatabaseResourceUsage:
     blocked_sessions: int
     max_connections: int
     connection_utilization_percent: float
+    application_cohorts: tuple[DatabaseApplicationResourceUsage, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -208,6 +295,8 @@ class DerivedStateResourceEvidence:
     observed_outbox_processed_events: int | None
     observed_outbox_seconds: float | None
     observed_outbox_processed_events_per_second: float | None
+    peak_database_usage_by_application: tuple[DatabaseApplicationResourceUsage, ...] = ()
+    database_cohort_reconciled_sample_count: int = 0
 
 
 def parse_memory_bytes(value: str) -> int:
@@ -273,24 +362,85 @@ def parse_compose_stats(payload: str) -> RuntimeResourceUsage:
     )
 
 
+def _database_application_cohorts(
+    value: object,
+) -> tuple[DatabaseApplicationResourceUsage, ...]:
+    decoded = json.loads(value) if isinstance(value, str) else value
+    if not isinstance(decoded, list):
+        raise RuntimeError("Database resource query returned invalid application cohorts")
+    cohorts = tuple(
+        DatabaseApplicationResourceUsage(
+            application_name=str(item["application_name"]),
+            total_connections=int(item["total_connections"]),
+            active_connections=int(item["active_connections"]),
+            idle_in_transaction_connections=int(item["idle_in_transaction_connections"]),
+            open_transactions=int(item["open_transactions"]),
+            lock_waiters=int(item["lock_waiters"]),
+            blocked_sessions=int(item["blocked_sessions"]),
+            oldest_open_transaction_seconds=round(
+                float(item["oldest_open_transaction_seconds"]), 6
+            ),
+            oldest_idle_in_transaction_seconds=round(
+                float(item["oldest_idle_in_transaction_seconds"]), 6
+            ),
+        )
+        for item in decoded
+        if isinstance(item, dict)
+    )
+    if len(cohorts) != len(decoded):
+        raise RuntimeError("Database resource query returned malformed application cohorts")
+    allowed_cohorts = DATABASE_RUNTIME_IDENTITIES | {
+        _UNATTRIBUTED_APPLICATION,
+        _UNGOVERNED_APPLICATION,
+    }
+    if any(cohort.application_name not in allowed_cohorts for cohort in cohorts):
+        raise RuntimeError("Database resource query returned an unbounded application cohort")
+    if not any(cohort.application_name == _UNATTRIBUTED_APPLICATION for cohort in cohorts):
+        raise RuntimeError("Database resource query omitted the unattributed application cohort")
+    return tuple(sorted(cohorts, key=lambda cohort: cohort.application_name))
+
+
 def read_database_resource_usage(*, engine: Engine) -> DatabaseResourceUsage:
-    """Read current database connections, blocked work, and lock waiters."""
+    """Read aggregate and bounded application-attributed pressure in one statement."""
 
     with engine.connect() as connection:
-        row = connection.execute(_DATABASE_RESOURCE_QUERY).mappings().one()
+        row = (
+            connection.execute(
+                _DATABASE_RESOURCE_QUERY,
+                {"governed_application_names": sorted(DATABASE_RUNTIME_IDENTITIES)},
+            )
+            .mappings()
+            .one()
+        )
     total_connections = int(row["total_connections"])
+    active_connections = int(row["active_connections"])
+    idle_in_transaction_connections = int(row["idle_in_transaction_connections"])
+    application_cohorts = _database_application_cohorts(row["application_cohorts"])
+    reconciled_counts = {
+        "total_connections": total_connections,
+        "active_connections": active_connections,
+        "idle_in_transaction_connections": idle_in_transaction_connections,
+    }
+    for field_name, aggregate_count in reconciled_counts.items():
+        cohort_count = sum(getattr(cohort, field_name) for cohort in application_cohorts)
+        if cohort_count != aggregate_count:
+            raise RuntimeError(
+                "Database application-cohort reconciliation failed: "
+                f"{field_name} {cohort_count} != aggregate {aggregate_count}"
+            )
     max_connections = int(row["max_connections"])
     utilization = (
         round((total_connections / max_connections) * 100, 4) if max_connections > 0 else 0.0
     )
     return DatabaseResourceUsage(
         total_connections=total_connections,
-        active_connections=int(row["active_connections"]),
-        idle_in_transaction_connections=int(row["idle_in_transaction_connections"]),
+        active_connections=active_connections,
+        idle_in_transaction_connections=idle_in_transaction_connections,
         lock_waiters=int(row["lock_waiters"]),
         blocked_sessions=int(row["blocked_sessions"]),
         max_connections=max_connections,
         connection_utilization_percent=utilization,
+        application_cohorts=application_cohorts,
     )
 
 
@@ -454,6 +604,78 @@ def _outbox_throughput(
     )
 
 
+def _maximum_database_application_usage(
+    cohorts: Iterable[DatabaseApplicationResourceUsage],
+    *,
+    application_name: str,
+) -> DatabaseApplicationResourceUsage:
+    values = tuple(cohorts)
+    return DatabaseApplicationResourceUsage(
+        application_name=application_name,
+        total_connections=max((value.total_connections for value in values), default=0),
+        active_connections=max((value.active_connections for value in values), default=0),
+        idle_in_transaction_connections=max(
+            (value.idle_in_transaction_connections for value in values), default=0
+        ),
+        open_transactions=max((value.open_transactions for value in values), default=0),
+        lock_waiters=max((value.lock_waiters for value in values), default=0),
+        blocked_sessions=max((value.blocked_sessions for value in values), default=0),
+        oldest_open_transaction_seconds=max(
+            (value.oldest_open_transaction_seconds for value in values), default=0.0
+        ),
+        oldest_idle_in_transaction_seconds=max(
+            (value.oldest_idle_in_transaction_seconds for value in values), default=0.0
+        ),
+    )
+
+
+def _bounded_peak_database_application_usage(
+    cohort_values: Iterable[DatabaseApplicationResourceUsage],
+) -> tuple[DatabaseApplicationResourceUsage, ...]:
+    """Retain deterministic peaks without allowing application cardinality to grow unbounded."""
+
+    cohorts = tuple(cohort_values)
+    allowed_cohorts = DATABASE_RUNTIME_IDENTITIES | {
+        _UNATTRIBUTED_APPLICATION,
+        _UNGOVERNED_APPLICATION,
+    }
+    if any(cohort.application_name not in allowed_cohorts for cohort in cohorts):
+        raise RuntimeError("Database samples contain an unbounded application cohort")
+    observations: dict[str, list[DatabaseApplicationResourceUsage]] = {}
+    for cohort in cohorts:
+        observations.setdefault(cohort.application_name, []).append(cohort)
+    peaks = {
+        application_name: _maximum_database_application_usage(
+            values, application_name=application_name
+        )
+        for application_name, values in observations.items()
+    }
+    return tuple(sorted(peaks.values(), key=lambda cohort: cohort.application_name))
+
+
+def _peak_database_application_usage(
+    samples: tuple[DerivedStateResourceSample, ...],
+) -> tuple[DatabaseApplicationResourceUsage, ...]:
+    return _bounded_peak_database_application_usage(
+        cohort for sample in samples for cohort in sample.database.application_cohorts
+    )
+
+
+def _database_cohorts_reconcile(database: DatabaseResourceUsage) -> bool:
+    cohorts = database.application_cohorts
+    return bool(cohorts) and all(
+        sum(getattr(cohort, field_name) for cohort in cohorts) == aggregate_count
+        for field_name, aggregate_count in (
+            ("total_connections", database.total_connections),
+            ("active_connections", database.active_connections),
+            (
+                "idle_in_transaction_connections",
+                database.idle_in_transaction_connections,
+            ),
+        )
+    )
+
+
 def summarize_resource_samples(
     *,
     samples: Iterable[DerivedStateResourceSample],
@@ -540,6 +762,10 @@ def summarize_resource_samples(
         observed_outbox_processed_events=processed_events,
         observed_outbox_seconds=observed_seconds,
         observed_outbox_processed_events_per_second=processed_per_second,
+        peak_database_usage_by_application=_peak_database_application_usage(sample_values),
+        database_cohort_reconciled_sample_count=sum(
+            _database_cohorts_reconcile(sample.database) for sample in sample_values
+        ),
     )
 
 

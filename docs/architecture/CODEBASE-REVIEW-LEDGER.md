@@ -1,5 +1,22 @@
 # Codebase Review Ledger
 
+CR-1630 service-attributed database evidence addendum (2026-08-11): issue #502's attribution-first
+slice gives every Core SQLAlchemy engine, Alembic migration, governed bank-day monitor, deployed
+Compose service, Kubernetes transaction/derived-state runtime, and recurring PostgreSQL health probe
+one stable allowlisted `SERVICE_NAME`/`application_name`. Production-like engine creation fails on
+missing, blank, unknown, or overlong identity; local/test fallbacks are bounded but cannot certify a
+profile. The existing five-second resource monitor still executes one PostgreSQL statement per
+sample and now retains bounded per-service peaks for connections, open transactions, lock pressure,
+and transaction ages. Aggregate total/active/idle counts reconcile exactly in every sample;
+unattributed, ungoverned, or local/test cohorts fail certifying runs. No PID, SQL text, raw
+sample, Prometheus application label, or business identifier is retained. Focused validation passes
+77 unit/deployment tests, five real-PostgreSQL psycopg/asyncpg/cohort tests, scoped Ruff, and focused
+MyPy. This uses only established PostgreSQL connection metadata, SQLAlchemy driver settings, and the
+existing monitor: no dependency, agent, sidecar, datastore, image, pool, timeout, recycle,
+concurrency, partition, API/OpenAPI, event, migration, calculation, or topology changed. Wider
+vulnerability and immutable-artifact posture remains owned by #720/#926/#927/#928; #502 and #795
+remain open until non-regressing fan-in and exact daily evidence justify the next decision.
+
 CR-1683 manifest-arrival discriminator addendum (2026-08-11): exact-main E2E run `31484915013`
 proved that an upstream-provided `ADJUSTMENT` cash settlement carrying ordinary economic-event and
 linked-transaction-group references was misclassified as a partially identified corporate-action

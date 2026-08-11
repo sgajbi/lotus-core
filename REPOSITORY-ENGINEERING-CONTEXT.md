@@ -3744,6 +3744,20 @@ Most relevant current governance:
      scalability, security, recovery, operability, and lifecycle evidence plus governed
      vulnerability and immutable-artifact posture.
 
+241. Every Core-owned PostgreSQL engine must publish the allowlisted stable `SERVICE_NAME` through
+     driver-level `application_name`. The identity is a deployable cohort shared by replicas, not a
+     host, pod, PID, worker, request, transaction, portfolio, account, or security identifier.
+     Production-like runtime must fail before engine creation when identity is missing or unknown;
+     local/test use only the explicit bounded fallback. Compose, Kubernetes, Alembic, and governed
+     workload monitors must remain covered by executable identity contracts. Resource evidence
+     must be collected in the existing PostgreSQL monitor statement at unchanged cadence, reconcile
+     per-service connection totals exactly to aggregate totals, retain bounded peaks only, and fail
+     certifying profiles on unattributed, ungoverned, or local/test sessions. Do not add
+     application identity as a Prometheus pool label or introduce an agent, sidecar, datastore, or
+     dependency for this attribution.
+     Measure this evidence before changing pool size, acquisition timeout, recycle policy, worker
+     concurrency, or Kafka partition capacity.
+
 ## Context Maintenance Rule
 
 Update this document when:

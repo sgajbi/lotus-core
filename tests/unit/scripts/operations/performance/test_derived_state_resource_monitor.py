@@ -5,11 +5,16 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+import pytest
+from portfolio_common.database_runtime_identity import DATABASE_RUNTIME_IDENTITIES
+
 from scripts.operations.performance.derived_state_resource_monitor import (
+    DatabaseApplicationResourceUsage,
     DatabaseResourceUsage,
     DerivedStateResourceSample,
     OutboxResourceUsage,
     RuntimeResourceUsage,
+    _bounded_peak_database_application_usage,
     parse_compose_stats,
     parse_memory_bytes,
     read_database_resource_usage,
@@ -51,13 +56,13 @@ def test_parse_compose_stats_accepts_array_and_docker_field_names() -> None:
 
 
 def test_read_database_resource_usage_calculates_connection_capacity() -> None:
-    captured: dict[str, str] = {}
+    captured: dict[str, object] = {}
 
     class Result:
         def mappings(self) -> Result:
             return self
 
-        def one(self) -> dict[str, int]:
+        def one(self) -> dict[str, object]:
             return {
                 "total_connections": 25,
                 "active_connections": 12,
@@ -65,6 +70,30 @@ def test_read_database_resource_usage_calculates_connection_capacity() -> None:
                 "lock_waiters": 3,
                 "blocked_sessions": 1,
                 "max_connections": 200,
+                "application_cohorts": [
+                    {
+                        "application_name": "__unattributed__",
+                        "total_connections": 5,
+                        "active_connections": 2,
+                        "idle_in_transaction_connections": 1,
+                        "open_transactions": 1,
+                        "lock_waiters": 0,
+                        "blocked_sessions": 0,
+                        "oldest_open_transaction_seconds": 8.1234567,
+                        "oldest_idle_in_transaction_seconds": 8.1234567,
+                    },
+                    {
+                        "application_name": "portfolio-derived-state",
+                        "total_connections": 20,
+                        "active_connections": 10,
+                        "idle_in_transaction_connections": 1,
+                        "open_transactions": 4,
+                        "lock_waiters": 3,
+                        "blocked_sessions": 1,
+                        "oldest_open_transaction_seconds": 12.5,
+                        "oldest_idle_in_transaction_seconds": 4.0,
+                    },
+                ],
             }
 
     class Connection:
@@ -74,8 +103,9 @@ def test_read_database_resource_usage_calculates_connection_capacity() -> None:
         def __exit__(self, *_args: object) -> None:
             return None
 
-        def execute(self, query: object) -> Result:
+        def execute(self, query: object, params: dict[str, object]) -> Result:
             captured["query"] = str(query)
+            captured["params"] = params
             return Result()
 
     class Engine:
@@ -89,9 +119,111 @@ def test_read_database_resource_usage_calculates_connection_capacity() -> None:
     assert usage.lock_waiters == 3
     assert usage.blocked_sessions == 1
     assert usage.connection_utilization_percent == 12.5
-    assert "JOIN pg_stat_activity waiting_activity" in captured["query"]
-    assert "waiting_activity.datname = current_database()" in captured["query"]
-    assert "NOT waiting_lock.granted" in captured["query"]
+    assert usage.application_cohorts[0].application_name == "__unattributed__"
+    assert usage.application_cohorts[1].open_transactions == 4
+    assert usage.application_cohorts[1].oldest_open_transaction_seconds == 12.5
+    assert captured["params"] == {"governed_application_names": sorted(DATABASE_RUNTIME_IDENTITIES)}
+    assert "FROM pg_stat_activity" in str(captured["query"])
+    assert "jsonb_agg" in str(captured["query"])
+    assert "NOT waiting_lock.granted" in str(captured["query"])
+
+
+def test_read_database_resource_usage_rejects_unreconciled_cohorts() -> None:
+    class Result:
+        def mappings(self) -> Result:
+            return self
+
+        def one(self) -> dict[str, object]:
+            return {
+                "total_connections": 2,
+                "active_connections": 1,
+                "idle_in_transaction_connections": 0,
+                "lock_waiters": 0,
+                "blocked_sessions": 0,
+                "max_connections": 100,
+                "application_cohorts": [
+                    {
+                        "application_name": "__unattributed__",
+                        "total_connections": 1,
+                        "active_connections": 1,
+                        "idle_in_transaction_connections": 0,
+                        "open_transactions": 1,
+                        "lock_waiters": 0,
+                        "blocked_sessions": 0,
+                        "oldest_open_transaction_seconds": 0,
+                        "oldest_idle_in_transaction_seconds": 0,
+                    }
+                ],
+            }
+
+    class Connection:
+        def __enter__(self) -> Connection:
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def execute(self, _query: object, _params: object) -> Result:
+            return Result()
+
+    class Engine:
+        def connect(self) -> Connection:
+            return Connection()
+
+    with pytest.raises(RuntimeError, match="total_connections 1 != aggregate 2"):
+        read_database_resource_usage(engine=Engine())  # type: ignore[arg-type]
+
+
+def test_database_application_peak_summary_is_bounded_to_governed_inventory() -> None:
+    cohorts = tuple(
+        DatabaseApplicationResourceUsage(
+            application_name=application_name,
+            total_connections=1,
+            active_connections=1,
+            idle_in_transaction_connections=0,
+            open_transactions=1,
+            lock_waiters=0,
+            blocked_sessions=0,
+            oldest_open_transaction_seconds=float(index),
+            oldest_idle_in_transaction_seconds=0.0,
+        )
+        for index, application_name in enumerate(sorted(DATABASE_RUNTIME_IDENTITIES))
+    ) + (
+        DatabaseApplicationResourceUsage(
+            application_name="__unattributed__",
+            total_connections=0,
+            active_connections=0,
+            idle_in_transaction_connections=0,
+            open_transactions=0,
+            lock_waiters=0,
+            blocked_sessions=0,
+            oldest_open_transaction_seconds=0.0,
+            oldest_idle_in_transaction_seconds=0.0,
+        ),
+    )
+
+    peaks = _bounded_peak_database_application_usage(cohorts)
+
+    assert len(peaks) == len(DATABASE_RUNTIME_IDENTITIES) + 1
+    assert DATABASE_RUNTIME_IDENTITIES <= {peak.application_name for peak in peaks}
+    assert "__unattributed__" in {peak.application_name for peak in peaks}
+
+
+def test_database_application_peak_summary_rejects_free_form_identity() -> None:
+    cohort = DatabaseApplicationResourceUsage(
+        application_name="portfolio-PB_SG_GLOBAL_BAL_001",
+        total_connections=1,
+        active_connections=1,
+        idle_in_transaction_connections=0,
+        open_transactions=1,
+        lock_waiters=0,
+        blocked_sessions=0,
+        oldest_open_transaction_seconds=0.0,
+        oldest_idle_in_transaction_seconds=0.0,
+    )
+
+    with pytest.raises(RuntimeError, match="unbounded application cohort"):
+        _bounded_peak_database_application_usage((cohort,))
 
 
 def test_read_runtime_resource_usage_targets_exact_compose_service() -> None:
@@ -302,6 +434,30 @@ def test_summarize_resource_samples_reports_peak_capacity_pressure() -> None:
                 blocked_sessions=0,
                 max_connections=100,
                 connection_utilization_percent=8.0,
+                application_cohorts=(
+                    DatabaseApplicationResourceUsage(
+                        application_name="__unattributed__",
+                        total_connections=2,
+                        active_connections=1,
+                        idle_in_transaction_connections=1,
+                        open_transactions=1,
+                        lock_waiters=0,
+                        blocked_sessions=0,
+                        oldest_open_transaction_seconds=2.0,
+                        oldest_idle_in_transaction_seconds=2.0,
+                    ),
+                    DatabaseApplicationResourceUsage(
+                        application_name="portfolio-derived-state",
+                        total_connections=6,
+                        active_connections=2,
+                        idle_in_transaction_connections=0,
+                        open_transactions=1,
+                        lock_waiters=0,
+                        blocked_sessions=0,
+                        oldest_open_transaction_seconds=1.0,
+                        oldest_idle_in_transaction_seconds=0.0,
+                    ),
+                ),
             ),
             runtime=RuntimeResourceUsage(
                 cpu_percent=20.0,
@@ -339,6 +495,30 @@ def test_summarize_resource_samples_reports_peak_capacity_pressure() -> None:
                 blocked_sessions=2,
                 max_connections=100,
                 connection_utilization_percent=15.0,
+                application_cohorts=(
+                    DatabaseApplicationResourceUsage(
+                        application_name="__unattributed__",
+                        total_connections=3,
+                        active_connections=1,
+                        idle_in_transaction_connections=1,
+                        open_transactions=1,
+                        lock_waiters=0,
+                        blocked_sessions=0,
+                        oldest_open_transaction_seconds=7.0,
+                        oldest_idle_in_transaction_seconds=7.0,
+                    ),
+                    DatabaseApplicationResourceUsage(
+                        application_name="portfolio-derived-state",
+                        total_connections=12,
+                        active_connections=8,
+                        idle_in_transaction_connections=1,
+                        open_transactions=3,
+                        lock_waiters=4,
+                        blocked_sessions=2,
+                        oldest_open_transaction_seconds=6.0,
+                        oldest_idle_in_transaction_seconds=5.0,
+                    ),
+                ),
             ),
             runtime=RuntimeResourceUsage(
                 cpu_percent=72.5,
@@ -387,6 +567,31 @@ def test_summarize_resource_samples_reports_peak_capacity_pressure() -> None:
     assert evidence.peak_database_lock_waiters == 4
     assert evidence.peak_database_blocked_sessions == 2
     assert evidence.peak_database_connection_utilization_percent == 15.0
+    assert evidence.database_cohort_reconciled_sample_count == 2
+    assert evidence.peak_database_usage_by_application == (
+        DatabaseApplicationResourceUsage(
+            application_name="__unattributed__",
+            total_connections=3,
+            active_connections=1,
+            idle_in_transaction_connections=1,
+            open_transactions=1,
+            lock_waiters=0,
+            blocked_sessions=0,
+            oldest_open_transaction_seconds=7.0,
+            oldest_idle_in_transaction_seconds=7.0,
+        ),
+        DatabaseApplicationResourceUsage(
+            application_name="portfolio-derived-state",
+            total_connections=12,
+            active_connections=8,
+            idle_in_transaction_connections=1,
+            open_transactions=3,
+            lock_waiters=4,
+            blocked_sessions=2,
+            oldest_open_transaction_seconds=6.0,
+            oldest_idle_in_transaction_seconds=5.0,
+        ),
+    )
     assert evidence.peak_runtime_cpu_percent == 72.5
     assert evidence.peak_runtime_memory_usage_bytes == 320 * 1024**2
     assert evidence.peak_runtime_memory_utilization_percent == 31.25
