@@ -333,7 +333,12 @@ async def test_valuation_message_skips_side_effects_after_losing_job_ownership(
                     PortfolioValuationJob.valuation_date == valuation_date,
                     PortfolioValuationJob.epoch == epoch,
                 )
-                .values(status="COMPLETE")
+                .values(
+                    status="COMPLETE",
+                    valuation_lease_owner=None,
+                    valuation_claim_token=None,
+                    valuation_lease_expires_at=None,
+                )
             )
             await session.commit()
         return await original_update_job_status(
