@@ -625,25 +625,37 @@ def upgrade() -> None:
             RETURNS trigger
             LANGUAGE plpgsql
             AS $$
+            DECLARE
+                current_next_execution_ordinal integer;
+                current_member_count integer;
             BEGIN
-                IF NEW.next_execution_ordinal > 0
+                SELECT
+                    release.next_execution_ordinal,
+                    release.member_count
+                INTO STRICT
+                    current_next_execution_ordinal,
+                    current_member_count
+                FROM corporate_action_execution_releases AS release
+                WHERE release.id = NEW.id;
+
+                IF current_next_execution_ordinal > 0
                    AND NOT EXISTS (
                        SELECT 1
                        FROM corporate_action_execution_members AS member
                        WHERE member.release_id = NEW.id
-                         AND member.execution_ordinal = NEW.next_execution_ordinal - 1
+                         AND member.execution_ordinal = current_next_execution_ordinal - 1
                          AND member.status = 'COMPLETE'
                    ) THEN
                     RAISE EXCEPTION
                         'corporate-action execution release lacks completed predecessor'
                         USING ERRCODE = '23514';
                 END IF;
-                IF NEW.next_execution_ordinal < NEW.member_count
+                IF current_next_execution_ordinal < current_member_count
                    AND NOT EXISTS (
                        SELECT 1
                        FROM corporate_action_execution_members AS member
                        WHERE member.release_id = NEW.id
-                         AND member.execution_ordinal = NEW.next_execution_ordinal
+                         AND member.execution_ordinal = current_next_execution_ordinal
                          AND member.status = 'PENDING'
                    ) THEN
                     RAISE EXCEPTION

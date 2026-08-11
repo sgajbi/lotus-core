@@ -138,6 +138,10 @@ def test_execution_release_migration_is_fenced_ordered_and_reversible(
     assert "AFTER UPDATE ON corporate_action_execution_members" in sql
     assert "NEW.next_execution_ordinal > OLD.next_execution_ordinal + 1" in sql
     assert "release.next_execution_ordinal > NEW.execution_ordinal" in sql
+    assert "current_next_execution_ordinal integer" in sql
+    assert "current_member_count integer" in sql
+    assert "member.execution_ordinal = current_next_execution_ordinal - 1" in sql
+    assert "member.execution_ordinal = current_next_execution_ordinal" in sql
     assert sql.count("PERFORM validate_ca_execution_release(NEW.id);") == 1
     assert (
         "AFTER INSERT ON corporate_action_execution_releases\n"
