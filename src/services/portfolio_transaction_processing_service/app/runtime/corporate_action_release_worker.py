@@ -31,6 +31,7 @@ logger = logging.getLogger(__name__)
 
 _RETRYABLE_DATABASE_ERRORS = (
     SQLAlchemyError,
+    ConnectionError,
     PostgresConnectionError,
     CannotConnectNowError,
     AdminShutdownError,
