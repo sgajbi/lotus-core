@@ -60,6 +60,7 @@ from src.services.portfolio_transaction_processing_service.app.ports import (
     CorporateActionChildObservation,
     CorporateActionManifestAppendOutcome,
     CorporateActionObservationAppendOutcome,
+    CorporateActionReadinessDecision,
 )
 from tests.test_support.async_task_coordination import (
     cancel_pending_tasks,
@@ -668,6 +669,115 @@ async def test_ready_release_materialization_freezes_payload_authority_and_repla
     )
     assert tuple(member.transaction_id for member in members) == decision.ordered_transaction_ids
     assert all(member.transaction_payload_fingerprint.startswith("sha256:") for member in members)
+
+
+async def test_corrected_generation_waits_for_owned_prior_generation(
+    clean_db,
+    db_engine: Engine,
+    async_db_session: AsyncSession,
+) -> None:
+    """One economic event must never execute two manifest generations concurrently."""
+
+    _apply_migration(db_engine)
+    await _seed_portfolio(async_db_session)
+    first_manifest = _manifest()
+    await _seed_transactions(async_db_session, first_manifest.expected_children)
+    await async_db_session.execute(
+        update(TransactionRecord)
+        .where(TransactionRecord.portfolio_id == first_manifest.portfolio_id)
+        .values(
+            economic_event_id=first_manifest.corporate_action_event_id,
+            linked_transaction_group_id=first_manifest.linked_transaction_group_id,
+            parent_event_reference=first_manifest.parent_event_reference,
+        )
+    )
+    graph = SqlAlchemyCorporateActionEventGraphRepository(async_db_session)
+    releases = SqlAlchemyCorporateActionExecutionReleaseRepository(async_db_session)
+    assert (
+        await graph.append_manifest(first_manifest) is CorporateActionManifestAppendOutcome.APPENDED
+    )
+    for sequence, child in enumerate(first_manifest.expected_children, start=1):
+        await graph.observe_child(
+            await _persisted_observation(
+                async_db_session,
+                first_manifest,
+                child,
+                delivery_event_id=f"generation-one-{sequence}",
+            )
+        )
+    first_decision = await graph.load_current_readiness(
+        portfolio_id=first_manifest.portfolio_id,
+        corporate_action_event_id=first_manifest.corporate_action_event_id,
+    )
+    first_release = await releases.materialize(_execution_plan(first_manifest, first_decision))
+    first_lease = CorporateActionExecutionLeaseRequest(
+        owner="generation-one-worker",
+        token="c" * 64,
+        duration_seconds=300,
+    )
+    first_claim = await releases.claim_next(first_lease)
+    assert first_claim is not None
+    await async_db_session.commit()
+
+    second_manifest = replace(
+        first_manifest,
+        version=2,
+        source_reference=replace(
+            first_manifest.source_reference,
+            source_revision="2",
+            source_content_hash="d" * 64,
+        ),
+    )
+    assert (
+        await graph.append_manifest(second_manifest)
+        is CorporateActionManifestAppendOutcome.APPENDED
+    )
+    second_decision = await graph.load_current_readiness(
+        portfolio_id=second_manifest.portfolio_id,
+        corporate_action_event_id=second_manifest.corporate_action_event_id,
+    )
+    assert second_decision.readiness_status == "READY"
+    second_release = await releases.materialize(_execution_plan(second_manifest, second_decision))
+    await async_db_session.commit()
+    assert second_release.release_id != first_release.release_id
+
+    contender = CorporateActionExecutionLeaseRequest(
+        owner="generation-two-worker",
+        token="e" * 64,
+        duration_seconds=300,
+    )
+    assert await releases.claim_next(contender) is None
+
+    await async_db_session.execute(
+        update(CorporateActionExecutionReleaseRecord)
+        .where(CorporateActionExecutionReleaseRecord.id == first_release.release_id)
+        .values(lease_expires_at=func.now() - text("INTERVAL '1 second'"))
+    )
+    await async_db_session.commit()
+    recovered = await releases.claim_next(contender)
+    assert recovered is not None
+    assert recovered.release_id == first_release.release_id
+    while True:
+        progress = await releases.advance_member(
+            release_id=recovered.release_id,
+            expected_ordinal=recovered.next_member.execution_ordinal,
+            lease_token=recovered.lease_token,
+            fence_token=recovered.fence_token,
+        )
+        await async_db_session.commit()
+        if progress is CorporateActionReleaseProgressOutcome.COMPLETE:
+            break
+        next_member = await releases.load_owned_next(
+            release_id=recovered.release_id,
+            lease_token=recovered.lease_token,
+            fence_token=recovered.fence_token,
+        )
+        assert next_member is not None
+        recovered = next_member
+
+    second_claim = await releases.claim_next(contender)
+    assert second_claim is not None
+    assert second_claim.release_id == second_release.release_id
 
 
 async def test_child_correction_epochs_are_monotonic_and_retries_are_neutral(
@@ -1310,6 +1420,46 @@ def _observation(
         delivery_event_id=delivery_event_id,
         correlation_id="correlation-001",
         observed_at=manifest.source_reference.observed_at,
+    )
+
+
+async def _persisted_observation(
+    session: AsyncSession,
+    manifest: corporate_action.CorporateActionParentManifest,
+    child: corporate_action.CorporateActionEventChild,
+    *,
+    delivery_event_id: str,
+) -> CorporateActionChildObservation:
+    persisted = await session.scalar(
+        select(TransactionRecord).where(TransactionRecord.transaction_id == child.transaction_id)
+    )
+    assert persisted is not None
+    booked = replace(to_booked_transaction(TransactionEvent.model_validate(persisted)), epoch=1)
+    return replace(
+        _observation(manifest, child, delivery_event_id=delivery_event_id),
+        transaction_payload_fingerprint=(
+            build_transaction_semantic_identity(booked).payload_fingerprint
+        ),
+    )
+
+
+def _execution_plan(
+    manifest: corporate_action.CorporateActionParentManifest,
+    decision: CorporateActionReadinessDecision,
+) -> CorporateActionExecutionPlan:
+    assert decision.readiness_status == "READY"
+    assert decision.manifest_content_hash is not None
+    assert decision.structural_plan_content_hash is not None
+    return CorporateActionExecutionPlan(
+        corporate_action_event_id=manifest.corporate_action_event_id,
+        portfolio_id=manifest.portfolio_id,
+        linked_transaction_group_id=manifest.linked_transaction_group_id,
+        parent_event_reference=manifest.parent_event_reference,
+        manifest_content_hash=decision.manifest_content_hash,
+        structural_plan_content_hash=decision.structural_plan_content_hash,
+        readiness_state_version=decision.state_version,
+        through_observation_sequence=decision.through_observation_sequence,
+        ordered_transaction_ids=decision.ordered_transaction_ids,
     )
 
 
