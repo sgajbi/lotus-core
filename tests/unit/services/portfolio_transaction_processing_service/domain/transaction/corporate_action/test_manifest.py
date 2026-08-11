@@ -88,6 +88,8 @@ def _manifest(
 ) -> CorporateActionParentManifest:
     return CorporateActionParentManifest(
         corporate_action_event_id="CA-EVENT-001",
+        tenant_id="TENANT-SG",
+        legal_book_id="PB-SG-01",
         portfolio_id="PB-SG-GLOBAL-001",
         linked_transaction_group_id="CA-GROUP-001",
         parent_event_reference="UPSTREAM-CA-001",

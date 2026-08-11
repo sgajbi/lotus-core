@@ -18,6 +18,8 @@ def _event() -> CorporateActionManifestReceivedEvent:
     return CorporateActionManifestReceivedEvent.model_validate(
         {
             "corporate_action_event_id": "EVENT_001",
+            "tenant_id": "TENANT_SG",
+            "legal_book_id": "BOOK_SG_PB",
             "portfolio_id": "PORTFOLIO_001",
             "linked_transaction_group_id": "GROUP_001",
             "parent_event_reference": "PARENT_001",
@@ -60,6 +62,8 @@ def test_mapping_preserves_complete_domain_and_source_authority() -> None:
     manifest = map_corporate_action_manifest_event(event)
 
     assert manifest.corporate_action_event_id == "EVENT_001"
+    assert manifest.tenant_id == "TENANT_SG"
+    assert manifest.legal_book_id == "BOOK_SG_PB"
     assert manifest.portfolio_id == "PORTFOLIO_001"
     assert manifest.linked_transaction_group_id == "GROUP_001"
     assert manifest.corporate_action_type == "SPIN_OFF"

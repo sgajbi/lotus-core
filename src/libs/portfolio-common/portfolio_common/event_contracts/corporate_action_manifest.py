@@ -98,6 +98,8 @@ class CorporateActionManifestReceivedEvent(BaseModel):
     )
     schema_version: Literal["1.0.0"] = "1.0.0"
     corporate_action_event_id: str = Field(min_length=1, max_length=200)
+    tenant_id: str = Field(min_length=1, max_length=160)
+    legal_book_id: str = Field(min_length=1, max_length=160)
     portfolio_id: str = Field(min_length=1, max_length=200)
     linked_transaction_group_id: str = Field(min_length=1, max_length=200)
     parent_event_reference: str = Field(min_length=1, max_length=200)

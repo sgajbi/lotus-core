@@ -117,6 +117,8 @@ def _manifest_payload_and_hash(
     )
     manifest = corporate_action.CorporateActionParentManifest(
         corporate_action_event_id=f"CA-EVENT-{identity_suffix}",
+        tenant_id="TENANT-SG",
+        legal_book_id="PB-SG-01",
         portfolio_id="CA-PORT-DB-001",
         linked_transaction_group_id=f"CA-GROUP-{identity_suffix}",
         parent_event_reference=f"CA-PARENT-{identity_suffix}",

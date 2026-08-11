@@ -27,6 +27,8 @@ PARTITION_KEY = "PORTFOLIO_001|transaction-group|GROUP_001"
 def _manifest(*, version: int = 1, revision: str | None = None) -> dict[str, object]:
     return {
         "corporate_action_event_id": "EVENT_001",
+        "tenant_id": "TENANT_SG",
+        "legal_book_id": "BOOK_SG_PB",
         "portfolio_id": "PORTFOLIO_001",
         "linked_transaction_group_id": "GROUP_001",
         "parent_event_reference": "PARENT_001",

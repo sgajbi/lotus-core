@@ -20,6 +20,8 @@ def map_corporate_action_manifest_event(
 
     return CorporateActionParentManifest(
         corporate_action_event_id=event.corporate_action_event_id,
+        tenant_id=event.tenant_id,
+        legal_book_id=event.legal_book_id,
         portfolio_id=event.portfolio_id,
         linked_transaction_group_id=event.linked_transaction_group_id,
         parent_event_reference=event.parent_event_reference,

@@ -12,6 +12,8 @@ def _event() -> dict[str, object]:
         "event_type": "corporate_action.manifest.received",
         "schema_version": "1.0.0",
         "corporate_action_event_id": " EVENT_001 ",
+        "tenant_id": " TENANT_SG ",
+        "legal_book_id": " BOOK_SG_PB ",
         "portfolio_id": " PORTFOLIO_001 ",
         "linked_transaction_group_id": " GROUP_001 ",
         "parent_event_reference": " PARENT_001 ",
@@ -76,6 +78,8 @@ def test_event_hash_is_stable_for_semantically_identical_child_order() -> None:
     ("path", "replacement"),
     (
         (("source", "source_revision"), "revision-2"),
+        (("tenant_id",), "TENANT_OTHER"),
+        (("legal_book_id",), "BOOK_OTHER"),
         (("expected_children", 0, "transaction_id"), "TX_OTHER"),
         (("expected_children", 0, "dependency_transaction_ids"), []),
         (("completion_declared",), False),
