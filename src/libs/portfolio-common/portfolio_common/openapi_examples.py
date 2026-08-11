@@ -14,7 +14,7 @@ _EXAMPLE_BY_KEY = {
     "instrument_id": "EQ_US_AAPL",
     "transaction_id": "TXN_0001",
     "consumer_system": "lotus-manage",
-    "tenant_id": "default",
+    "tenant_id": "TENANT_SG",
     "policy_version": "tenant-default-v1",
     "currency": "USD",
     "base_currency": "USD",
@@ -39,6 +39,10 @@ _EXAMPLE_BY_KEY = {
     "security_name": "Apple Inc. Common Stock",
     "price_date": "2026-02-27",
     "transaction_type": "BUY",
+    "corporate_action_type": "SPIN_OFF",
+    "parent_event_reference": "UPSTREAM-CA-2026-0001",
+    "source_content_hash": "a" * 64,
+    "source_revision": "revision-1",
     "quantity": 100.0,
     "price": 182.35,
     "trade_fee": 7.5,
@@ -91,6 +95,7 @@ def infer_example(prop_name: str, prop_schema: dict[str, Any]) -> Any:
     key = to_snake_case(prop_name)
     schema_type = prop_schema.get("type")
     for example in (
+        _declared_example(prop_schema),
         _known_key_example(key),
         _enum_example(prop_schema),
         _typed_example(prop_name=prop_name, key=key, prop_schema=prop_schema),
@@ -100,6 +105,17 @@ def infer_example(prop_name: str, prop_schema: dict[str, Any]) -> Any:
             return example
 
     return _infer_string_like_example(key=key, schema_type=schema_type)
+
+
+def _declared_example(prop_schema: dict[str, Any]) -> Any:
+    if prop_schema.get("example") is not None:
+        return prop_schema["example"]
+    examples = prop_schema.get("examples")
+    if isinstance(examples, list) and examples:
+        return examples[0]
+    if "const" in prop_schema:
+        return prop_schema["const"]
+    return None
 
 
 def _known_key_example(key: str) -> Any:

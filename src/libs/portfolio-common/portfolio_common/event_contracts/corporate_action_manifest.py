@@ -39,11 +39,32 @@ _IsoDatetime = Annotated[datetime, BeforeValidator(_parse_iso_datetime)]
 class CorporateActionManifestSourceContract(BaseModel):
     """Bind a manifest to immutable upstream source evidence."""
 
-    source_system: str = Field(min_length=1, max_length=160)
-    source_record_id: str = Field(min_length=1, max_length=200)
-    source_revision: str = Field(min_length=1, max_length=200)
-    source_content_hash: _Sha256Digest
-    observed_at: _IsoDatetime
+    source_system: str = Field(
+        min_length=1,
+        max_length=160,
+        description="Authoritative upstream corporate-action source system.",
+        examples=["corporate-actions-master"],
+    )
+    source_record_id: str = Field(
+        min_length=1,
+        max_length=200,
+        description="Immutable upstream corporate-action record identifier.",
+        examples=["CA-EVENT-2026-0001"],
+    )
+    source_revision: str = Field(
+        min_length=1,
+        max_length=200,
+        description="Upstream revision identity for this parent manifest.",
+        examples=["revision-1"],
+    )
+    source_content_hash: _Sha256Digest = Field(
+        description="Lowercase SHA-256 digest of the authoritative upstream source record.",
+        examples=["a" * 64],
+    )
+    observed_at: _IsoDatetime = Field(
+        description="Timezone-qualified time at which Core observed the source revision.",
+        examples=["2026-08-11T02:15:00Z"],
+    )
 
     @field_validator("observed_at")
     @classmethod
@@ -58,10 +79,30 @@ class CorporateActionManifestSourceContract(BaseModel):
 class CorporateActionManifestChildContract(BaseModel):
     """Declare one expected child and its deterministic dependency edges."""
 
-    transaction_id: str = Field(min_length=1, max_length=200)
-    transaction_type: str = Field(min_length=1, max_length=100)
-    child_role: str = Field(min_length=1, max_length=100)
-    dependency_transaction_ids: tuple[str, ...] = Field(default=(), max_length=1000)
+    transaction_id: str = Field(
+        min_length=1,
+        max_length=200,
+        description="Expected persisted child transaction identifier.",
+        examples=["TX-CA-SOURCE-001"],
+    )
+    transaction_type: str = Field(
+        min_length=1,
+        max_length=100,
+        description="Canonical transaction type of the expected child.",
+        examples=["SPIN_OFF"],
+    )
+    child_role: str = Field(
+        min_length=1,
+        max_length=100,
+        description="Corporate-action economic role of the expected child.",
+        examples=["SOURCE_POSITION_REDUCE"],
+    )
+    dependency_transaction_ids: tuple[str, ...] = Field(
+        default=(),
+        max_length=1000,
+        description="Predecessor child transaction identifiers that must execute first.",
+        examples=[["TX-CA-SOURCE-001"]],
+    )
     child_sequence_hint: _NonNegativeStrictSequence | None = None
     instrument_id: str | None = Field(default=None, min_length=1, max_length=200)
     source_instrument_id: str | None = Field(default=None, min_length=1, max_length=200)
@@ -93,20 +134,71 @@ class CorporateActionManifestChildContract(BaseModel):
 class CorporateActionManifestReceivedEvent(BaseModel):
     """Versioned source fact accepted by the transaction-processing owner."""
 
-    event_type: Literal["corporate_action.manifest.received"] = (
-        "corporate_action.manifest.received"
+    event_type: Literal["corporate_action.manifest.received"] = Field(
+        default="corporate_action.manifest.received",
+        description="Core-owned corporate-action parent-manifest event family.",
+        examples=["corporate_action.manifest.received"],
     )
-    schema_version: Literal["1.0.0"] = "1.0.0"
-    corporate_action_event_id: str = Field(min_length=1, max_length=200)
-    tenant_id: str = Field(min_length=1, max_length=160)
-    legal_book_id: str = Field(min_length=1, max_length=160)
-    portfolio_id: str = Field(min_length=1, max_length=200)
-    linked_transaction_group_id: str = Field(min_length=1, max_length=200)
-    parent_event_reference: str = Field(min_length=1, max_length=200)
-    corporate_action_type: str = Field(min_length=1, max_length=100)
-    version: _PositiveStrictVersion
-    completion_declared: bool = Field(strict=True)
-    expected_children: tuple[CorporateActionManifestChildContract, ...] = Field(max_length=1000)
+    schema_version: Literal["1.0.0"] = Field(
+        default="1.0.0",
+        description="Corporate-action parent-manifest event schema version.",
+        examples=["1.0.0"],
+    )
+    corporate_action_event_id: str = Field(
+        min_length=1,
+        max_length=200,
+        description="Stable Core identity for one corporate-action parent event.",
+        examples=["CA-EVENT-2026-0001"],
+    )
+    tenant_id: str = Field(
+        min_length=1,
+        max_length=160,
+        description="Tenant that owns the governed portfolio book.",
+        examples=["TENANT_SG"],
+    )
+    legal_book_id: str = Field(
+        min_length=1,
+        max_length=160,
+        description="Legal book that owns the governed portfolio.",
+        examples=["BOOK_SG_PB"],
+    )
+    portfolio_id: str = Field(
+        min_length=1,
+        max_length=200,
+        description="Portfolio whose corporate-action children will be processed.",
+        examples=["PB_SG_GLOBAL_BAL_001"],
+    )
+    linked_transaction_group_id: str = Field(
+        min_length=1,
+        max_length=200,
+        description="Group identity shared by every expected child transaction.",
+        examples=["CA-GROUP-2026-0001"],
+    )
+    parent_event_reference: str = Field(
+        min_length=1,
+        max_length=200,
+        description="Authoritative upstream parent-event reference.",
+        examples=["UPSTREAM-CA-2026-0001"],
+    )
+    corporate_action_type: str = Field(
+        min_length=1,
+        max_length=100,
+        description="Canonical corporate-action family governing child-shape policy.",
+        examples=["SPIN_OFF"],
+    )
+    version: _PositiveStrictVersion = Field(
+        description="Monotonic source-owned version of this parent manifest.",
+        examples=[1],
+    )
+    completion_declared: bool = Field(
+        strict=True,
+        description="Whether the source declares the expected child set complete.",
+        examples=[True],
+    )
+    expected_children: tuple[CorporateActionManifestChildContract, ...] = Field(
+        max_length=1000,
+        description="Complete expected child membership and dependency declarations.",
+    )
     source: CorporateActionManifestSourceContract
 
     @field_validator("corporate_action_type")

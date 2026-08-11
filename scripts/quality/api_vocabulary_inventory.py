@@ -45,6 +45,7 @@ EXAMPLE_BY_KEY = {
     "cashflow": 3200.0,
     "cost_basis_local": 95000.0,
     "cost_basis_method": "FIFO",
+    "corporate_action_type": "SPIN_OFF",
     "country_of_risk": "US",
     "created_by": "lotus-manage",
     "current_epoch": 42,
@@ -65,6 +66,7 @@ EXAMPLE_BY_KEY = {
     "objective": "CAPITAL_APPRECIATION",
     "owner_service": "lotus-core",
     "policy_source": "tenant-default-policy",
+    "parent_event_reference": "UPSTREAM-CA-2026-0001",
     "positions_baseline": [{"security_id": "SEC_AAPL_US", "quantity": "100.0000000000"}],
     "positions_projected": [{"security_id": "SEC_AAPL_US", "quantity": "120.0000000000"}],
     "positions_delta": [{"security_id": "SEC_AAPL_US", "delta_quantity": "20.0000000000"}],
@@ -74,9 +76,13 @@ EXAMPLE_BY_KEY = {
     "realized_gain_loss": 525.75,
     "realized_gain_loss_local": 525.75,
     "risk_exposure": "MODERATE",
+    "schema_version": "1.0.0",
     "sector": "TECHNOLOGY",
     "transaction_fx_rate": 1.1032,
     "transaction_type": "BUY",
+    "source_content_hash": "a" * 64,
+    "source_revision": "revision-1",
+    "tenant_id": "TENANT_SG",
     "valuation": 125000.5,
     "valuation_context": {
         "portfolio_currency": "EUR",
@@ -148,6 +154,8 @@ def _fallback_example(name: str, schema: dict[str, Any]) -> Any:
     key = _canonical_name(_leaf_name(name))
     if key in EXAMPLE_BY_KEY:
         return EXAMPLE_BY_KEY[key]
+    if "const" in schema:
+        return schema["const"]
     enum_values = schema.get("enum")
     if isinstance(enum_values, list) and enum_values:
         return enum_values[0]
