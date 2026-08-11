@@ -9,6 +9,7 @@ class SchedulerDispatchError(RuntimeError):
         *,
         message: str,
         recovery_job_ids: tuple[int, ...],
+        recovery_claims: tuple[tuple[int, str], ...] = (),
         recovery_record_keys: tuple[str, ...],
         published_record_keys: tuple[str, ...],
         failure_phase: str,
@@ -16,6 +17,7 @@ class SchedulerDispatchError(RuntimeError):
         super().__init__(message)
         self.message = message
         self.recovery_job_ids = recovery_job_ids
+        self.recovery_claims = recovery_claims
         self.recovery_record_keys = recovery_record_keys
         self.published_record_keys = published_record_keys
         self.failure_phase = failure_phase
@@ -38,3 +40,15 @@ def dispatch_failure_reason(*, failure_phase: str, record_keys: tuple[str, ...])
 
 def present_job_ids(jobs: list[object]) -> tuple[int, ...]:
     return tuple(job_id for job in jobs if isinstance((job_id := getattr(job, "id", None)), int))
+
+
+def present_job_claims(jobs: list[object]) -> tuple[tuple[int, str], ...]:
+    """Return only complete durable id/token claim pairs for recovery fencing."""
+
+    claims: list[tuple[int, str]] = []
+    for job in jobs:
+        job_id = getattr(job, "id", None)
+        claim_token = getattr(job, "valuation_claim_token", None)
+        if isinstance(job_id, int) and isinstance(claim_token, str) and claim_token:
+            claims.append((job_id, claim_token))
+    return tuple(claims)

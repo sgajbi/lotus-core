@@ -119,7 +119,7 @@ class SupportOverviewResponse(BaseModel):
     )
     stale_processing_valuation_jobs: int = Field(
         ...,
-        description="Number of PROCESSING valuation jobs older than the support stale threshold.",
+        description="Number of PROCESSING valuation jobs whose authoritative claim lease expired.",
         examples=[1],
     )
     failed_valuation_jobs: int = Field(
@@ -1815,7 +1815,10 @@ class SupportJobListResponse(BaseModel):
     portfolio_id: str = Field(..., description="Portfolio identifier.", examples=["PF-001"])
     stale_threshold_minutes: int = Field(
         ...,
-        description="Threshold in minutes used to classify stale support rows in this listing.",
+        description=(
+            "Threshold in minutes used for queues without authoritative lease expiry; "
+            "leased valuation and aggregation rows use their database-clock deadline."
+        ),
         examples=[15],
     )
     generated_at_utc: datetime = Field(

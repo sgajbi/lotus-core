@@ -1037,6 +1037,7 @@ async def test_scheduler_flushes_and_raises_with_remaining_keys_on_partial_dispa
             valuation_date=date(2025, 8, 11),
             epoch=1,
             correlation_id="corr-1",
+            valuation_claim_token="d" * 32,
         ),
         PortfolioValuationJob(
             portfolio_id="P1",
@@ -1044,6 +1045,7 @@ async def test_scheduler_flushes_and_raises_with_remaining_keys_on_partial_dispa
             valuation_date=date(2025, 8, 12),
             epoch=1,
             correlation_id="corr-2",
+            valuation_claim_token="e" * 32,
         ),
     ]
     mock_kafka_producer.publish_message.side_effect = [None, RuntimeError("broker timeout")]
@@ -1066,6 +1068,7 @@ async def test_scheduler_dispatch_failure_before_first_job_recovers_all_unpublis
             valuation_date=date(2025, 8, 11),
             epoch=1,
             correlation_id="corr-1",
+            valuation_claim_token="f" * 32,
         ),
         PortfolioValuationJob(
             id=102,
@@ -1074,6 +1077,7 @@ async def test_scheduler_dispatch_failure_before_first_job_recovers_all_unpublis
             valuation_date=date(2025, 8, 12),
             epoch=1,
             correlation_id="corr-2",
+            valuation_claim_token="1" * 32,
         ),
     ]
     mock_kafka_producer.publish_message.side_effect = RuntimeError("broker unavailable")
@@ -1086,6 +1090,7 @@ async def test_scheduler_dispatch_failure_before_first_job_recovers_all_unpublis
 
     assert exc_info.value.failure_phase == DISPATCH_PUBLISH_FAILURE_PHASE
     assert exc_info.value.recovery_job_ids == (101, 102)
+    assert exc_info.value.recovery_claims == ((101, "f" * 32), (102, "1" * 32))
     assert exc_info.value.recovery_record_keys == (
         "P1|S1|2025-08-11|1",
         "P1|S2|2025-08-12|1",
@@ -1106,6 +1111,7 @@ async def test_scheduler_partial_dispatch_failure_recovers_only_unpublished_jobs
             valuation_date=date(2025, 8, 11),
             epoch=1,
             correlation_id="corr-1",
+            valuation_claim_token="2" * 32,
         ),
         PortfolioValuationJob(
             id=202,
@@ -1114,6 +1120,7 @@ async def test_scheduler_partial_dispatch_failure_recovers_only_unpublished_jobs
             valuation_date=date(2025, 8, 12),
             epoch=1,
             correlation_id="corr-2",
+            valuation_claim_token="3" * 32,
         ),
     ]
     mock_kafka_producer.publish_message.side_effect = [None, RuntimeError("broker timeout")]
@@ -1123,6 +1130,7 @@ async def test_scheduler_partial_dispatch_failure_recovers_only_unpublished_jobs
 
     assert exc_info.value.failure_phase == DISPATCH_PUBLISH_FAILURE_PHASE
     assert exc_info.value.recovery_job_ids == (202,)
+    assert exc_info.value.recovery_claims == ((202, "3" * 32),)
     assert exc_info.value.recovery_record_keys == ("P1|S2|2025-08-12|1",)
     assert exc_info.value.published_record_keys == ("P1|S1|2025-08-11|1",)
 
@@ -1139,6 +1147,7 @@ async def test_scheduler_partial_dispatch_flush_timeout_recovers_all_claimed_job
             valuation_date=date(2025, 8, 11),
             epoch=1,
             correlation_id="corr-1",
+            valuation_claim_token="4" * 32,
         ),
         PortfolioValuationJob(
             id=212,
@@ -1147,6 +1156,7 @@ async def test_scheduler_partial_dispatch_flush_timeout_recovers_all_claimed_job
             valuation_date=date(2025, 8, 12),
             epoch=1,
             correlation_id="corr-2",
+            valuation_claim_token="5" * 32,
         ),
     ]
     mock_kafka_producer.publish_message.side_effect = [None, RuntimeError("broker timeout")]
@@ -1160,6 +1170,7 @@ async def test_scheduler_partial_dispatch_flush_timeout_recovers_all_claimed_job
 
     assert exc_info.value.failure_phase == DISPATCH_CONFIRMATION_TIMEOUT_PHASE
     assert exc_info.value.recovery_job_ids == (211, 212)
+    assert exc_info.value.recovery_claims == ((211, "4" * 32), (212, "5" * 32))
     assert exc_info.value.recovery_record_keys == (
         "P1|S1|2025-08-11|1",
         "P1|S2|2025-08-12|1",
@@ -1203,7 +1214,7 @@ async def test_scheduler_reads_max_attempts_from_environment(
     monkeypatch.setenv("VALUATION_SCHEDULER_POLL_BUDGET_SECONDS", "8")
     monkeypatch.setenv("VALUATION_SCHEDULER_DISPATCH_BUDGET_SECONDS", "5")
     monkeypatch.setenv("VALUATION_SCHEDULER_BACKFILL_UPSERT_CHUNK_SIZE", "13")
-    monkeypatch.setenv("VALUATION_SCHEDULER_STALE_TIMEOUT_MINUTES", "12")
+    monkeypatch.setenv("VALUATION_SCHEDULER_CLAIM_LEASE_SECONDS", "720")
     monkeypatch.setenv("VALUATION_SCHEDULER_MAX_ATTEMPTS", "6")
 
     scheduler = ValuationScheduler(
@@ -1217,18 +1228,18 @@ async def test_scheduler_reads_max_attempts_from_environment(
     assert scheduler._poll_budget_seconds == 8
     assert scheduler._dispatch_budget_seconds == 5
     assert scheduler._backfill_upsert_chunk_size == 13
-    assert scheduler._stale_timeout_minutes == 12
+    assert scheduler._claim_lease_seconds == 720
+    assert scheduler._lease_owner.startswith("valuation-orchestrator-")
     assert scheduler._max_attempts == 6
 
 
-async def test_stale_job_resetter_forwards_timeout_and_attempt_policy():
-    resetter = ValuationStaleJobResetter(stale_timeout_minutes=12, max_attempts=6)
+async def test_stale_job_resetter_forwards_attempt_policy():
+    resetter = ValuationStaleJobResetter(max_attempts=6)
     mock_repo = AsyncMock(spec=ValuationRepository)
 
     await resetter.reset_stale_jobs(repo=mock_repo)
 
     mock_repo.find_and_reset_stale_jobs.assert_awaited_once_with(
-        timeout_minutes=12,
         max_attempts=6,
     )
 
@@ -1335,6 +1346,8 @@ async def test_dispatch_coordinator_claims_and_dispatches_without_scheduler_loop
         dispatch_rounds_per_poll=10,
         poll_budget_seconds=30,
         max_attempts=5,
+        lease_owner="valuation-orchestrator-test",
+        lease_duration_seconds=720,
         session_provider=get_session_gen,
         repository_factory=ValuationDispatchRepositoryFactory(
             valuation_repository_factory=lambda db: mock_repo
@@ -1378,6 +1391,7 @@ async def test_scheduler_claim_loop_recovers_dispatch_failure_before_next_poll(
     dispatch_error = SchedulerDispatchError(
         message="dispatch failed",
         recovery_job_ids=(301,),
+        recovery_claims=((301, "a" * 32),),
         recovery_record_keys=("P1|S1|2025-08-11|1",),
         published_record_keys=(),
         failure_phase=DISPATCH_PUBLISH_FAILURE_PHASE,
@@ -1401,7 +1415,7 @@ async def test_scheduler_claim_loop_recovers_dispatch_failure_before_next_poll(
             await scheduler._claim_and_dispatch_ready_jobs()
 
     mock_repo.recover_dispatch_failed_jobs.assert_awaited_once_with(
-        [301],
+        [(301, "a" * 32)],
         max_attempts=scheduler._max_attempts,
         failure_reason=(
             "Scheduler dispatch publish failed before queueing record keys: P1|S1|2025-08-11|1"
@@ -1463,6 +1477,8 @@ async def test_scheduler_claim_loop_stops_before_next_round_when_poll_budget_exh
     mock_repo.find_and_claim_eligible_jobs.assert_awaited_once_with(
         2,
         max_in_flight_jobs=scheduler._max_in_flight_jobs,
+        lease_owner=scheduler._lease_owner,
+        lease_duration_seconds=scheduler._claim_lease_seconds,
     )
     mock_dispatch_jobs.assert_awaited_once_with(claimed_batch)
     mock_budget_exhausted.assert_called_once_with("poll")
@@ -1486,6 +1502,7 @@ async def test_scheduler_dispatch_budget_exhaustion_recovers_remaining_claimed_j
             valuation_date=date(2025, 8, 11),
             epoch=1,
             correlation_id="corr-1",
+            valuation_claim_token="a" * 32,
         ),
         PortfolioValuationJob(
             id=302,
@@ -1494,6 +1511,7 @@ async def test_scheduler_dispatch_budget_exhaustion_recovers_remaining_claimed_j
             valuation_date=date(2025, 8, 12),
             epoch=1,
             correlation_id="corr-2",
+            valuation_claim_token="b" * 32,
         ),
     ]
 
@@ -1530,7 +1548,7 @@ async def test_scheduler_dispatch_budget_exhaustion_recovers_remaining_claimed_j
     mock_kafka_producer.flush.assert_called_once_with(timeout=10)
     mock_budget_exhausted.assert_called_once_with("dispatch")
     mock_repo.recover_dispatch_failed_jobs.assert_awaited_once_with(
-        [302],
+        [(302, "b" * 32)],
         max_attempts=scheduler._max_attempts,
         failure_reason=(
             "Scheduler dispatch budget exhausted before queueing record keys: P1|S2|2025-08-12|1"
@@ -1556,6 +1574,7 @@ async def test_scheduler_counts_producer_backpressure_and_recovers_claimed_jobs(
             valuation_date=date(2025, 8, 11),
             epoch=1,
             correlation_id="corr-1",
+            valuation_claim_token="a" * 32,
         )
     ]
     mock_kafka_producer.publish_message.side_effect = BufferError("queue full")
@@ -1586,7 +1605,7 @@ async def test_scheduler_counts_producer_backpressure_and_recovers_claimed_jobs(
     assert exc_info.value.recovery_job_ids == (301,)
     mock_backpressure.assert_called_once_with()
     mock_repo.recover_dispatch_failed_jobs.assert_awaited_once_with(
-        [301],
+        [(301, "a" * 32)],
         max_attempts=scheduler._max_attempts,
         failure_reason=(
             "Scheduler dispatch publish failed before queueing record keys: P1|S1|2025-08-11|1"

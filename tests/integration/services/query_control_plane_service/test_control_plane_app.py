@@ -750,7 +750,8 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
         "Operational jobs for support workflows."
     )
     assert support_jobs["properties"]["stale_threshold_minutes"]["description"] == (
-        "Threshold in minutes used to classify stale support rows in this listing."
+        "Threshold in minutes used for queues without authoritative lease expiry; leased "
+        "valuation and aggregation rows use their database-clock deadline."
     )
     assert support_jobs["properties"]["generated_at_utc"]["description"] == (
         "UTC timestamp when this support job listing snapshot was generated."

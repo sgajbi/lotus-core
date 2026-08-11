@@ -45,6 +45,8 @@ class ValuationDispatchCoordinator:
         dispatch_rounds_per_poll: int,
         poll_budget_seconds: int,
         max_attempts: int,
+        lease_owner: str,
+        lease_duration_seconds: int,
         session_provider: SessionProvider,
         repository_factory: ValuationDispatchRepositoryFactory,
     ) -> None:
@@ -53,6 +55,8 @@ class ValuationDispatchCoordinator:
         self._dispatch_rounds_per_poll = dispatch_rounds_per_poll
         self._poll_budget_seconds = poll_budget_seconds
         self._max_attempts = max_attempts
+        self._lease_owner = lease_owner
+        self._lease_duration_seconds = lease_duration_seconds
         self._session_provider = session_provider
         self._repository_factory = repository_factory
 
@@ -61,7 +65,7 @@ class ValuationDispatchCoordinator:
         return time.monotonic() - started_at >= budget_seconds
 
     async def recover_dispatch_failure(self, failure: SchedulerDispatchError) -> None:
-        if not failure.recovery_job_ids:
+        if not failure.recovery_claims:
             logger.warning(
                 "Valuation scheduler dispatch failure had no durable job ids to recover.",
                 extra=operation_log_extra(
@@ -79,7 +83,7 @@ class ValuationDispatchCoordinator:
             async with db.begin():
                 repo = self._repository_factory.valuation_repository(db)
                 await repo.recover_dispatch_failed_jobs(
-                    list(failure.recovery_job_ids),
+                    list(failure.recovery_claims),
                     max_attempts=self._max_attempts,
                     failure_reason=dispatch_failure_reason(
                         failure_phase=failure.failure_phase,
@@ -125,6 +129,8 @@ class ValuationDispatchCoordinator:
                     claimed_jobs = await repo.find_and_claim_eligible_jobs(
                         self._batch_size,
                         max_in_flight_jobs=self._max_in_flight_jobs,
+                        lease_owner=self._lease_owner,
+                        lease_duration_seconds=self._lease_duration_seconds,
                     )
             if not claimed_jobs:
                 break

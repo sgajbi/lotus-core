@@ -12,6 +12,7 @@ from portfolio_common.scheduler_dispatch_recovery import (
     DISPATCH_CONFIRMATION_TIMEOUT_PHASE,
     DISPATCH_PUBLISH_FAILURE_PHASE,
     SchedulerDispatchError,
+    present_job_claims,
     present_job_ids,
 )
 from portfolio_common.valuation_job_contracts import VALUATION_CLAIM_HEADER
@@ -89,6 +90,7 @@ class ValuationJobDispatcher:
                         f"after budget exhaustion. Affected job keys: {affected_keys}."
                     ),
                     recovery_job_ids=present_job_ids([*published_jobs, *remaining_jobs]),
+                    recovery_claims=present_job_claims([*published_jobs, *remaining_jobs]),
                     recovery_record_keys=tuple(affected_record_keys),
                     published_record_keys=tuple(published_record_keys),
                     failure_phase=DISPATCH_CONFIRMATION_TIMEOUT_PHASE,
@@ -102,6 +104,7 @@ class ValuationJobDispatcher:
                 f"{queued_count} job(s) were queued. Remaining job keys: {remaining_keys}."
             ),
             recovery_job_ids=present_job_ids(remaining_jobs),
+            recovery_claims=present_job_claims(remaining_jobs),
             recovery_record_keys=tuple(remaining_record_keys),
             published_record_keys=tuple(published_record_keys),
             failure_phase=DISPATCH_BUDGET_EXHAUSTED_PHASE,
@@ -127,6 +130,7 @@ class ValuationJobDispatcher:
                     f"failure. Affected job keys: {affected_keys}."
                 ),
                 recovery_job_ids=present_job_ids([*published_jobs, *remaining_jobs]),
+                recovery_claims=present_job_claims([*published_jobs, *remaining_jobs]),
                 recovery_record_keys=tuple(affected_record_keys),
                 published_record_keys=tuple(published_record_keys),
                 failure_phase=DISPATCH_CONFIRMATION_TIMEOUT_PHASE,
@@ -140,6 +144,7 @@ class ValuationJobDispatcher:
                 f"{queued_count} earlier job(s) were queued. Remaining job keys: {remaining_keys}."
             ),
             recovery_job_ids=present_job_ids(remaining_jobs),
+            recovery_claims=present_job_claims(remaining_jobs),
             recovery_record_keys=tuple(remaining_record_keys),
             published_record_keys=tuple(published_record_keys),
             failure_phase=DISPATCH_PUBLISH_FAILURE_PHASE,
@@ -207,6 +212,7 @@ class ValuationJobDispatcher:
             raise SchedulerDispatchError(
                 message=exc.message,
                 recovery_job_ids=present_job_ids(jobs),
+                recovery_claims=present_job_claims(jobs),
                 recovery_record_keys=exc.recovery_record_keys,
                 published_record_keys=exc.published_record_keys,
                 failure_phase=exc.failure_phase,

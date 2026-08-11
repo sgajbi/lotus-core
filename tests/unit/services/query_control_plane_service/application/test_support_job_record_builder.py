@@ -50,6 +50,41 @@ def test_support_job_record_builder_classifies_processing_staleness() -> None:
     )
 
 
+def test_support_job_record_builder_prefers_authoritative_lease_deadline() -> None:
+    now = datetime(2026, 4, 18, 8, 0, tzinfo=timezone.utc)
+    recently_updated = now - timedelta(minutes=1)
+
+    expired = build_support_job_record(
+        job_id=202,
+        job_type="VALUATION",
+        business_date=date(2026, 4, 17),
+        status="PROCESSING",
+        security_id="SEC-2",
+        epoch=1,
+        attempt_count=1,
+        correlation_id="corr-202",
+        created_at=now - timedelta(minutes=2),
+        updated_at=recently_updated,
+        failure_reason=None,
+        reference_now=now,
+        stale_threshold_minutes=60,
+        stale_deadline=now,
+    )
+
+    assert expired.is_stale_processing is True
+    assert expired.operational_state == "STALE_PROCESSING"
+    assert (
+        is_support_job_stale(
+            "PROCESSING",
+            recently_updated,
+            now=now,
+            stale_threshold_minutes=60,
+            stale_deadline=now + timedelta(seconds=1),
+        )
+        is False
+    )
+
+
 def test_support_job_business_date_parser_preserves_malformed_replay_visibility() -> None:
     assert parse_support_job_business_date("2026-04-10") == date(2026, 4, 10)
     assert parse_support_job_business_date("not-a-date") is None

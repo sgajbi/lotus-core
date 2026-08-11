@@ -42,6 +42,9 @@ def setup_stale_job_data(db_engine):
                 valuation_date=date(2025, 8, 1),
                 status="PROCESSING",
                 updated_at=stale_time,
+                valuation_lease_owner="valuation-unit-test",
+                valuation_claim_token="a" * 32,
+                valuation_lease_expires_at=stale_time,
             ),
             PortfolioValuationJob(
                 portfolio_id="P2",
@@ -49,6 +52,9 @@ def setup_stale_job_data(db_engine):
                 valuation_date=date(2025, 8, 1),
                 status="PROCESSING",
                 updated_at=now,
+                valuation_lease_owner="valuation-unit-test",
+                valuation_claim_token="b" * 32,
+                valuation_lease_expires_at=now + timedelta(hours=1),
             ),
             PortfolioValuationJob(
                 portfolio_id="P3",

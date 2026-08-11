@@ -984,6 +984,7 @@ async def test_get_valuation_jobs(service: OperationsService, mock_ops_repo: Asy
                 "correlation_id": "corr-val-101",
                 "created_at": created_at,
                 "updated_at": updated_at,
+                "valuation_lease_expires_at": None,
                 "failure_reason": None,
             },
         )()
@@ -1045,6 +1046,7 @@ async def test_get_aggregation_jobs(service: OperationsService, mock_ops_repo: A
                 "correlation_id": "corr-agg-202",
                 "created_at": created_at,
                 "updated_at": updated_at,
+                "lease_expires_at": updated_at,
                 "failure_reason": "timed out once",
             },
         )()
@@ -1089,7 +1091,7 @@ async def test_get_aggregation_jobs(service: OperationsService, mock_ops_repo: A
     )
 
 
-async def test_get_aggregation_jobs_honors_custom_stale_threshold(
+async def test_get_aggregation_jobs_uses_lease_expiry_over_custom_stale_threshold(
     service: OperationsService, mock_ops_repo: AsyncMock
 ):
     created_at = datetime(2025, 8, 31, 9, 45, tzinfo=timezone.utc)
@@ -1107,6 +1109,7 @@ async def test_get_aggregation_jobs_honors_custom_stale_threshold(
                 "correlation_id": "corr-agg-203",
                 "created_at": created_at,
                 "updated_at": updated_at,
+                "lease_expires_at": updated_at,
                 "failure_reason": None,
             },
         )()
@@ -1121,8 +1124,8 @@ async def test_get_aggregation_jobs_honors_custom_stale_threshold(
     )
 
     assert response.stale_threshold_minutes == 30
-    assert response.items[0].is_stale_processing is False
-    assert response.items[0].operational_state == "PROCESSING"
+    assert response.items[0].is_stale_processing is True
+    assert response.items[0].operational_state == "STALE_PROCESSING"
     mock_ops_repo.get_aggregation_jobs.assert_awaited_once_with(
         portfolio_id="P1",
         skip=0,

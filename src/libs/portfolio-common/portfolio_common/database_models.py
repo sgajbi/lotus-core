@@ -4628,7 +4628,9 @@ class PortfolioValuationJob(Base):
     failure_reason = Column(Text, nullable=True)
     attempt_count = Column(Integer, nullable=False, default=0, server_default="0")
     claimed_readiness_outbox_id = Column(BigInteger, nullable=False, default=0, server_default="0")
+    valuation_lease_owner = Column(String(128), nullable=True)
     valuation_claim_token = Column(String(32), nullable=True)
+    valuation_lease_expires_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
@@ -4638,6 +4640,29 @@ class PortfolioValuationJob(Base):
         CheckConstraint(
             "valuation_claim_token IS NULL OR valuation_claim_token ~ '^[0-9a-f]{32}$'",
             name="ck_portfolio_valuation_jobs_claim_token",
+        ),
+        CheckConstraint(
+            "(valuation_lease_owner IS NULL AND valuation_claim_token IS NULL "
+            "AND valuation_lease_expires_at IS NULL) OR "
+            "(valuation_lease_owner IS NOT NULL AND valuation_claim_token IS NOT NULL "
+            "AND valuation_lease_expires_at IS NOT NULL)",
+            name="ck_portfolio_valuation_jobs_lease_all_or_none",
+        ),
+        CheckConstraint(
+            "valuation_lease_owner IS NULL OR btrim(valuation_lease_owner) <> ''",
+            name="ck_portfolio_valuation_jobs_lease_owner_nonblank",
+        ),
+        CheckConstraint(
+            "valuation_lease_expires_at IS NULL OR valuation_lease_expires_at "
+            "NOT IN ('infinity'::timestamptz, '-infinity'::timestamptz)",
+            name="ck_portfolio_valuation_jobs_lease_expiry_finite",
+        ),
+        CheckConstraint(
+            "(status = 'PROCESSING' AND valuation_lease_owner IS NOT NULL "
+            "AND valuation_claim_token IS NOT NULL AND valuation_lease_expires_at IS NOT NULL) "
+            "OR (status <> 'PROCESSING' AND valuation_lease_owner IS NULL "
+            "AND valuation_claim_token IS NULL AND valuation_lease_expires_at IS NULL)",
+            name="ck_portfolio_valuation_jobs_processing_lease_state",
         ),
         UniqueConstraint(
             "portfolio_id",
@@ -4655,6 +4680,11 @@ class PortfolioValuationJob(Base):
             "ix_portfolio_valuation_jobs_status_updated_at",
             "status",
             "updated_at",
+        ),
+        Index(
+            "ix_portfolio_valuation_jobs_processing_lease_expiry",
+            "valuation_lease_expires_at",
+            postgresql_where=status == "PROCESSING",
         ),
         Index(
             "ix_portfolio_valuation_jobs_claim_order_epoch",

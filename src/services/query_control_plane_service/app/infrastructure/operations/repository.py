@@ -128,6 +128,7 @@ class OperationsRepository:
         stale_threshold: datetime,
         failed_since: datetime,
         include_security: bool = False,
+        stale_at_column_name: str | None = None,
     ) -> JobHealthSummary:
         base_subq = base_stmt.subquery()
         open_date_column = getattr(base_subq.c, open_date_column_name)
@@ -137,6 +138,11 @@ class OperationsRepository:
             open_date_column,
             stale_threshold,
             failed_since,
+            stale_at_column=(
+                getattr(base_subq.c, stale_at_column_name)
+                if stale_at_column_name is not None
+                else None
+            ),
         )
         oldest_job_subq = oldest_open_support_job(
             base_subq,
@@ -310,7 +316,7 @@ class OperationsRepository:
         reference_now: datetime,
         as_of: Optional[datetime] = None,
     ) -> JobHealthSummary:
-        stale_threshold, failed_since = support_job_health_thresholds(
+        _stale_threshold, failed_since = support_job_health_thresholds(
             stale_minutes=stale_minutes,
             failed_window_hours=failed_window_hours,
             reference_now=reference_now,
@@ -318,6 +324,7 @@ class OperationsRepository:
         base_stmt = select(
             PortfolioValuationJob.status.label("status"),
             PortfolioValuationJob.updated_at.label("updated_at"),
+            PortfolioValuationJob.valuation_lease_expires_at.label("lease_expires_at"),
             PortfolioValuationJob.valuation_date.label("valuation_date"),
             PortfolioValuationJob.id.label("id"),
             PortfolioValuationJob.correlation_id.label("correlation_id"),
@@ -332,9 +339,10 @@ class OperationsRepository:
         return await self._get_support_job_health_summary(
             base_stmt,
             open_date_column_name="valuation_date",
-            stale_threshold=stale_threshold,
+            stale_threshold=reference_now,
             failed_since=failed_since,
             include_security=True,
+            stale_at_column_name="lease_expires_at",
         )
 
     async def get_aggregation_job_health_summary(
@@ -346,7 +354,7 @@ class OperationsRepository:
         as_of: Optional[datetime] = None,
         through_business_date: Optional[date] = None,
     ) -> JobHealthSummary:
-        stale_threshold, failed_since = support_job_health_thresholds(
+        _stale_threshold, failed_since = support_job_health_thresholds(
             stale_minutes=stale_minutes,
             failed_window_hours=failed_window_hours,
             reference_now=reference_now,
@@ -354,6 +362,7 @@ class OperationsRepository:
         base_stmt = select(
             PortfolioAggregationJob.status.label("status"),
             PortfolioAggregationJob.updated_at.label("updated_at"),
+            PortfolioAggregationJob.lease_expires_at.label("lease_expires_at"),
             PortfolioAggregationJob.aggregation_date.label("aggregation_date"),
             PortfolioAggregationJob.id.label("id"),
             PortfolioAggregationJob.correlation_id.label("correlation_id"),
@@ -367,8 +376,9 @@ class OperationsRepository:
         return await self._get_support_job_health_summary(
             base_stmt,
             open_date_column_name="aggregation_date",
-            stale_threshold=stale_threshold,
+            stale_threshold=reference_now,
             failed_since=failed_since,
+            stale_at_column_name="lease_expires_at",
         )
 
     async def get_analytics_export_job_health_summary(
@@ -875,7 +885,6 @@ class OperationsRepository:
         if security_id is not None and not normalized_security_id:
             return []
         reference_now = reference_now or datetime.now(timezone.utc)
-        stale_threshold = reference_now - timedelta(minutes=stale_minutes)
         stmt = apply_valuation_job_scope(
             select(PortfolioValuationJob),
             portfolio_id=portfolio_id,
@@ -891,8 +900,9 @@ class OperationsRepository:
             stmt.order_by(
                 support_job_priority(
                     PortfolioValuationJob.status,
-                    PortfolioValuationJob.updated_at,
-                    stale_threshold,
+                    PortfolioValuationJob.valuation_lease_expires_at,
+                    reference_now,
+                    inclusive=True,
                 ).asc(),
                 PortfolioValuationJob.valuation_date.asc(),
                 PortfolioValuationJob.updated_at.asc(),
@@ -937,7 +947,6 @@ class OperationsRepository:
         as_of: Optional[datetime] = None,
     ) -> list[PortfolioAggregationJob]:
         reference_now = reference_now or datetime.now(timezone.utc)
-        stale_threshold = reference_now - timedelta(minutes=stale_minutes)
         stmt = apply_aggregation_job_scope(
             select(PortfolioAggregationJob),
             portfolio_id=portfolio_id,
@@ -951,8 +960,9 @@ class OperationsRepository:
             stmt.order_by(
                 support_job_priority(
                     PortfolioAggregationJob.status,
-                    PortfolioAggregationJob.updated_at,
-                    stale_threshold,
+                    PortfolioAggregationJob.lease_expires_at,
+                    reference_now,
+                    inclusive=True,
                 ).asc(),
                 PortfolioAggregationJob.aggregation_date.asc(),
                 PortfolioAggregationJob.updated_at.asc(),
