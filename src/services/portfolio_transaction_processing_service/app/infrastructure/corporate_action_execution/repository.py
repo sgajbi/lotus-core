@@ -14,15 +14,19 @@ from portfolio_common.database_models import (
 )
 from portfolio_common.database_models import Transaction as TransactionRecord
 from portfolio_common.events import TransactionEvent
-from sqlalchemy import func, insert, select
+from sqlalchemy import case, func, insert, literal, or_, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...application.corporate_action_execution import CorporateActionExecutionPlan
 from ...application.corporate_action_release import (
+    ClaimedCorporateActionExecutionRelease,
     ConflictingCorporateActionExecutionReleaseError,
+    CorporateActionExecutionLeaseRequest,
+    CorporateActionExecutionMemberAuthority,
     CorporateActionExecutionReleaseAuthority,
     CorporateActionReleaseMaterialization,
     CorporateActionReleaseMaterializationOutcome,
+    CorporateActionReleaseProgressOutcome,
     StaleCorporateActionExecutionPlanError,
     build_corporate_action_execution_member_authority,
 )
@@ -81,6 +85,241 @@ class SqlAlchemyCorporateActionExecutionReleaseRepository:
         return _materialization(
             release,
             CorporateActionReleaseMaterializationOutcome.APPENDED,
+        )
+
+    async def claim_next(
+        self,
+        lease: CorporateActionExecutionLeaseRequest,
+    ) -> ClaimedCorporateActionExecutionRelease | None:
+        """Claim one pending or expired release using database-clock lease fencing."""
+
+        if not isinstance(lease, CorporateActionExecutionLeaseRequest):
+            raise TypeError("lease must be a CorporateActionExecutionLeaseRequest")
+        await self._supersede_stale_pending_releases()
+        release = CorporateActionExecutionReleaseRecord
+        candidate = await self._session.scalar(
+            select(release)
+            .where(
+                or_(
+                    release.status == "PENDING",
+                    (release.status == "PROCESSING")
+                    & (release.lease_expires_at <= func.now()),
+                )
+            )
+            .order_by(release.id)
+            .limit(1)
+            .with_for_update(skip_locked=True)
+        )
+        if candidate is None:
+            return None
+        lease_expiry = func.now() + literal(lease.duration_seconds) * text(
+            "INTERVAL '1 second'"
+        )
+        claimed = await self._session.scalar(
+            update(release)
+            .where(release.id == candidate.id)
+            .values(
+                status="PROCESSING",
+                attempt_count=release.attempt_count + 1,
+                fence_token=release.fence_token + 1,
+                lease_owner=lease.owner,
+                lease_token=lease.token,
+                lease_expires_at=lease_expiry,
+                terminal_reason=None,
+                updated_at=func.now(),
+            )
+            .returning(release)
+            .execution_options(populate_existing=True)
+        )
+        if claimed is None:
+            return None
+        member = await self._session.scalar(
+            select(CorporateActionExecutionMemberRecord).where(
+                CorporateActionExecutionMemberRecord.release_id == claimed.id,
+                CorporateActionExecutionMemberRecord.execution_ordinal
+                == claimed.next_execution_ordinal,
+                CorporateActionExecutionMemberRecord.status == "PENDING",
+            )
+        )
+        if member is None:
+            raise ConflictingCorporateActionExecutionReleaseError(
+                "claimed corporate-action release lacks its exact next member"
+            )
+        return _claimed_release(claimed, member)
+
+    async def advance_member(
+        self,
+        *,
+        release_id: int,
+        expected_ordinal: int,
+        lease_token: str,
+        fence_token: int,
+    ) -> CorporateActionReleaseProgressOutcome:
+        """Complete one exact member and advance its owned release atomically."""
+
+        _require_positive_integer(release_id, "release_id")
+        _require_nonnegative_integer(expected_ordinal, "expected_ordinal")
+        _require_sha256_digest(lease_token, "lease_token")
+        _require_positive_integer(fence_token, "fence_token")
+        release = CorporateActionExecutionReleaseRecord
+        owned = await self._session.scalar(
+            select(release)
+            .where(
+                release.id == release_id,
+                release.status == "PROCESSING",
+                release.next_execution_ordinal == expected_ordinal,
+                release.lease_token == lease_token,
+                release.fence_token == fence_token,
+                release.lease_expires_at > func.now(),
+            )
+            .with_for_update()
+        )
+        if owned is None:
+            return CorporateActionReleaseProgressOutcome.LOST_OWNERSHIP
+        member_result = await self._session.execute(
+            update(CorporateActionExecutionMemberRecord)
+            .where(
+                CorporateActionExecutionMemberRecord.release_id == release_id,
+                CorporateActionExecutionMemberRecord.execution_ordinal == expected_ordinal,
+                CorporateActionExecutionMemberRecord.status == "PENDING",
+            )
+            .values(
+                status="COMPLETE",
+                completed_fence_token=fence_token,
+                completed_at=func.now(),
+            )
+        )
+        if int(member_result.rowcount or 0) != 1:
+            raise ConflictingCorporateActionExecutionReleaseError(
+                "owned corporate-action release member is not pending"
+            )
+        next_ordinal = release.next_execution_ordinal + 1
+        completes_release = next_ordinal == release.member_count
+        advanced = await self._session.scalar(
+            update(release)
+            .where(
+                release.id == release_id,
+                release.status == "PROCESSING",
+                release.next_execution_ordinal == expected_ordinal,
+                release.lease_token == lease_token,
+                release.fence_token == fence_token,
+            )
+            .values(
+                next_execution_ordinal=next_ordinal,
+                status=case((completes_release, "COMPLETE"), else_="PROCESSING"),
+                lease_owner=case((completes_release, None), else_=release.lease_owner),
+                lease_token=case((completes_release, None), else_=release.lease_token),
+                lease_expires_at=case(
+                    (completes_release, None), else_=release.lease_expires_at
+                ),
+                completed_at=case((completes_release, func.now()), else_=None),
+                updated_at=func.now(),
+            )
+            .returning(release.status)
+        )
+        if advanced is None:
+            raise ConflictingCorporateActionExecutionReleaseError(
+                "owned corporate-action release did not advance"
+            )
+        return (
+            CorporateActionReleaseProgressOutcome.COMPLETE
+            if advanced == "COMPLETE"
+            else CorporateActionReleaseProgressOutcome.ADVANCED
+        )
+
+    async def load_owned_next(
+        self,
+        *,
+        release_id: int,
+        lease_token: str,
+        fence_token: int,
+    ) -> ClaimedCorporateActionExecutionRelease | None:
+        """Reload the exact next member only while the caller still owns the lease."""
+
+        _require_positive_integer(release_id, "release_id")
+        _require_sha256_digest(lease_token, "lease_token")
+        _require_positive_integer(fence_token, "fence_token")
+        release = await self._session.scalar(
+            select(CorporateActionExecutionReleaseRecord).where(
+                CorporateActionExecutionReleaseRecord.id == release_id,
+                CorporateActionExecutionReleaseRecord.status == "PROCESSING",
+                CorporateActionExecutionReleaseRecord.lease_token == lease_token,
+                CorporateActionExecutionReleaseRecord.fence_token == fence_token,
+                CorporateActionExecutionReleaseRecord.lease_expires_at > func.now(),
+            )
+        )
+        if release is None:
+            return None
+        member = await self._session.scalar(
+            select(CorporateActionExecutionMemberRecord).where(
+                CorporateActionExecutionMemberRecord.release_id == release.id,
+                CorporateActionExecutionMemberRecord.execution_ordinal
+                == release.next_execution_ordinal,
+                CorporateActionExecutionMemberRecord.status == "PENDING",
+            )
+        )
+        if member is None:
+            raise ConflictingCorporateActionExecutionReleaseError(
+                "owned corporate-action release lacks its exact next member"
+            )
+        return _claimed_release(release, member)
+
+    async def renew_lease(
+        self,
+        *,
+        release_id: int,
+        lease: CorporateActionExecutionLeaseRequest,
+        fence_token: int,
+    ) -> bool:
+        """Extend an unexpired owned lease using the PostgreSQL clock."""
+
+        _require_positive_integer(release_id, "release_id")
+        if not isinstance(lease, CorporateActionExecutionLeaseRequest):
+            raise TypeError("lease must be a CorporateActionExecutionLeaseRequest")
+        _require_positive_integer(fence_token, "fence_token")
+        lease_expiry = func.now() + literal(lease.duration_seconds) * text(
+            "INTERVAL '1 second'"
+        )
+        result = await self._session.execute(
+            update(CorporateActionExecutionReleaseRecord)
+            .where(
+                CorporateActionExecutionReleaseRecord.id == release_id,
+                CorporateActionExecutionReleaseRecord.status == "PROCESSING",
+                CorporateActionExecutionReleaseRecord.lease_owner == lease.owner,
+                CorporateActionExecutionReleaseRecord.lease_token == lease.token,
+                CorporateActionExecutionReleaseRecord.fence_token == fence_token,
+                CorporateActionExecutionReleaseRecord.lease_expires_at > func.now(),
+            )
+            .values(lease_expires_at=lease_expiry, updated_at=func.now())
+        )
+        return int(result.rowcount or 0) == 1
+
+    async def _supersede_stale_pending_releases(self) -> None:
+        release = CorporateActionExecutionReleaseRecord
+        readiness = CorporateActionReadinessEvaluationRecord
+        event = CorporateActionEventRecord
+        stale_current_state = (
+            select(1)
+            .select_from(readiness)
+            .join(event, event.id == readiness.event_id)
+            .where(
+                readiness.id == release.readiness_evaluation_id,
+                or_(
+                    event.state_version != readiness.state_version,
+                    event.readiness_status != "READY",
+                ),
+            )
+            .correlate(release)
+            .exists()
+        )
+        await self._session.execute(
+            update(release)
+            .where(release.status == "PENDING", stale_current_state)
+            .values(
+                status="SUPERSEDED",
+                terminal_reason="superseded_by_newer_event_state",
+                updated_at=func.now(),
+            )
         )
 
     async def _acquire_release_lock(self, plan: CorporateActionExecutionPlan) -> None:
@@ -265,3 +504,65 @@ def _materialization(
         release_authority_hash=release.release_authority_hash,
         member_count=release.member_count,
     )
+
+
+def _member_authority(
+    member: CorporateActionExecutionMemberRecord,
+) -> CorporateActionExecutionMemberAuthority:
+    return CorporateActionExecutionMemberAuthority(
+        execution_ordinal=member.execution_ordinal,
+        transaction_id=member.transaction_id,
+        observation_id=member.observation_id,
+        transaction_epoch=member.transaction_epoch,
+        observed_child_content_hash=member.observed_child_content_hash,
+        transaction_payload_fingerprint=member.transaction_payload_fingerprint,
+    )
+
+
+def _claimed_release(
+    release: CorporateActionExecutionReleaseRecord,
+    member: CorporateActionExecutionMemberRecord,
+) -> ClaimedCorporateActionExecutionRelease:
+    if (
+        release.lease_owner is None
+        or release.lease_token is None
+        or release.lease_expires_at is None
+    ):
+        raise ConflictingCorporateActionExecutionReleaseError(
+            "claimed corporate-action release lacks complete lease authority"
+        )
+    return ClaimedCorporateActionExecutionRelease(
+        release_id=release.id,
+        release_authority_hash=release.release_authority_hash,
+        member_count=release.member_count,
+        next_member=_member_authority(member),
+        attempt_count=release.attempt_count,
+        fence_token=release.fence_token,
+        lease_owner=release.lease_owner,
+        lease_token=release.lease_token,
+        lease_expires_at=release.lease_expires_at,
+    )
+
+
+def _require_positive_integer(value: object, field_name: str) -> None:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise ValueError(f"{field_name} must be a positive integer")
+
+
+def _require_nonnegative_integer(value: object, field_name: str) -> None:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ValueError(f"{field_name} must be a non-negative integer")
+
+
+def _require_sha256_digest(value: object, field_name: str) -> None:
+    if (
+        not isinstance(value, str)
+        or len(value) != 64
+        or value != value.lower()
+        or value != value.strip()
+    ):
+        raise ValueError(f"{field_name} must be a canonical sha256 digest")
+    try:
+        int(value, 16)
+    except ValueError as exc:
+        raise ValueError(f"{field_name} must be a canonical sha256 digest") from exc
