@@ -145,6 +145,12 @@ tenant-wide operator authority narrowed by legal book. Empty/filter-empty pages 
 responses; 404 is reserved for an absent exact portfolio scope. Use returned hashes, reason codes,
 fence, attempt, and member-progress counts. Never repair the immutable graph/release tables by hand.
 
+Aggregate worker alerts use `lotus_core_corporate_action_release_cycles_total`,
+`lotus_core_corporate_action_release_cycle_duration_seconds`, and
+`lotus_core_corporate_action_release_lease_renewals_total`. Their only label is bounded `outcome`.
+Do not add tenant, book, portfolio, event, release, transaction, token, or reason labels; drill down
+through the support API and correlated structured logs.
+
 ## Preferred diagnostic sequence
 
 When a portfolio or load scenario looks wrong, check in this order:

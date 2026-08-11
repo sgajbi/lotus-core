@@ -1,7 +1,7 @@
 """Specify resilient lifecycle behavior for the corporate-action release poller."""
 
 import asyncio
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from sqlalchemy.exc import SQLAlchemyError
@@ -9,6 +9,9 @@ from sqlalchemy.exc import SQLAlchemyError
 from src.services.portfolio_transaction_processing_service.app.application import (
     CorporateActionReleaseWorkerResult,
     CorporateActionReleaseWorkerStatus,
+)
+from src.services.portfolio_transaction_processing_service.app.ports.corporate_action_release_observability import (  # noqa: E501
+    CorporateActionReleaseCycleOutcome,
 )
 from src.services.portfolio_transaction_processing_service.app.runtime.corporate_action_release_worker import (  # noqa: E501
     CorporateActionReleaseWorker,
@@ -42,7 +45,9 @@ async def test_stop_allows_in_flight_member_to_finish_before_exit() -> None:
         return CorporateActionReleaseWorkerResult(CorporateActionReleaseWorkerStatus.COMPLETE)
 
     use_case.execute.side_effect = execute
-    worker = CorporateActionReleaseWorker(use_case)
+    observer = MagicMock()
+    clock = MagicMock(side_effect=[10.0, 10.5])
+    worker = CorporateActionReleaseWorker(use_case, observer=observer, clock=clock)
     task = asyncio.create_task(worker.run())
     await asyncio.wait_for(started.wait(), timeout=1)
 
@@ -52,6 +57,10 @@ async def test_stop_allows_in_flight_member_to_finish_before_exit() -> None:
 
     await asyncio.wait_for(task, timeout=1)
     assert use_case.execute.await_count == 1
+    observer.observe_cycle.assert_called_once_with(
+        CorporateActionReleaseCycleOutcome.COMPLETE,
+        0.5,
+    )
 
 
 @pytest.mark.asyncio

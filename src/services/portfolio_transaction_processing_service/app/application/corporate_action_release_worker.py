@@ -11,6 +11,11 @@ from enum import StrEnum
 
 from ..domain import BookedTransaction
 from ..ports.corporate_action_event_graph import CorporateActionEventGraphUnitOfWorkFactory
+from ..ports.corporate_action_release_observability import (
+    NOOP_CORPORATE_ACTION_RELEASE_OBSERVER,
+    CorporateActionLeaseRenewalOutcome,
+    CorporateActionReleaseObserver,
+)
 from .commands import ProcessTransactionCommand, TransactionEventMetadata
 from .corporate_action_release import (
     ClaimedCorporateActionExecutionRelease,
@@ -56,12 +61,14 @@ class ProcessNextCorporateActionReleaseUseCase:
         lease_owner: str,
         lease_duration_seconds: int = 60,
         token_factory: Callable[[], str] = lambda: secrets.token_hex(32),
+        observer: CorporateActionReleaseObserver = NOOP_CORPORATE_ACTION_RELEASE_OBSERVER,
     ) -> None:
         self._unit_of_work_factory = unit_of_work_factory
         self._process_transaction = process_transaction
         self._lease_owner = lease_owner
         self._lease_duration_seconds = lease_duration_seconds
         self._token_factory = token_factory
+        self._observer = observer
 
     async def execute(self) -> CorporateActionReleaseWorkerResult:
         lease = CorporateActionExecutionLeaseRequest(
@@ -181,11 +188,17 @@ class ProcessNextCorporateActionReleaseUseCase:
                     fence_token=claim.fence_token,
                 )
                 if not renewed:
+                    self._observer.observe_lease_renewal(
+                        CorporateActionLeaseRenewalOutcome.LOST
+                    )
                     raise TransactionProcessingError(
                         reason_code="corporate_action_release_lease_lost",
                         detail={"release_id": claim.release_id},
                         retryable=True,
                     )
+                self._observer.observe_lease_renewal(
+                    CorporateActionLeaseRenewalOutcome.RENEWED
+                )
                 await unit_of_work.commit()
 
     async def _claim(

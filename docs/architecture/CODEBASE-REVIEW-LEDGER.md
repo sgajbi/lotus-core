@@ -15,7 +15,9 @@ state filtering, canonical `PB_SG_GLOBAL_BAL_001`, and cross-tenant/cross-book d
 tests passed 19 cases; MyPy, Ruff, OpenAPI, API vocabulary, route-family, and problem-details guards
 passed. The route and index are additive. No package, framework, datastore, deployable, image, or
 experimental technology was introduced; the implementation remains on FastAPI, Pydantic,
-SQLAlchemy, PostgreSQL, Alembic, Kafka, and the existing Prometheus runtime.
+SQLAlchemy, PostgreSQL, Alembic, Kafka, and the existing Prometheus runtime. Release cycles,
+duration, and lease renewal/loss are now measured through three owner-registered metrics whose only
+label is the bounded `outcome` enum; identifiers remain in the support API and structured logs.
 
 CR-1683 ordered-runtime addendum (2026-08-11): signed implementation through `681cdd588`
 activates governed manifest ingestion, fail-closed child parking, atomic READY release

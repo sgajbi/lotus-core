@@ -80,6 +80,15 @@ SERVICE_LOCAL_METRIC_OWNERS: dict[str, str] = {
     "lotus_core_transaction_processing_operation_duration_seconds": (
         "portfolio_transaction_processing_service"
     ),
+    "lotus_core_corporate_action_release_cycle_duration_seconds": (
+        "portfolio_transaction_processing_service"
+    ),
+    "lotus_core_corporate_action_release_cycles_total": (
+        "portfolio_transaction_processing_service"
+    ),
+    "lotus_core_corporate_action_release_lease_renewals_total": (
+        "portfolio_transaction_processing_service"
+    ),
     "lotus_core_transaction_processing_operations_total": (
         "portfolio_transaction_processing_service"
     ),
