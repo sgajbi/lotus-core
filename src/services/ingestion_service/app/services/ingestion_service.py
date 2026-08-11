@@ -3,6 +3,7 @@ from typing import List
 
 from portfolio_common.config import (
     KAFKA_BUSINESS_DATES_RAW_RECEIVED_TOPIC,
+    KAFKA_CORPORATE_ACTION_MANIFEST_RECEIVED_TOPIC,
     KAFKA_FIXED_INCOME_BOOK_COST_AUTHORITY_RECEIVED_TOPIC,
     KAFKA_FX_RATES_RAW_RECEIVED_TOPIC,
     KAFKA_INSTRUMENTS_RECEIVED_TOPIC,
@@ -18,6 +19,7 @@ from portfolio_common.domain.eventing import (
     security_partition_key,
     transaction_partition_key,
 )
+from portfolio_common.event_contracts import CorporateActionManifestReceivedEvent
 from portfolio_common.event_contracts.fixed_income_book_cost import (
     FixedIncomeBookCostAuthorityEvent,
 )
@@ -40,6 +42,7 @@ from portfolio_common.monitoring import KAFKA_MESSAGES_PUBLISHED_TOTAL
 
 from ..domain import TransactionReprocessingTarget
 from ..DTOs.business_date_dto import BusinessDate
+from ..DTOs.corporate_action_manifest_dto import CorporateActionManifestIngestionRequest
 from ..DTOs.fixed_income_book_cost_authority_dto import (
     FixedIncomeBookCostAuthorityIngestionRequest,
 )
@@ -160,7 +163,7 @@ class IngestionService:
 
     def _confirm_delivery(self, *, timeout_seconds: int) -> int:
         result = self._event_publisher.confirm_delivery(timeout_seconds=timeout_seconds)
-        return result.undelivered_count
+        return int(result.undelivered_count)
 
     @staticmethod
     def _fixed_income_book_cost_record_key(
@@ -174,6 +177,68 @@ class IngestionService:
             f"{event.partition_key}|{authority.authority_type}|{source.source_system}|"
             f"{source.source_record_id}|v{source.source_version}"
         )
+
+    @staticmethod
+    def _corporate_action_manifest_record_key(
+        event: CorporateActionManifestReceivedEvent,
+    ) -> str:
+        """Return source-versioned parent authority for diagnostics."""
+
+        return (
+            f"{event.partition_key}|{event.corporate_action_event_id}|v{event.version}|"
+            f"{event.source.source_system}|{event.source.source_record_id}|"
+            f"{event.source.source_revision}"
+        )
+
+    async def publish_corporate_action_manifests(
+        self,
+        request: CorporateActionManifestIngestionRequest,
+        idempotency_key: str | None = None,
+    ) -> None:
+        """Publish manifests monotonically per parent stream and confirm delivery."""
+
+        if not isinstance(request, CorporateActionManifestIngestionRequest):
+            raise TypeError("request must be a CorporateActionManifestIngestionRequest")
+        stream_order: dict[tuple[str, str], int] = {}
+        for event in request.manifests:
+            stream_identity = (event.partition_key, event.corporate_action_event_id)
+            stream_order.setdefault(stream_identity, len(stream_order))
+        events = sorted(
+            request.manifests,
+            key=lambda event: (
+                stream_order[(event.partition_key, event.corporate_action_event_id)],
+                event.version,
+            ),
+        )
+        headers = self._get_headers(idempotency_key)
+        record_keys = [self._corporate_action_manifest_record_key(event) for event in events]
+        for index, event in enumerate(events):
+            try:
+                self._publish_event(
+                    topic=KAFKA_CORPORATE_ACTION_MANIFEST_RECEIVED_TOPIC,
+                    key=event.partition_key,
+                    value=event.model_dump(mode="json"),
+                    headers=headers,
+                )
+                KAFKA_MESSAGES_PUBLISHED_TOTAL.labels(
+                    topic=KAFKA_CORPORATE_ACTION_MANIFEST_RECEIVED_TOPIC
+                ).inc()
+            except Exception as exc:
+                try:
+                    self._raise_batch_publish_error(
+                        entity_label="corporate-action manifest",
+                        failed_key=record_keys[index],
+                        record_keys=record_keys,
+                        failure_index=index,
+                    )
+                except IngestionPublishError as publish_exc:
+                    raise publish_exc from exc
+
+        if self._confirm_delivery(timeout_seconds=5):
+            self._raise_flush_timeout_error(
+                entity_label="corporate-action manifest delivery confirmation",
+                record_keys=record_keys,
+            )
 
     async def publish_fixed_income_book_cost_authorities(
         self,
