@@ -109,11 +109,6 @@ def test_corporate_action_execution_release_declares_fenced_state_contract() -> 
     assert [
         column.name for column in release_indexes["ix_ca_execution_release_claim"].columns
     ] == ["status", "lease_expires_at", "id"]
-    assert [
-        column.name
-        for column in release_indexes["ix_ca_execution_release_authority"].columns
-    ] == ["release_authority_hash"]
-
     assert member.columns["observed_child_content_hash"].type.length == 64
     assert member.columns["transaction_payload_fingerprint"].type.length == 71
     assert {

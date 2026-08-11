@@ -2757,10 +2757,6 @@ class CorporateActionExecutionReleaseRecord(Base):
             "lease_expires_at",
             "id",
         ),
-        Index(
-            "ix_ca_execution_release_authority",
-            "release_authority_hash",
-        ),
     )
 
 
