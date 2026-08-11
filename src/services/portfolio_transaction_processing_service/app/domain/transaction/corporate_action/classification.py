@@ -23,6 +23,10 @@ RECONCILABLE_CORPORATE_ACTION_TYPES = frozenset(BASIS_TRANSFER_CORPORATE_ACTION_
     FRACTIONAL_CASH_BASIS_TRANSACTION_TYPES,
     {"ADJUSTMENT"},
 )
+# Child parking is deliberately opt-in. These are the transaction families that the
+# parent-manifest policy can govern; identity fields are checked separately so an
+# ordinary fee, tax, or adjustment cannot be captured merely by its transaction type.
+MANIFEST_GOVERNED_CORPORATE_ACTION_TYPES = RECONCILABLE_CORPORATE_ACTION_TYPES.union({"FEE", "TAX"})
 CORPORATE_ACTION_RECONCILIATION_INPUT_TYPES = RECONCILABLE_CORPORATE_ACTION_TYPES
 SOURCE_BASIS_TRANSFER_TRANSACTION_TYPES = {"SPIN_OFF", "DEMERGER_OUT"}
 TARGET_BASIS_TRANSFER_TRANSACTION_TYPES = {"SPIN_IN", "DEMERGER_IN"}
@@ -41,4 +45,13 @@ def is_reconcilable_corporate_action(transaction_type: str | None) -> bool:
     return (
         normalize_corporate_action_transaction_type(transaction_type)
         in RECONCILABLE_CORPORATE_ACTION_TYPES
+    )
+
+
+def is_manifest_governed_corporate_action(transaction_type: str | None) -> bool:
+    """Return whether a fully identified child may enter manifest-governed parking."""
+
+    return (
+        normalize_corporate_action_transaction_type(transaction_type)
+        in MANIFEST_GOVERNED_CORPORATE_ACTION_TYPES
     )

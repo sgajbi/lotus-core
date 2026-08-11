@@ -21,6 +21,7 @@ from .transaction import (
     TransactionSemanticIdentity,
     build_transaction_correction_identity,
     build_transaction_semantic_identity,
+    corporate_action_manifest_child,
 )
 
 __all__ = [
@@ -37,6 +38,7 @@ __all__ = [
     "TransactionStageRecord",
     "build_transaction_correction_identity",
     "build_transaction_semantic_identity",
+    "corporate_action_manifest_child",
     "build_position_history",
     "order_position_transactions",
     "position_transaction_ordering_key",
