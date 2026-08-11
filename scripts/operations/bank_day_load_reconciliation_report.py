@@ -10,7 +10,8 @@ from pathlib import Path
 from typing import Any
 
 import requests
-from sqlalchemy import create_engine, text
+from portfolio_common.db import create_sync_database_engine
+from sqlalchemy import text
 
 try:
     from scripts.operations.bank_day_load_scenario import (
@@ -82,7 +83,10 @@ def _fetch_portfolio_ids(
     run_id: str,
     portfolio_limit: int | None,
 ) -> list[str]:
-    engine = create_engine(host_database_url, future=True)
+    engine = create_sync_database_engine(
+        runtime_identity="bank-day-reconciliation-report",
+        database_url=host_database_url,
+    )
     stmt = text(
         """
         SELECT portfolio_id

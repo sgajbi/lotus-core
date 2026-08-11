@@ -14,7 +14,8 @@ from typing import TYPE_CHECKING, Any, Callable, Protocol, cast
 
 import requests  # type: ignore[import-untyped]
 from portfolio_common.config import KAFKA_VALUATION_SNAPSHOT_PERSISTED_TOPIC
-from sqlalchemy import Engine, create_engine, text
+from portfolio_common.db import create_sync_database_engine
+from sqlalchemy import Engine, text
 
 from scripts.operations.managed_gate_evidence import write_managed_gate_failure_receipt
 
@@ -467,7 +468,10 @@ def _run_gate(
         )
         host_database_url = args.host_database_url or endpoints.host_database_url
         kafka_bootstrap_servers = args.kafka_bootstrap_servers or endpoints.kafka_bootstrap_servers
-        engine = create_engine(host_database_url, pool_pre_ping=True)
+        engine = create_sync_database_engine(
+            runtime_identity="derived-state-recovery-gate",
+            database_url=host_database_url,
+        )
         lifecycle.callback(engine.dispose)
         offset_store = KafkaOffsetStore(
             bootstrap_servers=kafka_bootstrap_servers,

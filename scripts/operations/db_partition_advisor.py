@@ -16,7 +16,8 @@ from dataclasses import asdict, dataclass
 from datetime import date
 from typing import Any
 
-from sqlalchemy import create_engine, text
+from portfolio_common.db import create_sync_database_engine
+from sqlalchemy import text
 
 _IDENTIFIER_RE = re.compile(r"^[a-z_][a-z0-9_]*$")
 
@@ -207,7 +208,9 @@ def generate_monthly_partition_sql(
 
 
 def inspect_partition_status(database_url: str) -> dict[str, PartitionStatus]:
-    engine = create_engine(database_url)
+    engine = create_sync_database_engine(
+        runtime_identity="database-partition-advisor", database_url=database_url
+    )
     query = text(
         """
         SELECT
@@ -301,7 +304,9 @@ def execute_partition_sql(database_url: str, report: dict[str, Any]) -> list[str
     if not statements:
         return []
 
-    engine = create_engine(database_url)
+    engine = create_sync_database_engine(
+        runtime_identity="database-partition-advisor", database_url=database_url
+    )
     with engine.begin() as connection:
         for statement in statements:
             connection.execute(text(statement))

@@ -4,6 +4,7 @@ import argparse
 import json
 from dataclasses import dataclass
 
+from portfolio_common.database_runtime_identity import database_runtime_identity_scope
 from portfolio_common.db import SessionLocal
 from sqlalchemy import text
 from sqlalchemy.exc import OperationalError
@@ -126,24 +127,27 @@ def run(args: argparse.Namespace) -> int:
     summary: dict[str, dict[str, int | bool]] = {}
 
     try:
-        with SessionLocal() as db:
-            for rule in _rules(args):
-                days = days_by_rule[rule.name]
-                eligible = int(db.execute(text(rule.count_sql), {"days": days}).scalar() or 0)
-                deleted = 0
-                if not args.dry_run and eligible > 0:
-                    deleted = int(db.execute(text(rule.delete_sql), {"days": days}).rowcount or 0)
-                summary[rule.name] = {
-                    "days": days,
-                    "eligible_rows": eligible,
-                    "deleted_rows": deleted,
-                    "dry_run": args.dry_run,
-                }
+        with database_runtime_identity_scope("database-retention-maintenance"):
+            with SessionLocal() as db:
+                for rule in _rules(args):
+                    days = days_by_rule[rule.name]
+                    eligible = int(db.execute(text(rule.count_sql), {"days": days}).scalar() or 0)
+                    deleted = 0
+                    if not args.dry_run and eligible > 0:
+                        deleted = int(
+                            db.execute(text(rule.delete_sql), {"days": days}).rowcount or 0
+                        )
+                    summary[rule.name] = {
+                        "days": days,
+                        "eligible_rows": eligible,
+                        "deleted_rows": deleted,
+                        "dry_run": args.dry_run,
+                    }
 
-            if args.dry_run:
-                db.rollback()
-            else:
-                db.commit()
+                if args.dry_run:
+                    db.rollback()
+                else:
+                    db.commit()
     except OperationalError as exc:
         error_payload = {
             "error": "database_connection_failed",

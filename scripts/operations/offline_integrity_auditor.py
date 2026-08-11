@@ -14,7 +14,8 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
 
-from sqlalchemy import create_engine, text
+from portfolio_common.db import create_sync_database_engine
+from sqlalchemy import text
 
 
 @dataclass(slots=True, frozen=True)
@@ -151,7 +152,9 @@ def _load_ledger_rows(*, db_url: str, as_of_date: date) -> list[LedgerRow]:
         WHERE DATE(transaction_date) <= :as_of_date
         """
     )
-    engine = create_engine(db_url)
+    engine = create_sync_database_engine(
+        runtime_identity="offline-integrity-auditor", database_url=db_url
+    )
     with engine.connect() as conn:
         rows = conn.execute(query, {"as_of_date": as_of_date}).mappings().all()
     return [
@@ -179,7 +182,9 @@ def _load_snapshot_rows(*, db_url: str, as_of_date: date) -> list[SnapshotRow]:
         WHERE date <= :as_of_date
         """
     )
-    engine = create_engine(db_url)
+    engine = create_sync_database_engine(
+        runtime_identity="offline-integrity-auditor", database_url=db_url
+    )
     with engine.connect() as conn:
         rows = conn.execute(query, {"as_of_date": as_of_date}).mappings().all()
     return [

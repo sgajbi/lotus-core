@@ -68,6 +68,7 @@ def test_read_database_resource_usage_calculates_connection_capacity() -> None:
                 "total_connections": 25,
                 "active_connections": 12,
                 "idle_in_transaction_connections": 2,
+                "open_transactions": 5,
                 "lock_waiters": 3,
                 "blocked_sessions": 1,
                 "max_connections": 200,
@@ -117,6 +118,7 @@ def test_read_database_resource_usage_calculates_connection_capacity() -> None:
 
     assert usage.total_connections == 25
     assert usage.active_connections == 12
+    assert usage.open_transactions == 5
     assert usage.lock_waiters == 3
     assert usage.blocked_sessions == 1
     assert usage.connection_utilization_percent == 12.5
@@ -130,16 +132,32 @@ def test_read_database_resource_usage_calculates_connection_capacity() -> None:
     assert "NOT waiting_lock.granted" in str(captured["query"])
 
 
-def test_read_database_resource_usage_rejects_unreconciled_cohorts() -> None:
+@pytest.mark.parametrize(
+    ("aggregate_field", "aggregate_value", "cohort_value"),
+    (
+        ("total_connections", 2, 1),
+        ("active_connections", 2, 1),
+        ("idle_in_transaction_connections", 1, 0),
+        ("open_transactions", 2, 1),
+        ("lock_waiters", 1, 0),
+        ("blocked_sessions", 1, 0),
+    ),
+)
+def test_read_database_resource_usage_rejects_unreconciled_cohorts(
+    aggregate_field: str,
+    aggregate_value: int,
+    cohort_value: int,
+) -> None:
     class Result:
         def mappings(self) -> Result:
             return self
 
         def one(self) -> dict[str, object]:
-            return {
-                "total_connections": 2,
+            row: dict[str, object] = {
+                "total_connections": 1,
                 "active_connections": 1,
                 "idle_in_transaction_connections": 0,
+                "open_transactions": 1,
                 "lock_waiters": 0,
                 "blocked_sessions": 0,
                 "max_connections": 100,
@@ -157,6 +175,8 @@ def test_read_database_resource_usage_rejects_unreconciled_cohorts() -> None:
                     }
                 ],
             }
+            row[aggregate_field] = aggregate_value
+            return row
 
     class Connection:
         def __enter__(self) -> Connection:
@@ -172,7 +192,10 @@ def test_read_database_resource_usage_rejects_unreconciled_cohorts() -> None:
         def connect(self) -> Connection:
             return Connection()
 
-    with pytest.raises(RuntimeError, match="total_connections 1 != aggregate 2"):
+    with pytest.raises(
+        RuntimeError,
+        match=rf"{aggregate_field} {cohort_value} != aggregate {aggregate_value}",
+    ):
         read_database_resource_usage(engine=Engine())  # type: ignore[arg-type]
 
 
@@ -432,6 +455,7 @@ def test_summarize_resource_samples_reports_peak_capacity_pressure() -> None:
                 total_connections=8,
                 active_connections=3,
                 idle_in_transaction_connections=1,
+                open_transactions=2,
                 lock_waiters=0,
                 blocked_sessions=0,
                 max_connections=100,
@@ -493,6 +517,7 @@ def test_summarize_resource_samples_reports_peak_capacity_pressure() -> None:
                 total_connections=15,
                 active_connections=9,
                 idle_in_transaction_connections=2,
+                open_transactions=4,
                 lock_waiters=4,
                 blocked_sessions=2,
                 max_connections=100,
@@ -566,6 +591,7 @@ def test_summarize_resource_samples_reports_peak_capacity_pressure() -> None:
     assert evidence.peak_database_total_connections == 15
     assert evidence.peak_database_active_connections == 9
     assert evidence.peak_database_idle_in_transaction_connections == 2
+    assert evidence.peak_database_open_transactions == 4
     assert evidence.peak_database_lock_waiters == 4
     assert evidence.peak_database_blocked_sessions == 2
     assert evidence.peak_database_connection_utilization_percent == 15.0

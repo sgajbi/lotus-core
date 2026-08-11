@@ -129,6 +129,12 @@ def env_str(name: str, default: str) -> str:
     return default if raw is None else raw
 
 
+def env_optional_str(name: str) -> str | None:
+    """Return an optional raw string without collapsing missing and blank values."""
+
+    return os.getenv(name)
+
+
 def env_json_map(name: str, *, service_name: str) -> dict[str, Any]:
     raw = env_str(name, "{}")
     try:
