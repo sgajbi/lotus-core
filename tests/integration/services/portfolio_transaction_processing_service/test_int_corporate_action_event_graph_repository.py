@@ -7,6 +7,7 @@ import runpy
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from time import perf_counter
 from typing import Any
 from unittest.mock import AsyncMock
 
@@ -862,6 +863,107 @@ async def test_real_postgres_worker_drains_release_without_lease_expiry_wait(
     assert persisted_release.next_execution_ordinal == len(manifest.expected_children)
 
 
+async def test_thousand_member_release_drains_with_bounded_progress_validation(
+    clean_db,
+    db_engine: Engine,
+    async_db_session: AsyncSession,
+) -> None:
+    """Prove the contractual maximum cohort without repeated full-release validation."""
+
+    _apply_migration(db_engine)
+    await _seed_portfolio(async_db_session)
+    manifest = _large_manifest(node_count=1_000, suffix="RELEASE-CAPACITY")
+    await _seed_transactions(async_db_session, manifest.expected_children)
+    await async_db_session.execute(
+        update(TransactionRecord)
+        .where(
+            TransactionRecord.transaction_id.in_(
+                child.transaction_id for child in manifest.expected_children
+            )
+        )
+        .values(
+            economic_event_id=manifest.corporate_action_event_id,
+            linked_transaction_group_id=manifest.linked_transaction_group_id,
+            parent_event_reference=manifest.parent_event_reference,
+        )
+    )
+    graph = SqlAlchemyCorporateActionEventGraphRepository(async_db_session)
+    assert await graph.append_manifest(manifest) is CorporateActionManifestAppendOutcome.APPENDED
+    event = await async_db_session.scalar(
+        select(CorporateActionEventRecord).where(
+            CorporateActionEventRecord.corporate_action_event_id
+            == manifest.corporate_action_event_id
+        )
+    )
+    assert event is not None
+    await _seed_observations(async_db_session, event.id, manifest)
+    readiness, manifest_record = await graph._evaluate_current_event(event)
+    assert readiness.status == "READY"
+    assert manifest_record is not None
+    state_version = event.state_version + 1
+    through_observation_sequence = len(manifest.expected_children)
+    await async_db_session.execute(
+        update(CorporateActionEventRecord)
+        .where(CorporateActionEventRecord.id == event.id)
+        .values(
+            state_version=state_version,
+            last_observation_sequence=through_observation_sequence,
+            readiness_status="READY",
+        )
+    )
+    await graph._insert_readiness_evaluation(
+        event_id=event.id,
+        state_version=state_version,
+        manifest_id=manifest_record.id,
+        through_observation_sequence=through_observation_sequence,
+        readiness=readiness,
+        correlation_id="release-capacity-proof",
+    )
+    await async_db_session.flush()
+    decision = await graph.load_current_readiness(
+        portfolio_id=manifest.portfolio_id,
+        corporate_action_event_id=manifest.corporate_action_event_id,
+    )
+    release = await SqlAlchemyCorporateActionExecutionReleaseRepository(
+        async_db_session
+    ).materialize(_execution_plan(manifest, decision))
+    await async_db_session.commit()
+
+    bind = async_db_session.bind
+    assert bind is not None
+    session_factory = async_sessionmaker(bind, expire_on_commit=False)
+    process = AsyncMock()
+    process.execute.return_value = ProcessTransactionResult(
+        status=TransactionProcessingStatus.PROCESSED,
+        input_transaction_id="corporate-action-capacity-member",
+    )
+    worker = ProcessNextCorporateActionReleaseUseCase(  # type: ignore[arg-type]
+        unit_of_work_factory=lambda: SqlAlchemyCorporateActionEventGraphUnitOfWork(session_factory),
+        process_transaction=process,
+        lease_owner="capacity-worker",
+        lease_duration_seconds=300,
+        token_factory=lambda: "1" * 64,
+    )
+
+    started = perf_counter()
+    result = await worker.execute()
+    elapsed_seconds = perf_counter() - started
+
+    assert result.status is CorporateActionReleaseWorkerStatus.COMPLETE
+    assert result.release_id == release.release_id
+    assert result.processed_member_count == 1_000
+    assert process.execute.await_count == 1_000
+    assert elapsed_seconds < 120
+    persisted_release = await async_db_session.get(
+        CorporateActionExecutionReleaseRecord,
+        release.release_id,
+    )
+    assert persisted_release is not None
+    assert persisted_release.status == "COMPLETE"
+    assert persisted_release.attempt_count == 1
+    print(f"1,000-member release drain: {elapsed_seconds:.3f}s")
+
+
 async def test_child_correction_epochs_are_monotonic_and_retries_are_neutral(
     clean_db,
     db_engine: Engine,
@@ -1678,6 +1780,25 @@ async def _seed_observations(
     event_id: int,
     manifest: corporate_action.CorporateActionParentManifest,
 ) -> None:
+    transaction_records = (
+        await session.scalars(
+            select(TransactionRecord).where(
+                TransactionRecord.transaction_id.in_(
+                    child.transaction_id for child in manifest.expected_children
+                )
+            )
+        )
+    ).all()
+    fingerprints = {
+        record.transaction_id: build_transaction_semantic_identity(
+            replace(
+                to_booked_transaction(TransactionEvent.model_validate(record)),
+                epoch=1,
+            )
+        ).payload_fingerprint
+        for record in transaction_records
+    }
+    assert len(fingerprints) == len(manifest.expected_children)
     await session.execute(
         insert(CorporateActionChildObservationRecord),
         [
@@ -1689,6 +1810,7 @@ async def _seed_observations(
                 "delivery_event_id": f"capacity-{manifest.corporate_action_event_id}-{sequence}",
                 "correlation_id": "capacity-correlation",
                 "observed_content_hash": child.content_hash,
+                "transaction_payload_fingerprint": fingerprints[child.transaction_id],
                 "observed_payload": child.lineage_payload(),
                 "observed_at": manifest.source_reference.observed_at,
             }
