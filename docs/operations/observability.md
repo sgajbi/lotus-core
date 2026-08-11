@@ -72,6 +72,16 @@ workers, ingestion, reconciliation, supportability, and source-data product fres
     application observer port and Prometheus infrastructure adapter. Bounded stages distinguish
     transaction, replay, idempotency, cost, cashflow, position, and commit work without business
     identifiers. This is local target evidence until the combined runtime is deployed.
+15. Every Core-owned database runtime publishes one allowlisted `SERVICE_NAME` as PostgreSQL
+    `application_name`. The identity is stable across replicas and bounded to the deployed service
+    inventory; it must never contain pod, host, worker, request, transaction, portfolio, account,
+    or security identity. Production-like runtimes fail before engine creation when the identity is
+    missing or unknown. Local development uses the explicit `lotus-core-local` fallback.
+
+The database identity control uses PostgreSQL connection metadata and SQLAlchemy driver settings
+already present in the runtime. It adds no query to business processing, metric label, agent,
+sidecar, datastore, or dependency. This preserves a mature, widely operated technology path while
+making horizontally scaled connection and unit-of-work pressure attributable.
 
 ## Current Gaps
 

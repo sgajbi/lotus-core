@@ -7,6 +7,7 @@ import pytest
 
 from scripts.operations import bank_day_load_scenario
 from scripts.operations.bank_day_load_scenario import (
+    DERIVED_STATE_RESOURCE_MONITOR_DATABASE_IDENTITY,
     LOG_SERVICE_NAMES,
     ApiProbeResult,
     DatabaseTieOut,
@@ -18,6 +19,7 @@ from scripts.operations.bank_day_load_scenario import (
     _build_fx_rates_payload,
     _build_instrument_specs,
     _build_instruments_payload,
+    _derived_state_resource_monitor_connect_args,
     _evaluate_report,
     _finalize_report,
     _wait_for_cycle_completion,
@@ -25,6 +27,7 @@ from scripts.operations.bank_day_load_scenario import (
     iter_transaction_batches,
 )
 from scripts.operations.performance.derived_state_resource_monitor import (
+    DatabaseApplicationResourceUsage,
     DerivedStateResourceEvidence,
 )
 from scripts.operations.transaction_processing_load_support import (
@@ -39,6 +42,20 @@ from scripts.operations.transaction_processing_load_support import (
 def test_log_evidence_uses_the_combined_transaction_processing_runtime() -> None:
     assert "portfolio_transaction_processing_service" in LOG_SERVICE_NAMES
     assert not any("calculator_service" in name for name in LOG_SERVICE_NAMES)
+
+
+def test_resource_monitor_database_identity_is_process_local(monkeypatch) -> None:
+    source_args = {"application_name": "lotus-core-test"}
+    monkeypatch.setattr(
+        bank_day_load_scenario,
+        "sync_database_connect_args",
+        lambda: source_args.copy(),
+    )
+
+    connect_args = _derived_state_resource_monitor_connect_args()
+
+    assert connect_args == {"application_name": DERIVED_STATE_RESOURCE_MONITOR_DATABASE_IDENTITY}
+    assert source_args == {"application_name": "lotus-core-test"}
 
 
 def test_initial_source_facts_drain_before_business_horizon_activation(monkeypatch) -> None:
@@ -725,7 +742,6 @@ def test_evaluate_report_flags_tie_out_sample_api_and_log_failures() -> None:
     )
 
     failures = _evaluate_report(report)
-
     assert any("terminal_status is failed" in failure for failure in failures)
     assert any("complete_portfolios" in failure for failure in failures)
     assert any("portfolios_waiting_for_position_timeseries" in failure for failure in failures)
@@ -1179,10 +1195,37 @@ def test_evaluate_report_rejects_baseline_valuation_reprocessing() -> None:
             observed_outbox_processed_events=None,
             observed_outbox_seconds=None,
             observed_outbox_processed_events_per_second=None,
+            peak_database_usage_by_application=(
+                DatabaseApplicationResourceUsage(
+                    application_name="__unattributed__",
+                    total_connections=0,
+                    active_connections=0,
+                    idle_in_transaction_connections=0,
+                    open_transactions=0,
+                    lock_waiters=0,
+                    blocked_sessions=0,
+                    oldest_open_transaction_seconds=0.0,
+                    oldest_idle_in_transaction_seconds=0.0,
+                ),
+                DatabaseApplicationResourceUsage(
+                    application_name="derived-state-resource-monitor",
+                    total_connections=1,
+                    active_connections=0,
+                    idle_in_transaction_connections=0,
+                    open_transactions=0,
+                    lock_waiters=0,
+                    blocked_sessions=0,
+                    oldest_open_transaction_seconds=0.0,
+                    oldest_idle_in_transaction_seconds=0.0,
+                ),
+            ),
+            database_cohort_reconciled_sample_count=1,
         ),
     )
 
     failures = _evaluate_report(report)
+    assert report.derived_state_resource_evidence is not None
+    resource_evidence = report.derived_state_resource_evidence
 
     assert "valuation_job_attempt_count_max 4 != expected 2" in failures
     assert "valuation_jobs_with_repeated_processing 1 != expected 0" in failures
@@ -1190,20 +1233,127 @@ def test_evaluate_report_rejects_baseline_valuation_reprocessing() -> None:
     assert "outbox publication-age percentiles are incomplete" in failures
     assert "outbox processed-throughput evidence is incomplete" in failures
 
+    unreconciled_database_failures = _evaluate_report(
+        replace(
+            report,
+            derived_state_resource_evidence=replace(
+                resource_evidence,
+                database_cohort_reconciled_sample_count=0,
+            ),
+        )
+    )
+    assert any(
+        "database application-cohort attribution is incomplete" in failure
+        for failure in unreconciled_database_failures
+    )
+
+    missing_database_cohort_failures = _evaluate_report(
+        replace(
+            report,
+            derived_state_resource_evidence=replace(
+                resource_evidence,
+                peak_database_usage_by_application=(),
+            ),
+        )
+    )
+    assert (
+        "database application-cohort peak evidence is incomplete"
+        in missing_database_cohort_failures
+    )
+
+    unattributed_database_failures = _evaluate_report(
+        replace(
+            report,
+            derived_state_resource_evidence=replace(
+                resource_evidence,
+                peak_database_usage_by_application=(
+                    replace(
+                        resource_evidence.peak_database_usage_by_application[0],
+                        total_connections=1,
+                    ),
+                    *resource_evidence.peak_database_usage_by_application[1:],
+                ),
+            ),
+        )
+    )
+    assert any(
+        "database unattributed application connections were observed" in failure
+        for failure in unattributed_database_failures
+    )
+
+    unknown_database_identity_failures = _evaluate_report(
+        replace(
+            report,
+            derived_state_resource_evidence=replace(
+                resource_evidence,
+                peak_database_usage_by_application=(
+                    *resource_evidence.peak_database_usage_by_application,
+                    replace(
+                        resource_evidence.peak_database_usage_by_application[1],
+                        application_name="request-12345",
+                    ),
+                ),
+            ),
+        )
+    )
+    assert any(
+        "database application cohorts contain ungoverned identities: request-12345" in failure
+        for failure in unknown_database_identity_failures
+    )
+
+    ungoverned_database_failures = _evaluate_report(
+        replace(
+            report,
+            derived_state_resource_evidence=replace(
+                resource_evidence,
+                peak_database_usage_by_application=(
+                    *resource_evidence.peak_database_usage_by_application,
+                    replace(
+                        resource_evidence.peak_database_usage_by_application[1],
+                        application_name="__ungoverned__",
+                    ),
+                ),
+            ),
+        )
+    )
+    assert any(
+        "database ungoverned application connections were observed" in failure
+        for failure in ungoverned_database_failures
+    )
+
+    local_database_identity_failures = _evaluate_report(
+        replace(
+            report,
+            derived_state_resource_evidence=replace(
+                resource_evidence,
+                peak_database_usage_by_application=(
+                    *resource_evidence.peak_database_usage_by_application,
+                    replace(
+                        resource_evidence.peak_database_usage_by_application[1],
+                        application_name="lotus-core-local",
+                    ),
+                ),
+            ),
+        )
+    )
+    assert any(
+        "database application cohorts contain local/test identities: lotus-core-local" in failure
+        for failure in local_database_identity_failures
+    )
+
     missing_cohort_failures = _evaluate_report(
         replace(
             report,
             derived_state_resource_evidence=replace(
-                report.derived_state_resource_evidence,
+                resource_evidence,
                 final_outbox_created_events_by_producer_cohort=(),
             ),
         )
     )
     assert "outbox producer-cohort attribution is incomplete" in missing_cohort_failures
 
-    assert report.derived_state_resource_evidence is not None
     non_monotonic_evidence = replace(
-        report.derived_state_resource_evidence,
+        resource_evidence,
         peak_outbox_recent_publication_age_p50_seconds=3.0,
         peak_outbox_recent_publication_age_p95_seconds=2.0,
         peak_outbox_recent_publication_age_p99_seconds=1.0,

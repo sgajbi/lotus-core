@@ -111,6 +111,15 @@ sustained positive `overflow` together with processing latency or lag. Missing s
 database readiness probe has not completed successfully and should be interpreted with
 `health_dependency_check_total`, not as zero utilization.
 
+All Core database sessions also publish the allowlisted `SERVICE_NAME` through PostgreSQL
+`application_name`. The governed bank-day monitor reports bounded per-service peaks for total,
+active, idle-in-transaction, open-transaction, lock-waiter, and blocked-session counts plus oldest
+open and idle-in-transaction ages. Its per-service totals must reconcile exactly to aggregate
+counts, and certifying profiles fail when any connection is unattributed, outside the governed
+inventory, or using a local/test fallback. Investigate the owning service and unit-of-work
+lifetime before changing pool size, worker count, timeout, or recycle policy. Do not use pod names,
+PIDs, worker numbers, or business identifiers as application names.
+
 The app-local `Lotus Core Transaction Processing` Grafana dashboard correlates separate live and
 replay partition lag with stage p95 duration, failed/rejected outcomes, async pool state, and outbox
 backlog. It is a pre-cutover diagnostic view. Do not treat its absence of thresholds as an SLO; add
@@ -432,6 +441,7 @@ Operational knobs:
 
 | Setting | Default | Purpose |
 | --- | --- | --- |
+| `SERVICE_NAME` | `lotus-core-local` only in local/dev/test; required otherwise | Allowlisted stable runtime identity used by structured logs and PostgreSQL connection attribution. Unknown, blank, or overlong values fail before engine creation. |
 | `LOTUS_HTTP_CORS_ALLOW_ORIGINS` | empty | Comma-separated browser origins allowed by the shared CORS middleware. Empty means browser cross-origin requests are denied. |
 | `LOTUS_HTTP_TRUSTED_HOSTS` | `*` in local/dev/test only | Comma-separated host allowlist enforced by the shared trusted-host middleware. Production-like profiles must set non-wildcard hosts. |
 | `LOTUS_METRICS_ACCESS_TOKEN` | empty | When set, `/metrics` requires `Authorization: Bearer <token>`. |

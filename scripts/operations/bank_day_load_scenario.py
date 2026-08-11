@@ -24,6 +24,11 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping
 
 import requests
+from portfolio_common.database_runtime_identity import (
+    DATABASE_RUNTIME_IDENTITIES,
+    NON_CERTIFYING_DATABASE_RUNTIME_IDENTITIES,
+    sync_database_connect_args,
+)
 from portfolio_common.db import get_sync_database_url
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
@@ -74,6 +79,7 @@ DEFAULT_HOST_DATABASE_URL = os.getenv(
     "HOST_DATABASE_URL",
     "postgresql://user:password@localhost:55432/portfolio_db",
 )
+DERIVED_STATE_RESOURCE_MONITOR_DATABASE_IDENTITY = "derived-state-resource-monitor"
 
 SUPPORTED_CURRENCIES = ("USD", "EUR", "SGD", "GBP")
 USD_PER_CURRENCY: dict[str, Decimal] = {
@@ -102,6 +108,14 @@ REQUIRED_COST_DATABASE_OPERATION_EVIDENCE = (
     ("InitialOpeningCostStateRepository", "persist_initial_opening_cost_state"),
     ("CostProcessingEffectStager", "stage_processed_transactions"),
 )
+
+
+def _derived_state_resource_monitor_connect_args() -> dict[str, str]:
+    """Resolve governed driver settings with a process-local monitor identity."""
+
+    connect_args: dict[str, str] = sync_database_connect_args()
+    connect_args["application_name"] = DERIVED_STATE_RESOURCE_MONITOR_DATABASE_IDENTITY
+    return connect_args
 
 
 @dataclass(frozen=True)
@@ -1902,6 +1916,58 @@ def _evaluate_report(report: ScenarioReport) -> list[str]:
                 f"{outbox_evidence.final_outbox_failed_events} != expected 0"
             )
         if report.config.get("evidence_classification") == "certifying":
+            if (
+                outbox_evidence.database_cohort_reconciled_sample_count
+                != outbox_evidence.sample_count
+            ):
+                failures.append(
+                    "database application-cohort attribution is incomplete: reconciled samples "
+                    f"{outbox_evidence.database_cohort_reconciled_sample_count} != "
+                    f"sample count {outbox_evidence.sample_count}"
+                )
+            if not outbox_evidence.peak_database_usage_by_application:
+                failures.append("database application-cohort peak evidence is incomplete")
+            else:
+                database_cohorts = {
+                    cohort.application_name: cohort
+                    for cohort in outbox_evidence.peak_database_usage_by_application
+                }
+                unattributed = database_cohorts.get("__unattributed__")
+                if unattributed is None:
+                    failures.append("database unattributed application cohort is missing")
+                elif unattributed.total_connections > 0:
+                    failures.append(
+                        "database unattributed application connections were observed: peak "
+                        f"{unattributed.total_connections}"
+                    )
+                ungoverned = database_cohorts.get("__ungoverned__")
+                if ungoverned is not None and ungoverned.total_connections > 0:
+                    failures.append(
+                        "database ungoverned application connections were observed: peak "
+                        f"{ungoverned.total_connections}"
+                    )
+                unknown_applications = sorted(
+                    application_name
+                    for application_name in database_cohorts
+                    if application_name
+                    not in DATABASE_RUNTIME_IDENTITIES | {"__unattributed__", "__ungoverned__"}
+                )
+                if unknown_applications:
+                    failures.append(
+                        "database application cohorts contain ungoverned identities: "
+                        + ", ".join(unknown_applications)
+                    )
+                non_certifying_applications = sorted(
+                    application_name
+                    for application_name in database_cohorts
+                    if application_name in NON_CERTIFYING_DATABASE_RUNTIME_IDENTITIES
+                    and database_cohorts[application_name].total_connections > 0
+                )
+                if non_certifying_applications:
+                    failures.append(
+                        "database application cohorts contain local/test identities: "
+                        + ", ".join(non_certifying_applications)
+                    )
             publication_age_p50 = outbox_evidence.peak_outbox_recent_publication_age_p50_seconds
             publication_age_p95 = outbox_evidence.peak_outbox_recent_publication_age_p95_seconds
             publication_age_p99 = outbox_evidence.peak_outbox_recent_publication_age_p99_seconds
@@ -2617,7 +2683,11 @@ def main() -> int:
     run_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     started_at = _utc_now()
     os.environ["HOST_DATABASE_URL"] = args.host_database_url
-    engine = create_engine(get_sync_database_url(), future=True)
+    engine = create_engine(
+        get_sync_database_url(),
+        future=True,
+        connect_args=_derived_state_resource_monitor_connect_args(),
+    )
     resolved_trade_date = _resolve_trade_date(
         engine=engine,
         explicit_trade_date=args.trade_date,
