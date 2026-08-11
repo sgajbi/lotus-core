@@ -15,6 +15,12 @@ from .corporate_action_event_graph import (
     RegisterCorporateActionChildObservationUseCase,
     RegisterCorporateActionManifestUseCase,
 )
+from .corporate_action_execution import (
+    CorporateActionExecutionDisposition,
+    CorporateActionExecutionGate,
+    CorporateActionExecutionPlan,
+    resolve_corporate_action_execution_gate,
+)
 from .corporate_action_reconciliation import (
     CORPORATE_ACTION_RECONCILIATION_TYPE,
     CorporateActionReconciliationCoordinator,
@@ -66,10 +72,14 @@ __all__ = [
     "CorporateActionReconciliationRunEvidence",
     "RegisterCorporateActionChildObservationUseCase",
     "RegisterCorporateActionManifestUseCase",
+    "CorporateActionExecutionDisposition",
+    "CorporateActionExecutionGate",
+    "CorporateActionExecutionPlan",
     "ProcessTransactionCommand",
     "ProcessTransactionCashflowUseCase",
     "ProcessTransactionResult",
     "ProcessTransactionUseCase",
+    "resolve_corporate_action_execution_gate",
     "PositionHistoryProcessingResult",
     "PositionHistoryProcessor",
     "LotAmortizedCostMaterializationResult",
