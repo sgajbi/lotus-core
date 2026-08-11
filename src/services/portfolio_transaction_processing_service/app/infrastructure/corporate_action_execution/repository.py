@@ -16,6 +16,7 @@ from portfolio_common.database_models import Transaction as TransactionRecord
 from portfolio_common.events import TransactionEvent
 from sqlalchemy import case, func, insert, literal, or_, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from ...application.corporate_action_execution import CorporateActionExecutionPlan
 from ...application.corporate_action_release import (
@@ -30,6 +31,7 @@ from ...application.corporate_action_release import (
     StaleCorporateActionExecutionPlanError,
     build_corporate_action_execution_member_authority,
 )
+from ...domain import BookedTransaction, build_transaction_semantic_identity
 from ..transaction_mapping.booked_transaction import to_booked_transaction
 
 
@@ -97,14 +99,36 @@ class SqlAlchemyCorporateActionExecutionReleaseRepository:
             raise TypeError("lease must be a CorporateActionExecutionLeaseRequest")
         await self._supersede_stale_pending_releases()
         release = CorporateActionExecutionReleaseRecord
+        candidate_readiness = aliased(CorporateActionReadinessEvaluationRecord)
+        active_release = aliased(CorporateActionExecutionReleaseRecord)
+        active_readiness = aliased(CorporateActionReadinessEvaluationRecord)
+        same_event_is_processing = (
+            select(1)
+            .select_from(active_release)
+            .join(
+                active_readiness,
+                active_readiness.id == active_release.readiness_evaluation_id,
+            )
+            .where(
+                active_release.id != release.id,
+                active_release.status == "PROCESSING",
+                active_readiness.event_id == candidate_readiness.event_id,
+            )
+            .correlate(release, candidate_readiness)
+            .exists()
+        )
         candidate = await self._session.scalar(
             select(release)
+            .join(
+                candidate_readiness,
+                candidate_readiness.id == release.readiness_evaluation_id,
+            )
             .where(
                 or_(
                     release.status == "PENDING",
-                    (release.status == "PROCESSING")
-                    & (release.lease_expires_at <= func.now()),
-                )
+                    (release.status == "PROCESSING") & (release.lease_expires_at <= func.now()),
+                ),
+                ~same_event_is_processing,
             )
             .order_by(release.id)
             .limit(1)
@@ -112,9 +136,7 @@ class SqlAlchemyCorporateActionExecutionReleaseRepository:
         )
         if candidate is None:
             return None
-        lease_expiry = func.now() + literal(lease.duration_seconds) * text(
-            "INTERVAL '1 second'"
-        )
+        lease_expiry = func.now() + literal(lease.duration_seconds) * text("INTERVAL '1 second'")
         claimed = await self._session.scalar(
             update(release)
             .where(release.id == candidate.id)
@@ -146,6 +168,50 @@ class SqlAlchemyCorporateActionExecutionReleaseRepository:
                 "claimed corporate-action release lacks its exact next member"
             )
         return _claimed_release(claimed, member)
+
+    async def load_owned_transaction(
+        self,
+        claim: ClaimedCorporateActionExecutionRelease,
+    ) -> BookedTransaction:
+        """Reload and authenticate the frozen monetary payload under live lease ownership."""
+
+        if not isinstance(claim, ClaimedCorporateActionExecutionRelease):
+            raise TypeError("claim must be a ClaimedCorporateActionExecutionRelease")
+        owned = await self._session.scalar(
+            select(CorporateActionExecutionReleaseRecord.id).where(
+                CorporateActionExecutionReleaseRecord.id == claim.release_id,
+                CorporateActionExecutionReleaseRecord.status == "PROCESSING",
+                CorporateActionExecutionReleaseRecord.next_execution_ordinal
+                == claim.next_member.execution_ordinal,
+                CorporateActionExecutionReleaseRecord.lease_owner == claim.lease_owner,
+                CorporateActionExecutionReleaseRecord.lease_token == claim.lease_token,
+                CorporateActionExecutionReleaseRecord.fence_token == claim.fence_token,
+                CorporateActionExecutionReleaseRecord.lease_expires_at > func.now(),
+            )
+        )
+        if owned is None:
+            raise ConflictingCorporateActionExecutionReleaseError(
+                "corporate-action release lease ownership was lost before payload load"
+            )
+        persisted = await self._session.scalar(
+            select(TransactionRecord).where(
+                TransactionRecord.transaction_id == claim.next_member.transaction_id
+            )
+        )
+        if persisted is None:
+            raise ConflictingCorporateActionExecutionReleaseError(
+                "corporate-action release transaction payload is unavailable"
+            )
+        transaction = replace(
+            to_booked_transaction(TransactionEvent.model_validate(persisted)),
+            epoch=claim.next_member.transaction_epoch,
+        )
+        identity = build_transaction_semantic_identity(transaction)
+        if identity.payload_fingerprint != claim.next_member.transaction_payload_fingerprint:
+            raise ConflictingCorporateActionExecutionReleaseError(
+                "corporate-action release transaction payload changed after materialization"
+            )
+        return transaction
 
     async def advance_member(
         self,
@@ -209,9 +275,7 @@ class SqlAlchemyCorporateActionExecutionReleaseRepository:
                 status=case((completes_release, "COMPLETE"), else_="PROCESSING"),
                 lease_owner=case((completes_release, None), else_=release.lease_owner),
                 lease_token=case((completes_release, None), else_=release.lease_token),
-                lease_expires_at=case(
-                    (completes_release, None), else_=release.lease_expires_at
-                ),
+                lease_expires_at=case((completes_release, None), else_=release.lease_expires_at),
                 completed_at=case((completes_release, func.now()), else_=None),
                 updated_at=func.now(),
             )
@@ -226,6 +290,45 @@ class SqlAlchemyCorporateActionExecutionReleaseRepository:
             if advanced == "COMPLETE"
             else CorporateActionReleaseProgressOutcome.ADVANCED
         )
+
+    async def fail_release(
+        self,
+        *,
+        release_id: int,
+        expected_ordinal: int,
+        lease_token: str,
+        fence_token: int,
+        terminal_reason: str,
+    ) -> bool:
+        """Fail one owned release without allowing a stale worker to mutate progress."""
+
+        _require_positive_integer(release_id, "release_id")
+        _require_nonnegative_integer(expected_ordinal, "expected_ordinal")
+        _require_sha256_digest(lease_token, "lease_token")
+        _require_positive_integer(fence_token, "fence_token")
+        reason = terminal_reason.strip()
+        if not reason or len(reason) > 512:
+            raise ValueError("terminal_reason must contain at most 512 nonblank characters")
+        result = await self._session.execute(
+            update(CorporateActionExecutionReleaseRecord)
+            .where(
+                CorporateActionExecutionReleaseRecord.id == release_id,
+                CorporateActionExecutionReleaseRecord.status == "PROCESSING",
+                CorporateActionExecutionReleaseRecord.next_execution_ordinal == expected_ordinal,
+                CorporateActionExecutionReleaseRecord.lease_token == lease_token,
+                CorporateActionExecutionReleaseRecord.fence_token == fence_token,
+                CorporateActionExecutionReleaseRecord.lease_expires_at > func.now(),
+            )
+            .values(
+                status="FAILED",
+                lease_owner=None,
+                lease_token=None,
+                lease_expires_at=None,
+                terminal_reason=reason,
+                updated_at=func.now(),
+            )
+        )
+        return int(result.rowcount or 0) == 1
 
     async def load_owned_next(
         self,
@@ -277,9 +380,7 @@ class SqlAlchemyCorporateActionExecutionReleaseRepository:
         if not isinstance(lease, CorporateActionExecutionLeaseRequest):
             raise TypeError("lease must be a CorporateActionExecutionLeaseRequest")
         _require_positive_integer(fence_token, "fence_token")
-        lease_expiry = func.now() + literal(lease.duration_seconds) * text(
-            "INTERVAL '1 second'"
-        )
+        lease_expiry = func.now() + literal(lease.duration_seconds) * text("INTERVAL '1 second'")
         result = await self._session.execute(
             update(CorporateActionExecutionReleaseRecord)
             .where(
@@ -387,7 +488,7 @@ class SqlAlchemyCorporateActionExecutionReleaseRepository:
         plan: CorporateActionExecutionPlan,
         *,
         event_id: int,
-    ) -> tuple:
+    ) -> tuple[CorporateActionExecutionMemberAuthority, ...]:
         observation = CorporateActionChildObservationRecord
         transaction = TransactionRecord
         rows = (
@@ -448,8 +549,7 @@ class SqlAlchemyCorporateActionExecutionReleaseRepository:
         authority: CorporateActionExecutionReleaseAuthority,
     ) -> None:
         if (
-            release.structural_plan_content_hash
-            != authority.plan.structural_plan_content_hash
+            release.structural_plan_content_hash != authority.plan.structural_plan_content_hash
             or release.release_authority_hash != authority.release_authority_hash
             or release.member_count != len(authority.members)
         ):
@@ -474,15 +574,16 @@ class SqlAlchemyCorporateActionExecutionReleaseRepository:
             }
             for member in persisted_members
         )
-        if persisted_payloads != tuple(
-            member.lineage_payload() for member in authority.members
-        ):
+        if persisted_payloads != tuple(member.lineage_payload() for member in authority.members):
             raise ConflictingCorporateActionExecutionReleaseError(
                 "corporate-action release members differ from deterministic authority"
             )
 
 
-def _require_transaction_scope(plan: CorporateActionExecutionPlan, transaction) -> None:
+def _require_transaction_scope(
+    plan: CorporateActionExecutionPlan,
+    transaction: BookedTransaction,
+) -> None:
     if (
         transaction.portfolio_id != plan.portfolio_id
         or transaction.economic_event_id != plan.corporate_action_event_id

@@ -33,6 +33,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from src.services.portfolio_transaction_processing_service.app.application import (
     CorporateActionExecutionLeaseRequest,
     CorporateActionExecutionPlan,
+    ConflictingCorporateActionExecutionReleaseError,
     CorporateActionReleaseMaterializationOutcome,
     CorporateActionReleaseProgressOutcome,
     StaleCorporateActionExecutionPlanError,
@@ -578,6 +579,12 @@ async def test_ready_release_materialization_freezes_payload_authority_and_repla
     assert claimed.fence_token == 1
     assert claimed.attempt_count == 1
     assert claimed.next_member.execution_ordinal == 0
+    loaded = await releases.load_owned_transaction(claimed)
+    assert loaded.transaction_id == claimed.next_member.transaction_id
+    assert (
+        build_transaction_semantic_identity(loaded).payload_fingerprint
+        == claimed.next_member.transaction_payload_fingerprint
+    )
     await async_db_session.commit()
 
     contender_lease = CorporateActionExecutionLeaseRequest(
@@ -597,6 +604,11 @@ async def test_ready_release_materialization_freezes_payload_authority_and_repla
     assert reclaimed.release_id == claimed.release_id
     assert reclaimed.fence_token == 2
     assert reclaimed.attempt_count == 2
+    with pytest.raises(
+        ConflictingCorporateActionExecutionReleaseError,
+        match="lease ownership was lost",
+    ):
+        await releases.load_owned_transaction(claimed)
     assert (
         await releases.advance_member(
             release_id=claimed.release_id,

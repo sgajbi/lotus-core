@@ -1,0 +1,214 @@
+"""Specify fenced ordered corporate-action release processing."""
+
+from datetime import UTC, datetime, timedelta
+from decimal import Decimal
+from unittest.mock import AsyncMock
+
+import pytest
+
+from src.services.portfolio_transaction_processing_service.app.application import (
+    ClaimedCorporateActionExecutionRelease,
+    CorporateActionExecutionMemberAuthority,
+    CorporateActionReleaseProgressOutcome,
+    CorporateActionReleaseWorkerStatus,
+    ProcessNextCorporateActionReleaseUseCase,
+    ProcessTransactionResult,
+    TransactionProcessingError,
+    TransactionProcessingStatus,
+)
+from src.services.portfolio_transaction_processing_service.app.domain import BookedTransaction
+
+NOW = datetime(2026, 8, 11, 4, 0, tzinfo=UTC)
+
+
+def _transaction() -> BookedTransaction:
+    return BookedTransaction(
+        transaction_id="CA-OUT-001",
+        portfolio_id="PB-CA-001",
+        instrument_id="INST-OLD",
+        security_id="SEC-OLD",
+        transaction_date=NOW,
+        transaction_type="SPIN_OFF",
+        quantity=Decimal("10"),
+        price=Decimal("12.50"),
+        gross_transaction_amount=Decimal("125.00"),
+        trade_currency="SGD",
+        currency="SGD",
+        economic_event_id="CA-EVENT-001",
+        linked_transaction_group_id="CA-GROUP-001",
+        parent_event_reference="CA-PARENT-001",
+        child_role="SOURCE_POSITION_CLOSE",
+        epoch=3,
+    )
+
+
+def _claim() -> ClaimedCorporateActionExecutionRelease:
+    return ClaimedCorporateActionExecutionRelease(
+        release_id=41,
+        release_authority_hash="a" * 64,
+        member_count=1,
+        next_member=CorporateActionExecutionMemberAuthority(
+            execution_ordinal=0,
+            transaction_id="CA-OUT-001",
+            observation_id=91,
+            transaction_epoch=3,
+            observed_child_content_hash="b" * 64,
+            transaction_payload_fingerprint="sha256:" + "c" * 64,
+        ),
+        attempt_count=1,
+        fence_token=7,
+        lease_owner="worker-1",
+        lease_token="d" * 64,
+        lease_expires_at=NOW + timedelta(seconds=60),
+    )
+
+
+class _Releases:
+    def __init__(self, *, claim=None, progress=CorporateActionReleaseProgressOutcome.COMPLETE):
+        self.claim = claim
+        self.progress = progress
+        self.advance_calls = []
+        self.fail_calls = []
+
+    async def claim_next(self, _lease):
+        return self.claim
+
+    async def load_owned_transaction(self, _claim):
+        return _transaction()
+
+    async def advance_member(self, **kwargs):
+        self.advance_calls.append(kwargs)
+        return self.progress
+
+    async def renew_lease(self, **_kwargs):
+        return True
+
+    async def fail_release(self, **kwargs):
+        self.fail_calls.append(kwargs)
+        return True
+
+
+class _UnitOfWork:
+    def __init__(self, releases: _Releases) -> None:
+        self.releases = releases
+        self.committed = False
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *_args):
+        return None
+
+    async def commit(self):
+        self.committed = True
+
+
+def _worker(releases: _Releases, process: AsyncMock):
+    units = []
+
+    def factory():
+        unit = _UnitOfWork(releases)
+        units.append(unit)
+        return unit
+
+    return (
+        ProcessNextCorporateActionReleaseUseCase(  # type: ignore[arg-type]
+            unit_of_work_factory=factory,
+            process_transaction=process,
+            lease_owner="worker-1",
+            token_factory=lambda: "d" * 64,
+        ),
+        units,
+    )
+
+
+@pytest.mark.asyncio
+async def test_idle_poll_does_not_open_financial_processing() -> None:
+    process = AsyncMock()
+    worker, units = _worker(_Releases(), process)
+
+    result = await worker.execute()
+
+    assert result.status is CorporateActionReleaseWorkerStatus.IDLE
+    process.execute.assert_not_awaited()
+    assert len(units) == 1 and units[0].committed
+
+
+@pytest.mark.asyncio
+async def test_worker_commits_claim_and_load_before_exact_member_processing() -> None:
+    process = AsyncMock()
+    process.execute.return_value = ProcessTransactionResult(
+        status=TransactionProcessingStatus.PROCESSED,
+        input_transaction_id="CA-OUT-001",
+    )
+    releases = _Releases(claim=_claim())
+    worker, units = _worker(releases, process)
+
+    result = await worker.execute()
+
+    assert result.status is CorporateActionReleaseWorkerStatus.COMPLETE
+    assert result.transaction_status is TransactionProcessingStatus.PROCESSED
+    command = process.execute.await_args.args[0]
+    assert command.metadata.event_id == f"corporate-action-release:{'a' * 64}:0"
+    assert command.transaction.transaction_id == "CA-OUT-001"
+    assert len(units) == 3 and all(unit.committed for unit in units)
+    assert releases.advance_calls[0]["fence_token"] == 7
+
+
+@pytest.mark.asyncio
+async def test_retryable_processing_failure_preserves_pending_progress() -> None:
+    process = AsyncMock()
+    process.execute.side_effect = TransactionProcessingError(
+        reason_code="database_unavailable",
+        detail={},
+        retryable=True,
+    )
+    releases = _Releases(claim=_claim())
+    worker, _units = _worker(releases, process)
+
+    with pytest.raises(TransactionProcessingError, match="{}"):
+        await worker.execute()
+
+    assert releases.advance_calls == []
+    assert releases.fail_calls == []
+
+
+@pytest.mark.asyncio
+async def test_terminal_processing_failure_is_durably_failed_under_fence() -> None:
+    process = AsyncMock()
+    process.execute.side_effect = TransactionProcessingError(
+        reason_code="invalid_financial_effect",
+        detail={},
+        retryable=False,
+    )
+    releases = _Releases(claim=_claim())
+    worker, units = _worker(releases, process)
+
+    result = await worker.execute()
+
+    assert result.status is CorporateActionReleaseWorkerStatus.FAILED
+    assert releases.advance_calls == []
+    assert releases.fail_calls[0]["terminal_reason"] == (
+        "transaction_processing:invalid_financial_effect"
+    )
+    assert units[-1].committed
+
+
+@pytest.mark.asyncio
+async def test_lost_progress_fence_is_retryable_and_never_claimed_complete() -> None:
+    process = AsyncMock()
+    process.execute.return_value = ProcessTransactionResult(
+        status=TransactionProcessingStatus.DUPLICATE,
+        input_transaction_id="CA-OUT-001",
+    )
+    releases = _Releases(
+        claim=_claim(),
+        progress=CorporateActionReleaseProgressOutcome.LOST_OWNERSHIP,
+    )
+    worker, _units = _worker(releases, process)
+
+    with pytest.raises(TransactionProcessingError) as raised:
+        await worker.execute()
+
+    assert raised.value.retryable
+    assert raised.value.reason_code == "corporate_action_release_lease_lost"
