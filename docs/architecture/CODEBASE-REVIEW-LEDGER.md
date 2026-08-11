@@ -1,5 +1,23 @@
 # Codebase Review Ledger
 
+CR-1683 ordered-runtime addendum (2026-08-11): signed implementation through `681cdd588`
+activates governed manifest ingestion, fail-closed child parking, atomic READY release
+materialization, and a fenced ordered worker in the existing transaction-processing deployable.
+No manifest identity preserves the ordinary compatibility path; partial identity fails closed;
+complete identity is observed before financial mutation. Both child and manifest transitions
+materialize READY authority in their lightweight PostgreSQL UoW. The worker commits short
+claim/load/progress transactions, reloads and re-hashes the frozen transaction payload, processes
+outside the lease transaction under a deterministic member delivery id, heartbeats the
+database-clock lease, terminally records known non-retryable failure, rejects stale owners, and
+serializes generations of one economic event while allowing distinct events to scale. This
+supersedes the older CR-1683 table-row status that says parking and release execution are pending;
+real-PostgreSQL crash/concurrency/capacity proof and protected-PR/main evidence remain pending.
+Validation: 150 focused tests, repository-native `make lint`, and MyPy across 316 sources. GitHub
+evidence is on #480 comments `5248542274` and `5248596524`; Remote Feature Lane `31455022465` is
+the asynchronous exact-head run. Capability remains `limited`, so wiki capability wording has an
+explicit no-change decision. The slice retains Kafka, PostgreSQL, Pydantic, SQLAlchemy, Alembic,
+and the existing image; it adds no package, framework, datastore, image, or runtime split.
+
 CR-1683 multi-defect reconciliation addendum (2026-08-11): late PR #932 review issue #933 exposed
 that aggregate status precedence could suppress independently counted unsupported-adjustment
 evidence; same-pattern review found missing cash basis had the same defect. The application now

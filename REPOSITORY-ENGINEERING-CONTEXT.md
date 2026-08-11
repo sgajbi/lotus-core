@@ -2761,7 +2761,16 @@ Most relevant current governance:
      READY release/member ledgers must freeze the manifest, observation boundary, child definition,
      transaction epoch, and full transaction-payload fingerprint; claims use PostgreSQL-clock
      leases and monotonic fences so expired workers can be recovered without permitting stale
-     progress. This is internal design and runtime integration on the established Kafka,
+     progress. Live transaction intake requires transaction type plus complete
+     event/group/parent/role identity before manifest parking: absent identity preserves the
+     ordinary compatibility path, while partial identity fails closed. READY observation or
+     manifest transitions materialize the immutable release in the same lightweight UoW. The
+     existing transaction-processing deployable uses short claim/load/progress transactions,
+     revalidates the frozen payload fingerprint, processes outside the lease transaction under a
+     deterministic release-member delivery id, heartbeats the database-clock lease, and advances
+     or terminally fails only under the current fence. Serialize generations of one economic event
+     while allowing different events to execute concurrently. This is internal design and runtime
+     integration on the established Kafka,
      PostgreSQL, Pydantic, SQLAlchemy, and Alembic stack. Do not introduce a new datastore,
      framework, container image, or deployable service unless measured workload, failure-isolation,
      ownership, security, or operability evidence demonstrates that the existing stateless worker
