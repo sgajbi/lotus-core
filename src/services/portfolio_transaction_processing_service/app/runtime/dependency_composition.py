@@ -16,6 +16,10 @@ from ..application import (
     ReconcileAverageCostPoolsUseCase,
     ReplayBookedTransactionUseCase,
 )
+from ..application.corporate_action_event_graph import RegisterCorporateActionManifestUseCase
+from ..application.corporate_action_manifest_ingestion import (
+    HandleCorporateActionManifestEventUseCase,
+)
 from ..application.cost_basis_processing import (
     AverageCostPoolRebuildPlanner,
     PreparedCostProcessingUseCase,
@@ -28,6 +32,9 @@ from ..domain.fixed_income_book_cost import (
     governed_amortized_cost_policy_catalog,
 )
 from ..infrastructure.cashflow import CashflowRuleCache
+from ..infrastructure.corporate_action_event_graph import (
+    SqlAlchemyCorporateActionEventGraphUnitOfWork,
+)
 from ..infrastructure.cost_basis import (
     PROMETHEUS_CORPORATE_ACTION_RECONCILIATION_OBSERVER,
     PROMETHEUS_COST_BASIS_CALCULATION_OBSERVER,
@@ -68,6 +75,14 @@ class SqlAlchemyFixedIncomeBookCostAuthorityUnitOfWorkFactory:
 
     def __call__(self) -> SqlAlchemyFixedIncomeBookCostAuthorityUnitOfWork:
         return SqlAlchemyFixedIncomeBookCostAuthorityUnitOfWork(self.session_factory)
+
+
+@dataclass(frozen=True, slots=True)
+class SqlAlchemyCorporateActionEventGraphUnitOfWorkFactory:
+    session_factory: Callable[[], AsyncSession]
+
+    def __call__(self) -> SqlAlchemyCorporateActionEventGraphUnitOfWork:
+        return SqlAlchemyCorporateActionEventGraphUnitOfWork(self.session_factory)
 
 
 @dataclass(frozen=True, slots=True)
@@ -157,3 +172,17 @@ def build_fixed_income_book_cost_authority_use_case(
         policies=resolved_policies,
         correction_replay_enabled=correction_replay_enabled,
     )
+
+
+def build_corporate_action_manifest_use_case(
+    *,
+    session_factory: Callable[[], AsyncSession] | None = None,
+) -> HandleCorporateActionManifestEventUseCase:
+    """Compose source-manifest registration over the lightweight graph UoW."""
+
+    register_manifest = RegisterCorporateActionManifestUseCase(
+        SqlAlchemyCorporateActionEventGraphUnitOfWorkFactory(
+            session_factory=session_factory or get_async_session_factory()
+        )
+    )
+    return HandleCorporateActionManifestEventUseCase(register_manifest)

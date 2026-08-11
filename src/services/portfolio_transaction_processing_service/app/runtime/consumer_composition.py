@@ -4,6 +4,7 @@ from collections.abc import Callable
 
 from portfolio_common.config import (
     KAFKA_BOOTSTRAP_SERVERS,
+    KAFKA_CORPORATE_ACTION_MANIFEST_RECEIVED_TOPIC,
     KAFKA_FIXED_INCOME_BOOK_COST_AUTHORITY_RECEIVED_TOPIC,
     KAFKA_FIXED_INCOME_BOOK_COST_DISPOSAL_REPLAY_REQUESTED_TOPIC,
     KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC,
@@ -17,16 +18,21 @@ from portfolio_common.kafka_consumer_execution import (
 )
 
 from ..application import ProcessTransactionUseCase, ReplayBookedTransactionUseCase
+from ..application.corporate_action_manifest_ingestion import (
+    HandleCorporateActionManifestEventUseCase,
+)
 from ..application.fixed_income_book_cost import (
     HandleFixedIncomeBookCostAuthorityEventUseCase,
 )
 from ..delivery.kafka import (
     BookedTransactionReplayRequestConsumer,
+    CorporateActionManifestConsumer,
     FixedIncomeBookCostAuthorityConsumer,
     FixedIncomeBookCostCorrectionReplayConsumer,
     TransactionProcessingConsumer,
 )
 from .dependency_composition import (
+    build_corporate_action_manifest_use_case,
     build_fixed_income_book_cost_authority_use_case,
     build_process_transaction_use_case,
     build_replay_booked_transaction_use_case,
@@ -38,6 +44,7 @@ FIXED_INCOME_BOOK_COST_AUTHORITY_CONSUMER_GROUP = "fixed_income_book_cost_author
 FIXED_INCOME_BOOK_COST_CORRECTION_REPLAY_CONSUMER_GROUP = (
     "fixed_income_book_cost_correction_replay_group"
 )
+CORPORATE_ACTION_MANIFEST_CONSUMER_GROUP = "corporate_action_manifest_group"
 # Source/reference events arrive on independent topics. Keep the failed partition ordered while
 # allowing that dependency to converge, then use the existing DLQ recovery path instead of
 # restarting this entire service indefinitely behind a permanently unresolved reference.
@@ -54,6 +61,7 @@ def build_transaction_processing_consumers(
     handle_fixed_income_book_cost_authority: (
         HandleFixedIncomeBookCostAuthorityEventUseCase | None
     ) = None,
+    handle_corporate_action_manifest: HandleCorporateActionManifestEventUseCase | None = None,
     transaction_consumer_factory: ConsumerFactory = TransactionProcessingConsumer,
     replay_request_consumer_factory: ConsumerFactory = BookedTransactionReplayRequestConsumer,
     fixed_income_authority_consumer_factory: ConsumerFactory = (
@@ -62,9 +70,10 @@ def build_transaction_processing_consumers(
     fixed_income_correction_replay_consumer_factory: ConsumerFactory = (
         FixedIncomeBookCostCorrectionReplayConsumer
     ),
+    corporate_action_manifest_consumer_factory: ConsumerFactory = CorporateActionManifestConsumer,
     execution_profile_loader: ExecutionProfileLoader = load_kafka_consumer_execution_profile,
-) -> tuple[BaseConsumer, BaseConsumer, BaseConsumer, BaseConsumer]:
-    """Compose transaction, replay, and fixed-income authority/correction consumers."""
+) -> tuple[BaseConsumer, BaseConsumer, BaseConsumer, BaseConsumer, BaseConsumer]:
+    """Compose transaction, replay, source-authority, and manifest consumers."""
     process_use_case = (
         process_transaction
         if process_transaction is not None
@@ -80,6 +89,11 @@ def build_transaction_processing_consumers(
         if handle_fixed_income_book_cost_authority is not None
         else build_fixed_income_book_cost_authority_use_case(correction_replay_enabled=True)
     )
+    manifest_use_case = (
+        handle_corporate_action_manifest
+        if handle_corporate_action_manifest is not None
+        else build_corporate_action_manifest_use_case()
+    )
     live_execution_profile = execution_profile_loader(TRANSACTION_PROCESSING_CONSUMER_GROUP)
     replay_execution_profile = execution_profile_loader(TRANSACTION_REPLAY_REQUEST_CONSUMER_GROUP)
     authority_execution_profile = execution_profile_loader(
@@ -87,6 +101,9 @@ def build_transaction_processing_consumers(
     )
     correction_replay_execution_profile = execution_profile_loader(
         FIXED_INCOME_BOOK_COST_CORRECTION_REPLAY_CONSUMER_GROUP
+    )
+    manifest_execution_profile = execution_profile_loader(
+        CORPORATE_ACTION_MANIFEST_CONSUMER_GROUP
     )
     live_consumer = transaction_consumer_factory(
         bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
@@ -128,4 +145,20 @@ def build_transaction_processing_consumers(
         execution_profile=correction_replay_execution_profile,
         retryable_failure_max_elapsed_seconds=(TRANSACTION_DEPENDENCY_RETRY_MAX_ELAPSED_SECONDS),
     )
-    return live_consumer, replay_consumer, authority_consumer, correction_replay_consumer
+    manifest_consumer = corporate_action_manifest_consumer_factory(
+        bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
+        dlq_topic=KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC,
+        topic=KAFKA_CORPORATE_ACTION_MANIFEST_RECEIVED_TOPIC,
+        group_id=CORPORATE_ACTION_MANIFEST_CONSUMER_GROUP,
+        service_prefix="CAMANIFEST",
+        use_case=manifest_use_case,
+        execution_profile=manifest_execution_profile,
+        retryable_failure_max_elapsed_seconds=(TRANSACTION_DEPENDENCY_RETRY_MAX_ELAPSED_SECONDS),
+    )
+    return (
+        live_consumer,
+        replay_consumer,
+        authority_consumer,
+        correction_replay_consumer,
+        manifest_consumer,
+    )

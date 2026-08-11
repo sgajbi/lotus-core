@@ -42,25 +42,29 @@ def test_composition_builds_transaction_replay_authority_and_correction_consumer
     process_use_case = MagicMock()
     replay_use_case = MagicMock()
     authority_use_case = MagicMock()
+    manifest_use_case = MagicMock()
 
     consumers = consumer_composition.build_transaction_processing_consumers(
         process_transaction=process_use_case,
         replay_booked_transaction=replay_use_case,
         handle_fixed_income_book_cost_authority=authority_use_case,
+        handle_corporate_action_manifest=manifest_use_case,
         transaction_consumer_factory=_recording_factory("live", calls),
         replay_request_consumer_factory=_recording_factory("replay_request", calls),
         fixed_income_authority_consumer_factory=_recording_factory("authority", calls),
         fixed_income_correction_replay_consumer_factory=_recording_factory(
             "correction_replay", calls
         ),
+        corporate_action_manifest_consumer_factory=_recording_factory("manifest", calls),
     )
 
-    assert len(consumers) == 4
+    assert len(consumers) == 5
     assert [family for family, _ in calls] == [
         "live",
         "replay_request",
         "authority",
         "correction_replay",
+        "manifest",
     ]
     live = calls[0][1]
     assert live["topic"] == "transactions.persisted"
@@ -86,6 +90,12 @@ def test_composition_builds_transaction_replay_authority_and_correction_consumer
     assert correction_replay["service_prefix"] == "BOOKCOSTREPLAY"
     assert correction_replay["use_case"] is replay_use_case
     assert correction_replay["retryable_failure_max_elapsed_seconds"] == 30
+    manifest = calls[4][1]
+    assert manifest["topic"] == "corporate_action.manifest.received"
+    assert manifest["group_id"] == "corporate_action_manifest_group"
+    assert manifest["service_prefix"] == "CAMANIFEST"
+    assert manifest["use_case"] is manifest_use_case
+    assert manifest["retryable_failure_max_elapsed_seconds"] == 30
     assert all(values["dlq_topic"] == "dlq.persistence_service" for _, values in calls)
 
 
@@ -97,6 +107,8 @@ def test_composition_builds_each_application_use_case_once(monkeypatch) -> None:
     replay_builder = MagicMock(return_value=replay_use_case)
     authority_use_case = MagicMock()
     authority_builder = MagicMock(return_value=authority_use_case)
+    manifest_use_case = MagicMock()
+    manifest_builder = MagicMock(return_value=manifest_use_case)
     monkeypatch.setattr(
         consumer_composition,
         "build_process_transaction_use_case",
@@ -112,6 +124,11 @@ def test_composition_builds_each_application_use_case_once(monkeypatch) -> None:
         "build_fixed_income_book_cost_authority_use_case",
         authority_builder,
     )
+    monkeypatch.setattr(
+        consumer_composition,
+        "build_corporate_action_manifest_use_case",
+        manifest_builder,
+    )
 
     consumer_composition.build_transaction_processing_consumers(
         transaction_consumer_factory=_recording_factory("live", calls),
@@ -120,15 +137,18 @@ def test_composition_builds_each_application_use_case_once(monkeypatch) -> None:
         fixed_income_correction_replay_consumer_factory=_recording_factory(
             "correction_replay", calls
         ),
+        corporate_action_manifest_consumer_factory=_recording_factory("manifest", calls),
     )
 
     process_builder.assert_called_once_with()
     replay_builder.assert_called_once_with()
     authority_builder.assert_called_once_with(correction_replay_enabled=True)
+    manifest_builder.assert_called_once_with()
     assert calls[0][1]["use_case"] is process_use_case
     assert calls[1][1]["use_case"] is replay_use_case
     assert calls[2][1]["use_case"] is authority_use_case
     assert calls[3][1]["use_case"] is replay_use_case
+    assert calls[4][1]["use_case"] is manifest_use_case
 
 
 def test_composition_loads_independent_live_and_replay_execution_profiles() -> None:
@@ -137,12 +157,14 @@ def test_composition_loads_independent_live_and_replay_execution_profiles() -> N
     replay_profile = MagicMock(spec=KafkaConsumerExecutionProfile)
     authority_profile = MagicMock(spec=KafkaConsumerExecutionProfile)
     correction_replay_profile = MagicMock(spec=KafkaConsumerExecutionProfile)
+    manifest_profile = MagicMock(spec=KafkaConsumerExecutionProfile)
     profile_loader = MagicMock(
         side_effect=[
             live_profile,
             replay_profile,
             authority_profile,
             correction_replay_profile,
+            manifest_profile,
         ]
     )
 
@@ -150,12 +172,14 @@ def test_composition_loads_independent_live_and_replay_execution_profiles() -> N
         process_transaction=MagicMock(),
         replay_booked_transaction=MagicMock(),
         handle_fixed_income_book_cost_authority=MagicMock(),
+        handle_corporate_action_manifest=MagicMock(),
         transaction_consumer_factory=_recording_factory("live", calls),
         replay_request_consumer_factory=_recording_factory("replay_request", calls),
         fixed_income_authority_consumer_factory=_recording_factory("authority", calls),
         fixed_income_correction_replay_consumer_factory=_recording_factory(
             "correction_replay", calls
         ),
+        corporate_action_manifest_consumer_factory=_recording_factory("manifest", calls),
         execution_profile_loader=profile_loader,
     )
 
@@ -164,8 +188,10 @@ def test_composition_loads_independent_live_and_replay_execution_profiles() -> N
         "portfolio_transaction_replay_request_group",
         "fixed_income_book_cost_authority_group",
         "fixed_income_book_cost_correction_replay_group",
+        "corporate_action_manifest_group",
     ]
     assert calls[0][1]["execution_profile"] is live_profile
     assert calls[1][1]["execution_profile"] is replay_profile
     assert calls[2][1]["execution_profile"] is authority_profile
     assert calls[3][1]["execution_profile"] is correction_replay_profile
+    assert calls[4][1]["execution_profile"] is manifest_profile
