@@ -11,12 +11,16 @@ from src.services.ingestion_service.app.DTOs.transaction_model_dto import Transa
 
 from .api_client import E2EApiClient
 from .transaction_type_coverage_support import (
+    BUNDLE_A_CHILD_ROLES,
+    BUNDLE_A_TYPES,
     CASH_INSTRUMENT_TYPES,
     MIN_E2E_CASHFLOW_DISTINCT_TYPES,
+    REDEMPTION_TYPES,
     SUPPORTED_TRANSACTION_TYPES,
     TRANSACTION_TYPES_WITHOUT_CASHFLOW_RULE,
     TRANSFER_INFLOW_TRANSACTION_TYPES,
     TRANSFER_OUTFLOW_TRANSACTION_TYPES,
+    build_redemption_acquisition_payload,
     build_transaction_payloads,
     expected_cashflow_sign,
 )
@@ -60,10 +64,14 @@ def test_transaction_type_coverage_sets_are_registry_derived():
 
 
 def test_transaction_type_coverage_fixture_is_deduplicated_and_comprehensive():
+    redemption_security_ids = {
+        tx_type: f"BOND_{tx_type}_COVER_DRYRUN" for tx_type in REDEMPTION_TYPES
+    }
     tx_payloads = build_transaction_payloads(
         "E2E_TX_COVER_DRYRUN",
         security_id="SEC_COVER_DRYRUN",
         cash_security_id="CASH_USD_COVER_DRYRUN",
+        redemption_security_ids=redemption_security_ids,
     )
 
     tx_ids = [item["transaction_id"] for item in tx_payloads]
@@ -74,6 +82,37 @@ def test_transaction_type_coverage_fixture_is_deduplicated_and_comprehensive():
     assert set(tx_types) == SUPPORTED_TRANSACTION_TYPES
     for payload in tx_payloads:
         Transaction(**payload)
+        if payload["transaction_type"] in BUNDLE_A_TYPES:
+            assert payload["parent_event_reference"]
+            assert payload["linked_parent_event_id"]
+            assert payload["child_role"] == BUNDLE_A_CHILD_ROLES[payload["transaction_type"]]
+        else:
+            assert "parent_event_reference" not in payload
+            assert "linked_parent_event_id" not in payload
+            assert "child_role" not in payload
+        if payload["transaction_type"] in REDEMPTION_TYPES:
+            transaction_type = payload["transaction_type"]
+            redemption_security_id = redemption_security_ids[payload["transaction_type"]]
+            assert payload["security_id"] == redemption_security_id
+            assert payload["instrument_id"] == redemption_security_id
+            assert payload["settlement_cash_account_id"] == "CASH_USD_COVER_DRYRUN"
+            assert payload["settlement_cash_instrument_id"] == "CASH_USD_COVER_DRYRUN"
+            expected_quantity = "40" if transaction_type == "PARTIAL_REDEMPTION" else "100"
+            assert payload["quantity"] == expected_quantity
+            assert payload["gross_transaction_amount"] == expected_quantity
+            assert payload["principal_proceeds_local"] == expected_quantity
+            assert payload["redemption_price_type"] == "PAR"
+            if transaction_type == "PARTIAL_REDEMPTION":
+                assert payload["old_factor"] == "1"
+                assert payload["new_factor"] == "0.6"
+            acquisition = build_redemption_acquisition_payload(
+                "E2E_TX_COVER_DRYRUN",
+                transaction_type=transaction_type,
+                redemption_security_id=redemption_security_id,
+            )
+            Transaction(**acquisition)
+            assert acquisition["security_id"] == redemption_security_id
+            assert Decimal(acquisition["quantity"]) >= Decimal(expected_quantity)
     tax_payload = next(item for item in tx_payloads if item["transaction_type"] == "TAX")
     assert tax_payload["security_id"] == "CASH_USD_COVER_DRYRUN"
     assert tax_payload["instrument_id"] == "CASH_USD_COVER_DRYRUN"
@@ -107,12 +146,14 @@ def test_cashflow_rules_cover_every_supported_transaction_type(db_engine):
     assert not missing, f"Missing cashflow rules for transaction types: {sorted(missing)}"
 
 
-def test_all_supported_transaction_types_are_ingestable_queryable_and_cashflowed(
+def test_all_supported_transaction_types_are_queryable_and_baseline_cashflows_complete(
     setup_transaction_type_coverage_data, e2e_api_client: E2EApiClient, db_engine, poll_db_until
 ):
     portfolio_id = setup_transaction_type_coverage_data["portfolio_id"]
     expected_payloads = setup_transaction_type_coverage_data["payloads"]
     expected_by_id = {item["transaction_id"]: item for item in expected_payloads}
+    for acquisition in setup_transaction_type_coverage_data["redemption_acquisitions"]:
+        expected_by_id[acquisition["transaction_id"]] = acquisition
     expected_ids = set(expected_by_id)
     expected_types = {item["transaction_type"] for item in expected_payloads}
 
@@ -125,7 +166,7 @@ def test_all_supported_transaction_types_are_ingestable_queryable_and_cashflowed
 
     assert expected_ids.issubset(returned_ids)
     assert expected_types.issubset(returned_types)
-    assert body["total"] >= len(expected_payloads)
+    assert body["total"] >= len(expected_ids)
 
     for item in transactions:
         if item["transaction_id"] in expected_ids:
