@@ -11,6 +11,11 @@ from .commands import (
     TransactionEventMetadata,
     TransactionProcessingIntent,
 )
+from .corporate_action_arrival import (
+    CorporateActionArrivalDisposition,
+    CorporateActionArrivalResult,
+    RouteCorporateActionChildArrivalUseCase,
+)
 from .corporate_action_event_graph import (
     RegisterCorporateActionChildObservationUseCase,
     RegisterCorporateActionManifestUseCase,
@@ -77,6 +82,8 @@ __all__ = [
     "BookedTransactionReplayStatus",
     "CORPORATE_ACTION_RECONCILIATION_TYPE",
     "CorporateActionReconciliationCoordinator",
+    "CorporateActionArrivalDisposition",
+    "CorporateActionArrivalResult",
     "CorporateActionReconciliationEvidence",
     "CorporateActionReconciliationFindingEvidence",
     "CorporateActionReconciliationFindingType",
@@ -84,6 +91,7 @@ __all__ = [
     "CorporateActionReconciliationRunEvidence",
     "RegisterCorporateActionChildObservationUseCase",
     "RegisterCorporateActionManifestUseCase",
+    "RouteCorporateActionChildArrivalUseCase",
     "CorporateActionExecutionDisposition",
     "CorporateActionExecutionGate",
     "CorporateActionExecutionPlan",
