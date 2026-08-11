@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import secrets
 from collections.abc import Callable
+from contextlib import suppress
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -134,10 +135,30 @@ class ProcessNextCorporateActionReleaseUseCase:
             self._renew_while_processing(claim, lease, stop_heartbeat),
             name=f"corporate-action-release-heartbeat:{claim.release_id}",
         )
+        processing = asyncio.create_task(
+            self._process_transaction.execute(command),
+            name=(
+                f"corporate-action-release-processing:{claim.release_id}:"
+                f"{claim.next_member.execution_ordinal}"
+            ),
+        )
         try:
-            return await self._process_transaction.execute(command)
+            completed, _pending = await asyncio.wait(
+                {processing, heartbeat},
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            if heartbeat in completed:
+                await heartbeat
+                raise RuntimeError(
+                    "corporate-action release heartbeat stopped before member processing"
+                )
+            return await processing
         finally:
             stop_heartbeat.set()
+            if not processing.done():
+                processing.cancel()
+                with suppress(asyncio.CancelledError):
+                    await processing
             await heartbeat
 
     async def _renew_while_processing(

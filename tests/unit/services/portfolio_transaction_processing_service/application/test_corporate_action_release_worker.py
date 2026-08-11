@@ -1,5 +1,6 @@
 """Specify fenced ordered corporate-action release processing."""
 
+import asyncio
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -73,11 +74,15 @@ class _Releases:
         progress=CorporateActionReleaseProgressOutcome.COMPLETE,
         next_claims=(),
         load_error: Exception | None = None,
+        renew_result: bool = True,
+        advance_error: Exception | None = None,
     ):
         self.claim = claim
         self.progress = list(progress) if isinstance(progress, (list, tuple)) else [progress]
         self.next_claims = list(next_claims)
         self.load_error = load_error
+        self.renew_result = renew_result
+        self.advance_error = advance_error
         self.claim_calls = 0
         self.advance_calls = []
         self.fail_calls = []
@@ -93,13 +98,15 @@ class _Releases:
 
     async def advance_member(self, **kwargs):
         self.advance_calls.append(kwargs)
+        if self.advance_error is not None:
+            raise self.advance_error
         return self.progress.pop(0)
 
     async def load_owned_next(self, **_kwargs):
         return self.next_claims.pop(0) if self.next_claims else None
 
     async def renew_lease(self, **_kwargs):
-        return True
+        return self.renew_result
 
     async def fail_release(self, **kwargs):
         self.fail_calls.append(kwargs)
@@ -121,7 +128,12 @@ class _UnitOfWork:
         self.committed = True
 
 
-def _worker(releases: _Releases, process: AsyncMock):
+def _worker(
+    releases: _Releases,
+    process: AsyncMock,
+    *,
+    lease_duration_seconds: int = 60,
+):
     units = []
 
     def factory():
@@ -134,6 +146,7 @@ def _worker(releases: _Releases, process: AsyncMock):
             unit_of_work_factory=factory,
             process_transaction=process,
             lease_owner="worker-1",
+            lease_duration_seconds=lease_duration_seconds,
             token_factory=lambda: "d" * 64,
         ),
         units,
@@ -290,3 +303,29 @@ async def test_lost_progress_fence_is_retryable_and_never_claimed_complete() -> 
 
     assert raised.value.retryable
     assert raised.value.reason_code == "corporate_action_release_lease_lost"
+
+
+@pytest.mark.asyncio
+async def test_heartbeat_lease_loss_cancels_slow_processing_before_progress() -> None:
+    processing_cancelled = asyncio.Event()
+    process = AsyncMock()
+
+    async def slow_processing(_command):
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            processing_cancelled.set()
+            raise
+
+    process.execute.side_effect = slow_processing
+    releases = _Releases(claim=_claim(), renew_result=False)
+    worker, _units = _worker(releases, process, lease_duration_seconds=1)
+
+    with pytest.raises(TransactionProcessingError) as raised:
+        await asyncio.wait_for(worker.execute(), timeout=2)
+
+    assert raised.value.reason_code == "corporate_action_release_lease_lost"
+    assert raised.value.retryable
+    assert processing_cancelled.is_set()
+    assert releases.advance_calls == []
+    assert releases.fail_calls == []
