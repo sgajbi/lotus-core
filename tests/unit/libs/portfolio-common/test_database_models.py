@@ -92,7 +92,7 @@ def test_corporate_action_execution_release_declares_fenced_state_contract() -> 
     observation_constraints = {constraint.name for constraint in observation.constraints}
 
     assert observation.columns["transaction_payload_fingerprint"].type.length == 71
-    assert observation.columns["transaction_payload_fingerprint"].nullable is True
+    assert observation.columns["transaction_payload_fingerprint"].nullable is False
     assert "ck_ca_observation_transaction_fingerprint" in observation_constraints
 
     assert release.columns["structural_plan_content_hash"].type.length == 64

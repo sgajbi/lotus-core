@@ -3724,6 +3724,21 @@ Most relevant current governance:
      the bounded `outcome` label on cycle count/duration and lease-renewal count; identifiers and
      stable reason detail belong in the support API and structured logs.
 
+240. Never amend an Alembic revision that may already exist on main or in a deployed database.
+     Corporate-action migration `c152` is immutable historical truth. Introduce manifest authority
+     changes through forward migration `c155`: retain exact hashing support for historical
+     unscoped manifests, accept the canonical tenant/legal-book-scoped shape for new writes, and
+     enforce that scoped payload authority matches the parent event. Migration `c153` must derive
+     every preexisting child observation fingerprint from the exact transaction-processing
+     semantic fence, make the field non-null, and fail the entire migration when durable source
+     authority is absent or malformed; do not fabricate or substitute a hash. Corporate-action
+     replay monotonicity compares both child-content and transaction-payload fingerprints at the
+     same epoch. Lease renewal must be scheduled strictly before the shortest supported lease
+     expires. These controls remain on the established PostgreSQL, Alembic, SQLAlchemy, Kafka,
+     FastAPI, Pydantic, and Prometheus stack; a technology or topology change requires measured
+     scalability, security, recovery, operability, and lifecycle evidence plus governed
+     vulnerability and immutable-artifact posture.
+
 ## Context Maintenance Rule
 
 Update this document when:

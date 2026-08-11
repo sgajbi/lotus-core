@@ -106,6 +106,7 @@ def _manifest_payload_and_hash(
     policy: corporate_action.CorporateActionCohortPolicy | None = None,
     *,
     identity_suffix: str = "DB-001",
+    book_scoped: bool = False,
 ) -> tuple[str, str, str]:
     if policy is None:
         policy = next(
@@ -151,17 +152,21 @@ def _manifest_payload_and_hash(
         ),
     )
     payload = manifest.lineage_payload()
+    if not book_scoped:
+        payload.pop("tenant_id")
+        payload.pop("legal_book_id")
+    manifest_content_hash = canonical_content_hash(payload)
     source_payload = dict(cast(dict[str, object], payload["source_reference"]))
     source_payload["observed_at"] = datetime(2026, 8, 9, 1, tzinfo=UTC).isoformat()
     payload["source_reference"] = source_payload
     execution_plan_hash = canonical_content_hash(
         {
             "canonical_payload_version": 1,
-            "manifest_content_hash": manifest.content_hash,
+            "manifest_content_hash": manifest_content_hash,
             "ordered_transaction_ids": [source.transaction_id, target.transaction_id],
         }
     )
-    return json.dumps(payload), manifest.content_hash, execution_plan_hash
+    return json.dumps(payload), manifest_content_hash, execution_plan_hash
 
 
 def _seed_book_scope(connection) -> None:

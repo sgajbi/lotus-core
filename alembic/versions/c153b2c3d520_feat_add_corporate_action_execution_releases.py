@@ -30,6 +30,64 @@ def upgrade() -> None:
         "transaction_payload_fingerprint IS NULL OR "
         "transaction_payload_fingerprint ~ '^sha256:[0-9a-f]{64}$'",
     )
+    op.execute(
+        sa.text(
+            """
+            ALTER TABLE corporate_action_child_observations
+            DISABLE TRIGGER trg_ca_child_observation_immutable;
+
+            UPDATE corporate_action_child_observations AS observation
+            SET transaction_payload_fingerprint = processed.payload_fingerprint
+            FROM corporate_action_events AS event, processed_events AS processed
+            WHERE observation.event_id = event.id
+              AND processed.service_name = 'portfolio-transaction-processing'
+              AND processed.semantic_key = concat(
+                    'transaction-processing:v1:',
+                    event.portfolio_id,
+                    ':',
+                    observation.transaction_id,
+                    ':',
+                    observation.transaction_epoch
+                )
+              AND processed.payload_fingerprint ~ '^sha256:[0-9a-f]{64}$'
+              AND observation.transaction_payload_fingerprint IS NULL;
+
+            ALTER TABLE corporate_action_child_observations
+            ENABLE TRIGGER trg_ca_child_observation_immutable;
+
+            DO $$
+            BEGIN
+                IF EXISTS (
+                    SELECT 1
+                    FROM corporate_action_child_observations
+                    WHERE transaction_payload_fingerprint IS NULL
+                ) THEN
+                    RAISE EXCEPTION
+                        'legacy corporate-action observation lacks deterministic transaction '
+                        'semantic authority'
+                        USING ERRCODE = '23514';
+                END IF;
+            END;
+            $$;
+            """
+        )
+    )
+    op.drop_constraint(
+        "ck_ca_observation_transaction_fingerprint",
+        "corporate_action_child_observations",
+        type_="check",
+    )
+    op.alter_column(
+        "corporate_action_child_observations",
+        "transaction_payload_fingerprint",
+        existing_type=sa.String(length=71),
+        nullable=False,
+    )
+    op.create_check_constraint(
+        "ck_ca_observation_transaction_fingerprint",
+        "corporate_action_child_observations",
+        "transaction_payload_fingerprint ~ '^sha256:[0-9a-f]{64}$'",
+    )
 
     op.create_table(
         "corporate_action_execution_releases",

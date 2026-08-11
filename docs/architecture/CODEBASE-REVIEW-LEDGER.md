@@ -1,5 +1,25 @@
 # Codebase Review Ledger
 
+CR-1683 protected-review reconciliation addendum (2026-08-11): PR #935 review identified four
+production-significant authority gaps. The branch had edited already-applied migration `c152`,
+legacy child observations could retain a null transaction-payload fingerprint, the minimum
+one-second release lease did not schedule its first renewal before expiry, and same-epoch replay
+could accept changed transaction economics when the child content hash was unchanged. Migration
+`c152` is restored exactly to mainline history. Forward migration `c155` accepts the historical
+manifest shape without rewriting its hash, accepts and validates the new tenant/legal-book-scoped
+shape, and database-enforces that new scoped manifests match their parent event. Migration `c153`
+backfills every legacy observation from the exact transaction-processing semantic fence while
+holding the migration lock, then makes the fingerprint non-null and fails the whole migration if
+source authority is missing or malformed. The worker now renews at one third of the lease with a
+100 ms floor, strictly before every supported lease expires. Monotonic replay compares both child
+content and transaction-payload authority. Focused unit contracts and real-PostgreSQL populated
+upgrade, missing-authority rollback, scoped-manifest, and same-epoch conflict tests pass. The slice
+uses the existing mature FastAPI, Pydantic, SQLAlchemy, PostgreSQL, Alembic, Kafka, and Prometheus
+stack and adds no dependency, image, datastore, deployable, or topology. Wider vulnerability,
+immutable-image, SBOM, provenance, and production-capacity certification remain explicitly owned
+by #720, #926, #927, and #928; this PR does not promote the report-only technology-governance
+pilot to a bank-buyable claim.
+
 CR-1683 supportability and bounded-read addendum (2026-08-11): signed implementation through
 `62c64821b` adds a Core-owned Query Control Plane projection for current corporate-action
 manifest, readiness, and fenced release evidence. `core.support.read` is deliberately a
