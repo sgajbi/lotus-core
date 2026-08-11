@@ -4,6 +4,11 @@ import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from asyncpg import (
+    CannotConnectNowError,
+    ConnectionDoesNotExistError,
+    UniqueViolationError,
+)
 from sqlalchemy.exc import SQLAlchemyError
 
 from src.services.portfolio_transaction_processing_service.app.application import (
@@ -64,10 +69,21 @@ async def test_stop_allows_in_flight_member_to_finish_before_exit() -> None:
 
 
 @pytest.mark.asyncio
-async def test_database_failure_retries_without_terminating_runtime() -> None:
+@pytest.mark.parametrize(
+    "database_error",
+    [
+        SQLAlchemyError("database unavailable"),
+        CannotConnectNowError("database is restarting"),
+        ConnectionDoesNotExistError("database connection was interrupted"),
+    ],
+    ids=("sqlalchemy", "postgres-restart", "postgres-connection-loss"),
+)
+async def test_database_failure_retries_without_terminating_runtime(
+    database_error: Exception,
+) -> None:
     use_case = AsyncMock()
     use_case.execute.side_effect = [
-        SQLAlchemyError("database unavailable"),
+        database_error,
         CorporateActionReleaseWorkerResult(CorporateActionReleaseWorkerStatus.IDLE),
     ]
     worker = CorporateActionReleaseWorker(
@@ -81,6 +97,16 @@ async def test_database_failure_retries_without_terminating_runtime() -> None:
     worker.stop()
 
     await asyncio.wait_for(task, timeout=1)
+
+
+@pytest.mark.asyncio
+async def test_non_transient_driver_error_terminates_worker() -> None:
+    use_case = AsyncMock()
+    use_case.execute.side_effect = UniqueViolationError("constraint violation")
+    worker = CorporateActionReleaseWorker(use_case)
+
+    with pytest.raises(UniqueViolationError, match="constraint violation"):
+        await worker.run()
 
 
 async def _wait_for_calls(mock: AsyncMock, *, minimum: int) -> None:
