@@ -1,0 +1,82 @@
+"""Specify resilient lifecycle behavior for the corporate-action release poller."""
+
+import asyncio
+from unittest.mock import AsyncMock
+
+import pytest
+from sqlalchemy.exc import SQLAlchemyError
+
+from src.services.portfolio_transaction_processing_service.app.application import (
+    CorporateActionReleaseWorkerResult,
+    CorporateActionReleaseWorkerStatus,
+)
+from src.services.portfolio_transaction_processing_service.app.runtime.corporate_action_release_worker import (  # noqa: E501
+    CorporateActionReleaseWorker,
+)
+
+
+@pytest.mark.asyncio
+async def test_synchronous_stop_callback_ends_idle_worker_cleanly() -> None:
+    use_case = AsyncMock()
+    use_case.execute.return_value = CorporateActionReleaseWorkerResult(
+        CorporateActionReleaseWorkerStatus.IDLE
+    )
+    worker = CorporateActionReleaseWorker(use_case, idle_poll_seconds=0.01)
+    task = asyncio.create_task(worker.run())
+    await _wait_for_calls(use_case.execute, minimum=1)
+
+    assert worker.stop() is None
+
+    await asyncio.wait_for(task, timeout=1)
+
+
+@pytest.mark.asyncio
+async def test_stop_allows_in_flight_member_to_finish_before_exit() -> None:
+    started = asyncio.Event()
+    finish = asyncio.Event()
+    use_case = AsyncMock()
+
+    async def execute() -> CorporateActionReleaseWorkerResult:
+        started.set()
+        await finish.wait()
+        return CorporateActionReleaseWorkerResult(CorporateActionReleaseWorkerStatus.COMPLETE)
+
+    use_case.execute.side_effect = execute
+    worker = CorporateActionReleaseWorker(use_case)
+    task = asyncio.create_task(worker.run())
+    await asyncio.wait_for(started.wait(), timeout=1)
+
+    worker.stop()
+    assert not task.done()
+    finish.set()
+
+    await asyncio.wait_for(task, timeout=1)
+    assert use_case.execute.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_database_failure_retries_without_terminating_runtime() -> None:
+    use_case = AsyncMock()
+    use_case.execute.side_effect = [
+        SQLAlchemyError("database unavailable"),
+        CorporateActionReleaseWorkerResult(CorporateActionReleaseWorkerStatus.IDLE),
+    ]
+    worker = CorporateActionReleaseWorker(
+        use_case,
+        idle_poll_seconds=0.01,
+        retry_backoff_seconds=0.01,
+    )
+    task = asyncio.create_task(worker.run())
+    await _wait_for_calls(use_case.execute, minimum=2)
+
+    worker.stop()
+
+    await asyncio.wait_for(task, timeout=1)
+
+
+async def _wait_for_calls(mock: AsyncMock, *, minimum: int) -> None:
+    for _ in range(100):
+        if mock.await_count >= minimum:
+            return
+        await asyncio.sleep(0.01)
+    raise AssertionError(f"worker did not execute {minimum} time(s)")

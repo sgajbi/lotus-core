@@ -1,5 +1,6 @@
 """Specify fenced ordered corporate-action release processing."""
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from unittest.mock import AsyncMock
@@ -9,6 +10,7 @@ import pytest
 from src.services.portfolio_transaction_processing_service.app.application import (
     ClaimedCorporateActionExecutionRelease,
     CorporateActionExecutionMemberAuthority,
+    CorporateActionExecutionPayloadAuthorityError,
     CorporateActionReleaseProgressOutcome,
     CorporateActionReleaseWorkerStatus,
     ProcessNextCorporateActionReleaseUseCase,
@@ -64,21 +66,37 @@ def _claim() -> ClaimedCorporateActionExecutionRelease:
 
 
 class _Releases:
-    def __init__(self, *, claim=None, progress=CorporateActionReleaseProgressOutcome.COMPLETE):
+    def __init__(
+        self,
+        *,
+        claim=None,
+        progress=CorporateActionReleaseProgressOutcome.COMPLETE,
+        next_claims=(),
+        load_error: Exception | None = None,
+    ):
         self.claim = claim
-        self.progress = progress
+        self.progress = list(progress) if isinstance(progress, (list, tuple)) else [progress]
+        self.next_claims = list(next_claims)
+        self.load_error = load_error
+        self.claim_calls = 0
         self.advance_calls = []
         self.fail_calls = []
 
     async def claim_next(self, _lease):
+        self.claim_calls += 1
         return self.claim
 
     async def load_owned_transaction(self, _claim):
+        if self.load_error is not None:
+            raise self.load_error
         return _transaction()
 
     async def advance_member(self, **kwargs):
         self.advance_calls.append(kwargs)
-        return self.progress
+        return self.progress.pop(0)
+
+    async def load_owned_next(self, **_kwargs):
+        return self.next_claims.pop(0) if self.next_claims else None
 
     async def renew_lease(self, **_kwargs):
         return True
@@ -153,6 +171,66 @@ async def test_worker_commits_claim_and_load_before_exact_member_processing() ->
     assert command.transaction.transaction_id == "CA-OUT-001"
     assert len(units) == 3 and all(unit.committed for unit in units)
     assert releases.advance_calls[0]["fence_token"] == 7
+    assert result.processed_member_count == 1
+
+
+@pytest.mark.asyncio
+async def test_worker_drains_every_member_under_one_lease_without_reclaim() -> None:
+    process = AsyncMock()
+    process.execute.return_value = ProcessTransactionResult(
+        status=TransactionProcessingStatus.PROCESSED,
+        input_transaction_id="CA-OUT-001",
+    )
+    first = replace(
+        _claim(),
+        member_count=2,
+    )
+    second = replace(
+        first,
+        next_member=replace(
+            first.next_member,
+            execution_ordinal=1,
+            transaction_id="CA-IN-001",
+        ),
+    )
+    releases = _Releases(
+        claim=first,
+        progress=[
+            CorporateActionReleaseProgressOutcome.ADVANCED,
+            CorporateActionReleaseProgressOutcome.COMPLETE,
+        ],
+        next_claims=[second],
+    )
+    worker, units = _worker(releases, process)
+
+    result = await worker.execute()
+
+    assert result.status is CorporateActionReleaseWorkerStatus.COMPLETE
+    assert result.execution_ordinal == 1
+    assert result.processed_member_count == 2
+    assert releases.claim_calls == 1
+    assert [call["expected_ordinal"] for call in releases.advance_calls] == [0, 1]
+    assert len(units) == 6 and all(unit.committed for unit in units)
+
+
+@pytest.mark.asyncio
+async def test_payload_authority_drift_fails_release_durably() -> None:
+    process = AsyncMock()
+    releases = _Releases(
+        claim=_claim(),
+        load_error=CorporateActionExecutionPayloadAuthorityError("payload changed"),
+    )
+    worker, units = _worker(releases, process)
+
+    result = await worker.execute()
+
+    assert result.status is CorporateActionReleaseWorkerStatus.FAILED
+    assert result.processed_member_count == 0
+    process.execute.assert_not_awaited()
+    assert releases.fail_calls[0]["terminal_reason"] == (
+        "transaction_processing:payload_authority_conflict"
+    )
+    assert units[-1].committed
 
 
 @pytest.mark.asyncio

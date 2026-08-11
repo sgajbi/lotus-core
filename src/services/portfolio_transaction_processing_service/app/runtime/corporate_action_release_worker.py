@@ -5,6 +5,8 @@ from __future__ import annotations
 import asyncio
 import logging
 
+from sqlalchemy.exc import SQLAlchemyError
+
 from ..application import (
     CorporateActionReleaseWorkerStatus,
     ProcessNextCorporateActionReleaseUseCase,
@@ -44,10 +46,27 @@ class CorporateActionReleaseWorker:
                 )
                 await self._wait(self._retry_backoff_seconds)
                 continue
+            except SQLAlchemyError:
+                logger.exception(
+                    "Corporate-action release worker will retry after a database failure."
+                )
+                await self._wait(self._retry_backoff_seconds)
+                continue
             if result.status is CorporateActionReleaseWorkerStatus.IDLE:
                 await self._wait(self._idle_poll_seconds)
+            elif result.status is CorporateActionReleaseWorkerStatus.FAILED:
+                logger.error(
+                    "Corporate-action release entered terminal failure.",
+                    extra={
+                        "release_id": result.release_id,
+                        "execution_ordinal": result.execution_ordinal,
+                        "transaction_id": result.transaction_id,
+                    },
+                )
 
-    async def stop(self) -> None:
+    def stop(self) -> None:
+        """Signal shutdown synchronously for the shared runtime callback contract."""
+
         self._stopped.set()
 
     async def _wait(self, timeout_seconds: float) -> None:
