@@ -12,7 +12,10 @@ backfills every legacy observation from the exact transaction-processing semanti
 holding the migration lock, then makes the fingerprint non-null and fails the whole migration if
 source authority is missing or malformed. The worker now renews at one third of the lease with a
 100 ms floor, strictly before every supported lease expires. Monotonic replay compares both child
-content and transaction-payload authority. Focused unit contracts and real-PostgreSQL populated
+content and transaction-payload authority. Repository reconstruction selects canonical hash and
+payload verification from the durable manifest shape and carries the persisted historical hash
+into readiness, so an upgraded legacy manifest remains readable without rewriting its authority.
+Focused unit contracts and real-PostgreSQL populated
 upgrade, missing-authority rollback, scoped-manifest, and same-epoch conflict tests pass. The slice
 uses the existing mature FastAPI, Pydantic, SQLAlchemy, PostgreSQL, Alembic, Kafka, and Prometheus
 stack and adds no dependency, image, datastore, deployable, or topology. Wider vulnerability,

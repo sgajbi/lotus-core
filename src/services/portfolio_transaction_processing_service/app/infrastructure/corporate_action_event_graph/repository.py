@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Sequence
+from dataclasses import replace
 from datetime import UTC, datetime
 from typing import cast
 
@@ -724,11 +725,12 @@ class SqlAlchemyCorporateActionEventGraphRepository:
             event.id,
             manifest_id=manifest_record.id,
         )
+        readiness = evaluate_corporate_action_manifest_readiness(
+            manifest=manifest,
+            observed_children=observed_children,
+        )
         return (
-            evaluate_corporate_action_manifest_readiness(
-                manifest=manifest,
-                observed_children=observed_children,
-            ),
+            replace(readiness, manifest_content_hash=manifest_record.manifest_content_hash),
             manifest_record,
         )
 
@@ -1179,14 +1181,35 @@ def _require_persisted_manifest_content(
     record: CorporateActionManifestVersionRecord,
     manifest: CorporateActionParentManifest,
 ) -> None:
-    if record.manifest_content_hash != manifest.content_hash:
+    include_book_scope = _persisted_manifest_includes_book_scope(record)
+    lineage_payload = cast(dict[str, object], manifest.lineage_payload())
+    if not include_book_scope:
+        lineage_payload.pop("tenant_id")
+        lineage_payload.pop("legal_book_id")
+    if record.manifest_content_hash != canonical_content_hash(lineage_payload):
         raise ConflictingCorporateActionManifestError(
             "persisted corporate-action manifest content hash is inconsistent"
         )
-    if record.manifest_payload != _manifest_json_payload(manifest):
+    expected_payload = _manifest_json_payload(manifest)
+    if not include_book_scope:
+        expected_payload.pop("tenant_id")
+        expected_payload.pop("legal_book_id")
+    if record.manifest_payload != expected_payload:
         raise ConflictingCorporateActionManifestError(
             "persisted corporate-action manifest payload is not canonical"
         )
+
+
+def _persisted_manifest_includes_book_scope(
+    record: CorporateActionManifestVersionRecord,
+) -> bool:
+    has_tenant = "tenant_id" in record.manifest_payload
+    has_legal_book = "legal_book_id" in record.manifest_payload
+    if has_tenant != has_legal_book:
+        raise ConflictingCorporateActionManifestError(
+            "persisted corporate-action manifest book scope is incomplete"
+        )
+    return has_tenant
 
 
 def _require_valid_manifest_chain(

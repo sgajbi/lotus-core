@@ -3731,7 +3731,10 @@ Most relevant current governance:
      enforce that scoped payload authority matches the parent event. Migration `c153` must derive
      every preexisting child observation fingerprint from the exact transaction-processing
      semantic fence, make the field non-null, and fail the entire migration when durable source
-     authority is absent or malformed; do not fabricate or substitute a hash. Corporate-action
+     authority is absent or malformed; do not fabricate or substitute a hash. Application
+     reconstruction must select canonical verification from the persisted manifest shape and
+     propagate the durable stored manifest hash into readiness; never re-hash a legacy unscoped
+     manifest as the new scoped form. Corporate-action
      replay monotonicity compares both child-content and transaction-payload fingerprints at the
      same epoch. Lease renewal must be scheduled strictly before the shortest supported lease
      expires. These controls remain on the established PostgreSQL, Alembic, SQLAlchemy, Kafka,

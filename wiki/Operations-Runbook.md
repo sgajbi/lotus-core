@@ -158,8 +158,8 @@ transaction-processing semantic fence and then makes the field non-null. If any 
 lacks valid source authority, the migration deliberately fails and rolls back; repair the missing
 source evidence through the governed recovery path before retrying. Never synthesize a fingerprint,
 edit the immutable ledgers, or mark the Alembic revision manually. Historical unscoped manifest
-hashes remain replay-compatible, while newly scoped manifests must match the parent tenant and
-legal book.
+hashes remain replay-compatible and retain their durable authority through application
+reconstruction and readiness; newly scoped manifests must match the parent tenant and legal book.
 
 ## Preferred diagnostic sequence
 
