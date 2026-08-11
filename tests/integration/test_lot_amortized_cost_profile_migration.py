@@ -187,8 +187,28 @@ def _downgrade_later_revisions(connection) -> list[dict[str, Any]]:
     """Remove dependent revisions newest-first before exercising the profile schema."""
 
     later_migrations: list[dict[str, Any]] = []
-    if inspect(connection).has_table("corporate_action_execution_releases"):
-        for migration_path in CORPORATE_ACTION_DEPENDENT_MIGRATIONS:
+    for migration_path, revision_is_present in (
+        (
+            CORPORATE_ACTION_DEPENDENT_MIGRATIONS[0],
+            connection.scalar(
+                text("SELECT to_regprocedure('enforce_ca_manifest_payload_book_scope()')")
+            )
+            is not None,
+        ),
+        (
+            CORPORATE_ACTION_DEPENDENT_MIGRATIONS[1],
+            inspect(connection).has_table("corporate_action_events")
+            and any(
+                index["name"] == "ix_ca_event_book_scope_updated"
+                for index in inspect(connection).get_indexes("corporate_action_events")
+            ),
+        ),
+        (
+            CORPORATE_ACTION_DEPENDENT_MIGRATIONS[2],
+            inspect(connection).has_table("corporate_action_execution_releases"),
+        ),
+    ):
+        if revision_is_present:
             later_migration = runpy.run_path(str(migration_path))
             _bind_operations(later_migration, connection)
             later_migration["downgrade"]()

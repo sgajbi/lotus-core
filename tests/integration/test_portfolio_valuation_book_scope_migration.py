@@ -114,14 +114,33 @@ def _downgrade_dependent_schema(connection) -> list[dict[str, Any]]:
     """Downgrade later schema that deliberately references valuation-book scope."""
 
     dependent_migrations: list[dict[str, Any]] = []
-    inspector = inspect(connection)
-    if inspector.has_table("corporate_action_execution_releases"):
-        for migration_path in CORPORATE_ACTION_DEPENDENT_MIGRATIONS:
+    for migration_path, revision_is_present in (
+        (
+            CORPORATE_ACTION_DEPENDENT_MIGRATIONS[0],
+            connection.scalar(
+                text("SELECT to_regprocedure('enforce_ca_manifest_payload_book_scope()')")
+            )
+            is not None,
+        ),
+        (
+            CORPORATE_ACTION_DEPENDENT_MIGRATIONS[1],
+            inspect(connection).has_table("corporate_action_events")
+            and any(
+                index["name"] == "ix_ca_event_book_scope_updated"
+                for index in inspect(connection).get_indexes("corporate_action_events")
+            ),
+        ),
+        (
+            CORPORATE_ACTION_DEPENDENT_MIGRATIONS[2],
+            inspect(connection).has_table("corporate_action_execution_releases"),
+        ),
+    ):
+        if revision_is_present:
             dependent_migration = runpy.run_path(str(migration_path))
             _bind_operations(dependent_migration, connection)
             dependent_migration["downgrade"]()
             dependent_migrations.append(dependent_migration)
-        inspector = inspect(connection)
+    inspector = inspect(connection)
     if inspector.has_table("corporate_action_events"):
         corporate_action_graph_migration: dict[str, Any] = runpy.run_path(
             str(CORPORATE_ACTION_GRAPH_MIGRATION)
