@@ -83,6 +83,14 @@ async def _read_job(session: AsyncSession) -> PortfolioValuationJob:
     ).scalar_one()
 
 
+def _mark_job_complete(job: PortfolioValuationJob) -> None:
+    """Model the atomic terminal transition required by the lease invariant."""
+    job.status = "COMPLETE"
+    job.valuation_lease_owner = None
+    job.valuation_claim_token = None
+    job.valuation_lease_expires_at = None
+
+
 async def _apply_readiness(session: AsyncSession, *, outbox_id: int) -> None:
     await ValuationJobRepository(session).upsert_position_readiness_job(
         portfolio_id=PORTFOLIO_ID,
@@ -204,7 +212,7 @@ async def test_new_sequence_rearms_completed_job_and_redelivery_is_idempotent(
     await async_db_session.commit()
     await _seed_pending_job(async_db_session)
     job = await _read_job(async_db_session)
-    job.status = "COMPLETE"
+    _mark_job_complete(job)
     job.claimed_readiness_outbox_id = covered_id
     await async_db_session.commit()
 
@@ -246,7 +254,7 @@ async def test_unverified_high_transport_sequence_cannot_poison_claimed_authorit
     await _seed_pending_job(async_db_session)
     await ValuationRepository(async_db_session).find_and_claim_eligible_jobs(1)
     job = await _read_job(async_db_session)
-    job.status = "COMPLETE"
+    _mark_job_complete(job)
     await async_db_session.commit()
 
     unverified_high_id = covered_id + 1_000_000
@@ -254,7 +262,7 @@ async def test_unverified_high_transport_sequence_cannot_poison_claimed_authorit
     claimed = await ValuationRepository(async_db_session).find_and_claim_eligible_jobs(1)
     assert claimed[0].claimed_readiness_outbox_id == covered_id
     claimed_job = await _read_job(async_db_session)
-    claimed_job.status = "COMPLETE"
+    _mark_job_complete(claimed_job)
     await async_db_session.commit()
 
     legitimate = await _stage_readiness(async_db_session)
