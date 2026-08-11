@@ -8,6 +8,7 @@ import pytest
 
 from src.services.portfolio_transaction_processing_service.app.domain import (
     BookedTransaction,
+    IncompleteCorporateActionManifestIdentityError,
     corporate_action_manifest_child,
 )
 
@@ -59,8 +60,21 @@ def test_fully_identified_governed_child_maps_source_graph_authority() -> None:
         "child_role",
     ),
 )
-def test_incomplete_graph_identity_does_not_capture_transaction(missing_field: str) -> None:
+def test_partial_graph_identity_fails_closed(missing_field: str) -> None:
     transaction = replace(_transaction(), **{missing_field: None})
+
+    with pytest.raises(IncompleteCorporateActionManifestIdentityError, match="fully populated"):
+        corporate_action_manifest_child(transaction)
+
+
+def test_absent_graph_identity_preserves_ordinary_compatibility_path() -> None:
+    transaction = replace(
+        _transaction(),
+        economic_event_id=None,
+        linked_transaction_group_id=None,
+        parent_event_reference=None,
+        child_role=None,
+    )
 
     assert corporate_action_manifest_child(transaction) is None
 
@@ -78,7 +92,13 @@ def test_ordinary_charge_or_adjustment_without_graph_identity_is_not_parked(
 ) -> None:
     assert (
         corporate_action_manifest_child(
-            _transaction(transaction_type=transaction_type, economic_event_id=None)
+            _transaction(
+                transaction_type=transaction_type,
+                economic_event_id=None,
+                linked_transaction_group_id=None,
+                parent_event_reference=None,
+                child_role=None,
+            )
         )
         is None
     )

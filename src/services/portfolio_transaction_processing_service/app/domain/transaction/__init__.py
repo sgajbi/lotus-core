@@ -13,7 +13,10 @@ from .booking_metadata import (
     SELL_FIFO_POLICY_ID,
     enrich_booking_metadata,
 )
-from .corporate_action import corporate_action_manifest_child
+from .corporate_action import (
+    IncompleteCorporateActionManifestIdentityError,
+    corporate_action_manifest_child,
+)
 from .processing_type import (
     requires_cashflow_processing,
     resolve_effective_processing_transaction_type,
@@ -78,6 +81,7 @@ __all__ = [
     "GENERATED_CASH_LEG_TRANSACTION_TYPES",
     "INTEREST_DEFAULT_POLICY_ID",
     "INTEREST_DEFAULT_POLICY_VERSION",
+    "IncompleteCorporateActionManifestIdentityError",
     "InterestValidationReasonCode",
     "InterestSettlementEconomics",
     "ORDINARY_SETTLEMENT_TRANSACTION_TYPES",
