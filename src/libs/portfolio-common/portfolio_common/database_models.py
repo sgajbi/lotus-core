@@ -2689,7 +2689,7 @@ class CorporateActionExecutionReleaseRecord(Base):
     lease_owner = Column(String(128), nullable=True)
     lease_token = Column(String(64), nullable=True)
     lease_expires_at = Column(DateTime(timezone=True), nullable=True)
-    failure_reason = Column(Text, nullable=True)
+    terminal_reason = Column(Text, nullable=True)
     completed_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(
@@ -2711,7 +2711,7 @@ class CorporateActionExecutionReleaseRecord(Base):
             name="ck_ca_execution_release_hashes",
         ),
         CheckConstraint(
-            "status IN ('PENDING', 'PROCESSING', 'COMPLETE', 'FAILED')",
+            "status IN ('PENDING', 'PROCESSING', 'COMPLETE', 'FAILED', 'SUPERSEDED')",
             name="ck_ca_execution_release_status",
         ),
         CheckConstraint(
@@ -2742,14 +2742,17 @@ class CorporateActionExecutionReleaseRecord(Base):
         ),
         CheckConstraint(
             "(status = 'PROCESSING' AND lease_owner IS NOT NULL "
-            "AND completed_at IS NULL AND failure_reason IS NULL) OR "
+            "AND completed_at IS NULL AND terminal_reason IS NULL) OR "
             "(status = 'PENDING' AND lease_owner IS NULL "
-            "AND completed_at IS NULL AND failure_reason IS NULL) OR "
+            "AND completed_at IS NULL AND terminal_reason IS NULL) OR "
             "(status = 'COMPLETE' AND lease_owner IS NULL "
             "AND next_execution_ordinal = member_count "
-            "AND completed_at IS NOT NULL AND failure_reason IS NULL) OR "
+            "AND completed_at IS NOT NULL AND terminal_reason IS NULL) OR "
             "(status = 'FAILED' AND lease_owner IS NULL "
-            "AND completed_at IS NULL AND failure_reason IS NOT NULL)",
+            "AND completed_at IS NULL AND terminal_reason IS NOT NULL) OR "
+            "(status = 'SUPERSEDED' AND lease_owner IS NULL "
+            "AND next_execution_ordinal = 0 "
+            "AND completed_at IS NULL AND terminal_reason IS NOT NULL)",
             name="ck_ca_execution_release_state_shape",
         ),
         CheckConstraint(

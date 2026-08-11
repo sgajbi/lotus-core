@@ -55,7 +55,7 @@ def upgrade() -> None:
         sa.Column("lease_owner", sa.String(length=128), nullable=True),
         sa.Column("lease_token", sa.String(length=64), nullable=True),
         sa.Column("lease_expires_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("failure_reason", sa.Text(), nullable=True),
+        sa.Column("terminal_reason", sa.Text(), nullable=True),
         sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column(
             "created_at",
@@ -75,7 +75,7 @@ def upgrade() -> None:
             name="ck_ca_execution_release_hashes",
         ),
         sa.CheckConstraint(
-            "status IN ('PENDING', 'PROCESSING', 'COMPLETE', 'FAILED')",
+            "status IN ('PENDING', 'PROCESSING', 'COMPLETE', 'FAILED', 'SUPERSEDED')",
             name="ck_ca_execution_release_status",
         ),
         sa.CheckConstraint(
@@ -106,14 +106,17 @@ def upgrade() -> None:
         ),
         sa.CheckConstraint(
             "(status = 'PROCESSING' AND lease_owner IS NOT NULL "
-            "AND completed_at IS NULL AND failure_reason IS NULL) OR "
+            "AND completed_at IS NULL AND terminal_reason IS NULL) OR "
             "(status = 'PENDING' AND lease_owner IS NULL "
-            "AND completed_at IS NULL AND failure_reason IS NULL) OR "
+            "AND completed_at IS NULL AND terminal_reason IS NULL) OR "
             "(status = 'COMPLETE' AND lease_owner IS NULL "
             "AND next_execution_ordinal = member_count "
-            "AND completed_at IS NOT NULL AND failure_reason IS NULL) OR "
+            "AND completed_at IS NOT NULL AND terminal_reason IS NULL) OR "
             "(status = 'FAILED' AND lease_owner IS NULL "
-            "AND completed_at IS NULL AND failure_reason IS NOT NULL)",
+            "AND completed_at IS NULL AND terminal_reason IS NOT NULL) OR "
+            "(status = 'SUPERSEDED' AND lease_owner IS NULL "
+            "AND next_execution_ordinal = 0 "
+            "AND completed_at IS NULL AND terminal_reason IS NOT NULL)",
             name="ck_ca_execution_release_state_shape",
         ),
         sa.CheckConstraint(
@@ -275,7 +278,8 @@ def upgrade() -> None:
                     RAISE EXCEPTION 'corporate-action execution release progress is monotonic'
                         USING ERRCODE = '23514';
                 END IF;
-                IF OLD.status IN ('COMPLETE', 'FAILED') AND NEW IS DISTINCT FROM OLD THEN
+                IF OLD.status IN ('COMPLETE', 'FAILED', 'SUPERSEDED')
+                   AND NEW IS DISTINCT FROM OLD THEN
                     RAISE EXCEPTION 'corporate-action execution terminal state is immutable'
                         USING ERRCODE = '23514';
                 END IF;
