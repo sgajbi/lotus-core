@@ -74,10 +74,16 @@ async def test_stop_allows_in_flight_member_to_finish_before_exit() -> None:
     "database_error",
     [
         SQLAlchemyError("database unavailable"),
+        ConnectionRefusedError("database socket unavailable"),
         CannotConnectNowError("database is restarting"),
         ConnectionDoesNotExistError("database connection was interrupted"),
     ],
-    ids=("sqlalchemy", "postgres-restart", "postgres-connection-loss"),
+    ids=(
+        "sqlalchemy",
+        "socket-refused",
+        "postgres-restart",
+        "postgres-connection-loss",
+    ),
 )
 async def test_database_failure_retries_without_terminating_runtime(
     database_error: Exception,
