@@ -14,8 +14,14 @@ sample, Prometheus application label, or business identifier is retained. Focuse
 MyPy. This uses only established PostgreSQL connection metadata, SQLAlchemy driver settings, and the
 existing monitor: no dependency, agent, sidecar, datastore, image, pool, timeout, recycle,
 concurrency, partition, API/OpenAPI, event, migration, calculation, or topology changed. Wider
-vulnerability and immutable-artifact posture remains owned by #720/#926/#927/#928; #502 and #795
-remain open until non-regressing fan-in and exact daily evidence justify the next decision.
+vulnerability and immutable-artifact posture remains owned by #720/#926/#927/#928. Exact clean
+fan-in artifact `20260811T135244Z` reconciled all 1,000 transactions/snapshots/positions and one
+portfolio in `80.814s` versus retained `80.866s`, with attempts `2/2`, zero repeats, closed jobs and
+outbox, `24/24` reconciled samples, zero unattributed/ungoverned sessions, and peak
+connections/active/idle-in-transaction `51/7/24`. The largest idle-in-transaction peaks are now
+owned by transaction processing (`9`), derived state (`7`), position valuation (`7`), persistence
+(`5`), and valuation orchestration (`4`). This passes the non-regression retain gate and authorizes
+the exact daily profile without pre-authorizing capacity changes; #502 and #795 remain open.
 
 CR-1683 manifest-arrival discriminator addendum (2026-08-11): exact-main E2E run `31484915013`
 proved that an upstream-provided `ADJUSTMENT` cash settlement carrying ordinary economic-event and
