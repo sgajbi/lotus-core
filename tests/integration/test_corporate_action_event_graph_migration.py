@@ -30,6 +30,12 @@ MIGRATION = (
     / "versions"
     / "c152b2c3d519_feat_add_corporate_action_event_graph.py"
 )
+DEPENDENT_MIGRATION = (
+    Path(__file__).resolve().parents[2]
+    / "alembic"
+    / "versions"
+    / "c153b2c3d520_feat_add_corporate_action_execution_releases.py"
+)
 TABLES = {
     "corporate_action_events",
     "corporate_action_manifest_versions",
@@ -37,6 +43,10 @@ TABLES = {
     "corporate_action_manifest_edges",
     "corporate_action_child_observations",
     "corporate_action_readiness_evaluations",
+}
+DEPENDENT_TABLES = {
+    "corporate_action_execution_releases",
+    "corporate_action_execution_members",
 }
 
 
@@ -46,7 +56,13 @@ def _bind_operations(migration: dict[str, Any], connection) -> None:
     migration["downgrade"].__globals__["op"] = operations
 
 
-def _normalize_to_previous_revision(migration: dict[str, Any], connection) -> None:
+def _normalize_to_previous_revision(
+    migration: dict[str, Any],
+    dependent_migration: dict[str, Any],
+    connection,
+) -> None:
+    if DEPENDENT_TABLES.intersection(inspect(connection).get_table_names()):
+        dependent_migration["downgrade"]()
     if TABLES.intersection(inspect(connection).get_table_names()):
         migration["downgrade"]()
 
@@ -280,10 +296,12 @@ def test_corporate_action_event_graph_apply_constraints_and_rollback(
     clean_db,
 ) -> None:
     migration: dict[str, Any] = runpy.run_path(str(MIGRATION))
+    dependent_migration: dict[str, Any] = runpy.run_path(str(DEPENDENT_MIGRATION))
 
     with db_engine.begin() as connection:
         _bind_operations(migration, connection)
-        _normalize_to_previous_revision(migration, connection)
+        _bind_operations(dependent_migration, connection)
+        _normalize_to_previous_revision(migration, dependent_migration, connection)
         assert not TABLES.intersection(inspect(connection).get_table_names())
 
         migration["upgrade"]()
@@ -1091,3 +1109,5 @@ def test_corporate_action_event_graph_apply_constraints_and_rollback(
         assert not TABLES.intersection(inspect(connection).get_table_names())
         migration["upgrade"]()
         assert TABLES.issubset(inspect(connection).get_table_names())
+        dependent_migration["upgrade"]()
+        assert DEPENDENT_TABLES.issubset(inspect(connection).get_table_names())
