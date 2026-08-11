@@ -9,8 +9,14 @@ from ..domain.transaction.corporate_action import (
     CorporateActionEventChild,
     CorporateActionParentManifest,
 )
-from ..ports.corporate_action_event_graph import CorporateActionManifestAppendOutcome
-from .corporate_action_event_graph import RegisterCorporateActionManifestUseCase
+from ..ports.corporate_action_event_graph import (
+    CorporateActionEventGraphUnitOfWorkFactory,
+    CorporateActionManifestAppendOutcome,
+)
+from .corporate_action_execution import (
+    CorporateActionExecutionDisposition,
+    resolve_corporate_action_manifest_execution_gate,
+)
 
 
 def map_corporate_action_manifest_event(
@@ -54,11 +60,27 @@ def map_corporate_action_manifest_event(
 class HandleCorporateActionManifestEventUseCase:
     """Keep transport mapping outside the manifest persistence boundary."""
 
-    def __init__(self, register_manifest: RegisterCorporateActionManifestUseCase) -> None:
-        self._register_manifest = register_manifest
+    def __init__(
+        self,
+        unit_of_work_factory: CorporateActionEventGraphUnitOfWorkFactory,
+    ) -> None:
+        self._unit_of_work_factory = unit_of_work_factory
 
     async def execute(
         self,
         event: CorporateActionManifestReceivedEvent,
     ) -> CorporateActionManifestAppendOutcome:
-        return await self._register_manifest.execute(map_corporate_action_manifest_event(event))
+        manifest = map_corporate_action_manifest_event(event)
+        async with self._unit_of_work_factory() as unit_of_work:
+            outcome = await unit_of_work.event_graph.append_manifest(manifest)
+            decision = await unit_of_work.event_graph.load_current_readiness(
+                portfolio_id=manifest.portfolio_id,
+                corporate_action_event_id=manifest.corporate_action_event_id,
+            )
+            gate = resolve_corporate_action_manifest_execution_gate(manifest, decision)
+            if gate.disposition is CorporateActionExecutionDisposition.READY:
+                if gate.plan is None:
+                    raise ValueError("ready corporate-action gate is missing its execution plan")
+                await unit_of_work.releases.materialize(gate.plan)
+            await unit_of_work.commit()
+        return outcome

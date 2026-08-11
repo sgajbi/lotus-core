@@ -11,6 +11,7 @@ from portfolio_common.domain.calculation_lineage import canonical_content_hash
 from ..domain.transaction.corporate_action import (
     CorporateActionManifestFinding,
     CorporateActionManifestReadinessStatus,
+    CorporateActionParentManifest,
 )
 from ..ports.corporate_action_event_graph import (
     CorporateActionChildObservation,
@@ -109,6 +110,40 @@ def resolve_corporate_action_execution_gate(
 ) -> CorporateActionExecutionGate:
     """Permit execution only for a coherent READY decision with source-owned authority."""
 
+    return _resolve_corporate_action_execution_gate(
+        corporate_action_event_id=observation.corporate_action_event_id,
+        portfolio_id=observation.portfolio_id,
+        linked_transaction_group_id=observation.linked_transaction_group_id,
+        parent_event_reference=observation.parent_event_reference,
+        decision=decision,
+    )
+
+
+def resolve_corporate_action_manifest_execution_gate(
+    manifest: CorporateActionParentManifest,
+    decision: CorporateActionReadinessDecision,
+) -> CorporateActionExecutionGate:
+    """Resolve execution authority after a manifest-owned readiness transition."""
+
+    if not isinstance(manifest, CorporateActionParentManifest):
+        raise TypeError("manifest must be a CorporateActionParentManifest")
+    return _resolve_corporate_action_execution_gate(
+        corporate_action_event_id=manifest.corporate_action_event_id,
+        portfolio_id=manifest.portfolio_id,
+        linked_transaction_group_id=manifest.linked_transaction_group_id,
+        parent_event_reference=manifest.parent_event_reference,
+        decision=decision,
+    )
+
+
+def _resolve_corporate_action_execution_gate(
+    *,
+    corporate_action_event_id: str,
+    portfolio_id: str,
+    linked_transaction_group_id: str,
+    parent_event_reference: str,
+    decision: CorporateActionReadinessDecision,
+) -> CorporateActionExecutionGate:
     if decision.readiness_status is not CorporateActionManifestReadinessStatus.READY:
         if (
             decision.manifest_content_hash is not None
@@ -137,10 +172,10 @@ def resolve_corporate_action_execution_gate(
         readiness_status=decision.readiness_status,
         findings=(),
         plan=CorporateActionExecutionPlan(
-            corporate_action_event_id=observation.corporate_action_event_id,
-            portfolio_id=observation.portfolio_id,
-            linked_transaction_group_id=observation.linked_transaction_group_id,
-            parent_event_reference=observation.parent_event_reference,
+            corporate_action_event_id=corporate_action_event_id,
+            portfolio_id=portfolio_id,
+            linked_transaction_group_id=linked_transaction_group_id,
+            parent_event_reference=parent_event_reference,
             manifest_content_hash=decision.manifest_content_hash,
             structural_plan_content_hash=decision.structural_plan_content_hash,
             readiness_state_version=decision.state_version,

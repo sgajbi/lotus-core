@@ -17,7 +17,6 @@ from ..application import (
     ReplayBookedTransactionUseCase,
     RouteCorporateActionChildArrivalUseCase,
 )
-from ..application.corporate_action_event_graph import RegisterCorporateActionManifestUseCase
 from ..application.corporate_action_manifest_ingestion import (
     HandleCorporateActionManifestEventUseCase,
 )
@@ -181,12 +180,11 @@ def build_corporate_action_manifest_use_case(
 ) -> HandleCorporateActionManifestEventUseCase:
     """Compose source-manifest registration over the lightweight graph UoW."""
 
-    register_manifest = RegisterCorporateActionManifestUseCase(
+    return HandleCorporateActionManifestEventUseCase(
         SqlAlchemyCorporateActionEventGraphUnitOfWorkFactory(
             session_factory=session_factory or get_async_session_factory()
         )
     )
-    return HandleCorporateActionManifestEventUseCase(register_manifest)
 
 
 def build_corporate_action_child_arrival_use_case(

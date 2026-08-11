@@ -91,6 +91,13 @@ class CorporateActionEventGraphPort(Protocol):
         corporate_action_event_id: str,
     ) -> CorporateActionParentManifest | None: ...
 
+    async def load_current_readiness(
+        self,
+        *,
+        portfolio_id: str,
+        corporate_action_event_id: str,
+    ) -> CorporateActionReadinessDecision: ...
+
     async def observe_child(
         self,
         observation: CorporateActionChildObservation,

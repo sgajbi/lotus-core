@@ -274,6 +274,29 @@ class SqlAlchemyCorporateActionEventGraphRepository:
             )
         return await self._manifest_from_record(record, portfolio_id)
 
+    async def load_current_readiness(
+        self,
+        *,
+        portfolio_id: str,
+        corporate_action_event_id: str,
+    ) -> CorporateActionReadinessDecision:
+        """Load the current durable decision after a manifest-owned state transition."""
+
+        event = await self._session.scalar(
+            select(CorporateActionEventRecord).where(
+                CorporateActionEventRecord.portfolio_id == portfolio_id,
+                CorporateActionEventRecord.corporate_action_event_id == corporate_action_event_id,
+            )
+        )
+        if event is None:
+            raise ConflictingCorporateActionManifestError(
+                "corporate-action event readiness is unavailable"
+            )
+        return await self._current_readiness_decision(
+            event,
+            CorporateActionObservationAppendOutcome.UNCHANGED,
+        )
+
     async def _acquire_event_locks(
         self,
         identity: CorporateActionParentManifest | CorporateActionChildObservation,
