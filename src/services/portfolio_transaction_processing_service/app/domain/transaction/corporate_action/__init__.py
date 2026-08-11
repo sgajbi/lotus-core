@@ -1,5 +1,6 @@
 """Expose corporate-action transaction validation policy."""
 
+from .arrival import corporate_action_manifest_child
 from .classification import (
     BASIS_TRANSFER_CORPORATE_ACTION_TYPES,
     CASH_CONSIDERATION_TRANSACTION_TYPE,
@@ -79,6 +80,7 @@ __all__ = [
     "corporate_action_dependency_rank",
     "corporate_action_target_order_key",
     "evaluate_corporate_action_manifest_readiness",
+    "corporate_action_manifest_child",
     "is_bundle_a_corporate_action",
     "is_reconcilable_corporate_action",
     "normalize_corporate_action_transaction_type",

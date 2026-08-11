@@ -13,6 +13,7 @@ from .booking_metadata import (
     SELL_FIFO_POLICY_ID,
     enrich_booking_metadata,
 )
+from .corporate_action import corporate_action_manifest_child
 from .processing_type import (
     requires_cashflow_processing,
     resolve_effective_processing_transaction_type,
@@ -104,6 +105,7 @@ __all__ = [
     "enrich_booking_metadata",
     "build_transaction_correction_identity",
     "build_transaction_semantic_identity",
+    "corporate_action_manifest_child",
     "is_portfolio_level_cash_flow",
     "is_upstream_provided_cash_entry_mode",
     "resolve_cash_entry_mode",
