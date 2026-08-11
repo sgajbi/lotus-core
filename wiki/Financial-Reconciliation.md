@@ -142,6 +142,12 @@ Stable finding types are
 business date, correlation id through the run, linked transaction group, parent event reference,
 reason code, and source-safe observed values for triage.
 
+Treat aggregate status as the run's deterministic primary posture, not as a one-finding limit.
+Independently counted defects coexist in the same immutable evidence set: a non-zero missing-cash
+or unsupported-adjustment count has exactly one matching finding even when incomplete legs,
+invalid allocation, or another higher-priority status is present. Finding order is stable, and the
+summary's finding/error counts are derived from the emitted rows.
+
 Check beyond this service when:
 
 - the source data is missing before any control run could validate it

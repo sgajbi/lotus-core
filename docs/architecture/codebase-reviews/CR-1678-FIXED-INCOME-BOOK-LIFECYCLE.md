@@ -272,6 +272,14 @@ being interpreted as tax or allocation authority. The immutable run summary expo
 incoming and retained target, fractional, cash-consideration, adjustment, delta, and canonical
 input-lineage evidence through the existing reconciliation-run query.
 
+Multi-defect evidence no longer hides counted defects behind the aggregate status. The application
+builds one deterministic finding tuple and derives summary counts from that tuple. Missing cash
+basis and unsupported source adjustments are emitted independently after the primary status
+finding, followed by missing dependencies and canonical linkage findings. Replaying the same input
+retains the run and finding identities, and the PostgreSQL adapter upserts the exact set without
+duplicating rows. This is additive operator evidence: status precedence, calculation policy,
+reason-code vocabulary, routes, schema, Kafka, and runtime topology are unchanged.
+
 The mixed PostgreSQL lifecycle proves 1,000 original basis as 700 retained source, 240 retained
 target, 10 fractional, and 50 cash-consideration basis; the target lot remains at quantity 24 and
 basis 240, fractional realized P&L is 2, product flows balance, generated settlements are excluded,
@@ -319,6 +327,9 @@ migration, Kafka topic, partition, or deployment topology was introduced.
 - 35 warning-strict authoritative valuation tests;
 - 49 warning-strict shared valuation/calculator tests;
 - 77 warning-strict reconciliation domain/service/repository tests;
+- #933 multi-defect evidence: 22 focused application/repository tests and one real-PostgreSQL
+  save/replay case proving one run, two exact findings, summary cardinality parity, and duplicate
+  neutrality;
 - 18 warning-strict amortized-cost policy tests;
 - 34 warning-strict fixed-income policy and schedule-kernel tests, including irregular-period,
   premium, discount, negative-yield, rate-authority, date-only input, reconciliation, sub-quantum

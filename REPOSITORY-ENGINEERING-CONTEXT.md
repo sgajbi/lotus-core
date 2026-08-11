@@ -2694,8 +2694,14 @@ Most relevant current governance:
      exact settlement link type, references one unambiguous matching-type origin transaction in the
      current reconciliation cohort, and passes the shared upstream cash-pair policy for reciprocal
      identity, portfolio, event, and group scope. Missing, external, duplicate, type-mismatched, or
-     scope-mismatched origins fail closed as unsupported adjustments. Expose this evidence through
-     the existing reconciliation-run summary rather than a duplicate endpoint. Issues #480 and #481 retain the
+     scope-mismatched origins fail closed as unsupported adjustments. Aggregate reconciliation
+     status remains one deterministic precedence decision, but independently counted defects are
+     additive evidence: every non-zero `missing_cash_basis_count` and
+     `unsupported_adjustment_count` must produce exactly one corresponding finding in the same run,
+     even when a higher-priority status is selected. Build the canonical finding tuple once, derive
+     summary finding/error counts from its cardinality, and preserve primary-status, missing-cash,
+     unsupported-adjustment, missing-dependency, then canonical linkage order. Expose this evidence
+     through the existing reconciliation-run summary rather than a duplicate endpoint. Issues #480 and #481 retain the
      broader parent-event graph
      and lot-lineage closure. The #480 persistence foundation uses a mutable, book-scoped event
      pointer plus immutable manifest-version, node, edge, child-observation, and
