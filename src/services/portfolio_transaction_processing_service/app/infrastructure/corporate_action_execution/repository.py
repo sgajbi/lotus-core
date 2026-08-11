@@ -274,6 +274,7 @@ class SqlAlchemyCorporateActionExecutionReleaseRepository:
                 release.next_execution_ordinal == expected_ordinal,
                 release.lease_token == lease_token,
                 release.fence_token == fence_token,
+                release.lease_expires_at > func.clock_timestamp(),
             )
             .values(
                 next_execution_ordinal=next_ordinal,
