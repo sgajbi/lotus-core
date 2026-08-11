@@ -17,12 +17,27 @@ from .settings import env_bool, env_int, load_query_control_plane_settings
 logger = logging.getLogger("enterprise_readiness")
 
 _SERVICE_NAME = "lotus-core"
+CORPORATE_ACTION_SUPPORT_ROUTE = (
+    "GET /support/portfolios/{portfolio_id}/corporate-action-events"
+)
+QUERY_CONTROL_PLANE_CAPABILITY_RULES: dict[str, str] = {
+    CORPORATE_ACTION_SUPPORT_ROUTE: "core.support.read",
+}
+
+
+def query_control_plane_capability_rules() -> dict[str, str]:
+    """Return owned defaults without exposing mutable module state."""
+
+    return dict(QUERY_CONTROL_PLANE_CAPABILITY_RULES)
+
+
 _runtime = EnterpriseReadinessRuntime(
     service_name=_SERVICE_NAME,
     load_settings=load_query_control_plane_settings,
     env_bool=env_bool,
     env_int=env_int,
     logger=logger,
+    default_capability_rules=query_control_plane_capability_rules,
 )
 
 

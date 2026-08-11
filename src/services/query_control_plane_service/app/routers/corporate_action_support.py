@@ -23,6 +23,13 @@ FORBIDDEN = problem_example(
     error_code="QCP_CORPORATE_ACTION_SUPPORT_FORBIDDEN",
     instance="/support/portfolios/PORT-001/corporate-action-events",
 )
+INVALID = problem_example(
+    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+    title="Corporate-action support request invalid",
+    detail="Requested corporate-action support filters or paging are invalid.",
+    error_code="QCP_CORPORATE_ACTION_SUPPORT_INVALID",
+    instance="/support/portfolios/PORT-001/corporate-action-events",
+)
 
 
 @router.get(
@@ -32,6 +39,9 @@ FORBIDDEN = problem_example(
         status.HTTP_403_FORBIDDEN: problem_response("Tenant scope mismatch.", FORBIDDEN),
         status.HTTP_404_NOT_FOUND: problem_response(
             "Portfolio or corporate-action event not found.", NOT_FOUND
+        ),
+        status.HTTP_422_UNPROCESSABLE_CONTENT: problem_response(
+            "Filters or paging are outside governed bounds.", INVALID
         ),
     },
     summary="List current corporate-action event execution posture",
@@ -83,10 +93,10 @@ async def list_corporate_action_event_support(
             detail="Requested corporate-action support scope was not found.",
             error_code="QCP_CORPORATE_ACTION_SUPPORT_NOT_FOUND",
         )
-    except ValueError as exc:
+    except ValueError:
         raise_problem(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             title="Corporate-action support request invalid",
-            detail=str(exc),
+            detail="Requested corporate-action support filters or paging are invalid.",
             error_code="QCP_CORPORATE_ACTION_SUPPORT_INVALID",
         )

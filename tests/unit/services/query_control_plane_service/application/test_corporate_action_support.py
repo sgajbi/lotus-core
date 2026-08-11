@@ -58,6 +58,7 @@ def _evidence() -> CorporateActionEventEvidence:
             manifest_content_hash="b" * 64,
             execution_plan_content_hash="c" * 64,
             ordered_member_count=2,
+            finding_count=0,
             finding_reason_codes=(),
             correlation_id="QCP:correlation-001",
             evaluated_at=NOW - timedelta(minutes=3),

@@ -26,6 +26,7 @@ class CorporateActionReadinessEvidence:
     manifest_content_hash: str | None
     execution_plan_content_hash: str | None
     ordered_member_count: int
+    finding_count: int
     finding_reason_codes: tuple[str, ...]
     correlation_id: str | None
     evaluated_at: datetime
