@@ -23,6 +23,7 @@ from .application.core_snapshot.service import (
     CoreSnapshotDependencies,
     CoreSnapshotService,
 )
+from .application.corporate_action_support import CorporateActionSupportService
 from .application.dpm_portfolio_population import DpmPortfolioPopulationService
 from .application.dpm_source_readiness.discretionary_mandate_binding import (
     DiscretionaryMandateBindingService,
@@ -73,6 +74,9 @@ from .infrastructure.client_restriction_profile_sources import (
 from .infrastructure.client_tax_profile_sources import SqlAlchemyClientTaxProfileSourceReader
 from .infrastructure.client_tax_rule_set_sources import SqlAlchemyClientTaxRuleSetSourceReader
 from .infrastructure.core_snapshot_sources import SqlAlchemyCoreSnapshotSourceReader
+from .infrastructure.corporate_action_support_reader import (
+    SqlAlchemyCorporateActionSupportReader,
+)
 from .infrastructure.dpm_portfolio_population_sources import (
     SqlAlchemyDpmPortfolioPopulationReader,
 )
@@ -430,6 +434,15 @@ def get_operations_service(
     db: AsyncSession = Depends(get_async_db_session),
 ) -> OperationsService:
     return OperationsService(OperationsRepository(db))
+
+
+def get_corporate_action_support_service(
+    db: AsyncSession = Depends(get_async_db_session),
+) -> CorporateActionSupportService:
+    return CorporateActionSupportService(
+        reader=SqlAlchemyCorporateActionSupportReader(db),
+        clock=SystemClock().utc_now,
+    )
 
 
 def get_simulation_service(
