@@ -19,6 +19,17 @@ Use this scenario to answer customer-grade questions:
 3. whether positions, valuations, and timeseries reconcile exactly,
 4. whether worker health, backlog, and logs remain operationally clean.
 
+## Current Evidence Posture
+
+Clean exact-source daily artifact `20260811T161351Z-bank-day-load.json` is a valid
+certifying-shape capacity failure. It made all `100,000` transactions durable and reconciled all
+`1,031` database resource samples with zero unattributed clients, but only `95,873` valuation
+snapshots and `95,865` position-timeseries rows completed before the fixed drain deadline. This
+proves the service-attribution classifier while leaving the capacity profile unapproved. Issues
+`#794` and `#795` remain open; do not increase beyond 12 transaction partitions, add aggregation
+debounce, or restore rejected position-lock/MAX experiments without new evidence. A final-head
+daily run and the governed recovery, correction, and restatement profiles remain required.
+
 ## Automation
 
 Run:

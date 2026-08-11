@@ -9,8 +9,8 @@ events, calculations, and bounded metrics are unchanged; existing transaction-pr
 repository context are updated without adding a duplicate document.
 
 CR-1630 valuation lease-expiry addendum (2026-08-12): issue #487's remaining ownership gap is
-implemented locally with database certification pending. Valuation claims now persist scheduler
-owner, rotated token, and finite
+implemented locally with focused database certification complete. Valuation claims now persist
+scheduler owner, rotated token, and finite
 PostgreSQL-clock expiry; terminal and token-qualified dispatch-recovery writes require the lease to
 remain unexpired; stale recovery rechecks expiry rather than mutable `updated_at`; aggregation
 terminal writes reject expired tokens; and bounded metrics report acquisition, reclaim,
@@ -20,10 +20,11 @@ processing rows rather than fabricating authority. Pre-merge review then caught 
 and predicates, with aged-transaction PostgreSQL regression proof. The migration is governed as a
 quiesced hard cutover with stop/migrate/deploy/resume and inverse stop-first rollback order; mixed
 old/new valuation-job writers are prohibited. The fixed `900s` lease has no renewal path and
-still requires exact PostgreSQL race, daily workload, protected CI, merge, and exact-main proof
-before #487 may close. Focused proof currently passes `311` model/settings/repository/scheduler/
-control-plane/OpenAPI tests plus scoped Ruff and diff hygiene. Public API/OpenAPI response shape,
-Kafka event payload, topic, partition key, calculation, and downstream contracts are unchanged.
+still requires the final-head daily workload, protected CI, merge, and exact-main proof before #487
+may close. Focused proof includes `311` model/settings/repository/scheduler/control-plane/OpenAPI
+tests, `70` real-PostgreSQL migration/repository/concurrency tests, and `24` rebuilt-image consumer
+and control-plane persistence tests, plus scoped Ruff and diff hygiene. Public API/OpenAPI response
+shape, Kafka event payload, topic, partition key, calculation, and downstream contracts are unchanged.
 Authored wiki truth is updated and must be published with strict parity after merge.
 
 CR-1630 service-attributed database evidence addendum (2026-08-11): issue #502's attribution-first
