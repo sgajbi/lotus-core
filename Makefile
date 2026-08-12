@@ -165,6 +165,7 @@ rfc-status-ledger-guard:
 
 image-provenance-guard:
 	$(REPOSITORY_PYTHON) scripts/quality/image_provenance_guard.py
+	$(REPOSITORY_PYTHON) scripts/release/vulnerability_exception_policy.py
 
 technology-governance-pilot-guard:
 	$(REPOSITORY_PYTHON) scripts/quality/technology_governance_pilot_guard.py

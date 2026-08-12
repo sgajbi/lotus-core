@@ -98,16 +98,20 @@ def _write_required_sources(root: Path, *, bootstrap_content: str | None = None)
                 "--severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL",
                 "--kev-catalog",
                 "--kev-fetched-at",
-                "image_scan_policy.py evaluate",
-                "image_scan_policy.py unavailable",
+                "--exception-register",
+                "--exception-schema",
+                "raw.githubusercontent.com/sgajbi/lotus-platform/2868348d289fc685ecf5a218b6c73256ac3a7742",
+                "python -m scripts.release.image_scan_policy evaluate",
+                "python -m scripts.release.image_scan_policy unavailable",
                 "cisa_kev_fetch_failed",
                 "trivy_scan_failed",
                 "evidence_evaluation_failed",
+                "exception_schema_fetch_failed",
                 "Upload image scan policy receipt",
                 "image-scan-policy-${{ matrix.service }}-attempt-${{ github.run_attempt }}",
                 "if: ${{ always() }}",
                 "if-no-files-found: error",
-                "image_scan_policy.py enforce",
+                "python -m scripts.release.image_scan_policy enforce",
                 "--enforced-at",
                 "--format cyclonedx",
                 "-sbom.cdx.json",
@@ -188,8 +192,8 @@ def test_image_provenance_guard_rejects_scan_policy_ordering_drift(tmp_path: Pat
     workflow = tmp_path / ".github" / "workflows" / "image-release.yml"
     content = workflow.read_text(encoding="utf-8")
     content = content.replace(
-        "image_scan_policy.py enforce",
-        "write_image_release_manifest.py\nimage_scan_policy.py enforce",
+        "python -m scripts.release.image_scan_policy enforce",
+        "write_image_release_manifest.py\npython -m scripts.release.image_scan_policy enforce",
     )
     workflow.write_text(content, encoding="utf-8")
     _write_dockerfile(tmp_path, _complete_dockerfile())

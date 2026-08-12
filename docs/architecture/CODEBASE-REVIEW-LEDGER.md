@@ -44,6 +44,13 @@ review owner and lowering policy so a self-consistent truncated response cannot 
 absence from KEV. Its reviewed catalog version and release timestamp also reject a sufficiently
 large historical replay. Enforcement diagnostics use policy-wide wording because LOW/MEDIUM KEV
 and unclassified vulnerabilities can block in addition to HIGH/CRITICAL findings.
+The exception-lifecycle slice consumes the canonical Platform v1 register contract through one
+source-pinned authority record rather than copying governance prose. Core's register is empty by
+default. Receipt/policy identities advance to v3/KEV-exception-v1 and bind the register digest,
+schema provenance, and exact applicable IDs. Matching requires image digest, advisory, and severity
+equality; Medium joins High/Critical as plan-gated, while KEV, unclassified exploitation,
+unavailable evidence, proposed/expired/permanent records, and duplicate matches fail closed.
+Remediated history requires removal proof and cannot authorize release.
 
 CR-1630 corporate-action lease-clock addendum (2026-08-12): same-pattern review from #487 found
 that issue #939's corporate-action release claim, ownership, progress, failure, and renewal fences

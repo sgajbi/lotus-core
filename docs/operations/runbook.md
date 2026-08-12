@@ -174,8 +174,9 @@ lane:
    finding regardless of scanner severity,
 6. generates a secret-safe, digest-bound Trivy policy receipt for vulnerability and secret
    scanning and uploads it before enforcing the release decision,
-7. retains normalized Low and Medium finding identities/counts for governance, and fails on High or
-   Critical vulnerability or secret findings while retaining that receipt for remediation,
+7. retains normalized Low and Medium finding identities/counts for governance, fails on High or
+   Critical vulnerability or secret findings, and requires an exact approved remediation/exception
+   record before a Medium vulnerability can pass,
 8. generates BuildKit SBOM/provenance attestations and exports a CycloneDX SBOM artifact only
    after scan enforcement passes,
 9. signs the digest reference with Cosign only after scan enforcement passes,
@@ -190,7 +191,7 @@ still uses the immutable Git-SHA image tag and the same complete policy, signing
 controls. A manual feature-branch dispatch does not make the branch releasable and does not replace
 protected PR or exact-main validation.
 
-Each matrix service uploads a `lotus-core.image-scan-policy-receipt.v2` receipt as
+Each matrix service uploads a `lotus-core.image-scan-policy-receipt.v3` receipt as
 `image-scan-policy-<service>-attempt-<run-attempt>` even when the
 policy blocks. The receipt binds the repository, exact commit, workflow run and attempt, service,
 immutable image digest,
@@ -219,6 +220,16 @@ CISA maintains the authoritative KEV source at
 feed only inside the governed release lane; it does not infer exploitation from severity or package
 name. The reviewed baseline version and release timestamp form an anti-rollback boundary; the
 minimum count permits bounded feed evolution but cannot authorize a historical catalog replay.
+
+Vulnerability exceptions conform to the Platform-owned
+`lotus-platform.vulnerability-exception-register.v1` contract. Core avoids a duplicate schema dump:
+`contracts/security/vulnerability-exception-schema-authority.v1.json` pins the canonical repository,
+commit, path, schema identity, and digest; the separate Core register contains only local records and
+is empty by default. Only an exact image-digest, advisory, and severity match with approved,
+unexpired ownership, evidence, compensating controls, rollback, and planned-fix fields can affect a
+non-KEV decision. KEV, unknown exploitation, unavailable scans, proposed/expired/permanent records,
+and ambiguous matches fail closed. Remediated history requires removal proof and cannot authorize a
+release. `make image-provenance-guard` validates this lifecycle.
 
 ## Shared Retry Policies
 

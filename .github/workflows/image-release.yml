@@ -147,9 +147,10 @@ jobs:
           report_path="output/build-evidence/${{ matrix.service }}-trivy.json"
           receipt_path="output/build-evidence/${{ matrix.service }}-image-scan-policy.json"
           kev_catalog_path="output/build-evidence/${{ matrix.service }}-cisa-kev.json"
+          exception_schema_path="output/build-evidence/vulnerability-exception-register.schema.json"
           kev_fetched_at="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
           write_unavailable_receipt() {
-            python scripts/release/image_scan_policy.py unavailable \
+            python -m scripts.release.image_scan_policy unavailable \
               --service "${{ matrix.service }}" \
               --image-ref "${{ steps.meta.outputs.image_ref }}" \
               --image-digest "${{ steps.digest.outputs.image_digest }}" \
@@ -170,6 +171,15 @@ jobs:
             write_unavailable_receipt cisa_kev_fetch_failed
             exit 0
           fi
+          if ! curl --fail --location --silent --show-error \
+            --proto '=https' --proto-redir '=https' --max-redirs 3 \
+            --retry 3 --retry-all-errors --connect-timeout 10 --max-time 60 \
+            --user-agent "lotus-core-image-release/${GITHUB_SHA}" \
+            --output "${exception_schema_path}" \
+            "https://raw.githubusercontent.com/sgajbi/lotus-platform/2868348d289fc685ecf5a218b6c73256ac3a7742/platform-contracts/vulnerability-exceptions/vulnerability-exception-register.schema.json"; then
+            write_unavailable_receipt exception_schema_fetch_failed
+            exit 0
+          fi
           if ! docker run --rm \
             -v "$HOME/.docker:/root/.docker:ro" \
             -v "$PWD/output/build-evidence:/output" \
@@ -183,7 +193,7 @@ jobs:
             write_unavailable_receipt trivy_scan_failed
             exit 0
           fi
-          if ! python scripts/release/image_scan_policy.py evaluate \
+          if ! python -m scripts.release.image_scan_policy evaluate \
             --report "${report_path}" \
             --service "${{ matrix.service }}" \
             --image-ref "${{ steps.meta.outputs.image_ref }}" \
@@ -198,6 +208,8 @@ jobs:
             --scan-timestamp "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
             --kev-catalog "${kev_catalog_path}" \
             --kev-fetched-at "${kev_fetched_at}" \
+            --exception-register "contracts/security/vulnerability-exception-register.v1.json" \
+            --exception-schema "${exception_schema_path}" \
             --output "${receipt_path}"; then
             write_unavailable_receipt evidence_evaluation_failed
           fi
@@ -211,10 +223,12 @@ jobs:
           retention-days: 90
       - name: Enforce image vulnerability and secret policy
         run: |
-          python scripts/release/image_scan_policy.py enforce \
+          python -m scripts.release.image_scan_policy enforce \
             --receipt "output/build-evidence/${{ matrix.service }}-image-scan-policy.json" \
             --report "output/build-evidence/${{ matrix.service }}-trivy.json" \
             --kev-catalog "output/build-evidence/${{ matrix.service }}-cisa-kev.json" \
+            --exception-register "contracts/security/vulnerability-exception-register.v1.json" \
+            --exception-schema "output/build-evidence/vulnerability-exception-register.schema.json" \
             --expected-service "${{ matrix.service }}" \
             --expected-image-ref "${{ steps.meta.outputs.image_ref }}" \
             --expected-image-digest "${{ steps.digest.outputs.image_digest }}" \
