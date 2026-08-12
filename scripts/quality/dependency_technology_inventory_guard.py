@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 import re
@@ -11,6 +10,8 @@ import subprocess
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
+
+from scripts.technology_governance_identity import normalized_text_sha256
 
 ROOT = Path(__file__).resolve().parents[2]
 INVENTORY_FILE = ROOT / "contracts" / "security" / "dependency-technology-inventory.v1.json"
@@ -20,10 +21,6 @@ PIN = re.compile(r"^(?P<name>[A-Za-z0-9_.-]+)==(?P<version>[^\s;]+)$")
 
 class InventoryValidationError(RuntimeError):
     """Raised when dependency technology evidence is incomplete or has drifted."""
-
-
-def _sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def _canonical_name(value: str) -> str:
@@ -44,7 +41,7 @@ def _expected_components(source_locks: list[dict[str, Any]]) -> dict[tuple[str, 
     expected: dict[tuple[str, str], set[str]] = {}
     for lock in source_locks:
         path = ROOT / str(lock["path"])
-        if not path.is_file() or _sha256(path) != lock["sha256"]:
+        if not path.is_file() or normalized_text_sha256(path) != lock["sha256"]:
             raise InventoryValidationError(f"source lock drift: {lock['path']}")
         membership = f"{lock['scope']}:{lock['platform']}"
         for line in path.read_text(encoding="utf-8").splitlines():
@@ -59,7 +56,7 @@ def validate_inventory(*, as_of: date) -> dict[str, Any]:
     inventory = json.loads(INVENTORY_FILE.read_text(encoding="utf-8"))
     policy = inventory["policy"]
     policy_path = ROOT / str(policy["path"])
-    if not policy_path.is_file() or _sha256(policy_path) != policy["sha256"]:
+    if not policy_path.is_file() or normalized_text_sha256(policy_path) != policy["sha256"]:
         raise InventoryValidationError("dependency license policy identity has drifted")
     expected = _expected_components(inventory["source_locks"])
     actual: dict[tuple[str, str], dict[str, Any]] = {}
@@ -73,6 +70,18 @@ def validate_inventory(*, as_of: date) -> dict[str, Any]:
             raise InventoryValidationError(f"lock membership drift: {key[0]}=={key[1]}")
         license_state = str(component["license"]["classification"])
         support_state = str(component["supportability"]["classification"])
+        supportability = component["supportability"]
+        if support_state == "reviewed" and not all(
+            supportability.get(field)
+            for field in (
+                "upstream_support_policy_url",
+                "vulnerability_disclosure_url",
+                "eol_evidence_url",
+            )
+        ):
+            raise InventoryValidationError(
+                f"reviewed supportability lacks authority: {key[0]}=={key[1]}"
+            )
         due = date.fromisoformat(component["supportability"]["next_review_due"])
         if due < as_of:
             findings.append({"component": f"{key[0]}=={key[1]}", "reason": "review_stale"})
@@ -112,7 +121,7 @@ def validate_inventory(*, as_of: date) -> dict[str, Any]:
         "source_commit": _commit(),
         "generated_at_utc": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         "inventory_path": INVENTORY_FILE.relative_to(ROOT).as_posix(),
-        "inventory_sha256": _sha256(INVENTORY_FILE),
+        "inventory_sha256": normalized_text_sha256(INVENTORY_FILE),
         "component_count": len(actual),
         "finding_count": len(findings),
         "findings": sorted(findings, key=lambda item: (item["component"], item["reason"])),

@@ -13,6 +13,8 @@ from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from scripts.technology_governance_identity import normalized_text_sha256
+
 ROOT = Path(__file__).resolve().parents[2]
 POLICY_FILE = ROOT / "contracts" / "security" / "dependency-license-policy.v1.json"
 INVENTORY_FILE = ROOT / "contracts" / "security" / "dependency-technology-inventory.v1.json"
@@ -54,7 +56,7 @@ def _locked_components() -> tuple[list[dict[str, str]], dict[tuple[str, str], se
                 "path": relative_path,
                 "scope": scope,
                 "platform": platform,
-                "sha256": _sha256_bytes(path.read_bytes()),
+                "sha256": normalized_text_sha256(path),
             }
         )
         for line in path.read_text(encoding="utf-8").splitlines():
@@ -177,7 +179,18 @@ def build_inventory(*, reviewed_on: date) -> dict[str, Any]:
         prerelease = bool(re.search(r"(?:a|b|rc|dev)\d*", version, re.IGNORECASE))
         yanked = bool(info.get("yanked"))
         source_repository = _source_repository(info)
-        supportability = "blocked" if prerelease or yanked or not release_timestamp else "reviewed"
+        if prerelease:
+            supportability = "blocked"
+            supportability_reason = "prerelease_dependency"
+        elif yanked:
+            supportability = "blocked"
+            supportability_reason = "yanked_dependency"
+        elif not release_timestamp:
+            supportability = "blocked"
+            supportability_reason = "release_evidence_missing"
+        else:
+            supportability = "review_required"
+            supportability_reason = "upstream_support_evidence_not_governed"
         components.append(
             {
                 "name": name,
@@ -194,14 +207,16 @@ def build_inventory(*, reviewed_on: date) -> dict[str, Any]:
                 "license": _license_classification(info, policy),
                 "supportability": {
                     "classification": supportability,
+                    "classification_reason": supportability_reason,
                     "support_model": "upstream_release_evidence_plus_lotus_internal_lifecycle",
                     "release_evidence_url": f"https://pypi.org/project/{name}/{version}/",
-                    "vulnerability_advisory_channel": f"https://pypi.org/pypi/{name}/{version}/json",
+                    "upstream_support_policy_url": None,
+                    "vulnerability_disclosure_url": None,
                     "reviewed_on": reviewed_on.isoformat(),
                     "next_review_due": (
                         reviewed_on + timedelta(days=int(policy["review_cadence_days"]))
                     ).isoformat(),
-                    "eol_evidence": "not_published_in_pypi_release_metadata",
+                    "eol_evidence_url": None,
                     "approval_inference": "none",
                 },
             }
@@ -227,7 +242,7 @@ def build_inventory(*, reviewed_on: date) -> dict[str, Any]:
         "generator": {"id": GENERATOR_ID, "version": GENERATOR_VERSION},
         "policy": {
             "path": POLICY_FILE.relative_to(ROOT).as_posix(),
-            "sha256": _sha256_bytes(POLICY_FILE.read_bytes()),
+            "sha256": normalized_text_sha256(POLICY_FILE),
         },
         "claim_boundary": {
             "technology_state": (
