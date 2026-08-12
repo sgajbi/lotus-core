@@ -231,6 +231,12 @@ def _parse_args() -> argparse.Namespace:
         help="Upgrade only the named package while preserving other compiled pins.",
     )
     parser.add_argument("--check", action="store_true", help="Fail when generated inputs drift.")
+    parser.add_argument(
+        "--platform",
+        choices=("all", "linux", "windows"),
+        default="all",
+        help="Compile or replay-check one governed platform closure.",
+    )
     return parser.parse_args()
 
 
@@ -244,19 +250,23 @@ def main() -> int:
     else:
         RUNTIME_INPUT.write_text(rendered_input, encoding="utf-8")
     upgrade_packages = tuple(args.upgrade_package)
-    rendered_lock = _compile_linux_runtime_lock(upgrade_packages=upgrade_packages)
-    if args.check:
-        if RUNTIME_LOCK.read_text(encoding="utf-8") != rendered_lock:
-            raise SystemExit("shared-runtime.lock.txt is not the governed compiled closure")
-    else:
-        RUNTIME_LOCK.write_text(rendered_lock, encoding="utf-8")
-    if sys.platform == "win32":
+    if args.platform in {"all", "linux"}:
+        rendered_lock = _compile_linux_runtime_lock(upgrade_packages=upgrade_packages)
+        if args.check:
+            if RUNTIME_LOCK.read_text(encoding="utf-8") != rendered_lock:
+                raise SystemExit("shared-runtime.lock.txt is not the governed compiled closure")
+        else:
+            RUNTIME_LOCK.write_text(rendered_lock, encoding="utf-8")
+    if args.platform in {"all", "windows"} and sys.platform == "win32":
         rendered_windows_lock = _compile_windows_runtime_lock(upgrade_packages=upgrade_packages)
         if args.check:
             if WINDOWS_RUNTIME_LOCK.read_text(encoding="utf-8") != rendered_windows_lock:
                 raise SystemExit("shared-runtime-windows.lock.txt is not the governed closure")
         else:
             WINDOWS_RUNTIME_LOCK.write_text(rendered_windows_lock, encoding="utf-8")
+    elif args.platform == "windows":
+        if sys.platform != "win32":
+            raise SystemExit("the Windows runtime closure must be generated on governed Windows")
     return 0
 
 

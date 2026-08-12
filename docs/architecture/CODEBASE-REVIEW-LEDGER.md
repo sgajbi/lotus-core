@@ -14,7 +14,10 @@ arbitrary non-empty placeholders cannot create an allowed certification receipt.
 guard now independently requires the four governed runtime and CI lock closures, so deleting a
 lock and its matching components cannot shrink the asserted universe. Supportability deadlines are
 also derived from a non-future `reviewed_on` date and cannot exceed the cadence in the separately
-hash-bound dependency policy.
+hash-bound dependency policy. All protected delivery lanes now replay both dependency generators
+on Linux and Windows before inventory evidence can run, preventing stale input or platform closure
+certification. Official Images identity evidence must also be non-future and refreshed on the same
+date as the lifecycle observation.
 
 CR-1687 governed dependency technology inventory (2026-08-12): #926 now inventories all 104 unique
 components from the four compiled runtime/CI platform closures, never the ambient interpreter.

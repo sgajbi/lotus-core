@@ -38,8 +38,23 @@ jobs:
       - uses: actions/checkout@v6
       - uses: reviewdog/action-actionlint@v1
 
+  windows-lock-closures:
+    name: Main Releasability / Windows Lock Closure Replay
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Replay Windows runtime closure
+        run: python scripts/development/update_shared_runtime_lock.py --check --platform windows
+      - name: Replay Windows CI tooling closure
+        run: python scripts/development/update_ci_tooling_lock.py --check --platform windows
+
   lint-typecheck-contracts-security:
     name: Main Releasability / Lint Typecheck Contracts Security
+    needs: [windows-lock-closures]
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -54,6 +69,8 @@ jobs:
         run: make install-ci
       - name: Verify Dependencies
         run: make verify-dependencies-clean
+      - name: Replay Linux dependency lock closures
+        run: make dependency-lock-replay-check
       - name: Generate Dependency Technology Evidence
         run: make dependency-technology-inventory
       - name: Lint

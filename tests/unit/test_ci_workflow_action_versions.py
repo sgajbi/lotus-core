@@ -212,6 +212,27 @@ def test_governed_lanes_retain_exact_sha_dependency_technology_receipts() -> Non
         assert upload["with"]["retention-days"] == retention_days
 
 
+def test_governed_lanes_replay_all_platform_lock_closures_before_inventory() -> None:
+    for filename in ("feature-lane.yml", "pr-merge-gate.yml", "main-releasability.yml"):
+        workflow = yaml.safe_load(Path(".github/workflows", filename).read_text(encoding="utf-8"))
+        jobs = workflow["jobs"]
+        windows_steps = jobs["windows-lock-closures"]["steps"]
+        windows_commands = {step.get("run") for step in windows_steps}
+        lint_job = jobs["lint-typecheck-contracts-security"]
+        lint_commands = {step.get("run") for step in lint_job["steps"]}
+
+        assert lint_job["needs"] == ["windows-lock-closures"]
+        assert "make dependency-lock-replay-check" in lint_commands
+        assert (
+            "python scripts/development/update_shared_runtime_lock.py --check --platform windows"
+            in windows_commands
+        )
+        assert (
+            "python scripts/development/update_ci_tooling_lock.py --check --platform windows"
+            in windows_commands
+        )
+
+
 def test_local_main_parity_uses_clean_dependency_health_lane() -> None:
     makefile_lines = Path("Makefile").read_text(encoding="utf-8").splitlines()
     target_dependencies = {
