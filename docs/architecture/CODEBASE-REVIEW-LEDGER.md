@@ -10,6 +10,19 @@ historical OCI index do not imply production support. CPython 3.11 remains in se
 a conservative `2027-10-01` cutoff, Debian 12 remains in LTS through 2028-06-30, and review cadence
 is bounded to 30 days. The mature runtime stack is unchanged. Evidence and compatibility details:
 [CR-1685-BASE-IMAGE-LIFECYCLE-AUTHORITY.md](./codebase-reviews/CR-1685-BASE-IMAGE-LIFECYCLE-AUTHORITY.md).
+CR-1686 deterministic CI/build/test dependency closure (2026-08-12): #926's license-inventory
+acceptance audit found that `requirements/ci-tooling.lock.txt` contained only direct pins, while
+transitive tooling and test dependencies were resolved from mutable package metadata. A complete
+inventory from that environment would not be deterministically replayable. Core now owns one
+exact-pin `ci-tooling.in` input that includes the test requirements and is constrained by the
+runtime lock, plus pinned-pip/pip-tools-compiled Python 3.11 closures for Linux/amd64 CI and Windows/amd64
+engineering. Linux compilation runs inside the exact governed Python base image; Windows-only
+packages cannot leak into Linux CI. Generator headers use repository-relative provenance rather
+than workstation paths. Bootstrap, quality tooling, and dependency-health resolution select the
+platform-specific compiled closure. This adds no new package or runtime technology; it makes the
+already approved dependency set reproducible before license classification is attempted. #926
+remains open for deterministic license/supportability generation, fail-closed ambiguity policy,
+CI evidence, merge, and exact-main proof.
 
 CR-1684 image-scan failure-evidence addendum (2026-08-12): issue #928's hosted Image Release
 failure correctly blocked all 13 service images on HIGH/CRITICAL findings but retained zero scan

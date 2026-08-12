@@ -10,7 +10,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 RUNTIME_LOCK_FILE = ROOT / "requirements" / "shared-runtime.lock.txt"
-TOOLING_LOCK_FILE = ROOT / "requirements" / "ci-tooling.lock.txt"
+TOOLING_LOCK_FILE = (
+    ROOT
+    / "requirements"
+    / ("ci-tooling-windows.lock.txt" if sys.platform == "win32" else "ci-tooling.lock.txt")
+)
 PORTFOLIO_COMMON_PROJECT = ROOT / "src" / "libs" / "portfolio-common"
 
 

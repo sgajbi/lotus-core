@@ -32,7 +32,11 @@ except ModuleNotFoundError:
 ROOT = Path(__file__).resolve().parents[2]
 RUNTIME_LOCK_FILE = ROOT / "requirements" / "shared-runtime.lock.txt"
 TEST_REQUIREMENTS_FILE = ROOT / "tests" / "requirements.txt"
-TOOLING_LOCK_FILE = ROOT / "requirements" / "ci-tooling.lock.txt"
+TOOLING_LOCK_FILE = (
+    ROOT
+    / "requirements"
+    / ("ci-tooling-windows.lock.txt" if sys.platform == "win32" else "ci-tooling.lock.txt")
+)
 PIP_AUDIT_IGNORED_VULNERABILITIES: tuple[str, ...] = ()
 DEFAULT_CACHE_ROOT = ROOT / ".cache" / "dependency-health"
 DEFAULT_REPORT_FILE = ROOT / "output" / "dependency-health" / "report.json"

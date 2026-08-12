@@ -1116,6 +1116,17 @@ Most relevant current governance:
     Dockerfiles so supply-chain coverage cannot silently drift. Repository admins still need to
     enable Dependabot alerts/security updates and CodeQL/default code scanning in GitHub settings;
     the repo file does not enable those settings by itself.
+    Dependency evidence must be built from compiled closures, not an ambient or partially pinned
+    environment. `requirements/ci-tooling.in` owns direct CI/build/test inputs and includes the
+    governed test requirements while constraining overlap to `shared-runtime.lock.txt`.
+    `update_ci_tooling_lock.py` uses pinned `pip==26.1.2`, established `pip-tools==7.5.3`, and
+    Python 3.11 to compile
+    separate `linux/amd64` and `windows/amd64` closures; Linux compilation runs in the exact pinned
+    Python base image so Windows marker packages cannot contaminate CI. `ci-tooling.lock.txt` is the
+    Linux CI authority and `ci-tooling-windows.lock.txt` is the local Windows authority. Bootstrap,
+    quality-tool dispatch, and dependency-health checks select by execution platform. Regenerate
+    both with `make compile-ci-tooling-lock`; do not hand-edit either lock or generate license/
+    supportability evidence from a shared global environment.
 50. Cost-calculator persistence boundaries must strip event-envelope fields before transaction-table
     upserts. `TransactionEvent` carries governed event fields such as `event_type`,
     `schema_version`, and `correlation_id` that are not `transactions` columns. Use the persistence

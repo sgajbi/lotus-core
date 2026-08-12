@@ -11,7 +11,11 @@ from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_LOCK_FILE = ROOT / "requirements" / "ci-tooling.lock.txt"
+DEFAULT_LOCK_FILE = (
+    ROOT
+    / "requirements"
+    / ("ci-tooling-windows.lock.txt" if sys.platform == "win32" else "ci-tooling.lock.txt")
+)
 EXACT_PIN_PATTERN = re.compile(r"^(?P<name>[A-Za-z0-9_.-]+)==(?P<version>[^\s;]+)$")
 MODULE_BY_DISTRIBUTION = {
     "bandit": "bandit",
