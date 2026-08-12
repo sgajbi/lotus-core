@@ -1055,8 +1055,9 @@ Most relevant current governance:
     `.github/workflows/image-release.yml` remains the only image-push path. Before signing or
     promotion evidence, it uses `scripts/release/image_scan_policy.py` to convert Trivy's
     immutable-digest vulnerability and secret scan into a secret-safe policy receipt, uploads one
-    service-specific receipt even when HIGH/CRITICAL enforcement blocks. Receipts retain normalized
-    LOW/MEDIUM/HIGH/CRITICAL identities and counts, while UNKNOWN severity fails closed. The lane
+    service-specific receipt even when enforcement blocks. Receipts retain normalized
+    UNKNOWN/LOW/MEDIUM/HIGH/CRITICAL identities and counts. UNKNOWN severity remains an actionable,
+    non-exceptionable blocked finding instead of being collapsed into unavailable evidence. The lane
     binds a freshly fetched official CISA KEV catalog identity/digest and blocks any known-exploited
     finding regardless of scanner severity. Missing, malformed, empty, future-dated, stale, or
     below or older than the reviewed `contracts/security/cisa-kev-authority-policy.v1.json`

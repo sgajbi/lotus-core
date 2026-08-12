@@ -23,14 +23,15 @@ from scripts.release.vulnerability_exception_policy import (
     load_vulnerability_exception_register,
 )
 
-SCHEMA_VERSION = "lotus-core.image-scan-policy-receipt.v3"
-POLICY_ID = "lotus-core.image-release-vulnerability-secret-kev-exceptions.v1"
+SCHEMA_VERSION = "lotus-core.image-scan-policy-receipt.v4"
+POLICY_ID = "lotus-core.image-release-vulnerability-secret-kev-exceptions.v2"
 SCANNER_NAME = "trivy"
 SCANNER_VERSION = "0.56.2"
 SCANNER_IMAGE = "aquasec/trivy:0.56.2"
 BLOCKING_SEVERITIES = frozenset({"HIGH", "CRITICAL"})
 KNOWN_NONBLOCKING_SEVERITIES = frozenset({"LOW", "MEDIUM"})
-KNOWN_SEVERITIES = BLOCKING_SEVERITIES | KNOWN_NONBLOCKING_SEVERITIES
+UNCLASSIFIED_SEVERITIES = frozenset({"UNKNOWN"})
+KNOWN_SEVERITIES = BLOCKING_SEVERITIES | KNOWN_NONBLOCKING_SEVERITIES | UNCLASSIFIED_SEVERITIES
 FULL_GIT_SHA_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 SHA256_DIGEST_PATTERN = re.compile(r"^sha256:[0-9a-f]{64}$")
 MAX_KEV_TO_SCAN_AGE_SECONDS = 900
@@ -174,8 +175,6 @@ def _normalized_vulnerability(
     if not isinstance(raw, dict):
         raise ScanPolicyError("Trivy vulnerability entries must be objects")
     severity = _required_string(raw.get("Severity"), field="vulnerability severity").upper()
-    if severity == "UNKNOWN":
-        raise ScanPolicyError("unknown vulnerability severity cannot support a release decision")
     if severity not in KNOWN_SEVERITIES:
         raise ScanPolicyError(f"unsupported vulnerability severity: {severity}")
     finding_id = _required_string(raw.get("VulnerabilityID"), field="vulnerability ID")
@@ -187,7 +186,7 @@ def _normalized_vulnerability(
             "known_exploited" if known_exploited else "not_listed_in_current_cisa_kev"
         )
     approved_exception_ids: tuple[str, ...] = ()
-    if known_exploited is False:
+    if known_exploited is False and severity not in UNCLASSIFIED_SEVERITIES:
         approved_exception_ids = exception_register.approved_exception_ids(
             image_digest=image_digest, advisory_id=finding_id, severity=severity
         )
@@ -212,8 +211,6 @@ def _normalized_secret(raw: object, *, target: str, target_class: str) -> dict[s
     if not isinstance(raw, dict):
         raise ScanPolicyError("Trivy secret entries must be objects")
     severity = _required_string(raw.get("Severity"), field="secret severity").upper()
-    if severity == "UNKNOWN":
-        raise ScanPolicyError("unknown secret severity cannot support a release decision")
     if severity not in KNOWN_SEVERITIES:
         raise ScanPolicyError(f"unsupported secret severity: {severity}")
     return {
@@ -277,6 +274,8 @@ def _normalized_findings(
 
 
 def _finding_blocks(finding: dict[str, object]) -> bool:
+    if finding["severity"] in UNCLASSIFIED_SEVERITIES:
+        return True
     if finding["finding_type"] == "secret":
         return finding["severity"] in BLOCKING_SEVERITIES
     if finding["known_exploited"] is True or finding["known_exploited"] is None:
@@ -362,6 +361,9 @@ def build_policy_receipt(
         finding["finding_type"] == "vulnerability" and finding["known_exploited"] is None
         for finding in findings
     )
+    unclassified_severity_count = sum(
+        finding["severity"] in UNCLASSIFIED_SEVERITIES for finding in findings
+    )
     approved_exception_count = sum(bool(finding["approved_exception_ids"]) for finding in findings)
     return {
         "schema_version": SCHEMA_VERSION,
@@ -395,6 +397,7 @@ def build_policy_receipt(
             "blocking_finding_count": blocking_count,
             "known_exploited_finding_count": known_exploited_count,
             "unclassified_exploitation_finding_count": unclassified_exploitation_count,
+            "unclassified_severity_finding_count": unclassified_severity_count,
             "approved_exception_finding_count": approved_exception_count,
             "severity_counts": severity_counts,
         },
@@ -578,6 +581,7 @@ def enforce_policy_receipt(
     count = policy.get("blocking_finding_count")
     known_exploited_count = policy.get("known_exploited_finding_count")
     unclassified_exploitation_count = policy.get("unclassified_exploitation_finding_count")
+    unclassified_severity_count = policy.get("unclassified_severity_finding_count")
     approved_exception_count = policy.get("approved_exception_finding_count")
     severity_counts = policy.get("severity_counts")
     findings = receipt.get("findings")
@@ -596,6 +600,9 @@ def enforce_policy_receipt(
         finding["finding_type"] == "vulnerability" and finding["known_exploited"] is None
         for finding in findings
     )
+    expected_unclassified_severity_count = sum(
+        finding["severity"] in UNCLASSIFIED_SEVERITIES for finding in findings
+    )
     expected_approved_exception_count = sum(
         bool(finding["approved_exception_ids"]) for finding in findings
     )
@@ -607,6 +614,8 @@ def enforce_policy_receipt(
         raise ScanPolicyError("image scan policy receipt known-exploited count is inconsistent")
     if unclassified_exploitation_count != expected_unclassified_count:
         raise ScanPolicyError("image scan policy receipt exploitation count is inconsistent")
+    if unclassified_severity_count != expected_unclassified_severity_count:
+        raise ScanPolicyError("image scan policy receipt severity count is inconsistent")
     if approved_exception_count != expected_approved_exception_count:
         raise ScanPolicyError("image scan policy receipt exception count is inconsistent")
     expected_receipt = build_policy_receipt(
