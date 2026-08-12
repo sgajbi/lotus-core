@@ -286,7 +286,9 @@ def expected_cashflow_sign(payload: dict, classification: str) -> int:
 
 
 @pytest.fixture(scope="module")
-def setup_transaction_type_coverage_data(clean_db_module, e2e_api_client: E2EApiClient):
+def setup_transaction_type_coverage_data(
+    clean_db_module, e2e_api_client: E2EApiClient, poll_db_until
+):
     suffix = unique_suffix()
     portfolio_id = f"E2E_TX_COVER_{suffix}"
     security_id = f"SEC_COVER_{suffix}"
@@ -362,16 +364,35 @@ def setup_transaction_type_coverage_data(clean_db_module, e2e_api_client: E2EApi
         )
         for tx_type in sorted(REDEMPTION_TYPES)
     ]
-    e2e_api_client.ingest(
-        "/ingest/transactions", {"transactions": [*redemption_acquisitions, *payloads]}
+    e2e_api_client.ingest("/ingest/transactions", {"transactions": redemption_acquisitions})
+    acquisition_params = {
+        f"acquisition_id_{index}": acquisition["transaction_id"]
+        for index, acquisition in enumerate(redemption_acquisitions)
+    }
+    acquisition_placeholders = ", ".join(f":{name}" for name in acquisition_params)
+    poll_db_until(
+        query=f"""
+            SELECT count(DISTINCT transaction_id)
+            FROM position_history
+            WHERE transaction_id IN ({acquisition_placeholders})
+              AND quantity = 100
+        """,
+        params=acquisition_params,
+        validation_func=lambda row: row is not None and row[0] == len(redemption_acquisitions),
+        timeout=120,
+        fail_message="Redemption acquisition positions were not fully applied",
     )
 
+    e2e_api_client.ingest("/ingest/transactions", {"transactions": payloads})
+
     query_url = f"/portfolios/{portfolio_id}/transactions"
+    submitted_transaction_ids = {
+        transaction["transaction_id"] for transaction in [*redemption_acquisitions, *payloads]
+    }
     e2e_api_client.poll_for_data(
         query_url,
-        lambda data: (
-            data.get("transactions")
-            and len(data["transactions"]) >= len(payloads) + len(redemption_acquisitions)
+        lambda data: submitted_transaction_ids.issubset(
+            {transaction["transaction_id"] for transaction in data.get("transactions", [])}
         ),
         timeout=120,
         fail_message="Transaction type coverage transactions were not fully queryable in time.",
