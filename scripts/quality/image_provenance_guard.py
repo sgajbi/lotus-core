@@ -32,6 +32,7 @@ SECRET_LIKE_TOKENS = ("SECRET", "TOKEN", "PASSWORD", "CREDENTIAL", "PRIVATE_KEY"
 
 REQUIRED_RELEASE_WORKFLOW_SNIPPETS = (
     "fail-fast: false",
+    "github.event_name == 'workflow_dispatch'",
     "packages: write",
     "id-token: write",
     "docker buildx build",

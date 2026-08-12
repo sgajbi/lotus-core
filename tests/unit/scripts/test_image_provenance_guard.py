@@ -78,6 +78,7 @@ def _write_required_sources(root: Path, *, bootstrap_content: str | None = None)
         "\n".join(
             [
                 "fail-fast: false",
+                "github.event_name == 'workflow_dispatch'",
                 "permissions:",
                 "  packages: write",
                 "  id-token: write",
