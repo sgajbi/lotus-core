@@ -181,6 +181,10 @@ vulnerability-disclosure, and lifecycle authorities are recorded. Lotus retains 
 and removal ownership. Compound, ambiguous, missing, stale, yanked, pre-release, or unsupported
 evidence blocks certification. Ordinary CI remains report-only under the Platform pilot but always
 uploads the exact-SHA receipt; explicit certification uses the fail-closed target.
+`make refresh-dependency-technology-inventory` refreshes machine-owned lock and PyPI evidence and
+intentionally resets the three human-reviewed support authorities to `null`. It is not a
+certification workflow: approved authority records need a governed preservation/review path under
+#926, followed by diff review and both inventory and certification guards.
 
 The key covers the Python implementation/version, platform, invoking pip version, root and service
 `pyproject.toml` files, dependency/test/tooling lock inputs, and both cache implementation modules.

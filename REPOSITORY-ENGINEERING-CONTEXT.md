@@ -1144,8 +1144,12 @@ Most relevant current governance:
     component is explicitly approved. PyPI release existence is not a support policy or
     vulnerability-disclosure channel; supportability requires governed upstream support,
     disclosure, and lifecycle authorities. Missing, compound, conflicting, generic-family, stale,
-    yanked, or pre-release evidence is never approved from popularity or package name. Refresh only
-    through `make refresh-dependency-technology-inventory`, then review the machine diff.
+    yanked, or pre-release evidence is never approved from popularity or package name.
+    `make refresh-dependency-technology-inventory` refreshes the lock/PyPI baseline and deliberately
+    resets human-reviewed authorities to `null`; it cannot complete #926 certification alone.
+    Governed authority review and a reviewed preservation workflow remain required before any
+    component can become `reviewed`; always inspect the machine diff and rerun both inventory and
+    certification guards.
     Image Release trust is separately bounded: only `main` and `v*` tags may push, sign, export
     release SBOMs, write release manifests, render deployments, or declare promotion eligibility.
     Feature-ref `workflow_dispatch` has read-only permissions, builds runner-local images, and emits
