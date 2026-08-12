@@ -1142,7 +1142,9 @@ Most relevant current governance:
     `dependency-technology-inventory.v1.json` binds every exact package/version to lock membership,
     source metadata digest, license classification, release evidence, and a 30-day review
     cadence. `make dependency-technology-inventory` validates structure and emits an exact-commit
-    report-only receipt; `make dependency-technology-certify` additionally fails unless every
+    report-only receipt without release authority; `make dependency-technology-certify`
+    additionally refetches every exact PyPI JSON authority for a potentially allowed inventory,
+    verifies its canonical digest and decisive yanked/upload/license fields, and fails unless every
     component is explicitly approved. PyPI release existence is not a support policy or
     vulnerability-disclosure channel; supportability requires governed upstream support,
     disclosure, and lifecycle authorities. Missing, compound, conflicting, generic-family, stale,

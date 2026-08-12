@@ -24,7 +24,10 @@ declared-expression, classifier-mapping, or legacy-mapping evidence; an authored
 cannot create release authority. Every approval path rejects ambiguous or conflicting classifiers.
 The validator also independently binds exact PyPI URLs, metadata digest shape, upload time,
 prerelease identity, yanked posture, release-evidence URL, and no-inference posture; yanked and
-prerelease packages remain blocking even if classification labels are edited.
+prerelease packages remain blocking even if classification labels are edited. Report-only receipts
+cannot become release-certifying. For a finding-free candidate, the explicit certification target
+refetches each exact PyPI JSON response, recomputes its canonical digest, and compares yanked,
+upload-time, and raw license evidence before it can emit an allowed decision.
 
 CR-1687 governed dependency technology inventory (2026-08-12): #926 now inventories all 104 unique
 components from the four compiled runtime/CI platform closures, never the ambient interpreter.

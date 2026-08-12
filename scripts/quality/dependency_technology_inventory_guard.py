@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
 import subprocess
+import urllib.error
+import urllib.request
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
@@ -26,6 +29,7 @@ REQUIRED_SOURCE_LOCKS = frozenset(
         ("requirements/ci-tooling-windows.lock.txt", "ci_build_test", "windows/amd64"),
     }
 )
+PYPI_USER_AGENT = "lotus-core-dependency-technology-certifier/1.0.0"
 
 
 class InventoryValidationError(RuntimeError):
@@ -47,6 +51,52 @@ def _is_governed_authority_url(value: object) -> bool:
 
 def _canonical_name(value: str) -> str:
     return re.sub(r"[-_.]+", "-", value).lower()
+
+
+def _canonical_json(value: object) -> bytes:
+    return json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+
+def _fetch_pypi_metadata(url: str) -> dict[str, Any]:
+    request = urllib.request.Request(url, headers={"User-Agent": PYPI_USER_AGENT})
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:  # noqa: S310
+            payload = json.load(response)
+    except (OSError, urllib.error.URLError, json.JSONDecodeError) as exc:
+        raise InventoryValidationError(f"unable to revalidate PyPI authority: {url}") from exc
+    if not isinstance(payload, dict) or not isinstance(payload.get("info"), dict):
+        raise InventoryValidationError(f"invalid PyPI authority response: {url}")
+    return payload
+
+
+def _verify_pypi_authority(component: dict[str, Any], component_id: str) -> None:
+    payload = _fetch_pypi_metadata(str(component["pypi_json_url"]))
+    digest = hashlib.sha256(_canonical_json(payload)).hexdigest()
+    if digest != component["pypi_metadata_sha256"]:
+        raise InventoryValidationError(f"PyPI metadata digest drift: {component_id}")
+    info = payload["info"]
+    release_timestamps = sorted(
+        str(item.get("upload_time_iso_8601"))
+        for item in payload.get("urls", [])
+        if item.get("upload_time_iso_8601")
+    )
+    expected_license = {
+        "declared_expression": str(info.get("license_expression") or "").strip() or None,
+        "legacy_value": str(info.get("license") or "").strip() or None,
+        "classifiers": sorted(
+            str(value)
+            for value in info.get("classifiers", [])
+            if str(value).startswith("License ::")
+        ),
+    }
+    recorded_license = component["license"]
+    if any(recorded_license.get(field) != value for field, value in expected_license.items()):
+        raise InventoryValidationError(f"PyPI license evidence drift: {component_id}")
+    expected_uploaded_at = release_timestamps[0] if release_timestamps else None
+    if component.get("release_uploaded_at") != expected_uploaded_at:
+        raise InventoryValidationError(f"PyPI release timestamp drift: {component_id}")
+    if component.get("yanked") is not bool(info.get("yanked")):
+        raise InventoryValidationError(f"PyPI yanked evidence drift: {component_id}")
 
 
 def _validate_approved_license(
@@ -141,7 +191,7 @@ def _expected_components(source_locks: list[dict[str, Any]]) -> dict[tuple[str, 
     return expected
 
 
-def validate_inventory(*, as_of: date) -> dict[str, Any]:
+def validate_inventory(*, as_of: date, verify_pypi_authority: bool = False) -> dict[str, Any]:
     inventory = json.loads(INVENTORY_FILE.read_text(encoding="utf-8"))
     policy = inventory["policy"]
     policy_path = ROOT / str(policy["path"])
@@ -249,10 +299,17 @@ def validate_inventory(*, as_of: date) -> dict[str, Any]:
         raise InventoryValidationError(
             f"component coverage drift: missing={missing}, extra={extra}"
         )
+    authority_revalidated = False
+    if not findings and verify_pypi_authority:
+        for key, component in sorted(actual.items()):
+            _verify_pypi_authority(component, f"{key[0]}=={key[1]}")
+        authority_revalidated = True
     return {
         "schema_version": "lotus-core.dependency-technology-inventory-receipt.v1",
         "status": "passed",
-        "certification_decision": "blocked" if findings else "allowed",
+        "certification_decision": (
+            "allowed" if not findings and authority_revalidated else "blocked"
+        ),
         "repository": "https://github.com/sgajbi/lotus-core",
         "source_commit": _commit(),
         "generated_at_utc": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
@@ -261,8 +318,12 @@ def validate_inventory(*, as_of: date) -> dict[str, Any]:
         "component_count": len(actual),
         "finding_count": len(findings),
         "findings": sorted(findings, key=lambda item: (item["component"], item["reason"])),
+        "pypi_authority_revalidation": {
+            "required_for_certification": True,
+            "status": "passed" if authority_revalidated else "not_run",
+        },
         "claim_boundary": {
-            "release_certifying": not findings,
+            "release_certifying": not findings and authority_revalidated,
             "production_ready_claim": False,
             "bank_buyable_claim": False,
         },
@@ -281,7 +342,10 @@ def main() -> int:
     args = parser.parse_args()
     exit_code = 0
     try:
-        receipt = validate_inventory(as_of=args.as_of)
+        receipt = validate_inventory(
+            as_of=args.as_of,
+            verify_pypi_authority=args.enforce_allowed,
+        )
     except (
         OSError,
         KeyError,
