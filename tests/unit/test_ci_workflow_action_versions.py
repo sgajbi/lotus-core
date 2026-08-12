@@ -450,7 +450,7 @@ def test_image_release_workflow_enforces_supply_chain_controls() -> None:
         "--sbom=true",
         "--provenance=true",
         "aquasec/trivy",
-        "--severity HIGH,CRITICAL",
+        "--severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL",
         "--format cyclonedx",
         "-sbom.cdx.json",
         "cosign sign --yes",

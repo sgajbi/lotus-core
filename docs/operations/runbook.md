@@ -168,16 +168,20 @@ lane:
 2. adds OCI labels for commit, branch, repo URL, image version, build time, and CI run ID,
 3. pushes images to GHCR from CI only,
 4. captures the resolved image digest in a release manifest and runtime metadata,
-5. generates a secret-safe, digest-bound Trivy policy receipt for vulnerability and secret
+5. fetches the authoritative CISA Known Exploited Vulnerabilities catalog over HTTPS-only redirects, validates it against the reviewed completeness floor in
+   `contracts/security/cisa-kev-authority-policy.v1.json`, binds its
+   version, release/fetch times, entry count, and source digest into the receipt, and blocks a KEV
+   finding regardless of scanner severity,
+6. generates a secret-safe, digest-bound Trivy policy receipt for vulnerability and secret
    scanning and uploads it before enforcing the release decision,
-6. retains normalized Low and Medium finding identities/counts for governance, and fails on High or
+7. retains normalized Low and Medium finding identities/counts for governance, and fails on High or
    Critical vulnerability or secret findings while retaining that receipt for remediation,
-7. generates BuildKit SBOM/provenance attestations and exports a CycloneDX SBOM artifact only
+8. generates BuildKit SBOM/provenance attestations and exports a CycloneDX SBOM artifact only
    after scan enforcement passes,
-8. signs the digest reference with Cosign only after scan enforcement passes,
-9. records digest-based Kubernetes deployment and same-image promotion evidence across `dev`,
+9. signs the digest reference with Cosign only after scan enforcement passes,
+10. records digest-based Kubernetes deployment and same-image promotion evidence across `dev`,
    `uat`, and `prod`, and
-10. rejects secret-like Dockerfile or workflow build ARG/ENV additions through
+11. rejects secret-like Dockerfile or workflow build ARG/ENV additions through
    `make image-provenance-guard`.
 
 Automatic publication remains limited to `main` and release tags. An authorized operator may use
@@ -186,12 +190,21 @@ still uses the immutable Git-SHA image tag and the same complete policy, signing
 controls. A manual feature-branch dispatch does not make the branch releasable and does not replace
 protected PR or exact-main validation.
 
-Each matrix service uploads `image-scan-policy-<service>-attempt-<run-attempt>` even when the
-policy blocks. The receipt
-binds the repository, exact commit, workflow run and attempt, service, immutable image digest,
+Each matrix service uploads a `lotus-core.image-scan-policy-receipt.v2` receipt as
+`image-scan-policy-<service>-attempt-<run-attempt>` even when the
+policy blocks. The receipt binds the repository, exact commit, workflow run and attempt, service,
+immutable image digest,
 scanner identity, scan time, source-report digest, normalized finding identities, and decision. It
 never copies a secret match or source-code excerpt from Trivy. A missing, malformed, wrong-digest,
-or inconsistent receipt fails closed. Blocked jobs must not export a release SBOM, sign the image,
+or inconsistent receipt fails closed. The CISA KEV feed is fetched immediately before scanning;
+missing, malformed, empty, wrong-title, duplicate-CVE, future-dated, below-baseline, or replayed
+pre-baseline catalog
+evidence fails closed. Fetch, scan, and evaluation failures produce a bounded reason-code receipt
+without copying remote bodies or scanner error detail. Enforcement rejects receipts or KEV evidence
+older than 30 minutes (or future-dated beyond 60 seconds), while generation separately requires the
+KEV fetch to precede the scan by no more than 15 minutes. A vulnerability without a classifiable CVE exploitation identity
+also blocks instead of being assumed absent from KEV. The receipt retains only KEV catalog identity
+and digest, not a duplicate raw catalog. Blocked jobs must not export a release SBOM, sign the image,
 write a promotion manifest, or render a deployment. Retained failure receipts are remediation
 evidence only; they do not certify an image for release.
 
@@ -200,6 +213,12 @@ The enforcement command is:
 ```powershell
 make image-provenance-guard
 ```
+
+CISA maintains the authoritative KEV source at
+<https://www.cisa.gov/known-exploited-vulnerabilities-catalog>. Core consumes the official JSON
+feed only inside the governed release lane; it does not infer exploitation from severity or package
+name. The reviewed baseline version and release timestamp form an anti-rollback boundary; the
+minimum count permits bounded feed evolution but cannot authorize a historical catalog replay.
 
 ## Shared Retry Policies
 

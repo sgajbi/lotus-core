@@ -25,6 +25,25 @@ The receipt subsequently expanded to retain normalized LOW/MEDIUM/HIGH/CRITICAL 
 exact severity counts without changing the HIGH/CRITICAL release block. UNKNOWN severity remains
 fail-closed. This supplies source evidence for later Medium remediation ownership and Low review
 cadence without implying that either lifecycle is complete.
+The next #928 slice consumes CISA's official living KEV JSON feed immediately before each image
+scan, validates its title/version/release/fetch/count/unique-CVE shape, binds its source digest to the
+receipt, and classifies exact CVE membership. A KEV finding blocks irrespective of scanner severity;
+unavailable, malformed, empty, future-dated, stale, UNKNOWN-severity, or non-CVE exploitation
+authority fails closed. Enforcement rebuilds the expected receipt from the retained raw scan and
+catalog before accepting its decision, so tampering with catalog identity or exploitation status
+cannot create a pass. Only the compact catalog identity/digest enters the uploaded receipt; the raw
+catalog and Trivy report remain unuploaded. This uses established Trivy and the authoritative CISA
+source and introduces no package, agent, datastore, service, or runtime topology.
+Adversarial review then hardened that contract before commit: redirects are HTTPS-only and bounded;
+the living feed must meet a reviewed 1,600-entry floor derived from the 1,665-entry 2026.08.11
+baseline; receipt semantics moved to `lotus-core.image-scan-policy-receipt.v2` with KEV-aware policy
+identity; source-fetch, scanner, and evaluation failures produce exact-source secret-safe reason-code
+receipts; and enforcement checks receipt/catalog age against its own supplied UTC instant. Prior v1
+receipts are explicitly unsupported by current enforcement. The baseline contract records its
+review owner and lowering policy so a self-consistent truncated response cannot authorize false
+absence from KEV. Its reviewed catalog version and release timestamp also reject a sufficiently
+large historical replay. Enforcement diagnostics use policy-wide wording because LOW/MEDIUM KEV
+and unclassified vulnerabilities can block in addition to HIGH/CRITICAL findings.
 
 CR-1630 corporate-action lease-clock addendum (2026-08-12): same-pattern review from #487 found
 that issue #939's corporate-action release claim, ownership, progress, failure, and renewal fences

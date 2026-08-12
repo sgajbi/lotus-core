@@ -84,12 +84,20 @@ The manifest identifies Git commit, branch, repository, CI run, generated-at tim
 IDs, Dockerfile hashes, Compose hash, dependency-lock hash, dependency-closure hash, bundle digest,
 and manifest content hash. Release publication remains separate: only Image Release pushes to GHCR,
 scans and signs images, emits attestations/SBOMs, and records digest-based promotion evidence.
-Image Release uploads a separate `image-scan-policy-<service>-attempt-<run-attempt>` receipt before
+Image Release uploads a separate versioned `image-scan-policy-<service>-attempt-<run-attempt>` receipt before
 enforcing each immutable image decision. The receipt retains normalized Low, Medium, High, and
 Critical finding identities and counts. A High/Critical vulnerability or secret finding blocks all later
 SBOM-export, signing, release-manifest, and deployment-rendering steps but preserves the secret-safe
 receipt for remediation. Missing, malformed, wrong-digest, and inconsistent receipts fail closed;
 a retained blocked receipt is not release certification.
+Each scan receipt also binds a freshly fetched official CISA KEV catalog version, release/fetch
+times, entry count, and source digest. Known-exploited findings block at every severity. Missing,
+malformed, below-baseline, stale, or unclassifiable exploitation evidence fails closed; Core never
+infers KEV status from package name or severity. HTTPS-only redirects prevent source downgrade;
+the reviewed completeness and anti-rollback boundary lives in
+`contracts/security/cisa-kev-authority-policy.v1.json`.
+Fetch, scan, or evaluation failure still uploads an exact-source, secret-safe reason-code receipt,
+and enforcement rejects evidence older than 30 minutes or materially future-dated.
 Automatic Image Release publication is limited to `main` and release tags. An authorized manual
 dispatch may exercise an exact feature SHA for pre-merge supply-chain evidence, but it retains the
 same SHA tag and controls and does not replace protected PR or exact-main proof.

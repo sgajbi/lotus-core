@@ -146,17 +146,44 @@ jobs:
           scanner_image="aquasec/trivy:0.56.2"
           report_path="output/build-evidence/${{ matrix.service }}-trivy.json"
           receipt_path="output/build-evidence/${{ matrix.service }}-image-scan-policy.json"
-          docker run --rm \
+          kev_catalog_path="output/build-evidence/${{ matrix.service }}-cisa-kev.json"
+          kev_fetched_at="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          write_unavailable_receipt() {
+            python scripts/release/image_scan_policy.py unavailable \
+              --service "${{ matrix.service }}" \
+              --image-ref "${{ steps.meta.outputs.image_ref }}" \
+              --image-digest "${{ steps.digest.outputs.image_digest }}" \
+              --repository "${GITHUB_REPOSITORY}" \
+              --git-commit-sha "${GITHUB_SHA}" \
+              --ci-run-id "${GITHUB_RUN_ID}" \
+              --ci-run-attempt "${GITHUB_RUN_ATTEMPT}" \
+              --generated-at "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
+              --reason-code "$1" \
+              --output "${receipt_path}"
+          }
+          if ! curl --fail --location --silent --show-error \
+            --proto '=https' --proto-redir '=https' --max-redirs 3 \
+            --retry 3 --retry-all-errors --connect-timeout 10 --max-time 60 \
+            --user-agent "lotus-core-image-release/${GITHUB_SHA}" \
+            --output "${kev_catalog_path}" \
+            "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"; then
+            write_unavailable_receipt cisa_kev_fetch_failed
+            exit 0
+          fi
+          if ! docker run --rm \
             -v "$HOME/.docker:/root/.docker:ro" \
             -v "$PWD/output/build-evidence:/output" \
             "${scanner_image}" image \
             --exit-code 0 \
             --scanners vuln,secret \
-            --severity LOW,MEDIUM,HIGH,CRITICAL \
+            --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL \
             --format json \
             --output "/output/${{ matrix.service }}-trivy.json" \
-            "${{ steps.meta.outputs.image_ref }}@${{ steps.digest.outputs.image_digest }}"
-          python scripts/release/image_scan_policy.py evaluate \
+            "${{ steps.meta.outputs.image_ref }}@${{ steps.digest.outputs.image_digest }}"; then
+            write_unavailable_receipt trivy_scan_failed
+            exit 0
+          fi
+          if ! python scripts/release/image_scan_policy.py evaluate \
             --report "${report_path}" \
             --service "${{ matrix.service }}" \
             --image-ref "${{ steps.meta.outputs.image_ref }}" \
@@ -169,7 +196,11 @@ jobs:
             --scanner-version 0.56.2 \
             --scanner-image "${scanner_image}" \
             --scan-timestamp "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
-            --output "${receipt_path}"
+            --kev-catalog "${kev_catalog_path}" \
+            --kev-fetched-at "${kev_fetched_at}" \
+            --output "${receipt_path}"; then
+            write_unavailable_receipt evidence_evaluation_failed
+          fi
       - name: Upload image scan policy receipt
         if: ${{ always() }}
         uses: actions/upload-artifact@v7
@@ -182,13 +213,16 @@ jobs:
         run: |
           python scripts/release/image_scan_policy.py enforce \
             --receipt "output/build-evidence/${{ matrix.service }}-image-scan-policy.json" \
+            --report "output/build-evidence/${{ matrix.service }}-trivy.json" \
+            --kev-catalog "output/build-evidence/${{ matrix.service }}-cisa-kev.json" \
             --expected-service "${{ matrix.service }}" \
             --expected-image-ref "${{ steps.meta.outputs.image_ref }}" \
             --expected-image-digest "${{ steps.digest.outputs.image_digest }}" \
             --expected-repository "${GITHUB_REPOSITORY}" \
             --expected-git-commit-sha "${GITHUB_SHA}" \
             --expected-ci-run-id "${GITHUB_RUN_ID}" \
-            --expected-ci-run-attempt "${GITHUB_RUN_ATTEMPT}"
+            --expected-ci-run-attempt "${GITHUB_RUN_ATTEMPT}" \
+            --enforced-at "$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
       - name: Export image SBOM
         shell: bash
         run: |
