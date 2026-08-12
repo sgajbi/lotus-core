@@ -20,7 +20,10 @@ certification. Official Images identity evidence must also be non-future and ref
 date as the lifecycle observation.
 An `approved` dependency license is now recomputed against the hash-bound policy allowlist and its
 declared-expression, classifier-mapping, or legacy-mapping evidence; an authored status label alone
-cannot create release authority.
+cannot create release authority. Every approval path rejects ambiguous or conflicting classifiers.
+The validator also independently binds exact PyPI URLs, metadata digest shape, upload time,
+prerelease identity, yanked posture, release-evidence URL, and no-inference posture; yanked and
+prerelease packages remain blocking even if classification labels are edited.
 
 CR-1687 governed dependency technology inventory (2026-08-12): #926 now inventories all 104 unique
 components from the four compiled runtime/CI platform closures, never the ambient interpreter.
