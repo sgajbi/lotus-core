@@ -30,8 +30,8 @@ does not yet enforce—the generator identity and source commit alongside review
 evidence/classification, and a non-certifying claim boundary. PyPI proves
 release existence only; it cannot certify upstream support, lifecycle, or vulnerability disclosure.
 All 104 components therefore remain supportability `review_required` until those governed
-authorities exist. Ninety-five
-licenses classify from one approved SPDX expression or exact metadata mapping; eight require review
+authorities exist. Ninety-one
+licenses classify from one approved SPDX expression or consistent exact metadata mapping; twelve require review
 for compound/ambiguous evidence and `mypy-extensions==1.1.0` is blocked for missing license metadata.
 The structural guard passes while certification remains blocked; `--enforce-allowed` fails closed.
 Feature, PR, and main lanes retain exact-SHA receipts, including a failure receipt when validation

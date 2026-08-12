@@ -925,15 +925,15 @@
     },
     {
       "license": {
-        "classification": "approved",
-        "classification_reason": "approved_legacy_mapping",
-        "classification_source": "pypi_legacy_mapping",
+        "classification": "review_required",
+        "classification_reason": "ambiguous_or_unmapped_metadata",
+        "classification_source": "pypi_metadata",
         "classifiers": [
           "License :: OSI Approved :: BSD License"
         ],
         "declared_expression": null,
         "legacy_value": "BSD 2-Clause License",
-        "normalized_expression": "BSD-2-Clause"
+        "normalized_expression": null
       },
       "lock_membership": [
         "ci_build_test:linux/amd64",
@@ -1122,15 +1122,15 @@
     },
     {
       "license": {
-        "classification": "approved",
-        "classification_reason": "approved_legacy_mapping",
-        "classification_source": "pypi_legacy_mapping",
+        "classification": "review_required",
+        "classification_reason": "ambiguous_or_unmapped_metadata",
+        "classification_source": "pypi_metadata",
         "classifiers": [
           "License :: OSI Approved :: BSD License"
         ],
         "declared_expression": null,
         "legacy_value": "BSD-3-Clause",
-        "normalized_expression": "BSD-3-Clause"
+        "normalized_expression": null
       },
       "lock_membership": [
         "ci_build_test:linux/amd64",
@@ -1278,15 +1278,15 @@
     },
     {
       "license": {
-        "classification": "approved",
-        "classification_reason": "approved_legacy_mapping",
-        "classification_source": "pypi_legacy_mapping",
+        "classification": "review_required",
+        "classification_reason": "ambiguous_or_unmapped_metadata",
+        "classification_source": "pypi_metadata",
         "classifiers": [
           "License :: OSI Approved :: BSD License"
         ],
         "declared_expression": null,
         "legacy_value": "BSD 2-Clause License",
-        "normalized_expression": "BSD-2-Clause"
+        "normalized_expression": null
       },
       "lock_membership": [
         "ci_build_test:linux/amd64",
@@ -2194,15 +2194,15 @@
     },
     {
       "license": {
-        "classification": "approved",
-        "classification_reason": "approved_legacy_mapping",
-        "classification_source": "pypi_legacy_mapping",
+        "classification": "review_required",
+        "classification_reason": "ambiguous_or_unmapped_metadata",
+        "classification_source": "pypi_metadata",
         "classifiers": [
           "License :: OSI Approved"
         ],
         "declared_expression": null,
         "legacy_value": "ISC",
-        "normalized_expression": "ISC"
+        "normalized_expression": null
       },
       "lock_membership": [
         "runtime:linux/amd64",
@@ -3763,7 +3763,7 @@
     {
       "license": {
         "classification": "review_required",
-        "classification_reason": "ambiguous_or_unmapped_metadata",
+        "classification_reason": "conflicting_legacy_and_classifier_metadata",
         "classification_source": "pypi_metadata",
         "classifiers": [
           "License :: OSI Approved :: Apache Software License",
@@ -4004,7 +4004,7 @@
   },
   "repository": "https://github.com/sgajbi/lotus-core",
   "schema_version": "lotus-core.dependency-technology-inventory.v1",
-  "source_commit": "6a6ea78d38e3cd7b3bdaa948afa2478704001b7d",
+  "source_commit": "b3f54c4685267adc6806453183f26ab2f294b125",
   "source_locks": [
     {
       "path": "requirements/shared-runtime.lock.txt",
@@ -4032,7 +4032,7 @@
     }
   ],
   "summary": {
-    "approved_license_count": 95,
+    "approved_license_count": 91,
     "blocked_or_review_required_count": 104,
     "certification_decision": "blocked",
     "component_count": 104

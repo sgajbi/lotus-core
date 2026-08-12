@@ -107,6 +107,17 @@ def _license_classification(info: dict[str, Any], policy: dict[str, Any]) -> dic
             status, reason = "review_required", "unmapped_declared_expression"
         normalized: str | None = declared
         source = "pypi_license_expression"
+    elif (
+        legacy in policy["legacy_license_mappings"]
+        and mapped_classifiers
+        and set(mapped_classifiers) != {policy["legacy_license_mappings"][legacy]}
+    ):
+        normalized = None
+        status, reason, source = (
+            "review_required",
+            "conflicting_legacy_and_classifier_metadata",
+            "pypi_metadata",
+        )
     elif len(mapped_classifiers) == 1 and not any(
         marker in classifiers for marker in policy["ambiguous_markers"]
     ):
@@ -114,7 +125,11 @@ def _license_classification(info: dict[str, Any], policy: dict[str, Any]) -> dic
         status = "approved" if normalized in approved else "review_required"
         reason = "approved_classifier_mapping" if status == "approved" else "unapproved_classifier"
         source = "pypi_classifier_mapping"
-    elif legacy in policy["legacy_license_mappings"] and len(mapped_classifiers) <= 1:
+    elif (
+        legacy in policy["legacy_license_mappings"]
+        and set(mapped_classifiers) in (set(), {policy["legacy_license_mappings"][legacy]})
+        and not any(marker in classifiers for marker in policy["ambiguous_markers"])
+    ):
         normalized = policy["legacy_license_mappings"][legacy]
         status = "approved" if normalized in approved else "review_required"
         reason = "approved_legacy_mapping" if status == "approved" else "unapproved_legacy"
