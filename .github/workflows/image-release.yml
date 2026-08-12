@@ -137,18 +137,55 @@ jobs:
           fi
           echo "image_digest=${digest}" >> "$GITHUB_OUTPUT"
           echo "${{ steps.meta.outputs.image_ref }}@${digest}" > "output/build-evidence/${{ matrix.service }}-digest-ref.txt"
-      - name: Scan image digest for vulnerabilities
+      - name: Generate image vulnerability and secret policy receipt
         shell: bash
         run: |
+          scanner_image="aquasec/trivy:0.56.2"
+          report_path="output/build-evidence/${{ matrix.service }}-trivy.json"
+          receipt_path="output/build-evidence/${{ matrix.service }}-image-scan-policy.json"
           docker run --rm \
             -v "$HOME/.docker:/root/.docker:ro" \
             -v "$PWD/output/build-evidence:/output" \
-            aquasec/trivy:0.56.2 image \
-            --exit-code 1 \
+            "${scanner_image}" image \
+            --exit-code 0 \
+            --scanners vuln,secret \
             --severity HIGH,CRITICAL \
             --format json \
             --output "/output/${{ matrix.service }}-trivy.json" \
             "${{ steps.meta.outputs.image_ref }}@${{ steps.digest.outputs.image_digest }}"
+          python scripts/release/image_scan_policy.py evaluate \
+            --report "${report_path}" \
+            --service "${{ matrix.service }}" \
+            --image-ref "${{ steps.meta.outputs.image_ref }}" \
+            --image-digest "${{ steps.digest.outputs.image_digest }}" \
+            --repository "${GITHUB_REPOSITORY}" \
+            --git-commit-sha "${GITHUB_SHA}" \
+            --ci-run-id "${GITHUB_RUN_ID}" \
+            --ci-run-attempt "${GITHUB_RUN_ATTEMPT}" \
+            --scanner-name trivy \
+            --scanner-version 0.56.2 \
+            --scanner-image "${scanner_image}" \
+            --scan-timestamp "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
+            --output "${receipt_path}"
+      - name: Upload image scan policy receipt
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: image-scan-policy-${{ matrix.service }}-attempt-${{ github.run_attempt }}
+          path: output/build-evidence/${{ matrix.service }}-image-scan-policy.json
+          if-no-files-found: error
+          retention-days: 90
+      - name: Enforce image vulnerability and secret policy
+        run: |
+          python scripts/release/image_scan_policy.py enforce \
+            --receipt "output/build-evidence/${{ matrix.service }}-image-scan-policy.json" \
+            --expected-service "${{ matrix.service }}" \
+            --expected-image-ref "${{ steps.meta.outputs.image_ref }}" \
+            --expected-image-digest "${{ steps.digest.outputs.image_digest }}" \
+            --expected-repository "${GITHUB_REPOSITORY}" \
+            --expected-git-commit-sha "${GITHUB_SHA}" \
+            --expected-ci-run-id "${GITHUB_RUN_ID}" \
+            --expected-ci-run-attempt "${GITHUB_RUN_ATTEMPT}"
       - name: Export image SBOM
         shell: bash
         run: |
@@ -198,7 +235,6 @@ jobs:
           path: |
             output/build-evidence/${{ matrix.service }}-buildx-metadata.json
             output/build-evidence/${{ matrix.service }}-digest-ref.txt
-            output/build-evidence/${{ matrix.service }}-trivy.json
             output/build-evidence/${{ matrix.service }}-sbom.cdx.json
             output/build-evidence/${{ matrix.service }}-kubernetes.yaml
             output/build-evidence/${{ matrix.service }}-image-release-manifest.json

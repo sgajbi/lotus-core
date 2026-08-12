@@ -84,6 +84,12 @@ The manifest identifies Git commit, branch, repository, CI run, generated-at tim
 IDs, Dockerfile hashes, Compose hash, dependency-lock hash, dependency-closure hash, bundle digest,
 and manifest content hash. Release publication remains separate: only Image Release pushes to GHCR,
 scans and signs images, emits attestations/SBOMs, and records digest-based promotion evidence.
+Image Release uploads a separate `image-scan-policy-<service>-attempt-<run-attempt>` receipt before
+enforcing each
+immutable image decision. A HIGH/CRITICAL vulnerability or secret finding blocks all later
+SBOM-export, signing, release-manifest, and deployment-rendering steps but preserves the secret-safe
+receipt for remediation. Missing, malformed, wrong-digest, and inconsistent receipts fail closed;
+a retained blocked receipt is not release certification.
 
 ## Repo-Native Lane Mapping
 

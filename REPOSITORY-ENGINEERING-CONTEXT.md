@@ -1052,7 +1052,13 @@ Most relevant current governance:
     `scripts/release/prebuild_ci_images.py` supplies build args and timing evidence in CI,
     `scripts/release/runtime_image_set.py` owns ephemeral cross-job transport and exact-source
     verification, and `scripts/release/write_build_provenance.py` records matching build evidence.
-    `.github/workflows/image-release.yml` remains the only image-push path, and
+    `.github/workflows/image-release.yml` remains the only image-push path. Before signing or
+    promotion evidence, it uses `scripts/release/image_scan_policy.py` to convert Trivy's
+    immutable-digest vulnerability and secret scan into a secret-safe policy receipt, uploads one
+    service-specific receipt even when HIGH/CRITICAL enforcement blocks, and fails closed on
+    missing, malformed, wrong-digest, or inconsistent evidence. A blocked receipt must prevent
+    release SBOM export, signing, release-manifest generation, and deployment rendering; retained
+    failure evidence is diagnostic and does not certify an image. After enforcement passes,
     `scripts/release/write_image_release_manifest.py` records digest, OCI label parity, SBOM, scan,
     signing, provenance-attestation, digest-deploy, and same-image-promotion evidence across `dev`,
     `uat`, and `prod`. `make image-provenance-guard` blocks drift,

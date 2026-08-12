@@ -1,5 +1,23 @@
 # Codebase Review Ledger
 
+CR-1684 image-scan failure-evidence addendum (2026-08-12): issue #928's hosted Image Release
+failure correctly blocked all 13 service images on HIGH/CRITICAL findings but retained zero scan
+artifacts because Trivy generation and enforcement were one command and upload followed the
+blocking step. The release lane now generates a digest-bound vulnerability-and-secret report with
+non-blocking scanner exit semantics, converts it to a deterministic secret-safe receipt, uploads
+that receipt before enforcement under `always()` with missing-artifact failure, and then enforces
+the receipt before SBOM export, signing, release-manifest generation, or deployment rendering. The
+receipt binds repository, exact commit, workflow run/attempt, service, immutable image digest,
+scanner identity/version, scan time, source-report digest, normalized finding identity, and policy
+decision without retaining secret matches or source excerpts. Artifact names bind the workflow
+attempt so reruns cannot collide or become ambiguous. Wrong-digest, malformed, missing, or
+internally inconsistent evidence fails closed. The existing 13-service matrix, `fail-fast: false`,
+and HIGH/CRITICAL vulnerability plus secret-scanning boundary are unchanged. This is release
+evidence mechanics only: no runtime dependency, base image, API/OpenAPI, event, database,
+migration, calculation, service topology, or supported-feature contract changed. #928 remains open
+for KEV, all-severity remediation, and canonical exception lifecycle; #926/#927/#720 retain their
+separate license, support/EOL, and immutable release-certification ownership.
+
 CR-1630 corporate-action lease-clock addendum (2026-08-12): same-pattern review from #487 found
 that issue #939's corporate-action release claim, ownership, progress, failure, and renewal fences
 used PostgreSQL transaction-start `now()`. Lock waits or aged transactions could therefore retain

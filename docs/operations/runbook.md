@@ -168,13 +168,26 @@ lane:
 2. adds OCI labels for commit, branch, repo URL, image version, build time, and CI run ID,
 3. pushes images to GHCR from CI only,
 4. captures the resolved image digest in a release manifest and runtime metadata,
-5. generates BuildKit SBOM/provenance attestations and exports a CycloneDX SBOM artifact,
-6. fails on high or critical Trivy findings,
-7. signs the digest reference with Cosign,
-8. records digest-based Kubernetes deployment and same-image promotion evidence across `dev`,
+5. generates a secret-safe, digest-bound Trivy policy receipt for vulnerability and secret
+   scanning and uploads it before enforcing the release decision,
+6. fails on high or critical vulnerability or secret findings while retaining that receipt for
+   remediation,
+7. generates BuildKit SBOM/provenance attestations and exports a CycloneDX SBOM artifact only
+   after scan enforcement passes,
+8. signs the digest reference with Cosign only after scan enforcement passes,
+9. records digest-based Kubernetes deployment and same-image promotion evidence across `dev`,
    `uat`, and `prod`, and
-9. rejects secret-like Dockerfile or workflow build ARG/ENV additions through
+10. rejects secret-like Dockerfile or workflow build ARG/ENV additions through
    `make image-provenance-guard`.
+
+Each matrix service uploads `image-scan-policy-<service>-attempt-<run-attempt>` even when the
+policy blocks. The receipt
+binds the repository, exact commit, workflow run and attempt, service, immutable image digest,
+scanner identity, scan time, source-report digest, normalized finding identities, and decision. It
+never copies a secret match or source-code excerpt from Trivy. A missing, malformed, wrong-digest,
+or inconsistent receipt fails closed. Blocked jobs must not export a release SBOM, sign the image,
+write a promotion manifest, or render a deployment. Retained failure receipts are remediation
+evidence only; they do not certify an image for release.
 
 The enforcement command is:
 
