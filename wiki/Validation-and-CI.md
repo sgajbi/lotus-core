@@ -99,7 +99,7 @@ Image Release uploads a separate versioned `image-scan-policy-<service>-attempt-
 enforcing each immutable image decision. The receipt retains normalized Low, Medium, High, and
 Critical finding identities and counts. Unknown severity is retained as an actionable,
 non-exceptionable blocked finding rather than being collapsed into unavailable evidence. A
-High/Critical vulnerability or secret finding blocks all later
+A Medium, High, or Critical vulnerability or secret finding blocks all later
 SBOM-export, signing, release-manifest, and deployment-rendering steps but preserves the secret-safe
 receipt for remediation. Missing, malformed, wrong-digest, and inconsistent receipts fail closed;
 a retained blocked receipt is not release certification.

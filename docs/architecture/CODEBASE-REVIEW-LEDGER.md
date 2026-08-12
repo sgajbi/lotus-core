@@ -19,8 +19,9 @@ hash-bound dependency policy.
 CR-1687 governed dependency technology inventory (2026-08-12): #926 now inventories all 104 unique
 components from the four compiled runtime/CI platform closures, never the ambient interpreter.
 The committed machine contract binds newline-normalized lock and policy digests, exact
-package/version and lock membership, canonical PyPI release metadata digest, generator identity,
-review dates, license evidence/classification, and a non-certifying claim boundary. PyPI proves
+package/version and lock membership, and canonical PyPI release metadata digests. It records—but
+does not yet enforce—the generator identity and source commit alongside review dates, license
+evidence/classification, and a non-certifying claim boundary. PyPI proves
 release existence only; it cannot certify upstream support, lifecycle, or vulnerability disclosure.
 All 104 components therefore remain supportability `review_required` until those governed
 authorities exist. Ninety-five
