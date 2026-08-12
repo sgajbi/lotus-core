@@ -37,3 +37,8 @@ def test_input_requirements_accept_pinned_extras_and_includes(tmp_path: Path) ->
     path.write_text("-r other.txt\ntestcontainers[kafka]==4.14.2\n", encoding="utf-8")
 
     assert lock._input_requirements(path) == ["testcontainers[kafka]==4.14.2"]
+
+
+def test_platform_runtime_constraints_are_distinct() -> None:
+    assert lock.WINDOWS_RUNTIME_LOCK.name == "shared-runtime-windows.lock.txt"
+    assert lock.LINUX_TOOLING_LOCK.name == "ci-tooling.lock.txt"

@@ -1127,6 +1127,13 @@ Most relevant current governance:
     quality-tool dispatch, and dependency-health checks select by execution platform. Regenerate
     both with `make compile-ci-tooling-lock`; do not hand-edit either lock or generate license/
     supportability evidence from a shared global environment.
+    Runtime resolution uses the same pinned resolver versions for distinct Linux/amd64 and
+    Windows/amd64 closures. The Linux authority is resolved inside the exact governed Python 3.11
+    base and intentionally includes `uvloop`; the Windows engineering authority includes
+    `colorama` and excludes `uvloop`. Python 3.12 GitHub lanes are forward-compatibility
+    execution proof over the production-resolved lock, not an alternate dependency authority.
+    Regenerate or replay-check both with `make compile-runtime-lock` and
+    `python scripts/development/update_shared_runtime_lock.py --check`.
 50. Cost-calculator persistence boundaries must strip event-envelope fields before transaction-table
     upserts. `TransactionEvent` carries governed event fields such as `event_type`,
     `schema_version`, and `correlation_id` that are not `transactions` columns. Use the persistence

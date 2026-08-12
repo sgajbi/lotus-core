@@ -106,6 +106,32 @@ def test_tooling_lock_pins_secure_setuptools_bootstrap() -> None:
     assert "setuptools==83.0.0" in tooling_requirements
 
 
+def test_clean_environment_installs_only_compiled_tooling_closure(
+    tmp_path: Path, monkeypatch
+) -> None:
+    commands: list[list[str]] = []
+    monkeypatch.setattr(
+        dependency_health_check.venv,
+        "EnvBuilder",
+        lambda **_kwargs: type("Builder", (), {"create": lambda _self, _path: None})(),
+    )
+    monkeypatch.setattr(dependency_health_check, "discover_editable_projects", lambda _root: [])
+
+    dependency_health_check._build_environment(
+        tmp_path / "venv",
+        root=tmp_path,
+        installer_version="26.1.2",
+        command_runner=lambda command, **_kwargs: commands.append(command),
+    )
+
+    install_targets = [part for command in commands for part in command if part.endswith(".txt")]
+    assert install_targets == [
+        str(tmp_path / "requirements" / dependency_health_check.RUNTIME_LOCK_FILE.name),
+        str(tmp_path / "requirements" / dependency_health_check.TOOLING_LOCK_FILE.name),
+    ]
+    assert all("tests/requirements.txt" not in part.replace("\\", "/") for part in install_targets)
+
+
 def test_dependency_health_cli_supports_repo_native_direct_execution() -> None:
     result = subprocess.run(
         [

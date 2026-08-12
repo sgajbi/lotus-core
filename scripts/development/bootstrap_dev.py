@@ -9,7 +9,11 @@ from collections.abc import Callable
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-RUNTIME_LOCK_FILE = ROOT / "requirements" / "shared-runtime.lock.txt"
+RUNTIME_LOCK_FILE = (
+    ROOT
+    / "requirements"
+    / ("shared-runtime-windows.lock.txt" if sys.platform == "win32" else "shared-runtime.lock.txt")
+)
 TOOLING_LOCK_FILE = (
     ROOT
     / "requirements"
@@ -97,7 +101,6 @@ def main() -> int:
     for project_dir in projects:
         constrained_pip_install("-e", str(project_dir))
 
-    constrained_pip_install("-r", "tests/requirements.txt")
     constrained_pip_install("-r", str(TOOLING_LOCK_FILE))
     require_portfolio_common_import_origin()
     return 0
