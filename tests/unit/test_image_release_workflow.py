@@ -41,9 +41,29 @@ def test_image_scan_generates_receipt_before_policy_enforcement() -> None:
     generate = str(steps[generate_index]["run"])
     assert "--exit-code 0" in generate
     assert "--scanners vuln,secret" in generate
-    assert "--severity LOW,MEDIUM,HIGH,CRITICAL" in generate
+    assert "known_exploited_vulnerabilities.json" in generate
+    assert "curl --fail --location --silent --show-error" in generate
+    assert "--proto '=https' --proto-redir '=https' --max-redirs 3" in generate
+    assert "--retry 3 --retry-all-errors --connect-timeout 10 --max-time 60" in generate
+    assert "--severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL" in generate
+    assert "--kev-catalog" in generate
+    assert "--kev-fetched-at" in generate
     assert "image_scan_policy.py evaluate" in generate
+    assert "image_scan_policy.py unavailable" in generate
+    for reason_code in (
+        "cisa_kev_fetch_failed",
+        "trivy_scan_failed",
+        "evidence_evaluation_failed",
+    ):
+        assert reason_code in generate
     assert "image_scan_policy.py enforce" in str(steps[enforce_index]["run"])
+    assert '--report "output/build-evidence/${{ matrix.service }}-trivy.json"' in str(
+        steps[enforce_index]["run"]
+    )
+    assert '--kev-catalog "output/build-evidence/${{ matrix.service }}-cisa-kev.json"' in str(
+        steps[enforce_index]["run"]
+    )
+    assert "--enforced-at" in str(steps[enforce_index]["run"])
 
 
 def test_scan_receipt_upload_is_fail_closed_and_runs_after_failed_generation() -> None:
@@ -65,3 +85,4 @@ def test_successful_release_evidence_does_not_duplicate_policy_receipt() -> None
 
     assert "${{ matrix.service }}-image-scan-policy.json" not in paths
     assert "${{ matrix.service }}-trivy.json" not in paths
+    assert "${{ matrix.service }}-cisa-kev.json" not in paths

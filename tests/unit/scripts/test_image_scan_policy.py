@@ -2,14 +2,18 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 
+import scripts.release.cisa_kev as cisa_kev
+from scripts.release.cisa_kev import CISA_KEV_SOURCE_URL
 from scripts.release.image_scan_policy import (
     POLICY_ID,
     SCHEMA_VERSION,
     ScanPolicyError,
     build_policy_receipt,
+    build_unavailable_receipt,
     enforce_policy_receipt,
 )
 
@@ -17,6 +21,27 @@ FULL_SHA = "a" * 40
 IMAGE_DIGEST = "sha256:" + "b" * 64
 IMAGE_REF = "ghcr.io/sgajbi/lotus-core/query-service"
 DIGEST_REF = f"{IMAGE_REF}@{IMAGE_DIGEST}"
+
+
+@pytest.fixture(autouse=True)
+def _completeness_policy(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    path = tmp_path / "cisa-kev-authority-policy.json"
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": "lotus-core.cisa-kev-authority-policy.v1",
+                "source_url": CISA_KEV_SOURCE_URL,
+                "baseline_catalog_version": "2026.08.12",
+                "baseline_date_released_utc": "2026-08-12T00:00:00Z",
+                "baseline_entry_count": 1,
+                "minimum_entry_count": 1,
+                "baseline_observed_at_utc": "2026-08-12T02:00:00Z",
+                "review_owner": "test",
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(cisa_kev, "DEFAULT_COMPLETENESS_POLICY_PATH", path)
 
 
 def _write_report(tmp_path: Path, *, results: list[object]) -> Path:
@@ -35,7 +60,27 @@ def _write_report(tmp_path: Path, *, results: list[object]) -> Path:
     return path
 
 
-def _receipt(report_path: Path, **overrides: str) -> dict[str, object]:
+def _write_kev(tmp_path: Path, *, cve_ids: tuple[str, ...] = ("CVE-2020-0001",)) -> Path:
+    path = tmp_path / "cisa-kev.json"
+    path.write_text(
+        json.dumps(
+            {
+                "title": "CISA Catalog of Known Exploited Vulnerabilities",
+                "catalogVersion": "2026.08.12",
+                "dateReleased": "2026.08.12",
+                "count": len(cve_ids),
+                "vulnerabilities": [{"cveID": cve_id} for cve_id in cve_ids],
+            }
+        ),
+        encoding="utf-8",
+    )
+    return path
+
+
+def _receipt(report_path: Path, **overrides: Any) -> dict[str, object]:
+    kev_catalog_path = overrides.pop("kev_catalog_path", None)
+    if kev_catalog_path is None:
+        kev_catalog_path = _write_kev(report_path.parent)
     values = {
         "service": "query_service",
         "image_ref": IMAGE_REF,
@@ -48,13 +93,17 @@ def _receipt(report_path: Path, **overrides: str) -> dict[str, object]:
         "scanner_version": "0.56.2",
         "scanner_image": "aquasec/trivy:0.56.2",
         "scan_timestamp": "2026-08-12T02:03:04Z",
+        "kev_catalog_path": kev_catalog_path,
+        "kev_fetched_at": "2026-08-12T02:02:00Z",
     }
     values.update(overrides)
     return build_policy_receipt(report_path=report_path, **values)
 
 
-def _enforce(receipt_path: Path, **overrides: str) -> None:
+def _enforce(receipt_path: Path, **overrides: Any) -> None:
     values = {
+        "report_path": receipt_path.parent / "trivy.json",
+        "kev_catalog_path": receipt_path.parent / "cisa-kev.json",
         "expected_service": "query_service",
         "expected_image_ref": IMAGE_REF,
         "expected_image_digest": IMAGE_DIGEST,
@@ -62,9 +111,52 @@ def _enforce(receipt_path: Path, **overrides: str) -> None:
         "expected_git_commit_sha": FULL_SHA,
         "expected_ci_run_id": "12345",
         "expected_ci_run_attempt": "2",
+        "enforced_at": "2026-08-12T02:04:00Z",
     }
     values.update(overrides)
     enforce_policy_receipt(receipt_path, **values)
+
+
+def test_unavailable_receipt_is_secret_safe_exact_and_fail_closed(tmp_path: Path) -> None:
+    receipt = build_unavailable_receipt(
+        service="query_service",
+        image_ref=IMAGE_REF,
+        image_digest=IMAGE_DIGEST,
+        repository="sgajbi/lotus-core",
+        git_commit_sha=FULL_SHA,
+        ci_run_id="12345",
+        ci_run_attempt="2",
+        generated_at="2026-08-12T02:03:04Z",
+        reason_code="cisa_kev_fetch_failed",
+    )
+    receipt_path = tmp_path / "receipt.json"
+    receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+
+    assert receipt["evidence_state"] == "unavailable"
+    assert receipt["failure"] == {"reason_code": "cisa_kev_fetch_failed"}
+    assert "response" not in json.dumps(receipt).lower()
+    with pytest.raises(ScanPolicyError, match="cisa_kev_fetch_failed"):
+        _enforce(receipt_path)
+
+
+@pytest.mark.parametrize("enforced_at", ["2026-08-12T03:00:00Z", "2026-08-12T02:01:00Z"])
+def test_enforcement_rejects_stale_or_future_receipt(tmp_path: Path, enforced_at: str) -> None:
+    receipt = _receipt(_write_report(tmp_path, results=[]))
+    receipt_path = tmp_path / "receipt.json"
+    receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+
+    with pytest.raises(ScanPolicyError, match="stale or future-dated"):
+        _enforce(receipt_path, enforced_at=enforced_at)
+
+
+def test_current_enforcement_rejects_prior_v1_receipt(tmp_path: Path) -> None:
+    receipt = _receipt(_write_report(tmp_path, results=[]))
+    receipt["schema_version"] = "lotus-core.image-scan-policy-receipt.v1"
+    receipt_path = tmp_path / "receipt.json"
+    receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+
+    with pytest.raises(ScanPolicyError, match="unsupported schema version"):
+        _enforce(receipt_path)
 
 
 def test_clean_report_builds_digest_bound_pass_receipt(tmp_path: Path) -> None:
@@ -72,6 +164,7 @@ def test_clean_report_builds_digest_bound_pass_receipt(tmp_path: Path) -> None:
 
     assert receipt["schema_version"] == SCHEMA_VERSION
     assert receipt["generated_at_utc"] == "2026-08-12T02:03:04Z"
+    assert receipt["evidence_state"] == "available"
     assert receipt["source"] == {
         "repository": "sgajbi/lotus-core",
         "git_commit_sha": FULL_SHA,
@@ -91,7 +184,19 @@ def test_clean_report_builds_digest_bound_pass_receipt(tmp_path: Path) -> None:
         "decision": "passed",
         "finding_count": 0,
         "blocking_finding_count": 0,
+        "known_exploited_finding_count": 0,
+        "unclassified_exploitation_finding_count": 0,
         "severity_counts": {"CRITICAL": 0, "HIGH": 0, "LOW": 0, "MEDIUM": 0},
+    }
+    assert receipt["known_exploited_catalog"] == {
+        "source_url": (
+            "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
+        ),
+        "catalog_version": "2026.08.12",
+        "date_released_utc": "2026-08-12T00:00:00Z",
+        "fetched_at_utc": "2026-08-12T02:02:00Z",
+        "source_sha256": receipt["known_exploited_catalog"]["source_sha256"],
+        "entry_count": 1,
     }
     assert receipt["findings"] == []
     assert str(receipt["scanner"]["report_sha256"]).startswith("sha256:")
@@ -123,6 +228,8 @@ def test_high_vulnerability_builds_blocked_normalized_receipt(tmp_path: Path) ->
     assert receipt["policy"]["decision"] == "blocked"
     assert receipt["policy"]["finding_count"] == 1
     assert receipt["policy"]["blocking_finding_count"] == 1
+    assert receipt["policy"]["known_exploited_finding_count"] == 0
+    assert receipt["policy"]["unclassified_exploitation_finding_count"] == 0
     assert receipt["policy"]["severity_counts"] == {
         "CRITICAL": 0,
         "HIGH": 1,
@@ -139,6 +246,8 @@ def test_high_vulnerability_builds_blocked_normalized_receipt(tmp_path: Path) ->
             "component_name": "example",
             "installed_version": "1.0.0",
             "fixed_version": "1.0.1",
+            "known_exploited": False,
+            "exploitation_status": "not_listed_in_current_cisa_kev",
         }
     ]
 
@@ -194,6 +303,8 @@ def test_medium_findings_do_not_change_current_release_policy(tmp_path: Path) ->
     assert receipt["policy"]["decision"] == "passed"
     assert receipt["policy"]["finding_count"] == 1
     assert receipt["policy"]["blocking_finding_count"] == 0
+    assert receipt["policy"]["known_exploited_finding_count"] == 0
+    assert receipt["policy"]["unclassified_exploitation_finding_count"] == 0
     assert receipt["policy"]["severity_counts"] == {
         "CRITICAL": 0,
         "HIGH": 0,
@@ -210,8 +321,71 @@ def test_medium_findings_do_not_change_current_release_policy(tmp_path: Path) ->
             "component_name": "example",
             "installed_version": "1.0.0",
             "fixed_version": "",
+            "known_exploited": False,
+            "exploitation_status": "not_listed_in_current_cisa_kev",
         }
     ]
+
+
+def test_low_known_exploited_vulnerability_blocks_release(tmp_path: Path) -> None:
+    report = _write_report(
+        tmp_path,
+        results=[
+            {
+                "Target": "os-pkgs",
+                "Type": "debian",
+                "Vulnerabilities": [
+                    {
+                        "VulnerabilityID": "CVE-2026-4000",
+                        "PkgName": "example",
+                        "InstalledVersion": "1.0.0",
+                        "Severity": "LOW",
+                    }
+                ],
+            }
+        ],
+    )
+
+    receipt = _receipt(
+        report,
+        kev_catalog_path=_write_kev(tmp_path, cve_ids=("CVE-2026-4000",)),
+    )
+
+    assert receipt["policy"]["decision"] == "blocked"
+    assert receipt["policy"]["known_exploited_finding_count"] == 1
+    assert receipt["findings"][0]["known_exploited"] is True
+    assert receipt["findings"][0]["exploitation_status"] == "known_exploited"
+    receipt_path = tmp_path / "receipt.json"
+    receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+    with pytest.raises(ScanPolicyError, match="1 vulnerability or secret policy finding"):
+        _enforce(receipt_path)
+
+
+def test_non_cve_vulnerability_blocks_as_unclassified(tmp_path: Path) -> None:
+    report = _write_report(
+        tmp_path,
+        results=[
+            {
+                "Target": "python-pkgs",
+                "Type": "python-pkg",
+                "Vulnerabilities": [
+                    {
+                        "VulnerabilityID": "GHSA-abcd-efgh-ijkl",
+                        "PkgName": "example",
+                        "InstalledVersion": "1.0.0",
+                        "Severity": "LOW",
+                    }
+                ],
+            }
+        ],
+    )
+
+    receipt = _receipt(report)
+
+    assert receipt["policy"]["decision"] == "blocked"
+    assert receipt["policy"]["unclassified_exploitation_finding_count"] == 1
+    assert receipt["findings"][0]["known_exploited"] is None
+    assert receipt["findings"][0]["exploitation_status"] == "unclassified"
 
 
 def test_missing_results_fails_closed(tmp_path: Path) -> None:
@@ -281,6 +455,14 @@ def test_unapproved_scanner_identity_fails_closed(tmp_path: Path) -> None:
         )
 
 
+def test_stale_kev_fetch_fails_closed(tmp_path: Path) -> None:
+    with pytest.raises(ScanPolicyError, match="no more than 15 minutes"):
+        _receipt(
+            _write_report(tmp_path, results=[]),
+            kev_fetched_at="2026-08-12T01:00:00Z",
+        )
+
+
 def test_enforcement_accepts_passed_receipt(tmp_path: Path) -> None:
     receipt_path = tmp_path / "receipt.json"
     receipt_path.write_text(
@@ -327,6 +509,7 @@ def test_enforcement_rejects_blocked_or_inconsistent_receipt(tmp_path: Path) -> 
         ("source", "source identity does not match"),
         ("subject", "subject identity does not match"),
         ("scanner", "no scanner identity"),
+        ("known_exploited_catalog", "no KEV catalog identity"),
         ("policy", "no policy decision"),
     ],
 )
@@ -371,4 +554,10 @@ def test_enforcement_rejects_tampered_policy_and_findings(tmp_path: Path) -> Non
     receipt["scanner"]["version"] = "unapproved"
     receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
     with pytest.raises(ScanPolicyError, match="unsupported scanner identity"):
+        _enforce(receipt_path)
+
+    receipt = _receipt(_write_report(tmp_path, results=[]))
+    receipt["known_exploited_catalog"]["catalog_version"] = "tampered"
+    receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+    with pytest.raises(ScanPolicyError, match="does not match its source evidence"):
         _enforce(receipt_path)

@@ -10,8 +10,15 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = "lotus-core.image-scan-policy-receipt.v1"
-POLICY_ID = "lotus-core.image-release-high-critical-and-secret.v1"
+from scripts.release.cisa_kev import (
+    CVE_PATTERN,
+    CisaKevCatalog,
+    CisaKevError,
+    load_cisa_kev_catalog,
+)
+
+SCHEMA_VERSION = "lotus-core.image-scan-policy-receipt.v2"
+POLICY_ID = "lotus-core.image-release-vulnerability-secret-kev.v1"
 SCANNER_NAME = "trivy"
 SCANNER_VERSION = "0.56.2"
 SCANNER_IMAGE = "aquasec/trivy:0.56.2"
@@ -20,6 +27,12 @@ KNOWN_NONBLOCKING_SEVERITIES = frozenset({"LOW", "MEDIUM"})
 KNOWN_SEVERITIES = BLOCKING_SEVERITIES | KNOWN_NONBLOCKING_SEVERITIES
 FULL_GIT_SHA_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 SHA256_DIGEST_PATTERN = re.compile(r"^sha256:[0-9a-f]{64}$")
+MAX_KEV_TO_SCAN_AGE_SECONDS = 900
+MAX_RECEIPT_TO_ENFORCEMENT_AGE_SECONDS = 1800
+MAX_ENFORCEMENT_FUTURE_SKEW_SECONDS = 60
+UNAVAILABLE_REASON_CODES = frozenset(
+    {"cisa_kev_fetch_failed", "trivy_scan_failed", "evidence_evaluation_failed"}
+)
 
 
 class ScanPolicyError(ValueError):
@@ -41,6 +54,75 @@ def _utc_timestamp(value: str) -> str:
     if timestamp.tzinfo is None or timestamp.utcoffset() != UTC.utcoffset(timestamp):
         raise ScanPolicyError("scan timestamp must include an explicit UTC offset")
     return timestamp.astimezone(UTC).isoformat().replace("+00:00", "Z")
+
+
+def _utc_datetime(value: str) -> datetime:
+    return datetime.fromisoformat(_utc_timestamp(value).replace("Z", "+00:00"))
+
+
+def _source_identity(
+    *, repository: str, git_commit_sha: str, ci_run_id: str, ci_run_attempt: str
+) -> dict[str, str]:
+    repository = _required_string(repository, field="repository")
+    if not FULL_GIT_SHA_PATTERN.fullmatch(git_commit_sha):
+        raise ScanPolicyError("git commit SHA must be a full lowercase SHA")
+    for value, field in ((ci_run_id, "CI run ID"), (ci_run_attempt, "CI run attempt")):
+        if not value.isdecimal() or int(value) < 1:
+            raise ScanPolicyError(f"{field} must be a positive integer")
+    return {
+        "repository": repository,
+        "git_commit_sha": git_commit_sha,
+        "ci_run_id": ci_run_id,
+        "ci_run_attempt": ci_run_attempt,
+    }
+
+
+def _subject_identity(*, service: str, image_ref: str, image_digest: str) -> dict[str, str]:
+    service = _required_string(service, field="service")
+    image_ref = _required_string(image_ref, field="image ref")
+    if not SHA256_DIGEST_PATTERN.fullmatch(image_digest):
+        raise ScanPolicyError("image digest must be a sha256 digest")
+    return {
+        "service": service,
+        "image_ref": image_ref,
+        "image_digest": image_digest,
+        "digest_image_ref": f"{image_ref}@{image_digest}",
+    }
+
+
+def build_unavailable_receipt(
+    *,
+    service: str,
+    image_ref: str,
+    image_digest: str,
+    repository: str,
+    git_commit_sha: str,
+    ci_run_id: str,
+    ci_run_attempt: str,
+    generated_at: str,
+    reason_code: str,
+) -> dict[str, object]:
+    if reason_code not in UNAVAILABLE_REASON_CODES:
+        raise ScanPolicyError("unsupported evidence-unavailable reason code")
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "generated_at_utc": _utc_timestamp(generated_at),
+        "evidence_state": "unavailable",
+        "source": _source_identity(
+            repository=repository,
+            git_commit_sha=git_commit_sha,
+            ci_run_id=ci_run_id,
+            ci_run_attempt=ci_run_attempt,
+        ),
+        "subject": _subject_identity(
+            service=service, image_ref=image_ref, image_digest=image_digest
+        ),
+        "scanner": {"name": SCANNER_NAME, "version": SCANNER_VERSION, "image": SCANNER_IMAGE},
+        "known_exploited_catalog": None,
+        "policy": {"policy_id": POLICY_ID, "decision": "blocked"},
+        "failure": {"reason_code": reason_code},
+        "findings": [],
+    }
 
 
 def _load_json_object(path: Path, *, evidence_name: str) -> dict[str, Any]:
@@ -68,7 +150,13 @@ def _report_subject_matches(
     )
 
 
-def _normalized_vulnerability(raw: object, *, target: str, target_class: str) -> dict[str, str]:
+def _normalized_vulnerability(
+    raw: object,
+    *,
+    target: str,
+    target_class: str,
+    kev_catalog: CisaKevCatalog,
+) -> dict[str, object]:
     if not isinstance(raw, dict):
         raise ScanPolicyError("Trivy vulnerability entries must be objects")
     severity = _required_string(raw.get("Severity"), field="vulnerability severity").upper()
@@ -76,9 +164,17 @@ def _normalized_vulnerability(raw: object, *, target: str, target_class: str) ->
         raise ScanPolicyError("unknown vulnerability severity cannot support a release decision")
     if severity not in KNOWN_SEVERITIES:
         raise ScanPolicyError(f"unsupported vulnerability severity: {severity}")
+    finding_id = _required_string(raw.get("VulnerabilityID"), field="vulnerability ID")
+    known_exploited: bool | None = None
+    exploitation_status = "unclassified"
+    if CVE_PATTERN.fullmatch(finding_id):
+        known_exploited = finding_id in kev_catalog.cve_ids
+        exploitation_status = (
+            "known_exploited" if known_exploited else "not_listed_in_current_cisa_kev"
+        )
     return {
         "finding_type": "vulnerability",
-        "finding_id": _required_string(raw.get("VulnerabilityID"), field="vulnerability ID"),
+        "finding_id": finding_id,
         "severity": severity,
         "target": target,
         "target_class": target_class,
@@ -87,10 +183,12 @@ def _normalized_vulnerability(raw: object, *, target: str, target_class: str) ->
             raw.get("InstalledVersion"), field="installed version"
         ),
         "fixed_version": str(raw.get("FixedVersion") or ""),
+        "known_exploited": known_exploited,
+        "exploitation_status": exploitation_status,
     }
 
 
-def _normalized_secret(raw: object, *, target: str, target_class: str) -> dict[str, str]:
+def _normalized_secret(raw: object, *, target: str, target_class: str) -> dict[str, object]:
     if not isinstance(raw, dict):
         raise ScanPolicyError("Trivy secret entries must be objects")
     severity = _required_string(raw.get("Severity"), field="secret severity").upper()
@@ -107,24 +205,33 @@ def _normalized_secret(raw: object, *, target: str, target_class: str) -> dict[s
         "component_name": str(raw.get("Category") or "secret"),
         "installed_version": "",
         "fixed_version": "",
+        "known_exploited": None,
+        "exploitation_status": "not_applicable",
     }
 
 
-def _normalized_findings(report: dict[str, Any]) -> list[dict[str, str]]:
+def _normalized_findings(
+    report: dict[str, Any], *, kev_catalog: CisaKevCatalog
+) -> list[dict[str, object]]:
     if "Results" not in report:
         raise ScanPolicyError("Trivy report must contain Results")
     results = report["Results"]
     if not isinstance(results, list):
         raise ScanPolicyError("Trivy Results must be an array")
 
-    findings: list[dict[str, str]] = []
+    findings: list[dict[str, object]] = []
     for result in results:
         if not isinstance(result, dict):
             raise ScanPolicyError("Trivy result entries must be objects")
         target = _required_string(result.get("Target"), field="Trivy result target")
         target_class = str(result.get("Class") or result.get("Type") or "unknown")
         for raw in result.get("Vulnerabilities") or []:
-            finding = _normalized_vulnerability(raw, target=target, target_class=target_class)
+            finding = _normalized_vulnerability(
+                raw,
+                target=target,
+                target_class=target_class,
+                kev_catalog=kev_catalog,
+            )
             findings.append(finding)
         for raw in result.get("Secrets") or []:
             finding = _normalized_secret(raw, target=target, target_class=target_class)
@@ -156,12 +263,18 @@ def build_policy_receipt(
     scanner_version: str,
     scanner_image: str,
     scan_timestamp: str,
+    kev_catalog_path: Path,
+    kev_fetched_at: str,
 ) -> dict[str, object]:
-    service = _required_string(service, field="service")
-    image_ref = _required_string(image_ref, field="image ref")
-    repository = _required_string(repository, field="repository")
-    ci_run_id = _required_string(ci_run_id, field="CI run ID")
-    ci_run_attempt = _required_string(ci_run_attempt, field="CI run attempt")
+    source_identity = _source_identity(
+        repository=repository,
+        git_commit_sha=git_commit_sha,
+        ci_run_id=ci_run_id,
+        ci_run_attempt=ci_run_attempt,
+    )
+    subject_identity = _subject_identity(
+        service=service, image_ref=image_ref, image_digest=image_digest
+    )
     scanner_name = _required_string(scanner_name, field="scanner name")
     scanner_version = _required_string(scanner_version, field="scanner version")
     scanner_image = _required_string(scanner_image, field="scanner image")
@@ -171,52 +284,53 @@ def build_policy_receipt(
         SCANNER_IMAGE,
     ):
         raise ScanPolicyError("scanner identity does not match the governed release scanner")
-    if not SHA256_DIGEST_PATTERN.fullmatch(image_digest):
-        raise ScanPolicyError("image digest must be a sha256 digest")
-    if not FULL_GIT_SHA_PATTERN.fullmatch(git_commit_sha):
-        raise ScanPolicyError("git commit SHA must be a full lowercase SHA")
-    if not ci_run_id.isdecimal() or int(ci_run_id) < 1:
-        raise ScanPolicyError("CI run ID must be a positive integer")
-    if not ci_run_attempt.isdecimal() or int(ci_run_attempt) < 1:
-        raise ScanPolicyError("CI run attempt must be a positive integer")
-
+    normalized_scan_timestamp = _utc_timestamp(scan_timestamp)
+    kev_catalog = load_cisa_kev_catalog(kev_catalog_path, fetched_at=kev_fetched_at)
+    scan_time = datetime.fromisoformat(normalized_scan_timestamp.replace("Z", "+00:00"))
+    catalog_age_seconds = (scan_time - kev_catalog.fetched_at_utc).total_seconds()
+    if not 0 <= catalog_age_seconds <= MAX_KEV_TO_SCAN_AGE_SECONDS:
+        raise ScanPolicyError(
+            "CISA KEV fetch must precede the scan receipt by no more than 15 minutes"
+        )
     report_bytes = report_path.read_bytes()
     report = _load_json_object(report_path, evidence_name="Trivy report")
     if report.get("SchemaVersion") != 2:
         raise ScanPolicyError("Trivy report SchemaVersion must be 2")
-    digest_image_ref = f"{image_ref}@{image_digest}"
+    digest_image_ref = subject_identity["digest_image_ref"]
     if not _report_subject_matches(
         report, digest_image_ref=digest_image_ref, image_digest=image_digest
     ):
         raise ScanPolicyError("Trivy report does not match the expected image digest")
 
-    findings = _normalized_findings(report)
+    findings = _normalized_findings(report, kev_catalog=kev_catalog)
     severity_counts = {
         severity: sum(finding["severity"] == severity for finding in findings)
         for severity in sorted(KNOWN_SEVERITIES)
     }
-    blocking_count = sum(finding["severity"] in BLOCKING_SEVERITIES for finding in findings)
+    blocking_count = sum(
+        finding["severity"] in BLOCKING_SEVERITIES
+        or finding["known_exploited"] is True
+        or (finding["finding_type"] == "vulnerability" and finding["known_exploited"] is None)
+        for finding in findings
+    )
+    known_exploited_count = sum(finding["known_exploited"] is True for finding in findings)
+    unclassified_exploitation_count = sum(
+        finding["finding_type"] == "vulnerability" and finding["known_exploited"] is None
+        for finding in findings
+    )
     return {
         "schema_version": SCHEMA_VERSION,
-        "generated_at_utc": _utc_timestamp(scan_timestamp),
-        "source": {
-            "repository": repository,
-            "git_commit_sha": git_commit_sha,
-            "ci_run_id": ci_run_id,
-            "ci_run_attempt": ci_run_attempt,
-        },
-        "subject": {
-            "service": service,
-            "image_ref": image_ref,
-            "image_digest": image_digest,
-            "digest_image_ref": digest_image_ref,
-        },
+        "generated_at_utc": normalized_scan_timestamp,
+        "evidence_state": "available",
+        "source": source_identity,
+        "subject": subject_identity,
         "scanner": {
             "name": scanner_name,
             "version": scanner_version,
             "image": scanner_image,
             "report_sha256": "sha256:" + hashlib.sha256(report_bytes).hexdigest(),
         },
+        "known_exploited_catalog": kev_catalog.receipt_identity(),
         "policy": {
             "policy_id": POLICY_ID,
             "scanners": ["vulnerability", "secret"],
@@ -224,13 +338,15 @@ def build_policy_receipt(
             "decision": "blocked" if blocking_count else "passed",
             "finding_count": len(findings),
             "blocking_finding_count": blocking_count,
+            "known_exploited_finding_count": known_exploited_count,
+            "unclassified_exploitation_finding_count": unclassified_exploitation_count,
             "severity_counts": severity_counts,
         },
         "findings": findings,
     }
 
 
-def _validate_finding(raw: object) -> dict[str, str]:
+def _validate_finding(raw: object) -> dict[str, object]:
     if not isinstance(raw, dict):
         raise ScanPolicyError("image scan policy receipt findings must be objects")
     finding_type = _required_string(raw.get("finding_type"), field="finding type")
@@ -247,17 +363,36 @@ def _validate_finding(raw: object) -> dict[str, str]:
         ),
         "installed_version": str(raw.get("installed_version") or ""),
         "fixed_version": str(raw.get("fixed_version") or ""),
+        "known_exploited": raw.get("known_exploited"),
+        "exploitation_status": _required_string(
+            raw.get("exploitation_status"), field="finding exploitation status"
+        ),
     }
     if finding["severity"] not in KNOWN_SEVERITIES:
         raise ScanPolicyError("receipt findings must use a known severity")
     if finding_type == "vulnerability" and not finding["installed_version"]:
         raise ScanPolicyError("vulnerability finding requires installed version")
+    if finding_type == "secret":
+        if finding["known_exploited"] is not None or (
+            finding["exploitation_status"] != "not_applicable"
+        ):
+            raise ScanPolicyError("secret finding has invalid exploitation classification")
+    elif finding["known_exploited"] is True:
+        if finding["exploitation_status"] != "known_exploited":
+            raise ScanPolicyError("known-exploited finding classification is inconsistent")
+    elif finding["known_exploited"] is False:
+        if finding["exploitation_status"] != "not_listed_in_current_cisa_kev":
+            raise ScanPolicyError("non-KEV finding classification is inconsistent")
+    elif finding["exploitation_status"] != "unclassified":
+        raise ScanPolicyError("unclassified finding classification is inconsistent")
     return finding
 
 
 def enforce_policy_receipt(
     receipt_path: Path,
     *,
+    report_path: Path,
+    kev_catalog_path: Path,
     expected_service: str,
     expected_image_ref: str,
     expected_image_digest: str,
@@ -265,35 +400,35 @@ def enforce_policy_receipt(
     expected_git_commit_sha: str,
     expected_ci_run_id: str,
     expected_ci_run_attempt: str,
+    enforced_at: str,
 ) -> None:
     receipt = _load_json_object(receipt_path, evidence_name="image scan policy receipt")
     if receipt.get("schema_version") != SCHEMA_VERSION:
         raise ScanPolicyError("image scan policy receipt has an unsupported schema version")
-    _utc_timestamp(_required_string(receipt.get("generated_at_utc"), field="receipt generated-at"))
-    expected_source = {
-        "repository": expected_repository,
-        "git_commit_sha": expected_git_commit_sha,
-        "ci_run_id": expected_ci_run_id,
-        "ci_run_attempt": expected_ci_run_attempt,
-    }
+    generated_at = _utc_datetime(
+        _required_string(receipt.get("generated_at_utc"), field="receipt generated-at")
+    )
+    enforcement_time = _utc_datetime(enforced_at)
+    receipt_age_seconds = (enforcement_time - generated_at).total_seconds()
+    if not (
+        -MAX_ENFORCEMENT_FUTURE_SKEW_SECONDS
+        <= receipt_age_seconds
+        <= MAX_RECEIPT_TO_ENFORCEMENT_AGE_SECONDS
+    ):
+        raise ScanPolicyError("image scan policy receipt is stale or future-dated")
+    expected_source = _source_identity(
+        repository=expected_repository,
+        git_commit_sha=expected_git_commit_sha,
+        ci_run_id=expected_ci_run_id,
+        ci_run_attempt=expected_ci_run_attempt,
+    )
     if receipt.get("source") != expected_source:
         raise ScanPolicyError("image scan policy receipt source identity does not match")
-    if not FULL_GIT_SHA_PATTERN.fullmatch(expected_git_commit_sha):
-        raise ScanPolicyError("expected git commit SHA must be a full lowercase SHA")
-    for value, field in (
-        (expected_ci_run_id, "expected CI run ID"),
-        (expected_ci_run_attempt, "expected CI run attempt"),
-    ):
-        if not value.isdecimal() or int(value) < 1:
-            raise ScanPolicyError(f"{field} must be a positive integer")
-    if not SHA256_DIGEST_PATTERN.fullmatch(expected_image_digest):
-        raise ScanPolicyError("expected image digest must be a sha256 digest")
-    expected_subject = {
-        "service": expected_service,
-        "image_ref": expected_image_ref,
-        "image_digest": expected_image_digest,
-        "digest_image_ref": f"{expected_image_ref}@{expected_image_digest}",
-    }
+    expected_subject = _subject_identity(
+        service=expected_service,
+        image_ref=expected_image_ref,
+        image_digest=expected_image_digest,
+    )
     if receipt.get("subject") != expected_subject:
         raise ScanPolicyError("image scan policy receipt subject identity does not match")
     scanner = receipt.get("scanner")
@@ -308,9 +443,51 @@ def enforce_policy_receipt(
         expected_scanner_identity
     ):
         raise ScanPolicyError("image scan policy receipt has an unsupported scanner identity")
+    if receipt.get("evidence_state") == "unavailable":
+        failure = receipt.get("failure")
+        reason_code = failure.get("reason_code") if isinstance(failure, dict) else None
+        expected_unavailable = build_unavailable_receipt(
+            service=expected_service,
+            image_ref=expected_image_ref,
+            image_digest=expected_image_digest,
+            repository=expected_repository,
+            git_commit_sha=expected_git_commit_sha,
+            ci_run_id=expected_ci_run_id,
+            ci_run_attempt=expected_ci_run_attempt,
+            generated_at=receipt["generated_at_utc"],
+            reason_code=str(reason_code or ""),
+        )
+        if receipt != expected_unavailable:
+            raise ScanPolicyError("unavailable image scan receipt is not normalized")
+        raise ScanPolicyError(f"image scan evidence unavailable: {reason_code}")
+    if receipt.get("evidence_state") != "available":
+        raise ScanPolicyError("image scan policy receipt has an unsupported evidence state")
     report_digest = _required_string(scanner.get("report_sha256"), field="scanner report digest")
     if not SHA256_DIGEST_PATTERN.fullmatch(report_digest):
         raise ScanPolicyError("scanner report digest must be a sha256 digest")
+    kev_identity = receipt.get("known_exploited_catalog")
+    if not isinstance(kev_identity, dict):
+        raise ScanPolicyError("image scan policy receipt has no KEV catalog identity")
+    expected_kev_source = (
+        "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
+    )
+    if kev_identity.get("source_url") != expected_kev_source:
+        raise ScanPolicyError("image scan policy receipt has an unsupported KEV source")
+    for field in ("catalog_version", "date_released_utc", "fetched_at_utc"):
+        _required_string(kev_identity.get(field), field=f"KEV {field}")
+    kev_fetched_at = _utc_datetime(str(kev_identity["fetched_at_utc"]))
+    kev_age_seconds = (enforcement_time - kev_fetched_at).total_seconds()
+    if not (
+        -MAX_ENFORCEMENT_FUTURE_SKEW_SECONDS
+        <= kev_age_seconds
+        <= MAX_RECEIPT_TO_ENFORCEMENT_AGE_SECONDS
+    ):
+        raise ScanPolicyError("CISA KEV authority evidence is stale or future-dated")
+    kev_digest = _required_string(kev_identity.get("source_sha256"), field="KEV source digest")
+    if not SHA256_DIGEST_PATTERN.fullmatch(kev_digest):
+        raise ScanPolicyError("KEV source digest must be a sha256 digest")
+    if not isinstance(kev_identity.get("entry_count"), int) or kev_identity["entry_count"] < 1:
+        raise ScanPolicyError("KEV entry count must be positive")
     policy = receipt.get("policy")
     if not isinstance(policy, dict):
         raise ScanPolicyError("image scan policy receipt has no policy decision")
@@ -323,6 +500,8 @@ def enforce_policy_receipt(
     decision = policy.get("decision")
     finding_count = policy.get("finding_count")
     count = policy.get("blocking_finding_count")
+    known_exploited_count = policy.get("known_exploited_finding_count")
+    unclassified_exploitation_count = policy.get("unclassified_exploitation_finding_count")
     severity_counts = policy.get("severity_counts")
     findings = receipt.get("findings")
     if not isinstance(findings, list):
@@ -335,17 +514,49 @@ def enforce_policy_receipt(
         for severity in sorted(KNOWN_SEVERITIES)
     }
     expected_blocking_count = sum(
-        finding["severity"] in BLOCKING_SEVERITIES for finding in findings
+        finding["severity"] in BLOCKING_SEVERITIES
+        or finding["known_exploited"] is True
+        or (finding["finding_type"] == "vulnerability" and finding["known_exploited"] is None)
+        for finding in findings
+    )
+    expected_known_exploited_count = sum(finding["known_exploited"] is True for finding in findings)
+    expected_unclassified_count = sum(
+        finding["finding_type"] == "vulnerability" and finding["known_exploited"] is None
+        for finding in findings
     )
     if finding_count != len(findings) or severity_counts != expected_severity_counts:
         raise ScanPolicyError("image scan policy receipt finding totals are inconsistent")
     if not isinstance(count, int) or count != expected_blocking_count:
         raise ScanPolicyError("image scan policy receipt blocking count is inconsistent")
+    if known_exploited_count != expected_known_exploited_count:
+        raise ScanPolicyError("image scan policy receipt known-exploited count is inconsistent")
+    if unclassified_exploitation_count != expected_unclassified_count:
+        raise ScanPolicyError("image scan policy receipt exploitation count is inconsistent")
+    expected_receipt = build_policy_receipt(
+        report_path=report_path,
+        service=expected_service,
+        image_ref=expected_image_ref,
+        image_digest=expected_image_digest,
+        repository=expected_repository,
+        git_commit_sha=expected_git_commit_sha,
+        ci_run_id=expected_ci_run_id,
+        ci_run_attempt=expected_ci_run_attempt,
+        scanner_name=SCANNER_NAME,
+        scanner_version=SCANNER_VERSION,
+        scanner_image=SCANNER_IMAGE,
+        scan_timestamp=_required_string(
+            receipt.get("generated_at_utc"), field="receipt generated-at"
+        ),
+        kev_catalog_path=kev_catalog_path,
+        kev_fetched_at=_required_string(kev_identity.get("fetched_at_utc"), field="KEV fetched-at"),
+    )
+    if receipt != expected_receipt:
+        raise ScanPolicyError("image scan policy receipt does not match its source evidence")
     if decision == "passed" and expected_blocking_count == 0:
         return
     if decision == "blocked" and expected_blocking_count > 0:
         raise ScanPolicyError(
-            f"image release blocked by {count} HIGH/CRITICAL vulnerability or secret finding(s)"
+            f"image release blocked by {count} vulnerability or secret policy finding(s)"
         )
     raise ScanPolicyError("image scan policy receipt decision is inconsistent")
 
@@ -366,9 +577,26 @@ def _parser() -> argparse.ArgumentParser:
     evaluate.add_argument("--scanner-version", required=True)
     evaluate.add_argument("--scanner-image", required=True)
     evaluate.add_argument("--scan-timestamp", required=True)
+    evaluate.add_argument("--kev-catalog", required=True, type=Path)
+    evaluate.add_argument("--kev-fetched-at", required=True)
     evaluate.add_argument("--output", required=True, type=Path)
+    unavailable = subparsers.add_parser("unavailable")
+    unavailable.add_argument("--service", required=True)
+    unavailable.add_argument("--image-ref", required=True)
+    unavailable.add_argument("--image-digest", required=True)
+    unavailable.add_argument("--repository", required=True)
+    unavailable.add_argument("--git-commit-sha", required=True)
+    unavailable.add_argument("--ci-run-id", required=True)
+    unavailable.add_argument("--ci-run-attempt", required=True)
+    unavailable.add_argument("--generated-at", required=True)
+    unavailable.add_argument(
+        "--reason-code", required=True, choices=sorted(UNAVAILABLE_REASON_CODES)
+    )
+    unavailable.add_argument("--output", required=True, type=Path)
     enforce = subparsers.add_parser("enforce")
     enforce.add_argument("--receipt", required=True, type=Path)
+    enforce.add_argument("--report", required=True, type=Path)
+    enforce.add_argument("--kev-catalog", required=True, type=Path)
     enforce.add_argument("--expected-service", required=True)
     enforce.add_argument("--expected-image-ref", required=True)
     enforce.add_argument("--expected-image-digest", required=True)
@@ -376,6 +604,7 @@ def _parser() -> argparse.ArgumentParser:
     enforce.add_argument("--expected-git-commit-sha", required=True)
     enforce.add_argument("--expected-ci-run-id", required=True)
     enforce.add_argument("--expected-ci-run-attempt", required=True)
+    enforce.add_argument("--enforced-at", required=True)
     return parser
 
 
@@ -396,12 +625,31 @@ def main() -> int:
                 scanner_version=args.scanner_version,
                 scanner_image=args.scanner_image,
                 scan_timestamp=args.scan_timestamp,
+                kev_catalog_path=args.kev_catalog,
+                kev_fetched_at=args.kev_fetched_at,
+            )
+            args.output.parent.mkdir(parents=True, exist_ok=True)
+            args.output.write_text(json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
+            return 0
+        if args.command == "unavailable":
+            receipt = build_unavailable_receipt(
+                service=args.service,
+                image_ref=args.image_ref,
+                image_digest=args.image_digest,
+                repository=args.repository,
+                git_commit_sha=args.git_commit_sha,
+                ci_run_id=args.ci_run_id,
+                ci_run_attempt=args.ci_run_attempt,
+                generated_at=args.generated_at,
+                reason_code=args.reason_code,
             )
             args.output.parent.mkdir(parents=True, exist_ok=True)
             args.output.write_text(json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
             return 0
         enforce_policy_receipt(
             args.receipt,
+            report_path=args.report,
+            kev_catalog_path=args.kev_catalog,
             expected_service=args.expected_service,
             expected_image_ref=args.expected_image_ref,
             expected_image_digest=args.expected_image_digest,
@@ -409,9 +657,10 @@ def main() -> int:
             expected_git_commit_sha=args.expected_git_commit_sha,
             expected_ci_run_id=args.expected_ci_run_id,
             expected_ci_run_attempt=args.expected_ci_run_attempt,
+            enforced_at=args.enforced_at,
         )
         return 0
-    except (OSError, ScanPolicyError) as exc:
+    except (OSError, CisaKevError, ScanPolicyError) as exc:
         raise SystemExit(str(exc)) from exc
 
 

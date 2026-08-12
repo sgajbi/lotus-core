@@ -1057,7 +1057,15 @@ Most relevant current governance:
     immutable-digest vulnerability and secret scan into a secret-safe policy receipt, uploads one
     service-specific receipt even when HIGH/CRITICAL enforcement blocks. Receipts retain normalized
     LOW/MEDIUM/HIGH/CRITICAL identities and counts, while UNKNOWN severity fails closed. The lane
-    also fails closed on missing, malformed, wrong-digest, or inconsistent evidence. A blocked receipt must prevent
+    binds a freshly fetched official CISA KEV catalog identity/digest and blocks any known-exploited
+    finding regardless of scanner severity. Missing, malformed, empty, future-dated, stale, or
+    below or older than the reviewed `contracts/security/cisa-kev-authority-policy.v1.json`
+    completeness and anti-rollback boundary,
+    or unclassifiable exploitation evidence fails closed; absence from KEV is asserted only for a CVE
+    checked against that exact catalog. The lane also fails closed on missing, malformed,
+    wrong-digest, stale-at-enforcement, or inconsistent evidence. Fetch, scanner, and evaluation
+    failures emit only a bounded reason-code receipt so audit evidence remains durable without
+    retaining remote response bodies or secret-bearing scanner detail. A blocked receipt must prevent
     release SBOM export, signing, release-manifest generation, and deployment rendering; retained
     failure evidence is diagnostic and does not certify an image. After enforcement passes,
     `scripts/release/write_image_release_manifest.py` records digest, OCI label parity, SBOM, scan,
