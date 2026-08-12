@@ -81,6 +81,29 @@ def test_guard_rejects_stale_review(tmp_path: Path) -> None:
     assert "base-image lifecycle evidence is stale" in _details(tmp_path)
 
 
+def test_guard_rejects_package_support_evidence_not_refreshed_with_review(
+    tmp_path: Path,
+) -> None:
+    inventory = _inventory()
+    record = inventory["base_images"][0]  # type: ignore[index]
+    record["observed_on"] = "2026-08-13"
+    record["next_review_on"] = "2026-09-12"
+    _write_fixture(tmp_path, inventory)
+
+    assert "Debian package support evidence must be refreshed with observed_on" in _details(
+        tmp_path, today=date(2026, 8, 13)
+    )
+
+
+def test_guard_rejects_future_dated_package_support_evidence(tmp_path: Path) -> None:
+    inventory = _inventory()
+    record = inventory["base_images"][0]  # type: ignore[index]
+    record["distribution_package_support"]["verified_on"] = "2026-08-13"
+    _write_fixture(tmp_path, inventory)
+
+    assert "Debian package support evidence cannot be future-dated" in _details(tmp_path)
+
+
 def test_guard_rejects_end_of_life_component(tmp_path: Path) -> None:
     inventory = _inventory()
     record = inventory["base_images"][0]  # type: ignore[index]

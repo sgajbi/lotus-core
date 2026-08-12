@@ -174,9 +174,9 @@ lane:
    finding regardless of scanner severity,
 6. generates a secret-safe, digest-bound Trivy policy receipt for vulnerability and secret
    scanning and uploads it before enforcing the release decision,
-7. retains normalized Low and Medium finding identities/counts for governance, fails on High or
-   Critical vulnerability or secret findings, and requires an exact approved remediation/exception
-   record before a Medium vulnerability can pass,
+7. retains normalized Low and Medium finding identities/counts for governance and fails on Medium,
+   High, or Critical vulnerability or secret findings; exact exception records remain ownership
+   evidence but cannot authorize release until the workflow can rescan the same immutable artifact,
 8. generates BuildKit SBOM/provenance attestations and exports a CycloneDX SBOM artifact only
    after scan enforcement passes,
 9. signs the digest reference with Cosign only after scan enforcement passes,

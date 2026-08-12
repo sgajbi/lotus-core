@@ -1070,9 +1070,11 @@ Most relevant current governance:
     release SBOM export, signing, release-manifest generation, and deployment rendering; retained
     failure evidence is diagnostic and does not certify an image. Exceptions come only from
     `contracts/security/vulnerability-exception-register.v1.json`, validated against the pinned
-    Platform schema authority. The register is empty by default. Only exact digest/advisory/severity,
-    approved, unexpired, owned records can affect a non-KEV decision; Medium requires that governed
-    plan, while KEV/unclassified findings have no exception path. This adds no runtime dependency.
+    Platform schema authority. The register is empty by default. Exact digest/advisory/severity,
+    approved, unexpired, owned records are retained as remediation evidence but cannot authorize a
+    release until the workflow can re-evaluate that same scanned digest without rebuilding it.
+    Medium, High, Critical, KEV, and unclassified findings therefore remain blocking. This adds no
+    runtime dependency.
     After enforcement passes,
     `scripts/release/write_image_release_manifest.py` records digest, OCI label parity, SBOM, scan,
     signing, provenance-attestation, digest-deploy, and same-image-promotion evidence across `dev`,

@@ -112,8 +112,9 @@ the reviewed completeness and anti-rollback boundary lives in
 Fetch, scan, or evaluation failure still uploads an exact-source, secret-safe reason-code receipt,
 and enforcement rejects evidence older than 30 minutes or materially future-dated.
 Receipts also bind the Core exception-register digest and its source-pinned Platform schema
-authority. Medium findings require an exact approved remediation/exception record; KEV and
-unclassified exploitation are never exceptionable. The default register is empty, and
+authority. Medium, High, Critical, KEV, and unclassified exploitation findings remain blocking.
+Exact exception records retain ownership evidence but cannot authorize release until the workflow
+can rescan the same immutable artifact without rebuilding it. The default register is empty, and
 `make image-provenance-guard` rejects malformed ownership/approval/evidence, expiry, permanent
 suppression, and wrong digest/advisory/severity matches.
 The same command enforces the authored base-image lifecycle inventory. Core-built service images

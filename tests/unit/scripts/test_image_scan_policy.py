@@ -348,7 +348,7 @@ def test_medium_findings_require_an_owned_exception_plan(tmp_path: Path) -> None
     ]
 
 
-def test_exact_approved_medium_exception_allows_policy_decision(
+def test_exact_approved_medium_exception_remains_blocking_until_artifact_re_evaluation(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     class ApprovedRegister:
@@ -396,12 +396,64 @@ def test_exact_approved_medium_exception_allows_policy_decision(
 
     receipt = _receipt(report)
 
-    assert receipt["policy"]["decision"] == "passed"
+    assert receipt["policy"]["decision"] == "blocked"
     assert receipt["policy"]["approved_exception_finding_count"] == 1
     assert receipt["findings"][0]["approved_exception_ids"] == ["VX-CORE-0001"]
     assert receipt["vulnerability_exception_register"]["applicable_exception_ids"] == [
         "VX-CORE-0001"
     ]
+
+
+def test_exact_approved_high_exception_cannot_override_blocking_severity(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class ApprovedRegister:
+        identity: dict[str, object] = {
+            "schema_version": "lotus-platform.vulnerability-exception-register.v1",
+            "register_id": "lotus-core-vulnerability-exceptions",
+            "generated_at_utc": "2026-08-12T00:00:00Z",
+            "register_sha256": "sha256:" + "c" * 64,
+            "lane_posture": "blocking",
+            "schema_authority": {"source_commit": "d" * 40},
+        }
+
+        def approved_exception_ids(
+            self, *, image_digest: str, advisory_id: str, severity: str
+        ) -> tuple[str, ...]:
+            assert (image_digest, advisory_id, severity) == (
+                IMAGE_DIGEST,
+                "CVE-2026-2001",
+                "HIGH",
+            )
+            return ("VX-CORE-0002",)
+
+    monkeypatch.setattr(
+        image_scan_policy,
+        "load_vulnerability_exception_register",
+        lambda *_args, **_kwargs: ApprovedRegister(),
+    )
+    report = _write_report(
+        tmp_path,
+        results=[
+            {
+                "Target": "os-pkgs",
+                "Type": "debian",
+                "Vulnerabilities": [
+                    {
+                        "VulnerabilityID": "CVE-2026-2001",
+                        "PkgName": "example",
+                        "InstalledVersion": "1.0.0",
+                        "Severity": "HIGH",
+                    }
+                ],
+            }
+        ],
+    )
+
+    receipt = _receipt(report)
+
+    assert receipt["policy"]["decision"] == "blocked"
+    assert receipt["findings"][0]["approved_exception_ids"] == ["VX-CORE-0002"]
 
 
 def test_low_known_exploited_vulnerability_blocks_release(tmp_path: Path) -> None:

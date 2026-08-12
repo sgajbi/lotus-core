@@ -1,5 +1,14 @@
 # Codebase Review Ledger
 
+CR-1688 release-exception fail-closed review (2026-08-12): late PR #944 review proved that an
+approved exception could incorrectly override High/Critical policy and that even a Medium
+digest-bound exception could not authorize the originally scanned artifact through a rebuild-only
+workflow. Core now retains exact exception matches as ownership evidence but never converts them
+into release authority; Medium, High, Critical, KEV, and unclassified findings remain blocking
+until #928/#720 provide same-artifact re-evaluation without rebuilding. Base-image review renewal
+also requires Debian package-support evidence to be refreshed on the same observed date and rejects
+future-dated evidence. Focused policy/lifecycle tests and protected PR evidence govern this change.
+
 CR-1687 governed dependency technology inventory (2026-08-12): #926 now inventories all 104 unique
 components from the four compiled runtime/CI platform closures, never the ambient interpreter.
 The committed machine contract binds newline-normalized lock and policy digests, exact
