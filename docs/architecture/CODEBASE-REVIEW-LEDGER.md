@@ -62,6 +62,14 @@ schema provenance, and exact applicable IDs. Matching requires image digest, adv
 equality; Medium joins High/Critical as plan-gated, while KEV, unclassified exploitation,
 unavailable evidence, proposed/expired/permanent records, and duplicate matches fail closed.
 Remediated history requires removal proof and cannot authorize release.
+Exact-head hosted run `31559195490` then retained all 13 attempt-qualified receipts and correctly
+skipped SBOM export, signing, manifest generation, and deployment rendering, but Trivy's UNKNOWN
+severity caused the evaluator to replace valid finding evidence with generic
+`evidence_evaluation_failed`. Receipt semantics advance to v4: UNKNOWN vulnerability and secret
+findings are now normalized, counted, non-exceptionable, and blocking, without copying secret
+material. Unavailable receipts remain reserved for actual fetch, scanner, schema, or evaluator
+failure. The run is diagnostic pipeline evidence, not a vulnerability verdict; a new exact-head
+dispatch is required.
 
 CR-1630 corporate-action lease-clock addendum (2026-08-12): same-pattern review from #487 found
 that issue #939's corporate-action release claim, ownership, progress, failure, and renewal fences

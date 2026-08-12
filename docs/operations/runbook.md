@@ -191,13 +191,15 @@ still uses the immutable Git-SHA image tag and the same complete policy, signing
 controls. A manual feature-branch dispatch does not make the branch releasable and does not replace
 protected PR or exact-main validation.
 
-Each matrix service uploads a `lotus-core.image-scan-policy-receipt.v3` receipt as
+Each matrix service uploads a `lotus-core.image-scan-policy-receipt.v4` receipt as
 `image-scan-policy-<service>-attempt-<run-attempt>` even when the
 policy blocks. The receipt binds the repository, exact commit, workflow run and attempt, service,
 immutable image digest,
 scanner identity, scan time, source-report digest, normalized finding identities, and decision. It
 never copies a secret match or source-code excerpt from Trivy. A missing, malformed, wrong-digest,
-or inconsistent receipt fails closed. The CISA KEV feed is fetched immediately before scanning;
+or inconsistent receipt fails closed. UNKNOWN vulnerability or secret severity is retained as a
+normalized, non-exceptionable blocked finding so operators receive the advisory/component identity;
+it is not mislabeled as scanner unavailability. The CISA KEV feed is fetched immediately before scanning;
 missing, malformed, empty, wrong-title, duplicate-CVE, future-dated, below-baseline, or replayed
 pre-baseline catalog
 evidence fails closed. Fetch, scan, and evaluation failures produce a bounded reason-code receipt

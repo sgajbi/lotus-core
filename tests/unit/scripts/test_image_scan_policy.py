@@ -150,10 +150,8 @@ def test_enforcement_rejects_stale_or_future_receipt(tmp_path: Path, enforced_at
         _enforce(receipt_path, enforced_at=enforced_at)
 
 
-@pytest.mark.parametrize("version", ["v1", "v2"])
-def test_current_enforcement_rejects_prior_receipt_versions(
-    tmp_path: Path, version: str
-) -> None:
+@pytest.mark.parametrize("version", ["v1", "v2", "v3"])
+def test_current_enforcement_rejects_prior_receipt_versions(tmp_path: Path, version: str) -> None:
     receipt = _receipt(_write_report(tmp_path, results=[]))
     receipt["schema_version"] = f"lotus-core.image-scan-policy-receipt.{version}"
     receipt_path = tmp_path / "receipt.json"
@@ -192,8 +190,15 @@ def test_clean_report_builds_digest_bound_pass_receipt(tmp_path: Path) -> None:
         "blocking_finding_count": 0,
         "known_exploited_finding_count": 0,
         "unclassified_exploitation_finding_count": 0,
+        "unclassified_severity_finding_count": 0,
         "approved_exception_finding_count": 0,
-        "severity_counts": {"CRITICAL": 0, "HIGH": 0, "LOW": 0, "MEDIUM": 0},
+        "severity_counts": {
+            "CRITICAL": 0,
+            "HIGH": 0,
+            "LOW": 0,
+            "MEDIUM": 0,
+            "UNKNOWN": 0,
+        },
     }
     assert receipt["known_exploited_catalog"] == {
         "source_url": (
@@ -242,6 +247,7 @@ def test_high_vulnerability_builds_blocked_normalized_receipt(tmp_path: Path) ->
         "HIGH": 1,
         "LOW": 0,
         "MEDIUM": 0,
+        "UNKNOWN": 0,
     }
     assert receipt["findings"] == [
         {
@@ -318,6 +324,7 @@ def test_medium_findings_require_an_owned_exception_plan(tmp_path: Path) -> None
         "HIGH": 0,
         "LOW": 0,
         "MEDIUM": 1,
+        "UNKNOWN": 0,
     }
     assert receipt["findings"] == [
         {
@@ -463,7 +470,7 @@ def test_missing_results_fails_closed(tmp_path: Path) -> None:
         _receipt(report)
 
 
-def test_unknown_finding_severity_fails_closed(tmp_path: Path) -> None:
+def test_unknown_finding_severity_builds_actionable_blocked_receipt(tmp_path: Path) -> None:
     report = _write_report(
         tmp_path,
         results=[
@@ -482,8 +489,47 @@ def test_unknown_finding_severity_fails_closed(tmp_path: Path) -> None:
         ],
     )
 
-    with pytest.raises(ScanPolicyError, match="unknown vulnerability severity"):
-        _receipt(report)
+    receipt = _receipt(report)
+
+    assert receipt["evidence_state"] == "available"
+    assert receipt["policy"]["decision"] == "blocked"
+    assert receipt["policy"]["blocking_finding_count"] == 1
+    assert receipt["policy"]["unclassified_severity_finding_count"] == 1
+    assert receipt["policy"]["severity_counts"]["UNKNOWN"] == 1
+    assert receipt["findings"][0]["severity"] == "UNKNOWN"
+    assert receipt["findings"][0]["approved_exception_ids"] == []
+    receipt_path = tmp_path / "receipt.json"
+    receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+    with pytest.raises(ScanPolicyError, match="release blocked by 1"):
+        _enforce(receipt_path)
+
+
+def test_unknown_secret_severity_is_retained_without_secret_material(tmp_path: Path) -> None:
+    report = _write_report(
+        tmp_path,
+        results=[
+            {
+                "Target": "app/settings.py",
+                "Class": "secret",
+                "Secrets": [
+                    {
+                        "RuleID": "unclassified-secret",
+                        "Category": "unknown",
+                        "Severity": "UNKNOWN",
+                        "Match": "SENSITIVE-MATERIAL",
+                    }
+                ],
+            }
+        ],
+    )
+
+    receipt = _receipt(report)
+    serialized = json.dumps(receipt)
+
+    assert receipt["policy"]["decision"] == "blocked"
+    assert receipt["policy"]["unclassified_severity_finding_count"] == 1
+    assert receipt["findings"][0]["severity"] == "UNKNOWN"
+    assert "SENSITIVE-MATERIAL" not in serialized
 
 
 def test_report_for_another_digest_fails_closed(tmp_path: Path) -> None:
