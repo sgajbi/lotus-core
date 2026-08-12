@@ -3,14 +3,14 @@
 # Inputs: requirements/ci-tooling.in and tests/requirements.txt.
 anyio==4.12.1
     # via
-    #   -c requirements/shared-runtime.lock.txt
+    #   -c requirements/shared-runtime-windows.lock.txt
     #   httpx
     #   httpx2
 ast-serialize==0.8.0
     # via mypy
 asyncpg==0.31.0
     # via
-    #   -c requirements/shared-runtime.lock.txt
+    #   -c requirements/shared-runtime-windows.lock.txt
     #   -r tests/requirements.txt
 attrs==26.1.0
     # via interrogate
@@ -24,7 +24,7 @@ cachecontrol==0.14.4
     #   pip-audit
 certifi==2026.2.25
     # via
-    #   -c requirements/shared-runtime.lock.txt
+    #   -c requirements/shared-runtime-windows.lock.txt
     #   httpcore
     #   httpx
     #   requests
@@ -32,13 +32,13 @@ charset-normalizer==3.4.9
     # via requests
 click==8.4.2
     # via
-    #   -c requirements/shared-runtime.lock.txt
+    #   -c requirements/shared-runtime-windows.lock.txt
     #   deptry
     #   import-linter
     #   interrogate
 colorama==0.4.6
     # via
-    #   -c requirements/shared-runtime.lock.txt
+    #   -c requirements/shared-runtime-windows.lock.txt
     #   bandit
     #   click
     #   deptry
@@ -59,7 +59,7 @@ docker==7.2.0
     # via testcontainers
 et-xmlfile==2.0.0
     # via
-    #   -c requirements/shared-runtime.lock.txt
+    #   -c requirements/shared-runtime-windows.lock.txt
     #   openpyxl
 filelock==3.32.2
     # via cachecontrol
@@ -67,18 +67,18 @@ grimp==3.15
     # via import-linter
 h11==0.16.0
     # via
-    #   -c requirements/shared-runtime.lock.txt
+    #   -c requirements/shared-runtime-windows.lock.txt
     #   httpcore
     #   httpcore2
 httpcore==1.0.9
     # via
-    #   -c requirements/shared-runtime.lock.txt
+    #   -c requirements/shared-runtime-windows.lock.txt
     #   httpx
 httpcore2==2.4.0
     # via httpx2
 httpx==0.28.1
     # via
-    #   -c requirements/shared-runtime.lock.txt
+    #   -c requirements/shared-runtime-windows.lock.txt
     #   -r tests/requirements.txt
 httpx2==2.4.0
     # via -r tests/requirements.txt
@@ -86,7 +86,7 @@ hypothesis==6.155.7
     # via -r tests/requirements.txt
 idna==3.18
     # via
-    #   -c requirements/shared-runtime.lock.txt
+    #   -c requirements/shared-runtime-windows.lock.txt
     #   anyio
     #   httpx
     #   httpx2
@@ -115,7 +115,7 @@ mypy-extensions==1.1.0
     # via mypy
 openpyxl==3.1.5
     # via
-    #   -c requirements/shared-runtime.lock.txt
+    #   -c requirements/shared-runtime-windows.lock.txt
     #   -r tests/requirements.txt
 packageurl-python==0.17.6
     # via cyclonedx-python-lib
@@ -142,7 +142,7 @@ pluggy==1.6.0
     #   pytest-cov
 psycopg2-binary==2.9.12
     # via
-    #   -c requirements/shared-runtime.lock.txt
+    #   -c requirements/shared-runtime-windows.lock.txt
     #   -r tests/requirements.txt
 py==1.11.0
     # via interrogate
@@ -168,14 +168,14 @@ pytest-dependency==0.6.1
     # via -r tests/requirements.txt
 python-dotenv==1.2.2
     # via
-    #   -c requirements/shared-runtime.lock.txt
+    #   -c requirements/shared-runtime-windows.lock.txt
     #   -r tests/requirements.txt
     #   testcontainers
 pywin32==312
     # via docker
 pyyaml==6.0.3
     # via
-    #   -c requirements/shared-runtime.lock.txt
+    #   -c requirements/shared-runtime-windows.lock.txt
     #   bandit
     #   xenon
 radon==6.0.1
@@ -200,7 +200,7 @@ ruff==0.15.18
     # via -r requirements/ci-tooling.in
 six==1.17.0
     # via
-    #   -c requirements/shared-runtime.lock.txt
+    #   -c requirements/shared-runtime-windows.lock.txt
     #   mando
 sortedcontainers==2.4.0
     # via
@@ -226,7 +226,7 @@ types-python-dateutil==2.9.0.20260518
     # via -r requirements/ci-tooling.in
 typing-extensions==4.15.0
     # via
-    #   -c requirements/shared-runtime.lock.txt
+    #   -c requirements/shared-runtime-windows.lock.txt
     #   anyio
     #   cyclonedx-python-lib
     #   httpx2

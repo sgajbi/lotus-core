@@ -38,7 +38,6 @@ click==8.4.2
     #   interrogate
 colorama==0.4.6
     # via
-    #   -c requirements/shared-runtime.lock.txt
     #   interrogate
     #   radon
 coverage==7.15.1

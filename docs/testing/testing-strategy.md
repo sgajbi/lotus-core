@@ -148,7 +148,10 @@ test source file therefore cannot reduce closure blockers.
 
 Dependency consistency and vulnerability audit use one content-addressed environment contract:
 
-- runtime dependencies come from the compiled `requirements/shared-runtime.lock.txt` closure;
+- runtime dependencies use distinct Python 3.11 Linux/amd64 production and Windows/amd64
+  engineering closures; Linux compiles inside the exact governed production base, while
+  Python 3.12 GitHub execution proves forward compatibility against the Linux authority rather
+  than resolving a second mutable graph;
 - CI/build/test dependencies come from `requirements/ci-tooling.in`, compiled with pinned
   `pip==26.1.2`, `pip-tools==7.5.3`, and Python 3.11 into platform-specific Linux/amd64 and
   Windows/amd64 locks;
@@ -156,6 +159,11 @@ Dependency consistency and vulnerability audit use one content-addressed environ
   tooling uses the Windows closure so platform markers remain truthful; and
 - `make compile-ci-tooling-lock` regenerates the closures; committed locks are generated evidence,
   never hand-edited inputs.
+
+This platform split is intentional. The runtime lock includes Linux `uvloop` and excludes
+Windows-only `colorama`; the Windows CI/build/test tooling closure carries Windows marker packages.
+Use `python scripts/development/update_shared_runtime_lock.py --check` and
+`python scripts/development/update_ci_tooling_lock.py --check` for deterministic replay evidence.
 
 | Command | Cache Posture | Evidence |
 |---|---|---|

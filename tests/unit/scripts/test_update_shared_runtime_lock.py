@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+import pytest
+
 from scripts.development import update_shared_runtime_lock as lock_module
 
 
@@ -58,22 +60,41 @@ def test_compile_runtime_lock_forwards_bounded_package_upgrades(
     monkeypatch,
 ) -> None:
     commands: list[list[str]] = []
+    (tmp_path / "runtime.in").write_text("demo==1.0\n", encoding="utf-8")
+    (tmp_path / "runtime.lock").write_text("demo==1.0\n", encoding="utf-8")
     monkeypatch.setattr(lock_module, "RUNTIME_INPUT", tmp_path / "runtime.in")
     monkeypatch.setattr(lock_module, "RUNTIME_LOCK", tmp_path / "runtime.lock")
-    monkeypatch.setattr(lock_module.tempfile, "mkdtemp", lambda **_kwargs: str(tmp_path / "tools"))
+    tools = tmp_path / "tools"
+    tools.mkdir()
+    monkeypatch.setattr(lock_module.tempfile, "mkdtemp", lambda **_kwargs: str(tools))
     monkeypatch.setattr(
-        lock_module,
-        "_run",
-        lambda command, **_kwargs: commands.append(command),
+        lock_module.subprocess,
+        "run",
+        lambda command, **_kwargs: (
+            commands.append(command),
+            (tools / "shared-runtime.lock.txt").write_text(
+                "demo==1.0\n    # via /work/shared-runtime.in\n", encoding="utf-8"
+            ),
+        )[-1],
     )
 
-    lock_module._compile_runtime_lock(upgrade_packages=("click", "urllib3"))
+    result = lock_module._compile_linux_runtime_lock(upgrade_packages=("click", "urllib3"))
 
-    compile_command = commands[-1]
-    assert compile_command.count("--upgrade-package") == 2
-    assert compile_command[compile_command.index("--upgrade-package") + 1] == "click"
-    assert "urllib3" in compile_command
-    assert compile_command[-2:] == [
-        str(tmp_path / "runtime.lock"),
-        str(tmp_path / "runtime.in"),
-    ]
+    compile_command = commands[-1][-1]
+    assert "--upgrade-package click --upgrade-package urllib3" in compile_command
+    assert "Python 3.11; platform linux/amd64" in result
+    assert "/work/" not in result
+
+
+def test_normalized_runtime_lock_is_replay_stable() -> None:
+    raw = "# generated on a workstation\ndemo==1.0\n    # via /work/shared-runtime.in\n"
+
+    first = lock_module._normalize_compiled_lock(raw, platform="linux/amd64")
+    second = lock_module._normalize_compiled_lock(raw, platform="linux/amd64")
+    assert first == second
+    assert "pip==26.1.2; pip-tools==7.5.3" in first
+
+
+def test_compile_runtime_lock_rejects_shell_control_in_upgrade_name() -> None:
+    with pytest.raises(SystemExit, match="Invalid --upgrade-package"):
+        lock_module._compile_linux_runtime_lock(upgrade_packages=("uvicorn;echo-unsafe",))

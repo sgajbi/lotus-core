@@ -16,6 +16,7 @@ TOOLING_INPUT = REPO_ROOT / "requirements" / "ci-tooling.in"
 TEST_INPUT = REPO_ROOT / "tests" / "requirements.txt"
 LINUX_TOOLING_LOCK = REPO_ROOT / "requirements" / "ci-tooling.lock.txt"
 WINDOWS_TOOLING_LOCK = REPO_ROOT / "requirements" / "ci-tooling-windows.lock.txt"
+WINDOWS_RUNTIME_LOCK = REPO_ROOT / "requirements" / "shared-runtime-windows.lock.txt"
 PIP_TOOLS_VERSION = "7.5.3"
 PIP_VERSION = "26.1.2"
 GOVERNED_PYTHON = (3, 11)
@@ -143,6 +144,13 @@ def _compile_with_host_python() -> str:
                 f"pip-tools=={PIP_TOOLS_VERSION}",
             ]
         )
+        windows_input = temp_dir / "ci-tooling-windows.in"
+        windows_input.write_text(
+            TOOLING_INPUT.read_text(encoding="utf-8")
+            .replace("-c shared-runtime.lock.txt", f"-c {WINDOWS_RUNTIME_LOCK.as_posix()}")
+            .replace("-r ../tests/requirements.txt", f"-r {TEST_INPUT.as_posix()}"),
+            encoding="utf-8",
+        )
         raw_lock = temp_dir / "ci-tooling.raw.txt"
         _run(
             [
@@ -156,10 +164,14 @@ def _compile_with_host_python() -> str:
                 "--allow-unsafe",
                 "--output-file",
                 str(raw_lock),
-                str(TOOLING_INPUT),
+                str(windows_input),
             ]
         )
-        return raw_lock.read_text(encoding="utf-8")
+        return (
+            raw_lock.read_text(encoding="utf-8")
+            .replace(windows_input.as_posix(), TOOLING_INPUT.as_posix())
+            .replace(str(windows_input), str(TOOLING_INPUT))
+        )
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
 

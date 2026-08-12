@@ -23,6 +23,13 @@ platform-specific compiled closure. This adds no new package or runtime technolo
 already approved dependency set reproducible before license classification is attempted. #926
 remains open for deterministic license/supportability generation, fail-closed ambiguity policy,
 CI evidence, merge, and exact-main proof.
+The same-pattern runtime audit also removed workstation Python 3.13 provenance from the production
+lock. The exact Python 3.11 Linux base now resolves the runtime closure with pinned pip/pip-tools,
+adding the Linux `uvloop` extra selected by `uvicorn[standard]` and removing Windows-only
+`colorama`. A distinct Windows/amd64 closure preserves `colorama` while excluding `uvloop`, and
+bootstrap/dependency health select the matching authority. Python 3.12 remains the
+forward-compatibility CI execution lane over the Linux production closure; it is not a competing
+lock authority.
 
 CR-1684 image-scan failure-evidence addendum (2026-08-12): issue #928's hosted Image Release
 failure correctly blocked all 13 service images on HIGH/CRITICAL findings but retained zero scan

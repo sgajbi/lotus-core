@@ -30,7 +30,11 @@ except ModuleNotFoundError:
     )
 
 ROOT = Path(__file__).resolve().parents[2]
-RUNTIME_LOCK_FILE = ROOT / "requirements" / "shared-runtime.lock.txt"
+RUNTIME_LOCK_FILE = (
+    ROOT
+    / "requirements"
+    / ("shared-runtime-windows.lock.txt" if sys.platform == "win32" else "shared-runtime.lock.txt")
+)
 TEST_REQUIREMENTS_FILE = ROOT / "tests" / "requirements.txt"
 TOOLING_LOCK_FILE = (
     ROOT
@@ -151,7 +155,7 @@ def _build_environment(
         [str(python_bin), "-m", "pip", "install", f"pip=={installer_version}"],
         cwd=root,
     )
-    constraint_file = root / "requirements" / "shared-runtime.lock.txt"
+    constraint_file = root / "requirements" / RUNTIME_LOCK_FILE.name
     for project_dir in discover_editable_projects(root):
         command_runner(
             constrained_install_command(
@@ -162,19 +166,16 @@ def _build_environment(
             ),
             cwd=root,
         )
-    for requirements_file in (
-        root / "tests" / "requirements.txt",
-        root / "requirements" / "ci-tooling.lock.txt",
-    ):
-        command_runner(
-            constrained_install_command(
-                python_bin,
-                "-r",
-                str(requirements_file),
-                constraint_file=constraint_file,
-            ),
-            cwd=root,
-        )
+    requirements_file = root / "requirements" / TOOLING_LOCK_FILE.name
+    command_runner(
+        constrained_install_command(
+            python_bin,
+            "-r",
+            str(requirements_file),
+            constraint_file=constraint_file,
+        ),
+        cwd=root,
+    )
     command_runner([str(python_bin), "-m", "pip", "check"], cwd=root)
 
 
