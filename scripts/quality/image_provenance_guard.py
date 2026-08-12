@@ -182,8 +182,7 @@ def _release_workflow_findings(root: Path) -> list[ImageProvenanceFinding]:
                 )
             )
         expected_release_condition = (
-            "${{ github.ref == 'refs/heads/main' || "
-            "startsWith(github.ref, 'refs/tags/v') }}"
+            "${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') }}"
         )
         if " ".join(str(release_job.get("if", "")).split()) != expected_release_condition:
             findings.append(
@@ -207,10 +206,7 @@ def _release_workflow_findings(root: Path) -> list[ImageProvenanceFinding]:
             "${{ github.event_name == 'workflow_dispatch' && "
             "github.ref != 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/v') }}"
         )
-        if (
-            " ".join(str(diagnostic_job.get("if", "")).split())
-            != expected_diagnostic_condition
-        ):
+        if " ".join(str(diagnostic_job.get("if", "")).split()) != expected_diagnostic_condition:
             findings.append(
                 ImageProvenanceFinding(
                     RELEASE_WORKFLOW,
