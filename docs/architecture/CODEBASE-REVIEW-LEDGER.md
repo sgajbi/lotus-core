@@ -18,6 +18,9 @@ hash-bound dependency policy. All protected delivery lanes now replay both depen
 on Linux and Windows before inventory evidence can run, preventing stale input or platform closure
 certification. Official Images identity evidence must also be non-future and refreshed on the same
 date as the lifecycle observation.
+An `approved` dependency license is now recomputed against the hash-bound policy allowlist and its
+declared-expression, classifier-mapping, or legacy-mapping evidence; an authored status label alone
+cannot create release authority.
 
 CR-1687 governed dependency technology inventory (2026-08-12): #926 now inventories all 104 unique
 components from the four compiled runtime/CI platform closures, never the ambient interpreter.

@@ -49,6 +49,38 @@ def _canonical_name(value: str) -> str:
     return re.sub(r"[-_.]+", "-", value).lower()
 
 
+def _validate_approved_license(
+    license_evidence: dict[str, Any], policy: dict[str, Any], component: str
+) -> None:
+    normalized = license_evidence.get("normalized_expression")
+    if normalized not in set(policy["approved_single_spdx_expressions"]):
+        raise InventoryValidationError(f"approved license is outside policy: {component}")
+    source = license_evidence.get("classification_source")
+    reason = license_evidence.get("classification_reason")
+    if source == "pypi_license_expression":
+        evidence_matches = (
+            reason == "approved_declared_expression"
+            and license_evidence.get("declared_expression") == normalized
+        )
+    elif source == "pypi_classifier_mapping":
+        mapped = {
+            policy["classifier_mappings"][classifier]
+            for classifier in license_evidence.get("classifiers", [])
+            if classifier in policy["classifier_mappings"]
+        }
+        evidence_matches = reason == "approved_classifier_mapping" and mapped == {normalized}
+    elif source == "pypi_legacy_mapping":
+        evidence_matches = (
+            reason == "approved_legacy_mapping"
+            and policy["legacy_license_mappings"].get(license_evidence.get("legacy_value"))
+            == normalized
+        )
+    else:
+        evidence_matches = False
+    if not evidence_matches:
+        raise InventoryValidationError(f"approved license lacks policy evidence: {component}")
+
+
 def _commit() -> str:
     candidate = os.getenv("GITHUB_SHA")
     if candidate and re.fullmatch(r"[0-9a-fA-F]{40}", candidate):
@@ -105,6 +137,8 @@ def validate_inventory(*, as_of: date) -> dict[str, Any]:
         license_state = str(component["license"]["classification"])
         support_state = str(component["supportability"]["classification"])
         supportability = component["supportability"]
+        if license_state == "approved":
+            _validate_approved_license(component["license"], policy_contract, f"{key[0]}=={key[1]}")
         if support_state == "reviewed" and not all(
             _is_governed_authority_url(supportability.get(field))
             for field in (
