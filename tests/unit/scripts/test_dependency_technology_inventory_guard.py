@@ -71,6 +71,8 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[Path, Path]:
                         "pypi_json_url": "https://pypi.org/pypi/demo/1.0/json",
                         "pypi_metadata_sha256": "c" * 64,
                         "release_uploaded_at": "2026-08-01T00:00:00Z",
+                        "yanked": False,
+                        "prerelease": False,
                         "license": {
                             "classification": "approved",
                             "classification_reason": "approved_declared_expression",
@@ -83,11 +85,13 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[Path, Path]:
                         "supportability": {
                             "classification": "reviewed",
                             "classification_reason": "governed_authority_reviewed",
+                            "release_evidence_url": "https://pypi.org/project/demo/1.0/",
                             "upstream_support_policy_url": "https://example.test/support",
                             "vulnerability_disclosure_url": "https://example.test/security",
                             "eol_evidence_url": "https://example.test/lifecycle",
                             "reviewed_on": "2026-08-12",
                             "next_review_due": "2026-09-11",
+                            "approval_inference": "none",
                         },
                     }
                 ],
@@ -257,6 +261,63 @@ def test_approved_declared_license_rejects_ambiguous_classifier(
     inventory_file.write_text(json.dumps(data), encoding="utf-8")
 
     with pytest.raises(guard.InventoryValidationError, match="lacks policy evidence"):
+        guard.validate_inventory(as_of=date(2026, 8, 12))
+
+
+def test_approved_classifier_license_rejects_ambiguous_marker(tmp_path: Path, monkeypatch) -> None:
+    _lock, inventory_file = _fixture(tmp_path, monkeypatch)
+    policy = tmp_path / "contracts" / "security" / "policy.json"
+    policy_data = json.loads(policy.read_text(encoding="utf-8"))
+    policy_data["ambiguous_markers"] = ["License :: OSI Approved"]
+    policy.write_text(json.dumps(policy_data), encoding="utf-8")
+    data = json.loads(inventory_file.read_text(encoding="utf-8"))
+    data["policy"]["sha256"] = _sha(policy)
+    data["components"][0]["license"].update(
+        {
+            "classification_reason": "approved_classifier_mapping",
+            "classification_source": "pypi_classifier_mapping",
+            "declared_expression": None,
+            "classifiers": [
+                "License :: OSI Approved",
+                "License :: OSI Approved :: MIT License",
+            ],
+        }
+    )
+    inventory_file.write_text(json.dumps(data), encoding="utf-8")
+
+    with pytest.raises(guard.InventoryValidationError, match="lacks policy evidence"):
+        guard.validate_inventory(as_of=date(2026, 8, 12))
+
+
+def test_yanked_release_blocks_certification(tmp_path: Path, monkeypatch) -> None:
+    _lock, inventory_file = _fixture(tmp_path, monkeypatch)
+    data = json.loads(inventory_file.read_text(encoding="utf-8"))
+    data["components"][0]["yanked"] = True
+    inventory_file.write_text(json.dumps(data), encoding="utf-8")
+
+    receipt = guard.validate_inventory(as_of=date(2026, 8, 12))
+
+    assert receipt["certification_decision"] == "blocked"
+    assert {finding["reason"] for finding in receipt["findings"]} == {"release_yanked"}
+
+
+def test_release_posture_flags_are_required(tmp_path: Path, monkeypatch) -> None:
+    _lock, inventory_file = _fixture(tmp_path, monkeypatch)
+    data = json.loads(inventory_file.read_text(encoding="utf-8"))
+    data["components"][0].pop("prerelease")
+    inventory_file.write_text(json.dumps(data), encoding="utf-8")
+
+    with pytest.raises(guard.InventoryValidationError, match="invalid release posture flags"):
+        guard.validate_inventory(as_of=date(2026, 8, 12))
+
+
+def test_prerelease_flag_must_match_locked_version(tmp_path: Path, monkeypatch) -> None:
+    _lock, inventory_file = _fixture(tmp_path, monkeypatch)
+    data = json.loads(inventory_file.read_text(encoding="utf-8"))
+    data["components"][0]["prerelease"] = True
+    inventory_file.write_text(json.dumps(data), encoding="utf-8")
+
+    with pytest.raises(guard.InventoryValidationError, match="prerelease evidence drift"):
         guard.validate_inventory(as_of=date(2026, 8, 12))
 
 

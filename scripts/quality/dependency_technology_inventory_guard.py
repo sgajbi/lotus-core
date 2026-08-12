@@ -78,7 +78,14 @@ def _validate_approved_license(
             for classifier in license_evidence.get("classifiers", [])
             if classifier in policy["classifier_mappings"]
         }
-        evidence_matches = reason == "approved_classifier_mapping" and mapped == {normalized}
+        evidence_matches = (
+            reason == "approved_classifier_mapping"
+            and mapped == {normalized}
+            and not any(
+                marker in license_evidence.get("classifiers", [])
+                for marker in policy["ambiguous_markers"]
+            )
+        )
     elif source == "pypi_legacy_mapping":
         legacy_mapping = policy["legacy_license_mappings"].get(license_evidence.get("legacy_value"))
         mapped_classifiers = {
@@ -157,8 +164,35 @@ def validate_inventory(*, as_of: date) -> dict[str, Any]:
         license_state = str(component["license"]["classification"])
         support_state = str(component["supportability"]["classification"])
         supportability = component["supportability"]
+        component_id = f"{key[0]}=={key[1]}"
+        yanked = component.get("yanked")
+        prerelease = component.get("prerelease")
+        expected_prerelease = bool(re.search(r"(?:a|b|rc|dev)\d*", key[1], re.IGNORECASE))
+        if not isinstance(yanked, bool) or not isinstance(prerelease, bool):
+            raise InventoryValidationError(f"invalid release posture flags: {component_id}")
+        if prerelease != expected_prerelease:
+            raise InventoryValidationError(f"prerelease evidence drift: {component_id}")
+        expected_release_url = f"https://pypi.org/project/{key[0]}/{key[1]}/"
+        expected_json_url = f"https://pypi.org/pypi/{key[0]}/{key[1]}/json"
+        if component.get("pypi_release_url") != expected_release_url:
+            raise InventoryValidationError(f"PyPI release authority drift: {component_id}")
+        if component.get("pypi_json_url") != expected_json_url:
+            raise InventoryValidationError(f"PyPI JSON authority drift: {component_id}")
+        if not re.fullmatch(r"[0-9a-f]{64}", str(component.get("pypi_metadata_sha256", ""))):
+            raise InventoryValidationError(f"invalid PyPI metadata digest: {component_id}")
+        uploaded_at = datetime.fromisoformat(
+            str(component["release_uploaded_at"]).replace("Z", "+00:00")
+        )
+        if uploaded_at.date() > as_of:
+            raise InventoryValidationError(f"release evidence is future-dated: {component_id}")
+        if supportability.get("release_evidence_url") != expected_release_url:
+            raise InventoryValidationError(f"support release authority drift: {component_id}")
+        if supportability.get("approval_inference") != "none":
+            raise InventoryValidationError(
+                f"support approval inference is prohibited: {component_id}"
+            )
         if license_state == "approved":
-            _validate_approved_license(component["license"], policy_contract, f"{key[0]}=={key[1]}")
+            _validate_approved_license(component["license"], policy_contract, component_id)
         if support_state == "reviewed" and not all(
             _is_governed_authority_url(supportability.get(field))
             for field in (
@@ -182,7 +216,11 @@ def validate_inventory(*, as_of: date) -> dict[str, Any]:
                 f"supportability review cadence drift: {key[0]}=={key[1]}"
             )
         if due < as_of:
-            findings.append({"component": f"{key[0]}=={key[1]}", "reason": "review_stale"})
+            findings.append({"component": component_id, "reason": "review_stale"})
+        if yanked:
+            findings.append({"component": component_id, "reason": "release_yanked"})
+        if prerelease:
+            findings.append({"component": component_id, "reason": "release_prerelease"})
         if license_state != "approved":
             findings.append(
                 {
