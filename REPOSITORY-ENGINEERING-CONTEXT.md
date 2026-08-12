@@ -1134,8 +1134,9 @@ Most relevant current governance:
     base and intentionally includes `uvloop`; the Windows engineering authority includes
     `colorama` and excludes `uvloop`. Python 3.12 GitHub lanes are forward-compatibility
     execution proof over the production-resolved lock, not an alternate dependency authority.
-    Regenerate or replay-check both with `make compile-runtime-lock` and
-    `python scripts/development/update_shared_runtime_lock.py --check`.
+    Regenerate with `make compile-runtime-lock`. Use `make dependency-lock-replay-check` for the
+    Linux closure; protected Feature, PR, and Main workflows independently replay both generators
+    on governed Windows before dependency inventory evidence is accepted.
     Dependency technology evidence comes only from those four compiled locks. The generated
     `dependency-technology-inventory.v1.json` binds every exact package/version to lock membership,
     source metadata digest, license classification, release evidence, and a 30-day review

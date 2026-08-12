@@ -211,21 +211,36 @@ def _write_or_check(path: Path, content: str, *, check: bool) -> None:
 
 
 def compile_locks(*, check: bool = False) -> None:
+    compile_locks_for_platform(check=check, platform="all")
+
+
+def compile_locks_for_platform(*, check: bool = False, platform: str) -> None:
     validate_inputs()
-    linux_lock = normalize_compiled_lock(_compile_linux_in_exact_base(), platform="linux/amd64")
-    _write_or_check(LINUX_TOOLING_LOCK, linux_lock, check=check)
-    if sys.platform == "win32":
+    if platform in {"all", "linux"}:
+        linux_lock = normalize_compiled_lock(_compile_linux_in_exact_base(), platform="linux/amd64")
+        _write_or_check(LINUX_TOOLING_LOCK, linux_lock, check=check)
+    if platform in {"all", "windows"} and sys.platform == "win32":
         windows_lock = normalize_compiled_lock(
             _compile_with_host_python(), platform="windows/amd64"
         )
         _write_or_check(WINDOWS_TOOLING_LOCK, windows_lock, check=check)
+    elif platform == "windows":
+        raise ToolingLockError("the Windows tooling closure must be generated on governed Windows")
+    elif platform not in {"all", "linux"}:
+        raise ToolingLockError(f"unsupported lock platform: {platform}")
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true", help="Fail when the committed lock drifts.")
+    parser.add_argument(
+        "--platform",
+        choices=("all", "linux", "windows"),
+        default="all",
+        help="Compile or replay-check one governed platform closure.",
+    )
     args = parser.parse_args()
-    compile_locks(check=args.check)
+    compile_locks_for_platform(check=args.check, platform=args.platform)
     return 0
 
 

@@ -106,6 +106,17 @@ def _validate_inventory(inventory: dict[str, Any], *, root: Path, today: date) -
         findings.append("metadata_manifest_count must distinguish attached metadata")
     if record.get("present_in_current_official_library") is not True:
         findings.append("base image tag must remain in the current Docker Official Images library")
+    identity_evidence = record.get("identity_evidence")
+    if not isinstance(identity_evidence, dict):
+        findings.append("identity_evidence is required")
+    else:
+        identity_verified_on = _parse_date(
+            identity_evidence.get("verified_on"), "identity_evidence.verified_on", findings
+        )
+        if identity_verified_on and identity_verified_on > today:
+            findings.append("Official Images identity evidence cannot be future-dated")
+        if observed_on and identity_verified_on and identity_verified_on != observed_on:
+            findings.append("Official Images identity evidence must be refreshed with observed_on")
 
     components = record.get("support_components")
     if not isinstance(components, list) or {

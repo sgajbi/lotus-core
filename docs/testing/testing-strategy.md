@@ -162,8 +162,9 @@ Dependency consistency and vulnerability audit use one content-addressed environ
 
 This platform split is intentional. The runtime lock includes Linux `uvloop` and excludes
 Windows-only `colorama`; the Windows CI/build/test tooling closure carries Windows marker packages.
-Use `python scripts/development/update_shared_runtime_lock.py --check` and
-`python scripts/development/update_ci_tooling_lock.py --check` for deterministic replay evidence.
+Use `make dependency-lock-replay-check` for Linux deterministic replay evidence. Protected Feature,
+PR, and Main lanes also replay both generators with `--platform windows` on governed Windows hosts;
+dependency inventory evidence cannot run until that job passes.
 
 | Command | Cache Posture | Evidence |
 |---|---|---|
