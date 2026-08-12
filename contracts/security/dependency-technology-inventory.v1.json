@@ -1005,8 +1005,8 @@
     },
     {
       "license": {
-        "classification": "approved",
-        "classification_reason": "approved_declared_expression",
+        "classification": "review_required",
+        "classification_reason": "ambiguous_classifier_with_declared_expression",
         "classification_source": "pypi_license_expression",
         "classifiers": [
           "License :: OSI Approved :: BSD License"
@@ -1046,8 +1046,8 @@
     },
     {
       "license": {
-        "classification": "approved",
-        "classification_reason": "approved_declared_expression",
+        "classification": "review_required",
+        "classification_reason": "ambiguous_classifier_with_declared_expression",
         "classification_source": "pypi_license_expression",
         "classifiers": [
           "License :: OSI Approved :: BSD License"
@@ -1163,8 +1163,8 @@
     },
     {
       "license": {
-        "classification": "approved",
-        "classification_reason": "approved_declared_expression",
+        "classification": "review_required",
+        "classification_reason": "ambiguous_classifier_with_declared_expression",
         "classification_source": "pypi_license_expression",
         "classifiers": [
           "License :: OSI Approved :: BSD License"
@@ -4004,7 +4004,7 @@
   },
   "repository": "https://github.com/sgajbi/lotus-core",
   "schema_version": "lotus-core.dependency-technology-inventory.v1",
-  "source_commit": "b3f54c4685267adc6806453183f26ab2f294b125",
+  "source_commit": "93a6903b27692b4e779054a4001fe3b634023b5b",
   "source_locks": [
     {
       "path": "requirements/shared-runtime.lock.txt",
@@ -4032,7 +4032,7 @@
     }
   ],
   "summary": {
-    "approved_license_count": 91,
+    "approved_license_count": 88,
     "blocked_or_review_required_count": 104,
     "certification_decision": "blocked",
     "component_count": 104

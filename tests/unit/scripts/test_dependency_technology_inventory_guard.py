@@ -37,6 +37,7 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[Path, Path]:
                 "approved_single_spdx_expressions": ["MIT"],
                 "classifier_mappings": {"License :: OSI Approved :: MIT License": "MIT"},
                 "legacy_license_mappings": {"MIT License": "MIT"},
+                "ambiguous_markers": [],
             }
         )
         + "\n",
@@ -236,6 +237,23 @@ def test_approved_legacy_license_rejects_ambiguous_classifier(tmp_path: Path, mo
             "classifiers": ["License :: OSI Approved"],
         }
     )
+    inventory_file.write_text(json.dumps(data), encoding="utf-8")
+
+    with pytest.raises(guard.InventoryValidationError, match="lacks policy evidence"):
+        guard.validate_inventory(as_of=date(2026, 8, 12))
+
+
+def test_approved_declared_license_rejects_ambiguous_classifier(
+    tmp_path: Path, monkeypatch
+) -> None:
+    _lock, inventory_file = _fixture(tmp_path, monkeypatch)
+    policy = tmp_path / "contracts" / "security" / "policy.json"
+    policy_data = json.loads(policy.read_text(encoding="utf-8"))
+    policy_data["ambiguous_markers"] = ["License :: OSI Approved"]
+    policy.write_text(json.dumps(policy_data), encoding="utf-8")
+    data = json.loads(inventory_file.read_text(encoding="utf-8"))
+    data["policy"]["sha256"] = _sha(policy)
+    data["components"][0]["license"]["classifiers"] = ["License :: OSI Approved"]
     inventory_file.write_text(json.dumps(data), encoding="utf-8")
 
     with pytest.raises(guard.InventoryValidationError, match="lacks policy evidence"):
