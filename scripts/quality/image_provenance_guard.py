@@ -31,6 +31,7 @@ REQUIRED_OCI_LABELS = {
 SECRET_LIKE_TOKENS = ("SECRET", "TOKEN", "PASSWORD", "CREDENTIAL", "PRIVATE_KEY")
 
 REQUIRED_RELEASE_WORKFLOW_SNIPPETS = (
+    "fail-fast: false",
     "packages: write",
     "id-token: write",
     "docker buildx build",
@@ -40,7 +41,15 @@ REQUIRED_RELEASE_WORKFLOW_SNIPPETS = (
     "--sbom=true",
     "--provenance=true",
     "aquasec/trivy",
+    "--exit-code 0",
+    "--scanners vuln,secret",
     "--severity HIGH,CRITICAL",
+    "image_scan_policy.py evaluate",
+    "Upload image scan policy receipt",
+    "image-scan-policy-${{ matrix.service }}-attempt-${{ github.run_attempt }}",
+    "if: ${{ always() }}",
+    "if-no-files-found: error",
+    "image_scan_policy.py enforce",
     "--format cyclonedx",
     "-sbom.cdx.json",
     "cosign sign --yes",
@@ -132,6 +141,31 @@ def _release_workflow_findings(root: Path) -> list[ImageProvenanceFinding]:
                     f"image release workflow missing {snippet}",
                 )
             )
+
+    ordered_release_steps = (
+        "image_scan_policy.py evaluate",
+        "Upload image scan policy receipt",
+        "image_scan_policy.py enforce",
+        "cosign sign --yes",
+        "write_image_release_manifest.py",
+    )
+    step_offsets = [workflow_content.find(step) for step in ordered_release_steps]
+    if any(offset < 0 for offset in step_offsets) or step_offsets != sorted(step_offsets):
+        findings.append(
+            ImageProvenanceFinding(
+                RELEASE_WORKFLOW,
+                "image scan receipt must be generated, uploaded, and enforced before "
+                "signing and manifest generation",
+            )
+        )
+    if "--exit-code 1" in workflow_content:
+        findings.append(
+            ImageProvenanceFinding(
+                RELEASE_WORKFLOW,
+                "image scan evidence generation must not couple report creation to "
+                "policy exit status",
+            )
+        )
 
     for line_number, line in enumerate(workflow_content.splitlines(), start=1):
         if "--build-arg" not in line:

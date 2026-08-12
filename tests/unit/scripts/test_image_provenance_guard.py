@@ -77,6 +77,7 @@ def _write_required_sources(root: Path, *, bootstrap_content: str | None = None)
     workflow.write_text(
         "\n".join(
             [
+                "fail-fast: false",
                 "permissions:",
                 "  packages: write",
                 "  id-token: write",
@@ -87,7 +88,15 @@ def _write_required_sources(root: Path, *, bootstrap_content: str | None = None)
                 "--sbom=true",
                 "--provenance=true",
                 "aquasec/trivy",
+                "--exit-code 0",
+                "--scanners vuln,secret",
                 "--severity HIGH,CRITICAL",
+                "image_scan_policy.py evaluate",
+                "Upload image scan policy receipt",
+                "image-scan-policy-${{ matrix.service }}-attempt-${{ github.run_attempt }}",
+                "if: ${{ always() }}",
+                "if-no-files-found: error",
+                "image_scan_policy.py enforce",
                 "--format cyclonedx",
                 "-sbom.cdx.json",
                 "cosign sign --yes",
@@ -146,6 +155,38 @@ def test_image_provenance_guard_accepts_complete_contract(tmp_path: Path) -> Non
     _write_dockerfile(tmp_path, _complete_dockerfile())
 
     assert find_image_provenance_findings(tmp_path) == []
+
+
+def test_image_provenance_guard_rejects_coupled_scan_policy_exit(tmp_path: Path) -> None:
+    _write_required_sources(tmp_path)
+    workflow = tmp_path / ".github" / "workflows" / "image-release.yml"
+    workflow.write_text(
+        workflow.read_text(encoding="utf-8").replace("--exit-code 0", "--exit-code 1"),
+        encoding="utf-8",
+    )
+    _write_dockerfile(tmp_path, _complete_dockerfile())
+
+    findings = find_image_provenance_findings(tmp_path)
+
+    assert any("must not couple report creation" in finding.detail for finding in findings)
+
+
+def test_image_provenance_guard_rejects_scan_policy_ordering_drift(tmp_path: Path) -> None:
+    _write_required_sources(tmp_path)
+    workflow = tmp_path / ".github" / "workflows" / "image-release.yml"
+    content = workflow.read_text(encoding="utf-8")
+    content = content.replace(
+        "image_scan_policy.py enforce",
+        "write_image_release_manifest.py\nimage_scan_policy.py enforce",
+    )
+    workflow.write_text(content, encoding="utf-8")
+    _write_dockerfile(tmp_path, _complete_dockerfile())
+
+    findings = find_image_provenance_findings(tmp_path)
+
+    assert any(
+        "must be generated, uploaded, and enforced" in finding.detail for finding in findings
+    )
 
 
 def test_image_provenance_guard_reports_missing_digest_label(tmp_path: Path) -> None:
