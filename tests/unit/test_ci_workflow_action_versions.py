@@ -497,8 +497,9 @@ def test_image_release_workflow_publishes_every_registered_service_image() -> No
 
     assert {entry["service"] for entry in matrix["include"]} == set(SERVICE_BUILDS)
     assert "write_image_build_matrix" in str(workflow["jobs"]["prepare-image-matrix"])
-    assert workflow["jobs"]["publish-images"]["strategy"]["matrix"] == (
-        workflow["jobs"]["diagnose-images"]["strategy"]["matrix"]
+    assert (
+        workflow["jobs"]["publish-images"]["strategy"]["matrix"]
+        == (workflow["jobs"]["diagnose-images"]["strategy"]["matrix"])
     )
 
 

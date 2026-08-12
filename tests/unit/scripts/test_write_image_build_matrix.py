@@ -9,7 +9,5 @@ def test_release_matrix_is_derived_from_source_owned_service_builds() -> None:
     assert len(matrix["include"]) == 13
     for entry in matrix["include"]:
         local_tag, dockerfile = SERVICE_BUILDS[entry["service"]]
-        assert entry["image_name"] == local_tag.removeprefix("lotus-core/").removesuffix(
-            ":local"
-        )
+        assert entry["image_name"] == local_tag.removeprefix("lotus-core/").removesuffix(":local")
         assert entry["dockerfile"] == dockerfile

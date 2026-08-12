@@ -13,9 +13,7 @@ def build_matrix() -> dict[str, list[dict[str, str]]]:
     include = []
     for service, (local_tag, dockerfile) in SERVICE_BUILDS.items():
         image_name = local_tag.removeprefix("lotus-core/").removesuffix(":local")
-        include.append(
-            {"service": service, "image_name": image_name, "dockerfile": dockerfile}
-        )
+        include.append({"service": service, "image_name": image_name, "dockerfile": dockerfile})
     return {"include": include}
 
 
