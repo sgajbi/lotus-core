@@ -119,8 +119,10 @@ can rescan the same immutable artifact without rebuilding it. The default regist
 suppression, and wrong digest/advisory/severity matches.
 The same command enforces the authored base-image lifecycle inventory. Core-built service images
 must use the governed immutable Docker Official Python index and the release target must resolve to
-the recorded `linux/amd64` child/config digests. CPython and Debian support authority, exact-image
-Debian package-support status, ownership, and a maximum 30-day evidence age are mandatory. An
+the recorded `linux/amd64` child/config digests. Local CPython and Debian cutoffs cannot exceed
+machine-readable upstream authority end dates. Complete credential-free Docker Official Images
+identity evidence, exact-image Debian package-support status, ownership, and a maximum 30-day
+evidence age are mandatory. An
 available architecture in an OCI index is not by itself a supported production platform; external
 Compose dependency images remain outside the Core-built release boundary.
 Image publication, signing, release manifests, deployment rendering, and promotion eligibility are

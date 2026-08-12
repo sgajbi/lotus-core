@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 INVENTORY_PATH = Path("contracts/security/base-image-lifecycle-inventory.v1.json")
@@ -34,6 +35,18 @@ def _parse_date(value: object, field: str, findings: list[str]) -> date | None:
     except ValueError:
         findings.append(f"{field} must be an ISO date")
         return None
+
+
+def _is_credential_free_https_url(value: object) -> bool:
+    if not isinstance(value, str):
+        return False
+    parsed = urlsplit(value)
+    return (
+        parsed.scheme == "https"
+        and bool(parsed.netloc)
+        and parsed.username is None
+        and parsed.password is None
+    )
 
 
 def _external_compose_images(root: Path) -> set[str]:
@@ -110,6 +123,16 @@ def _validate_inventory(inventory: dict[str, Any], *, root: Path, today: date) -
     if not isinstance(identity_evidence, dict):
         findings.append("identity_evidence is required")
     else:
+        for field in ("official_image_source", "official_image_registry"):
+            if not _is_credential_free_https_url(identity_evidence.get(field)):
+                findings.append(
+                    f"identity_evidence.{field} must be a credential-free HTTPS authority"
+                )
+        verified_command = identity_evidence.get("verified_command")
+        if not isinstance(verified_command, str) or not verified_command.strip():
+            findings.append("identity_evidence.verified_command must be non-empty")
+        elif isinstance(image, str) and image not in verified_command:
+            findings.append("Official Images identity command must bind the governed image")
         identity_verified_on = _parse_date(
             identity_evidence.get("verified_on"), "identity_evidence.verified_on", findings
         )
@@ -127,6 +150,11 @@ def _validate_inventory(inventory: dict[str, Any], *, root: Path, today: date) -
         component_ends: list[date] = []
         for component in components:
             component_id = str(component.get("component", "unknown"))
+            authority_end = _parse_date(
+                component.get("authority_support_end_on"),
+                f"support_components.{component_id}.authority_support_end_on",
+                findings,
+            )
             end = _parse_date(
                 component.get("local_fail_closed_cutoff"),
                 f"support_components.{component_id}.local_fail_closed_cutoff",
@@ -136,9 +164,17 @@ def _validate_inventory(inventory: dict[str, Any], *, root: Path, today: date) -
                 component_ends.append(end)
                 if end < today:
                     findings.append(f"support component {component_id} is end-of-life")
+                if authority_end and end > authority_end:
+                    findings.append(
+                        f"support component {component_id} local cutoff exceeds upstream authority"
+                    )
+            if authority_end and authority_end < today:
+                findings.append(f"support component {component_id} upstream authority has ended")
             source = component.get("source")
-            if not isinstance(source, str) or not source.startswith("https://"):
-                findings.append(f"support component {component_id} requires an HTTPS authority")
+            if not _is_credential_free_https_url(source):
+                findings.append(
+                    f"support component {component_id} requires a credential-free HTTPS authority"
+                )
         if supported_through and component_ends and supported_through != min(component_ends):
             findings.append("supported_through must equal the earliest component support end date")
 
