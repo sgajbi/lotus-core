@@ -98,6 +98,11 @@ the reviewed completeness and anti-rollback boundary lives in
 `contracts/security/cisa-kev-authority-policy.v1.json`.
 Fetch, scan, or evaluation failure still uploads an exact-source, secret-safe reason-code receipt,
 and enforcement rejects evidence older than 30 minutes or materially future-dated.
+Receipts also bind the Core exception-register digest and its source-pinned Platform schema
+authority. Medium findings require an exact approved remediation/exception record; KEV and
+unclassified exploitation are never exceptionable. The default register is empty, and
+`make image-provenance-guard` rejects malformed ownership/approval/evidence, expiry, permanent
+suppression, and wrong digest/advisory/severity matches.
 Automatic Image Release publication is limited to `main` and release tags. An authorized manual
 dispatch may exercise an exact feature SHA for pre-merge supply-chain evidence, but it retains the
 same SHA tag and controls and does not replace protected PR or exact-main proof.

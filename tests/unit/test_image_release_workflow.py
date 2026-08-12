@@ -48,21 +48,26 @@ def test_image_scan_generates_receipt_before_policy_enforcement() -> None:
     assert "--severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL" in generate
     assert "--kev-catalog" in generate
     assert "--kev-fetched-at" in generate
-    assert "image_scan_policy.py evaluate" in generate
-    assert "image_scan_policy.py unavailable" in generate
+    assert "--exception-register" in generate
+    assert "--exception-schema" in generate
+    assert "python -m scripts.release.image_scan_policy evaluate" in generate
+    assert "python -m scripts.release.image_scan_policy unavailable" in generate
     for reason_code in (
         "cisa_kev_fetch_failed",
         "trivy_scan_failed",
         "evidence_evaluation_failed",
+        "exception_schema_fetch_failed",
     ):
         assert reason_code in generate
-    assert "image_scan_policy.py enforce" in str(steps[enforce_index]["run"])
+    assert "python -m scripts.release.image_scan_policy enforce" in str(steps[enforce_index]["run"])
     assert '--report "output/build-evidence/${{ matrix.service }}-trivy.json"' in str(
         steps[enforce_index]["run"]
     )
     assert '--kev-catalog "output/build-evidence/${{ matrix.service }}-cisa-kev.json"' in str(
         steps[enforce_index]["run"]
     )
+    assert "--exception-register" in str(steps[enforce_index]["run"])
+    assert "--exception-schema" in str(steps[enforce_index]["run"])
     assert "--enforced-at" in str(steps[enforce_index]["run"])
 
 

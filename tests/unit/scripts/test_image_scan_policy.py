@@ -7,6 +7,7 @@ from typing import Any
 import pytest
 
 import scripts.release.cisa_kev as cisa_kev
+import scripts.release.image_scan_policy as image_scan_policy
 from scripts.release.cisa_kev import CISA_KEV_SOURCE_URL
 from scripts.release.image_scan_policy import (
     POLICY_ID,
@@ -149,9 +150,12 @@ def test_enforcement_rejects_stale_or_future_receipt(tmp_path: Path, enforced_at
         _enforce(receipt_path, enforced_at=enforced_at)
 
 
-def test_current_enforcement_rejects_prior_v1_receipt(tmp_path: Path) -> None:
+@pytest.mark.parametrize("version", ["v1", "v2"])
+def test_current_enforcement_rejects_prior_receipt_versions(
+    tmp_path: Path, version: str
+) -> None:
     receipt = _receipt(_write_report(tmp_path, results=[]))
-    receipt["schema_version"] = "lotus-core.image-scan-policy-receipt.v1"
+    receipt["schema_version"] = f"lotus-core.image-scan-policy-receipt.{version}"
     receipt_path = tmp_path / "receipt.json"
     receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
 
@@ -181,11 +185,14 @@ def test_clean_report_builds_digest_bound_pass_receipt(tmp_path: Path) -> None:
         "policy_id": POLICY_ID,
         "scanners": ["vulnerability", "secret"],
         "blocking_severities": ["CRITICAL", "HIGH"],
+        "owned_plan_required_severities": ["MEDIUM"],
+        "known_exploited_exceptionable": False,
         "decision": "passed",
         "finding_count": 0,
         "blocking_finding_count": 0,
         "known_exploited_finding_count": 0,
         "unclassified_exploitation_finding_count": 0,
+        "approved_exception_finding_count": 0,
         "severity_counts": {"CRITICAL": 0, "HIGH": 0, "LOW": 0, "MEDIUM": 0},
     }
     assert receipt["known_exploited_catalog"] == {
@@ -248,6 +255,7 @@ def test_high_vulnerability_builds_blocked_normalized_receipt(tmp_path: Path) ->
             "fixed_version": "1.0.1",
             "known_exploited": False,
             "exploitation_status": "not_listed_in_current_cisa_kev",
+            "approved_exception_ids": [],
         }
     ]
 
@@ -279,7 +287,83 @@ def test_secret_receipt_never_copies_secret_material(tmp_path: Path) -> None:
     assert "secret material" not in serialized
 
 
-def test_medium_findings_do_not_change_current_release_policy(tmp_path: Path) -> None:
+def test_medium_findings_require_an_owned_exception_plan(tmp_path: Path) -> None:
+    report = _write_report(
+        tmp_path,
+        results=[
+            {
+                "Target": "os-pkgs",
+                "Type": "debian",
+                "Vulnerabilities": [
+                    {
+                        "VulnerabilityID": "CVE-2026-2000",
+                        "PkgName": "example",
+                        "InstalledVersion": "1.0.0",
+                        "Severity": "MEDIUM",
+                    }
+                ],
+            }
+        ],
+    )
+
+    receipt = _receipt(report)
+
+    assert receipt["policy"]["decision"] == "blocked"
+    assert receipt["policy"]["finding_count"] == 1
+    assert receipt["policy"]["blocking_finding_count"] == 1
+    assert receipt["policy"]["known_exploited_finding_count"] == 0
+    assert receipt["policy"]["unclassified_exploitation_finding_count"] == 0
+    assert receipt["policy"]["severity_counts"] == {
+        "CRITICAL": 0,
+        "HIGH": 0,
+        "LOW": 0,
+        "MEDIUM": 1,
+    }
+    assert receipt["findings"] == [
+        {
+            "finding_type": "vulnerability",
+            "finding_id": "CVE-2026-2000",
+            "severity": "MEDIUM",
+            "target": "os-pkgs",
+            "target_class": "debian",
+            "component_name": "example",
+            "installed_version": "1.0.0",
+            "fixed_version": "",
+            "known_exploited": False,
+            "exploitation_status": "not_listed_in_current_cisa_kev",
+            "approved_exception_ids": [],
+        }
+    ]
+
+
+def test_exact_approved_medium_exception_allows_policy_decision(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class ApprovedRegister:
+        identity: dict[str, object] = {
+            "schema_version": "lotus-platform.vulnerability-exception-register.v1",
+            "register_id": "lotus-core-vulnerability-exceptions",
+            "generated_at_utc": "2026-08-12T00:00:00Z",
+            "register_sha256": "sha256:" + "c" * 64,
+            "lane_posture": "blocking",
+            "schema_authority": {"source_commit": "d" * 40},
+        }
+
+        def approved_exception_ids(
+            self, *, image_digest: str, advisory_id: str, severity: str
+        ) -> tuple[str, ...]:
+            assert (image_digest, advisory_id, severity) == (
+                IMAGE_DIGEST,
+                "CVE-2026-2000",
+                "MEDIUM",
+            )
+            return ("VX-CORE-0001",)
+
+    monkeypatch.setattr(
+        image_scan_policy,
+        "load_vulnerability_exception_register",
+        lambda *_args, **_kwargs: ApprovedRegister(),
+    )
     report = _write_report(
         tmp_path,
         results=[
@@ -301,29 +385,10 @@ def test_medium_findings_do_not_change_current_release_policy(tmp_path: Path) ->
     receipt = _receipt(report)
 
     assert receipt["policy"]["decision"] == "passed"
-    assert receipt["policy"]["finding_count"] == 1
-    assert receipt["policy"]["blocking_finding_count"] == 0
-    assert receipt["policy"]["known_exploited_finding_count"] == 0
-    assert receipt["policy"]["unclassified_exploitation_finding_count"] == 0
-    assert receipt["policy"]["severity_counts"] == {
-        "CRITICAL": 0,
-        "HIGH": 0,
-        "LOW": 0,
-        "MEDIUM": 1,
-    }
-    assert receipt["findings"] == [
-        {
-            "finding_type": "vulnerability",
-            "finding_id": "CVE-2026-2000",
-            "severity": "MEDIUM",
-            "target": "os-pkgs",
-            "target_class": "debian",
-            "component_name": "example",
-            "installed_version": "1.0.0",
-            "fixed_version": "",
-            "known_exploited": False,
-            "exploitation_status": "not_listed_in_current_cisa_kev",
-        }
+    assert receipt["policy"]["approved_exception_finding_count"] == 1
+    assert receipt["findings"][0]["approved_exception_ids"] == ["VX-CORE-0001"]
+    assert receipt["vulnerability_exception_register"]["applicable_exception_ids"] == [
+        "VX-CORE-0001"
     ]
 
 

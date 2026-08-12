@@ -8,7 +8,7 @@ import json
 import re
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from scripts.release.cisa_kev import (
     CVE_PATTERN,
@@ -16,9 +16,15 @@ from scripts.release.cisa_kev import (
     CisaKevError,
     load_cisa_kev_catalog,
 )
+from scripts.release.vulnerability_exception_policy import (
+    DEFAULT_REGISTER_PATH,
+    VulnerabilityExceptionError,
+    VulnerabilityExceptionRegister,
+    load_vulnerability_exception_register,
+)
 
-SCHEMA_VERSION = "lotus-core.image-scan-policy-receipt.v2"
-POLICY_ID = "lotus-core.image-release-vulnerability-secret-kev.v1"
+SCHEMA_VERSION = "lotus-core.image-scan-policy-receipt.v3"
+POLICY_ID = "lotus-core.image-release-vulnerability-secret-kev-exceptions.v1"
 SCANNER_NAME = "trivy"
 SCANNER_VERSION = "0.56.2"
 SCANNER_IMAGE = "aquasec/trivy:0.56.2"
@@ -31,7 +37,12 @@ MAX_KEV_TO_SCAN_AGE_SECONDS = 900
 MAX_RECEIPT_TO_ENFORCEMENT_AGE_SECONDS = 1800
 MAX_ENFORCEMENT_FUTURE_SKEW_SECONDS = 60
 UNAVAILABLE_REASON_CODES = frozenset(
-    {"cisa_kev_fetch_failed", "trivy_scan_failed", "evidence_evaluation_failed"}
+    {
+        "cisa_kev_fetch_failed",
+        "exception_schema_fetch_failed",
+        "trivy_scan_failed",
+        "evidence_evaluation_failed",
+    }
 )
 
 
@@ -119,6 +130,7 @@ def build_unavailable_receipt(
         ),
         "scanner": {"name": SCANNER_NAME, "version": SCANNER_VERSION, "image": SCANNER_IMAGE},
         "known_exploited_catalog": None,
+        "vulnerability_exception_register": None,
         "policy": {"policy_id": POLICY_ID, "decision": "blocked"},
         "failure": {"reason_code": reason_code},
         "findings": [],
@@ -156,6 +168,8 @@ def _normalized_vulnerability(
     target: str,
     target_class: str,
     kev_catalog: CisaKevCatalog,
+    exception_register: VulnerabilityExceptionRegister,
+    image_digest: str,
 ) -> dict[str, object]:
     if not isinstance(raw, dict):
         raise ScanPolicyError("Trivy vulnerability entries must be objects")
@@ -172,6 +186,11 @@ def _normalized_vulnerability(
         exploitation_status = (
             "known_exploited" if known_exploited else "not_listed_in_current_cisa_kev"
         )
+    approved_exception_ids: tuple[str, ...] = ()
+    if known_exploited is False:
+        approved_exception_ids = exception_register.approved_exception_ids(
+            image_digest=image_digest, advisory_id=finding_id, severity=severity
+        )
     return {
         "finding_type": "vulnerability",
         "finding_id": finding_id,
@@ -185,6 +204,7 @@ def _normalized_vulnerability(
         "fixed_version": str(raw.get("FixedVersion") or ""),
         "known_exploited": known_exploited,
         "exploitation_status": exploitation_status,
+        "approved_exception_ids": list(approved_exception_ids),
     }
 
 
@@ -207,11 +227,16 @@ def _normalized_secret(raw: object, *, target: str, target_class: str) -> dict[s
         "fixed_version": "",
         "known_exploited": None,
         "exploitation_status": "not_applicable",
+        "approved_exception_ids": [],
     }
 
 
 def _normalized_findings(
-    report: dict[str, Any], *, kev_catalog: CisaKevCatalog
+    report: dict[str, Any],
+    *,
+    kev_catalog: CisaKevCatalog,
+    exception_register: VulnerabilityExceptionRegister,
+    image_digest: str,
 ) -> list[dict[str, object]]:
     if "Results" not in report:
         raise ScanPolicyError("Trivy report must contain Results")
@@ -231,6 +256,8 @@ def _normalized_findings(
                 target=target,
                 target_class=target_class,
                 kev_catalog=kev_catalog,
+                exception_register=exception_register,
+                image_digest=image_digest,
             )
             findings.append(finding)
         for raw in result.get("Secrets") or []:
@@ -249,6 +276,16 @@ def _normalized_findings(
     )
 
 
+def _finding_blocks(finding: dict[str, object]) -> bool:
+    if finding["finding_type"] == "secret":
+        return finding["severity"] in BLOCKING_SEVERITIES
+    if finding["known_exploited"] is True or finding["known_exploited"] is None:
+        return True
+    if finding["approved_exception_ids"]:
+        return False
+    return finding["severity"] in BLOCKING_SEVERITIES or finding["severity"] == "MEDIUM"
+
+
 def build_policy_receipt(
     *,
     report_path: Path,
@@ -265,6 +302,8 @@ def build_policy_receipt(
     scan_timestamp: str,
     kev_catalog_path: Path,
     kev_fetched_at: str,
+    exception_register_path: Path = DEFAULT_REGISTER_PATH,
+    exception_schema_path: Path | None = None,
 ) -> dict[str, object]:
     source_identity = _source_identity(
         repository=repository,
@@ -286,6 +325,11 @@ def build_policy_receipt(
         raise ScanPolicyError("scanner identity does not match the governed release scanner")
     normalized_scan_timestamp = _utc_timestamp(scan_timestamp)
     kev_catalog = load_cisa_kev_catalog(kev_catalog_path, fetched_at=kev_fetched_at)
+    exception_register = load_vulnerability_exception_register(
+        exception_register_path,
+        evaluated_at=normalized_scan_timestamp,
+        canonical_schema_path=exception_schema_path,
+    )
     scan_time = datetime.fromisoformat(normalized_scan_timestamp.replace("Z", "+00:00"))
     catalog_age_seconds = (scan_time - kev_catalog.fetched_at_utc).total_seconds()
     if not 0 <= catalog_age_seconds <= MAX_KEV_TO_SCAN_AGE_SECONDS:
@@ -302,22 +346,23 @@ def build_policy_receipt(
     ):
         raise ScanPolicyError("Trivy report does not match the expected image digest")
 
-    findings = _normalized_findings(report, kev_catalog=kev_catalog)
+    findings = _normalized_findings(
+        report,
+        kev_catalog=kev_catalog,
+        exception_register=exception_register,
+        image_digest=image_digest,
+    )
     severity_counts = {
         severity: sum(finding["severity"] == severity for finding in findings)
         for severity in sorted(KNOWN_SEVERITIES)
     }
-    blocking_count = sum(
-        finding["severity"] in BLOCKING_SEVERITIES
-        or finding["known_exploited"] is True
-        or (finding["finding_type"] == "vulnerability" and finding["known_exploited"] is None)
-        for finding in findings
-    )
+    blocking_count = sum(_finding_blocks(finding) for finding in findings)
     known_exploited_count = sum(finding["known_exploited"] is True for finding in findings)
     unclassified_exploitation_count = sum(
         finding["finding_type"] == "vulnerability" and finding["known_exploited"] is None
         for finding in findings
     )
+    approved_exception_count = sum(bool(finding["approved_exception_ids"]) for finding in findings)
     return {
         "schema_version": SCHEMA_VERSION,
         "generated_at_utc": normalized_scan_timestamp,
@@ -331,15 +376,26 @@ def build_policy_receipt(
             "report_sha256": "sha256:" + hashlib.sha256(report_bytes).hexdigest(),
         },
         "known_exploited_catalog": kev_catalog.receipt_identity(),
+        "vulnerability_exception_register": {
+            **exception_register.identity,
+            "applicable_exception_ids": sorted(
+                exception_id
+                for finding in findings
+                for exception_id in cast(list[str], finding["approved_exception_ids"])
+            ),
+        },
         "policy": {
             "policy_id": POLICY_ID,
             "scanners": ["vulnerability", "secret"],
             "blocking_severities": sorted(BLOCKING_SEVERITIES),
+            "owned_plan_required_severities": ["MEDIUM"],
+            "known_exploited_exceptionable": False,
             "decision": "blocked" if blocking_count else "passed",
             "finding_count": len(findings),
             "blocking_finding_count": blocking_count,
             "known_exploited_finding_count": known_exploited_count,
             "unclassified_exploitation_finding_count": unclassified_exploitation_count,
+            "approved_exception_finding_count": approved_exception_count,
             "severity_counts": severity_counts,
         },
         "findings": findings,
@@ -367,18 +423,29 @@ def _validate_finding(raw: object) -> dict[str, object]:
         "exploitation_status": _required_string(
             raw.get("exploitation_status"), field="finding exploitation status"
         ),
+        "approved_exception_ids": raw.get("approved_exception_ids"),
     }
     if finding["severity"] not in KNOWN_SEVERITIES:
         raise ScanPolicyError("receipt findings must use a known severity")
     if finding_type == "vulnerability" and not finding["installed_version"]:
         raise ScanPolicyError("vulnerability finding requires installed version")
+    exception_ids = finding["approved_exception_ids"]
+    if (
+        not isinstance(exception_ids, list)
+        or exception_ids != sorted(exception_ids)
+        or len(exception_ids) != len(set(exception_ids))
+        or any(not isinstance(value, str) or not value.startswith("VX-") for value in exception_ids)
+    ):
+        raise ScanPolicyError("finding exception identities are not normalized")
     if finding_type == "secret":
-        if finding["known_exploited"] is not None or (
-            finding["exploitation_status"] != "not_applicable"
+        if (
+            exception_ids
+            or finding["known_exploited"] is not None
+            or (finding["exploitation_status"] != "not_applicable")
         ):
             raise ScanPolicyError("secret finding has invalid exploitation classification")
     elif finding["known_exploited"] is True:
-        if finding["exploitation_status"] != "known_exploited":
+        if exception_ids or finding["exploitation_status"] != "known_exploited":
             raise ScanPolicyError("known-exploited finding classification is inconsistent")
     elif finding["known_exploited"] is False:
         if finding["exploitation_status"] != "not_listed_in_current_cisa_kev":
@@ -393,6 +460,8 @@ def enforce_policy_receipt(
     *,
     report_path: Path,
     kev_catalog_path: Path,
+    exception_register_path: Path = DEFAULT_REGISTER_PATH,
+    exception_schema_path: Path | None = None,
     expected_service: str,
     expected_image_ref: str,
     expected_image_digest: str,
@@ -488,6 +557,9 @@ def enforce_policy_receipt(
         raise ScanPolicyError("KEV source digest must be a sha256 digest")
     if not isinstance(kev_identity.get("entry_count"), int) or kev_identity["entry_count"] < 1:
         raise ScanPolicyError("KEV entry count must be positive")
+    exception_identity = receipt.get("vulnerability_exception_register")
+    if not isinstance(exception_identity, dict):
+        raise ScanPolicyError("image scan policy receipt has no exception-register identity")
     policy = receipt.get("policy")
     if not isinstance(policy, dict):
         raise ScanPolicyError("image scan policy receipt has no policy decision")
@@ -497,11 +569,16 @@ def enforce_policy_receipt(
         raise ScanPolicyError("image scan policy receipt has an unsupported scanner set")
     if policy.get("blocking_severities") != sorted(BLOCKING_SEVERITIES):
         raise ScanPolicyError("image scan policy receipt has an unsupported severity policy")
+    if policy.get("owned_plan_required_severities") != ["MEDIUM"]:
+        raise ScanPolicyError("image scan policy receipt has an unsupported remediation policy")
+    if policy.get("known_exploited_exceptionable") is not False:
+        raise ScanPolicyError("known-exploited findings must remain non-exceptionable")
     decision = policy.get("decision")
     finding_count = policy.get("finding_count")
     count = policy.get("blocking_finding_count")
     known_exploited_count = policy.get("known_exploited_finding_count")
     unclassified_exploitation_count = policy.get("unclassified_exploitation_finding_count")
+    approved_exception_count = policy.get("approved_exception_finding_count")
     severity_counts = policy.get("severity_counts")
     findings = receipt.get("findings")
     if not isinstance(findings, list):
@@ -513,16 +590,14 @@ def enforce_policy_receipt(
         severity: sum(finding["severity"] == severity for finding in findings)
         for severity in sorted(KNOWN_SEVERITIES)
     }
-    expected_blocking_count = sum(
-        finding["severity"] in BLOCKING_SEVERITIES
-        or finding["known_exploited"] is True
-        or (finding["finding_type"] == "vulnerability" and finding["known_exploited"] is None)
-        for finding in findings
-    )
+    expected_blocking_count = sum(_finding_blocks(finding) for finding in normalized_findings)
     expected_known_exploited_count = sum(finding["known_exploited"] is True for finding in findings)
     expected_unclassified_count = sum(
         finding["finding_type"] == "vulnerability" and finding["known_exploited"] is None
         for finding in findings
+    )
+    expected_approved_exception_count = sum(
+        bool(finding["approved_exception_ids"]) for finding in findings
     )
     if finding_count != len(findings) or severity_counts != expected_severity_counts:
         raise ScanPolicyError("image scan policy receipt finding totals are inconsistent")
@@ -532,6 +607,8 @@ def enforce_policy_receipt(
         raise ScanPolicyError("image scan policy receipt known-exploited count is inconsistent")
     if unclassified_exploitation_count != expected_unclassified_count:
         raise ScanPolicyError("image scan policy receipt exploitation count is inconsistent")
+    if approved_exception_count != expected_approved_exception_count:
+        raise ScanPolicyError("image scan policy receipt exception count is inconsistent")
     expected_receipt = build_policy_receipt(
         report_path=report_path,
         service=expected_service,
@@ -549,6 +626,8 @@ def enforce_policy_receipt(
         ),
         kev_catalog_path=kev_catalog_path,
         kev_fetched_at=_required_string(kev_identity.get("fetched_at_utc"), field="KEV fetched-at"),
+        exception_register_path=exception_register_path,
+        exception_schema_path=exception_schema_path,
     )
     if receipt != expected_receipt:
         raise ScanPolicyError("image scan policy receipt does not match its source evidence")
@@ -579,6 +658,8 @@ def _parser() -> argparse.ArgumentParser:
     evaluate.add_argument("--scan-timestamp", required=True)
     evaluate.add_argument("--kev-catalog", required=True, type=Path)
     evaluate.add_argument("--kev-fetched-at", required=True)
+    evaluate.add_argument("--exception-register", required=True, type=Path)
+    evaluate.add_argument("--exception-schema", required=True, type=Path)
     evaluate.add_argument("--output", required=True, type=Path)
     unavailable = subparsers.add_parser("unavailable")
     unavailable.add_argument("--service", required=True)
@@ -597,6 +678,8 @@ def _parser() -> argparse.ArgumentParser:
     enforce.add_argument("--receipt", required=True, type=Path)
     enforce.add_argument("--report", required=True, type=Path)
     enforce.add_argument("--kev-catalog", required=True, type=Path)
+    enforce.add_argument("--exception-register", required=True, type=Path)
+    enforce.add_argument("--exception-schema", required=True, type=Path)
     enforce.add_argument("--expected-service", required=True)
     enforce.add_argument("--expected-image-ref", required=True)
     enforce.add_argument("--expected-image-digest", required=True)
@@ -627,6 +710,8 @@ def main() -> int:
                 scan_timestamp=args.scan_timestamp,
                 kev_catalog_path=args.kev_catalog,
                 kev_fetched_at=args.kev_fetched_at,
+                exception_register_path=args.exception_register,
+                exception_schema_path=args.exception_schema,
             )
             args.output.parent.mkdir(parents=True, exist_ok=True)
             args.output.write_text(json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
@@ -650,6 +735,8 @@ def main() -> int:
             args.receipt,
             report_path=args.report,
             kev_catalog_path=args.kev_catalog,
+            exception_register_path=args.exception_register,
+            exception_schema_path=args.exception_schema,
             expected_service=args.expected_service,
             expected_image_ref=args.expected_image_ref,
             expected_image_digest=args.expected_image_digest,
@@ -660,7 +747,7 @@ def main() -> int:
             enforced_at=args.enforced_at,
         )
         return 0
-    except (OSError, CisaKevError, ScanPolicyError) as exc:
+    except (OSError, CisaKevError, ScanPolicyError, VulnerabilityExceptionError) as exc:
         raise SystemExit(str(exc)) from exc
 
 
