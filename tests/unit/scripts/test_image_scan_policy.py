@@ -298,6 +298,32 @@ def test_secret_receipt_never_copies_secret_material(tmp_path: Path) -> None:
     assert "secret material" not in serialized
 
 
+def test_medium_secret_finding_blocks_release_without_copying_material(tmp_path: Path) -> None:
+    report = _write_report(
+        tmp_path,
+        results=[
+            {
+                "Target": "app/settings.py",
+                "Class": "secret",
+                "Secrets": [
+                    {
+                        "RuleID": "medium-secret",
+                        "Category": "credential",
+                        "Severity": "MEDIUM",
+                        "Match": "do-not-retain-this-value",
+                    }
+                ],
+            }
+        ],
+    )
+
+    receipt = _receipt(report)
+
+    assert receipt["policy"]["decision"] == "blocked"
+    assert receipt["policy"]["blocking_finding_count"] == 1
+    assert "do-not-retain-this-value" not in json.dumps(receipt)
+
+
 def test_medium_findings_require_an_owned_exception_plan(tmp_path: Path) -> None:
     report = _write_report(
         tmp_path,

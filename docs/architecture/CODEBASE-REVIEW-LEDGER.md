@@ -8,6 +8,9 @@ into release authority; Medium, High, Critical, KEV, and unclassified findings r
 until #928/#720 provide same-artifact re-evaluation without rebuilding. Base-image review renewal
 also requires Debian package-support evidence to be refreshed on the same observed date and rejects
 future-dated evidence. Focused policy/lifecycle tests and protected PR evidence govern this change.
+Follow-up review also made Medium secret findings explicitly blocking and requires every reviewed
+dependency support, disclosure, and lifecycle authority to be a credential-free HTTPS reference;
+arbitrary non-empty placeholders cannot create an allowed certification receipt.
 
 CR-1687 governed dependency technology inventory (2026-08-12): #926 now inventories all 104 unique
 components from the four compiled runtime/CI platform closures, never the ambient interpreter.
