@@ -39,9 +39,12 @@ Feature, PR, and main lanes also upload
 inventory digest. A structurally valid but blocked classification is retained as evidence in the
 report-only pilot lane. Missing or drifted evidence writes an unavailable failure receipt and fails
 the job. The explicit certification target also fails when any component is missing, ambiguous,
-compound, stale, yanked, pre-release, or otherwise not approved. PyPI release existence is not a
-support policy or vulnerability-disclosure channel. Upstream metadata and popularity never create
-an implied support or legal approval.
+compound, stale, yanked, pre-release, or otherwise not approved. A potentially allowed inventory
+must additionally refetch every exact PyPI JSON authority, verify its canonical response digest,
+and compare its yanked, upload-time, and raw license evidence with the recorded derived fields.
+Report-only validation never emits release authority without that online revalidation. PyPI
+release existence is not a support policy or vulnerability-disclosure channel. Upstream metadata
+and popularity never create an implied support or legal approval.
 
 ## Runtime Image Evidence
 

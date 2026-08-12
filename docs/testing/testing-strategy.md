@@ -172,7 +172,7 @@ dependency inventory evidence cannot run until that job passes.
 | `make verify-dependencies-clean` | Bypass cache reads and perform a clean installation. | `output/dependency-health/clean-install-report.json` |
 | `make security-audit` | Recheck integrity, then run `pip-audit` against the verified environment. | `output/dependency-health/report.json` |
 | `make dependency-technology-inventory` | Validate exact lock/policy identities and all component classifications; report-only posture retains blocked evidence. | `output/dependency-technology/inventory-receipt.json` |
-| `make dependency-technology-certify` | Apply the same validation and return non-zero unless every component is explicitly allowed. | `output/dependency-technology/inventory-receipt.json` |
+| `make dependency-technology-certify` | Apply the same validation, refetch and digest-check every exact PyPI response for a potentially allowed inventory, compare decisive derived fields, and return non-zero unless every component is explicitly allowed. | `output/dependency-technology/inventory-receipt.json` |
 
 The dependency technology inventory covers the union of all four platform locks and does not read
 installed distributions. Its committed contract records exact release metadata digests and review
@@ -180,8 +180,9 @@ dates. PyPI proves release existence only; it is neither a support policy nor a 
 disclosure channel. Supportability remains `review_required` until governed upstream support,
 vulnerability-disclosure, and lifecycle authorities are recorded. Lotus retains internal lifecycle
 and removal ownership. Compound, ambiguous, missing, stale, yanked, pre-release, or unsupported
-evidence blocks certification. Ordinary CI remains report-only under the Platform pilot but always
-uploads the exact-SHA receipt; explicit certification uses the fail-closed target.
+evidence blocks certification. Ordinary CI remains report-only under the Platform pilot, never
+receives release authority without online authority revalidation, and always uploads the exact-SHA
+receipt. Explicit certification performs that revalidation through the fail-closed target.
 `make refresh-dependency-technology-inventory` refreshes machine-owned lock and PyPI evidence and
 intentionally resets the three human-reviewed support authorities to `null`. It is not a
 certification workflow: approved authority records need a governed preservation/review path under

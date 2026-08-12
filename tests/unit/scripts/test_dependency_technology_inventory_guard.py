@@ -1,3 +1,4 @@
+import hashlib
 import json
 import sys
 from datetime import date
@@ -11,6 +12,23 @@ from scripts.quality.technology_governance_identity import normalized_text_sha25
 
 def _sha(path: Path) -> str:
     return normalized_text_sha256(path)
+
+
+def _pypi_payload() -> dict[str, object]:
+    return {
+        "info": {
+            "yanked": False,
+            "license_expression": "MIT",
+            "license": "",
+            "classifiers": [],
+        },
+        "urls": [{"upload_time_iso_8601": "2026-08-01T00:00:00Z"}],
+    }
+
+
+def _metadata_sha256(payload: object) -> str:
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def _fixture(tmp_path: Path, monkeypatch) -> tuple[Path, Path]:
@@ -69,7 +87,7 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[Path, Path]:
                         ],
                         "pypi_release_url": "https://pypi.org/project/demo/1.0/",
                         "pypi_json_url": "https://pypi.org/pypi/demo/1.0/json",
-                        "pypi_metadata_sha256": "c" * 64,
+                        "pypi_metadata_sha256": _metadata_sha256(_pypi_payload()),
                         "release_uploaded_at": "2026-08-01T00:00:00Z",
                         "yanked": False,
                         "prerelease": False,
@@ -105,17 +123,29 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[Path, Path]:
     return locks[0][0], inventory_file
 
 
-def test_complete_inventory_produces_allowed_exact_commit_receipt(
+def test_complete_inventory_requires_online_authority_before_certification(
     tmp_path: Path, monkeypatch
 ) -> None:
     _fixture(tmp_path, monkeypatch)
 
     receipt = guard.validate_inventory(as_of=date(2026, 8, 12))
 
-    assert receipt["certification_decision"] == "allowed"
+    assert receipt["certification_decision"] == "blocked"
     assert receipt["component_count"] == 1
     assert receipt["source_commit"] == "d" * 40
     assert receipt["finding_count"] == 0
+    assert receipt["pypi_authority_revalidation"]["status"] == "not_run"
+
+
+def test_exact_online_pypi_authority_allows_certification(tmp_path: Path, monkeypatch) -> None:
+    _fixture(tmp_path, monkeypatch)
+    monkeypatch.setattr(guard, "_fetch_pypi_metadata", lambda _url: _pypi_payload())
+
+    receipt = guard.validate_inventory(as_of=date(2026, 8, 12), verify_pypi_authority=True)
+
+    assert receipt["certification_decision"] == "allowed"
+    assert receipt["claim_boundary"]["release_certifying"] is True
+    assert receipt["pypi_authority_revalidation"]["status"] == "passed"
 
 
 def test_lock_drift_fails_before_a_receipt_can_certify(tmp_path: Path, monkeypatch) -> None:
@@ -136,7 +166,7 @@ def test_checkout_newline_conversion_preserves_governed_identity(
 
     receipt = guard.validate_inventory(as_of=date(2026, 8, 12))
 
-    assert receipt["certification_decision"] == "allowed"
+    assert receipt["certification_decision"] == "blocked"
     assert receipt["inventory_sha256"] == normalized_text_sha256(inventory_file)
 
 
@@ -299,6 +329,38 @@ def test_yanked_release_blocks_certification(tmp_path: Path, monkeypatch) -> Non
 
     assert receipt["certification_decision"] == "blocked"
     assert {finding["reason"] for finding in receipt["findings"]} == {"release_yanked"}
+
+
+def test_online_authority_rejects_recorded_yanked_posture_drift(
+    tmp_path: Path, monkeypatch
+) -> None:
+    _lock, inventory_file = _fixture(tmp_path, monkeypatch)
+    payload = _pypi_payload()
+    payload["info"]["yanked"] = True  # type: ignore[index]
+    data = json.loads(inventory_file.read_text(encoding="utf-8"))
+    data["components"][0]["pypi_metadata_sha256"] = _metadata_sha256(payload)
+    inventory_file.write_text(json.dumps(data), encoding="utf-8")
+    monkeypatch.setattr(guard, "_fetch_pypi_metadata", lambda _url: payload)
+
+    with pytest.raises(guard.InventoryValidationError, match="yanked evidence drift"):
+        guard.validate_inventory(as_of=date(2026, 8, 12), verify_pypi_authority=True)
+
+
+def test_online_authority_rejects_recorded_license_evidence_drift(
+    tmp_path: Path, monkeypatch
+) -> None:
+    _lock, inventory_file = _fixture(tmp_path, monkeypatch)
+    payload = _pypi_payload()
+    payload["info"]["classifiers"] = [  # type: ignore[index]
+        "License :: OSI Approved :: MIT License"
+    ]
+    data = json.loads(inventory_file.read_text(encoding="utf-8"))
+    data["components"][0]["pypi_metadata_sha256"] = _metadata_sha256(payload)
+    inventory_file.write_text(json.dumps(data), encoding="utf-8")
+    monkeypatch.setattr(guard, "_fetch_pypi_metadata", lambda _url: payload)
+
+    with pytest.raises(guard.InventoryValidationError, match="license evidence drift"):
+        guard.validate_inventory(as_of=date(2026, 8, 12), verify_pypi_authority=True)
 
 
 def test_release_posture_flags_are_required(tmp_path: Path, monkeypatch) -> None:
